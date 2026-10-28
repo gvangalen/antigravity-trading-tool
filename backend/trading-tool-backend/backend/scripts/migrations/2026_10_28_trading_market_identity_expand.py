@@ -25,6 +25,16 @@ CREATE TABLE IF NOT EXISTS trading_markets (
     CHECK (venue = UPPER(venue))
 );
 
+-- A local bootstrap can create this table from an older ORM definition before
+-- this migration runs. CREATE TABLE IF NOT EXISTS does not add its UNIQUE
+-- clauses to that pre-existing table; preserve the ON CONFLICT arbiter.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_trading_markets_asset_quote_venue
+    ON trading_markets (asset_symbol, quote_currency, venue);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_trading_markets_venue_provider_symbol
+    ON trading_markets (venue, provider_symbol);
+ALTER TABLE trading_markets ALTER COLUMN is_active SET DEFAULT TRUE;
+ALTER TABLE trading_markets ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+
 ALTER TABLE setups ADD COLUMN IF NOT EXISTS market_id BIGINT REFERENCES trading_markets(id);
 ALTER TABLE strategies ADD COLUMN IF NOT EXISTS market_id BIGINT REFERENCES trading_markets(id);
 ALTER TABLE bot_configs ADD COLUMN IF NOT EXISTS market_id BIGINT REFERENCES trading_markets(id);

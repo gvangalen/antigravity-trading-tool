@@ -7,6 +7,7 @@ from backend.infrastructure.database import get_db
 from backend.utils.auth_utils import get_current_user
 from backend.infrastructure.repositories.report_repository import ReportRepository
 from backend.services.report_service import ReportService
+from backend.services.daily_report_trader_status_service import current_daily_trader_status
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -32,6 +33,14 @@ def _report_internal_error(message: str = "Rapportverwerking mislukt.") -> HTTPE
 # ======================================================
 # 🟢 DAILY REPORTS
 # ======================================================
+@router.get("/report/daily/trader-status")
+async def get_daily_trader_status(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Current owner-bound state, deliberately separate from the dated report."""
+    return await current_daily_trader_status(db, current_user["id"])
+
 @router.get("/report/daily/latest")
 async def get_daily_latest(
     symbol: str = Query("BTC"),

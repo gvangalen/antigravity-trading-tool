@@ -7,6 +7,7 @@ import {
   fetchDailyReportDates,
   generateDailyReport,
   fetchDailyReportPDF,
+  fetchDailyTraderStatus,
   fetchWeeklyReportLatest,
   fetchWeeklyReportByDate,
   fetchWeeklyReportDates,
@@ -30,6 +31,7 @@ import ReportTabs from '@/components/report/ReportTabs';
 import ReportContainer from '@/components/report/layout/ReportContainer';
 import ReportLayout from '@/components/report/layout/ReportLayout';
 import ReportTerminalHUD from '@/components/report/ReportTerminalHUD';
+import DailyTraderStatus from '@/components/report/DailyTraderStatus';
 import FinnTradeReviews from '@/components/report/FinnTradeReviews';
 import { ReportSkeleton } from '@/components/dashboard/DashboardSkeleton';
 import DashboardErrorBoundary from '@/components/ui/DashboardErrorBoundary';
@@ -1768,6 +1770,9 @@ export default function ReportPage() {
 
   const [reportType, setReportType] = useState('daily');
   const [report, setReport] = useState(null);
+  const [traderStatus, setTraderStatus] = useState(null);
+  const [traderStatusLoading, setTraderStatusLoading] = useState(false);
+  const [traderStatusError, setTraderStatusError] = useState(false);
   const [dates, setDates] = useState([]);
   const [selectedDate, setSelectedDate] = useState('latest');
   const [tradingReportExpanded, setTradingReportExpanded] = useState(false);
@@ -1834,6 +1839,23 @@ export default function ReportPage() {
   );
 
   const current = reportFns[reportType];
+
+  const loadTraderStatus = async () => {
+    setTraderStatusLoading(true);
+    setTraderStatusError(false);
+    setTraderStatus(null);
+    try {
+      setTraderStatus(await fetchDailyTraderStatus({ forceFresh: true }));
+    } catch {
+      setTraderStatusError(true);
+    } finally {
+      setTraderStatusLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (reportType === 'daily' && report) loadTraderStatus();
+  }, [reportType, report]);
 
   /* =====================================================
 LOAD
@@ -2100,6 +2122,13 @@ RENDER
                     <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
                       <ReportTerminalHUD report={report} type={reportType} loading={loading} />
                     </DashboardErrorBoundary>
+
+                    {reportType === 'daily' && (
+                      <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
+                        <DailyTraderStatus report={report} status={traderStatus}
+                          loading={traderStatusLoading} error={traderStatusError} onRefresh={loadTraderStatus} />
+                      </DashboardErrorBoundary>
+                    )}
 
                     <div className="mt-5 flex justify-end">
                       <button

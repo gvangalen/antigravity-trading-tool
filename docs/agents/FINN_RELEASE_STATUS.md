@@ -4,6 +4,32 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Dagrapport: actuele posities, botbeslissingen en lokale tijd (28 oktober 2026)
+
+Current phase: `LOCAL_VALIDATION_PASSED_CI_PENDING`. Candidate branch:
+`codex/daily-report-trader-status`, [PR #684](https://github.com/gvangalen/antigravity-trading-tool/pull/684).
+The daily report keeps its stored morning snapshot. A separate owner-scoped
+read shows current bot positions, saved stop and first target, Paper exit
+configuration, and the latest persisted bot decision with time and reason.
+The report page labels report time in Europe/Amsterdam and UTC, and labels
+current bot observations separately. Report generation can identify a stock
+snapshot as outside regular exchange hours only from a verified asset timezone
+and timestamp. It does not infer exchange holidays or claim automatic exits
+were checked when no check event is persisted.
+
+Final local backend suite: 4099 passed, 4 skipped. Frontend production build,
+typecheck, i18n lint/tests, command/proposal tests and high-severity audit
+passed. Real Luna/Responses development evaluation passed 20/20 and regression
+passed 109/109. The isolated parity runtime starts after correcting migration
+order, the schema bootstrap's premature partial index and the missing
+trading-market uniqueness/defaults in a fresh local schema. The new report SQL
+executes on that schema. The complete public local FINN matrix passed **16/16**
+action contracts, **9/9** downstream lineage checks and **37/37** runtime cases
+(artifact SHA-256 `d11dc080b49ee5259108575acb94d0decd1109f042f4671fc25586ff9d1fea7d`).
+No Live bot or non-allowlisted execution occurred. A separate Setup → Strategy
+→ Paper-bot chain passed 10/10. CI, Auto Deploy, public SHA identity and
+independent authenticated QA are pending; no live acceptance is claimed yet.
+
 ## Paper exit quote order and protected review diagnostics (28 oktober 2026)
 
 Current phase: `LIVE_READBACK_PASSED_AUTO_EXIT_NOT_ACCEPTED`. Candidate branch:

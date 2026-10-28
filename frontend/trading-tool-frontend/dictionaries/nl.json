@@ -1664,6 +1664,22 @@
       }
     },
     "report": {
+      "traderStatus": {
+        "title": "Posities en botstatus", "separation": "Het rapport is een momentopname. De gegevens hieronder zijn apart en actueel opgehaald.",
+        "refresh": "Status vernieuwen", "loading": "Laden…", "reportAt": "Rapportmoment (NL)", "utcAt": "Rapportmoment", "currentAt": "Status opgehaald",
+        "outsideHours": "Bij {assets} viel het rapportmoment buiten de gewone Amerikaanse beursuren. De getoonde koers kan de laatst beschikbare slotkoers zijn.",
+        "loadError": "De actuele botstatus kon niet worden geladen.", "noBots": "Geen bots gevonden.", "openPositions": "Open botposities",
+        "noOpenPositions": "Er zijn geen open botposities bekend.", "live": "Live", "paper": "Paper", "active": "Actief", "paused": "Gepauzeerd", "viewBot": "Bekijk bot",
+        "position": "Aantal", "positionValue": "Positiewaarde", "stop": "Opgeslagen stop", "firstTarget": "Eerste koersdoel",
+        "exitStatus": "Automatische exit", "lastAssessment": "Laatste botbeoordeling", "priceSource": "Koersbron", "latestDecision": "Laatste botbeslissing",
+        "noDecision": "Geen beslissing vastgelegd", "afterReport": "Na het rapport", "unknown": "Onbekend",
+        "monitoring": {
+          "not_applicable": "Niet van toepassing op deze positie", "not_configured": "Niet ingesteld voor automatische Paper-exit",
+          "levels_unconfirmed": "Koersniveaus zijn niet volledig bevestigd", "configured_check_unverified": "Ingesteld; recente exitcontrole is niet afzonderlijk vastgelegd",
+          "unknown": "Niet vast te stellen"
+        },
+        "actions": { "BUY": "Koop", "SELL": "Verkoop", "HOLD": "Houd vast", "buy": "Koop", "sell": "Verkoop", "hold": "Houd vast", "other": "Beoordeling" }
+      },
       "marketReportDescription": "Volg Markt, Macro en Technisch om gevoel te krijgen voor de marktomstandigheden.",
       "pageEyebrow": "Tradamind Intelligence",
       "title": "Tradamind Rapporten",

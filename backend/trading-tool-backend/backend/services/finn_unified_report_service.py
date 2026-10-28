@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import text
@@ -15,15 +17,42 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from backend.infrastructure.database import ASYNC_DATABASE_URL
+from backend.infrastructure.repositories.asset_catalog_repository import AssetCatalogRepository
 from backend.domain.indicator_display import indicator_display_name
 from backend.services.finn_shared_context_service import FinnSharedContextService
 from backend.utils.openai_client import ask_gpt_json
+
+logger = logging.getLogger(__name__)
 
 
 REPORT_SECTIONS = (
     "executive_summary", "market_analysis", "macro_context", "technical_analysis",
     "setup_validation", "strategy_implication", "bot_strategy", "outlook",
 )
+
+
+def _regular_session_at(observed_at: Any, asset_class: Any, market_timezone: Any) -> str:
+    """Only assert outside hours when the catalog and clock prove it.
+
+    Being inside scheduled hours does not prove the exchange was open: holidays,
+    halts and provider delays still need exchange evidence.
+    """
+    if str(asset_class or "").lower() not in {"stock", "equity", "etf"}:
+        return "not_applicable"
+    if str(market_timezone or "") not in {"America/New_York", "US/Eastern"}:
+        return "unknown"
+    try:
+        instant = datetime.fromisoformat(str(observed_at).replace("Z", "+00:00"))
+        if instant.tzinfo is None:
+            instant = instant.replace(tzinfo=timezone.utc)
+        local = instant.astimezone(ZoneInfo(str(market_timezone)))
+    except (ValueError, TypeError, ZoneInfoNotFoundError):
+        return "unknown"
+    if local.weekday() >= 5 or not (time(9, 30) <= local.time() < time(16, 0)):
+        return "outside_regular_hours"
+    return "unknown"
+
+
 PERIOD_SECTIONS = (
     "executive_summary", "market_overview", "macro_trends", "technical_structure",
     "setup_performance", "bot_performance", "strategic_lessons", "outlook",
@@ -39,7 +68,18 @@ async def _load_context(user_id: int) -> dict[str, Any]:
     try:
         sessions = async_sessionmaker(report_engine, expire_on_commit=False)
         async with sessions() as session:
-            return await FinnSharedContextService(session).for_user(user_id)
+            context = await FinnSharedContextService(session).for_user(user_id)
+            symbols = [item["symbol"] for item in context.get("assets") or [] if item.get("symbol")]
+            try:
+                catalog = await AssetCatalogRepository(session).get_assets(symbols)
+            except Exception:
+                logger.warning("Report market-hours metadata unavailable", exc_info=True)
+                catalog = {}
+            for item in context.get("assets") or []:
+                metadata = catalog.get(item["symbol"]) or {}
+                item["asset_class"] = metadata.get("asset_class")
+                item["market_timezone"] = metadata.get("timezone")
+            return context
     finally:
         await report_engine.dispose()
 
@@ -127,6 +167,12 @@ def _report_facts(context: dict[str, Any]) -> dict[str, Any]:
         setups_by_id = {row.get("id"): row for row in item.get("setups") or []}
         assets.append({
             "symbol": item.get("symbol"),
+            "asset_class": item.get("asset_class"),
+            "market_timezone": item.get("market_timezone"),
+            "market_session_at_report": _regular_session_at(
+                context.get("observed_at"), item.get("asset_class"),
+                item.get("market_timezone"),
+            ),
             "score_status": benchmark.get("source_status"),
             "score_report_date": benchmark.get("as_of"),
             "component_source_status": source_status,
@@ -233,6 +279,9 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
             "provided owner-scoped facts. Missing or stale scores are unknown, never zero. "
             "A setup match is not an entry signal; a bot budget is not cash. "
             "Do not claim an order or trade occurred unless the supplied facts prove it. "
+            "If market_session_at_report is outside_regular_hours, explain that the "
+            "latest stock quote may be from the previous regular session; do not "
+            "infer that a market was open from a timestamp alone. "
             "Use the localized indicator display names supplied in the context. "
             "Return valid JSON with the eight requested string fields."
         ),
@@ -380,6 +429,7 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
             "content_locale": locale,
             "assets": [{
                 "symbol": item["symbol"],
+                "market_session_at_report": item["market_session_at_report"],
                 "score_report_date": item.get("score_report_date"),
                 "score_status": item["score_status"],
                 "component_source_status": item["component_source_status"],
