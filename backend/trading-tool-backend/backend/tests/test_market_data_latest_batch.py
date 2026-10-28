@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 from sqlalchemy.dialects import postgresql
 
 from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
+from backend.infrastructure.repositories.bot_repository import BotRepository
 
 
 def test_latest_quote_batch_uses_indexed_top_one_lookup_per_symbol():
@@ -50,3 +51,13 @@ def test_exact_market_price_read_requires_selected_market_id():
     sql = str(statement.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
     assert "market_data.market_id = 23" in sql
     assert "market_data.symbol =" not in sql
+
+
+def test_legacy_portfolio_price_requires_the_source_quote():
+    session = SimpleNamespace(execute=AsyncMock(return_value=SimpleNamespace(
+        fetchall=lambda: [],
+    )))
+    assert asyncio.run(BotRepository(session).get_valuatable_market_prices(["BTC"])) == {}
+    sql = str(session.execute.await_args.args[0])
+    assert "market_id IS NULL" in sql
+    assert "quote_currency IS NOT NULL" in sql

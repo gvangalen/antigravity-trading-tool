@@ -56,6 +56,7 @@ const COPY = {
     matchScore: "Setupmatch",
     conditionsMatch: "Voorwaarden passen",
     benchmarkScore: "Jouw benchmarkscore",
+    assetWideScore: "Assetbreed; geen score voor een specifiek handelspaar",
     proximityScore: "Nabijheid",
     outsideConditions: "Voorwaarden passen niet",
     missingScores: "Actuele scores ontbreken",
@@ -141,6 +142,7 @@ const COPY = {
     matchScore: "Setup match",
     conditionsMatch: "Conditions match",
     benchmarkScore: "Your benchmark score",
+    assetWideScore: "Asset-wide; not a score for a specific trading pair",
     proximityScore: "Closeness",
     outsideConditions: "Conditions do not match",
     missingScores: "Current scores unavailable",
@@ -226,6 +228,7 @@ const COPY = {
     matchScore: "Setup-Abgleich",
     conditionsMatch: "Bedingungen passen",
     benchmarkScore: "Dein Benchmark-Score",
+    assetWideScore: "Assetweit; kein Score für ein bestimmtes Handelspaar",
     proximityScore: "Nähe",
     outsideConditions: "Bedingungen passen nicht",
     missingScores: "Aktuelle Scores fehlen",
@@ -409,7 +412,7 @@ function BenchmarkStatus({ match, copy }) {
   if (!Number.isFinite(score)) return null;
   return (
     <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-300">
-      {copy.benchmarkScore} {formatBenchmarkScore(score, locale)}/100
+      {copy.benchmarkScore} {formatBenchmarkScore(score, locale)}/100{match.market_id == null ? ` · ${copy.assetWideScore}` : ''}
     </span>
   );
 }

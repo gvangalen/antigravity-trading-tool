@@ -211,7 +211,11 @@ def build_closed_positions(
                                 "order_id": int(active[0]["plan_order_id"]),
                                 "decision_id": active[0].get("plan_decision_id"),
                                 "captured_at": entry_plan_captured_at.isoformat(),
-                                "relation": "entry_order_before_execution",
+                                "relation": (
+                                    "linked_plan_at_manual_entry_not_adherence"
+                                    if active[0].get("source") == "manual"
+                                    else "entry_order_before_execution"
+                                ),
                             } if entry_plan is not None else None),
                             "fills": [{
                                 "ledger_id": int(part["ledger_id"]),

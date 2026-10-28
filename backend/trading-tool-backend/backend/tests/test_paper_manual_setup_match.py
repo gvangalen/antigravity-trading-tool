@@ -74,6 +74,49 @@ def test_outside_score_preview_explains_the_verified_boundary(monkeypatch):
     assert "Macro 20 ligt onder minimum 30" in preview["message"]
 
 
+def test_benchmark_only_band_blocks_manual_paper_buy_before_preview_and_write(monkeypatch):
+    service, _, for_asset = _service(
+        monkeypatch,
+        setup={"id": 7, "symbol": "BTC", "min_benchmark_score": 61,
+               "max_benchmark_score": 75},
+        match_status="outside_conditions",
+        match_components={
+            "benchmark": {"score": 28, "minimum": 61, "maximum": 75,
+                          "within_range": False},
+        },
+    )
+
+    preview = asyncio.run(service.preview_manual_order(_payload(), user_id=3))
+    assert preview["blocked"] is True
+    assert preview["setup_match_status"] == "outside_conditions"
+    assert "Benchmark 28 ligt onder minimum 61" in preview["message"]
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.create_manual_order(_payload(), user_id=3))
+    assert exc.value.status_code == 409
+    service.repository.create_manual_order.assert_not_awaited()
+    assert for_asset.await_count == 2
+
+
+def test_pair_bound_paper_buy_uses_same_market_scope_as_saved_setup(monkeypatch):
+    service, _, for_asset = _service(
+        monkeypatch,
+        setup={"id": 7, "symbol": "BTC", "market_id": 42,
+               "min_benchmark_score": 61, "max_benchmark_score": 75},
+        match_status="outside_conditions",
+        match_components={"benchmark": {"score": 28, "minimum": 61,
+                                        "maximum": 75, "within_range": False}},
+    )
+    service.repository.get_bot_config = AsyncMock(return_value={
+        "id": 9, "setup_id": 7, "strategy_id": 11, "symbol": "BTC",
+        "market_id": 42, "is_live": False, "is_active": True,
+    })
+    result = asyncio.run(service._paper_manual_buy_match(
+        3, {"setup_id": 7, "market_id": 42, "is_live": False}, _payload()))
+    assert result["allowed"] is False
+    assert result["status"] == "outside_conditions"
+    assert for_asset.await_args.kwargs["market_id"] == 42
+
+
 def test_matching_setup_allows_paper_buy_check(monkeypatch):
     service, _, _ = _service(
         monkeypatch,

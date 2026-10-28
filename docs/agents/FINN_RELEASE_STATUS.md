@@ -4,6 +4,52 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Manual Paper plan boundary and entry evidence (28 oktober 2026)
+
+Current phase: `LOCAL_VALIDATED_AWAITING_CI`. Candidate branch:
+`codex/paper-manual-plan-boundary`. Production SHA and independent QA verdict
+are pending; this batch is not yet live.
+
+The 28 October trader log showed that a manual BTC Paper buy passed when its
+linked setup required benchmark 61–75 and the asset-wide benchmark was 28.3.
+`_paper_manual_buy_match` detected only market, macro and technical bounds, so
+a benchmark-only setup was classified as unconfigured. It now checks all four
+saved score dimensions, uses the bot's market scope, and rechecks after locking
+the Paper cash, bot, setup and daily score rows. An out-of-range or unavailable
+required score blocks a buy; a sell to close a position remains available.
+
+The manual order had no `decision_id`, while the existing entry-plan trigger
+captured only decision-linked plans. A forward-only migration captures the
+owner-bound linked setup and strategy when a new manual buy opens. Reflectie
+labels that as plan context, not proof of plan adherence. Existing closed
+trades are not backfilled from today's plan. The manual preview now uses a
+fresh, dated quote and FX after its transaction locks; it rejects stale or
+changed source quotes. Exact-pair bot cards use the price and source moment
+of their saved pair. A legacy asset bot's Paper EUR valuation is no longer
+presented as the traded EUR pair. Mijn Plan labels asset-wide scores as such,
+so they cannot be mistaken for a missing BTC/EUR pair score in Analyse.
+
+Measured local evidence on this worktree: backend `4095 passed, 4 skipped`;
+web typecheck, i18n lint and tests, command and proposal tests, and production
+build passed. The local worker-driven action matrix passed 16/16 contracts
+plus 21 adapter tests (artifact SHA-256
+`fe37497c7d0421ddd2379ee7fa8e2360d2503baf3eca673301db8eaf00ad1b4a`;
+zero Live trading calls). Real Luna/Responses development 20/20 and regression
+109/109 operation accuracy passed with provider configured and zero provider,
+schema, timeout, parse or validation failures. The canonical FINN migration
+plan validated and the new SQL migration applied in the disposable local DB.
+Security and Architecture found no remaining P1/P2 issue in their scoped
+rechecks after the quote and lock fixes. This local evidence does not prove a
+production order, a retroactive plan for the old trade, or AAPL automatic exit.
+
+Independent QA scope after verified deployment: on the exact live SHA, check
+that a manual Paper BTC buy outside 61–75 is blocked in preview and at submit;
+an in-range controlled Paper buy works; an exit remains possible; a newly
+closed manual trade records its linked plan without claiming adherence; and
+an older closed trade remains historically unknown. Check base versus
+BTC/EUR score labels and pair-specific valuation. Keep AAPL automatic exit as
+a separate unproven runtime item. No Live order.
+
 ## Exact-pair Analyse watchlist parity (28 oktober 2026)
 
 Current phase: `ACCEPTED_FOR_TESTED_SCOPE`. PR #673 CI

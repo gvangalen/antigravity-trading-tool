@@ -182,7 +182,7 @@ def test_native_usdt_quote_is_not_reported_as_eur_portfolio_value():
                 return connection.execute(query, parameters)
 
         repository = BotRepository(_Session())
-        repository.get_valuatable_market_prices = AsyncMock(return_value={"ETH": {"price": 2500.0, "observed_at": datetime.now(timezone.utc)}})
+        repository.get_valuatable_market_prices = AsyncMock(return_value={"ETH": {"price": 2500.0, "observed_at": datetime.now(timezone.utc), "quote_currency": "USDT"}})
         repository.get_asset_quote_currencies = AsyncMock(return_value={"ETH": "USDT"})
         repository.get_portfolio_fx_rates = AsyncMock(return_value={})
         context = asyncio.run(repository.get_portfolio_intelligence_context(17))
@@ -212,7 +212,7 @@ def test_dated_usdt_fx_values_a_position_without_treating_usdt_as_eur():
                 return connection.execute(query, parameters or {})
 
         repository = BotRepository(_Session())
-        repository.get_valuatable_market_prices = AsyncMock(return_value={"ETH": {"price": 2500.0, "observed_at": now}})
+        repository.get_valuatable_market_prices = AsyncMock(return_value={"ETH": {"price": 2500.0, "observed_at": now, "quote_currency": "USDT"}})
         repository.get_asset_quote_currencies = AsyncMock(return_value={"ETH": "USDT"})
         repository.get_portfolio_fx_rates = AsyncMock(return_value={
             "USDT": {"eur_per_unit": 0.8, "observed_at": now},

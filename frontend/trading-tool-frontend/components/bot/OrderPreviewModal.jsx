@@ -207,10 +207,10 @@ export default function OrderPreviewModal({
     if (isLive) {
       rows.push({ id: "exchangeEffect", label: copy.exchangeEffectLabel, value: isBlocked ? copy.noOrderPossible : copy.confirmPlacesLiveOrder });
     } else {
-      rows.push({ id: "exchangeEffect", label: copy.exchangeEffectLabel, value: copy.paperConfirmEffect });
+      rows.push({ id: "exchangeEffect", label: copy.paperEffectLabel, value: copy.paperConfirmEffect });
     }
     return rows;
-  }, [botName, copy.assetLabel, copy.botLabel, copy.buy, copy.confirmPlacesLiveOrder, copy.exchangeEffectLabel, copy.feeLabel, copy.liveManualOrder, copy.noOrderPossible, copy.orderValueLabel, copy.paperConfirmEffect, copy.paperPreview, copy.pathLabel, copy.priceLabel, copy.quantityLabel, copy.sell, copy.sideLabel, currencySymbol, feeRate, isBlocked, isBuy, isLive, locale, orderAmount, preview?.price, preview?.quantity, preview?.symbol]);
+  }, [botName, copy.assetLabel, copy.botLabel, copy.buy, copy.confirmPlacesLiveOrder, copy.exchangeEffectLabel, copy.paperEffectLabel, copy.feeLabel, copy.liveManualOrder, copy.noOrderPossible, copy.orderValueLabel, copy.paperConfirmEffect, copy.paperPreview, copy.pathLabel, copy.priceLabel, copy.quantityLabel, copy.sell, copy.sideLabel, currencySymbol, feeRate, isBlocked, isBuy, isLive, locale, orderAmount, preview?.price, preview?.quantity, preview?.symbol]);
 
   const liveContextRows = [
     livePreflight?.token ? [copy.preflightTokenLabel, copy.valid] : null,
@@ -332,7 +332,7 @@ export default function OrderPreviewModal({
                     {isBuy ? copy.buy : copy.sell}
                       </div>
                       <div className="mt-1 text-lg font-black tracking-tight text-slate-950 dark:text-white">
-                        {preview?.symbol} / {currencySymbol === "€" ? "EUR" : "USD"}
+                        {isLive ? `${preview?.symbol} / ${currencySymbol === "€" ? "EUR" : "USD"}` : `${preview?.symbol} · ${copy.paperEurValuation}`}
                       </div>
                       <div className="mt-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                         {botName}
@@ -355,6 +355,11 @@ export default function OrderPreviewModal({
                     <DetailRow key={row.id} label={row.label} value={row.value} emphasis={row.id === "orderValue" || row.id === "exchangeEffect"} labels={detailLabels} />
                   ))}
                 </div>
+                {!isLive && preview?.price_is_fx_converted && preview?.price_source_quote_currency && (
+                  <p className="mt-3 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+                    {String(copy.fxConvertedPriceHint || "").replace("{quote}", preview.price_source_quote_currency)}
+                  </p>
+                )}
               </div>
 
               {behavioralFriction?.message && (
