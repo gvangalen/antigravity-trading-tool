@@ -40,6 +40,8 @@ ALLOWED_PROFILES = {
     "score2_stale_paper",
     "score2_positive_paper",
     "score2_outside_paper",
+    "score2_exact_eur_paper",
+    "score2_exact_usdt_paper",
     "closed_paper_trade_review",
     "closed_paper_trade_review_chat",
     "auto_paper_trade_history",
@@ -2032,6 +2034,21 @@ def main() -> int:
                 report["safety"]["execution_calls"] = 1
                 report[args.profile] = run_match_probe(
                     fixture_namespace or "", outside=args.profile == "score2_outside_paper",
+                )
+                report["outcome"] = "passed"
+                report["qa_status"] = "COMPLETED"
+            elif args.profile in {"score2_exact_eur_paper", "score2_exact_usdt_paper"}:
+                if args.manifest_id != "none" or args.manifest_bundle_path:
+                    raise ValueError("exact_pair_fixture_manifest_forbidden")
+                if os.getenv("FINN_QA_ALLOW_EXACT_PAIR_FIXTURE") != "1":
+                    raise ValueError("exact_pair_fixture_not_authorized")
+                from backend.scripts.probe_protected_score2_exact_pair_paper import run as run_pair_probe
+
+                report["safety"]["read_only_profile"] = False
+                report["safety"]["execution_calls"] = 1
+                report[args.profile] = run_pair_probe(
+                    fixture_namespace or "",
+                    quote="EUR" if args.profile == "score2_exact_eur_paper" else "USDT",
                 )
                 report["outcome"] = "passed"
                 report["qa_status"] = "COMPLETED"

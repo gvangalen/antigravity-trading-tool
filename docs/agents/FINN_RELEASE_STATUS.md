@@ -4,6 +4,52 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Exact ETH/EUR and ETH/USDT protected Paper proof (28 oktober 2026)
+
+Current phase: `LOCAL_VALIDATION`. Independent QA on public SHA
+`4879c2c3267125c6f3851a0fb15e32b289499138` passed the existing
+synthetic Score 2.0 positive Paper profile (workflow `40648216340`:
+`matches`, `buy`, one filled Paper order and one ledger execution) and the
+outside-conditions profile (workflow `40648351640`: `hold`, no order, unchanged
+Paper cash). The stale-source profile also passed (workflow `40647650794`).
+Those profiles were base ETH fixtures without an exact market ID, so they did
+not close the pair-specific acceptance gap.
+
+This candidate adds two protected QA profiles, `score2_exact_eur_paper` and
+`score2_exact_usdt_paper`. Each requires both explicit protected fixture and
+safe Paper execution flags plus a valid bound QA owner. Before any write it
+checks an existing, dated Binance pair price and (for USDT) fresh EUR
+conversion. It then creates an isolated inactive owner with no exchange keys,
+binds a Paper setup, strategy and bot to that exact market ID, builds a
+pair-scoped Score 2.0 row from controlled owner-scoped indicator evidence,
+and checks `matches` → `buy` → one filled Paper order → one ledger fill and
+cash/quantity reconciliation. Successful fixtures are removed; a failure
+quarantines the inactive Paper bot. No shared price or FX row is modified.
+
+**Proof boundary:** the pair indicator readings are synthetic fixture data,
+and the probe invokes the Paper engine directly. A pass proves the exact-pair
+decision and fill against an existing dated pair quote; it does not prove the
+live indicator-ingestion job or Celery schedule. Existing live pair readback
+QA and local worker-driven exact-pair tests supply separate evidence for
+those paths. Architecture and Security reviewed this boundary; Security
+found no P1/P2. No protected official QA run has been started by Build.
+
+The local worker-driven ETH/EUR and ETH/USDT positive fills, missing-pair
+technical score, and stale-USDT-FX hold all passed on this source. The two
+positive local fills also passed the new protected result verifier, including
+the eight-decimal Paper-quantity rounding contract. The focused Paper suite
+passed **37/37**. The full backend suite passed
+**4083 tests, 4 existing skips**. Frontend typecheck, i18n checks, command,
+proposal and setup tests, production build, and high-severity audit passed;
+the audit found zero high-severity vulnerabilities. The local action matrix
+passed **16/16** with **21/21** adapter checks (artifact SHA-256
+`5805e427327b59223076d1e20d71a48a835a63a2f8e018c1894ef9d983b60b26`).
+The real Luna/Responses development selection passed **20/20** (artifact
+SHA-256 `328f4b6658bba99305aac8c44971f83f9f33dd81313ff44a4a50c84c1a472c21`),
+and regression passed **109/109** (artifact SHA-256
+`bfc2fe8d740b8f88ed0803267f5cc93b537ac263772f30b651f4346ef03c2e92`),
+both with no case failure category. Candidate CI/deploy remain pending.
+
 ## Exact-pair Paper price and FX decision consistency (28 oktober 2026)
 
 Current phase: `LIVE_DEPLOYED_AWAITING_INDEPENDENT_QA`. Independent QA accepted the preceding
