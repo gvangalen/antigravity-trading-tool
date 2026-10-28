@@ -3259,10 +3259,11 @@
     "tradePanel": {
       "status": "Status",
       "title": "Trade",
-      "remainingBotBudget": "Maximum volgens botlimieten",
+      "availableForOrder": "Beschikbaar voor deze order",
+      "liveMaxFromLimits": "Maximum volgens botlimieten",
       "positionQuantity": "Positiehoeveelheid",
       "budgetIsNotCash": "Een botbudget is geen beschikbaar kassaldo.",
-      "cappedByBudget": "Begrensd door budgetlimieten",
+      "paperAvailableContext": "Gebaseerd op virtueel Paper-kassaldo en actieve limieten.",
       "buy": "Kopen",
       "sell": "Verkopen",
       "orderPrice": "Orderprijs",

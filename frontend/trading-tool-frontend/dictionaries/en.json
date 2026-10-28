@@ -3258,10 +3258,11 @@
     "tradePanel": {
       "status": "Status",
       "title": "Trade",
-      "remainingBotBudget": "Maximum under bot limits",
+      "availableForOrder": "Available for this order",
+      "liveMaxFromLimits": "Maximum under bot limits",
       "positionQuantity": "Position quantity",
       "budgetIsNotCash": "A bot budget is not available cash.",
-      "cappedByBudget": "Capped by budget limits",
+      "paperAvailableContext": "Based on virtual Paper cash and enabled limits.",
       "buy": "Buy",
       "sell": "Sell",
       "orderPrice": "Order price",

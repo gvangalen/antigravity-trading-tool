@@ -4,6 +4,45 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Exact-pair manual Paper follow-up (28 oktober 2026)
+
+Current phase: `LOCAL_VALIDATION`. Candidate branch:
+`codex/paper-pair-manual-qa-fixes`; production remains on
+`3aa760dd007e35c075f1459dd65029959515a873` until this batch is released.
+
+Independent QA on that production SHA returned `NOT_ACCEPTED`. For a new
+BTC/EUR Paper bot whose saved benchmark range was 61–75 and current score
+36.7, manual buy preview stopped with 409 `EXACT_MARKET_EXECUTION_PENDING`
+before the score boundary could run. Its UI rendered a generic API error.
+The same browser showed Paper cash while the trade panel showed a maximum of
+€0 when all optional bot caps were disabled. In a separate, in-range base-BTC
+case, QA bought and fully sold €10 in Paper. The resulting closed Reflectie
+dossier captured the linked entry setup and strategy and correctly marked
+plan adherence as unassessed. A protected closed-trade QA runner ended with
+`runner_internal` and no narrower diagnostic; its result is incomplete. AAPL
+automatic exit remains unproven. No Live order occurred.
+
+Root cause for the pair failure: the manual-order symbol gate rejected every
+bot with `market_id`, including Paper, before score and quote validation.
+That gate now applies only to Live. Paper pair orders still use the selected
+market's owner-scoped Score 2.0 match, dated exact-market quote and FX,
+signed preview, transaction locks and one-time confirmation. Live pair manual
+orders remain unavailable. The trade panel now explains virtual Paper cash
+and active limits; disabled caps no longer reduce its available amount to
+zero. Preview and submit show the backend's typed error message.
+
+Measured local evidence so far: full backend suite `4096 passed, 4 skipped`;
+focused pair/manual tests `11 passed`; web typecheck, i18n/command/proposal
+checks, production build and high-severity audit passed. The local worker
+action matrix passed `16/16` contracts and `21` adapter tests (artifact
+SHA-256 `569a529da62656390d9f87581376f2d56ed801428d24889541abb70b713dfa5c`;
+zero Live trading calls). Real Luna/Responses development `20/20` and
+regression `109/109` operation accuracy passed with the provider configured;
+provider, schema, timeout, parse and validation failure rates were zero.
+CI, deployment and independent live QA for this batch are pending. This local
+evidence does not prove a new production Paper pair order or resolve the
+protected runner failure.
+
 ## Manual Paper plan boundary and entry evidence (28 oktober 2026)
 
 Current phase: `LIVE_BUILD_VERIFIED_AWAITING_QA`. Candidate branch:
@@ -11,9 +50,10 @@ Current phase: `LIVE_BUILD_VERIFIED_AWAITING_QA`. Candidate branch:
 `40683954035`; main CI `40684463636` and Auto Deploy `40684881485`
 succeeded for SHA `9da4b99e76370e47613f46a341c51f27a0be072b`. Public backend
 health and frontend build-info returned HTTP 200 and this exact SHA after
-deployment. This documentation-only status commit will create a later main
-SHA; its CI, deploy and public identity must also succeed before independent
-QA tests the final SHA. Independent QA verdict remains pending.
+deployment. A later status-only commit became the final public SHA
+`3aa760dd007e35c075f1459dd65029959515a873`. Independent QA returned
+`NOT_ACCEPTED` for the exact-pair manual Paper route; the evidence and repair
+batch are recorded in the section above.
 
 The 28 October trader log showed that a manual BTC Paper buy passed when its
 linked setup required benchmark 61–75 and the asset-wide benchmark was 28.3.

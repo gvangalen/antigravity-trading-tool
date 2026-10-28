@@ -708,12 +708,11 @@ def test_live_manual_order_rejects_asset_outside_bot_before_exchange():
 
 
 @pytest.mark.parametrize("route", ["preview_manual_order", "preflight_manual_order", "create_manual_order"])
-@pytest.mark.parametrize("is_live", [False, True])
-def test_pair_bound_bot_rejects_base_symbol_manual_order_before_quote_or_execution(route, is_live):
+def test_pair_bound_live_bot_rejects_base_symbol_manual_order_before_quote_or_execution(route):
     class PairRepo(_ManualOrderRepo):
         async def get_bot_config(self, user_id, bot_id):
             bot = await super().get_bot_config(user_id, bot_id)
-            bot.update(market_id=123, is_live=is_live, is_active=True)
+            bot.update(market_id=123, is_live=True, is_active=True)
             return bot
 
     service = BotService(_FakeSession())
@@ -730,6 +729,134 @@ def test_pair_bound_bot_rejects_base_symbol_manual_order_before_quote_or_executi
     assert exc.value.status_code == 409
     assert exc.value.detail["code"] == "EXACT_MARKET_EXECUTION_PENDING"
     assert repo.created_orders == 0
+
+
+@pytest.mark.parametrize("route", ["preview_manual_order", "create_manual_order"])
+def test_pair_bound_paper_buy_checks_setup_before_quote_or_execution(route, monkeypatch):
+    class PairRepo(_ManualOrderRepo):
+        async def get_bot_config(self, user_id, bot_id):
+            bot = await super().get_bot_config(user_id, bot_id)
+            bot.update(market_id=123, quote_currency="EUR", is_live=False,
+                       is_active=True, setup_id=42)
+            return bot
+
+        async def get_valuatable_exact_market_prices(self, market_ids):
+            raise AssertionError("outside setup must be checked before fetching a quote")
+
+    service = BotService(_FakeSession())
+    repo = PairRepo()
+    service.repository = repo
+
+    async def outside(*_args, **_kwargs):
+        return {"allowed": False, "status": "outside_conditions",
+                "message": "Benchmark 36,7 ligt onder minimum 61. Deze Paper-koop wacht.",
+                "safe_next_step": "Controleer de setupvoorwaarden."}
+
+    monkeypatch.setattr(service, "_paper_manual_buy_match", outside)
+    payload = BotManualOrderSchema(bot_id=9, symbol="BTC", side="buy", quantity=0.001,
+                                   price=50000, idempotency_key="pair-outside")
+    if route == "preview_manual_order":
+        result = asyncio.run(service.preview_manual_order(payload, user_id=7))
+        assert result["blocked"] is True
+        assert result["setup_match_status"] == "outside_conditions"
+        assert "Benchmark 36,7" in result["message"]
+    else:
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(service.create_manual_order(payload, user_id=7))
+        assert exc.value.detail["code"] == "PAPER_SETUP_MATCH_REQUIRED"
+    assert repo.created_orders == 0
+
+
+def test_pair_bound_paper_preview_uses_exact_market_quote_and_not_base_quote(monkeypatch):
+    service = BotService(_FakeSession())
+
+    class PairRepo(_ManualOrderRepo):
+        async def get_bot_config(self, user_id, bot_id):
+            bot = await super().get_bot_config(user_id, bot_id)
+            bot.update(market_id=123, quote_currency="EUR", is_live=False,
+                       is_active=True, setup_id=42, budget_max_order_eur=100)
+            return bot
+
+        async def get_valuatable_exact_market_prices(self, market_ids):
+            assert market_ids == [123]
+            return {123: {"symbol": "BTC", "quote_currency": "EUR", "price": 50000,
+                          "source_observed_at": datetime.now(timezone.utc)}}
+
+        async def get_valuatable_market_prices(self, symbols):
+            raise AssertionError("base asset quote must not be used for a saved pair")
+
+        async def get_paper_cash(self, **_fields):
+            return 100.0
+
+    service.repository = PairRepo()
+
+    async def allowed(*_args, **_kwargs):
+        return {"allowed": True, "status": "matches"}
+
+    monkeypatch.setattr(service, "_paper_manual_buy_match", allowed)
+    payload = BotManualOrderSchema(bot_id=9, symbol="BTC", side="buy", quantity=0.0002,
+                                   price=50000, value_eur=10, idempotency_key="pair-allowed")
+    result = asyncio.run(service.preview_manual_order(payload, user_id=7))
+    assert result["ok"] is True
+    assert result["price"] == 50000
+    assert result["price_source_quote_currency"] == "EUR"
+    assert result["paper_preview_token"]
+
+
+def test_pair_bound_paper_confirmation_rechecks_exact_quote_and_books_once(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    service = BotService(_FakeSession())
+
+    class PairRepo(_ManualOrderRepo):
+        def __init__(self):
+            super().__init__()
+            self.locked_setup = False
+
+        async def get_bot_config(self, user_id, bot_id):
+            bot = await super().get_bot_config(user_id, bot_id)
+            bot.update(market_id=123, quote_currency="EUR", is_live=False,
+                       is_active=True, setup_id=42, mode="manual", budget_max_order_eur=100)
+            return bot
+
+        async def lock_manual_paper_setup(self, user_id, setup_id, symbol, market_id):
+            assert (user_id, setup_id, symbol, market_id) == (7, 42, "BTC", 123)
+            self.locked_setup = True
+
+        async def get_valuatable_exact_market_prices(self, market_ids):
+            assert market_ids == [123]
+            return {123: {"symbol": "BTC", "quote_currency": "EUR", "price": 50000,
+                          "source_observed_at": datetime.now(timezone.utc)}}
+
+        async def get_valuatable_market_prices(self, symbols):
+            raise AssertionError("base quote must not be used")
+
+        async def get_paper_cash(self, **_fields):
+            return 100.0
+
+    repo = PairRepo()
+    repo.create_bot_execution = AsyncMock(return_value=1)
+    repo.insert_bot_ledger = AsyncMock()
+    service.repository = repo
+
+    async def allowed(*_args, **_kwargs):
+        return {"allowed": True, "status": "matches"}
+
+    monkeypatch.setattr(service, "_paper_manual_buy_match", allowed)
+    monkeypatch.setattr("backend.services.bot_service.sync_snapshot_all_for_user", lambda _user_id: None)
+    payload = BotManualOrderSchema(bot_id=9, symbol="BTC", side="buy", quantity=0.0002,
+                                   price=50000, value_eur=10, idempotency_key="pair-confirm")
+    preview = asyncio.run(service.preview_manual_order(payload, user_id=7))
+    payload.quantity = preview["quantity"]
+    payload.price = preview["price"]
+    payload.price_currency = preview["price_currency"]
+    payload.value_eur = preview["gross_eur"]
+    payload.paper_preview_token = preview["paper_preview_token"]
+    result = asyncio.run(service.create_manual_order(payload, user_id=7))
+    assert result["status"] == "filled"
+    assert repo.locked_setup
+    assert repo.created_orders == 1
+    assert repo.insert_bot_ledger.await_count == 1
 
 
 @pytest.mark.parametrize("field,value", [
