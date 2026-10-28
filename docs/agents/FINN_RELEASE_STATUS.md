@@ -6,8 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Dagrapport: beslisreden in gekozen taal (28 oktober 2026)
 
-Current phase: `LOCAL_VALIDATION_PASSED_CI_PENDING`. Candidate branch:
-`codex/daily-report-reason-i18n`. The preceding report batch is live on SHA
+Current phase: `LIVE_READBACK_PASSED_AWAITING_QA`. Candidate branch:
+`codex/daily-report-reason-i18n`, [PR #686](https://github.com/gvangalen/antigravity-trading-tool/pull/686). The preceding report batch is live on SHA
 `d0d5ca9d21c7318e5c60cb052f5f19055d81c4ad`; main CI `40760867896`
 and Auto Deploy `40761389628` succeeded, and public backend health and
 frontend build-info both returned HTTP 200 with that SHA.
@@ -28,8 +28,14 @@ web typecheck, i18n lint/tests, command/proposal tests, production build and
 high-severity audit passed. Real Luna/Responses development passed **20/20**
 and regression **109/109**, with zero provider, schema, timeout, parse or
 validation failures. The preceding batch's full public action matrix passed
-16/16; this presentation-only repair does not change action contracts. CI,
-Auto Deploy, final public identity and independent live recheck remain pending.
+16/16; this presentation-only repair does not change action contracts. All
+five candidate CI jobs passed. Main CI run `40765057025` and Auto Deploy run
+`40765585091` succeeded for merge SHA
+`068dd7fb84c6096afa10697905c873690a441488`; public backend health and
+frontend build-info each returned HTTP 200 and exactly that SHA. This
+documentation-only status update creates a later revision, so its main CI,
+Auto Deploy and public identity must pass before independent QA rechecks the
+final SHA.
 
 ## Dagrapport: actuele posities, botbeslissingen en lokale tijd (28 oktober 2026)
 
