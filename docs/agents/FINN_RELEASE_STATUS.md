@@ -4,6 +4,43 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Exact-pair Paper price and FX decision consistency (28 oktober 2026)
+
+Current phase: `LOCAL_VALIDATED_CANDIDATE`. Independent QA accepted the preceding
+targeted exact-pair readback matrix on public backend/frontend SHA
+`f854544db87253e6d8670a68a30db2ec210a6eba`; that verdict did not
+include a positive score-driven Paper fill. The user requested that remaining
+execution path be checked.
+
+The isolated local worker produced one ETH/EUR and one ETH/USDT positive
+Score 2.0 → setup-match → Paper `buy` → filled order → ledger/snapshot path.
+Each used its exact market ID and €50 amount. With an ETH/USDT technical score
+missing, despite a complete base-ETH score, it produced `hold` and zero orders.
+The same local fixture exposed a defect when the USDT→EUR FX quote was stale:
+the worker placed no order but persisted a planned €50 `buy`. The candidate
+now changes a Paper `buy` with no verified EUR market price to `hold`, €0,
+before persistence or order planning. A rerun with stale FX passed with zero
+orders. The bot remains active; trade-specific existing hold reasons remain
+unchanged. The exact-pair probe now varies EUR/USDT, distinguishes pair price
+from base-asset price, checks filled quantity and tests missing score/stale FX.
+
+The expanded focused score/Paper suite passed **37/37**. The final-source root
+backend suite passed **4083 tests, 4 existing skips** (log SHA-256
+`c3fb7ca36734e43db9eb4d0922c7b019fa414aa3a9c9c3da2e86af229d770145`).
+Frontend typecheck, i18n lint/tests, command/proposal/setup tests, production
+build and high-severity audit passed with zero high-severity vulnerabilities.
+The restarted local FastAPI/Celery action matrix passed **16/16** contracts
+and **21/21** adapter checks (matrix SHA-256
+`9a9752fd68b0a97db471828c387b73978644fa5cb8a203feb7846d281bff75ec`),
+with no broker orders or Live trading calls. Real Luna/Responses development
+selection passed **20/20** (artifact SHA-256
+`71f40eef5819823f1e5d716222092f05b1eae13ff33b322278bc57f0a7015655`)
+and regression passed **109/109** (artifact SHA-256
+`b5b34fc7e466fdf8b6318fa23bba4d63d95d7c1262cf93ec9cbd53028ab44604`),
+both with zero provider, schema, timeout or parse failures. Security's
+read-only review found no P1/P2 issue in the fix. CI, deployment and
+independent live QA have not yet tested this candidate.
+
 ## Named saved strategy amount repair candidate (27 oktober 2026)
 
 Current phase: `LIVE_DEPLOYED_AWAITING_INDEPENDENT_QA`. Independent QA returned `NOT_ACCEPTED` on
