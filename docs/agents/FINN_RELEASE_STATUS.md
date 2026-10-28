@@ -6,7 +6,15 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Exact-pair Paper verifier repair after independent QA (28 oktober 2026)
 
-Current phase: `LOCAL_VALIDATION`. Independent QA on public SHA
+Current phase: `LIVE_DEPLOYED_AWAITING_INDEPENDENT_QA`. PR #671 CI
+`40654888038` passed all five jobs. Main CI `40655309374` and Auto Deploy
+`40655697094` both succeeded for SHA
+`30b677b9918a1d3e1a3896f52d2d9c1daeba90af`. Backend health and frontend
+build-info each returned HTTP 200 with that exact SHA. The status-only release
+commit that records this evidence requires its own final CI, deployment
+identity check and independent QA run before acceptance.
+
+Independent QA on prior public SHA
 `620cc6038e8675fbd903ea01084205fca28e3c3f` accepted the protected
 ETH/EUR pair probe (workflow `40653374093`): complete pair-scoped fixture
 score, `matches`, `buy`, one filled Paper order and one ledger execution, with
