@@ -102,6 +102,24 @@ class FinnV2OperationResolverService:
                 selection, operation_id=indicator_mutation,
                 conversation_reference=selection.conversation_reference,
             )
+        if (
+            str((request_facts or {}).get("action_polarity") or "") == "read"
+            and str((request_facts or {}).get("primary_entity") or "") == "indicator_configuration"
+            and "indicator_configuration" in explicit_entities
+            and re.search(
+                r"\b(?:mijn|my|meine|opgeslagen|saved|gespeichert\w*|"
+                r"weging|gewicht|weight|instelling\w*|configuratie\w*)\b",
+                str((request_facts or {}).get("normalized_text") or "").casefold(),
+            )
+            and any(contract.operation_id == "read_indicator_configuration" for contract in candidates)
+        ):
+            # A named indicator may also be a financial concept. Possessive
+            # or configuration wording makes this a stored-settings read,
+            # even if the selector suggested a setup or a concept answer.
+            return self._with_resolved_operation(
+                selection, operation_id="read_indicator_configuration",
+                conversation_reference=selection.conversation_reference,
+            )
         selected_entities = {
             key: value
             for key, value in dict(getattr(selection, "entities", {}) or {}).items()
