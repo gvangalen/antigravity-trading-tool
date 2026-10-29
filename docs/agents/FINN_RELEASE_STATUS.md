@@ -30,8 +30,9 @@ each with zero provider failures; artifact SHA-256 values are
 and `dcf6314299f382365b06ccbdb0d13c9b57608f694b1fcdc6ae33dbda560625db`.
 These provider evaluations exercise the unchanged final selector; the last
 code adjustment exposed saved weight in read evidence and resolved two
-read-evidence test regressions. No protected QA fixture or sealed holdout was
-used by Build. CI, deployment, public SHA checks and independent live QA are
+read-evidence test regressions. All five candidate CI jobs passed on code SHA
+`94b656645` in run `40863987551`. No protected QA fixture or sealed holdout
+was used by Build. Deployment, public SHA checks and independent live QA are
 pending.
 
 ## Indicatorinstellingen per exact handelspaar (29 oktober 2026)
