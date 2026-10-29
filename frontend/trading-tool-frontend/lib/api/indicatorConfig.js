@@ -7,6 +7,11 @@ export async function getPairIndicatorConfig(marketId, category, indicator) {
   return fetchAuth(`/api/workspace/exact-market/indicator-config?${params}`, { method: 'GET' });
 }
 
+export async function previewPairIndicatorImpact(marketId, category, indicator) {
+  const params = new URLSearchParams({ market_id: String(marketId), category, indicator });
+  return fetchAuth(`/api/workspace/exact-market/indicator-impact?${params}`, { method: 'GET' });
+}
+
 export async function savePairIndicatorConfig({ marketId, category, indicator, mode, draft }) {
   return fetchAuth('/api/workspace/exact-market/indicator-config', {
     method: 'PUT',

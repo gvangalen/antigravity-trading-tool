@@ -17,6 +17,7 @@ import {
   getIndicatorConfig,
   getPairIndicatorConfig,
   previewIndicatorImpact,
+  previewPairIndicatorImpact,
   savePairIndicatorConfig,
   saveCustomRules,
   updateIndicatorSettings,
@@ -383,8 +384,10 @@ export default function IndicatorConfigModal({
     setLoadError("");
     setImpactPreview(null);
     setPreviewError(false);
-    setPreviewLoading(!marketId);
-    if (!marketId) previewIndicatorImpact({ category, indicator: normalizedIndicator, symbol: assetSymbol })
+    setPreviewLoading(true);
+    (marketId
+      ? previewPairIndicatorImpact(marketId, category, normalizedIndicator)
+      : previewIndicatorImpact({ category, indicator: normalizedIndicator, symbol: assetSymbol }))
       .then((preview) => { if (active) setImpactPreview(preview); })
       .catch(() => { if (active) setPreviewError(true); })
       .finally(() => { if (active) setPreviewLoading(false); });

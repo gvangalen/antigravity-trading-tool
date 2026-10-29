@@ -68,14 +68,20 @@ class IndicatorImpactPreviewService:
     def __init__(self, session):
         self.session = session
 
-    async def preview(self, *, user_id: int, symbol: str, category: str, indicator: str) -> dict:
+    async def preview(self, *, user_id: int, symbol: str, category: str, indicator: str,
+                      market_id: int | None = None) -> dict:
         symbol = str(symbol or "").strip().upper()
         category = str(category or "").strip().lower()
         indicator = str(indicator or "").strip().lower()
         if not symbol or category not in {"market", "macro", "technical"} or not indicator:
             raise ValueError("invalid_indicator_preview")
-        assessment = await SetupMarketMatchService(self.session).for_asset(user_id, symbol)
-        result = await self.session.execute(text("""
+        assessment = await SetupMarketMatchService(self.session).for_asset(
+            user_id, symbol, market_id=market_id)
+        market_scope = "AND st.market_id = :market_id" if market_id is not None else ""
+        params = {"user_id": user_id, "symbol": symbol}
+        if market_id is not None:
+            params["market_id"] = market_id
+        result = await self.session.execute(text(f"""
             SELECT b.id, b.name, b.is_active, b.is_live,
                    st.id AS setup_id, st.min_benchmark_score, st.max_benchmark_score,
                    s.execution_mode, s.decision_curve
@@ -83,9 +89,11 @@ class IndicatorImpactPreviewService:
             JOIN strategies s ON s.id = b.strategy_id AND s.user_id = b.user_id
             JOIN setups st ON st.id = s.setup_id AND st.user_id = b.user_id
             WHERE b.user_id = :user_id AND UPPER(st.symbol) = :symbol
+              {market_scope}
             ORDER BY b.id
-        """), {"user_id": user_id, "symbol": symbol})
+        """), params)
         return {
-            "symbol": symbol, "category": category, "indicator": indicator,
+            "symbol": symbol, "market_id": market_id,
+            "category": category, "indicator": indicator,
             **summarize_impact(assessment, [dict(row) for row in result.mappings().all()]),
         }

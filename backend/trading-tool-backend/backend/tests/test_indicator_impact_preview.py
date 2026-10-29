@@ -1,4 +1,7 @@
+import asyncio
+
 from backend.services.indicator_impact_preview_service import summarize_impact
+from backend.services.indicator_impact_preview_service import IndicatorImpactPreviewService
 
 
 def test_preview_marks_score_gated_setups_and_bots_pending_without_inventing_score():
@@ -31,3 +34,39 @@ def test_preview_marks_score_gated_setups_and_bots_pending_without_inventing_sco
     assert [item["after_status"] for item in preview["bots"]] == [
         "wait_for_fresh_score", "no_score_gate_change", "wait_for_fresh_score",
     ]
+
+
+def test_pair_preview_reads_only_setups_and_bots_for_selected_market(monkeypatch):
+    captured = {}
+
+    class FakeAssessment:
+        def __init__(self, session):
+            pass
+
+        async def for_asset(self, user_id, symbol, *, market_id=None):
+            captured["assessment"] = (user_id, symbol, market_id)
+            return {"benchmark_score": 40, "source_status": "available", "matches": []}
+
+    class FakeResult:
+        def mappings(self):
+            return self
+
+        def all(self):
+            return []
+
+    class FakeSession:
+        async def execute(self, statement, params):
+            captured["sql"] = str(statement)
+            captured["params"] = params
+            return FakeResult()
+
+    monkeypatch.setattr(
+        "backend.services.indicator_impact_preview_service.SetupMarketMatchService",
+        FakeAssessment,
+    )
+    preview = asyncio.run(IndicatorImpactPreviewService(FakeSession()).preview(
+        user_id=7, symbol="BTC", category="technical", indicator="rsi", market_id=12))
+    assert captured["assessment"] == (7, "BTC", 12)
+    assert "st.market_id = :market_id" in captured["sql"]
+    assert captured["params"] == {"user_id": 7, "symbol": "BTC", "market_id": 12}
+    assert preview["market_id"] == 12

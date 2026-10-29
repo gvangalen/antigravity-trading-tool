@@ -3128,6 +3128,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         marketLabel={workspace?.pair || null}
         mode="edit"
         onClose={() => setTechnicalConfigModal(null)}
+        onCompleted={() => void refreshWorkspaceOnce()}
       />
     </section>
   );
