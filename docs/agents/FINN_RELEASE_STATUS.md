@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Paaridentiteit in dagelijks rapport (29 oktober 2026)
 
-Current phase: `CANDIDATE_CI_PASSED_AWAITING_DEPLOY`. Candidate branch
+Current phase: `LIVE_AWAITING_INDEPENDENT_QA`. Candidate branch
 `codex/pair-report-identity-fix`, [PR #699](https://github.com/gvangalen/antigravity-trading-tool/pull/699).
 Independent authenticated QA on live SHA `377d606f39f073b7efb854f84bea295c18271e0d`
 reported `NOT_ACCEPTED` for the complete pair flow: benchmark copy, independent
@@ -29,6 +29,13 @@ FINN action contracts. These red diagnostics are not presented as passing
 release evidence. The official protected QA matrix remains blocked by its
 missing approved manifest binding; independent authenticated browser QA is
 still required after deployment. No Live order was placed.
+
+PR #699 merged as `413e47d7bd53b483476ad350bef3b1a8f61abfc8`.
+Main CI run `40961452558` and Auto Deploy run `40961930800` succeeded.
+Public `https://tradamind.com/api/health` and
+`https://tradamind.com/build-info.json` each returned HTTP 200 and exactly
+that merge SHA. This status-only update will create a later main revision, so
+its CI, Auto Deploy and public identity must be checked before QA starts.
 
 ## Paargebonden benchmarks kopiëren en mobiel uitlezen (29 oktober 2026)
 
