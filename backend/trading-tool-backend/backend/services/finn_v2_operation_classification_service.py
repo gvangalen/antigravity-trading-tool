@@ -380,6 +380,15 @@ class FinnV2OperationClassificationService:
         normalized_message = str(message or "").casefold()
         if (
             facts.discourse_act == "operation_request"
+            and polarity == "update"
+            and facts.primary_entity == "indicator_configuration"
+            and "indicator_configuration" in facts.explicit_entities
+        ):
+            # A typed change to an indicator cannot become a watchlist write.
+            # The proposal still needs its owner, exact market and confirmation.
+            return "update_indicator_configuration"
+        if (
+            facts.discourse_act == "operation_request"
             and polarity in {"delete", "remove"}
             and "indicator_configuration" in facts.explicit_entities
             and re.search(

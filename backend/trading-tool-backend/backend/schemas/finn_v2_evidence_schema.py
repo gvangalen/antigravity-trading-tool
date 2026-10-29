@@ -46,6 +46,7 @@ class IndicatorConfigurationItem(BaseModel):
     indicator: str
     category: str
     priority: Optional[int] = None
+    weight: Optional[float] = None
     enabled: bool = True
     symbol: Optional[str] = None
     asset_class: Optional[str] = None

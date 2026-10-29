@@ -284,6 +284,7 @@ class FinnV2OperationStateService:
                 )
                 if contract.operation_id in {
                     "create_setup", "create_strategy", "create_indicator_configuration",
+                    "update_indicator_configuration",
                 } or not model_tool_inputs
                 else {}
             )
@@ -316,6 +317,10 @@ class FinnV2OperationStateService:
                 # A revision of the open proposal may add the strategy now.
                 # Never let the old setup-only scope silently discard it.
                 explicit["plan_scope"] = "setup_and_strategy"
+        if contract.operation_id == "update_indicator_configuration":
+            pair = self._explicit_indicator_action_pair(message)
+            if pair is not None:
+                explicit["asset"], explicit["quote_currency"] = pair
         if dca_strategy:
             # The parent setup, not the model's phrasing, determines that
             # entry, stop and targets are inapplicable to this strategy.
@@ -401,6 +406,9 @@ class FinnV2OperationStateService:
                 # A quote cannot be inferred from a workspace default, an
                 # amount written in euros, or the model's own suggestion.
                 continue
+            if contract.operation_id == "update_indicator_configuration" and key == "quote_currency" and key not in explicit:
+                # Never let a model choose the market for a financial edit.
+                continue
             if (
                 key == "name" and model_tool_inputs
                 and contract.operation_id.startswith("create_")
@@ -476,8 +484,9 @@ class FinnV2OperationStateService:
             explicit["name"] = self._trim_linked_strategy_clause(str(explicit["name"]))
         sources = dict(existing.input_sources) if existing is not None else {}
         provenance = dict(existing.input_provenance) if existing is not None else {}
-        if (contract.operation_id == "create_setup" and existing is not None
-                and explicit.get("symbol") and explicit["symbol"] != collected.get("symbol")
+        target_field = "symbol" if contract.operation_id == "create_setup" else "asset"
+        if (contract.operation_id in {"create_setup", "update_indicator_configuration"} and existing is not None
+                and explicit.get(target_field) and explicit[target_field] != collected.get(target_field)
                 and "quote_currency" not in explicit):
             collected.pop("quote_currency", None)
             sources.pop("quote_currency", None)
@@ -686,6 +695,11 @@ class FinnV2OperationStateService:
         collected = collected_inputs or {}
         operation_id = contract.operation_id if contract is not None else None
         language = str(locale or "nl").split("-")[0].lower()
+        if field == "quote_currency" and operation_id == "update_indicator_configuration":
+            return {
+                "en": "Which trading pair should this indicator change apply to: EUR or USDT?",
+                "de": "Für welches Handelspaar gilt diese Indikatoränderung: EUR oder USDT?",
+            }.get(language, "Voor welk handelspaar wil je deze indicator wijzigen: EUR of USDT?")
         if language in {"en", "de"}:
             localized = {
                 "en": {
@@ -925,6 +939,10 @@ class FinnV2OperationStateService:
             pair = requested_catalog_trading_pair(text)
             if pair is not None:
                 values["symbol"], values["quote_currency"] = pair
+        if contract.operation_id == "update_indicator_configuration":
+            pair = self._explicit_indicator_action_pair(text)
+            if pair is not None:
+                values["asset"], values["quote_currency"] = pair
         if explicit_asset:
             for field in {"asset", "symbol"}.intersection(accepted_inputs):
                 if field not in values:
@@ -1931,6 +1949,18 @@ class FinnV2OperationStateService:
         return cls._name_input_from_text(message)
 
     @classmethod
+    def _explicit_indicator_action_pair(cls, text: str) -> tuple[str, str] | None:
+        # An explicit exclusion is not a second target market. Without such
+        # an exclusion, two different pairs remain ambiguous and no pair is
+        # promoted into a confirmable financial action.
+        target_text = re.sub(
+            r"\b(?:laat|leave|lass)\s+[A-Za-z0-9]{2,10}/[A-Za-z0-9]{2,10}"
+            r"\s+(?:ongemoeid|unchanged|in\s+ruhe)\b",
+            " ", text, flags=re.IGNORECASE,
+        )
+        return requested_catalog_trading_pair(target_text)
+
+    @classmethod
     def _natural_changed_fields(cls, text: str, *, contract: OperationContract) -> dict[str, object]:
         """Capture one explicit natural-language change for a typed update slot.
 
@@ -1943,6 +1973,19 @@ class FinnV2OperationStateService:
         if structured:
             return structured
         changes: dict[str, object] = {}
+        if contract.operation_id == "update_indicator_configuration":
+            weight = re.search(
+                r"\b(?:weging|gewicht|weight|gewichtung)\b[^.;\n]{0,100}?"
+                r"\b(?:naar|to|auf)\s+(laag|low|niedrig|normaal|normal|hoch|hoog|high)\b",
+                text, re.IGNORECASE,
+            )
+            if weight:
+                changes["weight"] = {
+                    "laag": 0.6, "low": 0.6, "niedrig": 0.6,
+                    "normaal": 1.0, "normal": 1.0,
+                    "hoog": 2.0, "high": 2.0, "hoch": 2.0,
+                }[weight.group(1).casefold()]
+                return changes
         if contract.operation_id == "update_strategy":
             mode = re.search(
                 r"\b(?:naar|to|auf)\s+(manual|handmatig|automatic|automatis\w*|fest(?:e)?|"

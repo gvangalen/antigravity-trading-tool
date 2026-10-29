@@ -514,10 +514,13 @@ class FinnV2ReasoningContextService:
                         "category": item.get("category"),
                         "enabled": item.get("enabled"),
                         "priority": item.get("priority"),
+                        **({"weight": item["weight"]} if item.get("weight") is not None else {}),
                     }
                 )
             return {
                 "symbol": source.get("symbol") or summary.get("symbol"),
+                "market_id": source.get("market_id"),
+                "pair": source.get("pair"),
                 "asset_class": source.get("asset_class") or summary.get("asset_class"),
                 "owner_user_id": source.get("owner_user_id"),
                 "requested_symbol": source.get("requested_symbol"),

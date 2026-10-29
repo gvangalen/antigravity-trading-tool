@@ -7,15 +7,20 @@ import logging
 from datetime import datetime
 from typing import Any, Awaitable, Callable, Optional
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from fastapi import HTTPException
 
 from backend.infrastructure.repositories.indicator_config_repository import IndicatorConfigRepository
 from backend.infrastructure.repositories.user_repository import UserRepository
+from backend.infrastructure.models import TradingMarket, UserIndicatorConfig
 from backend.schemas.bot_schema import BotConfigCreateSchema, BotConfigUpdateSchema, TradePlanUpsertSchema
 from backend.schemas.trading_schema import SetupCreateSchema, StrategyCreateSchema
 from backend.services.bot_service import BotService
 from backend.services.indicator_config_service import IndicatorConfigService
+from backend.services.pair_indicator_config_service import PairIndicatorConfigService
+from backend.services.indicator_score_refresh_service import queue_indicator_score_refresh
+from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
+from backend.utils.scoring_utils import normalize_indicator_name
 from backend.services.macro_data_service import MacroDataService
 from backend.services.market_data_service import MarketDataService
 from backend.services.market_data_ingestion_service import MarketDataIngestionService
@@ -34,6 +39,7 @@ class FinnV2ActionAdapterRegistry:
         self.session = session
         self.flags = flag_service or FinnV2FlagService()
         self.indicators = IndicatorConfigService(IndicatorConfigRepository(session))
+        self.pair_indicators = PairIndicatorConfigService(session)
         self.macro_indicators = MacroDataService(session)
         self.market_indicators = MarketDataService(session)
         self.market_data_ingestion = MarketDataIngestionService(session)
@@ -102,6 +108,29 @@ class FinnV2ActionAdapterRegistry:
             asset = str(payload.get("asset") or "").strip().upper()
             category = str(payload.get("category") or "").strip().lower()
             indicator = str(payload.get("indicator") or "").strip().lower()
+            quote_currency = str(payload.get("quote_currency") or "").strip().upper()
+            if quote_currency:
+                market = await self._exact_indicator_market(asset, quote_currency)
+                result = await self.session.execute(select(UserIndicatorConfig).where(
+                    UserIndicatorConfig.user_id == user_id,
+                    UserIndicatorConfig.market_id == market.id,
+                    UserIndicatorConfig.category == category,
+                    UserIndicatorConfig.indicator == indicator,
+                ))
+                row = result.scalars().first()
+                if row is None or not row.enabled:
+                    raise ValueError("indicator_configuration_postcondition_failed")
+                expected_weight = (payload.get("configuration") or {}).get("weight")
+                config = dict(row.config_json or {})
+                if expected_weight is not None and float(config.get("weight", -1)) != float(expected_weight):
+                    raise ValueError("indicator_configuration_postcondition_failed")
+                observed.update({
+                    "asset": asset, "quote_currency": quote_currency, "market_id": market.id,
+                    "category": category, "indicator": indicator,
+                    "exists": True, "config": config,
+                })
+                canonical = json.dumps(observed, sort_keys=True, default=str)
+                return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
             rows = await self.indicators.product_repository.get_user_configs(
                 user_id,
                 category,
@@ -210,6 +239,18 @@ class FinnV2ActionAdapterRegistry:
     async def _update_indicator_configuration(self, user_id: int, payload: dict) -> dict:
         return await self._apply_indicator_configuration(user_id, payload, default_operation="update")
 
+    async def _exact_indicator_market(self, asset: str, quote_currency: str) -> TradingMarket:
+        result = await self.session.execute(select(TradingMarket).where(
+            TradingMarket.asset_symbol == asset,
+            TradingMarket.quote_currency == quote_currency,
+            TradingMarket.venue == "BINANCE",
+            TradingMarket.is_active.is_(True),
+        ))
+        markets = result.scalars().all()
+        if len(markets) != 1:
+            raise ValueError("exact_indicator_market_unavailable")
+        return markets[0]
+
     async def _apply_indicator_configuration(self, user_id: int, payload: dict, *, default_operation: str) -> dict:
         if not self.flags.execute_indicator_changes_enabled():
             raise ValueError("execution_adapter_unavailable")
@@ -227,6 +268,37 @@ class FinnV2ActionAdapterRegistry:
         indicator = str(after.get("indicator_id") or change.get("indicator_id") or "").strip().lower()
         if not indicator:
             raise ValueError("indicator_required")
+        quote_currency = str(after.get("quote_currency") or "").strip().upper()
+        if (
+            default_operation == "update"
+            and str(DEFAULT_ASSET_CATALOG.get(symbol, {}).get("asset_class") or "").lower() == "crypto"
+            and not quote_currency
+        ):
+            raise ValueError("indicator_pair_required")
+        if quote_currency:
+            if default_operation != "update":
+                raise ValueError("pair_indicator_operation_unsupported")
+            if quote_currency not in {"EUR", "USDT"}:
+                raise ValueError("invalid_indicator_pair")
+            market = await self._exact_indicator_market(symbol, quote_currency)
+            indicator = normalize_indicator_name(indicator)
+            current = await self.pair_indicators.get(user_id, market, category, indicator)
+            score_mode = str(after.get("score_mode") or current.get("score_mode") or "standard")
+            weight = float(after.get("weight") if after.get("weight") is not None else current.get("weight", 1.0))
+            await self.pair_indicators.save(
+                user_id, market, category, indicator, mode="edit",
+                score_mode=score_mode, weight=weight,
+                rules=list(after.get("rules") if after.get("rules") is not None else current.get("rules") or []),
+            )
+            queue_indicator_score_refresh(user_id, symbol, market_id=int(market.id))
+            return {
+                "ok": True, "operation": "update_indicator_configuration",
+                "asset": symbol, "quote_currency": quote_currency,
+                "pair": f"{symbol}/{quote_currency}", "market_id": market.id,
+                "category": category, "indicator": indicator,
+                "configuration": {"score_mode": score_mode, "weight": weight},
+                "data_status": "pending_refresh",
+            }
         if "rules" in after:
             await self.indicators.save_custom_rules(
                 category=category,

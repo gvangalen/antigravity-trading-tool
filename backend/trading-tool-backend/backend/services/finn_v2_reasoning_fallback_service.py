@@ -1274,6 +1274,7 @@ class FinnV2ReasoningFallbackService:
                 payload["after"] = {
                     "category": fields["category"],
                     "indicator_id": fields["indicator"],
+                    **({"quote_currency": fields["quote_currency"]} if fields.get("quote_currency") else {}),
                     **dict(fields["changed_fields"]),
                 }
             else:

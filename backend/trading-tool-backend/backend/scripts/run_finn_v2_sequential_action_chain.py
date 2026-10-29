@@ -222,9 +222,9 @@ def _specifications(names: dict[str, str]) -> tuple[tuple[str, str, str], ...]:
         ("select_asset", "Selecteer SOL als mijn actieve asset.", "select_asset"),
         ("watchlist_add", "Add SOL to my watchlist.", "watchlist_add"),
         ("watchlist_remove", "Entferne SOL wieder aus meiner Watchlist.", "watchlist_remove"),
-        ("indicator_create", "Create a technical RSI indicator configuration for SOL.", "create_indicator_configuration"),
-        ("indicator_update", "Aktualisiere meine RSI-Indikatorkonfiguration fuer SOL und setze die Periode auf 21.", "update_indicator_configuration"),
-        ("indicator_delete", "Verwijder mijn technische RSI indicatorconfiguratie voor SOL.", "delete_indicator_configuration"),
+        ("indicator_create", "Create a technical RSI indicator configuration for ADA.", "create_indicator_configuration"),
+        ("indicator_update", "Aktualisiere nur das Gewicht meiner Volume-Indikatorkonfiguration fuer SOL/USDT auf niedrig.", "update_indicator_configuration"),
+        ("indicator_delete", "Verwijder mijn technische RSI indicatorconfiguratie voor ADA.", "delete_indicator_configuration"),
         (
             "setup_create",
             f"Erstelle ein Trade-Setup fuer SOL/USDT auf 4 Stunden mit dem Namen {names['setup']}.",
@@ -332,6 +332,29 @@ def main() -> None:
                 if item[0].startswith(("setup_", "strategy_", "bot_"))
             )
     user_id = int(primary["id"])
+    if not steps:
+        # The indicator update now needs a verified exact market. Seed the
+        # market identity only; the preceding public create step still owns
+        # the user's indicator configuration and its action lineage.
+        with sync_engine.begin() as connection:
+            market_id = connection.execute(text("""
+                INSERT INTO trading_markets
+                    (asset_symbol, quote_currency, venue, provider, provider_symbol,
+                     tradingview_symbol, source_verified_at, is_active)
+                VALUES ('SOL', 'USDT', 'BINANCE', 'binance', 'SOLUSDT',
+                        'BINANCE:SOLUSDT', NOW(), TRUE)
+                ON CONFLICT (asset_symbol, quote_currency, venue) DO UPDATE SET
+                    source_verified_at = EXCLUDED.source_verified_at, is_active = TRUE
+                RETURNING id
+            """)).scalar_one()
+            connection.execute(text("""
+                INSERT INTO user_indicator_configs
+                    (user_id, indicator, category, symbol, market_id, asset_class,
+                     priority, enabled, config_json, provenance, created_at, updated_at)
+                VALUES (:user_id, 'volume', 'market', 'SOL', :market_id, 'crypto',
+                        100, TRUE, CAST(:config AS jsonb), 'local_action_matrix', NOW(), NOW())
+            """), {"user_id": user_id, "market_id": market_id,
+                    "config": json.dumps({"score_mode": "standard", "weight": 1.0})})
     token = create_access_token({"sub": str(user_id), "role": "user"})
     other_token = create_access_token({"sub": str(other["id"]), "role": "user"})
     # Pronouns such as "that setup" are a conversation continuation, not an

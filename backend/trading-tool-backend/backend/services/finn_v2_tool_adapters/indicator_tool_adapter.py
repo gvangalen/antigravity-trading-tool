@@ -21,6 +21,7 @@ class IndicatorToolAdapter:
                 indicator=row.indicator,
                 category=row.category,
                 priority=row.priority,
+                weight=(getattr(row, "config_json", None) or {}).get("weight"),
                 enabled=row.enabled,
                 symbol=row.symbol,
                 asset_class=row.asset_class,
