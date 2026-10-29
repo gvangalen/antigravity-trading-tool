@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Paargebonden benchmarks kopiëren en mobiel uitlezen (29 oktober 2026)
 
-Current phase: `CANDIDATE_CI_PASSED_AWAITING_DEPLOY`. Candidate branch:
+Current phase: `LIVE_AWAITING_INDEPENDENT_QA`. Candidate branch:
 `codex/pair-benchmark-clone`, [PR #697](https://github.com/gvangalen/antigravity-trading-tool/pull/697),
 based on main `94a5288e9777d80c5f837941cd14aaa183a69d8f`. Indicatorselectie,
 regels en indicatorgewichten kunnen van een exact handelspaar naar een ander
@@ -30,6 +30,13 @@ and `be5d7eaeb40861d3718529e65229259c6880e3202fedcd9b1d78227243220515`.
 The published regression source and QA-only holdout were not modified or
 accessed by Build. All five candidate CI jobs passed in run `40947454118`
 on code commit `a2025c52b12074f9b830e491d690f34c182c3528`.
+
+PR #697 merged as `984cc1b6acd2bf5c13dfa5ad5d281cf75382b6c4`.
+Main CI run `40952431909` and Auto Deploy run `40952868763` both succeeded.
+Public `https://tradamind.com/api/health` and
+`https://tradamind.com/build-info.json` each returned HTTP 200 and exactly
+that merge SHA. This status-only update will create a later main revision, so
+its CI, Auto Deploy and public identity must be checked before QA starts.
 
 The preceding Volume-readback candidate reached live SHA
 `94a5288e9777d80c5f837941cd14aaa183a69d8f`. Its existing QA agent
