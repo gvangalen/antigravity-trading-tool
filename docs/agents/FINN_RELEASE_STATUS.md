@@ -4,9 +4,46 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Paargebonden benchmarks kopiëren en mobiel uitlezen (29 oktober 2026)
+
+Current phase: `CANDIDATE_CI_PASSED_AWAITING_DEPLOY`. Candidate branch:
+`codex/pair-benchmark-clone`, [PR #697](https://github.com/gvangalen/antigravity-trading-tool/pull/697),
+based on main `94a5288e9777d80c5f837941cd14aaa183a69d8f`. Indicatorselectie,
+regels en indicatorgewichten kunnen van een exact handelspaar naar een ander
+paar worden gekopieerd. De doelconfiguratie is onafhankelijk; scores en
+bronmetingen worden voor het doelpaar opnieuw opgebouwd. Markt-, macro- en
+technische categoriewegingen zijn eveneens paargebonden in Analyse, Score 2.0,
+setupmatch, Paper, FINN en rapporten. De mobiele Analyse-route leest nu de
+geselecteerde paarcontext en toont ook gekopieerde paren zonder setup.
+
+Measured Build evidence: root backend suite **4123 passed, 4 skipped**;
+frontend typecheck, i18n, command/proposal/setup tests, build and high audit
+passed. Mobile typecheck, lint without errors, chat tests and web/iOS/Android
+bundle smokes passed. The complete local worker-driven action matrix passed
+**16/16** safe action contracts with no broker orders or production connection;
+artifact SHA-256 `95efc1b87a2730c3ab19fcfee41369cac3b995147b1ffc8f6bbc85e185bd84cb`.
+Real Luna/Responses development passed **20/20** and the published regression
+passed **109/109**, with zero provider, schema, timeout, parse or validation
+failures; artifact SHA-256 values are
+`60c90ad5e089074f80f43c3d8fbcb30c6e44af1699ac40d8704f7dad9155264c`
+and `be5d7eaeb40861d3718529e65229259c6880e3202fedcd9b1d78227243220515`.
+The published regression source and QA-only holdout were not modified or
+accessed by Build. All five candidate CI jobs passed in run `40947454118`
+on code commit `a2025c52b12074f9b830e491d690f34c182c3528`.
+
+The preceding Volume-readback candidate reached live SHA
+`94a5288e9777d80c5f837941cd14aaa183a69d8f`. Its existing QA agent
+reported `QA BLOCKED / NOT STARTED`: the official protected matrix had no
+approved manifest ID or encrypted bundle attached to that QA task, and it
+issued no `ACCEPTED` or `NOT_ACCEPTED` verdict. No official QA run is in
+progress. This candidate supersedes that untested release slot and retains
+the Volume-readback repair. Independent QA for the new final live SHA must
+include the saved Volume-weight readback and the pair-copy/score/mobility
+matrix; it must not claim that the earlier candidate was accepted.
+
 ## FINN-chat: opgeslagen Volume-weging per handelspaar lezen (29 oktober 2026)
 
-Current phase: `LIVE_AWAITING_INDEPENDENT_QA`. Candidate branch:
+Current phase: `QA_NOT_STARTED_SUPERSEDED_BY_PR_697`. Candidate branch:
 `codex/finn-volume-read-tool`, based on main
 `0f824a174e73304e20ca2a2d4c220e722189ec6f`. Independent authenticated QA
 on that live SHA repeated the exact readback failure: after a refresh in a new
