@@ -4,9 +4,31 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Indicatorinstellingen per exact handelspaar (29 oktober 2026)
+
+Current phase: `LOCAL_VALIDATION_PASSED_AWAITING_DEPLOY`. Candidate branch:
+`codex/pair-scoped-indicators`, [PR #688](https://github.com/gvangalen/antigravity-trading-tool/pull/688).
+Indicator choices, weights and score rules now use the verified `market_id` for
+BTC/EUR and BTC/USDT. The same indicator can be selected once per pair;
+adding, reading, editing and disabling one pair does not change the other.
+The exact-market worker and Score 2.0 read the effective pair preference,
+including a disabled override of a legacy BTC default. Analyse requests a
+pair-scoped impact preview before the user can save, and refreshes after edits.
+This release changes no FINN model prompt or FINN action contract, so provider
+and action-matrix reruns are not applicable to this candidate.
+
+Final local evidence: backend **4104 passed, 4 skipped**; frontend typecheck,
+i18n lint/tests, command/proposal/setup tests, build and high-severity audit
+passed. Independent Security and Architecture reviews found and confirmed fixes
+for the missing pair impact preview, stale edit display and inaccurate pending
+source status. All five candidate CI jobs passed on code SHA `07bc5cd99` in
+run `40844937791`. The status-only commit and the eventual merge SHA require
+their own CI/deploy identity checks. Authenticated pair-switch/add/edit/remove
+QA remains open; no live trade was performed.
+
 ## Dagrapport: beslisreden in gekozen taal (28 oktober 2026)
 
-Current phase: `LIVE_READBACK_PASSED_AWAITING_QA`. Candidate branch:
+Current phase: `QA_VERIFIED_WITH_UNPROVEN_SCENARIOS`. Candidate branch:
 `codex/daily-report-reason-i18n`, [PR #686](https://github.com/gvangalen/antigravity-trading-tool/pull/686). The preceding report batch is live on SHA
 `d0d5ca9d21c7318e5c60cb052f5f19055d81c4ad`; main CI `40760867896`
 and Auto Deploy `40761389628` succeeded, and public backend health and
@@ -33,9 +55,13 @@ five candidate CI jobs passed. Main CI run `40765057025` and Auto Deploy run
 `40765585091` succeeded for merge SHA
 `068dd7fb84c6096afa10697905c873690a441488`; public backend health and
 frontend build-info each returned HTTP 200 and exactly that SHA. This
-documentation-only status update creates a later revision, so its main CI,
-Auto Deploy and public identity must pass before independent QA rechecks the
-final SHA.
+documentation-only status update created the later SHA `efde95f2a8b0d0e942b348faa1a5274ca9733164`.
+Independent QA then verified the stored report time, later bot decision labels,
+and translated bot reasons and Price labels in NL/EN/DE after refresh at that
+exact live SHA. Its fixture had no open bot position, so quantity, stop, target,
+price currency and automatic-exit display for an open position remain unproven;
+the AAPL outside-hours case was also unavailable. These are recorded evidence
+limits, not a claim of full acceptance.
 
 ## Dagrapport: actuele posities, botbeslissingen en lokale tijd (28 oktober 2026)
 
