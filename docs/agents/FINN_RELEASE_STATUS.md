@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN-chat: Volume-weging op exact handelspaar (29 oktober 2026)
 
-Current phase: `READBACK_HOTFIX_LOCAL_VALIDATION_COMPLETE`. Initial candidate branch:
+Current phase: `READBACK_HOTFIX_LIVE_AWAITING_INDEPENDENT_QA`. Initial candidate branch:
 `codex/finn-indicator-weight-chat`, [PR #691](https://github.com/gvangalen/antigravity-trading-tool/pull/691), based on main
 `b957c3bff2447b8894dcf0a82fb503d8d7cc2343`. The user can ask FINN to
 change only Volume on BTC/EUR to low weight while leaving BTC/USDT untouched.
@@ -64,7 +64,13 @@ The full worker-driven local parity matrix passed **37/37**, including
 The matrix now seeds a unique saved synthetic plan for plan-read probes, so
 their expected contracts are meaningful. An earlier run passed all 37 cases
 but exceeded the terminal p95 latency budget; the unchanged budget passed on
-the final full rerun. New CI, deployment and independent retest remain pending. QA did not execute
+the final full rerun. [PR #693](https://github.com/gvangalen/antigravity-trading-tool/pull/693)
+passed all five candidate CI jobs in run `40873583109` and merged as
+`dcc37e4422aa3a0af76e741df988a6d0279ef863`. Main CI run `40874048135`
+and Auto Deploy run `40874425437` succeeded. Public backend health and
+frontend build-info each returned HTTP 200 with exactly that SHA. This
+status-only commit will create a final public revision, whose main CI,
+Auto Deploy and identity are required before independent retest. QA did not execute
 a Live order; its browser run did not test cross-user isolation or duplicate
 confirmation.
 
