@@ -22,6 +22,7 @@ import { useModal } from "@/components/modal/ModalProvider";
 import { useAssetWorkspaceData } from "@/hooks/useAssetWorkspaceData";
 import { useWatchlist } from "@/hooks/useWatchlist";
 import IndicatorConfigModal from "@/components/scoring/IndicatorConfigModal";
+import { deletePairIndicatorConfig } from "@/lib/api/indicatorConfig";
 import MarketForwardReturnTabs from "@/components/market/MarketForwardReturnTabs";
 import {
   fetchForwardReturnsMonth,
@@ -173,6 +174,12 @@ function getUiCopy(locale = "nl") {
       scoreSourceLimit: "Saved indicator scores are not a live trading signal.",
       marketRegime: "Market regime",
       addIndicator: "Add indicator",
+      editIndicator: "Edit indicator",
+      removeIndicator: "Remove from this market",
+      removeIndicatorConfirm: "Remove indicator",
+      removeIndicatorContext: (name, pair) => `Remove ${name} from ${pair}?`,
+      removeIndicatorImpact: "This market's benchmark will be recalculated. Other trading pairs stay unchanged.",
+      removeIndicatorSuccess: (name, pair) => `${name} removed from ${pair}.`,
       positive: "Positive",
       negative: "Negative",
       neutral: "Neutral",
@@ -351,6 +358,12 @@ function getUiCopy(locale = "nl") {
       scoreSourceLimit: "Gespeicherte Indikatorwerte sind kein aktuelles Handelssignal.",
       marketRegime: "Marktregime",
       addIndicator: "Indikator hinzufügen",
+      editIndicator: "Indikator bearbeiten",
+      removeIndicator: "Aus diesem Markt entfernen",
+      removeIndicatorConfirm: "Indikator entfernen",
+      removeIndicatorContext: (name, pair) => `${name} aus ${pair} entfernen?`,
+      removeIndicatorImpact: "Der Benchmark dieses Marktes wird neu berechnet. Andere Handelspaare bleiben unverändert.",
+      removeIndicatorSuccess: (name, pair) => `${name} aus ${pair} entfernt.`,
       positive: "Positiv",
       negative: "Negativ",
       neutral: "Neutral",
@@ -528,6 +541,12 @@ function getUiCopy(locale = "nl") {
     scoreSourceLimit: "Opgeslagen indicatorscores zijn geen actueel handelssignaal.",
     marketRegime: "Marktregime",
     addIndicator: "Indicator toevoegen",
+    editIndicator: "Indicator bewerken",
+    removeIndicator: "Verwijderen uit deze markt",
+    removeIndicatorConfirm: "Indicator verwijderen",
+    removeIndicatorContext: (name, pair) => `${name} verwijderen uit ${pair}?`,
+    removeIndicatorImpact: "De benchmark van deze markt wordt opnieuw berekend. Andere handelsparen blijven ongewijzigd.",
+    removeIndicatorSuccess: (name, pair) => `${name} verwijderd uit ${pair}.`,
     positive: "Positief",
     negative: "Negatief",
     neutral: "Neutraal",
@@ -1958,6 +1977,8 @@ function EvidenceRow({
   row,
   expanded,
   onToggle,
+  onEdit,
+  onRemove,
   period,
   locale,
   ui,
@@ -2032,6 +2053,16 @@ function EvidenceRow({
 
       {expanded ? (
         <div className="border-t border-slate-100 px-4 py-4">
+          {onEdit ? (
+            <div className="mb-4 flex flex-wrap gap-2">
+              <button type="button" onClick={onEdit} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">
+                {ui.editIndicator}
+              </button>
+              <button type="button" onClick={onRemove} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50">
+                {ui.removeIndicator}
+              </button>
+            </div>
+          ) : null}
           <h3 className="text-[14px] font-bold text-slate-900">{ui.scoreCalculationTitle}</h3>
           <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-slate-50/70">
             <div className="grid md:grid-cols-2">
@@ -2116,6 +2147,8 @@ function EvidenceSection({
   rows,
   expandedRowKey,
   onToggleRow,
+  onEditIndicator,
+  onRemoveIndicator,
   action,
   toolbar,
   emptyState,
@@ -2172,6 +2205,8 @@ function EvidenceSection({
                 row={row}
                 expanded={expandedRowKey === rowKey}
                 onToggle={() => onToggleRow(rowKey)}
+                onEdit={onEditIndicator ? () => onEditIndicator(id, row) : null}
+                onRemove={onRemoveIndicator ? () => onRemoveIndicator(id, row) : null}
                 period={period}
                 locale={locale}
                 ui={ui}
@@ -2380,6 +2415,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const [activeAssetGroup, setActiveAssetGroup] = useState("crypto");
   const [expandedRowKey, setExpandedRowKey] = useState(null);
   const [technicalConfigModal, setTechnicalConfigModal] = useState(null);
+  const [pairConfigModal, setPairConfigModal] = useState(null);
   const [watchlistRows, setWatchlistRows] = useState([]);
   const [removedWatchlistSymbols, setRemovedWatchlistSymbols] = useState([]);
   const [showChart, setShowChart] = useState(true);
@@ -2816,6 +2852,33 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     activeWatchlistRow?.tradingviewSymbol ||
     null;
 
+  const handleEditIndicator = (category, row) => {
+    if (!workspace?.market_id || !row?.name) return;
+    setPairConfigModal({ category, indicator: row.name });
+  };
+  const handleRemoveIndicator = (category, row) => {
+    const marketId = workspace?.market_id;
+    if (!marketId || !row?.name) return;
+    const pair = workspace?.pair || activeSymbol;
+    openConfirm({
+      title: ui.removeIndicatorConfirm,
+      context: ui.removeIndicatorContext(row.label, pair),
+      impact: ui.removeIndicatorImpact,
+      contextLabel: ui.modalContextLabel,
+      impactLabel: ui.modalImpactLabel,
+      closeLabel: ui.modalCloseLabel,
+      cancelText: ui.modalCancelLabel,
+      tone: "danger",
+      confirmText: ui.removeIndicatorConfirm,
+      onConfirm: async () => {
+        await deletePairIndicatorConfig(marketId, category, row.name);
+        await refreshWorkspaceOnce();
+        scheduleScoreRefresh();
+        showSnackbar(ui.removeIndicatorSuccess(row.label, pair));
+      },
+    });
+  };
+
   const sections = useMemo(() => {
     const evidence = workspace?.daily?.indicator_evidence || {};
     const dayEvidence = (category, period, score) => period === "day" ? (normalizeScore(score) === null ? {} : evidence[category] || {}) : null;
@@ -3045,6 +3108,8 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
             rows={section.rows}
             expandedRowKey={expandedRowKey}
             onToggleRow={(key) => setExpandedRowKey((current) => (current === key ? null : key))}
+            onEditIndicator={workspace?.market_id ? handleEditIndicator : null}
+            onRemoveIndicator={workspace?.market_id ? handleRemoveIndicator : null}
             emptyState={section.emptyState}
             emptyAction={section.emptyAction}
             period={
@@ -3129,6 +3194,17 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         mode="edit"
         onClose={() => setTechnicalConfigModal(null)}
         onCompleted={() => void refreshWorkspaceOnce()}
+      />
+      <IndicatorConfigModal
+        isOpen={Boolean(pairConfigModal)}
+        category={pairConfigModal?.category}
+        indicator={pairConfigModal?.indicator}
+        assetSymbol={activeSymbol}
+        marketId={workspace?.market_id || null}
+        marketLabel={workspace?.pair || null}
+        mode="edit"
+        onClose={() => setPairConfigModal(null)}
+        onCompleted={() => { void refreshWorkspaceOnce(); scheduleScoreRefresh(); }}
       />
     </section>
   );

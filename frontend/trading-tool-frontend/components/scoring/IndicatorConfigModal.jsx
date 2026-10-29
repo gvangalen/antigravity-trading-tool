@@ -452,8 +452,8 @@ export default function IndicatorConfigModal({
           result?.pendingSource
             ? `${indicatorLabel} is ingesteld. De meetwaarde wacht op de databron; er is nog geen score.`
             : mode === "edit"
-            ? copy.saved.replace("{indicator}", indicatorLabel).replace("{asset}", assetSymbol).replace("{category}", categoryLabel)
-            : copy.added.replace("{indicator}", indicatorLabel).replace("{asset}", assetSymbol).replace("{category}", categoryLabel),
+            ? copy.saved.replace("{indicator}", indicatorLabel).replace("{asset}", marketLabel || assetSymbol).replace("{category}", categoryLabel)
+            : copy.added.replace("{indicator}", indicatorLabel).replace("{asset}", marketLabel || assetSymbol).replace("{category}", categoryLabel),
           result?.pendingSource ? "info" : "success"
         );
       }

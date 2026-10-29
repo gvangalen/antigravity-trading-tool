@@ -20,6 +20,11 @@ export async function savePairIndicatorConfig({ marketId, category, indicator, m
   });
 }
 
+export async function deletePairIndicatorConfig(marketId, category, indicator) {
+  const params = new URLSearchParams({ market_id: String(marketId), category, indicator });
+  return fetchAuth(`/api/workspace/exact-market/indicator-config?${params}`, { method: 'DELETE' });
+}
+
 export async function previewIndicatorImpact({ category, indicator, symbol }) {
   return fetchAuth('/api/indicator_config/preview', {
     method: 'POST',
