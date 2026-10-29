@@ -23,7 +23,10 @@ from urllib.parse import urlparse
 from sqlalchemy import text
 from redis import Redis
 
-from backend.scripts.run_finn_v2_full_action_matrix import _create_local_user, _runtime_record
+from backend.scripts.run_finn_v2_full_action_matrix import (
+    _create_local_user, _insert_bot, _insert_setup, _insert_strategy,
+    _runtime_record,
+)
 from backend.scripts.run_finn_v2_persisted_runtime_gate import run_gate
 from backend.infrastructure.database import sync_engine
 from backend.utils.auth_utils import create_access_token
@@ -263,6 +266,13 @@ def main() -> None:
     chain = json.loads(chain_path.read_text(encoding="utf-8")) if chain_path.exists() else {"steps": []}
 
     user = _create_local_user()
+    # Read and evaluation probes need an actual, unique saved plan. An empty
+    # user makes inventory lookup a reasonable model choice and leaves the
+    # specific plan-tool contracts untestable.
+    with sync_engine.begin() as connection:
+        setup_id = _insert_setup(connection, user["id"], "Matrix Probe BTC Setup")
+        strategy_id = _insert_strategy(connection, user["id"], setup_id, "Matrix Probe BTC Strategie")
+        _insert_bot(connection, user["id"], strategy_id, "Matrix Probe BTC Paper Bot")
     token = create_access_token({"sub": str(user["id"]), "role": str(user["role"])})
     probes = []
     for item in PUBLIC_PROBES:

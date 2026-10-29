@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN-chat: Volume-weging op exact handelspaar (29 oktober 2026)
 
-Current phase: `LIVE_READBACK_PASSED_AWAITING_QA`. Candidate branch:
+Current phase: `READBACK_HOTFIX_LOCAL_VALIDATION_COMPLETE`. Initial candidate branch:
 `codex/finn-indicator-weight-chat`, [PR #691](https://github.com/gvangalen/antigravity-trading-tool/pull/691), based on main
 `b957c3bff2447b8894dcf0a82fb503d8d7cc2343`. The user can ask FINN to
 change only Volume on BTC/EUR to low weight while leaving BTC/USDT untouched.
@@ -38,7 +38,35 @@ was used by Build. PR #691 merged as SHA
 Public backend health and frontend build-info each returned HTTP 200 with
 exactly that SHA. This documentation update creates a later revision, so QA
 must use the final public SHA after its CI and Auto Deploy complete.
-Independent authenticated live QA is pending.
+Independent authenticated live QA on final public SHA
+`75c26079b53fcfc03cfba20b87b6608c075800ce` found that the explicit
+BTC/EUR Volume change produced the correct confirmable card; after confirming,
+FINN and Analyse showed EUR weight 0.6 and USDT weight 1.0. An unspecified
+pair prompted EUR/USDT clarification. QA also found a P2 readback regression:
+in a fresh chat after refresh, “Lees mijn opgeslagen Volume-weging voor
+BTC/EUR en BTC/USDT” was routed to a setup read and FINN falsely said the
+weight was unavailable. A more explicit indicator-configuration question
+read both values correctly. The follow-up branch
+`codex/finn-indicator-weight-readback` binds a typed saved indicator
+read to the indicator contract even when the named indicator is also a
+financial concept. Targeted resolver tests **79 passed**, real Luna/Responses
+selection returned `read_indicator_configuration` for the exact failed
+question, and the full backend suite passed **4112 passed, 4 skipped**.
+Web typecheck, i18n lint/tests, command/proposal tests, build and high audit
+also passed. Real Luna/Responses development passed **20/20** and regression
+**109/109** with zero provider failures (artifact SHA-256
+`f34fa9c00b1bac280250fa4438bfe78a65838a281ed10a9198f4137203f02bc9`
+and `b153309cd81d4abcf095e7c04d529658ac3ea32102b4f7b6bb734eed0de6317d`).
+The full worker-driven local parity matrix passed **37/37**, including
+**16/16** action contracts and **9/9** lineage checks; terminal p95 was
+7063 ms under its 10000 ms limit (artifact SHA-256
+`6f7515a462cdb6d9ed6e933f66d95946fb8e274ba0fffa16cc275f4f293b873e`).
+The matrix now seeds a unique saved synthetic plan for plan-read probes, so
+their expected contracts are meaningful. An earlier run passed all 37 cases
+but exceeded the terminal p95 latency budget; the unchanged budget passed on
+the final full rerun. New CI, deployment and independent retest remain pending. QA did not execute
+a Live order; its browser run did not test cross-user isolation or duplicate
+confirmation.
 
 ## Indicatorinstellingen per exact handelspaar (29 oktober 2026)
 

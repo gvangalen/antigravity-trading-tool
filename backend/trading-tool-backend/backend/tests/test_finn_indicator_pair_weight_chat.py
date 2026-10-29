@@ -11,6 +11,7 @@ from backend.services.finn_v2_action_adapter_registry import FinnV2ActionAdapter
 from backend.services.finn_v2_operation_classification_service import FinnV2OperationClassificationService
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 from backend.services.finn_v2_operation_resolver_service import FinnV2OperationResolverService
+from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
 from backend.services.finn_v2_reasoning_fallback_service import FinnV2ReasoningFallbackService
 from backend.services.finn_v2_structured_operation_selector_service import FinnV2StructuredOperationSelection
 from backend.services.finn_v2_tool_adapters.indicator_tool_adapter import IndicatorToolAdapter
@@ -81,6 +82,28 @@ def test_typed_indicator_mutation_cannot_become_a_different_write():
                            "explicit_entities": ["indicator_configuration"]},
         )
         assert resolved.operation_id == expected
+
+
+def test_saved_volume_weight_read_cannot_become_setup_read():
+    registry = FinnV2OperationRegistry()
+    request = "Lees mijn opgeslagen Volume-weging voor BTC/EUR en BTC/USDT"
+    facts = FinnV2RequestPreprocessorService().preprocess(message=request)
+    assert facts.financial_concept == "volume"
+    selected = FinnV2StructuredOperationSelection(
+        operation_id="read_active_setup", confidence=0.9, entities={}, target_asset="BTC",
+        conversation_reference=None, missing_inputs=(), ambiguity_reason=None,
+    )
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=selected, candidates=registry.list(), conversation_context={},
+        request_facts={
+            "action_polarity": facts.action_polarity,
+            "primary_entity": facts.primary_entity,
+            "explicit_entities": facts.explicit_entities,
+            "normalized_text": facts.normalized_text,
+            "financial_concept": facts.financial_concept,
+        },
+    )
+    assert resolved.operation_id == "read_indicator_configuration"
 
 
 def test_confirmed_pair_weight_edit_preserves_mode_and_targets_only_eur(monkeypatch):
