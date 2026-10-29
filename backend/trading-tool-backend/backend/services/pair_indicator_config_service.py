@@ -48,14 +48,14 @@ class PairIndicatorConfigService:
         row = effective_pair_configs(rows).get((user_id, category, indicator))
         default = await self.base.get_indicator_config(category, indicator, user_id, market.asset_symbol)
         if row is None:
-            return default.model_dump()
+            return default.dict()
         metadata = row.config_json or {}
         rules = self.base._rules_to_fixed_buckets(metadata.get("rules") or
             await self.base.repository.get_system_indicator_rules(category, indicator))
         return {"category": category, "indicator": indicator,
                 "score_mode": metadata.get("score_mode", "standard"),
                 "weight": metadata.get("weight", row.priority / 100),
-                "rules": [rule.model_dump() for rule in rules]}
+                "rules": [rule.dict() for rule in rules]}
 
     async def save(self, user_id: int, market, category: str, indicator: str,
                    *, mode: str, score_mode: str, weight: float, rules: list[dict]):
