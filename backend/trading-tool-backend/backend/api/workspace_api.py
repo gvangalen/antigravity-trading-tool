@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func
+from sqlalchemy import select, func, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +16,9 @@ from backend.domain.market_indicator_catalog import get_market_indicator_definit
 from backend.domain.macro_indicator_catalog import get_macro_indicator_definition
 from backend.domain.technical_indicator_catalog import get_technical_indicator_definition
 from backend.infrastructure.models import MacroData, MarketDataIndicator, TechnicalDataIndicator
+from backend.services.pair_benchmark_service import (
+    PairBenchmarkCopyService, benchmark_weights, save_benchmark_weights,
+)
 from backend.utils.auth_utils import get_current_user
 
 
@@ -30,6 +33,107 @@ class PairIndicatorWrite(BaseModel):
     score_mode: str
     weight: float = Field(ge=0, le=3)
     rules: list[dict] = Field(default_factory=list)
+
+
+class PairBenchmarkWeightsWrite(BaseModel):
+    market_id: int = Field(gt=0)
+    weights: dict[str, float]
+
+
+class PairBenchmarkCopyWrite(BaseModel):
+    source_market_id: int = Field(gt=0)
+    target_market_id: int = Field(gt=0)
+    revision: str = Field(min_length=64, max_length=64)
+
+
+@router.get("/workspace/exact-market/benchmark-weights")
+async def get_pair_benchmark_weights(
+    market_id: int = Query(..., gt=0), current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    market = await PairIndicatorConfigService(db).market(market_id)
+    if market is None:
+        raise HTTPException(status_code=404, detail="exact_market_not_verified")
+    weights, source = await benchmark_weights(db, int(current_user["id"]), market.id)
+    return {"market_id": market.id, "weights": {
+        key.removesuffix("_score"): value for key, value in (weights or {}).items()},
+        "source": source}
+
+
+@router.put("/workspace/exact-market/benchmark-weights")
+async def put_pair_benchmark_weights(
+    payload: PairBenchmarkWeightsWrite, current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    market = await PairIndicatorConfigService(db).market(payload.market_id)
+    if market is None:
+        raise HTTPException(status_code=404, detail="exact_market_not_verified")
+    try:
+        weights = await save_benchmark_weights(db, int(current_user["id"]), market.id, payload.weights)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    queue_indicator_score_refresh(int(current_user["id"]), market.asset_symbol,
+                                  market_id=int(market.id))
+    return {"ok": True, "market_id": market.id,
+            "weights": {key.removesuffix("_score"): value for key, value in weights.items()}}
+
+
+@router.get("/workspace/exact-market/benchmark-copy-sources")
+async def get_pair_benchmark_copy_sources(
+    target_market_id: int = Query(..., gt=0), current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if await PairIndicatorConfigService(db).market(target_market_id) is None:
+        raise HTTPException(status_code=404, detail="exact_market_not_verified")
+    result = await db.execute(text("""
+        SELECT m.id, m.asset_symbol, m.quote_currency FROM trading_markets m
+        WHERE m.id != :target_market_id AND m.is_active=TRUE AND m.venue='BINANCE'
+          AND (EXISTS (SELECT 1 FROM user_indicator_configs c
+                       WHERE c.user_id=:user_id AND c.symbol=m.asset_symbol
+                         AND (c.market_id=m.id OR c.market_id IS NULL) AND c.enabled=TRUE)
+               OR EXISTS (SELECT 1 FROM user_market_benchmark_weights w
+                          WHERE w.user_id=:user_id AND w.market_id=m.id))
+        ORDER BY m.asset_symbol, m.quote_currency
+    """), {"target_market_id": target_market_id, "user_id": int(current_user["id"])})
+    return [{"market_id": row.id, "pair": f"{row.asset_symbol}/{row.quote_currency}"}
+            for row in result.mappings().all()]
+
+
+@router.get("/workspace/exact-market/benchmark-copy-preview")
+async def get_pair_benchmark_copy_preview(
+    source_market_id: int = Query(..., gt=0), target_market_id: int = Query(..., gt=0),
+    current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    try:
+        return await PairBenchmarkCopyService(db).preview(
+            int(current_user["id"]), source_market_id, target_market_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/workspace/exact-market/benchmark-copy")
+async def post_pair_benchmark_copy(
+    payload: PairBenchmarkCopyWrite, current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        result = await PairBenchmarkCopyService(db).apply(
+            int(current_user["id"]), payload.source_market_id,
+            payload.target_market_id, payload.revision)
+    except ValueError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=409 if str(exc) == "benchmark_preview_changed" else 422,
+                            detail=str(exc)) from exc
+    market = await PairIndicatorConfigService(db).market(payload.target_market_id)
+    status = "pending_score_refresh"
+    try:
+        await ExactMarketIndicatorService(db).materialize(market, owner_ids={int(current_user["id"])})
+    except Exception:
+        await db.rollback()
+        status = "pending_source"
+    queue_indicator_score_refresh(int(current_user["id"]), market.asset_symbol,
+                                  market_id=int(market.id))
+    return {**result, "status": status}
 
 
 async def _pair_config(db: AsyncSession, market_id: int, category: str, indicator: str):

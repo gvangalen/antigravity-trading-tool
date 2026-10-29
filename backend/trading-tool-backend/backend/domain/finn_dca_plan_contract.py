@@ -114,7 +114,7 @@ def split_confirmed_dca_plan(fields: dict[str, Any]) -> tuple[dict[str, Any], di
         multipliers = tuple(percent / 100 for percent in percents)
         strategy_fields["decision_curve"] = {
             "input": source,
-            "weights_policy": "current_user_preferences",
+            "weights_policy": "current_market_benchmark_weights",
             "interpolation": "step",
             "min_multiplier": 0.05,
             "max_multiplier": 3.0,

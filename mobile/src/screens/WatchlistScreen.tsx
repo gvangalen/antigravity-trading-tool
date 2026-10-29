@@ -699,7 +699,11 @@ function AnalysisContextScores({
     if (savingWeights || !isBalanced) return;
     setSavingWeights(true);
     try {
-      await assistantApi.updateIntelligenceWeights(localWeights);
+      if (workspaceAsset?.market_id) {
+        await assistantApi.updateMarketBenchmarkWeights(workspaceAsset.market_id, localWeights);
+      } else {
+        await assistantApi.updateIntelligenceWeights(localWeights);
+      }
       await onRefreshScores();
       await triggerHaptic('success');
       setTuningVisible(false);

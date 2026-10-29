@@ -23,7 +23,9 @@ def test_reselecting_ma200_keeps_owner_scoring_config():
 
     assert rows == [owner_row]
     assert rows[0].config_json["score_mode"] == "custom"
-    query, params = session.calls[0]
+    assert "FOR UPDATE" in session.calls[0][0]
+    query, params = next((query, params) for query, params in session.calls
+                         if "DELETE FROM user_indicator_configs" in query)
     assert "LOWER(indicator) NOT IN" in query
     assert "market_id IS NULL" in query
     assert params["retained"] == ["ma_200"]
@@ -45,7 +47,9 @@ def test_empty_preference_still_removes_all_indicators():
     repo._resolve_effective_scope = AsyncMock(return_value=("BTC", "crypto"))
 
     assert asyncio.run(repo.replace_scope_configs(7, [], symbol="BTC")) == []
-    query, params = session.calls[0]
+    assert "FOR UPDATE" in session.calls[0][0]
+    query, params = next((query, params) for query, params in session.calls
+                         if "DELETE FROM user_indicator_configs" in query)
     assert "NOT IN" not in query
     assert "market_id IS NULL" in query
     assert params == {"user_id": 7, "category": "technical", "symbol": "BTC"}
@@ -80,7 +84,9 @@ def test_case_variant_reuses_existing_owner_config():
     row = asyncio.run(repo.ensure_user_config(7, "rsi", symbol="BTC", priority=1))
 
     assert row.config_json == {"score_mode": "custom"}
-    assert "LOWER(indicator) = LOWER(:indicator)" in session.statements[0]
+    assert "FOR UPDATE" in session.statements[0]
+    assert any("LOWER(indicator) = LOWER(:indicator)" in statement
+               for statement in session.statements)
     assert not any("INSERT INTO user_indicator_configs" in statement for statement in session.statements)
 
 
@@ -107,6 +113,8 @@ def test_case_variant_metadata_update_targets_existing_owner_row():
     ))
 
     assert row.config_json == {"score_mode": "custom"}
-    query, params = session.statements[0]
+    assert "FOR UPDATE" in session.statements[0][0]
+    query, params = next((query, params) for query, params in session.statements
+                         if "LOWER(indicator) = LOWER(:indicator)" in query)
     assert "LOWER(indicator) = LOWER(:indicator)" in query
     assert params["indicator"] == "rsi"

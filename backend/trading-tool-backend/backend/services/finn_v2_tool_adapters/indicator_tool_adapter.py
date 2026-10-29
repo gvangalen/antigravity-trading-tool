@@ -4,8 +4,9 @@ from backend.infrastructure.repositories.technical_data_repository import Techni
 from backend.domain.finn_v2_source_registry import FinnV2InformationSourceRegistry
 from backend.schemas.finn_v2_evidence_schema import IndicatorConfigurationData, IndicatorConfigurationItem
 from backend.services.asset_catalog_service import AssetCatalogService
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select, text
 from backend.infrastructure.models import UserIndicatorConfig
+from backend.services.pair_indicator_config_service import effective_pair_configs
 
 
 class IndicatorToolAdapter:
@@ -48,21 +49,19 @@ class IndicatorToolAdapter:
                 UserIndicatorConfig.user_id == user_id,
                 UserIndicatorConfig.symbol == requested_symbol,
                 or_(UserIndicatorConfig.market_id == market_id,
-                    UserIndicatorConfig.market_id.is_(None)),
-                UserIndicatorConfig.enabled.is_(True),
-            ).order_by(UserIndicatorConfig.market_id.desc().nullslast()))
-            selected = {}
-            for row in result.scalars().all():
-                # Score 2.0 uses a shared asset rule unless this pair has an
-                # enabled rule for the same indicator and category.
-                selected.setdefault((row.category, str(row.indicator).lower()), row)
-            rows = list(selected.values())
+                    and_(UserIndicatorConfig.market_id.is_(None), text("""
+                        NOT EXISTS (SELECT 1 FROM user_market_benchmark_weights w
+                        WHERE w.user_id=:owner_id AND w.market_id=:chosen_market_id
+                          AND w.indicators_isolated=TRUE)
+                    """).bindparams(owner_id=user_id, chosen_market_id=market_id))),
+            ))
+            rows = list(effective_pair_configs(result.scalars().all()).values())
             configuration = {
                 "technical": [row for row in rows if row.category == "technical"],
                 "market": [row for row in rows if row.category == "market"],
                 "macro": [row for row in rows if row.category == "macro"],
                 "asset_class": asset_meta.get("asset_class"),
-                "scope_by_category": {category: "exact_market_with_shared_defaults"
+                "scope_by_category": {category: "exact_market_configuration"
                                       for category in ("technical", "market", "macro")},
             }
         technical = self._serialize(configuration["technical"])

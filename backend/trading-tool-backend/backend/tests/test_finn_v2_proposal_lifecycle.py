@@ -163,7 +163,7 @@ def test_second_dca_strategy_uses_parent_cadence_and_typed_amount_rule(amount_fi
     assert not {"entry", "stop_loss", "targets"}.intersection(fields)
     if expected_mode == "custom":
         assert fields["decision_curve"]["input"] == "benchmark_score"
-        assert fields["decision_curve"]["weights_policy"] == "current_user_preferences"
+        assert fields["decision_curve"]["weights_policy"] == "current_market_benchmark_weights"
 
 
 def test_terminal_proposal_scopes_key_before_comparing_a_new_before_state():

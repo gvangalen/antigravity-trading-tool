@@ -345,6 +345,12 @@ export const assistantApi = {
     });
   },
 
+  updateMarketBenchmarkWeights(marketId: number, weights: IntelligenceWeightsPayload) {
+    return apiClient.put<Record<string, unknown>>('/api/workspace/exact-market/benchmark-weights', {
+      market_id: marketId, weights,
+    });
+  },
+
   async chat(query: string, context: AssistantRuntimeContext, history?: AssistantHistoryMessage[], sessionId?: string | null, signal?: AbortSignal) {
     const initial = await apiClient.request<AssistantEnvelope>('/api/assistant/chat', {
       method: 'POST', signal, timeoutMs: 90000,

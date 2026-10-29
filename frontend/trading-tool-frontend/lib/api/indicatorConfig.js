@@ -25,6 +25,28 @@ export async function deletePairIndicatorConfig(marketId, category, indicator) {
   return fetchAuth(`/api/workspace/exact-market/indicator-config?${params}`, { method: 'DELETE' });
 }
 
+export async function savePairBenchmarkWeights(marketId, weights) {
+  return fetchAuth('/api/workspace/exact-market/benchmark-weights', {
+    method: 'PUT', body: JSON.stringify({ market_id: marketId, weights }),
+  });
+}
+
+export async function getBenchmarkCopySources(targetMarketId) {
+  return fetchAuth(`/api/workspace/exact-market/benchmark-copy-sources?target_market_id=${Number(targetMarketId)}`);
+}
+
+export async function previewBenchmarkCopy(sourceMarketId, targetMarketId) {
+  const params = new URLSearchParams({ source_market_id: String(sourceMarketId), target_market_id: String(targetMarketId) });
+  return fetchAuth(`/api/workspace/exact-market/benchmark-copy-preview?${params}`);
+}
+
+export async function confirmBenchmarkCopy(preview) {
+  return fetchAuth('/api/workspace/exact-market/benchmark-copy', {
+    method: 'POST', body: JSON.stringify({ source_market_id: preview.source_market_id,
+      target_market_id: preview.target_market_id, revision: preview.revision }),
+  });
+}
+
 export async function previewIndicatorImpact({ category, indicator, symbol }) {
   return fetchAuth('/api/indicator_config/preview', {
     method: 'POST',

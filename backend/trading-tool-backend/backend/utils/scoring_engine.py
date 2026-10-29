@@ -272,7 +272,10 @@ def fetch_rules_for_indicator(
     # Legacy user rules have no asset identity and must not override them.
     if user_id is not None and symbol:
         with conn.cursor() as cur:
-            market_scope = "AND (market_id = %s OR market_id IS NULL)" if market_id is not None else "AND market_id IS NULL"
+            market_scope = """AND (market_id = %s OR (market_id IS NULL AND NOT EXISTS (
+                SELECT 1 FROM user_market_benchmark_weights w
+                WHERE w.user_id = user_indicator_configs.user_id AND w.market_id = %s
+                  AND w.indicators_isolated = TRUE)))""" if market_id is not None else "AND market_id IS NULL"
             cur.execute(
                 f"""SELECT id, config_json, priority FROM user_indicator_configs
                    WHERE user_id = %s AND symbol = %s AND category = %s
@@ -280,7 +283,7 @@ def fetch_rules_for_indicator(
                      {market_scope}
                    ORDER BY market_id DESC NULLS LAST
                    LIMIT 1""",
-                (user_id, symbol.upper(), category, indicator, market_id)
+                (user_id, symbol.upper(), category, indicator, market_id, market_id)
                 if market_id is not None else (user_id, symbol.upper(), category, indicator),
             )
             config = cur.fetchone()

@@ -60,7 +60,9 @@ def decide_amount(
             and input_key != "benchmark_score"
         ):
             raise DecisionEngineError("Smart DCA requires the total benchmark score")
-        if input_key == "benchmark_score" and curve.get("weights_policy") != "current_user_preferences":
+        if input_key == "benchmark_score" and curve.get("weights_policy") not in {
+            "current_user_preferences", "current_market_benchmark_weights",
+        }:
             raise DecisionEngineError("Benchmark requires current preference weights")
         score_value = (
             benchmark_score(scores, scores.get("_benchmark_weights") or {}, scores.get("_source_available") or {})

@@ -153,7 +153,7 @@ def test_benchmark_plan_keeps_weight_policy_instead_of_a_weight_snapshot():
     })
     curve = strategy["decision_curve"]
     assert curve["input"] == "benchmark_score"
-    assert curve["weights_policy"] == "current_user_preferences"
+    assert curve["weights_policy"] == "current_market_benchmark_weights"
     assert "weights" not in curve
 
 

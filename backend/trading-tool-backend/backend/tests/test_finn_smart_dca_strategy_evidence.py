@@ -25,7 +25,7 @@ def test_linked_strategy_evidence_exposes_the_confirmed_smart_dca_rule():
 
     assert data.dca_amount_mode == "score_bands"
     assert data.score_source == "benchmark_score"
-    assert data.score_weights_policy == "current_user_preferences"
+    assert data.score_weights_policy == "current_market_benchmark_weights"
     assert (data.low_threshold, data.high_threshold) == (40, 70)
     assert (data.low_score_percent, data.mid_score_percent, data.high_score_percent) == (50, 100, 150)
 
@@ -48,4 +48,4 @@ def test_linked_strategy_evidence_explains_live_benchmark_weights():
         resolution_source="setup_id",
     ))["data"]
     assert data.score_source == "benchmark_score"
-    assert data.score_weights_policy == "current_user_preferences"
+    assert data.score_weights_policy == "current_market_benchmark_weights"
