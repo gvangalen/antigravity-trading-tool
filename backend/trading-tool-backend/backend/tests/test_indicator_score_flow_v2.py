@@ -20,7 +20,7 @@ class _Cursor:
         return False
 
     def execute(self, sql, params):
-        if "SELECT indicator FROM user_indicator_configs" in sql:
+        if "SELECT indicator FROM (" in sql and "FROM user_indicator_configs" in sql:
             self.rows = [("dxy",), ("fear_greed_index",)]
         elif "FROM macro_data" in sql and "source_observed_at::date" in sql:
             now = datetime.now(timezone.utc)
@@ -160,7 +160,7 @@ def test_missing_selected_indicator_does_not_reweight_category(monkeypatch):
 
             def execute(sql, params):
                 original(sql, params)
-                if "SELECT DISTINCT ON" in sql:
+                if "FROM macro_data" in sql and "SELECT DISTINCT ON" in sql:
                     cursor.rows = cursor.rows[:1]
 
             cursor.execute = execute

@@ -32,6 +32,7 @@ import {
   matchesCommandQuery,
 } from "@/lib/finnCommandSearch";
 import { publishWorkspaceRefresh } from "@/lib/workspaceSync";
+import { fetchExactMarketWorkspace } from "@/lib/api/workspace";
 
 let indicatorCatalogCache = null;
 let indicatorCatalogPromise = null;
@@ -190,6 +191,8 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
         indicatorName: detail.indicatorName,
         title: detail.title || detail.indicatorName,
         source: detail.source || "finn",
+        marketId: detail.marketId || null,
+        quoteCurrency: detail.quoteCurrency || null,
       });
     };
     window.addEventListener(FINN_INDICATOR_MODAL_OPEN_EVENT, openIndicator);
@@ -297,11 +300,28 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
       return;
     }
     if (result.type === "indicator") {
+      const quoteCurrency = request?.quoteCurrency || searchParams.get("quote")?.toUpperCase() || null;
+      let marketId = request?.marketId || null;
+      if (quoteCurrency && !marketId && ["EUR", "USDT"].includes(quoteCurrency)) {
+        try {
+          const exact = await fetchExactMarketWorkspace(activeSymbol, quoteCurrency);
+          marketId = exact?.market_id || null;
+        } catch {
+          showSnackbar(copy.failed, "danger");
+          return;
+        }
+        if (!marketId) {
+          showSnackbar(copy.failed, "danger");
+          return;
+        }
+      }
       setPendingIndicator({
         category: result.category,
         indicatorName: result.indicatorName,
         title: result.title,
         source: "finn",
+        marketId,
+        quoteCurrency,
       });
     }
   };
@@ -396,6 +416,8 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
         category={pendingIndicator?.category}
         indicator={pendingIndicator?.indicatorName}
         assetSymbol={activeSymbol}
+        marketId={pendingIndicator?.marketId || null}
+        marketLabel={pendingIndicator?.quoteCurrency ? `${activeSymbol}/${pendingIndicator.quoteCurrency}` : null}
         mode="add"
         showSuccessSnackbar={false}
         onClose={() => setPendingIndicator(null)}
@@ -410,6 +432,7 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
             context: category,
             indicatorNonce: String(Date.now()),
           });
+          if (pendingIndicator?.quoteCurrency) params.set("quote", pendingIndicator.quoteCurrency);
 
           window.dispatchEvent(new CustomEvent(FINN_INDICATOR_MODAL_COMPLETED_EVENT, {
             detail: { category, indicator, assetSymbol, source: pendingIndicator?.source || "finn" },

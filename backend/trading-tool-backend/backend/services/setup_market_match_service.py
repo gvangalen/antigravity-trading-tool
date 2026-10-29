@@ -94,11 +94,14 @@ class SetupMarketMatchService:
         if market_id is not None:
             parameters["market_id"] = market_id
         configured_result = await self.session.execute(text(f"""
-            SELECT DISTINCT ON (indicator) indicator, updated_at FROM user_indicator_configs
+            SELECT indicator, updated_at FROM (
+              SELECT DISTINCT ON (LOWER(indicator)) indicator, updated_at, enabled
+              FROM user_indicator_configs
             WHERE user_id = :user_id AND category = :category
-              AND symbol = :symbol AND enabled = TRUE
+              AND symbol = :symbol
               {config_scope}
-            ORDER BY indicator, market_id DESC NULLS LAST
+              ORDER BY LOWER(indicator), market_id DESC NULLS LAST
+            ) effective WHERE enabled = TRUE
         """), {**parameters, "category": category})
         configured = configured_result.fetchall()
         asset_clause = "" if category == "macro" else f"AND symbol = :symbol {market_scope}"

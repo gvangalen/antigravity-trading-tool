@@ -192,9 +192,13 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
             # one is explicitly configured; it is never inferred as a price.
             config_scope = "AND (market_id = %s OR market_id IS NULL)" if market_id is not None else "AND market_id IS NULL"
             cur.execute(f"""
-                SELECT indicator FROM user_indicator_configs
-                WHERE user_id = %s AND category = %s AND symbol = %s
-                  AND enabled = TRUE {config_scope}
+                SELECT indicator FROM (
+                    SELECT DISTINCT ON (LOWER(indicator)) indicator, enabled
+                    FROM user_indicator_configs
+                    WHERE user_id = %s AND category = %s AND symbol = %s
+                      {config_scope}
+                    ORDER BY LOWER(indicator), market_id DESC NULLS LAST
+                ) effective WHERE enabled = TRUE
             """, (user_id, category, symbol, market_id) if market_id is not None
                  else (user_id, category, symbol))
             configured = {normalize_indicator_name(row[0]) for row in cur.fetchall()}

@@ -182,10 +182,13 @@ class MacroDataService:
         symbol: str,
         *,
         reset_existing: bool = False,
+        indicator_names_override: list[str] | None = None,
     ) -> Dict[str, Any]:
         normalized_symbol = str(symbol or "BTC").strip().upper()
         resolved = await self.resolve_effective_preferences(user_id, symbol=normalized_symbol)
-        indicator_names = [normalize_indicator_name(row.indicator) for row in resolved["rows"]]
+        indicator_names = ([normalize_indicator_name(name) for name in indicator_names_override]
+                           if indicator_names_override is not None else
+                           [normalize_indicator_name(row.indicator) for row in resolved["rows"]])
         results: Dict[str, Any] = {
             "symbol": normalized_symbol,
             "asset_class": resolved["asset_class"],

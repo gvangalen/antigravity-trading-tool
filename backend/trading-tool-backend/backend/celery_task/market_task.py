@@ -156,6 +156,7 @@ async def _sync_exact_market_snapshots() -> dict:
     """
     from backend.services.indicator_history_bootstrap import IndicatorHistoryBootstrap
     from backend.services.exact_market_indicator_service import ExactMarketIndicatorService
+    from backend.services.pair_indicator_config_service import PairIndicatorConfigService, effective_pair_configs
     from backend.services.trading_market_service import TradingMarket
     from backend.celery_task.store_daily_scores_task import build_daily_scores_for_market
 
@@ -180,6 +181,7 @@ async def _sync_exact_market_snapshots() -> dict:
         selected_ids = {scope[0] for scope in window}
         await session.rollback()
         outcomes = []
+        refreshed_macro = set()
         for market in markets:
             if market.id not in selected_ids:
                 continue
@@ -190,6 +192,21 @@ async def _sync_exact_market_snapshots() -> dict:
                 indicators = await ExactMarketIndicatorService(session).materialize(market)
                 score_outcomes = []
                 for user_id in indicators["owners"]:
+                    pair_configs = effective_pair_configs(
+                        await PairIndicatorConfigService(session).rows(user_id, market))
+                    macro_names = [name for (owner, category, name) in pair_configs
+                                   if owner == user_id and category == "macro"
+                                   and (user_id, market.asset_symbol, name) not in refreshed_macro]
+                    if macro_names:
+                        refreshed_macro.update((user_id, market.asset_symbol, name)
+                                               for name in macro_names)
+                        macro_result = await MacroDataService(session).sync_effective_indicators(
+                            user_id, market.asset_symbol,
+                            indicator_names_override=macro_names)
+                        if macro_result.get("failed"):
+                            logger.warning("Pair macro refresh pending: market_id=%s user_id=%s",
+                                           market.id, user_id)
+                        await session.commit()
                     try:
                         score_outcomes.append(await asyncio.to_thread(
                             build_daily_scores_for_market, user_id, market.id))
