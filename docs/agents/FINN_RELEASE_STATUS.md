@@ -6,8 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN-chat: Volume-weging op exact handelspaar (29 oktober 2026)
 
-Current phase: `LOCAL_VALIDATION`. Candidate branch:
-`codex/finn-indicator-weight-chat`, based on main
+Current phase: `LIVE_READBACK_PASSED_AWAITING_QA`. Candidate branch:
+`codex/finn-indicator-weight-chat`, [PR #691](https://github.com/gvangalen/antigravity-trading-tool/pull/691), based on main
 `b957c3bff2447b8894dcf0a82fb503d8d7cc2343`. The user can ask FINN to
 change only Volume on BTC/EUR to low weight while leaving BTC/USDT untouched.
 The operation selector keeps this typed indicator edit out of watchlist and
@@ -32,8 +32,13 @@ These provider evaluations exercise the unchanged final selector; the last
 code adjustment exposed saved weight in read evidence and resolved two
 read-evidence test regressions. All five candidate CI jobs passed on code SHA
 `94b656645` in run `40863987551`. No protected QA fixture or sealed holdout
-was used by Build. Deployment, public SHA checks and independent live QA are
-pending.
+was used by Build. PR #691 merged as SHA
+`105e6085befad51871bcd904e71dc492d868d7f9`. Main CI run
+`40864971949` and Auto Deploy run `40865353067` succeeded for that SHA.
+Public backend health and frontend build-info each returned HTTP 200 with
+exactly that SHA. This documentation update creates a later revision, so QA
+must use the final public SHA after its CI and Auto Deploy complete.
+Independent authenticated live QA is pending.
 
 ## Indicatorinstellingen per exact handelspaar (29 oktober 2026)
 
