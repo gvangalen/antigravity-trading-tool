@@ -4,9 +4,35 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Paaridentiteit in dagelijks rapport (29 oktober 2026)
+
+Current phase: `CANDIDATE_CI_PASSED_AWAITING_DEPLOY`. Candidate branch
+`codex/pair-report-identity-fix`, [PR #699](https://github.com/gvangalen/antigravity-trading-tool/pull/699).
+Independent authenticated QA on live SHA `377d606f39f073b7efb854f84bea295c18271e0d`
+reported `NOT_ACCEPTED` for the complete pair flow: benchmark copy, independent
+weights, refresh, FINN readback and pair-bound plans/Paper bots worked, but the
+daily report's score overview showed two different BTC pairs only as `BTC` and
+bot status omitted the pair. The report's source snapshot already contained
+the exact pairs, so this candidate corrects report projection and verified
+bot pair context without changing score or action contracts.
+
+Build evidence on product commit `8a13bca7f`: targeted backend 18 passed;
+root backend **4124 passed, 4 skipped**; frontend typecheck, i18n, command
+tests, high audit and production build passed. Real Luna/Responses development
+and regression suites passed **20/20** and **109/109** with zero provider,
+schema, timeout, parse or validation failures. All five PR CI checks passed.
+The broader isolated worker matrix was also run but remained red: its first
+run passed 16/16 actions and 9/9 lineage but exceeded terminal p95 latency;
+the repeat passed 11/16 actions and 6/9 lineage, including intermittent
+model-led follow-up target resolution. This candidate does not modify those
+FINN action contracts. These red diagnostics are not presented as passing
+release evidence. The official protected QA matrix remains blocked by its
+missing approved manifest binding; independent authenticated browser QA is
+still required after deployment. No Live order was placed.
+
 ## Paargebonden benchmarks kopiëren en mobiel uitlezen (29 oktober 2026)
 
-Current phase: `LIVE_AWAITING_INDEPENDENT_QA`. Candidate branch:
+Current phase: `QA_NOT_ACCEPTED_SUPERSEDED_BY_PR_699`. Candidate branch:
 `codex/pair-benchmark-clone`, [PR #697](https://github.com/gvangalen/antigravity-trading-tool/pull/697),
 based on main `94a5288e9777d80c5f837941cd14aaa183a69d8f`. Indicatorselectie,
 regels en indicatorgewichten kunnen van een exact handelspaar naar een ander
@@ -35,8 +61,9 @@ PR #697 merged as `984cc1b6acd2bf5c13dfa5ad5d281cf75382b6c4`.
 Main CI run `40952431909` and Auto Deploy run `40952868763` both succeeded.
 Public `https://tradamind.com/api/health` and
 `https://tradamind.com/build-info.json` each returned HTTP 200 and exactly
-that merge SHA. This status-only update will create a later main revision, so
-its CI, Auto Deploy and public identity must be checked before QA starts.
+that merge SHA. The status-only update merged as
+`377d606f39f073b7efb854f84bea295c18271e0d`; its main CI and Auto Deploy
+passed and both public surfaces matched that SHA before independent QA.
 
 The preceding Volume-readback candidate reached live SHA
 `94a5288e9777d80c5f837941cd14aaa183a69d8f`. Its existing QA agent

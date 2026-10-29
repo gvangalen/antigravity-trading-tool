@@ -5,7 +5,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { HUDSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { formatDateTime } from "@/lib/i18n";
-import { parseUtcMoment, scoreSourceSnapshot } from "@/lib/report/reportSourceSnapshot.mjs";
+import { parseUtcMoment, reportMarketLabel, scoreSourceSnapshot } from "@/lib/report/reportSourceSnapshot.mjs";
 
 export default function ReportTerminalHUD({ report, type = "daily", loading = false }) {
   const { user } = useAuth();
@@ -92,7 +92,7 @@ export default function ReportTerminalHUD({ report, type = "daily", loading = fa
             <div className="mt-2 space-y-1">
               {sourceAssets.map((asset, index) => (
                 <p key={`${asset.symbol || 'asset'}-${index}`}>
-                  <strong>{asset.symbol || '—'}</strong> · {reportT.hudMarket}: {asset.reported_scores?.market_score ?? '—'} · {reportT.hudMacro}: {asset.reported_scores?.macro_score ?? '—'} · {reportT.hudTechnical}: {asset.reported_scores?.technical_score ?? '—'}
+                  <strong>{reportMarketLabel(asset)}</strong> · {reportT.hudMarket}: {asset.reported_scores?.market_score ?? '—'} · {reportT.hudMacro}: {asset.reported_scores?.macro_score ?? '—'} · {reportT.hudTechnical}: {asset.reported_scores?.technical_score ?? '—'}
                 </p>
               ))}
             </div>
@@ -119,7 +119,7 @@ export default function ReportTerminalHUD({ report, type = "daily", loading = fa
             <div className="mt-3 space-y-3">
               {sourceAssets.map((asset, index) => (
                 <div key={`${asset.symbol || 'asset'}-${index}`} className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950/40">
-                  <p className="font-semibold">{asset.symbol || '—'} · {reportT.hudScoreDate}: {asset.score_report_date || reportT.hudSourceUnknown}</p>
+                  <p className="font-semibold">{reportMarketLabel(asset)} · {reportT.hudScoreDate}: {asset.score_report_date || reportT.hudSourceUnknown}</p>
                   {Object.entries(categoryLabels).map(([category, label]) => {
                     const sources = asset.component_source_observed_at?.[category] || {};
                     const score = asset.reported_scores?.[`${category}_score`];

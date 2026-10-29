@@ -10,6 +10,10 @@ export function scoreSourceSnapshot(report) {
   }
 }
 
+export function reportMarketLabel(item) {
+  return item?.trading_pair || item?.pair || item?.symbol || '—';
+}
+
 export function parseUtcMoment(value) {
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
   if (typeof value !== 'string' || !value.trim()) return null;

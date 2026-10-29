@@ -306,6 +306,38 @@ def test_daily_report_uses_dated_fresh_price_and_distinct_strategy_name(monkeypa
     assert reports.generate_unified_daily_report_sections(7)["price"] is None
 
 
+def test_daily_report_keeps_pair_identity_in_scores_and_bot_prose(monkeypatch):
+    def asset(pair, market_score):
+        return {
+            "symbol": "BTC", "pair": pair, "market_id": 41 if pair == "BTC/EUR" else 42,
+            "benchmark": {
+                "source_status": "available", "benchmark_score": market_score,
+                "reported_scores": {"market_score": market_score, "macro_score": 60,
+                                    "technical_score": 70},
+                "component_source_status": {"market_score": "fresh", "macro_score": "fresh",
+                                            "technical_score": "fresh"},
+                "matches": [],
+            },
+            "indicator_configuration": {"market": [], "macro": [], "technical": []},
+            "setups": [], "strategies": [],
+            "bots": [{"id": 41 if pair == "BTC/EUR" else 42, "name": "Paper bot",
+                      "is_live": False, "is_active": True}],
+        }
+
+    context = {"locale": "nl", "assets": [asset("BTC/EUR", 40), asset("BTC/USDT", 50)]}
+    monkeypatch.setattr(reports, "_load_context", lambda _id: asyncio.sleep(0, result=context))
+    monkeypatch.setattr(reports, "ask_gpt_json", lambda **_: {})
+    report = reports.generate_unified_daily_report_sections(7)
+
+    assert "BTC/EUR: Geen indicatoren ingesteld; 40/100" in report["market_analysis"]
+    assert "BTC/USDT: Geen indicatoren ingesteld; 50/100" in report["market_analysis"]
+    assert "Paper bot (BTC/EUR)" in report["bot_strategy"]
+    assert "Paper bot (BTC/USDT)" in report["bot_strategy"]
+    assert [item["pair"] for item in report["score_source_snapshot"]["assets"]] == [
+        "BTC/EUR", "BTC/USDT",
+    ]
+
+
 def test_daily_report_lists_multiple_linked_strategies_and_rejects_false_missing_outlook(monkeypatch):
     context = {"locale": "nl", "assets": [{
         "symbol": "ETH",
