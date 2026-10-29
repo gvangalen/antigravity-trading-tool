@@ -2,6 +2,19 @@
 
 import { fetchAuth } from '@/lib/api/auth';
 
+export async function getPairIndicatorConfig(marketId, category, indicator) {
+  const params = new URLSearchParams({ market_id: String(marketId), category, indicator });
+  return fetchAuth(`/api/workspace/exact-market/indicator-config?${params}`, { method: 'GET' });
+}
+
+export async function savePairIndicatorConfig({ marketId, category, indicator, mode, draft }) {
+  return fetchAuth('/api/workspace/exact-market/indicator-config', {
+    method: 'PUT',
+    body: JSON.stringify({ market_id: marketId, category, indicator, mode,
+      score_mode: draft.score_mode, weight: draft.weight, rules: draft.rules }),
+  });
+}
+
 export async function previewIndicatorImpact({ category, indicator, symbol }) {
   return fetchAuth('/api/indicator_config/preview', {
     method: 'POST',

@@ -11,6 +11,8 @@ from backend.infrastructure.models import (
 )
 from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
 from backend.services.setup_market_match_service import SetupMarketMatchService, verified_indicator_evidence
+from backend.services.pair_indicator_config_service import PairIndicatorConfigService, effective_pair_configs
+from backend.utils.scoring_utils import normalize_indicator_name
 from backend.services.workspace_data_service import (
     STALE_AFTER_SECONDS, WorkspaceDataService, _current_indicator_rows, _freshness, _market_row,
     _technical_row,
@@ -59,7 +61,18 @@ class ExactMarketWorkspaceService:
         market_rows = self._latest_rows(market_result.scalars().all(), "name", _market_row)
         technical_rows = self._latest_rows(technical_result.scalars().all(), "indicator", _technical_row)
         workspace = WorkspaceDataService(self.session)
-        macro_rows = await workspace._macro_rows(user_id, symbol, "day", asset_class="crypto")
+        selected = effective_pair_configs(
+            await PairIndicatorConfigService(self.session).rows(user_id, market))
+        macro_rows = await workspace._macro_rows(
+            user_id, symbol, "day", asset_class="crypto",
+            configured_override=[row for (owner, category, _), row in selected.items()
+                                 if owner == user_id and category == "macro"])
+        def configured(category, row):
+            name = row.get("name") or row.get("indicator")
+            return (user_id, category, normalize_indicator_name(name)) in selected
+        market_rows = [row for row in market_rows if configured("market", row)]
+        macro_rows = [row for row in macro_rows if configured("macro", row)]
+        technical_rows = [row for row in technical_rows if configured("technical", row)]
         score_values = assessment["reported_scores"]
         verified_daily = {
             "indicator_evidence": indicator_evidence,

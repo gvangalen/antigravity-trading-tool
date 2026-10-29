@@ -127,7 +127,7 @@ class _Cursor:
                 "indicator_evidence": json.loads(params[-1]),
             }
             self.rows = []
-        elif "SELECT indicator FROM user_indicator_configs" in sql:
+        elif "SELECT indicator FROM (" in sql and "FROM user_indicator_configs" in sql:
             self.rows = [(self.store.names[params[1]],)]
         elif "updated_at FROM user_indicator_configs" in sql:
             self.rows = [(self.store.names[params[1]], self.store.now - timedelta(hours=2))]

@@ -828,11 +828,15 @@ class WorkspaceDataService:
             )
 
     async def _macro_rows(self, user_id: int, symbol: str, period: str,
-                          *, asset_class: str | None = None) -> list[dict[str, Any]]:
+                          *, asset_class: str | None = None,
+                          configured_override: list[Any] | None = None) -> list[dict[str, Any]]:
         allowed: set[str] = set()
         configured: list[Any] = []
         resolver = getattr(getattr(self, "macro_service", None), "resolve_effective_preferences", None)
-        if callable(resolver):
+        if configured_override is not None:
+            configured = configured_override
+            allowed = {_indicator_key(row.indicator) for row in configured}
+        elif callable(resolver):
             resolved = await resolver(user_id, symbol=symbol, asset_class=asset_class)
             configured = list(resolved.get("rows", []))
             allowed = {

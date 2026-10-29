@@ -25,7 +25,7 @@ def test_exact_market_workspace_never_borrows_base_quote_or_score(monkeypatch):
     market = SimpleNamespace(id=43, asset_symbol="ETH", quote_currency="EUR",
                              tradingview_symbol="BINANCE:ETHEUR")
     session = SimpleNamespace(execute=AsyncMock(side_effect=[
-        _Result([market]), _Result([]), _Result([]),
+        _Result([market]), _Result([]), _Result([]), _Result([]),
     ]))
     quote_reader = SimpleNamespace(get_latest_exact_market_snapshot=AsyncMock(
         return_value=SimpleNamespace(price=2400, change_24h=1, volume=100,
@@ -66,7 +66,7 @@ def test_selected_pair_watchlist_row_uses_the_workspace_quote_and_score(monkeypa
     market = SimpleNamespace(id=43, asset_symbol="ETH", quote_currency="EUR",
                              tradingview_symbol="BINANCE:ETHEUR")
     session = SimpleNamespace(execute=AsyncMock(side_effect=[
-        _Result([market]), _Result([]), _Result([]),
+        _Result([market]), _Result([]), _Result([]), _Result([]),
     ]))
     quote = SimpleNamespace(price=2400, change_24h=2, volume=100,
                             quote_currency="EUR", price_provider="binance",
@@ -107,7 +107,7 @@ def test_non_daily_period_does_not_show_daily_combined_score(monkeypatch):
     market = SimpleNamespace(id=43, asset_symbol="ETH", quote_currency="EUR",
                              tradingview_symbol="BINANCE:ETHEUR")
     session = SimpleNamespace(execute=AsyncMock(side_effect=[
-        _Result([market]), _Result([]), _Result([]),
+        _Result([market]), _Result([]), _Result([]), _Result([]),
     ]))
     matcher = SimpleNamespace(for_asset=AsyncMock(return_value={
         "benchmark_score": 65, "benchmark_weights": {"market": 1 / 3, "macro": 1 / 3, "technical": 1 / 3},
@@ -143,6 +143,8 @@ def test_exact_market_rows_show_only_verified_score_evidence(monkeypatch):
                                  interpretation=None, action=None, timestamp=observed,
                                  source_observed_at=observed)]),
         _Result([]),
+        _Result([SimpleNamespace(user_id=7, market_id=43, category="market",
+                                 indicator="price", enabled=True)]),
     ]))
     evidence = {"price": {"value": 2400, "score": 30,
                           "source_observed_at": timestamp,

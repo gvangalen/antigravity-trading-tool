@@ -2921,7 +2921,16 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
 
   const openSearch = (detail = undefined) => {
     if (typeof window === "undefined") return;
-    window.dispatchEvent(new CustomEvent(SEARCH_OPEN_EVENT, { detail }));
+    if (detail?.mode === "indicator" && activeQuoteCurrency && !workspace?.market_id) {
+      showSnackbar(locale?.startsWith("en") ? "The selected market is still loading. Please try again shortly."
+        : locale?.startsWith("de") ? "Das gewählte Handelspaar wird noch geladen. Bitte versuche es gleich erneut."
+        : "Het gekozen handelspaar wordt nog geladen. Probeer het zo opnieuw.", "info");
+      return;
+    }
+    window.dispatchEvent(new CustomEvent(SEARCH_OPEN_EVENT, {
+      detail: { ...(detail || {}), marketId: workspace?.market_id || null,
+        quoteCurrency: workspace?.quote_currency || null },
+    }));
   };
 
   return (
@@ -3115,6 +3124,8 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         category="technical"
         indicator={technicalConfigModal}
         assetSymbol={activeSymbol}
+        marketId={workspace?.market_id || null}
+        marketLabel={workspace?.pair || null}
         mode="edit"
         onClose={() => setTechnicalConfigModal(null)}
       />

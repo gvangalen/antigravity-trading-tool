@@ -15,7 +15,9 @@ import Drawer from "@/components/ui/Drawer";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import {
   getIndicatorConfig,
+  getPairIndicatorConfig,
   previewIndicatorImpact,
+  savePairIndicatorConfig,
   saveCustomRules,
   updateIndicatorSettings,
 } from "@/lib/api/indicatorConfig";
@@ -276,6 +278,8 @@ export default function IndicatorConfigModal({
   category,
   indicator,
   assetSymbol,
+  marketId = null,
+  marketLabel = null,
   mode = "add",
   showSuccessSnackbar = true,
   onClose,
@@ -379,14 +383,16 @@ export default function IndicatorConfigModal({
     setLoadError("");
     setImpactPreview(null);
     setPreviewError(false);
-    setPreviewLoading(true);
-    previewIndicatorImpact({ category, indicator: normalizedIndicator, symbol: assetSymbol })
+    setPreviewLoading(!marketId);
+    if (!marketId) previewIndicatorImpact({ category, indicator: normalizedIndicator, symbol: assetSymbol })
       .then((preview) => { if (active) setImpactPreview(preview); })
       .catch(() => { if (active) setPreviewError(true); })
       .finally(() => { if (active) setPreviewLoading(false); });
 
     Promise.all([
-      getIndicatorConfig(category, normalizedIndicator, assetSymbol),
+      marketId
+        ? getPairIndicatorConfig(marketId, category, normalizedIndicator)
+        : getIndicatorConfig(category, normalizedIndicator, assetSymbol),
       getAssistantPreferences().catch(() => null),
     ])
       .then(([configResponse, preferencesResponse]) => {
@@ -420,7 +426,7 @@ export default function IndicatorConfigModal({
     return () => {
       active = false;
     };
-  }, [assetSymbol, category, copy, indicatorLabel, isOpen, normalizedIndicator, showSnackbar]);
+  }, [assetSymbol, category, copy, indicatorLabel, isOpen, marketId, normalizedIndicator, showSnackbar]);
 
   const handleConfirm = useCallback(async () => {
     if (!indicator || !category || !draft || saving || !isValidDraft) return;
@@ -429,10 +435,14 @@ export default function IndicatorConfigModal({
     setSaveError("");
 
     try {
-      const result = await persistIndicatorConfiguration({
-        mode, indicator, category, assetSymbol, draft,
-        onSubmitAction, saveCustomRules, updateIndicatorSettings,
-      });
+      const result = marketId
+        ? { pendingSource: (await savePairIndicatorConfig({
+            marketId, mode, indicator: normalizedIndicator, category, draft,
+          })).status === "pending_source" }
+        : await persistIndicatorConfiguration({
+          mode, indicator, category, assetSymbol, draft,
+          onSubmitAction, saveCustomRules, updateIndicatorSettings,
+        });
 
       if (showSuccessSnackbar) {
         showSnackbar(
@@ -457,7 +467,7 @@ export default function IndicatorConfigModal({
     } catch (error) {
       console.error("Failed to confirm indicator config modal:", error);
       const message = indicatorConfigFailureMessage({
-        error, indicatorLabel, assetSymbol,
+        error, indicatorLabel, assetSymbol: marketLabel || assetSymbol,
         actionFailed: copy.actionFailed.replace("{indicator}", indicatorLabel),
       });
       if (error?.indicatorCreated || error?.configurationSaved) {
@@ -479,10 +489,12 @@ export default function IndicatorConfigModal({
     indicator,
     indicatorLabel,
     isValidDraft,
+    marketId,
     mode,
     onClose,
     onCompleted,
     onSubmitAction,
+    normalizedIndicator,
     saving,
     showSuccessSnackbar,
     showSnackbar,

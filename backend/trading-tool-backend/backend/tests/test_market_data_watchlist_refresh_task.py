@@ -1,5 +1,6 @@
 import asyncio
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 from backend.celery_task import market_task
 from backend.celery_task.store_daily_scores_task import store_daily_scores_task
@@ -80,7 +81,7 @@ def test_configured_snapshot_refresh_does_not_call_provider_without_watchlist_as
 
 
 def test_exact_market_refresh_uses_persisted_pair_identity(monkeypatch):
-    from backend.services import exact_market_indicator_service, indicator_history_bootstrap
+    from backend.services import exact_market_indicator_service, indicator_history_bootstrap, pair_indicator_config_service
 
     calls = []
     row = {"id": 73, "asset_symbol": "BTC", "quote_currency": "EUR",
@@ -142,6 +143,8 @@ def test_exact_market_refresh_uses_persisted_pair_identity(monkeypatch):
     monkeypatch.setattr(market_task, "MarketDataIngestionService", Ingestion)
     monkeypatch.setattr(indicator_history_bootstrap, "IndicatorHistoryBootstrap", History)
     monkeypatch.setattr(exact_market_indicator_service, "ExactMarketIndicatorService", Indicators)
+    monkeypatch.setattr(pair_indicator_config_service, "PairIndicatorConfigService",
+                        lambda _session: type("Preferences", (), {"rows": AsyncMock(return_value=[])})())
     monkeypatch.setattr("backend.celery_task.store_daily_scores_task.build_daily_scores_for_market", build_score)
 
     result = asyncio.run(market_task._sync_exact_market_snapshots())

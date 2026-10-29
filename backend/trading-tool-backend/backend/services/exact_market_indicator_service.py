@@ -13,6 +13,7 @@ from backend.infrastructure.models import (
     MarketData, MarketDataIndicator, TechnicalDataIndicator, UserIndicatorConfig,
 )
 from backend.services.trading_market_service import TradingMarket
+from backend.services.pair_indicator_config_service import effective_pair_configs
 from backend.utils.scoring_utils import normalize_indicator_name, score_exact_market_measurement
 
 
@@ -20,20 +21,23 @@ class ExactMarketIndicatorService:
     def __init__(self, session):
         self.session = session
 
-    async def _configured_owners(self, market: TradingMarket) -> dict[int, dict[str, set[str]]]:
+    async def _configured_owners(self, market: TradingMarket, owner_ids: set[int] | None = None) -> dict[int, dict[str, set[str]]]:
         # Only owners of a plan for this exact pair are refreshed. Their base
         # asset indicator choices carry over; pair-specific choices override
         # the same name without borrowing another pair's measurements.
         owners_result = await self.session.execute(text("""
             SELECT DISTINCT user_id FROM setups WHERE market_id = :market_id
         """), {"market_id": market.id})
-        owner_ids = [int(row[0]) for row in owners_result.fetchall()]
+        owner_ids = set(owner_ids or ()) | {int(row[0]) for row in owners_result.fetchall()}
+        configured_result = await self.session.execute(select(UserIndicatorConfig.user_id).where(
+            UserIndicatorConfig.market_id == market.id,
+        ).distinct())
+        owner_ids.update(int(row[0]) for row in configured_result.all())
         if not owner_ids:
             return {}
         result = await self.session.execute(select(UserIndicatorConfig).where(
             UserIndicatorConfig.user_id.in_(owner_ids),
             UserIndicatorConfig.symbol == market.asset_symbol,
-            UserIndicatorConfig.enabled.is_(True),
             or_(UserIndicatorConfig.market_id == market.id,
                 UserIndicatorConfig.market_id.is_(None)),
             UserIndicatorConfig.category.in_(("market", "technical")),
@@ -41,7 +45,7 @@ class ExactMarketIndicatorService:
         by_owner: dict[int, dict[str, set[str]]] = {
             owner_id: {"market": set(), "technical": set()} for owner_id in owner_ids
         }
-        for config in result.scalars().all():
+        for config in effective_pair_configs(result.scalars().all()).values():
             by_owner[int(config.user_id)][str(config.category)].add(
                 normalize_indicator_name(config.indicator))
         return by_owner
@@ -103,8 +107,8 @@ class ExactMarketIndicatorService:
             **fields,
         ))
 
-    async def materialize(self, market: TradingMarket) -> dict:
-        owners = await self._configured_owners(market)
+    async def materialize(self, market: TradingMarket, owner_ids: set[int] | None = None) -> dict:
+        owners = await self._configured_owners(market, owner_ids)
         if not owners:
             return {"market_id": market.id, "owners": [], "written": 0}
         market_values, technical_values, market_at, technical_at = await self._source_values(market)

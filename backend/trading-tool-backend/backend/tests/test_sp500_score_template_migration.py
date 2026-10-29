@@ -41,7 +41,7 @@ def test_sp500_dated_source_becomes_a_verified_macro_score_only_with_a_rule(monk
             return False
 
         def execute(self, sql, _params):
-            if "SELECT indicator FROM user_indicator_configs" in sql:
+            if "SELECT indicator FROM (" in sql and "FROM user_indicator_configs" in sql:
                 self.rows = [("sp500",)]
             elif "source_observed_at::date" in sql:
                 self.rows = history
