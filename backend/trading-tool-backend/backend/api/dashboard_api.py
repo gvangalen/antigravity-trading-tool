@@ -99,6 +99,7 @@ async def get_setup_summary(
 @router.get("/dashboard/mobile-overview", response_model=MobileOverviewResponse)
 async def get_mobile_overview(
     symbol: str | None = None,
+    quote_currency: str | None = None,
     bypass_cache: bool = False,
     x_locale: str | None = Header(default=None, alias="X-Locale"),
     current_user: dict = Depends(get_current_user),
@@ -113,6 +114,7 @@ async def get_mobile_overview(
     payload = await service.get_mobile_overview(
         user_id,
         symbol=symbol,
+        quote_currency=quote_currency,
         bypass_cache=bypass_cache,
         locale=locale,
     )

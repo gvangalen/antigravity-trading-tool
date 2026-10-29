@@ -173,6 +173,7 @@ class DashboardService:
         self,
         user_id: int,
         symbol: str | None = None,
+        quote_currency: str | None = None,
         bypass_cache: bool = False,
         locale: str = "nl",
     ) -> MobileOverviewResponse:
@@ -180,6 +181,9 @@ class DashboardService:
 
         # 2. Setup symbols and default fallback structs
         normalized_symbol = str(symbol or "").strip().upper()
+        chosen_quote = str(quote_currency or "").strip().upper() or None
+        if chosen_quote and not normalized_symbol:
+            raise HTTPException(status_code=422, detail="Kies een asset bij het handelspaar.")
         if normalized_symbol:
             symbols = [normalized_symbol]
         else:
@@ -227,7 +231,28 @@ class DashboardService:
         owned_setups = await SetupRepository(self.session).get_all_setups(user_id)
         for sym in symbols:
             price_info = prices_data.get(sym, {}) if isinstance(prices_data, dict) else {}
-            assessment = await match_service.for_asset(user_id, sym, setups=owned_setups)
+            exact_market = None
+            if chosen_quote:
+                from backend.services.exact_market_workspace_service import ExactMarketWorkspaceService
+                exact_market = await ExactMarketWorkspaceService(self.session).get(
+                    user_id, sym, chosen_quote, watchlist_symbols=symbols,
+                )
+                if exact_market is None:
+                    raise HTTPException(status_code=404, detail="Handelspaar niet beschikbaar.")
+                daily = exact_market.get("daily") or {}
+                assessment = {
+                    "reported_scores": {
+                        f"{category}_score": (daily.get(category) or {}).get("score")
+                        for category in ("market", "macro", "technical")
+                    },
+                    "matches": exact_market.get("setup_matches") or [],
+                    "source_status": (exact_market.get("combined") or {}).get("source_status"),
+                    "benchmark_score": daily.get("benchmark_score"),
+                    "as_of": daily.get("calculated_at"),
+                }
+                price_info = exact_market.get("quote") or {}
+            else:
+                assessment = await match_service.for_asset(user_id, sym, setups=owned_setups)
             reported_scores = assessment["reported_scores"]
             macro_val = (float(reported_scores["macro_score"])
                          if reported_scores["macro_score"] is not None else None)
@@ -248,6 +273,9 @@ class DashboardService:
 
             watchlist_items.append(MobileAssetWatchlistSchema(
                 symbol=sym,
+                market_id=exact_market.get("market_id") if exact_market else None,
+                pair=exact_market.get("pair") if exact_market else None,
+                quote_currency=chosen_quote if exact_market else None,
                 display_name=asset_meta.get("display_name") or sym,
                 asset_class=asset_meta.get("asset_class"),
                 logo_url=asset_meta.get("logo_url") or _asset_logo_url(sym),

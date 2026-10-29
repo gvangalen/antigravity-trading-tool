@@ -7,7 +7,19 @@ SECRET_FILE="$HOME/tradamind-local-secrets/finn-development.env"
 PID_DIR="$ROOT/.local-finn"
 load_env() { set -a; . "$ENV_FILE"; . "$SECRET_FILE"; set +a; }
 require_env() { test -r "$ENV_FILE" && test -r "$SECRET_FILE"; }
-migrate() { (cd "$BACKEND" && PYTHONPATH=. python3 backend/scripts/bootstrap_local_finn_schema.py); for file in "$BACKEND"/backend/scripts/migrations/*.py; do PYTHONPATH="$BACKEND" python3 "$BACKEND/backend/scripts/run_sql_migration.py" "$file"; done; }
+migrate() {
+  (cd "$BACKEND" && PYTHONPATH=. python3 backend/scripts/bootstrap_local_finn_schema.py)
+  local file cutover="$BACKEND/backend/scripts/migrations/2026_10_28_trading_market_identity_cutover.py"
+  for file in "$BACKEND"/backend/scripts/migrations/*.py; do
+    # The cutover requires the partial indexes installed by expand. Glob order
+    # puts cutover first, so run it immediately after expand instead.
+    [[ "$file" == "$cutover" ]] && continue
+    PYTHONPATH="$BACKEND" python3 "$BACKEND/backend/scripts/run_sql_migration.py" "$file"
+    if [[ "$file" == *2026_10_28_trading_market_identity_expand.py ]]; then
+      PYTHONPATH="$BACKEND" python3 "$BACKEND/backend/scripts/run_sql_migration.py" "$cutover"
+    fi
+  done
+}
 stop_local_processes() {
   # A prior interrupted local run can leave only these exact local processes.
   # Never match a production queue or an arbitrary uvicorn process.

@@ -18,6 +18,9 @@ export type FinnV2ConversationDetail = {
 
 export type MobileOverviewAsset = {
   symbol: string;
+  market_id?: number | null;
+  pair?: string | null;
+  quote_currency?: string | null;
   display_name?: string | null;
   asset_class?: string | null;
   logo_url?: string | null;
@@ -207,6 +210,7 @@ export type WorkspaceAssetResponse = {
   market_id?: number | null;
   pair?: string | null;
   quote_currency?: string | null;
+  setup_matches?: { score?: number | null; status?: string | null }[];
   asset?: { tradingview_symbol?: string | null } | null;
   periods: {
     market: string;
@@ -419,9 +423,9 @@ export const analyticsApi = {
 };
 
 export const mobileApi = {
-  overview(symbol?: string) {
+  overview(symbol?: string, quoteCurrency?: string | null) {
     return apiClient.request<MobileOverviewResponse>('/api/dashboard/mobile-overview', {
-      query: symbol ? { symbol } : undefined,
+      query: symbol ? { symbol, ...(quoteCurrency ? { quote_currency: quoteCurrency } : {}) } : undefined,
       timeoutMs: 20000,
     });
   },

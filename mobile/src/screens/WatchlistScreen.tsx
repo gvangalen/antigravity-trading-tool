@@ -70,12 +70,12 @@ export function WatchlistScreen() {
     fallbackData: [],
     fetcher: fetchPairMatches,
   });
-  const availableQuotes = useMemo(() => Array.from(new Set(
-    pairMatchesResource.data
+  const availableQuotes = useMemo(() => Array.from(new Set([
+    ...pairMatchesResource.data
       .filter((match) => String(match.symbol || '').toUpperCase() === selectedSymbol && match.market_id)
-      .map((match) => String(match.quote_currency || '').toUpperCase())
-      .filter(Boolean),
-  )).sort(), [pairMatchesResource.data, selectedSymbol]);
+      .map((match) => String(match.quote_currency || '').toUpperCase()),
+    String(context.quoteCurrency || '').toUpperCase(),
+  ].filter(Boolean))).sort(), [pairMatchesResource.data, selectedSymbol, context.quoteCurrency]);
   const selectedQuote = availableQuotes.includes(String(context.quoteCurrency || '').toUpperCase())
     ? String(context.quoteCurrency).toUpperCase()
     : availableQuotes[0] || null;
@@ -157,7 +157,7 @@ export function WatchlistScreen() {
     };
   }, [chartInterval, chartPreferenceLoaded]);
 
-  const fetchOverview = useCallback(() => mobileApi.overview(selectedSymbol), [selectedSymbol]);
+  const fetchOverview = useCallback(() => mobileApi.overview(selectedSymbol, selectedQuote), [selectedSymbol, selectedQuote]);
   const overviewResource = useApiResource<MobileOverviewResponse | undefined>({
     fallbackData: undefined,
     fetcher: fetchOverview,
@@ -2075,23 +2075,29 @@ function buildFallbackAnalysisAsset(
     Number.isFinite(latestChange) ? latestChange : null,
   ].some((value) => typeof value === 'number' && Number.isFinite(value));
 
-  if (!hasAnyBackendSignal) return null;
+  if (!hasAnyBackendSignal && !workspaceAsset) return null;
 
   const safeMarket = marketScore;
   const safeMacro = macroScore;
   const safeTechnical = technicalScore;
   const safeBenchmark = combinedScore ?? null;
+  const topMatch = workspaceAsset?.setup_matches?.[0];
+  const setupMatchScore = typeof topMatch?.score === 'number' && Number.isFinite(topMatch.score)
+    ? topMatch.score : null;
 
   return {
     symbol,
+    market_id: workspaceAsset?.market_id,
+    pair: workspaceAsset?.pair,
+    quote_currency: workspaceAsset?.quote_currency,
     price: Number.isFinite(latestPrice) ? latestPrice : null,
     change_24h: Number.isFinite(latestChange) ? latestChange : null,
     macro_score: safeMacro,
     technical_score: safeTechnical,
     market_score: safeMarket,
-    setup_score: null,
-    setup_match_score: null,
-    setup_match_status: 'insufficient_data',
+    setup_score: setupMatchScore,
+    setup_match_score: setupMatchScore,
+    setup_match_status: topMatch?.status ?? 'no_setups',
     benchmark_score: safeBenchmark,
     macro_label: workspaceAsset?.categories?.macro?.score?.status ?? null,
     technical_label: workspaceAsset?.categories?.technical?.score?.status ?? null,
