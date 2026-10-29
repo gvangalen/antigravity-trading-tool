@@ -217,6 +217,14 @@ class FinnResponsesToolCatalog:
                     "independent of how many strategies are linked. Do not read or choose a strategy "
                     "to answer a question only about these setup fields."
                 )
+            if name == "get_indicator_snapshot":
+                description += (
+                    " Read the owner's saved indicator configuration, including its stored "
+                    "weight, for the exact requested trading pair. This is the tool for a "
+                    "question about a saved Volume weight; a setup read cannot provide it. "
+                    "When two quote currencies are requested, call this tool once for each "
+                    "explicit quote_currency and keep their results separate."
+                )
             if name == "get_saved_bots":
                 description += (
                     " Read the owner's saved bot rows directly, including name, asset, "

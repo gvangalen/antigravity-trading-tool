@@ -54,6 +54,21 @@ def _named_asset_quote_question(message: str) -> bool:
     """A named asset's price needs a dated quote read, even when stale."""
     return bool(_QUOTE_QUESTION.search(message) and mentioned_catalog_symbols(message))
 
+
+def _saved_indicator_configuration_read(facts) -> bool:
+    """A stored indicator setting needs its owner-scoped indicator read first."""
+    return (
+        facts.action_polarity == "read"
+        and facts.discourse_act == "information_request"
+        and facts.primary_entity == "indicator_configuration"
+        and "indicator_configuration" in facts.explicit_entities
+        and bool(re.search(
+            r"\b(?:opgeslagen|saved|gespeichert\w*|weging|gewicht|weight|"
+            r"instelling\w*|configuratie\w*)\b",
+            facts.normalized_text,
+        ))
+    )
+
 _WEEKDAY_REFERENCES = {
     1: ("monday", "maandag", "montag"),
     2: ("tuesday", "dinsdag", "dienstag"),
@@ -3440,6 +3455,9 @@ class FinnResponsesFrontDoor:
             required_read_tool_name=(
                 "get_closed_trade_review"
                 if (explicit_closed_review_read or contextual_closed_review_read)
+                and pending_operation is None and not resuming_clarification
+                else "get_indicator_snapshot"
+                if is_read_only_turn and _saved_indicator_configuration_read(request_facts)
                 and pending_operation is None and not resuming_clarification
                 else "get_market_snapshot"
                 if is_read_only_turn and _named_asset_quote_question(message)
