@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import re
 from pathlib import Path
 from typing import Any, Literal, Mapping
 
@@ -77,7 +78,7 @@ def _fixture_migrations(paths: list[Path]) -> dict[str, dict[str, Any]]:
     return migrations
 
 
-def _validate_fixture_migration(*, case: SelectorEvalCase, contract: Any, migration: dict[str, Any]) -> None:
+def _validate_fixture_migration(*, case: SelectorEvalCase, contract: Any, migration: dict[str, Any], published: bool = False) -> None:
     if migration.get("dataset") != case.dataset or migration.get("expected_operation_id") != case.expected_operation_id:
         raise ValueError(f"fixture_migration_contract_mismatch:{case.eval_id}")
     expected_hash = hashlib.sha256(case.input_query.encode("utf-8")).hexdigest()
@@ -92,7 +93,10 @@ def _validate_fixture_migration(*, case: SelectorEvalCase, contract: Any, migrat
     derived = [field for field in contract.required_inputs if field not in supplied]
     if migration.get("derived_expected_missing_inputs") != derived:
         raise ValueError(f"fixture_migration_not_registry_derived:{case.eval_id}")
-    if case.expected_missing_inputs != derived:
+    projected = list(derived)
+    if published and "quote_currency" in contract.required_inputs_for({"symbol": case.expected_entities.get("asset")}) and "quote_currency" not in supplied:
+        projected.append("quote_currency")
+    if case.expected_missing_inputs != projected:
         raise ValueError(f"fixture_migration_case_not_derived:{case.eval_id}")
     if original == derived:
         raise ValueError(f"fixture_migration_no_effect:{case.eval_id}")
@@ -133,6 +137,21 @@ def _raw_cases_for_path(path: Path) -> tuple[list[dict[str, Any]], bool]:
             if case.get(field) != old_value:
                 raise ValueError(f"corpus_erratum_source_value_mismatch:{case.get('eval_id')}:{field}")
             case[field] = canonical_value
+        # The published regression is immutable. Project the newly required
+        # crypto quote slot from the current operation contract, never from a
+        # provider response or an unpublished QA case.
+        if case.get("expected_operation_id") == "create_setup":
+            contract = FinnV2OperationRegistry().get("create_setup")
+            asset = str((case.get("expected_entities") or {}).get("asset") or "").upper()
+            query = str(case.get("input_query") or "")
+            if (
+                "quote_currency" in contract.required_inputs_for({"symbol": asset})
+                and not re.search(r"\b(?:BTC|ETH|SOL|DOT|XRP)\s*[/\-]\s*(?:EUR|USDT|USD)\b", query, re.I)
+                and not (case.get("expected_entities") or {}).get("quote_currency")
+            ):
+                missing = list(case.get("expected_missing_inputs") or [])
+                if "quote_currency" not in missing:
+                    case["expected_missing_inputs"] = missing + ["quote_currency"]
         # Dataset assignment is a runner projection only. The frozen source
         # remains byte-for-byte intact and records its original dataset.
         case["dataset"] = "regression"
@@ -267,7 +286,7 @@ def load_and_validate(
                     # and registry-derived slots stay identical; only the
                     # runner lane changes from holdout to regression.
                     migration = {**migration, "dataset": case.dataset}
-                _validate_fixture_migration(case=case, contract=contract, migration=migration)
+                _validate_fixture_migration(case=case, contract=contract, migration=migration, published=published)
             ids.add(case.eval_id)
             queries.add(normalized)
             families_by_dataset[case.dataset].add(

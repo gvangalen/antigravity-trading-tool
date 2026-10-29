@@ -39,6 +39,8 @@ def test_published_holdouts_are_hash_pinned_and_only_run_as_regression():
     assert corrected.expected_operation_id == "unsupported_financial_operation"
     assert corrected.expected_action_polarity.value == "execute"
     assert corrected.expected_supported is True
+    assert next(case for case in cases if case.eval_id == "s609-11").expected_missing_inputs == ["quote_currency"]
+    assert next(case for case in cases if case.eval_id == "sealed-create-setup").expected_missing_inputs == ["timeframe", "name", "quote_currency"]
     errata = json.loads((FIXTURES / "finn_v2_selector_published_qa_609_errata.json").read_text(encoding="utf-8"))
     assert len(errata["operation_contract_sha256"]) == 64
 

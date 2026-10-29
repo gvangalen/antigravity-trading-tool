@@ -8,6 +8,7 @@ from backend.services.pair_benchmark_service import (
     PairBenchmarkCopyService, benchmark_weights, save_benchmark_weights,
 )
 from backend.engine.trading_bot_execution import _get_current_benchmark_weights
+from backend.api.workspace_api import get_configured_exact_markets
 
 
 def test_pair_weights_override_legacy_user_weights():
@@ -22,6 +23,26 @@ def test_pair_weights_override_legacy_user_weights():
     assert source == "market"
     assert len(queries) == 1
     assert queries[0][1] == {"user_id": 7, "market_id": 41}
+
+
+def test_mobile_pair_choices_are_owner_scoped_and_exclude_base_asset_fallback():
+    statements = []
+
+    async def execute(statement, parameters):
+        statements.append((str(statement), parameters))
+        return SimpleNamespace(mappings=lambda: SimpleNamespace(all=lambda: [
+            SimpleNamespace(market_id=41, asset_symbol="BTC", quote_currency="EUR"),
+        ]))
+
+    result = asyncio.run(get_configured_exact_markets(
+        symbol="btc", current_user={"id": 7}, db=SimpleNamespace(execute=execute),
+    ))
+    assert result == [{"market_id": 41, "pair": "BTC/EUR", "quote_currency": "EUR"}]
+    sql, parameters = statements[0]
+    assert parameters == {"symbol": "BTC", "user_id": 7}
+    assert sql.count("user_id=:user_id") == 3
+    assert "c.market_id=m.id" in sql
+    assert "c.market_id IS NULL" not in sql
 
 
 def test_new_pair_weights_do_not_follow_later_global_preference_changes():

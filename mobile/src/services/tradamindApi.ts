@@ -432,6 +432,13 @@ export const mobileApi = {
 };
 
 export const intelligenceApi = {
+  configuredMarkets(symbol: string) {
+    return apiClient.request<{ market_id: number; pair: string; quote_currency: string }[]>(
+      '/api/workspace/exact-market/configured-markets',
+      { query: { symbol }, timeoutMs: 20000 },
+    );
+  },
+
   watchlist() {
     return apiClient.get<WatchlistResponse>('/api/watchlist');
   },

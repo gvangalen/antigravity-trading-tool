@@ -46,6 +46,31 @@ class PairBenchmarkCopyWrite(BaseModel):
     revision: str = Field(min_length=64, max_length=64)
 
 
+@router.get("/workspace/exact-market/configured-markets")
+async def get_configured_exact_markets(
+    symbol: str = Query(..., min_length=1, max_length=20),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List only the owner's saved pair contexts for mobile analysis selection."""
+    result = await db.execute(text("""
+        SELECT m.id AS market_id, m.asset_symbol, m.quote_currency
+        FROM trading_markets m
+        WHERE m.asset_symbol=:symbol AND m.is_active=TRUE AND m.venue='BINANCE'
+          AND (EXISTS (SELECT 1 FROM user_indicator_configs c
+                       WHERE c.user_id=:user_id AND c.market_id=m.id AND c.enabled=TRUE)
+               OR EXISTS (SELECT 1 FROM user_market_benchmark_weights w
+                          WHERE w.user_id=:user_id AND w.market_id=m.id)
+               OR EXISTS (SELECT 1 FROM setups s
+                          WHERE s.user_id=:user_id AND s.market_id=m.id))
+        ORDER BY m.quote_currency
+    """), {"symbol": symbol.strip().upper(), "user_id": int(current_user["id"])})
+    return [{"market_id": row.market_id,
+             "pair": f"{row.asset_symbol}/{row.quote_currency}",
+             "quote_currency": row.quote_currency}
+            for row in result.mappings().all()]
+
+
 @router.get("/workspace/exact-market/benchmark-weights")
 async def get_pair_benchmark_weights(
     market_id: int = Query(..., gt=0), current_user: dict = Depends(get_current_user),

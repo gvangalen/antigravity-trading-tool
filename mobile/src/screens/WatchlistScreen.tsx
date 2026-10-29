@@ -70,12 +70,20 @@ export function WatchlistScreen() {
     fallbackData: [],
     fetcher: fetchPairMatches,
   });
+  const fetchConfiguredMarkets = useCallback(
+    () => intelligenceApi.configuredMarkets(selectedSymbol), [selectedSymbol],
+  );
+  const configuredMarketsResource = useApiResource<{
+    market_id: number; pair: string; quote_currency: string;
+  }[]>({ fallbackData: [], fetcher: fetchConfiguredMarkets });
   const availableQuotes = useMemo(() => Array.from(new Set([
+    ...configuredMarketsResource.data
+      .map((market) => String(market.quote_currency || '').toUpperCase()),
     ...pairMatchesResource.data
       .filter((match) => String(match.symbol || '').toUpperCase() === selectedSymbol && match.market_id)
       .map((match) => String(match.quote_currency || '').toUpperCase()),
     String(context.quoteCurrency || '').toUpperCase(),
-  ].filter(Boolean))).sort(), [pairMatchesResource.data, selectedSymbol, context.quoteCurrency]);
+  ].filter(Boolean))).sort(), [configuredMarketsResource.data, pairMatchesResource.data, selectedSymbol, context.quoteCurrency]);
   const selectedQuote = availableQuotes.includes(String(context.quoteCurrency || '').toUpperCase())
     ? String(context.quoteCurrency).toUpperCase()
     : availableQuotes[0] || null;
@@ -245,7 +253,11 @@ export function WatchlistScreen() {
   });
 
   const intelligence = selectedAsset
-    ? buildAssetIntelligence(selectedAsset, latestResource.data, insightResource.data)
+    ? buildAssetIntelligence(
+        selectedAsset,
+        selectedQuote ? exactWorkspace?.quote as MarketLatestResponse | undefined : latestResource.data,
+        insightResource.data,
+      )
     : null;
   const hasRenderableAnalysisCore =
     hasAnalysisBootstrap ||
