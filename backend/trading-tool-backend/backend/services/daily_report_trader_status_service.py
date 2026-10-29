@@ -55,11 +55,13 @@ async def current_daily_trader_status(session, user_id: int) -> dict[str, Any]:
 
     rows = await session.execute(text("""
         SELECT b.id AS bot_id, b.last_run, b.is_active, b.is_live, b.mode,
+               b.market_id, tm.quote_currency,
                st.setup_type, s.entry, s.stop_loss, s.targets, s.data AS strategy_data,
                s.name AS strategy_name, st.name AS setup_name,
                d.id AS decision_id, d.decision_kind, d.action, d.status AS decision_status,
                d.decision_ts, d.reason_json, d.scores_json
         FROM bot_configs b
+        LEFT JOIN trading_markets tm ON tm.id=b.market_id AND tm.asset_symbol=b.symbol
         LEFT JOIN strategies s ON s.id=b.strategy_id AND s.user_id=b.user_id
         LEFT JOIN setups st ON st.id=s.setup_id AND st.user_id=b.user_id
         LEFT JOIN LATERAL (
@@ -117,6 +119,11 @@ async def current_daily_trader_status(session, user_id: int) -> dict[str, Any]:
         bots.append({
             "bot_id": portfolio["bot_id"], "bot_name": portfolio.get("name"),
             "symbol": portfolio.get("symbol"), "is_live": bool(row.get("is_live")),
+            "trading_pair": (
+                f"{portfolio['symbol']}/{row['quote_currency']}"
+                if row.get("market_id") is not None and row.get("quote_currency")
+                and portfolio.get("symbol") else None
+            ),
             "is_active": bool(row.get("is_active")), "mode": row.get("mode"),
             "setup_name": row.get("setup_name"), "strategy_name": row.get("strategy_name"),
             "position_qty": quantity, "position_value_eur": stats.get("position_value_eur"),

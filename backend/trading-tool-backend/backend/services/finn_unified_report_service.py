@@ -203,6 +203,7 @@ def _report_facts(context: dict[str, Any]) -> dict[str, Any]:
                             "targets": row.get("targets")}
                            for row in item.get("strategies") or []],
             "bots": [{"id": row.get("id"), "name": row.get("name"),
+                      "pair": item.get("pair"), "symbol": item.get("symbol"),
                       "is_live": row.get("is_live"), "is_active": row.get("is_active")}
                      for row in item.get("bots") or []],
             "matches": [{"setup_id": row.get("setup_id"), "name": row.get("name"),
@@ -258,7 +259,8 @@ def _bot_status_section(facts: dict[str, Any], locale: str) -> str:
             status = {"nl": "is actief; een setupmatch bewijst geen uitgevoerde aankoop",
                       "en": "is active; a setup match does not prove an executed purchase",
                       "de": "ist aktiv; ein Setup-Treffer belegt keinen ausgeführten Kauf"}
-        parts.append(f"{name} {status.get(locale, status['en'])}.")
+        pair = f" ({bot['pair']})" if bot.get("pair") else ""
+        parts.append(f"{name}{pair} {status.get(locale, status['en'])}.")
     budget_note = {
         "nl": "Beschikbaar kassaldo is in dit rapport niet vastgesteld; een botbudget is alleen een limiet.",
         "en": "Available cash has not been established in this report; a bot budget is only a limit.",

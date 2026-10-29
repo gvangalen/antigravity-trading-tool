@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslation } from '@/app/providers/I18nProvider';
-import { parseUtcMoment, scoreSourceSnapshot } from '@/lib/report/reportSourceSnapshot.mjs';
+import { parseUtcMoment, reportMarketLabel, scoreSourceSnapshot } from '@/lib/report/reportSourceSnapshot.mjs';
 
 const LOCALES = { nl: 'nl-NL', en: 'en-GB', de: 'de-DE' };
 
@@ -80,7 +80,7 @@ export default function DailyTraderStatus({ report, status, loading, error, onRe
             return (
               <div key={bot.bot_id} className="rounded-xl border border-slate-200 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="font-semibold">{bot.bot_name || bot.symbol} · {bot.symbol} · {bot.is_live ? copy.live : copy.paper} · {bot.is_active ? copy.active : copy.paused}</div>
+                  <div className="font-semibold">{bot.bot_name || bot.symbol} · {reportMarketLabel(bot)} · {bot.is_live ? copy.live : copy.paper} · {bot.is_active ? copy.active : copy.paused}</div>
                   <a className="text-sm font-semibold text-blue-700 hover:underline"
                     href={`/bot?symbol=${encodeURIComponent(bot.symbol || '')}&bot_id=${encodeURIComponent(bot.bot_id)}`}>
                     {copy.viewBot}

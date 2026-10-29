@@ -22,6 +22,7 @@ def test_current_status_is_owner_scoped_and_does_not_claim_unrecorded_exit_check
             return [{
                 "bot_id": 3, "last_run": datetime(2026, 10, 24, tzinfo=timezone.utc),
                 "is_active": True, "is_live": False, "mode": "auto",
+                "market_id": 19, "quote_currency": "USD",
                 "setup_type": "trade", "entry": 300, "stop_loss": 280,
                 "targets": ["330", "360"],
                 "strategy_data": {"price_currency": "USD", "price_currency_confirmed": True},
@@ -50,6 +51,7 @@ def test_current_status_is_owner_scoped_and_does_not_claim_unrecorded_exit_check
     result = asyncio.run(trader_status.current_daily_trader_status(Session(), 7))
     bot = result["bots"][0]
     assert bot["position_qty"] == 2
+    assert bot["trading_pair"] == "AAPL/USD"
     assert bot["first_target"] == 330
     assert bot["level_currency"] == "USD"
     assert bot["exit_monitoring"] == "configured_check_unverified"
