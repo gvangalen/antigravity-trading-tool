@@ -133,7 +133,7 @@ def test_pair_scoring_does_not_consume_legacy_symbol_indicator_configuration(mon
     assert len(connection.cursor_instance.calls) == 1
     sql, params = connection.cursor_instance.calls[0]
     assert "market_id = %s" in sql
-    assert params == (9, "market", "BTC", 73)
+    assert params == (9, "market", "BTC", 73, 73)
 
 
 def test_pair_score_rule_looks_up_only_the_chosen_market_configuration():
@@ -165,7 +165,7 @@ def test_pair_score_rule_looks_up_only_the_chosen_market_configuration():
                               symbol="BTC", market_id=73)
     sql, params = connection.cursor_instance.calls[0]
     assert "market_id = %s" in sql
-    assert params == (9, "BTC", "market", "price", 73)
+    assert params == (9, "BTC", "market", "price", 73, 73)
 
     connection.cursor_instance.calls = []
     fetch_rules_for_indicator(connection, "market", "price", user_id=9,

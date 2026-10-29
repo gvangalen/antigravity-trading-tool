@@ -190,16 +190,19 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
             # The owner's asset indicator choices apply to both exact quotes.
             # A pair-specific choice overrides the same base indicator when
             # one is explicitly configured; it is never inferred as a price.
-            config_scope = "AND (market_id = %s OR market_id IS NULL)" if market_id is not None else "AND market_id IS NULL"
+            config_scope = """AND (market_id = %s OR (market_id IS NULL AND NOT EXISTS (
+                SELECT 1 FROM user_market_benchmark_weights w
+                WHERE w.user_id = c.user_id AND w.market_id = %s
+                  AND w.indicators_isolated = TRUE)))""" if market_id is not None else "AND market_id IS NULL"
             cur.execute(f"""
                 SELECT indicator FROM (
                     SELECT DISTINCT ON (LOWER(indicator)) indicator, enabled
-                    FROM user_indicator_configs
+                    FROM user_indicator_configs c
                     WHERE user_id = %s AND category = %s AND symbol = %s
                       {config_scope}
                     ORDER BY LOWER(indicator), market_id DESC NULLS LAST
                 ) effective WHERE enabled = TRUE
-            """, (user_id, category, symbol, market_id) if market_id is not None
+            """, (user_id, category, symbol, market_id, market_id) if market_id is not None
                  else (user_id, category, symbol))
             configured = {normalize_indicator_name(row[0]) for row in cur.fetchall()}
             if not configured:

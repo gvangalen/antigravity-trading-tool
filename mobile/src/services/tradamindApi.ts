@@ -18,6 +18,9 @@ export type FinnV2ConversationDetail = {
 
 export type MobileOverviewAsset = {
   symbol: string;
+  market_id?: number | null;
+  pair?: string | null;
+  quote_currency?: string | null;
   display_name?: string | null;
   asset_class?: string | null;
   logo_url?: string | null;
@@ -207,6 +210,7 @@ export type WorkspaceAssetResponse = {
   market_id?: number | null;
   pair?: string | null;
   quote_currency?: string | null;
+  setup_matches?: { score?: number | null; status?: string | null }[];
   asset?: { tradingview_symbol?: string | null } | null;
   periods: {
     market: string;
@@ -345,6 +349,12 @@ export const assistantApi = {
     });
   },
 
+  updateMarketBenchmarkWeights(marketId: number, weights: IntelligenceWeightsPayload) {
+    return apiClient.put<Record<string, unknown>>('/api/workspace/exact-market/benchmark-weights', {
+      market_id: marketId, weights,
+    });
+  },
+
   async chat(query: string, context: AssistantRuntimeContext, history?: AssistantHistoryMessage[], sessionId?: string | null, signal?: AbortSignal) {
     const initial = await apiClient.request<AssistantEnvelope>('/api/assistant/chat', {
       method: 'POST', signal, timeoutMs: 90000,
@@ -413,15 +423,22 @@ export const analyticsApi = {
 };
 
 export const mobileApi = {
-  overview(symbol?: string) {
+  overview(symbol?: string, quoteCurrency?: string | null) {
     return apiClient.request<MobileOverviewResponse>('/api/dashboard/mobile-overview', {
-      query: symbol ? { symbol } : undefined,
+      query: symbol ? { symbol, ...(quoteCurrency ? { quote_currency: quoteCurrency } : {}) } : undefined,
       timeoutMs: 20000,
     });
   },
 };
 
 export const intelligenceApi = {
+  configuredMarkets(symbol: string) {
+    return apiClient.request<{ market_id: number; pair: string; quote_currency: string }[]>(
+      '/api/workspace/exact-market/configured-markets',
+      { query: { symbol }, timeoutMs: 20000 },
+    );
+  },
+
   watchlist() {
     return apiClient.get<WatchlistResponse>('/api/watchlist');
   },

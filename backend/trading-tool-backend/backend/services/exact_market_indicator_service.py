@@ -6,7 +6,7 @@ import asyncio
 from datetime import datetime, time, timedelta, timezone
 from math import isfinite
 
-from sqlalchemy import or_, select, text
+from sqlalchemy import and_, or_, select, text
 
 from backend.domain.exact_market_technical import calculate_exact_market_technical
 from backend.infrastructure.models import (
@@ -39,7 +39,11 @@ class ExactMarketIndicatorService:
             UserIndicatorConfig.user_id.in_(owner_ids),
             UserIndicatorConfig.symbol == market.asset_symbol,
             or_(UserIndicatorConfig.market_id == market.id,
-                UserIndicatorConfig.market_id.is_(None)),
+                and_(UserIndicatorConfig.market_id.is_(None), text("""
+                    NOT EXISTS (SELECT 1 FROM user_market_benchmark_weights w
+                    WHERE w.user_id=user_indicator_configs.user_id
+                      AND w.market_id=:chosen_market_id AND w.indicators_isolated=TRUE)
+                """).bindparams(chosen_market_id=market.id))),
             UserIndicatorConfig.category.in_(("market", "technical")),
         ))
         by_owner: dict[int, dict[str, set[str]]] = {

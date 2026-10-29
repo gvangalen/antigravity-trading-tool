@@ -84,3 +84,36 @@ def test_web_and_mobile_dashboard_use_the_same_current_score_projection(monkeypa
     assert mobile.watchlist[0].benchmark_score is None
     assert "finn_briefing" not in mobile.dict()
     assert "intelligence_events" not in mobile.dict()
+
+    class ExactMarketWorkspaceService:
+        def __init__(self, _session):
+            pass
+
+        async def get(self, user_id, symbol, quote_currency, **_kwargs):
+            assert (user_id, symbol, quote_currency) == (7, "ETH", "USDT")
+            return {
+                "market_id": 42, "pair": "ETH/USDT", "quote_currency": "USDT",
+                "quote": {"price": 2600, "change_24h": -2},
+                "daily": {
+                    "market": {"score": 60}, "macro": {"score": 30},
+                    "technical": {"score": None}, "benchmark_score": None,
+                    "calculated_at": "2026-10-29T12:00:00Z",
+                },
+                "combined": {"source_status": "missing_scores"},
+                "setup_matches": [{"score": None, "status": "insufficient_data"}],
+            }
+
+    monkeypatch.setattr(
+        "backend.services.exact_market_workspace_service.ExactMarketWorkspaceService",
+        ExactMarketWorkspaceService,
+    )
+    pair_mobile = asyncio.run(service.get_mobile_overview(
+        7, symbol="ETH", quote_currency="USDT",
+    )).watchlist[0]
+    assert pair_mobile.market_id == 42
+    assert pair_mobile.pair == "ETH/USDT"
+    assert pair_mobile.price == 2600
+    assert pair_mobile.market_score == 60
+    assert pair_mobile.macro_score == 30
+    assert pair_mobile.technical_score is None
+    assert pair_mobile.benchmark_score is None

@@ -129,7 +129,7 @@ class _Cursor:
             self.rows = []
         elif "SELECT indicator FROM (" in sql and "FROM user_indicator_configs" in sql:
             self.rows = [(self.store.names[params[1]],)]
-        elif "updated_at FROM user_indicator_configs" in sql:
+        elif "FROM user_indicator_configs" in sql and "updated_at" in sql:
             self.rows = [(self.store.names[params[1]], self.store.now - timedelta(hours=2))]
         elif "SELECT DISTINCT ON" in sql:
             category = next(key for key, table in (

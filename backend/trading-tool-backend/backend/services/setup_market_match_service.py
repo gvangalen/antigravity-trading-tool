@@ -7,6 +7,7 @@ import json
 from sqlalchemy import text
 
 from backend.domain.finn_dca_plan_contract import benchmark_score, normalize_benchmark_weights
+from backend.services.pair_benchmark_service import benchmark_weights
 from backend.domain.setup_market_match import rank_matches
 from backend.infrastructure.repositories.setup_repository import SetupRepository
 from backend.utils.scoring_utils import (
@@ -51,32 +52,31 @@ class SetupMarketMatchService:
         self.session = session
         self.setups = SetupRepository(session)
         self.daily_rows = daily_rows
-        self._weights_by_user: dict[int, dict[str, float] | None] = {}
+        self._weights_by_user: dict[tuple[int, int | None], dict[str, float] | None] = {}
         self.last_source_row: dict | None = None
 
-    async def _benchmark_weights(self, user_id: int) -> dict[str, float] | None:
-        if user_id in self._weights_by_user:
+    async def _benchmark_weights(self, user_id: int, market_id: int | None = None) -> dict[str, float] | None:
+        key = (user_id, market_id)
+        if key in self._weights_by_user:
+            return self._weights_by_user[key]
+        if market_id is None and user_id in self._weights_by_user:
             return self._weights_by_user[user_id]
-        result = await self.session.execute(text("""
-            SELECT ai_preferences FROM users WHERE id = :user_id
-        """), {"user_id": user_id})
-        row = result.mappings().first()
-        if row is None:
-            self._weights_by_user[user_id] = None
-            return None
-        preferences = row.get("ai_preferences")
-        if isinstance(preferences, str):
-            try:
-                preferences = json.loads(preferences)
-            except json.JSONDecodeError:
-                self._weights_by_user[user_id] = None
-                return None
-        if preferences is not None and not isinstance(preferences, dict):
-            self._weights_by_user[user_id] = None
-            return None
-        custom = preferences.get("intelligence_weights") if isinstance(preferences, dict) else None
-        weights = normalize_benchmark_weights(custom)
-        self._weights_by_user[user_id] = weights
+        if market_id is None:
+            result = await self.session.execute(text("""
+                SELECT ai_preferences FROM users WHERE id = :user_id
+            """), {"user_id": user_id})
+            row = result.mappings().first()
+            preferences = row.get("ai_preferences") if row else None
+            if isinstance(preferences, str):
+                try:
+                    preferences = json.loads(preferences)
+                except json.JSONDecodeError:
+                    preferences = None
+            custom = preferences.get("intelligence_weights") if isinstance(preferences, dict) else None
+            weights = normalize_benchmark_weights(custom) if row else None
+        else:
+            weights, _ = await benchmark_weights(self.session, user_id, market_id)
+        self._weights_by_user[key] = weights
         return weights
 
     async def _source_is_fresh(self, user_id: int, symbol: str, category: str,
@@ -90,7 +90,10 @@ class SetupMarketMatchService:
         }[category]
         parameters = {"user_id": user_id, "symbol": symbol}
         market_scope = "AND market_id = :market_id" if market_id is not None else "AND market_id IS NULL"
-        config_scope = "AND (market_id = :market_id OR market_id IS NULL)" if market_id is not None else "AND market_id IS NULL"
+        config_scope = """AND (market_id = :market_id OR (market_id IS NULL AND NOT EXISTS (
+            SELECT 1 FROM user_market_benchmark_weights w
+            WHERE w.user_id = :user_id AND w.market_id = :market_id
+              AND w.indicators_isolated = TRUE)))""" if market_id is not None else "AND market_id IS NULL"
         if market_id is not None:
             parameters["market_id"] = market_id
         configured_result = await self.session.execute(text(f"""
@@ -152,7 +155,8 @@ class SetupMarketMatchService:
         selected = [dict(row) for row in owned
                     if str(row.get("symbol") or "").upper() == symbol
                     and row.get("market_id") == market_id]
-        weights = await self._benchmark_weights(user_id)
+        weights = (await self._benchmark_weights(user_id, market_id) if market_id is not None
+                   else await self._benchmark_weights(user_id))
 
         if self.daily_rows is not None:
             row = self.daily_rows.get((symbol, market_id)) if market_id is not None else self.daily_rows.get(symbol)

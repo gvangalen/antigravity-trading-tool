@@ -156,7 +156,8 @@
     "expected_action_polarity": "create",
     "provider_call_expected": true,
     "expected_missing_inputs": [
-      "name"
+      "name",
+      "quote_currency"
     ]
   },
   {

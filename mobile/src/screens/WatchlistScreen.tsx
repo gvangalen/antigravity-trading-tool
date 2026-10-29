@@ -70,12 +70,20 @@ export function WatchlistScreen() {
     fallbackData: [],
     fetcher: fetchPairMatches,
   });
-  const availableQuotes = useMemo(() => Array.from(new Set(
-    pairMatchesResource.data
+  const fetchConfiguredMarkets = useCallback(
+    () => intelligenceApi.configuredMarkets(selectedSymbol), [selectedSymbol],
+  );
+  const configuredMarketsResource = useApiResource<{
+    market_id: number; pair: string; quote_currency: string;
+  }[]>({ fallbackData: [], fetcher: fetchConfiguredMarkets });
+  const availableQuotes = useMemo(() => Array.from(new Set([
+    ...configuredMarketsResource.data
+      .map((market) => String(market.quote_currency || '').toUpperCase()),
+    ...pairMatchesResource.data
       .filter((match) => String(match.symbol || '').toUpperCase() === selectedSymbol && match.market_id)
-      .map((match) => String(match.quote_currency || '').toUpperCase())
-      .filter(Boolean),
-  )).sort(), [pairMatchesResource.data, selectedSymbol]);
+      .map((match) => String(match.quote_currency || '').toUpperCase()),
+    String(context.quoteCurrency || '').toUpperCase(),
+  ].filter(Boolean))).sort(), [configuredMarketsResource.data, pairMatchesResource.data, selectedSymbol, context.quoteCurrency]);
   const selectedQuote = availableQuotes.includes(String(context.quoteCurrency || '').toUpperCase())
     ? String(context.quoteCurrency).toUpperCase()
     : availableQuotes[0] || null;
@@ -157,7 +165,7 @@ export function WatchlistScreen() {
     };
   }, [chartInterval, chartPreferenceLoaded]);
 
-  const fetchOverview = useCallback(() => mobileApi.overview(selectedSymbol), [selectedSymbol]);
+  const fetchOverview = useCallback(() => mobileApi.overview(selectedSymbol, selectedQuote), [selectedSymbol, selectedQuote]);
   const overviewResource = useApiResource<MobileOverviewResponse | undefined>({
     fallbackData: undefined,
     fetcher: fetchOverview,
@@ -245,7 +253,11 @@ export function WatchlistScreen() {
   });
 
   const intelligence = selectedAsset
-    ? buildAssetIntelligence(selectedAsset, latestResource.data, insightResource.data)
+    ? buildAssetIntelligence(
+        selectedAsset,
+        selectedQuote ? exactWorkspace?.quote as MarketLatestResponse | undefined : latestResource.data,
+        insightResource.data,
+      )
     : null;
   const hasRenderableAnalysisCore =
     hasAnalysisBootstrap ||
@@ -699,7 +711,11 @@ function AnalysisContextScores({
     if (savingWeights || !isBalanced) return;
     setSavingWeights(true);
     try {
-      await assistantApi.updateIntelligenceWeights(localWeights);
+      if (workspaceAsset?.market_id) {
+        await assistantApi.updateMarketBenchmarkWeights(workspaceAsset.market_id, localWeights);
+      } else {
+        await assistantApi.updateIntelligenceWeights(localWeights);
+      }
       await onRefreshScores();
       await triggerHaptic('success');
       setTuningVisible(false);
@@ -2071,23 +2087,29 @@ function buildFallbackAnalysisAsset(
     Number.isFinite(latestChange) ? latestChange : null,
   ].some((value) => typeof value === 'number' && Number.isFinite(value));
 
-  if (!hasAnyBackendSignal) return null;
+  if (!hasAnyBackendSignal && !workspaceAsset) return null;
 
   const safeMarket = marketScore;
   const safeMacro = macroScore;
   const safeTechnical = technicalScore;
   const safeBenchmark = combinedScore ?? null;
+  const topMatch = workspaceAsset?.setup_matches?.[0];
+  const setupMatchScore = typeof topMatch?.score === 'number' && Number.isFinite(topMatch.score)
+    ? topMatch.score : null;
 
   return {
     symbol,
+    market_id: workspaceAsset?.market_id,
+    pair: workspaceAsset?.pair,
+    quote_currency: workspaceAsset?.quote_currency,
     price: Number.isFinite(latestPrice) ? latestPrice : null,
     change_24h: Number.isFinite(latestChange) ? latestChange : null,
     macro_score: safeMacro,
     technical_score: safeTechnical,
     market_score: safeMarket,
-    setup_score: null,
-    setup_match_score: null,
-    setup_match_status: 'insufficient_data',
+    setup_score: setupMatchScore,
+    setup_match_score: setupMatchScore,
+    setup_match_status: topMatch?.status ?? 'no_setups',
     benchmark_score: safeBenchmark,
     macro_label: workspaceAsset?.categories?.macro?.score?.status ?? null,
     technical_label: workspaceAsset?.categories?.technical?.score?.status ?? null,

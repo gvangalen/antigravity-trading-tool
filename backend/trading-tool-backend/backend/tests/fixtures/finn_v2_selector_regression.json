@@ -150,11 +150,7 @@
     },
     "expected_action_polarity": "create",
     "provider_call_expected": true,
-    "expected_missing_inputs": [
-      "setup_type",
-      "timeframe",
-      "name"
-    ]
+    "expected_missing_inputs": ["setup_type", "timeframe", "name", "quote_currency"]
   },
   {
     "eval_id": "reg-watch-add-1",
@@ -275,10 +271,7 @@
     },
     "expected_action_polarity": "create",
     "expected_clarification": false,
-    "expected_missing_inputs": [
-      "timeframe",
-      "name"
-    ],
+    "expected_missing_inputs": ["timeframe", "name", "quote_currency"],
     "provider_call_expected": true
   },
   {
@@ -337,7 +330,7 @@
     "expected_target_asset": "DOT",
     "expected_action_polarity": "create",
     "expected_clarification": false,
-    "expected_missing_inputs": [],
+    "expected_missing_inputs": ["quote_currency"],
     "provider_call_expected": true
   },
   {
@@ -395,7 +388,7 @@
     "expected_target_asset": "XRP",
     "expected_action_polarity": "create",
     "expected_clarification": false,
-    "expected_missing_inputs": [],
+    "expected_missing_inputs": ["quote_currency"],
     "provider_call_expected": true
   },
   {

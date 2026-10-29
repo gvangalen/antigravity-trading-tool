@@ -29,13 +29,19 @@ def _fresh(conn, user_id: int, symbol: str, category: str, row: dict,
         "market": ("market_data_indicators", "name"),
     }[category]
     with conn.cursor() as cur:
-        config_scope = ("AND (market_id=%s OR market_id IS NULL)" if market_id is not None
+        config_scope = ("""AND (market_id=%s OR (market_id IS NULL AND NOT EXISTS (
+            SELECT 1 FROM user_market_benchmark_weights w
+            WHERE w.user_id=user_indicator_configs.user_id AND w.market_id=%s
+              AND w.indicators_isolated=TRUE)))""" if market_id is not None
                         else "AND market_id IS NULL")
         cur.execute(
-            "SELECT DISTINCT ON (indicator) indicator, updated_at FROM user_indicator_configs "
-            "WHERE user_id=%s AND category=%s AND symbol=%s AND enabled=TRUE "
-            + config_scope + " ORDER BY indicator, market_id DESC NULLS LAST",
-            (user_id, category, symbol, market_id) if market_id is not None
+            "SELECT indicator, updated_at FROM ("
+            "SELECT DISTINCT ON (LOWER(indicator)) indicator, updated_at, enabled "
+            "FROM user_indicator_configs "
+            "WHERE user_id=%s AND category=%s AND symbol=%s "
+            + config_scope + " ORDER BY LOWER(indicator), market_id DESC NULLS LAST"
+            ") effective WHERE enabled=TRUE",
+            (user_id, category, symbol, market_id, market_id) if market_id is not None
             else (user_id, category, symbol),
         )
         configured = cur.fetchall()

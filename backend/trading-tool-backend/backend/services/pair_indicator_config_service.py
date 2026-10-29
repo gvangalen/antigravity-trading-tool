@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, text, and_, or_
 
 from backend.infrastructure.models import TradingMarket, UserIndicatorConfig
 from backend.infrastructure.repositories.indicator_config_repository import IndicatorConfigRepository
@@ -40,7 +40,12 @@ class PairIndicatorConfigService:
         return (await self.session.execute(select(UserIndicatorConfig).where(
             UserIndicatorConfig.user_id == user_id,
             UserIndicatorConfig.symbol == market.asset_symbol,
-            (UserIndicatorConfig.market_id == market.id) | UserIndicatorConfig.market_id.is_(None),
+            or_(UserIndicatorConfig.market_id == market.id,
+                and_(UserIndicatorConfig.market_id.is_(None), text("""
+                    NOT EXISTS (SELECT 1 FROM user_market_benchmark_weights w
+                    WHERE w.user_id=:owner_id AND w.market_id=:chosen_market_id
+                      AND w.indicators_isolated=TRUE)
+                """).bindparams(owner_id=user_id, chosen_market_id=market.id))),
         ))).scalars().all()
 
     async def get(self, user_id: int, market, category: str, indicator: str):
@@ -59,6 +64,8 @@ class PairIndicatorConfigService:
 
     async def save(self, user_id: int, market, category: str, indicator: str,
                    *, mode: str, score_mode: str, weight: float, rules: list[dict]):
+        await self.session.execute(text("SELECT id FROM users WHERE id=:user_id FOR UPDATE"),
+                                   {"user_id": user_id})
         rows = await self.rows(user_id, market)
         pair_row = next((row for row in rows if row.market_id == market.id
                          and row.category == category
@@ -102,6 +109,8 @@ class PairIndicatorConfigService:
         return pair_row
 
     async def disable(self, user_id: int, market, category: str, indicator: str):
+        await self.session.execute(text("SELECT id FROM users WHERE id=:user_id FOR UPDATE"),
+                                   {"user_id": user_id})
         rows = await self.rows(user_id, market)
         pair_row = next((row for row in rows if row.market_id == market.id
                          and row.category == category

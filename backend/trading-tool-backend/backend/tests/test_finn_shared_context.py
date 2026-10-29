@@ -76,6 +76,41 @@ def test_shared_context_keeps_failed_indicator_lookup_unknown():
     assert snapshot["assets"][0]["benchmark"]["benchmark_score"] is None
 
 
+def test_shared_context_keeps_two_exact_quotes_separate(monkeypatch):
+    class _Session:
+        async def execute(self, _query, _params):
+            return _Rows([("BTC", 41), ("BTC", 42), ("BTC", None)])
+
+    service = FinnSharedContextService(_Session())
+    service.users.get_by_id = AsyncMock(return_value=SimpleNamespace(ai_preferences={}))
+    service.setups.get_all_setups = AsyncMock(return_value=[
+        {"id": 1, "symbol": "BTC", "market_id": 41},
+        {"id": 2, "symbol": "BTC", "market_id": 42},
+    ])
+    service.strategies.query_strategies = AsyncMock(return_value=[])
+    service.bots.get_bot_configs = AsyncMock(return_value=[])
+    service.market_data.get_latest_exact_market_snapshot = AsyncMock(return_value=None)
+    service.benchmark_for_asset = AsyncMock(side_effect=lambda _owner, _symbol, **kwargs: {
+        "benchmark_score": kwargs["market_id"], "reported_scores": {}, "matches": [],
+    })
+
+    class _Pairs:
+        def __init__(self, _session):
+            pass
+
+        async def market(self, market_id):
+            return SimpleNamespace(id=market_id, asset_symbol="BTC")
+
+        async def rows(self, _user_id, _market):
+            return []
+
+    monkeypatch.setattr("backend.services.finn_shared_context_service.PairIndicatorConfigService", _Pairs)
+    snapshot = asyncio.run(service.for_user(7))
+    assert [(asset["market_id"], asset["benchmark"]["benchmark_score"])
+            for asset in snapshot["assets"]] == [(41, 41), (42, 42)]
+    assert [[setup["id"] for setup in asset["setups"]] for asset in snapshot["assets"]] == [[1], [2]]
+
+
 def test_report_context_uses_a_scoped_connection_without_disposing_the_api_pool(monkeypatch):
     disposed = []
 

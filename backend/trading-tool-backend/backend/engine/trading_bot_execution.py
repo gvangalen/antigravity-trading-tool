@@ -1130,9 +1130,18 @@ def _benchmark_component_source_freshness(conn, user_id: int, symbol: str, score
     return result
 
 
-def _get_current_benchmark_weights(conn, user_id: int, symbol: str) -> tuple[dict[str, float] | None, str]:
+def _get_current_benchmark_weights(conn, user_id: int, symbol: str,
+                                   market_id: int | None = None) -> tuple[dict[str, float] | None, str]:
     """Use the same current Analyse preferences as FINN and My Plan."""
     with conn.cursor() as cur:
+        if market_id is not None:
+            cur.execute("SELECT weights FROM user_market_benchmark_weights WHERE user_id=%s AND market_id=%s",
+                        (user_id, market_id))
+            pair_row = cur.fetchone()
+            if pair_row is not None:
+                pair_weights = _safe_json(pair_row[0], {}) if isinstance(pair_row[0], str) else pair_row[0]
+                return normalize_benchmark_weights(pair_weights), "market"
+            return normalize_benchmark_weights(None), "equal_default"
         cur.execute("SELECT ai_preferences FROM users WHERE id = %s", (user_id,))
         row = cur.fetchone()
     if not row:
@@ -2374,7 +2383,7 @@ def run_trading_bot_execution(
                 logger.warning("Bot %s asset differs from linked strategy; skipping decision", bot["bot_id"])
                 continue
             try:
-                scores["_benchmark_weights"], scores["_benchmark_weight_source"] = _get_current_benchmark_weights(conn, user_id, symbol)
+                scores["_benchmark_weights"], scores["_benchmark_weight_source"] = _get_current_benchmark_weights(conn, user_id, symbol, market_id)
             except Exception:
                 logger.exception("Analyse weights unavailable for user_id=%s", user_id)
                 scores["_benchmark_weights"] = None

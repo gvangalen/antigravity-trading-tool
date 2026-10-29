@@ -46,8 +46,21 @@ def test_pair_config_read_serializes_pydantic_v1_models():
     assert pair["rules"][0]["score"] == 10
 
 
+def test_pair_config_read_excludes_future_base_additions_after_clone():
+    queries = []
+
+    async def execute(statement):
+        queries.append(str(statement))
+        return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: []))
+
+    service = PairIndicatorConfigService(SimpleNamespace(execute=execute))
+    asyncio.run(service.rows(7, SimpleNamespace(id=42, asset_symbol="BTC")))
+    assert "indicators_isolated=TRUE" in queries[0]
+    assert "user_market_benchmark_weights" in queries[0]
+
+
 def test_same_indicator_is_allowed_on_second_pair_but_not_twice_on_same_pair():
-    session = SimpleNamespace(add=lambda _row: None, commit=AsyncMock())
+    session = SimpleNamespace(add=lambda _row: None, commit=AsyncMock(), execute=AsyncMock())
     service = PairIndicatorConfigService(session)
     eur = SimpleNamespace(id=41, asset_symbol="BTC", quote_currency="EUR")
     usdt = SimpleNamespace(id=42, asset_symbol="BTC", quote_currency="USDT")
@@ -72,7 +85,7 @@ def test_same_indicator_is_allowed_on_second_pair_but_not_twice_on_same_pair():
 
 
 def test_removing_one_pair_keeps_the_other_pair_selected():
-    session = SimpleNamespace(add=lambda _row: None, commit=AsyncMock())
+    session = SimpleNamespace(add=lambda _row: None, commit=AsyncMock(), execute=AsyncMock())
     service = PairIndicatorConfigService(session)
     eur = SimpleNamespace(id=41, asset_symbol="BTC")
     base = _config(None)

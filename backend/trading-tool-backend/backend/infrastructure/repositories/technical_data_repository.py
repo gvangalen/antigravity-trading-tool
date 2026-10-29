@@ -353,6 +353,10 @@ class TechnicalDataRepository:
         asset_class: Optional[str] = None,
         priority: int = 100,
     ):
+        await self.session.execute(
+            text("SELECT id FROM users WHERE id = :user_id FOR UPDATE"),
+            {"user_id": user_id},
+        )
         normalized_symbol, normalized_asset_class = await self._resolve_effective_scope(symbol, asset_class)
         self._source_registry.get("indicator_configuration").validate_request(
             user_id=user_id,
@@ -529,6 +533,10 @@ class TechnicalDataRepository:
         symbol: Optional[str] = None,
         asset_class: Optional[str] = None,
     ):
+        await self.session.execute(
+            text("SELECT id FROM users WHERE id = :user_id FOR UPDATE"),
+            {"user_id": user_id},
+        )
         normalized_symbol, normalized_asset_class = await self._resolve_effective_scope(symbol, asset_class)
         self._source_registry.get("indicator_configuration").validate_request(
             user_id=user_id,
@@ -594,6 +602,10 @@ class TechnicalDataRepository:
         symbol: Optional[str] = None,
         asset_class: Optional[str] = None,
     ) -> List[UserIndicatorConfig]:
+        await self.session.execute(
+            text("SELECT id FROM users WHERE id = :user_id FOR UPDATE"),
+            {"user_id": user_id},
+        )
         normalized_symbol, normalized_asset_class = await self._resolve_effective_scope(symbol, asset_class)
         columns = await self._get_user_config_columns()
         self._source_registry.get("indicator_configuration").validate_request(
@@ -653,6 +665,12 @@ class TechnicalDataRepository:
         source_record_id: Optional[int] = None,
     ) -> SimpleNamespace:
         """Persist user-specific scoring settings beside the canonical selection."""
+        # Serialize legacy symbol-wide writes with pair benchmark copies. The
+        # copy path locks this owner row before checking its preview revision.
+        await self.session.execute(
+            text("SELECT id FROM users WHERE id = :user_id FOR UPDATE"),
+            {"user_id": user_id},
+        )
         normalized_symbol, normalized_asset_class = await self._resolve_effective_scope(symbol, asset_class)
         self._source_registry.get("indicator_configuration").validate_request(
             user_id=user_id,
@@ -708,6 +726,10 @@ class TechnicalDataRepository:
         asset_class: Optional[str] = None,
     ) -> bool:
         """Remove one canonical owner- and asset-scoped indicator config."""
+        await self.session.execute(
+            text("SELECT id FROM users WHERE id = :user_id FOR UPDATE"),
+            {"user_id": user_id},
+        )
         normalized_symbol, normalized_asset_class = await self._resolve_effective_scope(symbol, asset_class)
         self._source_registry.get("indicator_configuration").validate_request(
             user_id=user_id,

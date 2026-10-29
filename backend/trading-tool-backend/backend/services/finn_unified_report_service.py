@@ -86,8 +86,9 @@ async def _load_context(user_id: int) -> dict[str, Any]:
 
 def _fallback_sections(context: dict[str, Any]) -> dict[str, str]:
     assets = context.get("assets") or []
-    symbols = ", ".join(item["symbol"] for item in assets)
-    missing = [item["symbol"] for item in assets if item["benchmark"].get("source_status") != "available"]
+    symbols = ", ".join(item.get("pair") or item["symbol"] for item in assets)
+    missing = [item.get("pair") or item["symbol"] for item in assets
+               if item["benchmark"].get("source_status") != "available"]
     matches = [match for item in assets for match in item["benchmark"].get("matches") or []]
     active = [match for match in matches if match.get("is_active")]
     outside = [match for match in matches if match.get("status") == "outside_conditions"]
@@ -167,6 +168,9 @@ def _report_facts(context: dict[str, Any]) -> dict[str, Any]:
         setups_by_id = {row.get("id"): row for row in item.get("setups") or []}
         assets.append({
             "symbol": item.get("symbol"),
+            "market_id": item.get("market_id"),
+            "pair": item.get("pair"),
+            "display_symbol": item.get("pair") or item.get("symbol"),
             "asset_class": item.get("asset_class"),
             "market_timezone": item.get("market_timezone"),
             "market_session_at_report": _regular_session_at(
@@ -190,6 +194,7 @@ def _report_facts(context: dict[str, Any]) -> dict[str, Any]:
                             "setup_name": (setups_by_id.get(row.get("setup_id")) or {}).get("name")
                                           or row.get("setup_name"),
                             "symbol": item.get("symbol"),
+                            "pair": item.get("pair"),
                             "timeframe": row.get("timeframe") or
                                          (setups_by_id.get(row.get("setup_id")) or {}).get("timeframe"),
                             "execution_mode": row.get("execution_mode"),
@@ -201,7 +206,8 @@ def _report_facts(context: dict[str, Any]) -> dict[str, Any]:
                       "is_live": row.get("is_live"), "is_active": row.get("is_active")}
                      for row in item.get("bots") or []],
             "matches": [{"setup_id": row.get("setup_id"), "name": row.get("name"),
-                         "symbol": row.get("symbol"), "timeframe": row.get("timeframe"),
+                         "symbol": row.get("symbol"), "pair": item.get("pair"),
+                         "timeframe": row.get("timeframe"),
                          "status": row.get("status"), "score": row.get("score"),
                          "is_active": row.get("is_active")}
                         for row in benchmark.get("matches") or []],
@@ -211,7 +217,8 @@ def _report_facts(context: dict[str, Any]) -> dict[str, Any]:
 
 
 def _configured_highlights(facts: dict[str, Any], category: str, locale: str) -> list[dict[str, Any]]:
-    return [{"indicator": _report_indicator_label(name, locale), "symbol": item["symbol"]}
+    return [{"indicator": _report_indicator_label(name, locale), "symbol": item["symbol"],
+             **({"pair": item["pair"]} if item.get("pair") else {})}
             for item in facts["assets"]
             for name in (item.get("configured_indicators") or {}).get(category, [])]
 
@@ -327,14 +334,14 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
                              else labels["unknown"])
             value = item["scores"].get(f"{category}_score")
             score = f"{value:g}/100" if isinstance(value, (int, float)) else labels["missing"]
-            parts.append(f"{item['symbol']}: {configuration}; {score}.")
+            parts.append(f"{item['display_symbol']}: {configuration}; {score}.")
         return " ".join(parts) if parts else fallbacks[{
             "market": "market_analysis", "macro": "macro_context",
             "technical": "technical_analysis"}[category]]
     prose["market_analysis"] = score_section("market")
     prose["macro_context"] = score_section("macro")
     prose["technical_analysis"] = score_section("technical")
-    strategy_names = [f"{item['symbol']}: {row['name']}"
+    strategy_names = [f"{item['display_symbol']}: {row['name']}"
                       for item in facts["assets"] for row in item["strategies"] if row.get("name")]
     prose["strategy_implication"] = (
         f"{labels['strategies']}: {', '.join(strategy_names)}. "
@@ -377,6 +384,7 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
                  and isinstance(match.get("score"), (int, float))), None)
     best_setup = ({
         "id": best.get("setup_id"), "name": best.get("name"), "symbol": best.get("symbol"),
+        "pair": best.get("pair"),
         "timeframe": best.get("timeframe"), "score": best.get("score"), "status": best.get("status"),
         "score_semantics": best.get("score_semantics"),
     } if best else None)
@@ -389,7 +397,7 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
         single_market_snapshot = {}
     return {
         **prose,
-        "watchlist": [{"symbol": item["symbol"], "benchmark": {
+        "watchlist": [{"symbol": item["symbol"], "pair": item.get("pair"), "benchmark": {
             "source_status": item["score_status"],
             "benchmark_score": item["benchmark_score"],
             "reported_scores": item["scores"],
@@ -401,6 +409,7 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
             "strategy_name": all_strategies[0].get("name"),
             "setup_name": all_strategies[0].get("setup_name"),
             "symbol": all_strategies[0].get("symbol"),
+            "pair": all_strategies[0].get("pair"),
             "timeframe": all_strategies[0].get("timeframe"),
             "entry": all_strategies[0].get("entry"),
             "targets": all_strategies[0].get("targets"),
@@ -410,6 +419,7 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
             "strategies": [{"strategy_name": row.get("name"),
                             "setup_name": row.get("setup_name"),
                             "symbol": row.get("symbol"),
+                            **({"pair": row["pair"]} if row.get("pair") else {}),
                             "timeframe": row.get("timeframe")}
                            for row in all_strategies]
         } if all_strategies else None),
@@ -429,6 +439,7 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
             "content_locale": locale,
             "assets": [{
                 "symbol": item["symbol"],
+                "pair": item.get("pair"),
                 "market_session_at_report": item["market_session_at_report"],
                 "score_report_date": item.get("score_report_date"),
                 "score_status": item["score_status"],

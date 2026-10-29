@@ -20,6 +20,7 @@ from backend.infrastructure.repositories.strategy_repository import StrategyRepo
 from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.services.finn_v2_tool_adapters.indicator_tool_adapter import IndicatorToolAdapter
 from backend.services.setup_market_match_service import SetupMarketMatchService
+from backend.services.pair_indicator_config_service import PairIndicatorConfigService, effective_pair_configs
 from backend.utils.scoring_utils import score_source_is_fresh
 from backend.services.trader_profile_service import normalize_trader_context, normalize_trader_profile_preferences
 
@@ -50,27 +51,36 @@ class FinnSharedContextService:
         owned_bots = [dict(row) for row in await self.bots.get_bot_configs(user_id)]
 
         if symbol:
-            symbols = [str(symbol).strip().upper()]
+            scopes = [(str(symbol).strip().upper(), None)]
         else:
             result = await self.session.execute(text("""
-                SELECT symbol FROM watchlists WHERE user_id = :user_id
-                UNION SELECT symbol FROM user_indicator_configs
+                SELECT symbol, NULL::bigint AS market_id FROM watchlists WHERE user_id = :user_id
+                UNION SELECT symbol, market_id FROM user_indicator_configs
                 WHERE user_id = :user_id AND enabled = TRUE AND symbol IS NOT NULL
             """), {"user_id": user_id})
-            symbols = sorted({
-                *(str(row[0]).strip().upper() for row in result.fetchall() if row[0]),
-                *(str(row.get("symbol") or "").strip().upper() for row in owned_setups),
-            } - {""})
+            scopes = {(str(row[0]).strip().upper(), row[1] if len(row) > 1 else None)
+                      for row in result.fetchall() if row[0]}
+            scopes.update((str(row.get("symbol") or "").strip().upper(), row.get("market_id"))
+                          for row in owned_setups)
+            scopes = {(asset, market_id) for asset, market_id in scopes if asset}
+            exact_symbols = {asset for asset, market_id in scopes if market_id is not None}
+            scopes = sorted(((asset, market_id) for asset, market_id in scopes
+                             if market_id is not None or asset not in exact_symbols),
+                            key=lambda scope: (scope[0], scope[1] or 0))
 
         assets = []
-        for asset in symbols:
-            asset_setups = [row for row in owned_setups if str(row.get("symbol") or "").upper() == asset]
+        for asset, market_id in scopes:
+            asset_setups = [row for row in owned_setups
+                            if str(row.get("symbol") or "").upper() == asset
+                            and (market_id is None or row.get("market_id") == market_id)]
             setup_ids = {int(row["id"]) for row in asset_setups if row.get("id") is not None}
             asset_strategies = [row for row in owned_strategies if row.get("setup_id") in setup_ids]
             strategy_ids = {int(row["id"]) for row in asset_strategies if row.get("id") is not None}
             asset_bots = [row for row in owned_bots if row.get("strategy_id") in strategy_ids]
-            benchmark = await self.benchmark_for_asset(user_id, asset, setups=owned_setups)
-            price_row = await self.market_data.get_latest_snapshot(asset)
+            benchmark = await self.benchmark_for_asset(user_id, asset, setups=asset_setups,
+                                                       market_id=market_id)
+            price_row = (await self.market_data.get_latest_exact_market_snapshot(market_id)
+                         if market_id is not None else await self.market_data.get_latest_snapshot(asset))
             price_as_of = getattr(price_row, "source_observed_at", None)
             price_fresh = score_source_is_fresh("market", "price", price_as_of, symbol=asset)
             market_snapshot = {
@@ -81,12 +91,22 @@ class FinnSharedContextService:
                 "volume": float(price_row.volume) if price_fresh and price_row.volume is not None else None,
             } if price_row is not None else {"source_status": "missing", "as_of": None,
                                               "price": None, "change_24h": None, "volume": None}
+            pair_label = None
             try:
-                indicator_result = await self.indicators.execute(user_id=user_id, asset=asset)
-                # The evidence schema is a Pydantic v1 model in the deployed
-                # runtime. FastAPI's encoder supports both v1 and v2; calling
-                # model_dump here made every successful lookup appear unknown.
-                configuration = jsonable_encoder(indicator_result["data"])
+                if market_id is None:
+                    indicator_result = await self.indicators.execute(user_id=user_id, asset=asset)
+                    configuration = jsonable_encoder(indicator_result["data"])
+                else:
+                    market = await PairIndicatorConfigService(self.session).market(market_id)
+                    if market is None or market.asset_symbol != asset:
+                        raise LookupError("exact_market_not_verified")
+                    pair_label = f"{asset}/{market.quote_currency}"
+                    selected = effective_pair_configs(
+                        await PairIndicatorConfigService(self.session).rows(user_id, market))
+                    configuration = {category: [
+                        {"indicator": name, "enabled": True}
+                        for (owner, group, name) in selected if owner == user_id and group == category
+                    ] for category in ("market", "macro", "technical")}
                 configuration_status = "available"
             except Exception:
                 # A failed lookup cannot be interpreted as no configuration.
@@ -94,6 +114,8 @@ class FinnSharedContextService:
                 configuration_status = "unknown"
             assets.append({
                 "symbol": asset,
+                "market_id": market_id,
+                "pair": pair_label,
                 "indicator_configuration": configuration,
                 "indicator_lookup_status": configuration_status,
                 "benchmark": benchmark,
