@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Indicatorinstellingen per exact handelspaar (29 oktober 2026)
 
-Current phase: `LOCAL_VALIDATION_PASSED_AWAITING_DEPLOY`. Candidate branch:
+Current phase: `LIVE_QA_P1_HOTFIX_IN_PROGRESS`. Candidate branch:
 `codex/pair-scoped-indicators`, [PR #688](https://github.com/gvangalen/antigravity-trading-tool/pull/688).
 Indicator choices, weights and score rules now use the verified `market_id` for
 BTC/EUR and BTC/USDT. The same indicator can be selected once per pair;
@@ -22,9 +22,14 @@ i18n lint/tests, command/proposal/setup tests, build and high-severity audit
 passed. Independent Security and Architecture reviews found and confirmed fixes
 for the missing pair impact preview, stale edit display and inaccurate pending
 source status. All five candidate CI jobs passed on code SHA `07bc5cd99` in
-run `40844937791`. The status-only commit and the eventual merge SHA require
-their own CI/deploy identity checks. Authenticated pair-switch/add/edit/remove
-QA remains open; no live trade was performed.
+run `40844937791`. PR #688 merged as SHA
+`069cddf2c83bd6252dc949c98fa1819f89da7bbb`; main CI `40845829631` and
+Auto Deploy `40846232577` passed, and public backend/frontend each returned
+HTTP 200 with that SHA. Independent live QA then found a P1: the new pair
+indicator form could not load configuration because the read service called
+Pydantic 2 `model_dump()` while this backend uses Pydantic 1. The same existing
+QA agent will rerun pair-add/edit/disable after this hotfix. No live trade
+was performed.
 
 ## Dagrapport: beslisreden in gekozen taal (28 oktober 2026)
 

@@ -7,6 +7,7 @@ import pytest
 from backend.services.pair_indicator_config_service import (
     PairIndicatorConfigService, effective_pair_configs,
 )
+from backend.schemas.indicator_config_schema import IndicatorBucketRule, IndicatorConfigResponse
 
 
 def _config(market_id, indicator="rsi", enabled=True):
@@ -22,6 +23,27 @@ def test_pair_preference_overrides_base_without_changing_other_quote():
     assert effective_pair_configs([base, eur_disabled]) == {}
     assert effective_pair_configs([base, usdt])[(7, "technical", "rsi")] is usdt
     assert effective_pair_configs([base])[(7, "technical", "rsi")] is base
+
+
+def test_pair_config_read_serializes_pydantic_v1_models():
+    session = SimpleNamespace()
+    service = PairIndicatorConfigService(session)
+    market = SimpleNamespace(id=42, asset_symbol="BTC")
+    rule = IndicatorBucketRule(range_min=0, range_max=20, score=10)
+    fallback = IndicatorConfigResponse(indicator="rsi", category="technical",
+                                       score_mode="standard", weight=1, rules=[rule])
+    service.base.get_indicator_config = AsyncMock(return_value=fallback)
+    service.rows = AsyncMock(return_value=[])
+    assert asyncio.run(service.get(7, market, "technical", "rsi"))["rules"][0]["score"] == 10
+
+    pair_row = _config(42)
+    pair_row.config_json = {"score_mode": "custom", "weight": 1.5,
+                            "rules": [rule.dict()]}
+    service.rows = AsyncMock(return_value=[pair_row])
+    service.base._rules_to_fixed_buckets = lambda rules: [rule]
+    pair = asyncio.run(service.get(7, market, "technical", "rsi"))
+    assert pair["weight"] == 1.5
+    assert pair["rules"][0]["score"] == 10
 
 
 def test_same_indicator_is_allowed_on_second_pair_but_not_twice_on_same_pair():
