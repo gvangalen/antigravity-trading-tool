@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN-chat: opgeslagen Volume-weging per handelspaar lezen (29 oktober 2026)
 
-Current phase: `CANDIDATE_READY`. Candidate branch:
+Current phase: `LIVE_AWAITING_INDEPENDENT_QA`. Candidate branch:
 `codex/finn-volume-read-tool`, based on main
 `0f824a174e73304e20ca2a2d4c220e722189ec6f`. Independent authenticated QA
 on that live SHA repeated the exact readback failure: after a refresh in a new
@@ -38,8 +38,14 @@ against a 10000 ms budget. Artifact SHA-256:
 `4ff56d21951cc79a01ade7a0333ad31e57a358ad642880f3f831629343a41a21`.
 An earlier full 38-case run had one nondeterministic active-setup tool choice
 (`get_saved_setup_inventory` instead of `get_active_plan_and_strategy`); the
-unchanged gate passed in the subsequent full run. No protected QA fixture or
-sealed holdout was used by Build.
+unchanged gate passed in the subsequent full run. Candidate [PR #695](https://github.com/gvangalen/antigravity-trading-tool/pull/695)
+passed all five CI jobs in run `40883117465` and merged as
+`331465324df902284b78f74c1151da148854887e`. Main CI `40883699061`
+and Auto Deploy `40884207229` passed; public backend health and frontend
+build-info both returned HTTP 200 and that exact SHA. This status update
+creates a later SHA, so its main CI, Auto Deploy and public identity must be
+checked before QA starts. No protected QA fixture or sealed holdout was used
+by Build.
 
 ## FINN-chat: Volume-weging op exact handelspaar (29 oktober 2026)
 
