@@ -4,6 +4,43 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN-chat: opgeslagen Volume-weging per handelspaar lezen (29 oktober 2026)
+
+Current phase: `CANDIDATE_READY`. Candidate branch:
+`codex/finn-volume-read-tool`, based on main
+`0f824a174e73304e20ca2a2d4c220e722189ec6f`. Independent authenticated QA
+on that live SHA repeated the exact readback failure: after a refresh in a new
+conversation, “Lees mijn opgeslagen Volume-weging voor BTC/EUR en BTC/USDT”
+made FINN read setups and treat the indicator weight as a setup name. Analyse
+still showed BTC/EUR 0.6 and BTC/USDT 1.0. The earlier operation-selector
+repair was on a different path from the model-led coach loop used by this
+read-only turn.
+
+The repair requires the owner-scoped indicator snapshot as the first read for
+a saved indicator-configuration question. FINN may then read each requested
+quote currency separately and write its own answer. This changes tool routing
+and description, not the user's saved configuration or a fixed coach response.
+The public local runtime matrix includes the exact failed wording and asserts
+indicator-tool reads without setup-tool reads. Targeted regressions and the
+root backend suite passed **4114 passed, 4 skipped**. Frontend typecheck,
+i18n lint/tests, command tests, production build, and high-severity audit
+passed. A direct real Luna/Responses probe used the model-led loop and read
+BTC/EUR and BTC/USDT separately before answering with 0.6 and 1.0. The
+real Luna/Responses development and regression operation selection passed
+**20/20** and **109/109**, with zero provider, schema, timeout, parse or
+validation failures. Their artifact SHA-256 values are
+`37145abb382bcc650da6ff49ca81df71d6d450e79842b77a3d34b01c5cc78686`
+and `7f4d35ec96a65c679177312b4848ec43120b849345605ac69aee33deff1ed0fc`.
+The complete worker-driven matrix passed **38/38**, including **16/16** action
+contracts and **9/9** lineage cases. The exact readback probe used two
+`get_indicator_snapshot` calls and no setup read; terminal p95 was 7448 ms
+against a 10000 ms budget. Artifact SHA-256:
+`4ff56d21951cc79a01ade7a0333ad31e57a358ad642880f3f831629343a41a21`.
+An earlier full 38-case run had one nondeterministic active-setup tool choice
+(`get_saved_setup_inventory` instead of `get_active_plan_and_strategy`); the
+unchanged gate passed in the subsequent full run. No protected QA fixture or
+sealed holdout was used by Build.
+
 ## FINN-chat: Volume-weging op exact handelspaar (29 oktober 2026)
 
 Current phase: `READBACK_HOTFIX_LIVE_AWAITING_INDEPENDENT_QA`. Initial candidate branch:

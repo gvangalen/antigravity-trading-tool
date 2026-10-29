@@ -12874,6 +12874,61 @@ def test_front_door_reads_named_last_known_quote_before_answering(monkeypatch):
     assert captured["catalog_boundary_only"] is False
 
 
+def test_front_door_reads_saved_pair_indicator_weights_before_answering(monkeypatch):
+    message = "Lees mijn opgeslagen Volume-weging voor BTC/EUR en BTC/USDT"
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="pair-weight-read")
+    front.model_led_coach = True
+    captured = {}
+
+    async def capture_loop(_self, **kwargs):
+        captured.update(kwargs)
+        return FinnResponsesResult("Ik lees de opgeslagen wegingen.", "answer", ())
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run", capture_loop,
+    )
+    asyncio.run(front.run(
+        message=message, instructions="Lees feiten", conversation_context={}, verified_asset="BTC",
+    ))
+
+    assert captured["model_led_coach"] is True
+    assert captured["read_only_turn"] is True
+    assert captured["required_read_tool_name"] == "get_indicator_snapshot"
+
+
+def test_model_led_saved_indicator_read_keeps_requested_pairs_separate():
+    fake = FakeResponses(
+        response("pair-eur", calls=(tool_call("read-eur", "get_indicator_snapshot", {
+            "asset": "BTC", "quote_currency": "EUR",
+        }),)),
+        response("pair-usdt", calls=(tool_call("read-usdt", "get_indicator_snapshot", {
+            "asset": "BTC", "quote_currency": "USDT",
+        }),)),
+        response("pair-answer", text="BTC/EUR: 0,6. BTC/USDT: 1,0."),
+    )
+    seen = []
+
+    async def execute(call):
+        seen.append((call.name, call.inputs.get("quote_currency")))
+        return {"status": "completed", "results": [{
+            "scope": "read_indicator_configuration", "status": "completed",
+            "asset": "BTC", "data": {"pair": f"BTC/{call.inputs['quote_currency']}"},
+        }]}
+
+    result = asyncio.run(FinnResponsesLoop(
+        client=SimpleNamespace(responses=fake), executor=execute,
+    ).run(
+        message="Lees mijn opgeslagen Volume-weging voor BTC/EUR en BTC/USDT",
+        instructions="Lees eigenaargebonden gegevens", model_led_coach=True,
+        read_only_turn=True, required_read_tool_name="get_indicator_snapshot",
+    ))
+
+    assert fake.requests[0]["tool_choice"] == {"type": "function", "name": "get_indicator_snapshot"}
+    assert seen == [("get_indicator_snapshot", "EUR"), ("get_indicator_snapshot", "USDT")]
+    assert result.text == "BTC/EUR: 0,6. BTC/USDT: 1,0."
+
+
+
 
 def test_open_bot_context_binds_its_strategy_only_for_unnamed_owner_plan(monkeypatch):
     setup = {"id": 11, "name": "QA BTC Friday Setup", "symbol": "BTC",

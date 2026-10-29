@@ -2,9 +2,9 @@
 """Run a public, production-shaped FINN V2 matrix against a local stack.
 
 This harness deliberately contains no QA manifest, protected fixture identity,
-or sealed wording. It combines the public natural action chain with 21 typed
-read/evaluate/guided probes, so the matrix has the same 37-case shape as the
-production gate while remaining Build-owned and reproducible.
+or sealed wording. It combines the public natural action chain with 22 typed
+read/evaluate/guided probes for 38 cases while remaining Build-owned and
+reproducible.
 """
 from __future__ import annotations
 
@@ -38,6 +38,7 @@ PUBLIC_PROBES = (
     ("off_topic", "Schrijf een gedicht over regen.", "off_topic"),
     ("active_asset", "Which asset is active?", "read_active_asset"),
     ("indicator_read", "Welche Indikatoren sind konfiguriert?", "read_indicator_configuration"),
+    ("indicator_pair_weight_read", "Lees mijn opgeslagen Volume-weging voor BTC/EUR en BTC/USDT", "read_indicator_configuration"),
     ("evaluate_plan", "Beoordeel mijn actieve plan eerlijk.", "evaluate_plan"),
     ("evaluate_setup", "Evaluate my current setup.", "evaluate_setup"),
     ("evaluate_strategy", "Bewerte meine aktive Strategie.", "evaluate_strategy"),
@@ -63,6 +64,7 @@ PUBLIC_PROBES = (
 READ_TOOLS = {
     "active_asset": "get_active_asset_context",
     "indicator_read": "get_indicator_snapshot",
+    "indicator_pair_weight_read": "get_indicator_snapshot",
     "evaluate_plan": "evaluate_plan",
     "evaluate_setup": "evaluate_setup",
     "evaluate_strategy": "evaluate_strategy",
@@ -98,9 +100,12 @@ def _probe_contract(case_id: str, expected_operation: str, observed: dict, recor
         allowed_read_tools = READ_TOOLS[case_id]
         if isinstance(allowed_read_tools, str):
             allowed_read_tools = (allowed_read_tools,)
+        wrong_object_read = case_id == "indicator_pair_weight_read" and bool(
+            {"get_active_plan_and_strategy", "get_saved_setup", "get_saved_setup_inventory"}.intersection(names)
+        )
         return bool(base and observed.get("status") == "completed"
                     and any(tool in names for tool in allowed_read_tools)
-                    and not WRITE_TOOLS.intersection(names)), names
+                    and not WRITE_TOOLS.intersection(names) and not wrong_object_read), names
     if case_id in DIRECT_ANSWER_CASES:
         return bool(base and observed.get("status") == "completed"
                     and not WRITE_TOOLS.intersection(names)), names
@@ -283,7 +288,7 @@ def main() -> None:
             "incomplete": True,
             "sealed_qa_material_used": False,
             "fixture_namespace": namespace,
-            "planned_cases": 37,
+            "planned_cases": 38,
             "executed_cases": len(partial_cases),
             "cases": partial_cases,
             "resource_snapshot": _resource_snapshot(),
@@ -308,7 +313,7 @@ def main() -> None:
         "incomplete": False,
         "sealed_qa_material_used": False,
         "fixture_namespace": namespace,
-        "planned_cases": 37,
+        "planned_cases": 38,
         "executed_cases": len(cases),
         "cases": cases,
         "action_contracts": {"passed": sum(bool(step.get("passed")) for step in chain.get("steps", [])), "total": 16},
@@ -331,7 +336,7 @@ def main() -> None:
         "chain_checkpoint": str(chain_path),
         "chain_process_evidence": chain.get("persistence_boundary_summary") or {},
         "all_passed": (
-            len(cases) == 37
+            len(cases) == 38
             and all(case["passed"] for case in cases)
             and chain_result.returncode == 0
             and all_http_200
