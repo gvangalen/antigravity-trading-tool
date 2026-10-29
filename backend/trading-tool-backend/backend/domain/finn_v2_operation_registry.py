@@ -95,6 +95,7 @@ _MODEL_TOOL_INPUT_TYPES: dict[str, tuple[tuple[str, str], ...]] = {
     "update_indicator_configuration": (
         ("asset", "string"), ("category", "string"),
         ("indicator", "string"), ("changed_fields", "object"),
+        ("quote_currency", "string"),
     ),
     "delete_indicator_configuration": (
         ("asset", "string"), ("category", "string"), ("indicator", "string"),
@@ -343,9 +344,9 @@ class OperationContract:
         """Return required fields after evaluating registry-owned conditions."""
         from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
 
-        symbol = str(supplied_inputs.get("symbol") or "").strip().upper()
+        symbol = str(supplied_inputs.get("symbol") or supplied_inputs.get("asset") or "").strip().upper()
         crypto_pair_required = (
-            self.operation_id == "create_setup"
+            self.operation_id in {"create_setup", "update_indicator_configuration"}
             and DEFAULT_ASSET_CATALOG.get(symbol, {}).get("asset_class") == "crypto"
         )
         if self.operation_id == "create_setup" and supplied_inputs.get("setup_type") == "dca" and supplied_inputs.get("plan_scope") == "setup_only":
@@ -1062,7 +1063,7 @@ _CONTRACTS: tuple[OperationContract, ...] = (
     OperationContract("watchlist_remove", FinnV2OperationRegistry.VERSION, "watchlist", "ACTION_PROPOSAL", ("verwijder", "remove", "watchlist"), action_polarity=ActionPolarity.REMOVE, required_inputs=("asset",), required_scopes=("active_asset", "watchlist"), proposal_type="watchlist_remove", confirmation_required=True, execution_adapter="watchlist_remove", idempotency_rule="user_asset_absent", postcondition="watchlist_excludes_asset", response_strategy="proposal_draft", policy_class="proposal"),
     _read("read_indicator_configuration", "indicators", ("active_asset", "indicator_configuration"), ("indicator", "rsi", "vwap", "volume"), ("asset", "configured_count", "indicator_names")),
     OperationContract("create_indicator_configuration", FinnV2OperationRegistry.VERSION, "indicators", "CREATE_PROPOSAL", ("maak indicator", "create indicator", "erstelle indikator"), action_polarity=ActionPolarity.CREATE, required_inputs=("asset", "category", "indicator"), required_scopes=("active_asset", "indicator_configuration"), proposal_type="create_indicator_configuration", confirmation_required=True, execution_adapter="create_indicator_configuration", idempotency_rule="proposal_payload_hash", postcondition="indicator_configuration_created", response_strategy="proposal_draft", policy_class="proposal"),
-    OperationContract("update_indicator_configuration", FinnV2OperationRegistry.VERSION, "indicators", "CREATE_PROPOSAL", ("wijzig indicator", "update indicator", "ändere indikator"), action_polarity=ActionPolarity.UPDATE, required_inputs=("asset", "category", "indicator", "changed_fields"), required_scopes=("active_asset", "indicator_configuration"), proposal_type="update_indicator_configuration", confirmation_required=True, execution_adapter="update_indicator_configuration", idempotency_rule="proposal_payload_hash", postcondition="indicator_configuration_updated", response_strategy="proposal_draft", policy_class="proposal"),
+    OperationContract("update_indicator_configuration", FinnV2OperationRegistry.VERSION, "indicators", "CREATE_PROPOSAL", ("wijzig indicator", "update indicator", "ändere indikator"), action_polarity=ActionPolarity.UPDATE, required_inputs=("asset", "category", "indicator", "changed_fields"), optional_inputs=("quote_currency",), required_scopes=("active_asset", "indicator_configuration"), proposal_type="update_indicator_configuration", confirmation_required=True, execution_adapter="update_indicator_configuration", idempotency_rule="proposal_payload_hash", postcondition="indicator_configuration_updated", response_strategy="proposal_draft", policy_class="proposal"),
     OperationContract("delete_indicator_configuration", FinnV2OperationRegistry.VERSION, "indicators", "CREATE_PROPOSAL", ("verwijder indicator", "delete indicator", "lösche indikator"), action_polarity=ActionPolarity.DELETE, required_inputs=("asset", "category", "indicator"), required_scopes=("active_asset", "indicator_configuration"), proposal_type="delete_indicator_configuration", confirmation_required=True, execution_adapter="delete_indicator_configuration", idempotency_rule="proposal_payload_hash", postcondition="indicator_configuration_removed", response_strategy="proposal_draft", policy_class="proposal"),
     OperationContract("evaluate_indicator_configuration", FinnV2OperationRegistry.VERSION, "indicators", "EVALUATE", ("beoordeel indicator",), required_scopes=("active_asset", "indicator_configuration", "market_snapshot", "macro_snapshot", "technical_snapshot"), model_policy="required", response_strategy="model_reasoning", policy_class="advice"),
     # A persisted setup is self-describing: its owner-scoped record already

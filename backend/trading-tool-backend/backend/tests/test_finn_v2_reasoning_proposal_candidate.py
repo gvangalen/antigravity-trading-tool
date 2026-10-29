@@ -486,7 +486,7 @@ def test_complete_proposal_contracts_remain_deterministic():
     ("operation_id", "inputs", "target_type"),
     [
         ("create_indicator_configuration", {"asset": "SOL", "category": "momentum", "indicator": "RSI"}, "indicator_configuration"),
-        ("update_indicator_configuration", {"asset": "SOL", "category": "momentum", "indicator": "RSI", "changed_fields": {"period": 21}}, "indicator_configuration"),
+        ("update_indicator_configuration", {"asset": "SOL", "quote_currency": "USDT", "category": "momentum", "indicator": "RSI", "changed_fields": {"period": 21}}, "indicator_configuration"),
         ("delete_indicator_configuration", {"asset": "SOL", "category": "momentum", "indicator": "RSI"}, "indicator_configuration"),
         ("update_setup", {"setup_id": 41, "changed_fields": {"timeframe": "1H"}}, "setup"),
         ("delete_setup", {"setup_id": 41}, "setup"),

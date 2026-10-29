@@ -4,6 +4,37 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN-chat: Volume-weging op exact handelspaar (29 oktober 2026)
+
+Current phase: `LOCAL_VALIDATION`. Candidate branch:
+`codex/finn-indicator-weight-chat`, based on main
+`b957c3bff2447b8894dcf0a82fb503d8d7cc2343`. The user can ask FINN to
+change only Volume on BTC/EUR to low weight while leaving BTC/USDT untouched.
+The operation selector keeps this typed indicator edit out of watchlist and
+other write routes. The action contract requires an explicit quote currency
+for crypto, asks when the pair is ambiguous, and stores a confirmable proposal.
+The adapter edits the owner’s exact market configuration, preserves scoring
+mode and rules, refreshes only that market, and checks the pair-scoped
+postcondition. FINN’s indicator read evidence now includes the saved weight
+and pair for follow-up questions. No coach answer text is hard-coded.
+
+Measured local evidence: root backend suite **4111 passed, 4 skipped**;
+frontend typecheck, i18n lint/tests, command/proposal tests, production build,
+and high-severity audit passed. The complete worker-driven nonsealed parity
+matrix passed **37/37**, including **16/16** action contracts and **9/9**
+conversation-lineage cases; artifact SHA-256
+`3f8a66019a4e0b3c1f5a550f2691c0e6026030aeb07931637f0a29a11d7bac92`.
+Real Luna/Responses development passed **20/20** and regression **109/109**,
+each with zero provider failures; artifact SHA-256 values are
+`e3bdb0b348864a0a187e76d9ace1f49111be9f63ce06fba0a0c4ee0bb8e3599c`
+and `dcf6314299f382365b06ccbdb0d13c9b57608f694b1fcdc6ae33dbda560625db`.
+These provider evaluations exercise the unchanged final selector; the last
+code adjustment exposed saved weight in read evidence and resolved two
+read-evidence test regressions. All five candidate CI jobs passed on code SHA
+`94b656645` in run `40863987551`. No protected QA fixture or sealed holdout
+was used by Build. Deployment, public SHA checks and independent live QA are
+pending.
+
 ## Indicatorinstellingen per exact handelspaar (29 oktober 2026)
 
 Current phase: `LIVE_QA_P1_HOTFIX_IN_PROGRESS`. Candidate branch:

@@ -30,7 +30,7 @@ ACTION_SPECS = (
     ("watchlist_add", "Voeg ETH toe aan mijn watchlist.", "Voeg een asset toe aan mijn watchlist.", "ETH."),
     ("watchlist_remove", "Verwijder XRP uit mijn watchlist.", "Verwijder een asset uit mijn watchlist.", "XRP."),
     ("create_indicator_configuration", "Maak een technische RSI indicatorconfiguratie voor ADA.", "Maak een technische RSI indicatorconfiguratie.", "Voor ADA."),
-    ("update_indicator_configuration", "Werk mijn technische RSI indicatorconfiguratie voor BTC bij en zet de periode naar 21.", "Pas mijn technische RSI indicatorconfiguratie aan.", "Voor BTC en zet de periode naar 21."),
+    ("update_indicator_configuration", "Wijzig alleen de weging van Volume voor BTC/EUR naar laag; laat BTC/USDT ongemoeid.", "Pas de weging van mijn Volume-indicator aan.", "Voor BTC/EUR naar laag; laat BTC/USDT ongemoeid."),
     ("delete_indicator_configuration", "Verwijder mijn technische RSI indicatorconfiguratie voor SOL.", "Verwijder mijn technische RSI indicatorconfiguratie.", "Voor SOL."),
     ("create_setup", "Maak een swing setup voor SOL/USDT op 4 uur met de naam Matrix Nieuwe Setup.", "Maak een swing setup voor SOL.", "Op 4 uur met de naam Matrix Nieuwe Setup voor SOL/USDT."),
     ("update_setup", "Werk Matrix Update Setup bij en zet het tijdframe naar 1 uur.", "Werk een setup bij.", "Werk Matrix Update Setup bij en zet het tijdframe naar 1 uur."),
@@ -52,7 +52,7 @@ GUIDED_SLOT_ANSWERS = {
     "watchlist_add": ("ETH.",),
     "watchlist_remove": ("XRP.",),
     "create_indicator_configuration": ("Voor ADA.",),
-    "update_indicator_configuration": ("Voor BTC.", "Zet de periode op 21."),
+    "update_indicator_configuration": ("Voor BTC/EUR.", "Zet de weging naar laag; laat BTC/USDT ongemoeid."),
     "delete_indicator_configuration": ("Voor SOL.",),
     "create_setup": {
         "quote_currency": "USDT als koersvaluta; SOL/USDT.",
@@ -218,6 +218,26 @@ def _seed_fixtures(user_id: int) -> dict[str, int]:
                         CAST(:config AS jsonb), 'local_action_matrix', NOW(), NOW())
             """), {"user_id": user_id, "symbol": symbol,
                     "config": json.dumps({"period": 14, "source": "close"})})
+        for quote in ("EUR", "USDT"):
+            market_id = connection.execute(text("""
+                INSERT INTO trading_markets
+                    (asset_symbol, quote_currency, venue, provider, provider_symbol,
+                     tradingview_symbol, source_verified_at, is_active)
+                VALUES ('BTC', :quote, 'BINANCE', 'binance', :provider_symbol,
+                        :tradingview_symbol, NOW(), TRUE)
+                ON CONFLICT (asset_symbol, quote_currency, venue) DO UPDATE SET
+                    source_verified_at = EXCLUDED.source_verified_at, is_active = TRUE
+                RETURNING id
+            """), {"quote": quote, "provider_symbol": f"BTC{quote}",
+                    "tradingview_symbol": f"BINANCE:BTC{quote}"}).scalar_one()
+            connection.execute(text("""
+                INSERT INTO user_indicator_configs
+                    (user_id, indicator, category, symbol, market_id, asset_class,
+                     priority, enabled, config_json, provenance, created_at, updated_at)
+                VALUES (:user_id, 'volume', 'market', 'BTC', :market_id, 'crypto',
+                        100, TRUE, CAST(:config AS jsonb), 'local_action_matrix', NOW(), NOW())
+            """), {"user_id": user_id, "market_id": market_id,
+                    "config": json.dumps({"score_mode": "standard", "weight": 1.0})})
         fixtures = {
             "setup_update": _insert_setup(connection, user_id, "Matrix Update Setup"),
             "setup_delete": _insert_setup(connection, user_id, "Matrix Delete Setup"),

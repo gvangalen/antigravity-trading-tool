@@ -1908,7 +1908,7 @@ function AIAssistantContent({
       ? [supplied.symbol || context.symbol, supplied.timeframe || context.timeframe, at("draftCards.linkedToName", "gekoppeld aan {name}", { name: linkedName })].filter(Boolean).join(" · ")
       : isBot
         ? `Paper · ${at("draftCards.linkedToName", "gekoppeld aan {name}", { name: linkedName })}`
-        : [supplied.asset || context.symbol, isIndicator ? ({ technical: at("draftCards.technicalEvidence", "Technisch bewijs"), macro: "Macro", market: at("draftCards.marketIndicators", "Marktindicatoren") }[supplied.category] || supplied.category) : "Watchlist"].filter(Boolean).join(" · ");
+        : [isIndicator && supplied.quote_currency ? `${supplied.asset || context.symbol}/${supplied.quote_currency}` : supplied.asset || context.symbol, isIndicator ? ({ technical: at("draftCards.technicalEvidence", "Technisch bewijs"), macro: "Macro", market: at("draftCards.marketIndicators", "Marktindicatoren") }[supplied.category] || supplied.category) : "Watchlist"].filter(Boolean).join(" · ");
     const labels = { name: "naam", setup_id: "setup", strategy_id: "strategie", symbol: "asset", timeframe: "timeframe", execution_mode: "uitvoering", base_amount: "bedrag", entry: "entry", stop_loss: "stop-loss", targets: "targets", price_currency: "valuta koersniveaus", risk_profile: "risico", budget_total_eur: "budget", dca_amount_mode: "bedragregel", score_source: "totale benchmark", low_threshold: "grens lage/middenscore", high_threshold: "grens midden/hoge score", low_score_percent: "percentage lage score", mid_score_percent: "percentage middenscore", high_score_percent: "percentage hoge score" };
     const missing = (draft.missing_inputs || []).map((field) => at(`draftCards.inputs.${field}`, labels[field] || field));
     const formatValue = (value) => formatDraftCardValue(value, locale);
@@ -1936,7 +1936,7 @@ function AIAssistantContent({
         ? [[({ en: "Bot budget limit", de: "Bot-Budgetlimit" }[locale] || "Botbudgetlimiet"), supplied.budget_total_eur ? `€${supplied.budget_total_eur}` : null],
           [({ en: "Virtual Paper starting capital", de: "Virtuelles Paper-Startkapital" }[locale] || "Virtueel Paper-startkapitaal"), supplied.paper_initial_cash_eur ? `€${supplied.paper_initial_cash_eur}` : null]]
         : isIndicator
-          ? [[at("draftCards.fieldIndicator", "Indicator"), supplied.indicator ? indicatorDisplayName(supplied.indicator) : null], [at("draftCards.fieldCategory", "Categorie"), ({ technical: at("draftCards.technicalEvidence", "Technisch bewijs"), macro: "Macro", market: at("draftCards.marketIndicators", "Marktindicatoren") }[supplied.category] || supplied.category)], [at("draftCards.fieldWeight", "Weging"), supplied.weight]]
+          ? [[at("draftCards.fieldIndicator", "Indicator"), supplied.indicator ? indicatorDisplayName(supplied.indicator) : null], [at("draftCards.fieldCategory", "Categorie"), ({ technical: at("draftCards.technicalEvidence", "Technisch bewijs"), macro: "Macro", market: at("draftCards.marketIndicators", "Marktindicatoren") }[supplied.category] || supplied.category)], [at("draftCards.fieldWeight", "Weging"), supplied.changed_fields?.weight ?? supplied.weight]]
           : [];
     const title = isStrategy
       ? at("draftCards.strategyTitle", "Concept strategie")
@@ -2134,7 +2134,9 @@ function AIAssistantContent({
     ].filter(Boolean);
 
     if (isWatchlistAction || isIndicatorAction) {
-      const asset = suppliedInputs.asset || displayContext.symbol;
+      const baseAsset = suppliedInputs.asset || displayContext.symbol;
+      const asset = isIndicatorAction && suppliedInputs.quote_currency
+        ? `${baseAsset}/${suppliedInputs.quote_currency}` : baseAsset;
       const indicator = indicatorDisplayName(suppliedInputs.indicator);
       const category = ({ technical: at("draftCards.technicalEvidence", "Technisch bewijs"), macro: "Macro", market: at("draftCards.marketIndicators", "Marktindicatoren") })[suppliedInputs.category] || suppliedInputs.category;
       const title = isWatchlistAction

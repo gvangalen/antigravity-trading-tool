@@ -86,6 +86,22 @@ class FinnV2OperationResolverService:
             for item in (request_facts or {}).get("explicit_entities", ())
             if isinstance(item, str) and item.strip()
         }
+        indicator_mutation = {
+            "update": "update_indicator_configuration",
+            "delete": "delete_indicator_configuration",
+            "remove": "delete_indicator_configuration",
+        }.get(str((request_facts or {}).get("action_polarity") or ""))
+        if (
+            str((request_facts or {}).get("discourse_act") or "") == "operation_request"
+            and str((request_facts or {}).get("primary_entity") or "") == "indicator_configuration"
+            and "indicator_configuration" in explicit_entities
+            and indicator_mutation is not None
+            and any(contract.operation_id == indicator_mutation for contract in candidates)
+        ):
+            return self._with_resolved_operation(
+                selection, operation_id=indicator_mutation,
+                conversation_reference=selection.conversation_reference,
+            )
         selected_entities = {
             key: value
             for key, value in dict(getattr(selection, "entities", {}) or {}).items()
