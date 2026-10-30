@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Dagrapport weer als FINN-verhaal per hoofdstuk (30 oktober 2026)
 
-Current phase: `LOCAL_VALIDATION_COMPLETE_AWAITING_CI`. Candidate branch
+Current phase: `LIVE_AWAITING_INDEPENDENT_QA`. Candidate branch
 `codex/daily-report-sections`, product commit `c12f55eccf158b7d3c34f63d229ca5014cddb9f0`,
 based on main `ee5c3f16d0e9e8cd6eeb7ad738e0c3dec54d418c`. The daily report
 previously requested eight Luna/Responses chapters, then unconditionally
@@ -32,8 +32,13 @@ parse or validation failures (artifact SHA-256
 The isolated API/Celery action matrix passed **16/16**, with **21/21** adapter
 tests and zero production connections, broker orders or live-trading calls
 (artifact SHA-256 `7cac53c140c5b3024d498694e0e47fd978d4bf1af48d55ff202c4f167740edce`).
-This is Build evidence only; no authenticated production QA or deployment is
-claimed.
+PR #705 passed all five CI jobs and merged as
+`79243dd91fd54a7d0d340ea02b27efab256a6e65`. Main CI run `41117953505`
+and Auto Deploy run `41118397889` succeeded. Public backend health and
+frontend build-info returned HTTP 200 with exactly that SHA. This measured
+deployment is Build evidence only; authenticated production QA of a newly
+generated report remains pending. The status-only update creates a newer
+main revision whose final deployment identity must be checked before QA.
 
 ## FINN scoreteruglezing voor AAPL en BTC/EUR (30 oktober 2026)
 
