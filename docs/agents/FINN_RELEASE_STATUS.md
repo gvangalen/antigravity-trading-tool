@@ -75,10 +75,11 @@ generated report found a blocking client-side crash on live SHA
 `setTradingReportExpanded` state setter and failed before any report could be
 reviewed. Independent QA returned `NOT_ACCEPTED` (P0). PR #707 removes that
 stale effect; its five CI jobs passed and it merged as
-`abee11e2daa2b23fed29048894500c283d16a23b`. Main CI and Auto Deploy for
-that repair must complete, public backend/frontend identity must match, and
-the existing independent QA Agent must repeat the authenticated report flow
-on the final live SHA. The report-content changes have not been accepted live.
+`abee11e2daa2b23fed29048894500c283d16a23b`. Main CI and Auto Deploy
+for that repair completed. The later status revision
+`49a1f0e6861a44619c73ce3ab45b70a5cb4fdd5b` was live with matching
+backend/frontend identity for the repeat authenticated QA described above.
+The report-content changes have not yet received a full live acceptance.
 
 ## FINN scoreteruglezing voor AAPL en BTC/EUR (30 oktober 2026)
 
