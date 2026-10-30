@@ -195,18 +195,22 @@ def test_tool_execution_preserves_initially_empty_shared_state(monkeypatch):
     assert shared_state == {"asset": "BTC", "resolution_source": "selected_asset"}
 
 
-def test_current_score_read_uses_asset_resolved_from_workspace(monkeypatch):
+def test_match_read_filters_workspace_asset_without_borrowing_its_pair(monkeypatch):
     seen = []
 
     class Context:
         def __init__(self, session):
             pass
 
-        async def benchmark_for_asset(self, user_id, asset):
-            seen.append((user_id, asset))
-            return {"symbol": asset, "as_of": None, "source_status": "missing_scores",
-                    "benchmark_score": None, "reported_scores": {},
-                    "component_source_status": {}, "matches": []}
+            self.matches = self
+
+        async def for_all_assets(self, user_id):
+            seen.append(user_id)
+            return {"symbol": "ALL", "as_of": None, "source_status": "per_asset",
+                    "matches": [
+                        {"setup_id": 1, "symbol": "ETH", "benchmark_score": 40},
+                        {"setup_id": 2, "symbol": "BTC", "benchmark_score": None},
+                    ]}
 
     monkeypatch.setattr(execution_module, "FinnSharedContextService", Context)
     service = FinnV2ToolExecutionService(session=_FakeSession())
@@ -216,8 +220,9 @@ def test_current_score_read_uses_asset_resolved_from_workspace(monkeypatch):
         selector={"asset": None}, run=SimpleNamespace(),
         shared_state={"asset": "ETH", "resolution_source": "selected_asset"},
     ))
-    assert seen == [(7, "ETH")]
+    assert seen == [7]
     assert result["data"].symbol == "ETH"
+    assert [row["setup_id"] for row in result["data"].matches] == [1]
 
 
 def test_tool_execution_releases_primary_connection_around_durable_call_sessions(monkeypatch):

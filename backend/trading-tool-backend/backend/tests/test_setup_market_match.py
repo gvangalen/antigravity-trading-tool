@@ -591,7 +591,7 @@ def test_finn_match_tool_returns_scoped_typed_evidence(monkeypatch):
         async def asset(**_kwargs):
             return {"asset": "BTC"}
 
-        async def assessment(_user_id, _symbol):
+        async def assessment(_user_id):
             return {"symbol": "BTC", "market_id": None, "as_of": date.today(), "source_status": "available",
                     "matches": [match_setup(setup(1, min_benchmark_score=50),
                                             {"macro": 50, "technical": 50, "market": 70})]}
@@ -599,7 +599,7 @@ def test_finn_match_tool_returns_scoped_typed_evidence(monkeypatch):
         service._ensure_asset = asset
         service._resolve_read_market_scope = AsyncMock(return_value={"market_id": None, "quote_currency": None})
         monkeypatch.setattr(execution_module, "FinnSharedContextService",
-                            lambda _session: SimpleNamespace(benchmark_for_asset=assessment))
+                            lambda _session: SimpleNamespace(matches=SimpleNamespace(for_all_assets=assessment)))
         payload = await service._dispatch_tool(
             tool_name="read_setup_market_matches", user_id=7,
             selector={"asset": "BTC"}, run=SimpleNamespace(), shared_state={},
@@ -632,6 +632,58 @@ def test_finn_match_tool_preserves_selected_market_identity(monkeypatch):
         )
         assessment.assert_awaited_once_with(7, "BTC", market_id=73)
         assert payload["data"].market_id == 73
+        assert payload["data"].pair == "BTC/EUR"
+
+    asyncio.run(run())
+
+
+def test_finn_asset_match_read_keeps_both_owned_pairs_separate(monkeypatch):
+    async def run():
+        service = object.__new__(execution_module.FinnV2ToolExecutionService)
+        service.session = object()
+        service._resolve_read_market_scope = AsyncMock(side_effect=AssertionError("workspace pair used"))
+        rows = [
+            {"setup_id": 1, "name": "BTC EUR", "symbol": "BTC", "market_id": 73,
+             "trading_pair": "BTC/EUR", "benchmark_score": 40, "source_status": "available"},
+            {"setup_id": 2, "name": "BTC USDT", "symbol": "BTC", "market_id": 74,
+             "trading_pair": "BTC/USDT", "benchmark_score": None, "source_status": "missing_scores"},
+            {"setup_id": 3, "name": "AAPL", "symbol": "AAPL", "market_id": None,
+             "benchmark_score": 57.3, "source_status": "available"},
+        ]
+        all_assets = AsyncMock(return_value={"symbol": "ALL", "as_of": None,
+            "source_status": "per_asset", "matches": rows})
+        monkeypatch.setattr(execution_module, "FinnSharedContextService",
+                            lambda _session: SimpleNamespace(matches=SimpleNamespace(for_all_assets=all_assets)))
+        payload = await service._dispatch_tool(
+            tool_name="read_setup_market_matches", user_id=7,
+            selector={"asset": "BTC"},
+            run=SimpleNamespace(workspace_hints_json={"symbol": "BTC", "quote_currency": "USDT"}),
+            shared_state={},
+        )
+        assert [(row["trading_pair"], row["benchmark_score"]) for row in payload["data"].matches] == [
+            ("BTC/EUR", 40), ("BTC/USDT", None),
+        ]
+        all_assets.assert_awaited_once_with(7)
+
+    asyncio.run(run())
+
+
+def test_finn_match_read_with_pair_in_asset_uses_that_market(monkeypatch):
+    async def run():
+        service = object.__new__(execution_module.FinnV2ToolExecutionService)
+        service.session = object()
+        service._ensure_asset = AsyncMock(return_value={"asset": "BTC"})
+        service._resolve_read_market_scope = AsyncMock(return_value={
+            "market_id": 73, "quote_currency": "EUR"})
+        assessment = AsyncMock(return_value={"symbol": "BTC", "market_id": 73,
+            "as_of": None, "source_status": "available", "matches": []})
+        monkeypatch.setattr(execution_module, "FinnSharedContextService",
+                            lambda _session: SimpleNamespace(benchmark_for_asset=assessment))
+        payload = await service._dispatch_tool(
+            tool_name="read_setup_market_matches", user_id=7,
+            selector={"asset": "BTC/EUR"}, run=SimpleNamespace(), shared_state={},
+        )
+        assessment.assert_awaited_once_with(7, "BTC", market_id=73)
         assert payload["data"].pair == "BTC/EUR"
 
     asyncio.run(run())

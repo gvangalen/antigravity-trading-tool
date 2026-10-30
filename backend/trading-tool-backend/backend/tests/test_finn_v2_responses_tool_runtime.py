@@ -1443,6 +1443,12 @@ def test_single_saved_dca_explanation_reads_strategy_even_when_model_chooses_inv
 
     async def read(call):
         reads.append(call)
+        if call.name == "get_setup_market_matches":
+            return {"status": "completed", "results": [{
+                "scope": "read_setup_market_matches", "status": "completed",
+                "data": {"matches": [{"setup_id": 41, "name": "ETH Smart DCA Herhaal 0410",
+                                      "benchmark_score": None, "source_status": "missing_scores"}]},
+            }]}
         if call.name == "get_active_plan_and_strategy":
             assert call.inputs == {"setup_id": 41}
             return {"status": "completed", "results": [
@@ -1471,10 +1477,10 @@ def test_single_saved_dca_explanation_reads_strategy_even_when_model_chooses_inv
         conversation_context={}, verified_asset=None,
     ))
     assert [call.name for call in reads] == [
-        "get_saved_setup_inventory", "get_active_plan_and_strategy",
+        "get_saved_setup_inventory", "get_setup_market_matches", "get_active_plan_and_strategy",
     ]
     scopes = [item.get("scope") for item in result.response.tool_trace[0]["result"]["results"]]
-    assert scopes == ["read_saved_setup_inventory", "read_active_setup", "read_linked_strategy"]
+    assert scopes == ["read_saved_setup_inventory", "read_setup_market_matches", "read_active_setup", "read_linked_strategy"]
     assert "€117" in result.response.text
 
 
@@ -1776,6 +1782,137 @@ def test_score_followup_binds_the_previously_verified_setup_instead_of_sibling_m
     assert result.response.text == "De benchmark ligt buiten de gekozen setupgrens."
 
 
+def test_multi_asset_score_read_uses_named_pair_not_workspace_pair():
+    fake = FakeResponses(
+        response("score-read", calls=[tool_call("scores", "get_current_asset_scores", {})]),
+        response("answer", text="AAPL 57,3 en BTC/EUR 40; BTC/USDT heeft geen score."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="pair-score-readback", model_led_coach=True,
+    )
+    calls = []
+
+    async def read(call):
+        calls.append(call)
+        assert call.name == "get_current_asset_scores"
+        return {"status": "completed", "results": [{
+            "scope": "read_asset_scores", "status": "completed",
+            "data": {"symbol": call.inputs["asset"],
+                     "pair": (f'{call.inputs["asset"]}/{call.inputs["quote_currency"]}'
+                              if call.inputs.get("quote_currency") else None),
+                     "benchmark_score": (40 if call.inputs["asset"] == "BTC" else 57.3)},
+        }]}
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message="Wat zijn de actuele AAPL- en BTC/EUR-scores voor mijn plannen?",
+        instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="BTC",
+        workspace_hints={"page": "/asset", "symbol": "BTC", "quote_currency": "USDT"},
+    ))
+    assert [call.inputs for call in calls] == [
+        {"asset": "AAPL"}, {"asset": "BTC", "quote_currency": "EUR"},
+    ]
+    rows = result.response.tool_trace[0]["result"]["results"]
+    assert [row["data"]["benchmark_score"] for row in rows] == [57.3, 40]
+
+
+def test_plan_score_comparison_keeps_aapl_and_btc_eur_separate_from_btc_usdt():
+    fake = FakeResponses(
+        response("inventory", calls=[tool_call("plans", "get_saved_setup_inventory", {})]),
+        response("answer", text="AAPL heeft 57,3 en BTC/EUR 40. Beide liggen buiten 61–75."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="morning-pair-scores", model_led_coach=True,
+    )
+
+    async def read(call):
+        if call.name == "get_saved_setup_inventory":
+            return {"status": "completed", "results": [{
+                "scope": "read_saved_setup_inventory", "status": "completed",
+                "data": {"complete": True, "setups": [
+                    {"setup_id": 1, "name": "Apple Plan", "symbol": "AAPL",
+                     "quote_currency": "USD", "pair": "AAPL/USD"},
+                    {"setup_id": 2, "name": "BTC EUR Plan", "symbol": "BTC",
+                     "quote_currency": "EUR", "pair": "BTC/EUR"},
+                    {"setup_id": 3, "name": "BTC USDT Plan", "symbol": "BTC",
+                     "quote_currency": "USDT", "pair": "BTC/USDT"},
+                ]},
+            }]}
+        if call.name == "get_setup_market_matches":
+            return {"status": "completed", "results": [{
+                "scope": "read_setup_market_matches", "status": "completed",
+                "data": {"matches": [
+                    {"setup_id": 1, "name": "Apple Plan", "symbol": "AAPL",
+                     "benchmark_score": 57.3, "source_status": "available"},
+                    {"setup_id": 2, "name": "BTC EUR Plan", "symbol": "BTC",
+                     "trading_pair": "BTC/EUR", "benchmark_score": 40,
+                     "source_status": "available"},
+                    {"setup_id": 3, "name": "BTC USDT Plan", "symbol": "BTC",
+                     "trading_pair": "BTC/USDT", "benchmark_score": None,
+                     "source_status": "missing_scores"},
+                ]},
+            }]}
+        if call.name == "get_active_plan_and_strategy":
+            return {"status": "completed", "results": []}
+        raise AssertionError(call.name)
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message="Wat is de ochtendstand van mijn AAPL- en BTC/EUR-plannen en hun scores?",
+        instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="BTC",
+        workspace_hints={"page": "/asset", "symbol": "BTC", "quote_currency": "USDT"},
+    ))
+    evidence = result.response.tool_trace[0]["result"]["results"]
+    plans = next(row["data"]["setups"] for row in evidence if row["scope"] == "read_saved_setup_inventory")
+    scores = next(row["data"]["matches"] for row in evidence if row["scope"] == "read_setup_market_matches")
+    assert {row["setup_id"] for row in plans} == {1, 2}
+    assert {row["setup_id"]: row["benchmark_score"] for row in scores} == {1: 57.3, 2: 40}
+
+
+def test_direct_match_read_for_two_markets_ignores_open_workspace_pair():
+    fake = FakeResponses(
+        response("matches", calls=[tool_call("match-call", "get_setup_market_matches", {
+            "asset": "BTC", "quote_currency": "USDT",
+        })]),
+        response("answer", text="AAPL 57,3 en BTC/EUR 40; beide buiten 61–75."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="direct-pair-matches", model_led_coach=True,
+    )
+    calls = []
+
+    async def read(call):
+        calls.append(call)
+        return {"status": "completed", "results": [{
+            "scope": "read_setup_market_matches", "status": "completed",
+            "data": {"matches": [
+                {"setup_id": 1, "symbol": "AAPL", "quote_currency": "USD",
+                 "benchmark_score": 57.3},
+                {"setup_id": 2, "symbol": "BTC", "trading_pair": "BTC/EUR",
+                 "benchmark_score": 40},
+                {"setup_id": 3, "symbol": "BTC", "trading_pair": "BTC/USDT",
+                 "benchmark_score": None},
+            ]},
+        }]}
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message="Wat zijn de scores van mijn AAPL- en BTC/EUR-plannen?",
+        instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="BTC",
+        workspace_hints={"page": "/asset", "symbol": "BTC", "quote_currency": "USDT"},
+    ))
+    assert calls[0].inputs == {}
+    matches = result.response.tool_trace[0]["result"]["results"][0]["data"]["matches"]
+    assert {row["setup_id"]: row["benchmark_score"] for row in matches} == {1: 57.3, 2: 40}
+
+
+
 def test_explicit_owned_setup_name_overrides_older_score_conversation_focus(monkeypatch):
     question = "Vergelijk de scores met BTC Andere DCA."
     fake = FakeResponses(
@@ -1921,11 +2058,15 @@ def test_asset_setup_comparison_hydrates_all_seven_owner_scoped_plans_in_one_rou
                                          "setup_id": setup_id,
                                          "name": f"ETH Strategy {setup_id}"}]},
             }]}
-        assert call.name == "get_current_asset_scores"
-        assert call.inputs == {"asset": "ETH"}
-        return {"status": "partial", "results": [{
-            "scope": "read_asset_scores", "status": "unavailable",
-            "reason": "macro_score_missing", "data": None,
+        assert call.name == "get_setup_market_matches"
+        assert call.inputs == {}
+        return {"status": "completed", "results": [{
+            "scope": "read_setup_market_matches", "status": "completed",
+            "data": {"matches": [
+                {"setup_id": index, "name": f"ETH Setup {index}", "symbol": "ETH",
+                 "benchmark_score": None, "source_status": "missing_scores"}
+                for index in range(1, 8)
+            ] + [{"setup_id": 99, "name": "BTC Other", "symbol": "BTC"}]},
         }]}
 
     front.reads = read
@@ -1935,8 +2076,8 @@ def test_asset_setup_comparison_hydrates_all_seven_owner_scoped_plans_in_one_rou
     ))
     tool_result = result.response.tool_trace[0]["result"]
     assert [call.name for call in calls] == [
-        "get_saved_setup_inventory", *(["get_linked_strategies"] * 7),
-        "get_current_asset_scores",
+        "get_saved_setup_inventory", "get_setup_market_matches",
+        *(["get_linked_strategies"] * 7),
     ]
     assert tool_result["finalize_now"] is True
     assert tool_result["turn_request"]["target_ids"] == list(range(1, 8))
