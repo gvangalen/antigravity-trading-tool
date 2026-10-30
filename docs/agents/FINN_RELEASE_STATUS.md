@@ -4,6 +4,24 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Dagrapport browserdownload (31 oktober 2026)
+
+Phase: `LIVE_AWAITING_INDEPENDENT_QA`. [PR #716](https://github.com/gvangalen/antigravity-trading-tool/pull/716)
+passed all five PR checks and merged as `cfdcf74f3e73eb8d77d02852aab07def9ad5497a`.
+Main CI run `41145328414` and Auto Deploy run `41145634154` succeeded.
+Public backend health and frontend build-info each returned HTTP 200 and that
+exact SHA. The browser PDF helper now verifies the `%PDF-` signature and
+releases its blob URL after 60 seconds instead of in the same click task.
+Two focused download tests passed; frontend typecheck, build, i18n lint/tests,
+command/proposal tests and high-severity audit passed locally. The report's
+eight narrative chapters and in-chapter facts were accepted by independent
+QA on the preceding release. The preceding authenticated export produced a
+132082-byte PDF in production Chromium and returned HTTP 200, but QA's browser
+could not observe the local saved file. Independent QA must repeat the
+authenticated browser download on the final deployed SHA. This status update
+itself creates a later main revision, so its CI, Auto Deploy and public SHA
+must match before that QA run.
+
 ## Dagrapport PDF-printwacht (30 oktober 2026)
 
 Phase: `LIVE_AWAITING_INDEPENDENT_QA`. [PR #714](https://github.com/gvangalen/antigravity-trading-tool/pull/714)
