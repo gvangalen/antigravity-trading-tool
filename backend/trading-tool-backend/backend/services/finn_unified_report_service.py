@@ -370,6 +370,10 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
         model_override=os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna"),
         reasoning_effort="none",
     )
+    if isinstance(result, dict) and result.get("error") == "ai_rate_limited":
+        # Preserve the last stored report rather than replacing its personal
+        # prose with an inventory when this regeneration hits the call limit.
+        raise RuntimeError("daily_report_ai_rate_limited")
     fallbacks = _fallback_sections(context)
     for category, section in (("market", "market_analysis"), ("macro", "macro_context"),
                               ("technical", "technical_analysis")):

@@ -27,7 +27,7 @@ def test_closed_trade_review_gets_two_scoped_model_attempts(monkeypatch):
     assert slots == [
         ("finn_trade_review:41:237", True, 2),
         ("finn_trade_review:41:237", True, 2),
-        ("daily_report_task:41:237", True, None),
+        ("daily_report_task:41:237", True, 4),
     ]
 
 

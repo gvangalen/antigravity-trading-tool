@@ -4,6 +4,23 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Dagrapport PDF-printwacht (30 oktober 2026)
+
+Current phase: `LOCAL_VALIDATION`. Independent QA repeated the report on
+production SHA `fbace0a9d27804357add7ba510829b8bcf1aa7eb` and found PDF
+export still returned HTTP 500. The new production trace shows Chromium now
+reaches the deployed frontend, but `Page.goto` waits for `networkidle` until
+the 60-second timeout. This candidate waits for document readiness and then
+for the existing print page's explicit `#print-ready` success marker. This
+changes PDF navigation, not the report's score facts. QA also found the newly
+regenerated chapters had fallen back to short inventories. The protected QA
+user's production Redis call-slot count was 2 in the current hour, while the
+generic scheduled limit was 1. The report task finished in 0.22 seconds with
+no Luna call, consistent with the rate-limited fallback. This candidate gives
+daily reports four scoped attempts per hour and refuses to overwrite a stored
+report when a later attempt still hits that limit.
+Independent authenticated live QA is still required after deployment.
+
 ## Dagrapport PDF-herkeuring (30 oktober 2026)
 
 Current phase: `LOCAL_VALIDATION`. The existing independent QA Agent returned
