@@ -11,6 +11,25 @@ from backend.schemas.finn_v2_evidence_schema import IndicatorConfigurationData, 
 from backend.celery_task import daily_report_task
 from backend.services.finn_v2_tool_adapters.score_tool_adapter import ScoreToolAdapter
 from backend.services.report_service import ReportService
+from backend.utils import pdf_playwright
+
+
+def test_pdf_render_uses_deployed_frontend_origin(monkeypatch):
+    monkeypatch.delenv("FRONTEND_BASE_URL", raising=False)
+    monkeypatch.setenv("FRONTEND_URL", "https://tradamind.com/")
+    assert pdf_playwright._frontend_base_url() == "https://tradamind.com"
+    monkeypatch.setenv("FRONTEND_BASE_URL", "http://127.0.0.1:5002/")
+    assert pdf_playwright._frontend_base_url() == "http://127.0.0.1:5002"
+
+
+def test_report_source_times_keep_seconds_and_missing_values():
+    assert reports._report_source_times({
+        "macro": {"DXY": "2026-10-29T23:59:59.999999+00:00"},
+        "technical": {"RSI": None},
+    }) == {
+        "macro": {"DXY": "2026-10-29T23:59:59+00:00"},
+        "technical": {"RSI": None},
+    }
 
 
 class _Rows:
