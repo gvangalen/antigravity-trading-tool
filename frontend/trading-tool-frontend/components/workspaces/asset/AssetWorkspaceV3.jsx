@@ -2428,9 +2428,9 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     if (!sessionChecked || !user?.id) return;
     let canceled = false;
     setTradingMarkets({ symbol: null, markets: [] });
-    fetchTradingMarkets(activeSymbol).then((markets) => {
+    fetchTradingMarkets(activeSymbol).then((result) => {
       if (canceled) return;
-      setTradingMarkets({ symbol: activeSymbol, markets: Array.isArray(markets) ? markets : [] });
+      setTradingMarkets({ symbol: activeSymbol, markets: Array.isArray(result) ? result : (Array.isArray(result?.markets) ? result.markets : []) });
     }).catch(() => {
       if (!canceled) setTradingMarkets({ symbol: activeSymbol, markets: [] });
     });

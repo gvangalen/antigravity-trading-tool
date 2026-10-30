@@ -36,6 +36,11 @@ class TradingMarketChoiceResponse(BaseModel):
     tradingview_symbol: str | None = None
 
 
+class TradingMarketsResponse(BaseModel):
+    asset_class: str
+    markets: List[TradingMarketChoiceResponse]
+
+
 @router.post("/assets/{symbol}/trading-markets/{quote_currency}/select")
 async def select_crypto_trading_market(
     symbol: str,
@@ -112,7 +117,7 @@ async def select_crypto_trading_market(
     return response
 
 
-@router.get("/assets/{symbol}/trading-markets", response_model=List[TradingMarketChoiceResponse])
+@router.get("/assets/{symbol}/trading-markets", response_model=TradingMarketsResponse)
 async def get_crypto_trading_markets(
     symbol: str,
     current_user: dict = Depends(get_current_user),
@@ -121,10 +126,14 @@ async def get_crypto_trading_markets(
     _ = current_user
     base = str(symbol or "").strip().upper()
     asset = await AssetCatalogService(session).get_asset(base)
-    if not asset or str(asset.get("asset_class") or "").lower() != "crypto":
-        raise HTTPException(404, "Geen ondersteunde crypto-asset gevonden.")
+    asset_class = str((asset or {}).get("asset_class") or "unknown").lower()
+    if asset_class in {"stock", "etf"}:
+        return TradingMarketsResponse(asset_class=asset_class, markets=[])
+    if asset_class != "crypto":
+        raise HTTPException(404, "Geen ondersteunde asset gevonden.")
     try:
-        return await TradingMarketService(session).inspect_crypto_quotes(base)
+        markets = await TradingMarketService(session).inspect_crypto_quotes(base)
+        return TradingMarketsResponse(asset_class="crypto", markets=markets)
     except MarketUnavailable as exc:
         raise HTTPException(400, str(exc)) from exc
 
