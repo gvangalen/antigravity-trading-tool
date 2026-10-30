@@ -154,6 +154,7 @@ jobs:
           npm run test:i18n
           npm run test:commands
           npm run test:proposals
+          node --test tests/report-pdf-download.test.mjs
           npm run test:setups
 
       - name: Run frontend build
