@@ -20,8 +20,13 @@ i18n tests, command tests and high-severity audit passed. The deployment
 script and PM2 configuration passed syntax checks; a focused test confirmed
 that the production print origin reaches API and worker processes. The real
 Luna/Responses selector development set passed **20/20** with no provider,
-schema, timeout, parse or validation failures. The PDF origin change does not
-alter a FINN action contract. Security read-only review found no P1/P2 blocker.
+schema, timeout, parse or validation failures (artifact SHA-256
+`6e89effedbe7b745fb970e3947dbf181e2b71f782ec44055d9791de3c45d7538`).
+The real provider regression set passed **109/109** with zero provider, schema,
+timeout, parse or validation failures (artifact SHA-256
+`8837d89455073068707ad9a791a2164c8bb30f518e00acd2bd243b6a42ba90ea`).
+The PDF origin change does not alter a FINN action contract. Security
+read-only review found no P1/P2 blocker.
 Independent live PDF QA is required on the next deployed SHA.
 
 Follow-up on live SHA `8c1191065189ee778b8c95330735575a06ea8130`:
