@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN scoreteruglezing voor AAPL en BTC/EUR (30 oktober 2026)
 
-Current phase: `LIVE_AWAITING_INDEPENDENT_QA`. Candidate branch
+Current phase: `TARGETED_QA_ACCEPTED`. Candidate branch
 `codex/finn-pair-score-readback`, [PR #701](https://github.com/gvangalen/antigravity-trading-tool/pull/701), based on main
 `554fc200b454c8720e3b8c2e27404f06dc0e97c3`. Independent QA found that
 FINN reported missing AAPL and BTC/EUR scores while Analyse and Mijn Plan
@@ -30,9 +30,22 @@ PR #701 passed all five CI jobs, then merged as
 `9f5af80540893c2cc7674dc0152953598917b33f`. Main CI run
 `41094478883` and Auto Deploy run `41094956995` succeeded. Public backend
 health and frontend build-info both returned HTTP 200 and that SHA. This
-status-only update creates a later main revision; its CI, Auto Deploy, and
-public identity must match before the existing QA Agent begins its focused
+status-only update created a later main revision; its CI, Auto Deploy, and
+public identity were checked before the existing QA Agent began its focused
 AAPL/BTC/EUR readback test. No Live order was placed.
+
+The status-only merge became `2b6b474c212e328080756b3493d6443c9ee621c8`.
+Main CI run `41095977997` and Auto Deploy run `41096418620` succeeded;
+backend health and frontend build-info each returned HTTP 200 and that tested
+SHA. The existing independent QA Agent gave `ACCEPTED` for the focused score
+readback on that SHA: from a BTC/USDT workspace, FINN kept BTC/EUR separate,
+compared the current BTC/EUR score 36.7 to the two saved setup bands, and
+correctly said AAPL had no complete current score. The earlier 57.3 AAPL and
+40 BTC/EUR values had changed by test time, so those exact numeric contrasts
+were not reproduced live. QA observed a separate AAPL page request to the
+crypto-only `/api/assets/AAPL/trading-markets` endpoint returning 404; it did
+not establish that this caused the missing AAPL score. No bot or order action
+was executed. The full score-to-Paper flow is not accepted by this verdict.
 
 ## Paaridentiteit in dagelijks rapport (29 oktober 2026)
 
