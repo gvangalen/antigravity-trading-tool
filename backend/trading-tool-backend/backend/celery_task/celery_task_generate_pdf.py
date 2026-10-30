@@ -6,6 +6,7 @@ from pathlib import Path
 from celery import shared_task
 from playwright.sync_api import sync_playwright, TimeoutError
 from backend.utils.db import get_db_connection
+from backend.utils.pdf_playwright import _frontend_base_url
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -14,7 +15,6 @@ logger.setLevel(logging.INFO)
 # CONFIG
 # =========================================================
 
-FRONTEND_URL = os.getenv("FRONTEND_URL")
 PDF_DIR = os.getenv("PDF_OUTPUT_DIR", "/var/reports")
 
 PRINT_TIMEOUT = 90_000  # ms
@@ -28,7 +28,7 @@ def _ensure_pdf_dir():
 
 
 def _build_print_url(token: str) -> str:
-    return f"{FRONTEND_URL}/print/daily?token={token}"
+    return f"{_frontend_base_url()}/print/daily?token={token}"
 
 
 def _update_snapshot_status(conn, snapshot_id, *, status,
@@ -56,10 +56,7 @@ def _update_snapshot_status(conn, snapshot_id, *, status,
              retry_kwargs={"max_retries": 4}, acks_late=True)
 def generate_report_pdf(self, snapshot_id: int):
 
-    if not FRONTEND_URL:
-        raise RuntimeError("FRONTEND_URL not configured")
-
-    logger.info("🌐 FRONTEND_URL = %s", FRONTEND_URL)
+    logger.info("🌐 Report print origin = %s", _frontend_base_url())
 
     conn = get_db_connection()
     if not conn:
@@ -90,7 +87,7 @@ def generate_report_pdf(self, snapshot_id: int):
         filepath = os.path.join(PDF_DIR, filename)
 
         url = _build_print_url(token)
-        logger.info("➡️ Opening print URL: %s", url)
+        logger.info("➡️ Opening print page for snapshot=%s at %s", snapshot_id, _frontend_base_url())
 
         # =====================================================
         # PLAYWRIGHT

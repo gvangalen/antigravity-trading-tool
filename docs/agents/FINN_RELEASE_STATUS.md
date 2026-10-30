@@ -6,6 +6,24 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Dagrapport PDF-printwacht (30 oktober 2026)
 
+On live SHA `f864913b5f2079f0498da7fa6c356316ba090cf6`, independent QA
+again observed HTTP 500 for PDF export. The production runtime's protected
+`FRONTEND_URL` points to `staging.tradamind.com`; that staging frontend still
+runs an older SHA, so the print renderer never reaches the current production
+print page. Candidate `codex/report-print-deploy-origin` passes the selected
+deployment environment's external origin to the backend and workers as
+`REPORT_PRINT_BASE_URL`. Both PDF paths prefer that origin over the shared
+`FRONTEND_URL`. The print snapshot token remains short-lived and validated by
+the public report endpoint. Build validation on this candidate: backend
+**4141 passed, 4 skipped**; frontend production build, typecheck, i18n lint,
+i18n tests, command tests and high-severity audit passed. The deployment
+script and PM2 configuration passed syntax checks; a focused test confirmed
+that the production print origin reaches API and worker processes. The real
+Luna/Responses selector development set passed **20/20** with no provider,
+schema, timeout, parse or validation failures. The PDF origin change does not
+alter a FINN action contract. Security read-only review found no P1/P2 blocker.
+Independent live PDF QA is required on the next deployed SHA.
+
 Follow-up on live SHA `8c1191065189ee778b8c95330735575a06ea8130`:
 independent authenticated QA accepted the eight report chapters, source
 placement, timestamp formatting and refresh persistence, but PDF export still

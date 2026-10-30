@@ -1,8 +1,11 @@
 import asyncio
 import json
+import os
+import subprocess
 import pytest
 from datetime import datetime, timedelta, timezone
 from contextlib import nullcontext
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -16,11 +19,28 @@ from backend.utils import pdf_playwright
 
 
 def test_pdf_render_uses_deployed_frontend_origin(monkeypatch):
+    monkeypatch.delenv("REPORT_PRINT_BASE_URL", raising=False)
     monkeypatch.delenv("FRONTEND_BASE_URL", raising=False)
     monkeypatch.setenv("FRONTEND_URL", "https://tradamind.com/")
     assert pdf_playwright._frontend_base_url() == "https://tradamind.com"
     monkeypatch.setenv("FRONTEND_BASE_URL", "http://127.0.0.1:5002/")
     assert pdf_playwright._frontend_base_url() == "http://127.0.0.1:5002"
+    monkeypatch.setenv("REPORT_PRINT_BASE_URL", "https://tradamind.com/")
+    assert pdf_playwright._frontend_base_url() == "https://tradamind.com"
+
+
+def test_report_print_origin_reaches_api_and_worker_ecosystem():
+    root = Path(__file__).resolve().parents[4]
+    deploy = (root / "ops/deploy/deploy_env.sh").read_text(encoding="utf-8")
+    assert deploy.count("export REPORT_PRINT_BASE_URL=$EXTERNAL_BASE_URL") == 2
+    env = {**os.environ, "REPORT_PRINT_BASE_URL": "https://tradamind.com"}
+    script = """const apps = require('./ops/deploy/ecosystem.shared').createEcosystem('production').apps;
+const selected = apps.filter(app => app.name === 'backend' || app.name === 'celery-worker-default');
+process.stdout.write(JSON.stringify(selected.map(app => app.env.REPORT_PRINT_BASE_URL)));"""
+    result = subprocess.run(
+        ["node", "-e", script], cwd=root, env=env, capture_output=True, text=True, check=True,
+    )
+    assert json.loads(result.stdout) == ["https://tradamind.com"] * 2
 
 
 def test_report_source_times_keep_seconds_and_missing_values():

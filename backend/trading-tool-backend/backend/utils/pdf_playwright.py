@@ -13,9 +13,13 @@ DEFAULT_TIMEOUT_MS = 60000
 
 
 def _frontend_base_url() -> str:
-    # Use the same deployed frontend origin as the other PDF/report paths.
-    # FRONTEND_BASE_URL remains an explicit override for local render jobs.
-    configured = os.getenv("FRONTEND_BASE_URL") or os.getenv("FRONTEND_URL")
+    # The deploy sets REPORT_PRINT_BASE_URL for its own environment. The shared
+    # FRONTEND_URL secret may name staging even on the production host.
+    configured = (
+        os.getenv("REPORT_PRINT_BASE_URL")
+        or os.getenv("FRONTEND_BASE_URL")
+        or os.getenv("FRONTEND_URL")
+    )
     return (configured or "http://localhost:3000").split(",", 1)[0].strip().rstrip("/")
 
 async def render_report_pdf_via_playwright(token: str) -> bytes:
