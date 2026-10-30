@@ -6,6 +6,16 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Dagrapport PDF-printwacht (30 oktober 2026)
 
+Phase: `LIVE_AWAITING_INDEPENDENT_QA`. [PR #714](https://github.com/gvangalen/antigravity-trading-tool/pull/714)
+passed all five PR checks and merged as `9108b33298a45a9d12f46cc309317f99b0920600`.
+Main CI run `41142375330` and Auto Deploy run `41142716853` succeeded.
+Public backend health and frontend build-info returned HTTP 200 and both
+reported that exact SHA. This status update creates a later main revision; its
+CI, Auto Deploy and public SHA must match before the existing independent QA
+Agent repeats the authenticated report PDF download. The report's eight
+narrative chapters were accepted by that QA Agent on the preceding release;
+PDF export remains unaccepted until this retest succeeds.
+
 On live SHA `f864913b5f2079f0498da7fa6c356316ba090cf6`, independent QA
 again observed HTTP 500 for PDF export. The production runtime's protected
 `FRONTEND_URL` points to `staging.tradamind.com`; that staging frontend still
