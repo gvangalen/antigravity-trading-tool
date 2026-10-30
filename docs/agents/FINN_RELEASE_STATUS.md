@@ -4,6 +4,37 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Dagrapport weer als FINN-verhaal per hoofdstuk (30 oktober 2026)
+
+Current phase: `LOCAL_VALIDATION_COMPLETE_AWAITING_CI`. Candidate branch
+`codex/daily-report-sections`, product commit `c12f55eccf158b7d3c34f63d229ca5014cddb9f0`,
+based on main `ee5c3f16d0e9e8cd6eeb7ad738e0c3dec54d418c`. The daily report
+previously requested eight Luna/Responses chapters, then unconditionally
+replaced almost all generated prose with fixed score inventories. The web page
+also put the full score-source block and later-fetched bot status above a
+collapsed report. This candidate preserves Luna's distinct chapter prose,
+keeps narrow checks for demonstrably wrong scores or saved-strategy absence,
+places optional score evidence inside the matching Market/Macro/Technical
+chapters, opens the report directly, and displays later-fetched bot status
+after the report. Missing benchmark data no longer projects a numeric setup
+proximity score. Existing stored reports remain historical snapshots; the
+new composition applies to the next generated report.
+
+Measured local Build evidence: root backend suite **4134 passed, 4 skipped**;
+frontend typecheck, i18n lint/tests, command/proposal tests, production build
+and high audit passed. A synthetic owner-scoped daily-report request through
+the real Luna/Responses API returned all eight chapters with distinct prose
+and HTTP 200. The real-provider selector development set passed **20/20**
+(artifact SHA-256 `abad264052c597db684d9fb582d4fe1a7fa5eebce57d5df23f7ee89567fbce16`)
+and regression set passed **109/109** with zero provider, schema, timeout,
+parse or validation failures (artifact SHA-256
+`fb795f45793f6cc542a7a0974faf0de8000d25de62e85a535a735a597bb8677c`).
+The isolated API/Celery action matrix passed **16/16**, with **21/21** adapter
+tests and zero production connections, broker orders or live-trading calls
+(artifact SHA-256 `7cac53c140c5b3024d498694e0e47fd978d4bf1af48d55ff202c4f167740edce`).
+This is Build evidence only; no authenticated production QA or deployment is
+claimed.
+
 ## FINN scoreteruglezing voor AAPL en BTC/EUR (30 oktober 2026)
 
 Current phase: `TARGETED_QA_ACCEPTED`. Candidate branch

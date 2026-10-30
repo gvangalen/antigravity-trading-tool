@@ -62,7 +62,6 @@ import {
   ShieldCheck,
   Shield,
   ClipboardList,
-  ChevronDown,
   ChevronRight,
   Activity,
   ShieldAlert,
@@ -1775,7 +1774,6 @@ export default function ReportPage() {
   const [traderStatusError, setTraderStatusError] = useState(false);
   const [dates, setDates] = useState([]);
   const [selectedDate, setSelectedDate] = useState('latest');
-  const [tradingReportExpanded, setTradingReportExpanded] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -2123,33 +2121,18 @@ RENDER
                       <ReportTerminalHUD report={report} type={reportType} loading={loading} />
                     </DashboardErrorBoundary>
 
+                    <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
+                      <div className="mt-8">
+                        <ReportContainer>
+                          <ReportLayout report={report} />
+                        </ReportContainer>
+                      </div>
+                    </DashboardErrorBoundary>
+
                     {reportType === 'daily' && (
                       <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
                         <DailyTraderStatus report={report} status={traderStatus}
                           loading={traderStatusLoading} error={traderStatusError} onRefresh={loadTraderStatus} />
-                      </DashboardErrorBoundary>
-                    )}
-
-                    <div className="mt-5 flex justify-end">
-                      <button
-                        onClick={() => setTradingReportExpanded((value) => !value)}
-                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-700 transition hover:border-blue-200 hover:text-blue-600"
-                      >
-                        {tradingReportExpanded ? tradingPanelCopy.expandedCta : tradingPanelCopy.collapsedCta}
-                        <ChevronDown
-                          size={14}
-                          className={`transition-transform ${tradingReportExpanded ? 'rotate-180' : ''}`}
-                        />
-                      </button>
-                    </div>
-
-                    {tradingReportExpanded && (
-                      <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
-                        <div className="mt-8">
-                          <ReportContainer>
-                            <ReportLayout report={report} />
-                          </ReportContainer>
-                        </div>
                       </DashboardErrorBoundary>
                     )}
                   </div>

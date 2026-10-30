@@ -79,6 +79,8 @@ export default function MarketSnapshotBlock({
     isNum(market_score) ||
     isNum(setup_score);
 
+  if (!isNum(price) && !isNum(change_24h) && !isNum(volume) && !hasAnyScores) return null;
+
   const changeIsUp = isNum(change_24h) ? Number(change_24h) >= 0 : null;
 
   return (

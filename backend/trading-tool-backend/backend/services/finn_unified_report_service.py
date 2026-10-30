@@ -182,7 +182,7 @@ def _report_facts(context: dict[str, Any]) -> dict[str, Any]:
             "component_source_status": source_status,
             "component_source_observed_at": benchmark.get("component_source_observed_at") or {},
             "scores": scores,
-            "benchmark_score": benchmark.get("benchmark_score"),
+            "benchmark_score": benchmark.get("benchmark_score") if benchmark.get("source_status") == "available" else None,
             "market_snapshot": item.get("market_snapshot") or {},
             "configured_indicators": configured,
             "indicator_lookup_status": item.get("indicator_lookup_status"),
@@ -236,6 +236,24 @@ def _report_indicator_label(name: object, locale: str) -> str:
     return translations.get(locale, translations["en"]).get(key) or indicator_display_name(name)
 
 
+def _category_fact_fallback(facts: dict[str, Any], category: str, locale: str) -> str:
+    """A brief source-backed fallback only when the report writer is unavailable."""
+    labels = {
+        "nl": ("Ingesteld", "Geen indicatoren ingesteld", "Indicatorconfiguratie niet beschikbaar", "Geen bruikbare actuele score"),
+        "en": ("Configured", "No indicators configured", "Indicator configuration unavailable", "No usable current score"),
+        "de": ("Eingerichtet", "Keine Indikatoren eingerichtet", "Indikatorkonfiguration nicht verfügbar", "Kein brauchbarer aktueller Wert"),
+    }.get(locale, ("Configured", "No indicators configured", "Indicator configuration unavailable", "No usable current score"))
+    parts = []
+    for item in facts["assets"]:
+        names = (item.get("configured_indicators") or {}).get(category)
+        configuration = (f"{labels[0]}: {', '.join(_report_indicator_label(name, locale) for name in names)}" if names
+                         else labels[1] if names is not None else labels[2])
+        value = item["scores"].get(f"{category}_score")
+        score = f"{value:g}/100" if isinstance(value, (int, float)) else labels[3]
+        parts.append(f"{item['display_symbol']}: {configuration}; {score}.")
+    return " ".join(parts)
+
+
 def _bot_status_section(facts: dict[str, Any], locale: str) -> str:
     bots = [bot for asset in facts["assets"] for bot in asset["bots"]]
     if not bots:
@@ -284,7 +302,7 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
     ]}
     result = ask_gpt_json(
         system_role=(
-            "You are FINN, the user's trading coach. Write a careful daily report from only the "
+            "You are FINN, the user's trading coach. Write a complete, readable daily report from only the "
             "provided owner-scoped facts. Missing or stale scores are unknown, never zero. "
             "A setup match is not an entry signal; a bot budget is not cash. "
             "Do not claim an order or trade occurred unless the supplied facts prove it. "
@@ -292,6 +310,13 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
             "latest stock quote may be from the previous regular session; do not "
             "infer that a market was open from a timestamp alone. "
             "Use the localized indicator display names supplied in the context. "
+            "Write each of the eight sections as its own useful narrative, naming relevant assets, "
+            "measured scores, missing evidence and plan implications in the appropriate section. "
+            "Distinguish no configured indicator from a configured indicator without a usable score. "
+            "Do not repeat the same asset inventory in every section. "
+            "The executive summary gives the main conclusion. Market, macro and technical sections "
+            "interpret their respective evidence. Setup, strategy and bot sections explain the corresponding "
+            "saved state. The outlook gives the next useful check. "
             "Return valid JSON with the eight requested string fields."
         ),
         prompt=json.dumps({
@@ -299,82 +324,60 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
             "sections": REPORT_SECTIONS,
             "context": factual_context,
         }, ensure_ascii=False, default=str),
-        max_tokens=2400,
+        max_tokens=4000,
         model_override=os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna"),
         reasoning_effort="none",
     )
     fallbacks = _fallback_sections(context)
+    for category, section in (("market", "market_analysis"), ("macro", "macro_context"),
+                              ("technical", "technical_analysis")):
+        fallbacks[section] = _category_fact_fallback(facts, category, locale) or fallbacks[section]
+    strategy_names = [f"{item['display_symbol']}: {row['name']}"
+                      for item in facts["assets"] for row in item["strategies"] if row.get("name")]
+    if strategy_names:
+        fallbacks["strategy_implication"] = f"{', '.join(strategy_names)}. {fallbacks['strategy_implication']}"
+    fallbacks["bot_strategy"] = _bot_status_section(facts, locale)
     prose = {
         key: str(result.get(key) or "").strip() if isinstance(result, dict)
         and len(str(result.get(key) or "").strip()) >= 20 else fallbacks[key]
         for key in REPORT_SECTIONS
     }
-    # Model prose is useful for a coaching outlook. Factual report sections are
-    # assembled from typed source status and owner-scoped configuration. A
-    # prompt alone cannot prevent a persisted report from calling a stale score
-    # current or claiming a saved strategy does not exist.
-    labels = {
-        "nl": {"missing": "Geen bruikbare actuele score", "configured": "Ingesteld",
-               "not_configured": "Geen indicatoren ingesteld", "unknown": "Indicatorconfiguratie niet beschikbaar",
-               "strategies": "Opgeslagen strategieën", "no_strategies": "Geen opgeslagen strategie"},
-        "en": {"missing": "No usable current score", "configured": "Configured",
-               "not_configured": "No indicators configured", "unknown": "Indicator configuration unavailable",
-               "strategies": "Saved strategies", "no_strategies": "No saved strategy"},
-        "de": {"missing": "Kein brauchbarer aktueller Wert", "configured": "Eingerichtet",
-               "not_configured": "Keine Indikatoren eingerichtet", "unknown": "Indikatorkonfiguration nicht verfügbar",
-               "strategies": "Gespeicherte Strategien", "no_strategies": "Keine gespeicherte Strategie"},
-    }.get(locale, None)
-    labels = labels or {"missing": "No usable current score", "configured": "Configured",
-                         "not_configured": "No indicators configured", "unknown": "Indicator configuration unavailable",
-                         "strategies": "Saved strategies", "no_strategies": "No saved strategy"}
-    def score_section(category: str) -> str:
-        parts = []
-        for item in facts["assets"]:
-            names = (item.get("configured_indicators") or {}).get(category)
-            configuration = (f"{labels['configured']}: {', '.join(_report_indicator_label(name, locale) for name in names)}" if names
-                             else labels["not_configured"] if names is not None
-                             else labels["unknown"])
-            value = item["scores"].get(f"{category}_score")
-            score = f"{value:g}/100" if isinstance(value, (int, float)) else labels["missing"]
-            parts.append(f"{item['display_symbol']}: {configuration}; {score}.")
-        return " ".join(parts) if parts else fallbacks[{
-            "market": "market_analysis", "macro": "macro_context",
-            "technical": "technical_analysis"}[category]]
-    prose["market_analysis"] = score_section("market")
-    prose["macro_context"] = score_section("macro")
-    prose["technical_analysis"] = score_section("technical")
-    strategy_names = [f"{item['display_symbol']}: {row['name']}"
-                      for item in facts["assets"] for row in item["strategies"] if row.get("name")]
-    prose["strategy_implication"] = (
-        f"{labels['strategies']}: {', '.join(strategy_names)}. "
-        + fallbacks["strategy_implication"] if strategy_names else labels["no_strategies"] + "."
-    )
-    # Match status is a computed fact shared with Analyse and FINN. Do not let
-    # generated prose or a fallback imply missing data when the benchmark is
-    # complete and a saved boundary is simply not met.
-    prose["setup_validation"] = fallbacks["setup_validation"]
-    # Bot activity must come from stored state, not model guesses about why a
-    # score match did or did not become an order.
-    prose["bot_strategy"] = _bot_status_section(facts, locale)
-    if any(item["score_status"] != "available" for item in facts["assets"]):
-        prose["outlook"] = fallbacks["outlook"]
-    elif facts["assets"] and all(
-        all(value is not None for value in item["scores"].values())
+    allowed_scores = {
+        float(value)
         for item in facts["assets"]
-    ) and re.search(r"\b(?:ontbre\w*|zonder|miss\w*|without|fehl\w*|ohne|unavailable)\b", prose["outlook"], re.I):
-        # A complete scored snapshot must not end with an unsupported claim
-        # that its measurements are missing. Keep the model for interpretation
-        # while deriving data availability from typed Score 2.0 facts.
-        prose["outlook"] = fallbacks["outlook"]
-    # The summary must not turn unavailable scores or saved plans into model
-    # assertions. It uses the same owner-scoped names as the fact cards.
-    prose["executive_summary"] = fallbacks["executive_summary"]
+        for value in (
+            *item["scores"].values(),
+            item.get("benchmark_score"),
+            *(match.get("score") for match in item.get("matches") or []
+              if item.get("score_status") == "available"),
+        )
+        if isinstance(value, (int, float))
+    }
+    for section, value in prose.items():
+        # A reported numeric score must occur in the verified Score 2.0 snapshot.
+        claims = [float(number.replace(",", ".")) for number in re.findall(r"(?<!\d)(\d+(?:[.,]\d+)?)/100\b", value)]
+        has_unverified_score = any(claim not in allowed_scores for claim in claims)
+        false_strategy_absence = bool(strategy_names) and bool(re.search(
+            r"\b(?:geen|no|keine)\s+(?:opgeslagen\s+|saved\s+|gespeicherte\s+)?(?:strategie|strategy|Strategie)\b", value, re.I))
+        if has_unverified_score or false_strategy_absence:
+            prose[section] = fallbacks[section]
+    # Reject a concrete contradiction, without replacing otherwise useful
+    # coaching prose with canned score inventories.
+    if facts["assets"] and all(item["score_status"] == "available" for item in facts["assets"]):
+        if re.search(r"(?:zonder|geen|without|missing|ohne|fehl\w*)\s+(?:een\s+)?(?:complete\s+)?(?:actuele\s+)?benchmark", prose["setup_validation"], re.I):
+            prose["setup_validation"] = fallbacks["setup_validation"]
+        if re.search(r"\b(?:ontbre\w*|zonder|miss\w*|without|fehl\w*|ohne|unavailable)\b", prose["outlook"], re.I):
+            prose["outlook"] = fallbacks["outlook"]
+    # Keep Luna's section prose. Typed score and plan facts are projected into
+    # separate evidence fields; replacing prose with a flat inventory made the
+    # eight-chapter report unreadable for multiple assets.
     all_strategies = [row for item in facts["assets"] for row in item.get("strategies") or []]
     # ReportService deliberately hides historical AI setup scores unless each
     # stored match declares the measured Score 2.0 semantics. Preserve that
     # provenance when projecting the shared match into the report row.
     matches = [
-        {**match, "score_semantics": "benchmark_setup_match_v1"}
+        {**match, "score": match.get("score") if item["score_status"] == "available" else None,
+         "score_semantics": "benchmark_setup_match_v1"}
         for item in facts["assets"] for match in item["matches"]
     ]
     matches.sort(key=lambda item: (
@@ -447,6 +450,7 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
                 "score_status": item["score_status"],
                 "component_source_status": item["component_source_status"],
                 "component_source_observed_at": item["component_source_observed_at"],
+                "configured_indicators": item["configured_indicators"],
                 "reported_scores": item["scores"],
             } for item in facts["assets"]],
         },

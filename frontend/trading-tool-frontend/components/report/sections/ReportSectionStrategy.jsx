@@ -24,7 +24,7 @@ export default function ReportSectionStrategy({ report, isPrint = false }) {
   const colSpanClass = isPrint ? "w-full" : "lg:col-span-2";
 
   return (
-    <div className="space-y-32">
+    <div className="space-y-16">
 
       {/* CHAPTER 5: SETUP VALIDATIE */}
       <div className={gridClass}>

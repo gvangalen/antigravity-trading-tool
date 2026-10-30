@@ -44,6 +44,22 @@ def test_generate_daily_report_sections_replaces_weak_short_ai_sections(monkeypa
     assert "BTC Pullback Continuation" in result["executive_summary"]
 
 
+def test_daily_report_keeps_model_narrative_in_its_sections(monkeypatch):
+    prose = {
+        "executive_summary": "BTC heeft vandaag geen volledige actuele benchmark; bekijk eerst de ontbrekende scorebronnen.",
+        "market_analysis": "Voor BTC is de marktbeoordeling nog niet compleet. De koers alleen onderbouwt geen conclusie.",
+        "macro_context": "Voor BTC ontbreekt macro bewijs; de huidige context kan daarom nog niet worden beoordeeld.",
+        "technical_analysis": "De technische gegevens voor BTC zijn nog onvolledig; timing blijft daarmee onzeker.",
+        "setup_validation": "De opgeslagen BTC Pullback Continuation kan zonder complete benchmark nog niet worden beoordeeld.",
+        "strategy_implication": "Er is nog geen gekoppelde strategie; bepaal eerst welke uitvoering bij dit plan hoort.",
+        "bot_strategy": "Er is geen gekoppelde bot en er is geen aankoop uit deze gegevens af te leiden.",
+        "outlook": "Controleer de ontbrekende indicatorbronnen voordat je dit plan opnieuw beoordeelt.",
+    }
+    result = _generate(monkeypatch, prose)
+    for section, text in prose.items():
+        assert result[section] == text
+
+
 def test_complete_scores_outside_setup_bounds_do_not_become_missing_benchmark(monkeypatch):
     context = {
         "locale": "nl", "profile": {}, "observed_at": "2026-10-11T12:00:00+00:00",
@@ -81,3 +97,23 @@ def test_complete_scores_outside_setup_bounds_do_not_become_missing_benchmark(mo
     assert result["technical_score"] == 50
     assert "buiten hun scorevoorwaarden" in result["setup_validation"]
     assert "zonder complete" not in result["setup_validation"]
+
+
+def test_missing_benchmark_does_not_publish_a_setup_proximity_score(monkeypatch):
+    context = _context()
+    context["assets"][0]["benchmark"]["benchmark_score"] = 55
+    context["assets"][0]["benchmark"]["matches"] = [{
+        "setup_id": 1, "name": "BTC Pullback Continuation", "symbol": "BTC",
+        "status": "insufficient_data", "score": 0, "is_active": False,
+    }]
+
+    async def load(_user_id):
+        return context
+
+    monkeypatch.setattr(reports, "_load_context", load)
+    monkeypatch.setattr(reports, "ask_gpt_json", lambda **_: {})
+
+    result = reports.generate_unified_daily_report_sections(7)
+    assert result["watchlist"][0]["benchmark"]["benchmark_score"] is None
+    assert result["top_setups"][0]["score"] is None
+    assert result["setup_score"] is None

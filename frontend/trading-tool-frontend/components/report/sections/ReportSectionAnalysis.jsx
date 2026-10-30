@@ -1,3 +1,4 @@
+import ReportCategoryEvidence from "../blocks/ReportCategoryEvidence";
 import NarrativeBlock from "../blocks/NarrativeBlock";
 import DataListBlock from "../blocks/DataListBlock";
 import SectionAlignedAside from "../layout/SectionAlignedAside";
@@ -20,7 +21,7 @@ export default function ReportSectionAnalysis({ report, isPrint = false }) {
   const colSpanClass = isPrint ? "w-full" : "lg:col-span-2";
 
   return (
-    <div className="space-y-32">
+    <div className="space-y-16">
 
       {/* CHAPTER 3: MACRO CONTEXT (Reversed Layout on Screen, Standard in Print) */}
       <div className={gridClass}>
@@ -40,6 +41,7 @@ export default function ReportSectionAnalysis({ report, isPrint = false }) {
             field="macro_context"
             report={report}
           />
+          <ReportCategoryEvidence report={report} category="macro" isPrint={isPrint} />
         </div>
       </div>
 
@@ -51,6 +53,7 @@ export default function ReportSectionAnalysis({ report, isPrint = false }) {
             field="technical_analysis"
             report={report}
           />
+          <ReportCategoryEvidence report={report} category="technical" isPrint={isPrint} />
         </div>
 
         <SectionAlignedAside isPrint={isPrint}>
