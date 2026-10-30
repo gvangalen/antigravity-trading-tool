@@ -1,5 +1,6 @@
 import asyncio
 import json
+import pytest
 from datetime import datetime, timedelta, timezone
 from contextlib import nullcontext
 from types import SimpleNamespace
@@ -30,6 +31,15 @@ def test_report_source_times_keep_seconds_and_missing_values():
         "macro": {"DXY": "2026-10-29T23:59:59+00:00"},
         "technical": {"RSI": None},
     }
+
+
+def test_rate_limited_report_does_not_replace_stored_prose(monkeypatch):
+    monkeypatch.setattr(reports, "_load_context", lambda _id: asyncio.sleep(0, result={
+        "locale": "nl", "observed_at": "2026-10-30T21:54:00+00:00", "assets": [],
+    }))
+    monkeypatch.setattr(reports, "ask_gpt_json", lambda **_: {"error": "ai_rate_limited"})
+    with pytest.raises(RuntimeError, match="daily_report_ai_rate_limited"):
+        reports.generate_unified_daily_report_sections(94)
 
 
 class _Rows:

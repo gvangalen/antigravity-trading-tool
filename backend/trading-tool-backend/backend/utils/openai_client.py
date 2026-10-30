@@ -674,6 +674,11 @@ def _rate_limit_allows_call() -> bool:
         # owner and review ID; the generic scheduled limit of one would reject
         # that second call and leave a complete Paper dossier unavailable.
         limit_override = 2
+    elif context.get("entry_point") == "daily_report_task":
+        # A user may retry a report after a failed or corrected generation.
+        # The generic scheduled limit of one per hour silently turns the next
+        # report into factual fallback copy before Luna can write it.
+        limit_override = 4
     allowed = acquire_ai_call_slot(scope, scheduled=scheduled, limit_override=limit_override)
     if not allowed:
         _log_openai_quota_skip("ai_rate_limited")

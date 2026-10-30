@@ -53,7 +53,10 @@ async def render_report_pdf_via_playwright(token: str) -> bytes:
 
                     await page.goto(
                         url,
-                        wait_until="networkidle",
+                        # The print page loads its report after hydration. Shared
+                        # app polling can keep the network busy indefinitely;
+                        # #print-ready below is the actual success signal.
+                        wait_until="domcontentloaded",
                         timeout=DEFAULT_TIMEOUT_MS,
                     )
 
