@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Dagrapport weer als FINN-verhaal per hoofdstuk (30 oktober 2026)
 
-Current follow-up candidate: `codex/daily-report-qa-fixes`,
+Current phase: `LIVE_AWAITING_INDEPENDENT_QA`. Follow-up candidate: `codex/daily-report-qa-fixes`,
 [PR #709](https://github.com/gvangalen/antigravity-trading-tool/pull/709),
 product commit `1a15465a1`. Independent authenticated QA on live SHA
 `49a1f0e6861a44619c73ce3ab45b70a5cb4fdd5b` found that the restored
@@ -35,9 +35,13 @@ phase was model selection, whereas this candidate changes only report
 composition, PDF deployment dependencies and their tests; none of the 38
 matrix cases invokes the report path. No FINN action contract is changed by
 this candidate. The report-specific backend and real-provider gates passed.
-The selector latency is retained as a separate open runtime issue. This
-candidate is not deployed and still requires merge, Auto Deploy, matching
-public backend/frontend SHA, and independent authenticated report QA.
+The selector latency is retained as a separate open runtime issue. PR #709
+merged as `d1888ff93833b64713f15e14abfbee5e185c91a7`. Main CI run
+`41129946168` and Auto Deploy run `41130369068` both succeeded. Public
+backend health and frontend build-info each returned HTTP 200 with exactly
+that SHA. This status-only update creates a later main revision, so the
+final public SHA must be verified after its CI and Auto Deploy before the
+existing independent QA Agent repeats the authenticated report and PDF flow.
 
 Current phase: `LOCAL_VALIDATION`. Candidate branch
 `codex/daily-report-sections`, product commit `c12f55eccf158b7d3c34f63d229ca5014cddb9f0`,
