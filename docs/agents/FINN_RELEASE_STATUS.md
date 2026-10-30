@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Dagrapport weer als FINN-verhaal per hoofdstuk (30 oktober 2026)
 
-Current phase: `LIVE_AWAITING_INDEPENDENT_QA`. Candidate branch
+Current phase: `LOCAL_VALIDATION`. Candidate branch
 `codex/daily-report-sections`, product commit `c12f55eccf158b7d3c34f63d229ca5014cddb9f0`,
 based on main `ee5c3f16d0e9e8cd6eeb7ad738e0c3dec54d418c`. The daily report
 previously requested eight Luna/Responses chapters, then unconditionally
@@ -37,8 +37,15 @@ PR #705 passed all five CI jobs and merged as
 and Auto Deploy run `41118397889` succeeded. Public backend health and
 frontend build-info returned HTTP 200 with exactly that SHA. This measured
 deployment is Build evidence only; authenticated production QA of a newly
-generated report remains pending. The status-only update creates a newer
-main revision whose final deployment identity must be checked before QA.
+generated report found a blocking client-side crash on live SHA
+`b4f35db67cffadde3627269cd29f0890d224c19f`: `/report` called the removed
+`setTradingReportExpanded` state setter and failed before any report could be
+reviewed. Independent QA returned `NOT_ACCEPTED` (P0). PR #707 removes that
+stale effect; its five CI jobs passed and it merged as
+`abee11e2daa2b23fed29048894500c283d16a23b`. Main CI and Auto Deploy for
+that repair must complete, public backend/frontend identity must match, and
+the existing independent QA Agent must repeat the authenticated report flow
+on the final live SHA. The report-content changes have not been accepted live.
 
 ## FINN scoreteruglezing voor AAPL en BTC/EUR (30 oktober 2026)
 
