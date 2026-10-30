@@ -438,6 +438,7 @@ class FinnResponsesFrontDoor:
             grouped.append({
                 "setup_name": row.get("name"),
                 "asset": row.get("symbol"),
+                "pair": row.get("pair"),
                 "analysis_timeframe": row.get("timeframe"),
                 "setup_type": row.get("setup_type"),
                 "saved_market_condition": row.get("saved_market_condition"),
@@ -459,6 +460,8 @@ class FinnResponsesFrontDoor:
             })
         score_item = next((item for item in results if item.get("scope") == "read_asset_scores"), None)
         score_data = (score_item or {}).get("data") or {}
+        match_item = next((item for item in results if item.get("scope") == "read_setup_market_matches"), None)
+        match_data = (match_item or {}).get("data") or {}
         condition_groups = {}
         for field in (
             "min_benchmark_score", "max_benchmark_score",
@@ -493,6 +496,14 @@ class FinnResponsesFrontDoor:
                 for row in grouped for bot in row["linked_bots"]
             ),
             "score_condition_groups": condition_groups,
+            "current_setup_scores": [
+                {key: match[key] for key in (
+                    "setup_id", "name", "symbol", "trading_pair", "market_id",
+                    "benchmark_score", "reported_scores", "component_source_status",
+                    "source_status", "status", "is_active", "as_of",
+                ) if match.get(key) is not None}
+                for match in match_data.get("matches") or [] if isinstance(match, dict)
+            ],
             "current_asset_scores": ({
                 "status": score_item.get("status"),
                 "asset": score_data.get("symbol"),
@@ -1593,6 +1604,11 @@ class FinnResponsesFrontDoor:
             )
         unsupported_pair = unsupported_catalog_pair_mention(message)
         mentioned_assets = mentioned_catalog_symbols(message)
+        mentioned_pairs = {
+            (asset.upper(), quote.upper())
+            for asset, quote in re.findall(r"\b([A-Z]{2,10})/(EUR|USDT)\b", message, re.I)
+            if asset.upper() in mentioned_assets
+        }
         # A conversion reference is not the requested instrument. Preserve
         # the named asset's own dated quote even if the FX pair is not in the
         # tradable asset catalog; the conversion may remain unavailable.
@@ -2704,6 +2720,29 @@ class FinnResponsesFrontDoor:
                             "asset": selected_score_setup[1],
                             "setup_id": selected_score_setup[0],
                         })
+                if call.name == "get_current_asset_scores" and mentioned_assets:
+                    # The score tool reads one market. Bind it to the assets
+                    # and exact pairs named in this turn instead of letting a
+                    # previous page's market hint answer for a different plan.
+                    score_scopes = sorted({
+                        (asset, quote) for asset, quote in mentioned_pairs
+                    } | {
+                        (asset, None) for asset in mentioned_assets
+                        if not any(pair_asset == asset for pair_asset, _ in mentioned_pairs)
+                    }, key=lambda item: (item[0], item[1] or ""))
+                    if len(score_scopes) == 1:
+                        asset, quote = score_scopes[0]
+                        call = replace(call, inputs={
+                            "asset": asset,
+                            **({"quote_currency": quote} if quote else {}),
+                        })
+                collection_score_match = (
+                    call.name == "get_setup_market_matches"
+                    and (len(mentioned_assets) > 1 or len(mentioned_pairs) > 1)
+                    and not (call.inputs.get("setup_id") or call.inputs.get("setup_name"))
+                )
+                if collection_score_match:
+                    call = replace(call, inputs={})
                 workspace_selector = None
                 visible_bot_reference = (
                     workspace_hints.get("page") == "/bot"
@@ -2737,7 +2776,51 @@ class FinnResponsesFrontDoor:
                         workspace_hints=workspace_hints, message=message,
                         mentioned_assets=mentioned_assets,
                     )
-                read_result = await self.reads(call)
+                if call.name == "get_current_asset_scores" and mentioned_assets and len(score_scopes) > 1:
+                    score_reads = [await self.reads(replace(
+                        call, inputs={
+                            "asset": asset,
+                            **({"quote_currency": quote} if quote else {}),
+                        },
+                    )) for asset, quote in score_scopes]
+                    read_result = {
+                        "status": ("completed" if all(row.get("status") == "completed" for row in score_reads)
+                                   else "partial"),
+                        "tool": call.name,
+                        "results": [item for row in score_reads for item in row.get("results") or []],
+                    }
+                else:
+                    read_result = await self.reads(call)
+                if collection_score_match:
+                    pair_quotes: dict[str, set[str]] = {}
+                    for pair_asset, pair_quote in mentioned_pairs:
+                        pair_quotes.setdefault(pair_asset, set()).add(pair_quote)
+                    def requested_match(row: dict) -> bool:
+                        symbol = str(row.get("symbol") or "").upper()
+                        if symbol not in mentioned_assets:
+                            return False
+                        if symbol not in pair_quotes:
+                            return True
+                        pair = str(row.get("trading_pair") or row.get("pair") or "").upper()
+                        quote = str(row.get("quote_currency") or "").upper()
+                        if not quote and "/" in pair:
+                            quote = pair.rsplit("/", 1)[1]
+                        return quote in pair_quotes[symbol]
+                    scoped_results = []
+                    for item in read_result.get("results") or []:
+                        if not isinstance(item, dict) or item.get("scope") != "read_setup_market_matches":
+                            scoped_results.append(item)
+                            continue
+                        data = item.get("data")
+                        if not isinstance(data, dict):
+                            scoped_results.append(item)
+                            continue
+                        matches = [
+                            row for row in data.get("matches") or []
+                            if isinstance(row, dict) and requested_match(row)
+                        ]
+                        scoped_results.append({**item, "data": {**data, "matches": matches}})
+                    read_result = {**read_result, "results": scoped_results}
                 if visible_bot_reference and "read_portfolio" in call.read_tools:
                     read_result = self._focus_portfolio_on_open_bot(
                         read_result,
@@ -2759,6 +2842,18 @@ class FinnResponsesFrontDoor:
                             projected_results.append(item)
                             continue
                         available_rows = [row for row in rows if isinstance(row, dict)]
+                        if mentioned_pairs:
+                            pair_quotes: dict[str, set[str]] = {}
+                            for pair_asset, pair_quote in mentioned_pairs:
+                                pair_quotes.setdefault(pair_asset, set()).add(pair_quote)
+                            available_rows = [
+                                row for row in available_rows
+                                if str(row.get("symbol") or "").upper() not in pair_quotes
+                                or str(row.get("quote_currency") or "").upper()
+                                in pair_quotes[str(row.get("symbol") or "").upper()]
+                                or (bool(row.get("name")) and str(row["name"]).casefold()
+                                    in message.casefold())
+                            ]
                         referenced_rows = referenced_setup_rows(
                             message=message,
                             rows=available_rows,
@@ -2903,7 +2998,8 @@ class FinnResponsesFrontDoor:
                                 not call.setup_names or named_rows == [source_row]
                             ):
                                 named_rows = [source_row, target_rows[0]]
-                        selected_rows = named_rows is not available_rows or bool(call.setup_names)
+                        selected_rows = (named_rows is not available_rows or bool(call.setup_names)
+                                         or len(named_rows) != len(rows))
                         if selected_rows or (call.answer_mode == "list" and explicit_list):
                             resolved_setup_ids = [
                                 row["setup_id"] for row in named_rows
@@ -2919,6 +3015,38 @@ class FinnResponsesFrontDoor:
                         else:
                             projected_results.append(item)
                     read_result = {**read_result, "results": projected_results}
+                    if re.search(r"\b(?:score\w*|benchmark\w*|match\w*|ochtendstand)\b", message, re.I):
+                        # A collection of plans needs a collection of exact
+                        # market assessments. One asset-only score read could
+                        # silently use the currently open BTC/USDT workspace
+                        # for a BTC/EUR setup, or omit another asset entirely.
+                        market_read = await self.reads(replace(
+                            call, name="get_setup_market_matches", inputs={},
+                            read_tools=("read_setup_market_matches",),
+                            answer_mode=None, setup_names=(),
+                        ))
+                        market_evidence = []
+                        visible_setup_ids = {
+                            row.get("setup_id")
+                            for result_item in projected_results
+                            if isinstance(result_item, dict)
+                            and result_item.get("scope") == "read_saved_setup_inventory"
+                            for row in (result_item.get("data") or {}).get("setups") or []
+                            if isinstance(row, dict) and isinstance(row.get("setup_id"), int)
+                        }
+                        for item in market_read.get("results") or []:
+                            if not isinstance(item, dict) or item.get("scope") != "read_setup_market_matches":
+                                continue
+                            data = item.get("data")
+                            if isinstance(data, dict):
+                                item = {**item, "data": {**data, "matches": [
+                                    row for row in data.get("matches") or []
+                                    if isinstance(row, dict) and row.get("setup_id") in visible_setup_ids
+                                ]}}
+                            market_evidence.append(item)
+                        read_result["results"] = [*read_result["results"], *market_evidence]
+                        if market_read.get("status") != "completed":
+                            read_result["status"] = "partial"
                     verified_answer_mode = (
                         call.answer_mode
                         if call.answer_mode != "list" or explicit_list else None
@@ -2952,17 +3080,6 @@ class FinnResponsesFrontDoor:
                                 answer_mode=None, setup_names=(),
                             ))
                             linked_evidence.extend(linked.get("results") or [])
-                        if (
-                            len(mentioned_assets) == 1
-                            and re.search(r"\b(?:score\w*|benchmark\w*)\b", message, re.I)
-                        ):
-                            scores = await self.reads(replace(
-                                call, name="get_current_asset_scores",
-                                inputs={"asset": next(iter(mentioned_assets))},
-                                read_tools=("read_asset_scores",),
-                                answer_mode=None, setup_names=(),
-                            ))
-                            linked_evidence.extend(scores.get("results") or [])
                         read_result["results"] = [
                             *(read_result.get("results") or []), *linked_evidence,
                         ]
@@ -3089,19 +3206,6 @@ class FinnResponsesFrontDoor:
                         read_result["results"] = [*read_result.get("results", []), *details]
                         if any(item.get("status") != "completed" for item in details):
                             read_result["status"] = "partial"
-                        if (
-                            comparison and len(mentioned_assets) == 1
-                            and re.search(r"\b(?:score\w*|benchmark\w*)\b", message, re.I)
-                        ):
-                            scores = await self.reads(replace(
-                                call, name="get_current_asset_scores",
-                                inputs={"asset": next(iter(mentioned_assets))},
-                                read_tools=("read_asset_scores",),
-                                answer_mode=None, setup_names=(),
-                            ))
-                            read_result["results"].extend(scores.get("results") or [])
-                            if scores.get("status") != "completed":
-                                read_result["status"] = "partial"
                     if (multiple_targets or pair_followup) and any(
                         item.get("scope") == "read_saved_setup_inventory"
                         and len((item.get("data") or {}).get("setups") or []) == 2

@@ -4,6 +4,27 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN scoreteruglezing voor AAPL en BTC/EUR (30 oktober 2026)
+
+Current phase: `LOCAL_VALIDATION_COMPLETE`. Candidate branch
+`codex/finn-pair-score-readback`, based on main
+`554fc200b454c8720e3b8c2e27404f06dc0e97c3`. Independent QA found that
+FINN reported missing AAPL and BTC/EUR scores while Analyse and Mijn Plan
+showed 57.3 and 40. The BTC/USDT workspace was allowed to determine a
+single score read for a question about other saved markets. Build now binds
+score reads to each explicitly named owner market, supplies the owner-scoped
+setup-match assessments for a plan collection, and filters unrelated pairs.
+The score formula and Paper execution are unchanged.
+
+Measured Build evidence: focused pair/FINN regressions **912 passed**;
+root backend suite **4129 passed, 4 skipped**; frontend typecheck, i18n lint
+and tests, command/proposal checks, production build, and high audit passed.
+The local worker-driven action matrix passed **16/16** contracts and its
+21 adapter tests. Real Luna/Responses operation selection passed **20/20**
+development and **109/109** regression cases with zero provider, schema,
+timeout, parse, or validation failures. Deployment identity and independent
+authenticated live QA remain pending; this result is not a live verdict.
+
 ## Paaridentiteit in dagelijks rapport (29 oktober 2026)
 
 Current phase: `LIVE_AWAITING_INDEPENDENT_QA`. Candidate branch

@@ -567,15 +567,29 @@ class FinnV2ToolExecutionService:
         if tool_name == "read_setup_market_matches":
             context_service = FinnSharedContextService(self.session)
             requested_asset = (selector.get("asset") if isinstance(selector, dict) else None) or shared_state.get("asset")
-            if requested_asset or selector.get("setup_id") or selector.get("setup_name") or selector.get("quote_currency"):
+            exact_target = bool(
+                selector.get("setup_id") or selector.get("setup_name")
+                or selector.get("quote_currency")
+                or (isinstance(requested_asset, str) and "/" in requested_asset)
+            )
+            if exact_target:
                 asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
                 scope = await self._resolve_read_market_scope(user_id=user_id, asset=asset_state["asset"], selector=selector, run=run, shared_state=shared_state)
                 assessment = await context_service.benchmark_for_asset(
                     user_id, asset_state["asset"],
                     **({"market_id": scope["market_id"]} if scope["market_id"] is not None else {}))
             else:
+                # An asset name can have several independently scored markets.
+                # A workspace hint (for example BTC/USDT) must not turn a
+                # question about BTC plans into that one pair's score.
                 assessment = await context_service.matches.for_all_assets(user_id)
                 scope = {"market_id": None, "quote_currency": None}
+                if requested_asset:
+                    asset = str(requested_asset).upper().split("/", 1)[0]
+                    assessment = {**assessment, "symbol": asset, "matches": [
+                        match for match in assessment["matches"]
+                        if str(match.get("symbol") or "").upper() == asset
+                    ]}
             selected_setup_id = (
                 self.resolver._coerce_int(selector.get("setup_id"))
                 if selector.get("setup_id") is not None else None
