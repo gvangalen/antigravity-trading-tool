@@ -4,6 +4,20 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Dagrapport PDF-herkeuring (30 oktober 2026)
+
+Current phase: `LOCAL_VALIDATION`. The existing independent QA Agent returned
+`NOT_ACCEPTED` on live SHA `7af1b678b021faecaf6eca40cf547e0f72a35d61`.
+All eight Luna report chapters were filled and persisted, the mixed AAPL and
+crypto market movements were accurately described, and later bot status was
+below the report. PDF export still returned HTTP 500. The production traceback
+showed Chromium now launches but cannot connect to `http://localhost:3000`:
+the PDF helper used a development default rather than the deployed frontend
+origin. This candidate makes the helper use the required `FRONTEND_URL` runtime
+setting, with `FRONTEND_BASE_URL` as an explicit override, and removes
+microseconds from report source timestamps. The earlier terminal latency
+performance failure remains a separately recorded open issue.
+
 ## Dagrapport weer als FINN-verhaal per hoofdstuk (30 oktober 2026)
 
 Current phase: `LIVE_AWAITING_INDEPENDENT_QA`. Follow-up candidate: `codex/daily-report-qa-fixes`,

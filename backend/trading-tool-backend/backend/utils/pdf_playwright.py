@@ -9,8 +9,14 @@ logger = logging.getLogger(__name__)
 _render_lock = asyncio.Lock()
 
 # Constants
-FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
 DEFAULT_TIMEOUT_MS = 60000
+
+
+def _frontend_base_url() -> str:
+    # Use the same deployed frontend origin as the other PDF/report paths.
+    # FRONTEND_BASE_URL remains an explicit override for local render jobs.
+    configured = os.getenv("FRONTEND_BASE_URL") or os.getenv("FRONTEND_URL")
+    return (configured or "http://localhost:3000").split(",", 1)[0].strip().rstrip("/")
 
 async def render_report_pdf_via_playwright(token: str) -> bytes:
     """
@@ -18,7 +24,7 @@ async def render_report_pdf_via_playwright(token: str) -> bytes:
     Token komt uit report_snapshots tabel.
     """
 
-    url = f"{FRONTEND_BASE_URL}/print/daily?token={token}"
+    url = f"{_frontend_base_url()}/print/daily?token={token}"
     
     logger.info("🧾 Playwright PDF render starting | Token: %s", token[:8] + "...")
 

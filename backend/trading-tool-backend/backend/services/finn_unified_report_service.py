@@ -31,6 +31,21 @@ REPORT_SECTIONS = (
 )
 
 
+def _report_source_times(value: Any) -> Any:
+    """Keep source instants, but omit subsecond provider precision in reports."""
+    if isinstance(value, dict):
+        return {key: _report_source_times(item) for key, item in value.items()}
+    if isinstance(value, datetime):
+        return value.replace(microsecond=0).isoformat()
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return value
+        return parsed.replace(microsecond=0).isoformat()
+    return value
+
+
 def _regular_session_at(observed_at: Any, asset_class: Any, market_timezone: Any) -> str:
     """Only assert outside hours when the catalog and clock prove it.
 
@@ -180,7 +195,9 @@ def _report_facts(context: dict[str, Any]) -> dict[str, Any]:
             "score_status": benchmark.get("source_status"),
             "score_report_date": benchmark.get("as_of"),
             "component_source_status": source_status,
-            "component_source_observed_at": benchmark.get("component_source_observed_at") or {},
+            "component_source_observed_at": _report_source_times(
+                benchmark.get("component_source_observed_at") or {}
+            ),
             "scores": scores,
             "benchmark_score": benchmark.get("benchmark_score") if benchmark.get("source_status") == "available" else None,
             "market_snapshot": item.get("market_snapshot") or {},
