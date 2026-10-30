@@ -121,6 +121,8 @@ def test_runtime_bootstrap_covers_backend_frontend_and_playwright_dependencies()
     assert 'python3 -m pip install -r "${BACKEND_REQUIREMENTS}"' in source
     assert 'npm ci --no-audit --no-fund' in source
     assert 'python3 -m playwright install chromium' in source
+    assert 'python3 -m playwright install-deps chromium' in source
+    assert 'if ! playwright_runtime_ok >/dev/null 2>&1; then' in source
     assert 'required = ("email_validator", "playwright", "faiss")' in source
     assert "email-validator" in requirements
     assert "playwright" in requirements

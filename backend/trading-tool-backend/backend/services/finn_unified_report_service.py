@@ -254,6 +254,30 @@ def _category_fact_fallback(facts: dict[str, Any], category: str, locale: str) -
     return " ".join(parts)
 
 
+def _market_direction_contradicts_snapshot(text: str, facts: dict[str, Any]) -> bool:
+    """Reject only a universal direction claim disproved by a measured move."""
+    changes = []
+    for item in facts["assets"]:
+        snapshot = item.get("market_snapshot") or {}
+        if snapshot.get("source_status") != "fresh":
+            continue
+        value = snapshot.get("change_24h")
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            changes.append(float(value))
+    if not changes:
+        return False
+    all_fall = re.search(
+        r"\b(?:alle|all|sämtliche)\b.{0,100}\b(?:dal\w*|daal\w*|declin\w*|fall\w*|sink\w*|rück\w*)\b",
+        text, re.I,
+    )
+    all_rise = re.search(
+        r"\b(?:alle|all|sämtliche)\b.{0,100}\b(?:stijg\w*|rise\w*|risen|rising|gain\w*|steig\w*)\b",
+        text, re.I,
+    )
+    return bool((all_fall and any(value > 0 for value in changes)) or
+                (all_rise and any(value < 0 for value in changes)))
+
+
 def _bot_status_section(facts: dict[str, Any], locale: str) -> str:
     bots = [bot for asset in facts["assets"] for bot in asset["bots"]]
     if not bots:
@@ -314,6 +338,7 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
             "measured scores, missing evidence and plan implications in the appropriate section. "
             "Distinguish no configured indicator from a configured indicator without a usable score. "
             "Do not repeat the same asset inventory in every section. "
+            "Never say all measured assets rise or fall unless every supplied 24-hour change has that direction. "
             "The executive summary gives the main conclusion. Market, macro and technical sections "
             "interpret their respective evidence. Setup, strategy and bot sections explain the corresponding "
             "saved state. The outlook gives the next useful check. "
@@ -361,6 +386,34 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
             r"\b(?:geen|no|keine)\s+(?:opgeslagen\s+|saved\s+|gespeicherte\s+)?(?:strategie|strategy|Strategie)\b", value, re.I))
         if has_unverified_score or false_strategy_absence:
             prose[section] = fallbacks[section]
+    if _market_direction_contradicts_snapshot(prose["market_analysis"], facts):
+        # Give the report writer one chance to correct its own prose using the
+        # same typed facts. A factual fallback is used only if that also fails.
+        repaired = ask_gpt_json(
+            system_role=(
+                "You are FINN. Rewrite only the market_analysis section in the requested locale. "
+                "Preserve a useful market explanation, but do not claim all measured assets "
+                "moved in one direction when the supplied changes are mixed. "
+                "Return JSON with one market_analysis string."
+            ),
+            prompt=json.dumps({"locale": locale, "market_snapshots": [
+                {"asset": item["display_symbol"], "change_24h":
+                 (item.get("market_snapshot") or {}).get("change_24h")}
+                for item in facts["assets"]
+            ], "draft": prose["market_analysis"]}, ensure_ascii=False, default=str),
+            max_tokens=600,
+            model_override=os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna"),
+            reasoning_effort="none",
+        )
+        candidate = str(repaired.get("market_analysis") or "").strip() if isinstance(repaired, dict) else ""
+        candidate_scores = [float(number.replace(",", ".")) for number in
+                            re.findall(r"(?<!\d)(\d+(?:[.,]\d+)?)/100\b", candidate)]
+        prose["market_analysis"] = (
+            candidate if len(candidate) >= 20
+            and not _market_direction_contradicts_snapshot(candidate, facts)
+            and all(score in allowed_scores for score in candidate_scores)
+            else fallbacks["market_analysis"]
+        )
     # Reject a concrete contradiction, without replacing otherwise useful
     # coaching prose with canned score inventories.
     if facts["assets"] and all(item["score_status"] == "available" for item in facts["assets"]):

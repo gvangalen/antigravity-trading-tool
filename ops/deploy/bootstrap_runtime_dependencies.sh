@@ -65,8 +65,29 @@ if [ ! -f "${playwright_hash_file}" ] || [ "$(cat "${playwright_hash_file}")" !=
   playwright_needs_install=true
 fi
 
+playwright_runtime_ok() {
+  python3 - <<'PY'
+from playwright.sync_api import sync_playwright
+
+with sync_playwright() as playwright:
+    browser = playwright.chromium.launch(
+        headless=True,
+        args=["--no-sandbox", "--disable-dev-shm-usage"],
+    )
+    browser.close()
+PY
+}
+
+# A downloaded browser binary can still fail at launch when OS libraries are
+# missing. The PDF endpoint needs a working Chromium runtime, not just files.
+if ! playwright_runtime_ok >/dev/null 2>&1; then
+  playwright_needs_install=true
+fi
+
 if [ "${playwright_needs_install}" = "true" ]; then
   echo "🎭 Ensuring Playwright Chromium runtime is installed..."
   python3 -m playwright install chromium
+  python3 -m playwright install-deps chromium
+  playwright_runtime_ok
   printf '%s\n' "${backend_hash}" > "${playwright_hash_file}"
 fi
