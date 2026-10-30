@@ -107,9 +107,13 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
     let cancelled = false;
     setMarketChoiceStatus("loading");
     setMarketChoices([]);
-    fetchTradingMarkets(formData.symbol).then((choices) => {
+    fetchTradingMarkets(formData.symbol).then((result) => {
       if (cancelled) return;
-      const available = (Array.isArray(choices) ? choices : [])
+      if (!Array.isArray(result) && result?.asset_class !== "crypto") {
+        setMarketChoiceStatus("not_crypto");
+        return;
+      }
+      const available = (Array.isArray(result) ? result : (Array.isArray(result?.markets) ? result.markets : []))
         .filter((choice) => choice?.status === "available" && choice?.quote_currency);
       setMarketChoices(available);
       setMarketChoiceStatus(available.length ? "ready" : "unavailable");

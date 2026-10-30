@@ -21,6 +21,52 @@ class _Session:
         self.rollbacks += 1
 
 
+@pytest.mark.parametrize("asset_class", ["stock", "etf"])
+def test_trading_market_choices_return_explicit_non_crypto_class(monkeypatch, asset_class):
+    class Catalog:
+        def __init__(self, _session):
+            pass
+
+        async def get_asset(self, symbol):
+            assert symbol == "AAPL"
+            return {"asset_class": asset_class}
+
+    monkeypatch.setattr(asset_catalog_api, "AssetCatalogService", Catalog)
+    monkeypatch.setattr(asset_catalog_api, "TradingMarketService",
+                        lambda _session: (_ for _ in ()).throw(AssertionError("unexpected crypto lookup")))
+    result = asyncio.run(asset_catalog_api.get_crypto_trading_markets(
+        "aapl", current_user={"id": 8}, session=_Session(),
+    ))
+    assert result.asset_class == asset_class
+    assert result.markets == []
+
+
+def test_trading_market_choices_keep_crypto_pairs(monkeypatch):
+    class Catalog:
+        def __init__(self, _session):
+            pass
+
+        async def get_asset(self, symbol):
+            assert symbol == "BTC"
+            return {"asset_class": "crypto"}
+
+    class Markets:
+        def __init__(self, _session):
+            pass
+
+        async def inspect_crypto_quotes(self, symbol):
+            assert symbol == "BTC"
+            return [{"pair": "BTC/EUR", "quote_currency": "EUR", "status": "available"}]
+
+    monkeypatch.setattr(asset_catalog_api, "AssetCatalogService", Catalog)
+    monkeypatch.setattr(asset_catalog_api, "TradingMarketService", Markets)
+    result = asyncio.run(asset_catalog_api.get_crypto_trading_markets(
+        "btc", current_user={"id": 8}, session=_Session(),
+    ))
+    assert result.asset_class == "crypto"
+    assert [(market.pair, market.quote_currency) for market in result.markets] == [("BTC/EUR", "EUR")]
+
+
 def test_selected_pair_without_a_setup_is_registered_and_read_exactly(monkeypatch):
     session = _Session()
     market = SimpleNamespace(id=73, pair="ETH/EUR", quote_currency="EUR",
