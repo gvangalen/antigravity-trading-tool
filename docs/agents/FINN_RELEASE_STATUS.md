@@ -6,8 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN scoreteruglezing voor AAPL en BTC/EUR (30 oktober 2026)
 
-Current phase: `LOCAL_VALIDATION_COMPLETE`. Candidate branch
-`codex/finn-pair-score-readback`, based on main
+Current phase: `LIVE_AWAITING_INDEPENDENT_QA`. Candidate branch
+`codex/finn-pair-score-readback`, [PR #701](https://github.com/gvangalen/antigravity-trading-tool/pull/701), based on main
 `554fc200b454c8720e3b8c2e27404f06dc0e97c3`. Independent QA found that
 FINN reported missing AAPL and BTC/EUR scores while Analyse and Mijn Plan
 showed 57.3 and 40. The BTC/USDT workspace was allowed to determine a
@@ -22,8 +22,17 @@ and tests, command/proposal checks, production build, and high audit passed.
 The local worker-driven action matrix passed **16/16** contracts and its
 21 adapter tests. Real Luna/Responses operation selection passed **20/20**
 development and **109/109** regression cases with zero provider, schema,
-timeout, parse, or validation failures. Deployment identity and independent
-authenticated live QA remain pending; this result is not a live verdict.
+timeout, parse, or validation failures. Final deployment identity after the
+status update and independent authenticated live QA remain pending; this is
+not an independent QA verdict.
+
+PR #701 passed all five CI jobs, then merged as
+`9f5af80540893c2cc7674dc0152953598917b33f`. Main CI run
+`41094478883` and Auto Deploy run `41094956995` succeeded. Public backend
+health and frontend build-info both returned HTTP 200 and that SHA. This
+status-only update creates a later main revision; its CI, Auto Deploy, and
+public identity must match before the existing QA Agent begins its focused
+AAPL/BTC/EUR readback test. No Live order was placed.
 
 ## Paaridentiteit in dagelijks rapport (29 oktober 2026)
 
