@@ -1893,10 +1893,6 @@ LOAD
     loadData(date);
   }, [reportType, locale]);
 
-  useEffect(() => {
-    setTradingReportExpanded(false);
-  }, [reportType, selectedDate]);
-
   /* =====================================================
 GENERATE
 ===================================================== */
