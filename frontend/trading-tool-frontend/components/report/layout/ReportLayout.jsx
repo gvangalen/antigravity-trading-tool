@@ -1,6 +1,5 @@
 "use client";
 
-import SummaryBlock from '@/components/report/blocks/SummaryBlock';
 import ReportSectionMarket from '@/components/report/sections/ReportSectionMarket';
 import ReportSectionAnalysis from '@/components/report/sections/ReportSectionAnalysis';
 import ReportSectionStrategy from '@/components/report/sections/ReportSectionStrategy';
@@ -31,7 +30,7 @@ export default function ReportLayout({ report, isPrint = false }) {
       className={`
         mx-auto 
         ${isPrint ? "max-w-[1000px]" : "max-w-[1100px]"}
-        space-y-24 pb-32
+        space-y-16 pb-20
       `}
     >
       {/* CHAPTERS 1-2: MARKT & OVERZICHT */}

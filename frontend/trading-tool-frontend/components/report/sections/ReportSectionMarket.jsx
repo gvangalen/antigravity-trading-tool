@@ -1,3 +1,4 @@
+import ReportCategoryEvidence from "../blocks/ReportCategoryEvidence";
 import SummaryBlock from "../blocks/SummaryBlock";
 import NarrativeBlock from "../blocks/NarrativeBlock";
 import MarketSnapshotBlock from "../blocks/MarketSnapshotBlock";
@@ -25,7 +26,7 @@ export default function ReportSectionMarket({ report, isPrint = false }) {
   const colSpanClass = isPrint ? "w-full" : "lg:col-span-2";
 
   return (
-    <div className="space-y-32">
+    <div className="space-y-16">
 
       {/* CHAPTER 1: DAGOVERZICHT */}
       <div className={gridClass}>
@@ -61,6 +62,7 @@ export default function ReportSectionMarket({ report, isPrint = false }) {
             field="market_analysis"
             report={report}
           />
+          <ReportCategoryEvidence report={report} category="market" isPrint={isPrint} />
         </div>
 
         <SectionAlignedAside isPrint={isPrint}>
