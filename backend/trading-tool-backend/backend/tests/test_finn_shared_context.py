@@ -378,6 +378,53 @@ def test_daily_report_lists_multiple_linked_strategies_and_rejects_false_missing
     assert "Zonder RSI" not in reports.generate_unified_daily_report_sections(7)["outlook"]
 
 
+def test_daily_report_rejects_universal_market_decline_when_one_asset_rises(monkeypatch):
+    context = {"locale": "nl", "assets": [
+        {"symbol": "AAPL", "market_snapshot": {"source_status": "fresh", "change_24h": 1.74},
+         "benchmark": {"source_status": "missing_scores", "matches": []}},
+        {"symbol": "BTC", "market_snapshot": {"source_status": "fresh", "change_24h": -0.62},
+         "benchmark": {"source_status": "missing_scores", "matches": []}},
+    ]}
+    monkeypatch.setattr(reports, "_load_context", lambda _id: asyncio.sleep(0, result=context))
+    monkeypatch.setattr(reports, "ask_gpt_json", lambda **_: {
+        "market_analysis": "Alle gemeten assets dalen vandaag, waaronder AAPL met +1,74%."
+    })
+
+    report = reports.generate_unified_daily_report_sections(7)
+
+    assert "Alle gemeten assets dalen" not in report["market_analysis"]
+    assert "+1,74%" not in report["market_analysis"]
+
+
+def test_market_direction_guard_does_not_override_mixed_direction_prose():
+    facts = {"assets": [
+        {"market_snapshot": {"source_status": "fresh", "change_24h": 1.74}},
+        {"market_snapshot": {"source_status": "fresh", "change_24h": -0.62}},
+    ]}
+    assert not reports._market_direction_contradicts_snapshot(
+        "AAPL stijgt, terwijl BTC daalt; de markt is gemengd.", facts,
+    )
+
+
+def test_daily_report_lets_luna_repair_wrong_market_direction(monkeypatch):
+    context = {"locale": "nl", "assets": [
+        {"symbol": "AAPL", "market_snapshot": {"source_status": "fresh", "change_24h": 1.74},
+         "benchmark": {"source_status": "missing_scores", "matches": []}},
+        {"symbol": "BTC", "market_snapshot": {"source_status": "fresh", "change_24h": -0.62},
+         "benchmark": {"source_status": "missing_scores", "matches": []}},
+    ]}
+    monkeypatch.setattr(reports, "_load_context", lambda _id: asyncio.sleep(0, result=context))
+    model_calls = iter([
+        {"market_analysis": "Alle gemeten assets dalen vandaag, waaronder AAPL met +1,74%."},
+        {"market_analysis": "AAPL stijgt met 1,74%, terwijl BTC daalt; de koersbewegingen zijn gemengd."},
+    ])
+    monkeypatch.setattr(reports, "ask_gpt_json", lambda **_: next(model_calls))
+
+    report = reports.generate_unified_daily_report_sections(7)
+
+    assert report["market_analysis"].startswith("AAPL stijgt")
+
+
 def test_multi_asset_report_keeps_btc_match_when_aapl_scores_are_missing(monkeypatch):
     context = {"locale": "nl", "assets": [
         {"symbol": "BTC", "setups": [], "strategies": [], "bots": [],
