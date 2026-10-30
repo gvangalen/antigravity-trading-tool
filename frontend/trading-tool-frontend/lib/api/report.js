@@ -1,6 +1,7 @@
 'use client';
 
 import { fetchAuth } from '@/lib/api/auth';
+import { savePdfResponse } from '@/lib/api/pdfDownload.mjs';
 
 //
 // =====================================================
@@ -172,30 +173,12 @@ export const generateQuarterlyReportAndWait = async () =>
 // =====================================================
 //
 async function downloadPdf(url, filename) {
-
   const response = await fetchAuth(url, {
     method: 'GET',
     headers: {
       Accept: 'application/pdf',
     },
-    raw: true, // 🔥 cruciaal
   });
 
-  if (!response.ok) {
-    console.error('❌ PDF response error', response.status);
-    throw new Error(`PDF download mislukt (${response.status})`);
-  }
-
-  const blob = await response.blob();
-  const blobUrl = window.URL.createObjectURL(blob);
-
-  const link = document.createElement('a');
-  link.href = blobUrl;
-  link.download = filename;
-
-  document.body.appendChild(link);
-  link.click();
-
-  document.body.removeChild(link);
-  window.URL.revokeObjectURL(blobUrl);
+  return savePdfResponse(response, filename);
 }
