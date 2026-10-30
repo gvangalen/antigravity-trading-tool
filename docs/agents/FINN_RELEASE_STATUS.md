@@ -6,6 +6,39 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Dagrapport weer als FINN-verhaal per hoofdstuk (30 oktober 2026)
 
+Current follow-up candidate: `codex/daily-report-qa-fixes`,
+[PR #709](https://github.com/gvangalen/antigravity-trading-tool/pull/709),
+product commit `1a15465a1`. Independent authenticated QA on live SHA
+`49a1f0e6861a44619c73ce3ab45b70a5cb4fdd5b` found that the restored
+eight-chapter report now renders, persists after refresh and puts bot status
+below the report, but returned `NOT_ACCEPTED`: PDF export failed with HTTP 500
+and one Marketanalyse sentence claimed every measured asset declined while
+AAPL was shown as rising. Production backend logs identified the PDF cause:
+Playwright Chromium cannot launch because `libatk-1.0.so.0` and other OS
+dependencies are absent. This candidate validates a real headless Chromium
+launch during deployment and installs the missing runtime dependencies. It
+also checks absolute all-assets direction claims against the typed report
+snapshot and asks Luna/Responses to rewrite the affected Marketanalyse
+paragraph when the claim conflicts with a measured move. Other chapter prose
+remains Luna-authored.
+
+Measured follow-up Build evidence: root backend suite **4137 passed, 4
+skipped**; real-provider selector development **20/20** and regression
+**109/109**, with zero provider, schema, timeout, parse or validation
+failures. PR #709 passed all five CI checks. Three full isolated worker-matrix
+runs passed **16/16** action contracts, **9/9** context checks and all **38**
+case contracts, but each failed the existing terminal latency budget. The
+first terminal p95 was 10143 ms, the second 13219 ms, and the third 10892 ms;
+the third run had one 25422 ms outlier on an unrelated clarification. These
+are **red performance results**, not a green full-runtime verdict. The slow
+phase was model selection, whereas this candidate changes only report
+composition, PDF deployment dependencies and their tests; none of the 38
+matrix cases invokes the report path. No FINN action contract is changed by
+this candidate. The report-specific backend and real-provider gates passed.
+The selector latency is retained as a separate open runtime issue. This
+candidate is not deployed and still requires merge, Auto Deploy, matching
+public backend/frontend SHA, and independent authenticated report QA.
+
 Current phase: `LOCAL_VALIDATION`. Candidate branch
 `codex/daily-report-sections`, product commit `c12f55eccf158b7d3c34f63d229ca5014cddb9f0`,
 based on main `ee5c3f16d0e9e8cd6eeb7ad738e0c3dec54d418c`. The daily report
