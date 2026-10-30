@@ -6,6 +6,18 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Dagrapport PDF-printwacht (30 oktober 2026)
 
+Follow-up on live SHA `8c1191065189ee778b8c95330735575a06ea8130`:
+independent authenticated QA accepted the eight report chapters, source
+placement, timestamp formatting and refresh persistence, but PDF export still
+returned HTTP 500. The deployed Chromium reached `/print/daily`, then waited
+for `#print-ready`; a headless production diagnostic showed that the page
+remained at the global auth loading screen. `AuthGuard` exempted `/print` but
+not its `/print/daily` child route. Candidate
+`codex/report-print-public-route` exempts only `/print/daily` so the
+token-scoped print page can load its report. The public report endpoint still
+validates the snapshot token. Independent authenticated QA must recheck the
+PDF download on the final deployed SHA.
+
 Current phase: `LOCAL_VALIDATION`. Independent QA repeated the report on
 production SHA `fbace0a9d27804357add7ba510829b8bcf1aa7eb` and found PDF
 export still returned HTTP 500. The new production trace shows Chromium now
