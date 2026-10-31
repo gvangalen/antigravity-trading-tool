@@ -824,6 +824,8 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
             "report_v2_evidence": report_v2_evidence,
         }, ensure_ascii=False, default=str),
         max_tokens=5500,
+        timeout_seconds=75,
+        client_max_retries=0,
         model_override=os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna"),
         reasoning_effort="none",
     )
@@ -874,6 +876,9 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
                 "draft": report_v2_prose["analysis"],
             }, ensure_ascii=False, default=str),
             max_tokens=1400,
+            retries=1,
+            timeout_seconds=30,
+            client_max_retries=0,
             model_override=os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna"),
             reasoning_effort="none",
         )
@@ -950,6 +955,9 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
                 for item in facts["assets"]
             ], "draft": prose["market_analysis"]}, ensure_ascii=False, default=str),
             max_tokens=600,
+            retries=1,
+            timeout_seconds=30,
+            client_max_retries=0,
             model_override=os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna"),
             reasoning_effort="none",
         )
