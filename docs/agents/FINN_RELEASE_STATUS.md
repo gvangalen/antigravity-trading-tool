@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Report 2.0 releasekandidaat (31 oktober 2026)
 
-Phase: `CI_VALIDATION`. De gebruiker heeft expliciet gevraagd Report 2.0 nu
+Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De gebruiker heeft expliciet gevraagd Report 2.0 nu
 te releasen en de PDF daarna opnieuw op de nieuwe rapportopzet te beoordelen.
 De eerdere PDF-herkeuring van de oude rapportopzet wordt daarmee vervangen.
 Kandidaat `codex/report-context-cards` bouwt het dagrapport uit een bevroren,
@@ -22,9 +22,14 @@ slaagden: development 20/20 (artifact SHA-256
 en regression 109/109 (artifact SHA-256
 `6392bbf977ca9b084b4d42008971b01ca1e197ddd3c952974c421116196ae5cd`),
 zonder provider-, schema-, timeout-, parse- of validatiefouten. [PR #718](https://github.com/gvangalen/antigravity-trading-tool/pull/718)
-had op productcommit `1e2becbfa` vijf geslaagde CI-checks. Na deze
-statuscommit moeten de definitieve PR-CI, main-CI, Auto Deploy en publieke
-SHA nog worden gecontroleerd. Onafhankelijke live rapport-/PDF-QA volgt daarna.
+had op productcommit `1e2becbfa` vijf geslaagde CI-checks, evenals de
+definitieve PR-commit `1489d9983`. De PR is samengevoegd als
+`7a718c57c13af215b5d321320ce6e39781e75be0`. Main-CI-run
+`41192163242` en Auto Deploy-run `41192381774` slaagden. Publieke
+`/api/health` en `/build-info.json` gaven beide HTTP 200 en exact die SHA.
+Deze statuswijziging creëert zelf een laatste main-revisie; CI, Auto Deploy
+en beide publieke SHA's daarvan moeten opnieuw overeenkomen vóór de
+onafhankelijke ingelogde rapport-/PDF-QA begint.
 
 ## Dagrapport browserdownload (31 oktober 2026)
 
