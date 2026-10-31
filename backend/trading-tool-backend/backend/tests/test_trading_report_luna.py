@@ -127,3 +127,40 @@ def test_period_comparison_uses_only_dated_same_pair_scores(period):
         {"asset": "BTC/EUR", "fact": "market_score", "before": 45, "after": 55},
     ]
     assert all(row["asset"] == "BTC/EUR" for row in comparison["period_observations"])
+
+
+@pytest.mark.parametrize("locale, availability, score", [
+    ("nl", "niet beschikbaar → beschikbaar", "40/100 → 20/100"),
+    ("en", "unavailable → available", "40/100 → 20/100"),
+    ("de", "nicht verfügbar → verfügbar", "40/100 → 20/100"),
+])
+def test_period_retrospective_localizes_score_changes(locale, availability, score):
+    comparison = {
+        "period": "weekly", "previous_date": "2026-10-30", "previous_observations": [],
+        "changes": [
+            {"asset": "BTC/EUR", "fact": "benchmark_availability", "before": False, "after": True},
+            {"asset": "BTC/EUR", "fact": "macro_score", "before": 40.0, "after": 20.0},
+        ],
+    }
+    facts = {"assets": []}
+    context = {"report_portfolios": {}, "report_bot_status": {"bots": []}}
+    text = reports._report_v2_factual_fallbacks(context, facts, comparison, locale)["retrospective"]
+    assert availability in text
+    assert score in text
+    assert "benchmark_availability" not in text
+    assert "40.0" not in text
+
+
+def test_report_analysis_repairs_market_score_benchmark_conflation():
+    facts = {"assets": [{"display_symbol": "BTC/EUR", "scores": {"market_score": 40},
+                          "benchmark_score": 33.3, "market_snapshot": {}, "setups": []}]}
+    assert reports._report_v2_analysis_claims_contradict(
+        "BTC/EUR: de marktscore (benchmark) is 33,3.", facts)
+    assert not reports._report_v2_analysis_claims_contradict(
+        "BTC/EUR: marktscore 40; benchmarkscore 33,3.", facts)
+
+
+def test_period_retrospective_rejects_raw_internal_field_names():
+    assert reports._report_v2_contradicts_facts(
+        "retrospective", "BTC/EUR benchmark_availability: False → True",
+        {"assets": []}, {}, {})

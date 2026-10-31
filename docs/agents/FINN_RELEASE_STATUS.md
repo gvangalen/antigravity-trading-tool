@@ -4,6 +4,26 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Report 2.0: periodeherkeuring (31 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. Onafhankelijke QA gaf `NOT_ACCEPTED` op live SHA
+`e1d60b00669084fdfb260b83984b48f601040c07`. Nieuwe week-, maand- en
+kwartaalrapporten en PDF's kregen de zes Report 2.0-onderdelen, juiste
+PDF-periodetitels, eigenaargebonden scoremomenten en gescheiden Paper/Live-
+bedragen. Drie presentatieafwijkingen bleven: webkoppen toonden alleen de
+einddatum, de wekelijkse terugblik lekte `benchmark_availability: False → True`
+en `40.0 → 20.0`, en de Analyse-tekst noemde de totale benchmark 33,3 een
+marktscore terwijl het Markt-onderdeel 40 was.
+
+Kandidaat `codex/report2-period-qa-fixes` toont in beide webkoppen hetzelfde
+opgeslagen datumbereik als de PDF, lokaliseert veranderingen in de feitelijke
+terugvaltekst, wijst ruwe interne veldnamen in de terugblik af en laat FINN
+een verwisseling tussen Markt en benchmark gericht herschrijven. Gerichte
+backend- en frontendtests, webbuild en i18n-controles slagen. Volledige
+backend-suite: 4167 geslaagd, vier bestaande skips. De bestaande verwachting
+voor scoreveranderingen is aangepast aan de nieuwe expliciete `/100`-weergave.
+CI, providerproef, deployment en onafhankelijke live herkeuring zijn nog open.
+
 ## Report 2.0: week, maand en kwartaal (31 oktober 2026)
 
 Phase: `LIVE_PENDING_QA`. De voorafgaande gerichte NL-PDF-herkeuring is door

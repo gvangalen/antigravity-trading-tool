@@ -452,6 +452,10 @@ def _report_v2_analysis_claims_contradict(value: str, facts: dict[str, Any]) -> 
     if not assets:
         return False
     by_symbol = {str(item["display_symbol"]): item for item in assets}
+    # A market component and the weighted benchmark are different scores. Repair
+    # this narrow, misleading phrase with the report writer before publishing.
+    if re.search(r"\b(?:marktscore|market score|Marktwert)\s*\(\s*(?:benchmark|Benchmarkwert)\s*\)", value, re.I):
+        return True
     names = sorted(by_symbol, key=len, reverse=True)
     starts = list(re.finditer(
         rf"(?<![\w/])({'|'.join(re.escape(name) for name in names)})\s*:", value, re.I,
@@ -634,15 +638,29 @@ def _report_v2_factual_fallbacks(context: dict[str, Any], facts: dict[str, Any],
     period_label = period_labels.get(locale, period_labels["en"]).get(period, period)
     change_labels = {
         "nl": {"benchmark_score": "benchmarkscore", "market_score": "marktscore",
-               "macro_score": "macroscore", "technical_score": "technische score"},
+               "macro_score": "macroscore", "technical_score": "technische score",
+               "benchmark_availability": "benchmark"},
         "en": {"benchmark_score": "benchmark score", "market_score": "market score",
-               "macro_score": "macro score", "technical_score": "technical score"},
+               "macro_score": "macro score", "technical_score": "technical score",
+               "benchmark_availability": "benchmark"},
         "de": {"benchmark_score": "Benchmarkwert", "market_score": "Marktwert",
-               "macro_score": "Makrowert", "technical_score": "technischer Wert"},
+               "macro_score": "Makrowert", "technical_score": "technischer Wert",
+               "benchmark_availability": "Benchmark"},
     }
     def change_text(row: dict[str, Any]) -> str:
         label = change_labels.get(locale, change_labels["en"]).get(row["fact"], row["fact"])
-        return f"{row['asset']} {label}: {row['before']} → {row['after']}"
+        def display(value: Any) -> str:
+            if row["fact"] == "benchmark_availability":
+                return {
+                    "nl": "beschikbaar" if value else "niet beschikbaar",
+                    "en": "available" if value else "unavailable",
+                    "de": "verfügbar" if value else "nicht verfügbar",
+                }.get(locale, "available" if value else "unavailable")
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                number = f"{float(value):g}"
+                return f"{number.replace('.', ',') if locale in ('nl', 'de') else number}/100"
+            return "—"
+        return f"{row['asset']} {label}: {display(row['before'])} → {display(row['after'])}"
     if locale == "en":
         retrospective = (f"Compared with {comparison['previous_date']}: " + "; ".join(
             change_text(row) for row in comparisons)
@@ -787,6 +805,9 @@ def _report_v2_contradicts_facts(section: str, value: str, facts: dict[str, Any]
                                context: dict[str, Any], comparison: dict[str, Any]) -> bool:
     """Reject only concrete contradictions with the frozen report facts."""
     if section == "retrospective":
+        if re.search(r"\b(?:benchmark_availability|market_score|macro_score|technical_score)\b|"
+                     r"\b(?:True|False)\s*→\s*(?:True|False)\b", value):
+            return True
         prior_has_scores = any(
             isinstance(score, (int, float)) and not isinstance(score, bool)
             for row in comparison.get("previous_observations") or []
@@ -878,6 +899,7 @@ def generate_unified_daily_report_sections(user_id: int, period: str = "daily") 
             f"You are FINN, the user's trading coach. Write a complete, readable {period} report from only the "
             "provided owner-scoped facts. Missing or stale scores are unknown, never zero. "
             "A setup match is not an entry signal; a bot budget is not cash. "
+            "The market_score is one component; benchmark_score is the weighted total. Never call the total a market score. "
             "Do not claim an order or trade occurred unless the supplied facts prove it. "
             "If market_session_at_report is outside_regular_hours, explain that the "
             "latest stock quote may be from the previous regular session; do not "
@@ -965,6 +987,7 @@ def generate_unified_daily_report_sections(user_id: int, period: str = "daily") 
                 "Use short paragraphs, one per exact trading pair. A 24-hour change "
                 "is already in percent and must keep its measured sign and magnitude. "
                 "A setup name, range or match may be attached only to its own pair. "
+                "The market_score is a component, while benchmark_score is the weighted total; do not conflate them. "
                 "Keep the useful explanation. Return JSON with one analysis string."
             ),
             prompt=json.dumps({
