@@ -30,11 +30,17 @@ REPORT_SECTIONS = (
     "setup_validation", "strategy_implication", "bot_strategy", "outlook",
 )
 
+REPORT_V2_SECTIONS = (
+    "retrospective", "portfolio", "analysis", "plan", "automation", "outlook_v2",
+)
+
 
 def _report_source_times(value: Any) -> Any:
     """Keep source instants, but omit subsecond provider precision in reports."""
     if isinstance(value, dict):
         return {key: _report_source_times(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_report_source_times(item) for item in value]
     if isinstance(value, datetime):
         return value.replace(microsecond=0).isoformat()
     if isinstance(value, str):
@@ -68,6 +74,37 @@ def _regular_session_at(observed_at: Any, asset_class: Any, market_timezone: Any
     return "unknown"
 
 
+def _report_indicator_evidence(raw: Any) -> dict[str, dict[str, dict[str, Any]]]:
+    """Project measured fields only; old interpretation/action copy is not evidence."""
+    if not isinstance(raw, dict):
+        return {}
+    result = {}
+    for category in ("market", "macro", "technical"):
+        rows = raw.get(category)
+        if not isinstance(rows, dict):
+            continue
+        result[category] = {}
+        for name, entry in rows.items():
+            if not isinstance(entry, dict):
+                continue
+            result[category][str(name)] = {
+                key: _report_source_times(value) if key == "source_observed_at" else value
+                for key, value in entry.items()
+                if key in {"value", "score", "source_observed_at", "unit"}
+                and isinstance(value, (str, int, float, type(None)))
+            }
+    return result
+
+
+def _saved_curve(value: Any) -> dict[str, Any] | None:
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except ValueError:
+            return None
+    return value if isinstance(value, dict) else None
+
+
 PERIOD_SECTIONS = (
     "executive_summary", "market_overview", "macro_trends", "technical_structure",
     "setup_performance", "bot_performance", "strategic_lessons", "outlook",
@@ -94,6 +131,41 @@ async def _load_context(user_id: int) -> dict[str, Any]:
                 metadata = catalog.get(item["symbol"]) or {}
                 item["asset_class"] = metadata.get("asset_class")
                 item["market_timezone"] = metadata.get("timezone")
+            # Read the same owner-scoped projections as Portfolio and the bot
+            # status screen at generation time. A report must never acquire
+            # newer balances or decisions merely because it was opened later.
+            from backend.services.finn_v2_tool_adapters.portfolio_tool_adapter import PortfolioToolAdapter
+            from backend.services.daily_report_trader_status_service import current_daily_trader_status
+            adapter = PortfolioToolAdapter(session)
+            context["report_portfolios"] = {}
+            for environment in ("paper", "live"):
+                try:
+                    result = await adapter.execute(user_id=user_id, environment=environment)
+                    context["report_portfolios"][environment] = jsonable_encoder(result["data"])
+                except Exception:
+                    logger.warning("Report %s portfolio unavailable for user=%s", environment, user_id, exc_info=True)
+                    context["report_portfolios"][environment] = {"valuation_status": "unavailable"}
+            try:
+                context["report_bot_status"] = await current_daily_trader_status(session, user_id)
+            except Exception:
+                logger.warning("Report bot status unavailable for user=%s", user_id, exc_info=True)
+                context["report_bot_status"] = {"bots": [], "status": "unavailable"}
+            try:
+                rows = (await session.execute(text("""
+                    SELECT report_date, score_source_snapshot
+                    FROM daily_reports
+                    WHERE user_id = :user_id AND report_date < CURRENT_DATE
+                      AND report_date >= CURRENT_DATE - INTERVAL '7 days'
+                    ORDER BY report_date DESC LIMIT 7
+                """), {"user_id": user_id})).mappings().all()
+                context["report_previous"] = [
+                    {"report_date": row["report_date"].isoformat(),
+                     "snapshot": row["score_source_snapshot"]}
+                    for row in rows if isinstance(row["score_source_snapshot"], dict)
+                ]
+            except Exception:
+                logger.warning("Prior report snapshots unavailable for user=%s", user_id, exc_info=True)
+                context["report_previous"] = []
             return context
     finally:
         await report_engine.dispose()
@@ -201,10 +273,17 @@ def _report_facts(context: dict[str, Any]) -> dict[str, Any]:
             "scores": scores,
             "benchmark_score": benchmark.get("benchmark_score") if benchmark.get("source_status") == "available" else None,
             "market_snapshot": item.get("market_snapshot") or {},
+            "verified_indicator_evidence": _report_indicator_evidence(
+                item.get("verified_indicator_evidence")),
             "configured_indicators": configured,
             "indicator_lookup_status": item.get("indicator_lookup_status"),
             "setups": [{"id": row.get("id"), "name": row.get("name"),
-                        "timeframe": row.get("timeframe"), "setup_type": row.get("setup_type")}
+                        "timeframe": row.get("timeframe"), "setup_type": row.get("setup_type"),
+                        "dca_frequency": row.get("dca_frequency"),
+                        "dca_day": row.get("dca_day"),
+                        "dca_month_day": row.get("dca_month_day"),
+                        "min_benchmark_score": row.get("min_benchmark_score"),
+                        "max_benchmark_score": row.get("max_benchmark_score")}
                        for row in item.get("setups") or []],
             "strategies": [{"id": row.get("id"), "setup_id": row.get("setup_id"),
                             "name": row.get("name"),
@@ -214,8 +293,13 @@ def _report_facts(context: dict[str, Any]) -> dict[str, Any]:
                             "pair": item.get("pair"),
                             "timeframe": row.get("timeframe") or
                                          (setups_by_id.get(row.get("setup_id")) or {}).get("timeframe"),
+                            "setup_type": (setups_by_id.get(row.get("setup_id")) or {}).get("setup_type"),
+                            "dca_frequency": (setups_by_id.get(row.get("setup_id")) or {}).get("dca_frequency"),
+                            "dca_day": (setups_by_id.get(row.get("setup_id")) or {}).get("dca_day"),
+                            "dca_month_day": (setups_by_id.get(row.get("setup_id")) or {}).get("dca_month_day"),
                             "execution_mode": row.get("execution_mode"),
                             "base_amount": row.get("base_amount"),
+                            "decision_curve": _saved_curve(row.get("decision_curve")),
                             "entry": row.get("entry"), "stop_loss": row.get("stop_loss"),
                             "targets": row.get("targets")}
                            for row in item.get("strategies") or []],
@@ -328,12 +412,96 @@ def _bot_status_section(facts: dict[str, Any], locale: str) -> str:
     return " ".join([*parts, budget_note.get(locale, budget_note["en"])])
 
 
+def _report_v2_comparison(context: dict[str, Any], facts: dict[str, Any]) -> dict[str, Any]:
+    """Compare like-for-like saved observations, never a prose prediction."""
+    previous = context.get("report_previous") or []
+    if not previous:
+        return {"status": "no_prior_report", "previous_date": None, "changes": []}
+    def changes_since(report: dict[str, Any]) -> list[dict[str, Any]]:
+        prior_assets = {
+            (row.get("pair") or row.get("symbol") or row.get("market_id")): row
+            for row in (report.get("snapshot") or {}).get("assets") or []
+            if isinstance(row, dict)
+        }
+        changes = []
+        for asset in facts["assets"]:
+            key = asset.get("pair") or asset.get("symbol") or asset.get("market_id")
+            old = prior_assets.get(key)
+            if not old:
+                continue
+            before, after = old.get("benchmark_score"), asset.get("benchmark_score")
+            if isinstance(before, (int, float)) and isinstance(after, (int, float)):
+                changes.append({"asset": asset["display_symbol"], "fact": "benchmark_score",
+                                "before": before, "after": after})
+            elif (before is None) != (after is None):
+                changes.append({"asset": asset["display_symbol"], "fact": "benchmark_availability",
+                                "before": before is not None, "after": after is not None})
+        return changes[:30]
+
+    latest = previous[0]
+    changes = changes_since(latest)
+    earliest = previous[-1] if len(previous) > 1 else None
+    def previous_outlook(report: dict[str, Any] | None) -> str | None:
+        value = (((report or {}).get("snapshot") or {}).get("report_v2") or {}).get("sections") or {}
+        outlook = value.get("outlook_v2") if isinstance(value, dict) else None
+        return outlook[:1200] if isinstance(outlook, str) else None
+    return {"status": "comparable" if changes else "no_comparable_change",
+            "previous_date": latest.get("report_date"), "changes": changes,
+            "previous_outlook": previous_outlook(latest),
+            "week_earliest_date": earliest.get("report_date") if earliest else None,
+            "week_changes": changes_since(earliest) if earliest else [],
+            "week_earliest_outlook": previous_outlook(earliest)}
+
+
+def _report_v2_factual_fallbacks(context: dict[str, Any], facts: dict[str, Any],
+                                  comparison: dict[str, Any], locale: str) -> dict[str, str]:
+    """Short factual copy for provider failure, with no inferred trade advice."""
+    legacy = _fallback_sections(context)
+    snapshots = context.get("report_portfolios") or {}
+    bots = (context.get("report_bot_status") or {}).get("bots") or []
+    paper = snapshots.get("paper") or {}
+    live = snapshots.get("live") or {}
+    comparisons = comparison.get("changes") or []
+    if locale == "en":
+        retrospective = (f"Compared with {comparison['previous_date']}: " + "; ".join(
+            f"{row['asset']} {row['fact']}: {row['before']} → {row['after']}" for row in comparisons)
+            if comparisons else "No comparable change from a saved report in the past seven days.")
+        portfolio = f"Paper valuation: {paper.get('valuation_status', 'unknown')}; Live valuation: {live.get('valuation_status', 'unknown')}."
+        automation = f"{len(bots)} bot(s) were read at the report time. A prior decision is not a new order."
+    elif locale == "de":
+        retrospective = (f"Gegenüber {comparison['previous_date']}: " + "; ".join(
+            f"{row['asset']} {row['fact']}: {row['before']} → {row['after']}" for row in comparisons)
+            if comparisons else "Kein vergleichbarer Unterschied zu einem gespeicherten Bericht der letzten sieben Tage.")
+        portfolio = f"Paper-Bewertung: {paper.get('valuation_status', 'unbekannt')}; Live-Bewertung: {live.get('valuation_status', 'unbekannt')}."
+        automation = f"{len(bots)} Bot(s) zum Berichtszeitpunkt gelesen. Eine ältere Entscheidung ist keine neue Order."
+    else:
+        retrospective = (f"Vergeleken met {comparison['previous_date']}: " + "; ".join(
+            f"{row['asset']} {row['fact']}: {row['before']} → {row['after']}" for row in comparisons)
+            if comparisons else "Er is geen vergelijkbare verandering uit een opgeslagen rapport van de afgelopen zeven dagen.")
+        portfolio = f"Paperwaardering: {paper.get('valuation_status', 'onbekend')}; Livewaardering: {live.get('valuation_status', 'onbekend')}."
+        automation = f"{len(bots)} bot(s) gelezen op het rapportmoment. Een oudere beslissing is geen nieuwe order."
+    return {
+        "retrospective": retrospective,
+        "portfolio": portfolio,
+        "analysis": " ".join((legacy["market_analysis"], legacy["macro_context"], legacy["technical_analysis"])),
+        "plan": " ".join((legacy["setup_validation"], legacy["strategy_implication"])),
+        "automation": automation,
+        "outlook_v2": legacy["outlook"],
+    }
+
+
 def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
     """Generate prose, preserving the report storage shape without old agent snapshots."""
     context = asyncio.run(_load_context(user_id))
     assets = context.get("assets") or []
     facts = _report_facts(context)
     locale = str(context.get("locale") or "nl").lower()
+    comparison = _report_v2_comparison(context, facts)
+    report_v2_evidence = {
+        "portfolio": context.get("report_portfolios") or {},
+        "automation": context.get("report_bot_status") or {},
+        "comparison": comparison,
+    }
     factual_context = {**facts, "assets": [
         {**item, "configured_indicators": {
             category: [_report_indicator_label(name, locale) for name in names]
@@ -351,22 +519,34 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
             "latest stock quote may be from the previous regular session; do not "
             "infer that a market was open from a timestamp alone. "
             "Use the localized indicator display names supplied in the context. "
-            "Write each of the eight sections as its own useful narrative, naming relevant assets, "
+            "A setup timeframe is the analysis candle, never a DCA buying cadence. Use dca_frequency "
+            "and the stored weekday or month day for purchase timing. A step decision_curve changes "
+            "the planned amount by benchmark band; do not call such a strategy fixed. "
+            "A DCA plan does not require trade entry, stop-loss or target prices; do not advise "
+            "adding those merely because they are absent from the DCA strategy. "
+            "Only verified_indicator_evidence contains measured indicator values. "
+            "Write six Report 2.0 sections as useful narrative, naming relevant assets, "
             "measured scores, missing evidence and plan implications in the appropriate section. "
             "Distinguish no configured indicator from a configured indicator without a usable score. "
             "Do not repeat the same asset inventory in every section. "
             "Never say all measured assets rise or fall unless every supplied 24-hour change has that direction. "
-            "The executive summary gives the main conclusion. Market, macro and technical sections "
-            "interpret their respective evidence. Setup, strategy and bot sections explain the corresponding "
-            "saved state. The outlook gives the next useful check. "
-            "Return valid JSON with the eight requested string fields."
+            "Return valid JSON with six Report 2.0 fields: retrospective, portfolio, analysis, plan, "
+            "automation and outlook_v2. The retrospective may compare only the supplied "
+            "prior observations; never claim a prior forecast was correct without evidence. "
+            "Portfolio distinguishes Paper from Live and unknown balances from zero. "
+            "Analysis explains the benchmark for each relevant pair, including absent components. "
+            "Plan explains saved cadence, conditions and amount rule. Automation describes the "
+            "bot state at the report instant, identifies old decisions as old, and never asserts "
+            "that configured exit levels are being watched without execution evidence. "
+            "The final outlook names concrete checks grounded in these facts, not a trade command."
         ),
         prompt=json.dumps({
             "task": "Write the daily report in the requested locale from this snapshot only.",
-            "sections": REPORT_SECTIONS,
+            "report_v2_sections": REPORT_V2_SECTIONS,
             "context": factual_context,
+            "report_v2_evidence": report_v2_evidence,
         }, ensure_ascii=False, default=str),
-        max_tokens=4000,
+        max_tokens=5500,
         model_override=os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna"),
         reasoning_effort="none",
     )
@@ -388,6 +568,11 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
         and len(str(result.get(key) or "").strip()) >= 20 else fallbacks[key]
         for key in REPORT_SECTIONS
     }
+    v2_fallbacks = _report_v2_factual_fallbacks(context, facts, comparison, locale)
+    report_v2_prose = {}
+    for key in REPORT_V2_SECTIONS:
+        candidate = str(result.get(key) or "").strip() if isinstance(result, dict) else ""
+        report_v2_prose[key] = candidate if len(candidate) >= 20 else v2_fallbacks[key]
     allowed_scores = {
         float(value)
         for item in facts["assets"]
@@ -399,6 +584,15 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
         )
         if isinstance(value, (int, float))
     }
+    # The retrospective may quote a prior verified score that no longer
+    # appears in today's snapshot. Those values come from saved reports.
+    prior_scores = {
+        float(value)
+        for change in (*comparison.get("changes", []), *comparison.get("week_changes", []))
+        if change.get("fact") == "benchmark_score"
+        for value in (change.get("before"), change.get("after"))
+        if isinstance(value, (int, float)) and not isinstance(value, bool)
+    }
     for section, value in prose.items():
         # A reported numeric score must occur in the verified Score 2.0 snapshot.
         claims = [float(number.replace(",", ".")) for number in re.findall(r"(?<!\d)(\d+(?:[.,]\d+)?)/100\b", value)]
@@ -407,6 +601,15 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
             r"\b(?:geen|no|keine)\s+(?:opgeslagen\s+|saved\s+|gespeicherte\s+)?(?:strategie|strategy|Strategie)\b", value, re.I))
         if has_unverified_score or false_strategy_absence:
             prose[section] = fallbacks[section]
+    for section, value in report_v2_prose.items():
+        claims = [float(number.replace(",", ".")) for number in
+                  re.findall(r"(?<!\d)(\d+(?:[.,]\d+)?)/100\b", value)]
+        valid_scores = allowed_scores | (prior_scores if section == "retrospective" else set())
+        false_strategy_absence = bool(strategy_names) and bool(re.search(
+            r"\b(?:geen|no|keine)\s+(?:opgeslagen\s+|saved\s+|gespeicherte\s+)?(?:strategie|strategy|Strategie)\b", value, re.I))
+        wrong_direction = section == "analysis" and _market_direction_contradicts_snapshot(value, facts)
+        if any(claim not in valid_scores for claim in claims) or false_strategy_absence or wrong_direction:
+            report_v2_prose[section] = v2_fallbacks[section]
     if _market_direction_contradicts_snapshot(prose["market_analysis"], facts):
         # Give the report writer one chance to correct its own prose using the
         # same typed facts. A factual fallback is used only if that also fails.
@@ -490,6 +693,13 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
             "symbol": all_strategies[0].get("symbol"),
             "pair": all_strategies[0].get("pair"),
             "timeframe": all_strategies[0].get("timeframe"),
+            "setup_type": all_strategies[0].get("setup_type"),
+            "dca_frequency": all_strategies[0].get("dca_frequency"),
+            "dca_day": all_strategies[0].get("dca_day"),
+            "dca_month_day": all_strategies[0].get("dca_month_day"),
+            "execution_mode": all_strategies[0].get("execution_mode"),
+            "base_amount": all_strategies[0].get("base_amount"),
+            "decision_curve": all_strategies[0].get("decision_curve"),
             "entry": all_strategies[0].get("entry"),
             "targets": all_strategies[0].get("targets"),
             "stop_loss": all_strategies[0].get("stop_loss"),
@@ -516,16 +726,31 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
         "score_source_snapshot": {
             "observed_at": context.get("observed_at"),
             "content_locale": locale,
+            "report_v2": {
+                "version": 2,
+                "sections": report_v2_prose,
+                "portfolio": jsonable_encoder(_report_source_times(context.get("report_portfolios") or {})),
+                "automation": jsonable_encoder(_report_source_times(context.get("report_bot_status") or {})),
+                "comparison": comparison,
+                "plans": [{"market_id": item.get("market_id"),
+                           "pair": item.get("pair"), "symbol": item.get("symbol"),
+                           "setups": item["setups"], "strategies": item["strategies"],
+                           "matches": item["matches"]} for item in facts["assets"]],
+            },
             "assets": [{
                 "symbol": item["symbol"],
                 "pair": item.get("pair"),
+                "market_id": item.get("market_id"),
                 "market_session_at_report": item["market_session_at_report"],
                 "score_report_date": item.get("score_report_date"),
                 "score_status": item["score_status"],
                 "component_source_status": item["component_source_status"],
                 "component_source_observed_at": item["component_source_observed_at"],
+                "verified_indicator_evidence": item["verified_indicator_evidence"],
                 "configured_indicators": item["configured_indicators"],
                 "reported_scores": item["scores"],
+                "benchmark_score": item["benchmark_score"],
+                "market_snapshot": item["market_snapshot"],
             } for item in facts["assets"]],
         },
         "meta": {"source": "finn_shared_context.v1", "report_facts_version": 2,

@@ -1482,7 +1482,9 @@ function mapMobileReport(
   fullReport?: ReportResponse,
 ): MappedReport {
   let hydratedReport: MobileReportResponse | undefined;
-  if (report && report._status !== 'pending') {
+  if (reportV2Snapshot(fullReport)) {
+    hydratedReport = buildMobileReportFromFullReport(fullReport!);
+  } else if (report && report._status !== 'pending') {
     hydratedReport = report;
   } else if (fullReport && hasUsableFullReport(fullReport)) {
     hydratedReport = buildMobileReportFromFullReport(fullReport);
@@ -1495,9 +1497,9 @@ function mapMobileReport(
   const outlook = normalizeReportText(String(hydratedReport.outlook_compact || ''));
   const scores = scoresFromKpis(hydratedReport.kpi_metrics);
   const avgScore = scores.reduce((total, item) => total + item.value, 0) / Math.max(1, scores.length);
-  const headline = headlineFromReport(summary, avgScore);
+  const headline = reportV2Snapshot(fullReport) ? 'FINN dagrapport' : headlineFromReport(summary, avgScore);
   const highlights = normalizeHighlights(hydratedReport.highlights);
-  const fullSections = fullReportSections(fullReport, hydratedReport);
+  const fullSections = fullReportSections(fullReport, hydratedReport, language);
 
   return {
     conclusionTitle: conclusionTitle(avgScore),
@@ -1537,6 +1539,8 @@ function hasUsableFullReport(fullReport: ReportResponse | undefined) {
 }
 
 function buildMobileReportFromFullReport(fullReport: ReportResponse): MobileReportResponse {
+  const v2 = reportV2Snapshot(fullReport);
+  const v2Sections = readRecord(v2?.sections);
   const highlights = [
     ...reportHighlightsFromField(fullReport, 'market_indicator_highlights', 'market'),
     ...reportHighlightsFromField(fullReport, 'macro_indicator_highlights', 'macro'),
@@ -1548,7 +1552,7 @@ function buildMobileReportFromFullReport(fullReport: ReportResponse): MobileRepo
     best_setup: fullReport.best_setup,
     bot_snapshot: fullReport.bot_snapshot,
     executive_summary_compact: normalizeReportText(
-      readReportText(fullReport, ['executive_summary', 'summary']),
+      readStringField(v2Sections, ['retrospective']) || readReportText(fullReport, ['executive_summary', 'summary']),
     ),
     generated_at:
       readStringField(fullReport, ['generated_at', 'created_at']) || null,
@@ -1563,10 +1567,10 @@ function buildMobileReportFromFullReport(fullReport: ReportResponse): MobileRepo
       volume: readReportNumber(fullReport, ['volume', 'total_volume']) ?? 0,
     },
     market_analysis_compact: normalizeReportText(
-      readReportText(fullReport, ['market_analysis', 'market_overview']),
+      readStringField(v2Sections, ['analysis']) || readReportText(fullReport, ['market_analysis', 'market_overview']),
     ),
     outlook_compact: normalizeReportText(
-      readReportText(fullReport, ['outlook', 'strategic_lessons']),
+      readStringField(v2Sections, ['outlook_v2']) || readReportText(fullReport, ['outlook', 'strategic_lessons']),
     ),
     period_end: readStringField(fullReport, ['period_end']) || null,
     period_start: readStringField(fullReport, ['period_start']) || null,
@@ -1661,7 +1665,89 @@ function normalizeHighlights(highlights?: MobileReportHighlight[]) {
   return normalized;
 }
 
-function fullReportSections(fullReport: ReportResponse | undefined, mobileReport: MobileReportResponse) {
+function reportV2Snapshot(fullReport: ReportResponse | undefined) {
+  const snapshot = readRecord(fullReport?.score_source_snapshot);
+  const v2 = readRecord(snapshot?.report_v2);
+  return v2?.version === 2 ? v2 : undefined;
+}
+
+function fullReportSections(fullReport: ReportResponse | undefined, mobileReport: MobileReportResponse, language: AppLanguage) {
+  const v2 = reportV2Snapshot(fullReport);
+  if (v2) {
+    const prose = readRecord(v2.sections);
+    const labels = ({
+      nl: ['Terugblik', 'Portfolio', 'Analyse', 'Mijn plan', 'Automatisering', 'Vooruitblik'],
+      en: ['Looking back', 'Portfolio', 'Analysis', 'My plan', 'Automation', 'Looking ahead'],
+      de: ['Rückblick', 'Portfolio', 'Analyse', 'Mein Plan', 'Automatisierung', 'Ausblick'],
+    } as Record<string, string[]>)[language] || ['Looking back', 'Portfolio', 'Analysis', 'My plan', 'Automation', 'Looking ahead'];
+    const terms = ({
+      nl: { cash: 'cash', positions: 'posities', market: 'Markt', macro: 'Macro', technical: 'Technisch', active: 'actief', paused: 'gepauzeerd', weekly: 'wekelijks', monthly: 'maandelijks', daily: 'dagelijks', smart: 'scoregestuurd', buy: 'Koop', sell: 'Verkoop', hold: 'Houd vast' },
+      en: { cash: 'cash', positions: 'positions', market: 'Market', macro: 'Macro', technical: 'Technical', active: 'active', paused: 'paused', weekly: 'weekly', monthly: 'monthly', daily: 'daily', smart: 'score based', buy: 'Buy', sell: 'Sell', hold: 'Hold' },
+      de: { cash: 'Guthaben', positions: 'Positionen', market: 'Markt', macro: 'Makro', technical: 'Technisch', active: 'aktiv', paused: 'pausiert', weekly: 'wöchentlich', monthly: 'monatlich', daily: 'täglich', smart: 'scoreabhängig', buy: 'Kauf', sell: 'Verkauf', hold: 'Halten' },
+    } as Record<string, Record<string, string>>)[language] || { cash: 'cash', positions: 'positions', market: 'Market', macro: 'Macro', technical: 'Technical', active: 'active', paused: 'paused', weekly: 'weekly', monthly: 'monthly', daily: 'daily', smart: 'score based', buy: 'Buy', sell: 'Sell', hold: 'Hold' };
+    const weekdays = ({
+      nl: ['maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag', 'zondag'],
+      en: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+      de: ['Montag', 'Dienstag', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'],
+    } as Record<string, string[]>)[language] || [];
+    const snapshot = readRecord(fullReport?.score_source_snapshot);
+    const formatScore = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? `${value}/100` : '—';
+    const formatMoney = (value: unknown) => typeof value === 'number' && Number.isFinite(value)
+      ? new Intl.NumberFormat(language, { style: 'currency', currency: 'EUR' }).format(value) : '—';
+    const portfolio = readRecord(v2.portfolio);
+    const portfolioFacts = ['paper', 'live'].map((mode) => {
+      const data = readRecord(portfolio?.[mode]);
+      const total = readRecord(data?.global);
+      return `${mode === 'paper' ? 'Paper' : 'Live'} · ${formatMoney(total?.total_equity)} · ${terms.cash} ${formatMoney(total?.cash_balance)} · ${terms.positions} ${formatMoney(total?.current_position_value)}`;
+    });
+    const analysisFacts = readArray(snapshot?.assets).map((item) => {
+      const asset = readRecord(item);
+      const scores = readRecord(asset?.reported_scores);
+      return `${readStringField(asset, ['pair', 'symbol'])} · ${formatScore(asset?.benchmark_score)} · ${terms.market} ${formatScore(scores?.market_score)} · ${terms.macro} ${formatScore(scores?.macro_score)} · ${terms.technical} ${formatScore(scores?.technical_score)}`;
+    });
+    const planFacts = readArray(v2.plans).flatMap((item) => {
+      const asset = readRecord(item);
+      return readArray(asset?.setups).map((row) => {
+        const setup = readRecord(row);
+        const strategies = readArray(asset?.strategies).map(readRecord).filter((strategy) => strategy?.setup_id === setup?.id);
+        const frequency = readStringField(setup, ['dca_frequency']);
+        const cadence = terms[frequency] || frequency;
+        const dayNumber = frequency === 'weekly' ? Number(setup?.dca_day) : Number(setup?.dca_month_day);
+        const day = frequency === 'weekly' && dayNumber >= 1 && dayNumber <= 7 ? weekdays[dayNumber - 1] : Number.isFinite(dayNumber) && dayNumber > 0 ? String(dayNumber) : '';
+        const amount = strategies.map((strategy) => {
+          const curve = readRecord(strategy?.decision_curve);
+          const bands = readArray(curve?.points).map((point) => {
+            const band = readRecord(point);
+            return typeof band?.x === 'number' && typeof band?.y === 'number' ? `${band.x}→${Math.round(band.y * 100)}%` : '';
+          }).filter(Boolean).join(', ');
+          return `${readStringField(strategy, ['name'])}: ${formatMoney(strategy?.base_amount)}${strategy?.execution_mode === 'custom' ? ` · ${terms.smart}${bands ? ` (${bands})` : ''}` : ''}`;
+        }).join('; ');
+        return `${readStringField(asset, ['pair', 'symbol'])} · ${readStringField(setup, ['name'])} · ${readStringField(setup, ['timeframe'])}${cadence ? ` · ${cadence}${day ? ` ${day}` : ''}` : ''}${amount ? ` · ${amount}` : ''}`;
+      });
+    });
+    const automation = readRecord(v2.automation);
+    const botFacts = readArray(automation?.bots).map((row) => {
+      const bot = readRecord(row);
+      const decision = readRecord(bot?.latest_decision);
+      const action = readStringField(decision, ['action']).toLowerCase();
+      return `${readStringField(bot, ['bot_name', 'strategy_name', 'symbol'])} · ${bot?.is_live ? 'Live' : 'Paper'} · ${bot?.is_active ? terms.active : terms.paused} · ${readStringField(bot, ['trading_pair', 'symbol'])}${decision ? ` · ${terms[action] || action} (${readStringField(decision, ['at'])})` : ''}`;
+    });
+    const extraFacts: Record<string, string[]> = { portfolio: portfolioFacts, analysis: analysisFacts, plan: planFacts, automation: botFacts };
+    const chapters: Array<{ key: string; title: string; tone: StatusTone }> = [
+      { key: 'retrospective', title: labels[0], tone: 'neutral' },
+      { key: 'portfolio', title: labels[1], tone: 'accent' },
+      { key: 'analysis', title: labels[2], tone: 'neutral' },
+      { key: 'plan', title: labels[3], tone: 'accent' },
+      { key: 'automation', title: labels[4], tone: 'neutral' },
+      { key: 'outlook_v2', title: labels[5], tone: 'warning' },
+    ];
+    return chapters.map(({ key, title, tone }) => ({
+      label: title,
+      title,
+      tone,
+      paragraphs: [...splitReportParagraphs(readStringField(prose, [key])), ...(extraFacts[key] || [])],
+    }));
+  }
   const scores = scoresFromKpis(mobileReport.kpi_metrics);
   const sections = [
     {

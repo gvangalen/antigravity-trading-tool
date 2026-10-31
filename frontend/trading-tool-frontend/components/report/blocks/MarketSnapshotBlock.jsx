@@ -3,6 +3,7 @@
 import ReportCard from "../ReportCard";
 import { Activity } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
+import { reportMarketLabel, scoreSourceSnapshot } from "@/lib/report/reportSourceSnapshot.mjs";
 
 /* =====================================================
    HELPERS
@@ -19,9 +20,10 @@ function formatNumber(v, decimals = 0) {
   });
 }
 
-function formatUSD(v) {
+function formatPrice(v, pair) {
   if (!isNum(v)) return "–";
-  return `$${formatNumber(v, 0)}`;
+  const quote = String(pair || "").split("/")[1];
+  return `${quote === "EUR" ? "€" : quote === "USD" ? "US$" : ""}${formatNumber(v, 2)}${quote && quote !== "EUR" && quote !== "USD" ? ` ${quote}` : ""}`;
 }
 
 function formatPercent(v) {
@@ -57,11 +59,42 @@ function ScoreItem({ label, value }) {
 
 export default function MarketSnapshotBlock({
   report,
-  title = "Market_Audit_Log",
 }) {
   const { t } = useTranslation();
   const copy = t?.reports?.blocks?.marketSnapshot || {};
   if (!report || typeof report !== "object") return null;
+  const assets = scoreSourceSnapshot(report)?.assets || [];
+  if (assets.length > 1) {
+    return (
+      <ReportCard title={copy.cardTitle} icon={<Activity size={16} />}>
+        <div className="space-y-4">
+          {assets.map((asset, index) => {
+            const scores = asset.reported_scores || {};
+            const snapshot = asset.market_snapshot || {};
+            const measured = snapshot.source_status === "fresh";
+            const components = [
+              [copy.marketLabel, scores.market_score],
+              [copy.macroLabel, scores.macro_score],
+              [copy.technicalLabel, scores.technical_score],
+            ];
+            return (
+              <div key={`${reportMarketLabel(asset)}-${index}`} className="border-b border-slate-200 pb-3 last:border-0 last:pb-0">
+                <strong className="text-foreground">{reportMarketLabel(asset)}</strong>
+                {measured && isNum(snapshot.price) && (
+                  <div className="text-sm">{copy.priceLabel}: {formatPrice(snapshot.price, asset.pair)}</div>
+                )}
+                <div className="mt-2 flex flex-wrap gap-x-3 text-sm">
+                  {components.map(([label, value]) => (
+                    <span key={label}>{label}: {scoreValue(value)}</span>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </ReportCard>
+    );
+  }
 
   const {
     price,
@@ -70,14 +103,12 @@ export default function MarketSnapshotBlock({
     macro_score,
     technical_score,
     market_score,
-    setup_score,
   } = report;
 
   const hasAnyScores =
     isNum(macro_score) ||
     isNum(technical_score) ||
-    isNum(market_score) ||
-    isNum(setup_score);
+    isNum(market_score);
 
   if (!isNum(price) && !isNum(change_24h) && !isNum(volume) && !hasAnyScores) return null;
 
@@ -95,7 +126,7 @@ export default function MarketSnapshotBlock({
           </div>
           <div className="flex items-baseline gap-3">
             <div className="text-3xl font-bold text-foreground tracking-tight font-mono">
-              {formatUSD(price)}
+              {formatPrice(price, assets[0]?.pair)}
             </div>
             <div className={`text-sm font-bold font-mono ${
               changeIsUp === null ? "text-secondary" : changeIsUp ? "text-green-600" : "text-red-600"
@@ -123,7 +154,6 @@ export default function MarketSnapshotBlock({
           <ScoreItem label={copy.macroLabel} value={macro_score} />
           <ScoreItem label={copy.technicalLabel} value={technical_score} />
           <ScoreItem label={copy.marketLabel} value={market_score} />
-          <ScoreItem label={copy.setupLabel} value={setup_score} />
         </div>
       )}
     </ReportCard>

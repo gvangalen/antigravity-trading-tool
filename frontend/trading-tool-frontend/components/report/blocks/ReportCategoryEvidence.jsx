@@ -3,6 +3,7 @@
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { formatDateTime } from "@/lib/i18n";
 import { parseUtcMoment, reportMarketLabel, scoreSourceSnapshot } from "@/lib/report/reportSourceSnapshot.mjs";
+import { indicatorDisplayName } from "@/lib/indicators/configuredIndicatorRows.mjs";
 
 export default function ReportCategoryEvidence({ report, category, isPrint = false }) {
   const { t, locale } = useTranslation();
@@ -17,7 +18,7 @@ export default function ReportCategoryEvidence({ report, category, isPrint = fal
       day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC",
     })} UTC` : copy.hudSourceUnknown;
   };
-  const sourceLabel = (name) => copy.hudIndicatorLabels?.[String(name).toLowerCase().replaceAll(/[-\s]+/g, "_")] || name;
+  const sourceLabel = (name) => copy.hudIndicatorLabels?.[String(name).toLowerCase().replaceAll(/[-\s]+/g, "_")] || indicatorDisplayName(name);
 
   return (
     <details open={isPrint} className="mt-6 rounded-xl border border-slate-200 bg-slate-50/70 p-4 text-sm text-slate-600">
@@ -31,6 +32,7 @@ export default function ReportCategoryEvidence({ report, category, isPrint = fal
             : ["missing_score", "missing_indicator_reading"].includes(status) ? "missing"
             : status === "score_rebuild_pending" ? "pending" : "unknown";
           const sources = asset.component_source_observed_at?.[category] || {};
+          const evidence = asset.verified_indicator_evidence?.[category] || {};
           const configured = asset.configured_indicators?.[category];
           return (
             <div key={`${reportMarketLabel(asset)}-${index}`} className="border-t border-slate-200 pt-2 first:border-0 first:pt-0">
@@ -40,6 +42,13 @@ export default function ReportCategoryEvidence({ report, category, isPrint = fal
               )}
               {Object.entries(sources).map(([name, moment]) => (
                 <div key={name}>{sourceLabel(name)} · {formatMoment(moment)}</div>
+              ))}
+              {Object.entries(evidence).map(([name, reading]) => (
+                reading?.value !== null && reading?.value !== undefined
+                  ? <div key={`value-${name}`}>{sourceLabel(name)}: {Number.isFinite(Number(reading.value))
+                    ? Number(reading.value).toLocaleString(locale, { maximumFractionDigits: 4 })
+                    : String(reading.value)}{reading.unit ? ` ${reading.unit}` : ""}</div>
+                  : null
               ))}
             </div>
           );

@@ -32,6 +32,7 @@ import ReportContainer from '@/components/report/layout/ReportContainer';
 import ReportLayout from '@/components/report/layout/ReportLayout';
 import ReportTerminalHUD from '@/components/report/ReportTerminalHUD';
 import DailyTraderStatus from '@/components/report/DailyTraderStatus';
+import { scoreSourceSnapshot } from '@/lib/report/reportSourceSnapshot.mjs';
 import FinnTradeReviews from '@/components/report/FinnTradeReviews';
 import { ReportSkeleton } from '@/components/dashboard/DashboardSkeleton';
 import DashboardErrorBoundary from '@/components/ui/DashboardErrorBoundary';
@@ -1852,7 +1853,7 @@ export default function ReportPage() {
   };
 
   useEffect(() => {
-    if (reportType === 'daily' && report) loadTraderStatus();
+    if (reportType === 'daily' && report && scoreSourceSnapshot(report)?.report_v2?.version !== 2) loadTraderStatus();
   }, [reportType, report]);
 
   /* =====================================================
@@ -2125,7 +2126,7 @@ RENDER
                       </div>
                     </DashboardErrorBoundary>
 
-                    {reportType === 'daily' && (
+                    {reportType === 'daily' && scoreSourceSnapshot(report)?.report_v2?.version !== 2 && (
                       <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
                         <DailyTraderStatus report={report} status={traderStatus}
                           loading={traderStatusLoading} error={traderStatusError} onRefresh={loadTraderStatus} />
