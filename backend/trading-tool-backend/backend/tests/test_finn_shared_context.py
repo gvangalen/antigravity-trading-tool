@@ -354,6 +354,51 @@ def test_report_v2_freezes_portfolio_and_prior_pair_score_without_losing_luna_pr
     assert v2["automation"]["bots"][0]["latest_decision"]["at"] == "2026-10-30T08:00:00+00:00"
 
 
+def test_report_v2_rejects_prior_score_absence_and_paused_bot_claims(monkeypatch):
+    prior = {"report_date": "2026-10-30", "snapshot": {"assets": [{
+        "symbol": "BTC", "pair": "BTC/EUR", "benchmark_score": None,
+        "reported_scores": {"market_score": 50, "macro_score": 20, "technical_score": 40},
+    }]}}
+    context = {"locale": "nl", "observed_at": "2026-10-31T09:00:00+00:00",
+               "report_previous": [prior],
+               "report_bot_status": {"bots": [{"symbol": "ETH", "is_active": False,
+                                                 "bot_name": "ETH Paper"}]},
+               "assets": [{"symbol": "BTC", "pair": "BTC/EUR", "setups": [],
+                           "strategies": [], "bots": [], "benchmark": {"source_status": "missing",
+                               "reported_scores": {}, "component_source_status": {}},
+                           "market_snapshot": {}}]}
+    monkeypatch.setattr(reports, "_load_context", lambda _id: asyncio.sleep(0, result=context))
+    answer = {key: f"{key}: verslag op basis van opgeslagen gegevens." for key in reports.REPORT_V2_SECTIONS}
+    answer["retrospective"] = "BTC/EUR en ETH hadden gisteren geen benchmark of deelscores."
+    answer["automation"] = "De ETH-Paper-bot is actief en kan nu handelen."
+    monkeypatch.setattr(reports, "ask_gpt_json", lambda **_: answer)
+
+    v2 = reports.generate_unified_daily_report_sections(7)["score_source_snapshot"]["report_v2"]
+    assert "markt 50" in v2["sections"]["retrospective"]
+    assert "gepauzeerd" in v2["sections"]["automation"]
+    assert v2["comparison"]["previous_observations"][0]["scores"]["technical_score"] == 40
+
+
+def test_report_v2_rejects_blanket_daily_cadence_for_mixed_dca_plans(monkeypatch):
+    context = {"locale": "nl", "observed_at": "2026-10-31T09:00:00+00:00", "assets": [{
+        "symbol": "BTC", "pair": "BTC/EUR", "benchmark": {"source_status": "missing",
+            "reported_scores": {}, "component_source_status": {}}, "market_snapshot": {},
+        "setups": [{"id": 1, "name": "Dagelijks", "setup_type": "dca", "timeframe": "1D",
+                    "dca_frequency": "daily"},
+                   {"id": 2, "name": "Vrijdag", "setup_type": "dca", "timeframe": "1D",
+                    "dca_frequency": "weekly", "dca_day": "5"}],
+        "strategies": [], "bots": [],
+    }]}
+    monkeypatch.setattr(reports, "_load_context", lambda _id: asyncio.sleep(0, result=context))
+    answer = {key: f"{key}: verslag op basis van opgeslagen gegevens." for key in reports.REPORT_V2_SECTIONS}
+    answer["plan"] = "BTC/EUR heeft twee dagelijkse DCA-plannen."
+    monkeypatch.setattr(reports, "ask_gpt_json", lambda **_: answer)
+
+    plan = reports.generate_unified_daily_report_sections(7)["score_source_snapshot"]["report_v2"]["sections"]["plan"]
+    assert "wekelijks vrijdag" in plan
+    assert "twee dagelijkse" not in plan
+
+
 def test_chat_and_report_project_the_same_verified_score_snapshot(monkeypatch):
     assessment = {
         "symbol": "ETH", "as_of": "2026-10-10", "source_status": "available",
