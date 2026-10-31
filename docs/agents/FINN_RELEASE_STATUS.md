@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Report 2.0 PDF: botwaarde en rapporttaal (31 oktober 2026)
 
-Phase: `RELEASE_CANDIDATE`. De bestaande onafhankelijke QA-agent testte een
+Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De bestaande onafhankelijke QA-agent testte een
 nieuwe ingelogde PDF op live SHA `39878a72809a5b09aecf24b3f20ba7c69ca91394`.
 Verdict: `NOT_ACCEPTED`. De score `36,7/100` en paginering waren hersteld,
 maar de Automatisering-kaart noemde €0 positiewaarde nog `Totale waarde`
@@ -29,8 +29,18 @@ zes Nederlandstalige rapportsecties met behoud van een opgeslagen plannaam.
 De lokale runtime zelf heeft geen `OPENAI_API_KEY`; daarom is die proef in
 de beschermde CI-runtime uitgevoerd. De gegenereerde rapporttekst bevatte
 de gecontroleerde Engelse brontermen niet. De actiecontracten en
-selectorroute zijn in deze batch niet gewijzigd. Er is nog geen nieuwe deploy
-of ingelogde QA-acceptatie voor deze kandidaat.
+selectorroute zijn in deze batch niet gewijzigd.
+[PR #729](https://github.com/gvangalen/antigravity-trading-tool/pull/729) is
+samengevoegd als `f8e8267bc93a166a5fef6ad81af7884f4f6292b0`.
+Alle vijf PR-controles en main-CI
+[41216165861](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41216165861)
+slaagden. Auto Deploy
+[41216409402](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41216409402)
+slaagde; publieke backend-health en frontend-buildinfo gaven beide HTTP 200 en
+dezelfde SHA. Deze documentatiecommit creëert zelf een volgende main-SHA;
+daarvoor moeten de laatste CI, deploy en publieke SHA's nog overeenkomen
+voordat de bestaande QA-agent de ingelogde PDF herkeurt. Er is nog geen
+onafhankelijke QA-acceptatie voor deze reparatie.
 
 ## Report 2.0 PDF herkeuring: botwaarde, scoregetal en paginering (31 oktober 2026)
 
