@@ -4,6 +4,26 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Report 2.0: paargebonden feiten en 24-uurspercentages (31 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. Onafhankelijke QA gaf `NOT_ACCEPTED` op live
+SHA `dd0d182d391ce3a47a4d945b307ea0747d6ebaa3`. Verse NL- en EN-rapporten
+schreven 24-uurswijzigingen ongeveer honderdmaal te groot; EN verbond bovendien
+BTC/EUR-setupnamen en matchscores aan BTC/USDT. De gevraagde NL-alineaopmaak en
+de Duitse weekdagnamen waren in de live PDF's wel hersteld. De eerste Duitse
+rapportpoging eindigde op 92% met een browser-`Polling timeout`; herhaling
+slaagde. Een run-ID en typed backendfout waren via de QA-UI niet zichtbaar.
+
+De nieuwe kandidaat `codex/report2-pair-fact-guard` levert 24-uurswijzigingen
+aan de rapportwriter als expliciete percentages, houdt setup- en matchfeiten
+per exact handelspaar bijeen, en controleert uitsluitend die numerieke en
+paargebonden claims. Bij een concrete fout laat FINN alleen de Analyse-sectie
+opnieuw schrijven; als ook die tekst feitelijk fout is, volgt een korte
+brongebonden sectie. Er zijn geen vaste coachalinea's toegevoegd. Gerichte
+rapporttests: 32 geslaagd. Volledige backend-suite: 4151 geslaagd, 4 bestaande
+skips. De echte Responses-proef, CI, deploy en onafhankelijke live herkeuring
+zijn voor deze kandidaat nog niet uitgevoerd.
+
 ## Report 2.0 PDF: leesbare Analyse en Duitse weekdagen (31 oktober 2026)
 
 Phase: `LIVE_PENDING_QA`. Gebruikers-PDF `daily_report_2026-10-31-2.pdf`

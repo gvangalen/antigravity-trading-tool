@@ -331,6 +331,55 @@ def test_report_v2_german_writer_receives_weekday_names_without_storage_codes():
     assert friday["dca_day"] == "5"  # The frozen source plan remains unchanged.
 
 
+def test_report_v2_analysis_guard_keeps_percent_units_and_pair_boundaries():
+    facts = {"assets": [
+        {"display_symbol": "BTC/EUR", "market_snapshot": {"source_status": "fresh", "change_24h": -0.295},
+         "setups": [{"name": "EUR buying zone"}]},
+        {"display_symbol": "BTC/USDT", "market_snapshot": {"source_status": "fresh", "change_24h": 0.354},
+         "setups": [{"name": "USDT buying zone"}]},
+        {"display_symbol": "ETH", "market_snapshot": {"source_status": "fresh", "change_24h": 0.826},
+         "setups": []},
+    ]}
+    assert reports._report_v2_prompt_market_snapshot(facts["assets"][0]["market_snapshot"], "nl")["change_24h_percent"] == "-0,295%"
+    assert "change_24h" not in reports._report_v2_prompt_market_snapshot(facts["assets"][0]["market_snapshot"], "nl")
+    good = ("BTC/EUR: 24-hour change is −0.295%; EUR buying zone applies.\n\n"
+            "BTC/USDT: 24-hour change is +0.354%; USDT buying zone applies.\n\n"
+            "ETH: 24-hour change is +0.826%.")
+    assert not reports._report_v2_analysis_claims_contradict(good, facts)
+    assert reports._report_v2_analysis_claims_contradict(good.replace("−0.295%", "−29.5%"), facts)
+    assert reports._report_v2_analysis_claims_contradict(good.replace("+0.826%", "+82.6%"), facts)
+    assert reports._report_v2_analysis_claims_contradict(good.replace("USDT buying zone applies", "EUR buying zone applies"), facts)
+
+
+def test_report_v2_repairs_wrong_percent_and_foreign_pair_setup_without_fixed_prose(monkeypatch):
+    assets = [
+        {"symbol": "BTC", "pair": "BTC/EUR", "market_snapshot": {"source_status": "fresh", "change_24h": -0.295},
+         "setups": [{"id": 1, "name": "EUR buying zone", "setup_type": "trade"}], "strategies": [], "bots": [],
+         "benchmark": {"source_status": "missing_scores", "reported_scores": {}, "matches": []}},
+        {"symbol": "BTC", "pair": "BTC/USDT", "market_snapshot": {"source_status": "fresh", "change_24h": 0.354},
+         "setups": [{"id": 2, "name": "USDT buying zone", "setup_type": "trade"}], "strategies": [], "bots": [],
+         "benchmark": {"source_status": "missing_scores", "reported_scores": {}, "matches": []}},
+    ]
+    monkeypatch.setattr(reports, "_load_context", lambda _id: asyncio.sleep(0, result={"locale": "en", "assets": assets}))
+    calls = []
+    def writer(**kwargs):
+        calls.append(json.loads(kwargs["prompt"]))
+        if len(calls) == 1:
+            answer = {key: f"A useful {key} paragraph about the saved BTC plans." for key in reports.REPORT_V2_SECTIONS}
+            answer["analysis"] = ("BTC/EUR: 24-hour change is −29.5%; EUR buying zone applies. "
+                                  "BTC/USDT: 24-hour change is +35.4%; EUR buying zone applies.")
+            return answer
+        return {"analysis": ("BTC/EUR: The measured 24-hour change is −0.295%; EUR buying zone applies.\n\n"
+                             "BTC/USDT: The measured 24-hour change is +0.354%; USDT buying zone applies.")}
+    monkeypatch.setattr(reports, "ask_gpt_json", writer)
+    result = reports.generate_unified_daily_report_sections(7)
+    assert len(calls) == 2
+    assert calls[0]["context"]["assets"][0]["market_snapshot"]["change_24h_percent"] == "-0.295%"
+    assert "change_24h" not in calls[0]["context"]["assets"][0]["market_snapshot"]
+    assert "−0.295%" in result["score_source_snapshot"]["report_v2"]["sections"]["analysis"]
+    assert "USDT buying zone" in result["score_source_snapshot"]["report_v2"]["sections"]["analysis"]
+
+
 def test_report_v2_freezes_portfolio_and_prior_pair_score_without_losing_luna_prose(monkeypatch):
     prior = {"report_date": "2026-10-30", "snapshot": {"assets": [{
         "symbol": "BTC", "pair": "BTC/EUR", "benchmark_score": 40,

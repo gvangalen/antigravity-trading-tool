@@ -438,6 +438,57 @@ def _market_direction_contradicts_snapshot(text: str, facts: dict[str, Any]) -> 
                 (all_rise and any(value < 0 for value in changes)))
 
 
+def _report_v2_prompt_market_snapshot(snapshot: dict[str, Any], locale: str) -> dict[str, Any]:
+    """Give the writer an explicit percentage instead of an ambiguous bare number."""
+    projected = {key: value for key, value in snapshot.items() if key != "change_24h"}
+    change = snapshot.get("change_24h")
+    if isinstance(change, (int, float)) and not isinstance(change, bool):
+        number = f"{float(change):+.3f}".rstrip("0").rstrip(".")
+        if locale in ("nl", "de"):
+            number = number.replace(".", ",")
+        projected["change_24h_percent"] = f"{number}%"
+    return projected
+
+
+def _report_v2_analysis_claims_contradict(value: str, facts: dict[str, Any]) -> bool:
+    """Check pair-scoped price changes and plan names, leaving prose to Luna."""
+    assets = [item for item in facts.get("assets") or [] if item.get("display_symbol")]
+    if not assets:
+        return False
+    by_symbol = {str(item["display_symbol"]): item for item in assets}
+    names = sorted(by_symbol, key=len, reverse=True)
+    starts = list(re.finditer(
+        rf"(?<![\w/])({'|'.join(re.escape(name) for name in names)})\s*:", value, re.I,
+    ))
+    for index, start in enumerate(starts):
+        symbol = start.group(1)
+        item = next((row for name, row in by_symbol.items() if name.casefold() == symbol.casefold()), None)
+        if item is None:
+            continue
+        section = value[start.end(): starts[index + 1].start() if index + 1 < len(starts) else len(value)]
+        snapshot = item.get("market_snapshot") or {}
+        expected = snapshot.get("change_24h") if snapshot.get("source_status") == "fresh" else None
+        # Market snapshots already express change_24h in percent, not as a ratio.
+        change_terms = r"(?:24[-\s]?(?:hour|uur|stunden)|24h|24u|24-?stündig|daily change)"
+        claims = re.findall(rf"{change_terms}[^;\n]{{0,55}}?([+\-−]?\d+(?:[.,]\d+)?)\s*%", section, re.I)
+        claims += re.findall(rf"([+\-−]?\d+(?:[.,]\d+)?)\s*%[^;\n]{{0,35}}?{change_terms}", section, re.I)
+        for claim in claims:
+            number = float(claim.replace("−", "-").replace(",", "."))
+            if not isinstance(expected, (int, float)) or isinstance(expected, bool):
+                return True
+            if abs(number - float(expected)) > max(0.05, abs(float(expected)) * 0.05):
+                return True
+        own_names = {str(row.get("name") or "").casefold() for row in item.get("setups") or []}
+        for other in assets:
+            if other is item:
+                continue
+            for setup in other.get("setups") or []:
+                name = str(setup.get("name") or "").strip()
+                if name and name.casefold() not in own_names and re.search(re.escape(name), section, re.I):
+                    return True
+    return False
+
+
 def _bot_status_section(facts: dict[str, Any], locale: str) -> str:
     bots = [bot for asset in facts["assets"] for bot in asset["bots"]]
     if not bots:
@@ -714,7 +765,8 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
         "comparison": comparison,
     }
     factual_context = {**facts, "assets": [
-        {**item, "setups": [_report_v2_prompt_plan(row, locale) for row in item.get("setups") or []],
+        {**item, "market_snapshot": _report_v2_prompt_market_snapshot(item.get("market_snapshot") or {}, locale),
+         "setups": [_report_v2_prompt_plan(row, locale) for row in item.get("setups") or []],
          "strategies": [_report_v2_prompt_plan(row, locale) for row in item.get("strategies") or []],
          "configured_indicators": {
             category: [_report_indicator_label(name, locale) for name in names]
@@ -742,6 +794,10 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
             "A DCA plan does not require trade entry, stop-loss or target prices; do not advise "
             "adding those merely because they are absent from the DCA strategy. "
             "Only verified_indicator_evidence contains measured indicator values. "
+            "market_snapshot.change_24h_percent is already a percentage, not a fraction; "
+            "copy its magnitude and sign without multiplying by 100. "
+            "Each setup and match belongs only to the asset's exact display_symbol trading pair. "
+            "Do not apply BTC/EUR plans or matches to BTC/USDT or vice versa. "
             "Write six Report 2.0 sections as useful narrative, naming relevant assets, "
             "measured scores, missing evidence and plan implications in the appropriate section. "
             "In analysis, use short paragraphs separated by blank lines, grouped by trading pair; "
@@ -794,6 +850,39 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
     for key in REPORT_V2_SECTIONS:
         candidate = str(result.get(key) or "").strip() if isinstance(result, dict) else ""
         report_v2_prose[key] = candidate if len(candidate) >= 20 else v2_fallbacks[key]
+    if _report_v2_analysis_claims_contradict(report_v2_prose["analysis"], facts):
+        # Repair only the affected narrative. The measured facts remain the
+        # authority; a failed repair falls back to a short factual section.
+        repaired = ask_gpt_json(
+            system_role=(
+                "You are FINN. Rewrite only the analysis section in the requested locale. "
+                "Use short paragraphs, one per exact trading pair. A 24-hour change "
+                "is already in percent and must keep its measured sign and magnitude. "
+                "A setup name, range or match may be attached only to its own pair. "
+                "Keep the useful explanation. Return JSON with one analysis string."
+            ),
+            prompt=json.dumps({
+                "locale": locale,
+                "assets": [{
+                    "display_symbol": item["display_symbol"],
+                    "market_snapshot": _report_v2_prompt_market_snapshot(item.get("market_snapshot") or {}, locale),
+                    "scores": item["scores"],
+                    "benchmark_score": item.get("benchmark_score"),
+                    "setups": item.get("setups") or [],
+                    "matches": item.get("matches") or [],
+                } for item in facts["assets"]],
+                "draft": report_v2_prose["analysis"],
+            }, ensure_ascii=False, default=str),
+            max_tokens=1400,
+            model_override=os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna"),
+            reasoning_effort="none",
+        )
+        candidate = str(repaired.get("analysis") or "").strip() if isinstance(repaired, dict) else ""
+        report_v2_prose["analysis"] = (
+            candidate if len(candidate) >= 20
+            and not _report_v2_analysis_claims_contradict(candidate, facts)
+            else v2_fallbacks["analysis"]
+        )
     allowed_scores = {
         float(value)
         for item in facts["assets"]
