@@ -1,16 +1,23 @@
 import logging
 from typing import Optional
+from celery.result import AsyncResult
 from fastapi import APIRouter, HTTPException, Query, Depends, Header
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.database import get_db
-from backend.utils.auth_utils import get_current_user
+from backend.utils.auth_utils import get_current_user, decode_token
+from backend.celery_task.celery_app import celery_app
 from backend.infrastructure.repositories.report_repository import ReportRepository
 from backend.services.report_service import ReportService
 from backend.services.daily_report_trader_status_service import current_daily_trader_status
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+class ReportGenerationStatusRequest(BaseModel):
+    status_token: str
 
 async def get_report_service(
     db: AsyncSession = Depends(get_db),
@@ -93,6 +100,38 @@ async def generate_daily(
     except Exception as e:
         logger.error("❌ generate_daily failed: %s", e, exc_info=True)
         raise _report_internal_error()
+
+
+@router.post("/report/daily/generation-status")
+async def get_daily_generation_status(
+    request: ReportGenerationStatusRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Owner-bound task status; never expose raw Celery errors or task results."""
+    try:
+        claims = decode_token(request.status_token)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Rapporttaak niet gevonden.")
+    if (
+        claims.get("type") != "report_generation"
+        or claims.get("period") != "daily"
+        or claims.get("sub") != str(current_user["id"])
+        or not isinstance(claims.get("task_id"), str)
+    ):
+        raise HTTPException(status_code=404, detail="Rapporttaak niet gevonden.")
+
+    result = AsyncResult(claims["task_id"], app=celery_app)
+    state = result.state
+    response = {"state": state}
+    if state == "FAILURE":
+        response["error_code"] = (
+            "ai_rate_limited"
+            if "daily_report_ai_rate_limited" in str(result.result)
+            else "generation_failed"
+        )
+    elif state == "REVOKED":
+        response["error_code"] = "generation_failed"
+    return response
 
 @router.get("/report/daily/export/pdf")
 async def export_daily_pdf(
