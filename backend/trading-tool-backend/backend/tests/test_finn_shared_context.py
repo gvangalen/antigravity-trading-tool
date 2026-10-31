@@ -184,7 +184,10 @@ def test_report_context_uses_a_scoped_connection_without_disposing_the_api_pool(
         for_user=AsyncMock(return_value={"assets": []}),
     ))
 
-    assert asyncio.run(reports._load_context(7)) == {"assets": []}
+    context = asyncio.run(reports._load_context(7))
+    assert context["assets"] == []
+    assert context["report_portfolios"]["paper"]["valuation_status"] == "unavailable"
+    assert context["report_previous"] == []
     assert disposed == [True]
 
 
@@ -310,6 +313,45 @@ def test_daily_report_projects_dca_cadence_curve_and_verified_readings(monkeypat
     assert evidence == {"value": 7659.44, "score": 80,
                         "source_observed_at": "2026-10-30T00:00:00+00:00"}
     assert report["score_source_snapshot"]["assets"][0]["verified_indicator_evidence"]["macro"]["sp500"] == evidence
+    report_v2 = report["score_source_snapshot"]["report_v2"]
+    assert report_v2["version"] == 2
+    assert report_v2["plans"][0]["setups"][0]["dca_frequency"] == "weekly"
+    assert report_v2["plans"][0]["strategies"][0]["decision_curve"] == curve
+    assert report_v2["sections"]["analysis"]
+
+
+def test_report_v2_freezes_portfolio_and_prior_pair_score_without_losing_luna_prose(monkeypatch):
+    prior = {"report_date": "2026-10-30", "snapshot": {"assets": [{
+        "symbol": "BTC", "pair": "BTC/EUR", "benchmark_score": 40,
+    }]}}
+    context = {"locale": "nl", "observed_at": "2026-10-31T09:00:00+00:00",
+               "report_previous": [prior],
+               "report_portfolios": {"paper": {"global": {"total_equity": 300,
+                   "cash_balance": 300, "total_budget_limit": 1000}, "bots": []},
+                   "live": {"global": {"total_equity": None, "cash_balance": None}, "bots": []}},
+               "report_bot_status": {"observed_at": "2026-10-31T09:00:00+00:00",
+                   "bots": [{"bot_id": 5, "is_live": False, "latest_decision": {
+                       "action": "hold", "at": "2026-10-30T08:00:00+00:00"}}]},
+               "assets": [{"symbol": "BTC", "pair": "BTC/EUR", "setups": [],
+                   "strategies": [], "bots": [], "benchmark": {"source_status": "available",
+                       "benchmark_score": 65, "reported_scores": {"market_score": 50,
+                           "macro_score": 80, "technical_score": 65},
+                       "component_source_status": {"market_score": "fresh",
+                           "macro_score": "fresh", "technical_score": "fresh"}},
+                   "market_snapshot": {"source_status": "fresh", "change_24h": 1.0}}]}
+    monkeypatch.setattr(reports, "_load_context", lambda _id: asyncio.sleep(0, result=context))
+    answer = {key: f"{key}: opgeslagen BTC/EUR-momentopname." for key in reports.REPORT_V2_SECTIONS}
+    answer["retrospective"] = "Gisteren stond BTC/EUR op 40/100; vandaag is dat 65/100."
+    monkeypatch.setattr(reports, "ask_gpt_json", lambda **_: answer)
+
+    result = reports.generate_unified_daily_report_sections(7)
+    v2 = result["score_source_snapshot"]["report_v2"]
+    assert v2["sections"]["retrospective"] == answer["retrospective"]
+    assert v2["comparison"]["changes"] == [{"asset": "BTC/EUR", "fact": "benchmark_score",
+                                            "before": 40, "after": 65}]
+    assert v2["portfolio"]["paper"]["global"]["total_equity"] == 300
+    assert v2["portfolio"]["live"]["global"]["total_equity"] is None
+    assert v2["automation"]["bots"][0]["latest_decision"]["at"] == "2026-10-30T08:00:00+00:00"
 
 
 def test_chat_and_report_project_the_same_verified_score_snapshot(monkeypatch):

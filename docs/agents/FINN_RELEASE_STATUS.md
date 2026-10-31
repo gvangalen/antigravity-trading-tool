@@ -4,6 +4,22 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Report 2.0 releasekandidaat (31 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. De gebruiker heeft expliciet gevraagd Report 2.0 nu
+te releasen en de PDF daarna opnieuw op de nieuwe rapportopzet te beoordelen.
+De eerdere PDF-herkeuring van de oude rapportopzet wordt daarmee vervangen.
+Kandidaat `codex/report-context-cards` bouwt het dagrapport uit een bevroren,
+eigenaargebonden momentopname met de onderdelen terugblik, Portfolio, Analyse,
+Mijn Plan, Automatisering en vooruitblik. De webweergave gebruikt dezelfde
+benchmarkschaal als Analyse en toont ontbrekende scores zonder fictieve waarde.
+Oudere opgeslagen rapporten blijven in hun oorspronkelijke indeling leesbaar.
+Backend: 4143 tests geslaagd, 4 overgeslagen. Webproductiebuild en mobiele
+typecheck, lint en iOS-bundelcontrole zijn lokaal geslaagd. Een echte
+Luna/Responses-aanroep vulde alle zes onderdelen. De selector-providerproeven
+voor de definitieve kandidaat, CI, Auto Deploy en onafhankelijke live
+rapport-/PDF-QA volgen nog.
+
 ## Dagrapport browserdownload (31 oktober 2026)
 
 Phase: `LIVE_AWAITING_INDEPENDENT_QA`. [PR #716](https://github.com/gvangalen/antigravity-trading-tool/pull/716)

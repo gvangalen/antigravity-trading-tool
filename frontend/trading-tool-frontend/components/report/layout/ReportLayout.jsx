@@ -3,6 +3,8 @@
 import ReportSectionMarket from '@/components/report/sections/ReportSectionMarket';
 import ReportSectionAnalysis from '@/components/report/sections/ReportSectionAnalysis';
 import ReportSectionStrategy from '@/components/report/sections/ReportSectionStrategy';
+import ReportV2Layout from '@/components/report/layout/ReportV2Layout';
+import { scoreSourceSnapshot } from '@/lib/report/reportSourceSnapshot.mjs';
 
 /**
  * 📄 ReportLayout (Unified Professional Edition)
@@ -24,6 +26,9 @@ import ReportSectionStrategy from '@/components/report/sections/ReportSectionStr
  */
 export default function ReportLayout({ report, isPrint = false }) {
   if (!report) return null;
+  if (scoreSourceSnapshot(report)?.report_v2?.version === 2) {
+    return <ReportV2Layout report={report} isPrint={isPrint} />;
+  }
 
   return (
     <div
