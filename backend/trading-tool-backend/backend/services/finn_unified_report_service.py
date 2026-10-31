@@ -676,10 +676,65 @@ def _report_v2_factual_fallbacks(context: dict[str, Any], facts: dict[str, Any],
                 else:
                     plans.append(f"{asset['display_symbol']} · {strategy.get('name') or 'Strategy'}: "
                                  f"base amount {amount_label} per execution")
+    analysis_parts = []
+    component_names = {
+        "nl": ("Markt", "Macro", "Technisch"),
+        "en": ("Market", "Macro", "Technical"),
+        "de": ("Markt", "Makro", "Technik"),
+    }.get(locale, ("Market", "Macro", "Technical"))
+    for asset in facts["assets"]:
+        label = str(asset.get("display_symbol") or asset.get("symbol") or "").strip()
+        if not label:
+            continue
+        scores = asset.get("scores") or {}
+        components = [scores.get(key) for key in ("market_score", "macro_score", "technical_score")]
+        def formatted(value: object) -> str:
+            number = f"{float(value):g}"
+            return number.replace(".", ",") if locale in ("nl", "de") else number
+        available = [f"{name} {formatted(value)}/100" for name, value in zip(component_names, components)
+                     if isinstance(value, (int, float)) and not isinstance(value, bool)]
+        absent = [name for name, value in zip(component_names, components)
+                  if not isinstance(value, (int, float)) or isinstance(value, bool)]
+        benchmark = asset.get("benchmark_score")
+        if isinstance(benchmark, (int, float)) and not isinstance(benchmark, bool):
+            if locale == "de":
+                detail = f"Benchmarkwert {formatted(benchmark)}/100; " + ", ".join(available) + "."
+            elif locale == "nl":
+                detail = f"Benchmarkscore {formatted(benchmark)}/100; " + ", ".join(available) + "."
+            else:
+                detail = f"Benchmark score {formatted(benchmark)}/100; " + ", ".join(available) + "."
+        else:
+            missing = ", ".join(absent)
+            if locale == "de":
+                detail = "Kein vollständiger aktueller Benchmark."
+                if missing:
+                    detail += f" {missing} ohne brauchbaren Score."
+            elif locale == "nl":
+                detail = "Geen complete actuele benchmark."
+                if missing:
+                    detail += f" {missing} zonder bruikbare score."
+            else:
+                detail = "No complete current benchmark."
+                if missing:
+                    detail += f" No usable score for {missing}."
+            if available:
+                detail += " " + ", ".join(available) + "."
+        snapshot = asset.get("market_snapshot") or {}
+        change = snapshot.get("change_24h") if snapshot.get("source_status") == "fresh" else None
+        if isinstance(change, (int, float)) and not isinstance(change, bool):
+            percent = _report_v2_prompt_market_snapshot(snapshot, locale)["change_24h_percent"]
+            if locale == "de":
+                detail += f" Gemessene Kursänderung über 24 Stunden: {percent}."
+            elif locale == "nl":
+                detail += f" Gemeten koerswijziging over 24 uur: {percent}."
+            else:
+                detail += f" Measured 24-hour price change: {percent}."
+        analysis_parts.append(f"{label}: {detail}")
     return {
         "retrospective": retrospective,
         "portfolio": portfolio,
-        "analysis": " ".join((legacy["market_analysis"], legacy["macro_context"], legacy["technical_analysis"])),
+        "analysis": "\n\n".join(analysis_parts) if analysis_parts else " ".join(
+            (legacy["market_analysis"], legacy["macro_context"], legacy["technical_analysis"])),
         "plan": "; ".join(plans) + "." if plans else legacy["setup_validation"],
         "automation": automation,
         "outlook_v2": legacy["outlook"],
@@ -712,7 +767,7 @@ def _report_v2_contradicts_facts(section: str, value: str, facts: dict[str, Any]
             return True
 
     paused = [bot for bot in (context.get("report_bot_status") or {}).get("bots") or []
-              if bot.get("is_active") is False]
+              if bot.get("is_active") is False] if section == "automation" else []
     if paused:
         for sentence in re.split(r"(?<=[.!?])\s+", value):
             if not re.search(r"\b(?:actief|active|aktiv)\b", sentence, re.I):

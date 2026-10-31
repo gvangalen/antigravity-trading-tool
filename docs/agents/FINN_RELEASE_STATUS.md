@@ -4,6 +4,26 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Report 2.0: Duitse Analyse bij gemengde scorebeschikbaarheid (31 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. Onafhankelijke QA gaf `NOT_ACCEPTED` op live SHA
+`f9a3e0ca854bf81feb509e7b4c6b24734ca27722`: de Engelse timeout kwam
+niet terug en de NL-, EN- en DE-PDF's behielden hun paargebonden feiten, maar
+de Duitse Analyse viel terug op algemene tekst over ontbrekende metingen
+terwijl meerdere scorekaarten complete actuele BTC- en ETH-benchmarks toonden.
+De precieze trigger van die terugval is zonder typed runtrace niet bewezen.
+
+Kandidaat `codex/report2-analysis-fallback` maakt de feitelijke terugvaltekst
+per exact handelspaar uit de bevroren Score 2.0-feiten. Een ontbrekende
+benchmark wordt alleen voor dat paar genoemd; bestaande scores en gedateerde
+24-uursmetingen blijven zichtbaar. Ook beperkt de botstatuscontrole zich tot
+de Automatisering-sectie, zodat zij geen Analyse-tekst afkeurt. Luna blijft de
+primaire schrijver; deze wijziging raakt geen actiecontract of botuitvoering.
+Gerichte tests: 38 geslaagd. Volledige backend-suite: 4154 geslaagd, 4
+bestaande skips. Frontend typecheck, i18n-lint, 30 i18n-tests en build
+slaagden. Echte provider-CI, merge, deployment en onafhankelijke herkeuring
+volgen nog.
+
 ## Report 2.0: generatie begrensd na Engelse timeout (31 oktober 2026)
 
 Phase: `LIVE_PENDING_QA`. Onafhankelijke QA gaf `NOT_ACCEPTED` op live SHA

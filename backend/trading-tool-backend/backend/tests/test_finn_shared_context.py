@@ -338,6 +338,39 @@ def test_report_v2_german_writer_receives_weekday_names_without_storage_codes():
     assert friday["dca_day"] == "5"  # The frozen source plan remains unchanged.
 
 
+def test_report_v2_german_analysis_fallback_uses_available_pair_scores():
+    facts = {"assets": [
+        {"symbol": "BTC", "display_symbol": "BTC/EUR", "scores": {
+            "market_score": 50, "macro_score": 20, "technical_score": 40},
+         "benchmark_score": 36.7,
+         "market_snapshot": {"source_status": "fresh", "change_24h": 0.227},
+         "setups": [], "strategies": []},
+        {"symbol": "BTC", "display_symbol": "BTC/USDT", "scores": {
+            "market_score": 30, "macro_score": 20, "technical_score": 40},
+         "benchmark_score": 30,
+         "market_snapshot": {"source_status": "fresh", "change_24h": -0.295},
+         "setups": [], "strategies": []},
+        {"symbol": "AAPL", "display_symbol": "AAPL", "scores": {
+            "market_score": None, "macro_score": None, "technical_score": None},
+         "benchmark_score": None, "market_snapshot": {}, "setups": [], "strategies": []},
+    ]}
+    fallback = reports._report_v2_factual_fallbacks(
+        {"locale": "de", "assets": []}, facts, {}, "de")
+    analysis = fallback["analysis"]
+    assert "BTC/EUR: Benchmarkwert 36,7/100; Markt 50/100, Makro 20/100, Technik 40/100." in analysis
+    assert "BTC/USDT: Benchmarkwert 30/100; Markt 30/100, Makro 20/100, Technik 40/100." in analysis
+    assert "+0,227%" in analysis and "-0,295%" in analysis
+    assert "AAPL: Kein vollständiger aktueller Benchmark." in analysis
+    assert "BTC/EUR: Kein vollständiger" not in analysis
+
+
+def test_report_v2_analysis_is_not_rejected_for_unrelated_paused_bot():
+    context = {"report_bot_status": {"bots": [{"symbol": "BTC", "is_active": False}]}}
+    facts = {"assets": []}
+    assert not reports._report_v2_contradicts_facts(
+        "analysis", "BTC has an active price measurement.", facts, context, {})
+
+
 def test_report_v2_analysis_guard_keeps_percent_units_and_pair_boundaries():
     facts = {"assets": [
         {"display_symbol": "BTC/EUR", "market_snapshot": {"source_status": "fresh", "change_24h": -0.295},
