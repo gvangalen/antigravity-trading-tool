@@ -4,6 +4,33 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Report 2.0: generatie begrensd na Engelse timeout (31 oktober 2026)
+
+Phase: `LIVE_PENDING_QA`. Onafhankelijke QA gaf `NOT_ACCEPTED` op live SHA
+`aa6a8176613f8be86a3592bfb3f4dcd404b3fb00`. Nieuwe NL- en DE-PDF's
+toonden de correcte paargebonden 24-uurspercentages, gescheiden BTC/EUR- en
+BTC/USDT-plannen, korte Nederlandse Analyse-alinea's en Duitse weekdagnamen.
+Twee pogingen voor een nieuw Engels rapport leverden geen nieuwe momentopname
+of PDF op; de tweede eindigde in de browser met `Polling timeout`. De 92% in
+de voortgangsbalk was een clientanimatie, geen gemeten backendvoortgang. Een
+run-ID of typed serverfout was niet beschikbaar, dus de productierootcause is
+niet bewezen.
+
+Kandidaat `codex/report2-generation-timeout` begrenst de hoofd-Responses-call
+tot 75 seconden per poging zonder verborgen SDK-retries en eventuele
+reparatiecalls tot 30 seconden. Zo kan een vastgelopen providerrequest niet
+onbegrensd de rapportworker bezetten. De rapportfeiten, Luna-tekst en
+brongebonden terugval blijven gelijk. Gerichte backendtests: 43 geslaagd;
+volledige backend-suite: 4152 geslaagd, 4 bestaande skips. Frontend typecheck,
+i18n-lint, 30 i18n-tests en productiebuild slaagden. De handmatige
+[CI-run 41227002513](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41227002513)
+op kandidaat `849fc56c8bd9662cbd135937c017cbcdc05c62b2` slaagde op vijf jobs,
+inclusief de echte Responses-proef. De actiecontracten zijn niet gewijzigd.
+[PR #736](https://github.com/gvangalen/antigravity-trading-tool/pull/736) is
+samengevoegd als `8c54fb0f333d79be62bb8f00fc0663576efebbfe`. Main-CI,
+Auto Deploy, publieke SHA-controle en onafhankelijke live herkeuring moeten
+voor de definitieve revision nog worden voltooid.
+
 ## Report 2.0: paargebonden feiten en 24-uurspercentages (31 oktober 2026)
 
 Phase: `LIVE_PENDING_QA`. Onafhankelijke QA gaf `NOT_ACCEPTED` op de vorige live
