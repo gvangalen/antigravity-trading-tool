@@ -4,6 +4,24 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Report 2.0 PDF herkeuring: botwaarde, scoregetal en paginering (31 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. De bestaande onafhankelijke QA-agent testte op
+live SHA `549a2dffb35bd1d826c5a462b59de491faebb48f` een nieuw
+ingelogd rapport en een PDF van acht A4-pagina's. Verdict: `NOT_ACCEPTED`.
+Engelse opmaaklabels en bedragnotatie zijn hersteld. In dezelfde momentopname
+stond een gefinancierd Paper-botportfolio met €300 cash, terwijl de
+Automatisering-kaart de €0 positiewaarde verkeerd als totale waarde labelde.
+Een NL-scorekop gebruikte `36.7` naast `36,7` in de tekst. Analyse en
+Vooruitblik braken in de PDF ongunstig over pagina's.
+
+Kandidaat `codex/report2-pdf-qa-fixes` labelt de botmeting als
+`Positiewaarde`, formatteert de score met de rapporttaal en houdt
+rapportalinea's en de slotsectie bij PDF-print zo veel mogelijk bij elkaar.
+De inhoudelijke rapportfeiten en botberekening zijn ongewijzigd. Frontend
+typecheck, i18n-lint, 29 i18n-tests en productiebuild zijn lokaal geslaagd.
+Ingelogde live QA op de definitieve gedeployde SHA blijft vereist.
+
 ## Report 2.0 PDF-taal en leesbaarheid (31 oktober 2026)
 
 Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De gebruiker leverde een PDF van
