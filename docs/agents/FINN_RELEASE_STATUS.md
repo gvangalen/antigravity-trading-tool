@@ -4,6 +4,35 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Report 2.0 live herkeuring en herstelkandidaat (31 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. De eerste onafhankelijke ingelogde webherkeuring van
+Report 2.0 op live SHA `56bf954df166f34c84c738cc144dddfbaa381d90`
+eindigde `NOT_ACCEPTED`. Een nieuw rapport verscheen pas na een extra selectie
+of harde refresh wanneer een historisch rapport was geselecteerd. De terugblik
+ontkende opgeslagen scores van de vorige dag, twee gepauzeerde Paper-bots
+werden actief genoemd, en een wekelijks BTC/EUR-plan werd onder dagelijkse
+plannen geschaard. De QA-browser kon na drie PDF-klikken geen download
+waarnemen; de HTTP-uitkomst van die export is niet vastgesteld.
+
+Kandidaat `codex/report2-qa-fixes` vergelijkt het nieuwste opgeslagen rapport
+vóór en na generatie, los van de geselecteerde historische datum. De
+rapportprojectie geeft de vorige geverifieerde deelscores door en controleert
+uitspraken over botstatus en DCA-frequentie tegen de eigenaargebonden
+momentopname. Tegenstrijdige secties krijgen een korte feitelijke weergave uit
+dezelfde gegevens. De gerichte backendtests slaagden (26) en de volledige
+backend-suite slaagde (4145, 4 skips). Frontend build, typecheck, i18n-
+controles, command/proposal-tests en high audit zijn lokaal geslaagd.
+De lokale worker-actiematrix slaagde 16/16 en de adapterregistratie 21/21
+(actiematrix-artifact SHA-256 `373b39d465e9cf702c101108188a2056d04f9959a142040e438b35683b122fb1`).
+De echte Luna/Responses-selectorproeven slaagden voor development 20/20
+(SHA-256 `ace67a7f2aa3ca956f5f03d7229716a791410d1ad6962dab74080e20351fac21`)
+en regression 109/109
+(SHA-256 `73e2b8062e96101d46d3b2553ce7adae1724e3100d1055780df4f7deb3b27f66`).
+Ook de twee gerichte PDF-downloadtests slagen. CI, deployment en onafhankelijke
+herkeuring op de definitieve SHA blijven open; dit is geen live of
+QA-acceptatieclaim.
+
 ## Report 2.0 releasekandidaat (31 oktober 2026)
 
 Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De gebruiker heeft expliciet gevraagd Report 2.0 nu

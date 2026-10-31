@@ -1898,7 +1898,7 @@ LOAD
 GENERATE
 ===================================================== */
 
-  const pollUntilNewReport = async (preferDate = 'latest') => {
+  const pollUntilNewReport = async (baselineSignature = '') => {
     pollTokenRef.current += 1;
     const token = pollTokenRef.current;
 
@@ -1910,15 +1910,13 @@ GENERATE
       await sleep(POLL_INTERVAL_MS);
       await waitUntilVisible();
 
-      const data =
-        preferDate === 'latest'
-          ? await current.getLatest({ forceFresh: true })
-          : await current.getByDate(preferDate, { forceFresh: true });
+      const data = await current.getLatest({ forceFresh: true });
 
       const sig = getReportSignature(data);
 
-      if (isReadyReport(data) && sig && sig !== lastSignatureRef.current) {
+      if (isReadyReport(data) && sig && sig !== baselineSignature) {
         lastSignatureRef.current = sig;
+        setSelectedDate('latest');
         setReport(data);
         return;
       }
@@ -1929,7 +1927,7 @@ GENERATE
     throw new Error('Polling timeout');
   };
 
-  const handleGenerate = async (fromAuto = false, preferDate = 'latest') => {
+  const handleGenerate = async (fromAuto = false) => {
     setGenerating(true);
     setLoading(true);
     setGenerateInfo(
@@ -1939,17 +1937,27 @@ GENERATE
     );
 
     try {
+      // The selected history date is not the report being generated. Compare
+      // against the latest saved report so an older selection cannot satisfy
+      // the poll before the new report has actually been stored.
+      let baselineSignature = '';
+      try {
+        baselineSignature = getReportSignature(await current.getLatest({ forceFresh: true }));
+      } catch {
+        // No prior report is a normal state for a new account.
+      }
       const generation = await current.generate();
       if (generation?.source === 'existing_daily_report') {
         const existing = await current.getLatest({ forceFresh: true });
         if (isReadyReport(existing)) {
           lastSignatureRef.current = getReportSignature(existing);
+          setSelectedDate('latest');
           setReport(existing);
           showSnackbar(reportT.recentReport || `${fallbackLabel} is recent gemaakt en opnieuw getoond`, 'info');
           return;
         }
       }
-      await pollUntilNewReport(preferDate);
+      await pollUntilNewReport(baselineSignature);
       showSnackbar(`${fallbackLabel} staat klaar`, 'success');
     } catch (err) {
       console.error(err);
@@ -2102,7 +2110,7 @@ RENDER
                         </button>
 
                         <button
-                          onClick={() => handleGenerate(false, selectedDate)}
+                          onClick={() => handleGenerate(false)}
                           disabled={generating}
                           className="flex min-w-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-2 py-2 text-white shadow-lg shadow-blue-600/10 transition-all hover:bg-blue-700 active:scale-95 disabled:bg-slate-300 md:px-4"
                         >

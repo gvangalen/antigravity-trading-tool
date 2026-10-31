@@ -416,7 +416,14 @@ def _report_v2_comparison(context: dict[str, Any], facts: dict[str, Any]) -> dic
     """Compare like-for-like saved observations, never a prose prediction."""
     previous = context.get("report_previous") or []
     if not previous:
-        return {"status": "no_prior_report", "previous_date": None, "changes": []}
+        return {"status": "no_prior_report", "previous_date": None, "changes": [],
+                "previous_observations": []}
+    def observations(report: dict[str, Any]) -> list[dict[str, Any]]:
+        return [{"asset": row.get("pair") or row.get("symbol") or row.get("market_id"),
+                 "benchmark_score": row.get("benchmark_score"),
+                 "scores": row.get("reported_scores") or {}}
+                for row in (report.get("snapshot") or {}).get("assets") or []
+                if isinstance(row, dict)]
     def changes_since(report: dict[str, Any]) -> list[dict[str, Any]]:
         prior_assets = {
             (row.get("pair") or row.get("symbol") or row.get("market_id")): row
@@ -447,6 +454,7 @@ def _report_v2_comparison(context: dict[str, Any], facts: dict[str, Any]) -> dic
         return outlook[:1200] if isinstance(outlook, str) else None
     return {"status": "comparable" if changes else "no_comparable_change",
             "previous_date": latest.get("report_date"), "changes": changes,
+            "previous_observations": observations(latest),
             "previous_outlook": previous_outlook(latest),
             "week_earliest_date": earliest.get("report_date") if earliest else None,
             "week_changes": changes_since(earliest) if earliest else [],
@@ -462,32 +470,121 @@ def _report_v2_factual_fallbacks(context: dict[str, Any], facts: dict[str, Any],
     paper = snapshots.get("paper") or {}
     live = snapshots.get("live") or {}
     comparisons = comparison.get("changes") or []
+    prior = comparison.get("previous_observations") or []
     if locale == "en":
         retrospective = (f"Compared with {comparison['previous_date']}: " + "; ".join(
             f"{row['asset']} {row['fact']}: {row['before']} → {row['after']}" for row in comparisons)
             if comparisons else "No comparable change from a saved report in the past seven days.")
         portfolio = f"Paper valuation: {paper.get('valuation_status', 'unknown')}; Live valuation: {live.get('valuation_status', 'unknown')}."
-        automation = f"{len(bots)} bot(s) were read at the report time. A prior decision is not a new order."
+        states = "; ".join(f"{bot.get('trading_pair') or bot.get('symbol') or bot.get('bot_name') or 'Bot'}: "
+                           f"{'active' if bot.get('is_active') else 'paused'}" for bot in bots)
+        automation = f"{len(bots)} bot(s) read at report time. {states}. A prior decision is not a new order."
     elif locale == "de":
         retrospective = (f"Gegenüber {comparison['previous_date']}: " + "; ".join(
             f"{row['asset']} {row['fact']}: {row['before']} → {row['after']}" for row in comparisons)
             if comparisons else "Kein vergleichbarer Unterschied zu einem gespeicherten Bericht der letzten sieben Tage.")
         portfolio = f"Paper-Bewertung: {paper.get('valuation_status', 'unbekannt')}; Live-Bewertung: {live.get('valuation_status', 'unbekannt')}."
-        automation = f"{len(bots)} Bot(s) zum Berichtszeitpunkt gelesen. Eine ältere Entscheidung ist keine neue Order."
+        states = "; ".join(f"{bot.get('trading_pair') or bot.get('symbol') or bot.get('bot_name') or 'Bot'}: "
+                           f"{'aktiv' if bot.get('is_active') else 'pausiert'}" for bot in bots)
+        automation = f"{len(bots)} Bot(s) zum Berichtszeitpunkt gelesen. {states}. Eine ältere Entscheidung ist keine neue Order."
     else:
         retrospective = (f"Vergeleken met {comparison['previous_date']}: " + "; ".join(
             f"{row['asset']} {row['fact']}: {row['before']} → {row['after']}" for row in comparisons)
             if comparisons else "Er is geen vergelijkbare verandering uit een opgeslagen rapport van de afgelopen zeven dagen.")
+        if prior and not comparisons:
+            score_labels = {"market_score": "markt", "macro_score": "macro",
+                            "technical_score": "technisch"}
+            measured = [f"{row['asset']}: " + ", ".join(
+                [*([f"benchmark {row['benchmark_score']:g}"]
+                    if isinstance(row.get('benchmark_score'), (int, float)) else []),
+                 *(f"{score_labels.get(key, key)} {value:g}"
+                   for key, value in row['scores'].items() if isinstance(value, (int, float)))])
+                for row in prior if isinstance(row.get("benchmark_score"), (int, float))
+                or any(isinstance(value, (int, float)) for value in row['scores'].values())]
+            if measured:
+                retrospective = (f"Het opgeslagen rapport van {comparison['previous_date']} bevatte "
+                                 + "; ".join(measured) + ". Een vergelijkbare verandering van de "
+                                 "volledige benchmark is niet vastgesteld.")
         portfolio = f"Paperwaardering: {paper.get('valuation_status', 'onbekend')}; Livewaardering: {live.get('valuation_status', 'onbekend')}."
-        automation = f"{len(bots)} bot(s) gelezen op het rapportmoment. Een oudere beslissing is geen nieuwe order."
+        states = "; ".join(f"{bot.get('trading_pair') or bot.get('symbol') or bot.get('bot_name') or 'Bot'}: "
+                           f"{'actief' if bot.get('is_active') else 'gepauzeerd'}"
+                           for bot in bots)
+        automation = (f"{len(bots)} bot(s) gelezen op het rapportmoment. {states}. "
+                      "Een oudere beslissing is geen nieuwe order.")
+    frequency_labels = {
+        "nl": {"daily": "dagelijks", "weekly": "wekelijks", "monthly": "maandelijks"},
+        "en": {"daily": "daily", "weekly": "weekly", "monthly": "monthly"},
+        "de": {"daily": "täglich", "weekly": "wöchentlich", "monthly": "monatlich"},
+    }
+    weekday_labels = {
+        "nl": ("maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag", "zondag"),
+        "en": ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"),
+        "de": ("Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"),
+    }
+    timeframe_label = {"nl": "analysetijdframe", "en": "analysis timeframe", "de": "Analysezeitrahmen"}.get(locale, "analysis timeframe")
+    plans = []
+    for asset in facts["assets"]:
+        for setup in asset.get("setups") or []:
+            cadence = setup.get("dca_frequency") if setup.get("setup_type") == "dca" else None
+            cadence_label = frequency_labels.get(locale, frequency_labels["en"]).get(cadence, cadence)
+            if cadence == "weekly" and str(setup.get("dca_day") or "").isdigit():
+                day = int(setup["dca_day"])
+                if 1 <= day <= 7:
+                    cadence_label += " " + weekday_labels.get(locale, weekday_labels["en"])[day - 1]
+            elif cadence == "monthly" and str(setup.get("dca_month_day") or "").isdigit():
+                day = int(setup["dca_month_day"])
+                if 1 <= day <= 31:
+                    cadence_label += f" {day}"
+            plans.append(f"{asset['display_symbol']} · {setup.get('name') or 'Setup'}: "
+                         f"{cadence_label or setup.get('setup_type') or 'unknown'}, "
+                         f"{timeframe_label} {setup.get('timeframe') or 'unknown'}")
     return {
         "retrospective": retrospective,
         "portfolio": portfolio,
         "analysis": " ".join((legacy["market_analysis"], legacy["macro_context"], legacy["technical_analysis"])),
-        "plan": " ".join((legacy["setup_validation"], legacy["strategy_implication"])),
+        "plan": "; ".join(plans) + ". " + legacy["strategy_implication"] if plans else legacy["setup_validation"],
         "automation": automation,
         "outlook_v2": legacy["outlook"],
     }
+
+
+def _report_v2_contradicts_facts(section: str, value: str, facts: dict[str, Any],
+                               context: dict[str, Any], comparison: dict[str, Any]) -> bool:
+    """Reject only concrete contradictions with the frozen report facts."""
+    if section == "retrospective":
+        prior_has_scores = any(
+            isinstance(score, (int, float)) and not isinstance(score, bool)
+            for row in comparison.get("previous_observations") or []
+            for score in (row.get("benchmark_score"), *(row.get("scores") or {}).values())
+        )
+        if prior_has_scores and re.search(
+            r"\b(?:geen|no|keine)\b.{0,65}\bbenchmarks?\b", value, re.I
+        ):
+            return True
+
+    paused = [bot for bot in (context.get("report_bot_status") or {}).get("bots") or []
+              if bot.get("is_active") is False]
+    if paused:
+        for sentence in re.split(r"(?<=[.!?])\s+", value):
+            if not re.search(r"\b(?:actief|active|aktiv)\b", sentence, re.I):
+                continue
+            if re.search(r"\b(?:niet|not|nicht)\s+(?:\w+\s+){0,2}(?:actief|active|aktiv)\b", sentence, re.I):
+                continue
+            if any(re.search(rf"\b{re.escape(str(bot.get('symbol') or ''))}\b", sentence, re.I)
+                   for bot in paused if bot.get("symbol")):
+                return True
+
+    if section == "plan":
+        frequencies = [setup.get("dca_frequency") for asset in facts["assets"]
+                       for setup in asset.get("setups") or []
+                       if setup.get("setup_type") == "dca"]
+        if any(freq != "daily" for freq in frequencies) and re.search(
+            r"\b(?:\d+|twee|drie|vier|two|three|four|zwei|drei|vier)\s+"
+            r"(?:\w+\s+){0,3}(?:dagelijkse|daily|tägliche)\s+"
+            r"(?:\w+\s+){0,2}(?:DCA[- ]?)?(?:plannen|plans|Pläne)\b", value, re.I
+        ):
+            return True
+    return False
 
 
 def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
@@ -588,9 +685,8 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
     # appears in today's snapshot. Those values come from saved reports.
     prior_scores = {
         float(value)
-        for change in (*comparison.get("changes", []), *comparison.get("week_changes", []))
-        if change.get("fact") == "benchmark_score"
-        for value in (change.get("before"), change.get("after"))
+        for row in comparison.get("previous_observations") or []
+        for value in (row.get("benchmark_score"), *(row.get("scores") or {}).values())
         if isinstance(value, (int, float)) and not isinstance(value, bool)
     }
     for section, value in prose.items():
@@ -608,7 +704,8 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
         false_strategy_absence = bool(strategy_names) and bool(re.search(
             r"\b(?:geen|no|keine)\s+(?:opgeslagen\s+|saved\s+|gespeicherte\s+)?(?:strategie|strategy|Strategie)\b", value, re.I))
         wrong_direction = section == "analysis" and _market_direction_contradicts_snapshot(value, facts)
-        if any(claim not in valid_scores for claim in claims) or false_strategy_absence or wrong_direction:
+        if (any(claim not in valid_scores for claim in claims) or false_strategy_absence
+                or wrong_direction or _report_v2_contradicts_facts(section, value, facts, context, comparison)):
             report_v2_prose[section] = v2_fallbacks[section]
     if _market_direction_contradicts_snapshot(prose["market_analysis"], facts):
         # Give the report writer one chance to correct its own prose using the
