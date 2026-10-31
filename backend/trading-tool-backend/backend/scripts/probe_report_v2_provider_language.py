@@ -28,27 +28,36 @@ def main() -> None:
         "report_bot_status": {"observed_at": "2026-10-31T09:00:00+00:00", "bots": []},
         "assets": [{
             "symbol": "BTC", "pair": "BTC/EUR",
-            "setups": [{"id": 1, "name": "Cash Builder", "setup_type": "dca",
+            "setups": [{"id": 1, "name": "EUR Cash Builder", "setup_type": "dca",
                         "timeframe": "1D", "dca_frequency": "weekly", "dca_day": 5}],
             "strategies": [{"id": 2, "name": "BTC DCA", "setup_id": 1,
                             "execution_mode": "fixed", "base_amount": 100}],
             "bots": [],
             "benchmark": {"source_status": "missing", "reported_scores": {},
                           "component_source_status": {}},
-            "market_snapshot": {"source_status": "fresh", "change_24h": 0.5},
+            "market_snapshot": {"source_status": "fresh", "change_24h": -0.295},
+        }, {
+            "symbol": "BTC", "pair": "BTC/USDT",
+            "setups": [{"id": 3, "name": "USDT Cash Builder", "setup_type": "dca",
+                        "timeframe": "1D", "dca_frequency": "weekly", "dca_day": 1}],
+            "strategies": [], "bots": [],
+            "benchmark": {"source_status": "missing", "reported_scores": {},
+                          "component_source_status": {}},
+            "market_snapshot": {"source_status": "fresh", "change_24h": 0.354},
         }],
     }
     reports._load_context = lambda _user_id: asyncio.sleep(0, result=context)
-    provider_result = {}
+    provider_result = []
     real_ask = reports.ask_gpt_json
 
     def capture_provider(**kwargs):
-        provider_result["value"] = real_ask(**kwargs)
-        return provider_result["value"]
+        value = real_ask(**kwargs)
+        provider_result.append(value)
+        return value
 
     reports.ask_gpt_json = capture_provider
     result = reports.generate_unified_daily_report_sections(1)
-    raw = provider_result.get("value")
+    raw = provider_result[0] if provider_result else None
     if not isinstance(raw, dict) or any(
         not isinstance(raw.get(section), str) or len(raw[section].strip()) < 20
         for section in reports.REPORT_V2_SECTIONS
@@ -58,19 +67,32 @@ def main() -> None:
     if any(re.search(r"\b(?:market score|technical scores?|total equity|P&L|outlook)\b", text, re.I)
            for text in sections.values()):
         raise AssertionError("English financial source terms remain in Dutch Report 2.0 prose")
-    if not any("Cash Builder" in text for text in sections.values()):
+    if not any("EUR Cash Builder" in text for text in sections.values()):
         raise AssertionError("Stored plan name was lost from Report 2.0")
+    def check_pair_facts(report):
+        facts = reports._report_facts(context)
+        analysis = report["score_source_snapshot"]["report_v2"]["sections"]["analysis"]
+        if reports._report_v2_analysis_claims_contradict(analysis, facts):
+            raise AssertionError("Report 2.0 analysis changed a percentage or crossed a pair boundary")
+    check_pair_facts(result)
     context["locale"] = "de"
     provider_result.clear()
     german_result = reports.generate_unified_daily_report_sections(1)
     german = german_result["score_source_snapshot"]["report_v2"]["sections"]
-    if not isinstance(provider_result.get("value"), dict):
+    if not provider_result or not isinstance(provider_result[0], dict):
         raise AssertionError("Provider did not return German Report 2.0 prose")
+    check_pair_facts(german_result)
     if any(re.search(r"\bWochentag\s*[1-7]\b", text, re.I) for text in german.values()):
         raise AssertionError("German report exposed a stored weekday code")
     if not any("Freitag" in text for text in (german["plan"], german["outlook_v2"])):
         raise AssertionError("German report did not explain the weekly plan with its weekday name")
-    print("Report 2.0 real-provider language gate: PASS (NL and DE)")
+    context["locale"] = "en"
+    provider_result.clear()
+    english_result = reports.generate_unified_daily_report_sections(1)
+    if not provider_result or not isinstance(provider_result[0], dict):
+        raise AssertionError("Provider did not return English Report 2.0 prose")
+    check_pair_facts(english_result)
+    print("Report 2.0 real-provider language gate: PASS (NL, DE and EN)")
 
 
 if __name__ == "__main__":
