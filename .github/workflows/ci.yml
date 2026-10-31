@@ -98,6 +98,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          PYTHONPATH: backend/trading-tool-backend
         run: python backend/trading-tool-backend/backend/scripts/probe_report_v2_provider_language.py
 
   frontend-quality:
