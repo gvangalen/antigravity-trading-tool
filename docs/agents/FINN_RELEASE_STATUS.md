@@ -6,9 +6,9 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Report 2.0 PDF: botwaarde en rapporttaal (31 oktober 2026)
 
-Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De bestaande onafhankelijke QA-agent testte een
-nieuwe ingelogde PDF op live SHA `39878a72809a5b09aecf24b3f20ba7c69ca91394`.
-Verdict: `NOT_ACCEPTED`. De score `36,7/100` en paginering waren hersteld,
+Phase: `ACCEPTED` op `6b084778567e1b51ea15a56998a1abd71ee921d5`.
+De eerdere QA op live SHA `39878a72809a5b09aecf24b3f20ba7c69ca91394`
+gaf `NOT_ACCEPTED`. De score `36,7/100` en paginering waren toen hersteld,
 maar de Automatisering-kaart noemde €0 positiewaarde nog `Totale waarde`
 terwijl Portfolio €300 Paper-kassaldo toonde. FINN's Nederlandstalige
 rapportalinea's bevatten Engelse brontermen als `market score`, `total equity`
@@ -37,10 +37,21 @@ Alle vijf PR-controles en main-CI
 slaagden. Auto Deploy
 [41216409402](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41216409402)
 slaagde; publieke backend-health en frontend-buildinfo gaven beide HTTP 200 en
-dezelfde SHA. Deze documentatiecommit creëert zelf een volgende main-SHA;
-daarvoor moeten de laatste CI, deploy en publieke SHA's nog overeenkomen
-voordat de bestaande QA-agent de ingelogde PDF herkeurt. Er is nog geen
-onafhankelijke QA-acceptatie voor deze reparatie.
+dezelfde SHA. Na een documentatierevisie werd de definitieve
+main-SHA `6b084778567e1b51ea15a56998a1abd71ee921d5` doorliep alle vijf
+CI-jobs en Auto Deploy; publieke backend-health en frontend-buildinfo gaven
+beide HTTP 200 met die SHA. Onafhankelijke QA gaf `ACCEPTED` voor de gerichte
+Report 2.0-herkeuring op deze release. Het nieuwe Nederlandse dagrapport van
+31 oktober (15:58 UTC) en de PDF van acht A4-pagina's tonen bij bots
+`Positiewaarde: € 0,00` naast afzonderlijk € 789,95 Paper-kassaldo en
+€ 1.650 budgetlimiet. Zes Nederlandse rapportsecties bevatten de eerder
+gemelde Engelse brontermen niet; plan- en botnamen bleven behouden. De
+benchmark staat als `36,7/100`, zonder afgebroken kaarten of alinea's.
+Nieuwe Engelse en Duitse PDF's lokaliseerden eveneens labels en bedragen.
+Kleine resterende leesbaarheidspunten: de Analyse-sectie is een dichte
+technische alinea en de Duitse Vooruitblik toont `Wochentag 5/1` in plaats
+van dagnamen. De QA-dekking betrof het aangewezen QA-account en dagrapport;
+andere rapportperiodes en gewone gebruikers zijn niet afzonderlijk getest.
 
 ## Report 2.0 PDF herkeuring: botwaarde, scoregetal en paginering (31 oktober 2026)
 
