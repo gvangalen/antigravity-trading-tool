@@ -28,8 +28,8 @@ def main() -> None:
         "report_bot_status": {"observed_at": "2026-10-31T09:00:00+00:00", "bots": []},
         "assets": [{
             "symbol": "BTC", "pair": "BTC/EUR",
-            "setups": [{"id": 1, "name": "Cash Builder", "setup_type": "DCA",
-                        "timeframe": "1D", "dca_frequency": "weekly", "dca_weekday": 1}],
+            "setups": [{"id": 1, "name": "Cash Builder", "setup_type": "dca",
+                        "timeframe": "1D", "dca_frequency": "weekly", "dca_day": 5}],
             "strategies": [{"id": 2, "name": "BTC DCA", "setup_id": 1,
                             "execution_mode": "fixed", "base_amount": 100}],
             "bots": [],
@@ -60,7 +60,17 @@ def main() -> None:
         raise AssertionError("English financial source terms remain in Dutch Report 2.0 prose")
     if not any("Cash Builder" in text for text in sections.values()):
         raise AssertionError("Stored plan name was lost from Report 2.0")
-    print("Report 2.0 real-provider Dutch prose gate: PASS (6 sections; plan name preserved)")
+    context["locale"] = "de"
+    provider_result.clear()
+    german_result = reports.generate_unified_daily_report_sections(1)
+    german = german_result["score_source_snapshot"]["report_v2"]["sections"]
+    if not isinstance(provider_result.get("value"), dict):
+        raise AssertionError("Provider did not return German Report 2.0 prose")
+    if any(re.search(r"\bWochentag\s*[1-7]\b", text, re.I) for text in german.values()):
+        raise AssertionError("German report exposed a stored weekday code")
+    if not any("Freitag" in text for text in (german["plan"], german["outlook_v2"])):
+        raise AssertionError("German report did not explain the weekly plan with its weekday name")
+    print("Report 2.0 real-provider language gate: PASS (NL and DE)")
 
 
 if __name__ == "__main__":

@@ -26,3 +26,20 @@ export function reportV2Change(change, labels) {
   };
   return `${change.asset} · ${title}: ${value(change.before)} → ${value(change.after)}`;
 }
+
+export function reportV2AnalysisParagraphs(value, locale = 'nl') {
+  const text = String(value || '').trim();
+  if (!text) return [];
+  return text.split(/\n\s*\n/).flatMap((paragraph) => {
+    const clean = paragraph.trim();
+    if (clean.length <= 320 || !Intl.Segmenter) return [clean];
+    const sentences = [...new Intl.Segmenter(locale, { granularity: 'sentence' }).segment(clean)]
+      .map(({ segment }) => segment.trim()).filter(Boolean);
+    if (sentences.length < 3) return [clean];
+    const blocks = [];
+    for (let index = 0; index < sentences.length; index += 2) {
+      blocks.push(sentences.slice(index, index + 2).join(' '));
+    }
+    return blocks;
+  });
+}

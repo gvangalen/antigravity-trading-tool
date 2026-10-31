@@ -34,6 +34,25 @@ REPORT_V2_SECTIONS = (
     "retrospective", "portfolio", "analysis", "plan", "automation", "outlook_v2",
 )
 
+REPORT_WEEKDAYS = {
+    "nl": ("maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag", "zondag"),
+    "en": ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"),
+    "de": ("Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"),
+}
+
+
+def _report_v2_prompt_plan(row: dict[str, Any], locale: str) -> dict[str, Any]:
+    """Give the writer a weekday name while keeping the frozen plan's numeric code."""
+    projected = {key: value for key, value in row.items() if key != "dca_day"}
+    if row.get("dca_frequency") == "weekly":
+        try:
+            day = int(row.get("dca_day"))
+        except (TypeError, ValueError):
+            day = 0
+        if 1 <= day <= 7:
+            projected["purchase_weekday"] = REPORT_WEEKDAYS.get(locale, REPORT_WEEKDAYS["en"])[day - 1]
+    return projected
+
 REPORT_V2_TERMINOLOGY = {
     "nl": {
         "market score": "marktscore", "technical scores": "technische scores",
@@ -576,11 +595,6 @@ def _report_v2_factual_fallbacks(context: dict[str, Any], facts: dict[str, Any],
         "en": {"daily": "daily", "weekly": "weekly", "monthly": "monthly"},
         "de": {"daily": "täglich", "weekly": "wöchentlich", "monthly": "monatlich"},
     }
-    weekday_labels = {
-        "nl": ("maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag", "zondag"),
-        "en": ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"),
-        "de": ("Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"),
-    }
     timeframe_label = {"nl": "analysetijdframe", "en": "analysis timeframe", "de": "Analysezeitrahmen"}.get(locale, "analysis timeframe")
     plans = []
     for asset in facts["assets"]:
@@ -590,7 +604,7 @@ def _report_v2_factual_fallbacks(context: dict[str, Any], facts: dict[str, Any],
             if cadence == "weekly" and str(setup.get("dca_day") or "").isdigit():
                 day = int(setup["dca_day"])
                 if 1 <= day <= 7:
-                    cadence_label += " " + weekday_labels.get(locale, weekday_labels["en"])[day - 1]
+                    cadence_label += " " + REPORT_WEEKDAYS.get(locale, REPORT_WEEKDAYS["en"])[day - 1]
             elif cadence == "monthly" and str(setup.get("dca_month_day") or "").isdigit():
                 day = int(setup["dca_month_day"])
                 if 1 <= day <= 31:
@@ -700,7 +714,9 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
         "comparison": comparison,
     }
     factual_context = {**facts, "assets": [
-        {**item, "configured_indicators": {
+        {**item, "setups": [_report_v2_prompt_plan(row, locale) for row in item.get("setups") or []],
+         "strategies": [_report_v2_prompt_plan(row, locale) for row in item.get("strategies") or []],
+         "configured_indicators": {
             category: [_report_indicator_label(name, locale) for name in names]
             for category, names in (item.get("configured_indicators") or {}).items()
         } if item.get("configured_indicators") is not None else None}
@@ -728,6 +744,9 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
             "Only verified_indicator_evidence contains measured indicator values. "
             "Write six Report 2.0 sections as useful narrative, naming relevant assets, "
             "measured scores, missing evidence and plan implications in the appropriate section. "
+            "In analysis, use short paragraphs separated by blank lines, grouped by trading pair; "
+            "keep each paragraph to two or three sentences. In plan and outlook, use the supplied "
+            "purchase_weekday name rather than a numeric weekday code. "
             "Distinguish no configured indicator from a configured indicator without a usable score. "
             "Do not repeat the same asset inventory in every section. "
             "Never say all measured assets rise or fall unless every supplied 24-hour change has that direction. "
