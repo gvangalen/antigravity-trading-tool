@@ -50,6 +50,7 @@ export default function ReportV2Layout({ report, isPrint = false }) {
   const traderCopy = t?.pages?.report?.traderStatus || {};
   const snapshot = scoreSourceSnapshot(report) || {};
   const v2 = snapshot.report_v2 || {};
+  const period = ['daily', 'weekly', 'monthly', 'quarterly'].includes(v2.period) ? v2.period : 'daily';
   const prose = v2.sections || {};
   const assets = Array.isArray(snapshot.assets) ? snapshot.assets : [];
   const plans = Array.isArray(v2.plans) ? v2.plans : [];
@@ -95,9 +96,15 @@ export default function ReportV2Layout({ report, isPrint = false }) {
   const reportDate = /^\d{4}-\d{2}-\d{2}$/.test(String(report?.report_date || ''))
     ? new Intl.DateTimeFormat(language, { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${report.report_date}T12:00:00Z`))
     : null;
+  const periodDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))
+    ? new Intl.DateTimeFormat(language, { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${value}T12:00:00Z`))
+    : null;
+  const periodRange = period !== 'daily' && periodDate(v2.period_start) && periodDate(v2.period_end)
+    ? `${periodDate(v2.period_start)} – ${periodDate(v2.period_end)}` : reportDate;
   return <div className={`mx-auto max-w-[1100px] space-y-6 pb-20 ${isPrint ? 'print:space-y-4' : ''}`}>
-    <div className="break-after-avoid pb-1"><h1 className="text-3xl font-bold text-slate-950">{t?.pages?.report?.types?.daily}</h1>{reportDate && <p className="mt-1 text-sm text-slate-600">{reportDate}</p>}</div>
+    <div className="break-after-avoid pb-1"><h1 className="text-3xl font-bold text-slate-950">{t?.pages?.report?.types?.[period]}</h1>{periodRange && <p className="mt-1 text-sm text-slate-600">{periodRange}</p>}</div>
     <Section title={c.retrospective} prose={prose.retrospective}>
+      {period !== 'daily' && <p className="mt-3 text-xs text-slate-500">{periodRange} · {v2.comparison?.observation_days || 0} {language === 'nl' ? 'opgeslagen vergelijkingsdagen' : language === 'de' ? 'gespeicherte Vergleichstage' : 'saved comparison days'}</p>}
       {(v2.comparison?.changes || []).length > 0 && <div className="mt-4 space-y-2 text-sm text-slate-600">{v2.comparison.changes.map((change, i) => <p key={`${change.asset}-${i}`}>{reportV2Change(change, changeLabels)}</p>)}</div>}
     </Section>
     <Section title={c.portfolio} prose={prose.portfolio}>

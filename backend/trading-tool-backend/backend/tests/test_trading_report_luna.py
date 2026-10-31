@@ -1,4 +1,7 @@
 from types import SimpleNamespace
+from datetime import date, timedelta
+
+import pytest
 
 from backend.services import finn_unified_report_service as reports
 from backend.utils import openai_client
@@ -75,16 +78,10 @@ def test_all_trading_report_generators_pin_luna(monkeypatch):
     captured = []
     shared = {"locale": "nl", "observed_at": "2026-10-07", "assets": []}
 
-    async def load_daily(_user_id):
+    async def load_daily(_user_id, period="daily"):
         return shared
 
-    async def load_period(_user_id, period):
-        return {"period": period, "period_start": "2026-10-01",
-                "period_end": "2026-10-07", "shared": shared,
-                "dated_scores": [], "bot_decisions": []}
-
     monkeypatch.setattr(reports, "_load_context", load_daily)
-    monkeypatch.setattr(reports, "_load_period_context", load_period)
     monkeypatch.setattr(reports, "ask_gpt_json", lambda **kwargs: captured.append(kwargs) or {})
     for generate in (
         reports.generate_unified_daily_report_sections,
@@ -96,3 +93,37 @@ def test_all_trading_report_generators_pin_luna(monkeypatch):
     assert len(captured) == 4
     assert all(call["model_override"] == "gpt-6-luna" for call in captured)
     assert all(call["reasoning_effort"] == "none" for call in captured)
+
+
+@pytest.mark.parametrize("period", ["weekly", "monthly", "quarterly"])
+def test_period_comparison_uses_only_dated_same_pair_scores(period):
+    start = reports._period_start(period, date.today())
+    before = (start - timedelta(days=1)).isoformat()
+    within = start.isoformat()
+    context = {"report_previous": [
+        {"report_date": before, "snapshot": {"assets": [
+            {"pair": "BTC/EUR", "benchmark_score": 45,
+             "reported_scores": {"market_score": 40}},
+            {"pair": "BTC/USDT", "benchmark_score": 90,
+             "reported_scores": {"market_score": 90}},
+        ]}},
+        {"report_date": within, "snapshot": {"assets": [
+            {"pair": "BTC/EUR", "benchmark_score": 50,
+             "reported_scores": {"market_score": 45}},
+        ]}},
+    ]}
+    facts = {"assets": [{"pair": "BTC/EUR", "display_symbol": "BTC/EUR",
+                         "benchmark_score": 65,
+                         "scores": {"market_score": 55}}]}
+
+    comparison = reports._report_v2_period_comparison(context, facts, period)
+
+    assert comparison["period"] == period
+    assert comparison["period_start"] == within
+    assert comparison["baseline_date"] == within
+    assert comparison["observation_days"] == 1
+    assert comparison["changes"] == [
+        {"asset": "BTC/EUR", "fact": "benchmark_score", "before": 50, "after": 65},
+        {"asset": "BTC/EUR", "fact": "market_score", "before": 45, "after": 55},
+    ]
+    assert all(row["asset"] == "BTC/EUR" for row in comparison["period_observations"])

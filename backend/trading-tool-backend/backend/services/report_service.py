@@ -1,4 +1,5 @@
 import logging
+import json
 import io
 import asyncio
 import os
@@ -273,7 +274,8 @@ class ReportService:
             "period_start": p_start,
             "period_end": p_end,
             "generated_at": report.get("generated_at"),
-            "score_source_snapshot": safe_json_parse(report.get("score_source_snapshot")),
+            "score_source_snapshot": safe_json_parse(report.get("score_source_snapshot"))
+            or (meta.get("score_source_snapshot") if isinstance(meta, dict) else None),
             "executive_summary_compact": exec_summary,
             "market_analysis_compact": market_analysis,
             "outlook_compact": outlook,
@@ -360,7 +362,15 @@ class ReportService:
             return await localize_report_payload(self.format_report_for_mobile(row), locale)
 
         if table_name != "daily_reports":
-            return await localize_report_payload({"_status": "ready", **row}, locale)
+            meta = row.get("meta_json")
+            if isinstance(meta, str):
+                try:
+                    meta = json.loads(meta)
+                except (TypeError, ValueError):
+                    meta = None
+            snapshot = meta.get("score_source_snapshot") if isinstance(meta, dict) else None
+            return await localize_report_payload({"_status": "ready", **row,
+                                                  "score_source_snapshot": snapshot}, locale)
         return await localize_report_payload(row, locale)
 
     async def get_report_by_date(self, user_id: int, table_name: str, date_str: str, format_type: Optional[str] = None) -> Dict[str, Any]:
@@ -377,6 +387,15 @@ class ReportService:
         if format_type == "mobile":
             return await localize_report_payload(self.format_report_for_mobile(row), locale)
 
+        if table_name != "daily_reports":
+            meta = row.get("meta_json")
+            if isinstance(meta, str):
+                try:
+                    meta = json.loads(meta)
+                except (TypeError, ValueError):
+                    meta = None
+            row = {**row, "score_source_snapshot":
+                   meta.get("score_source_snapshot") if isinstance(meta, dict) else None}
         return await localize_report_payload(row, locale)
 
     async def get_report_history(self, user_id: int, table_name: str) -> List[str]:

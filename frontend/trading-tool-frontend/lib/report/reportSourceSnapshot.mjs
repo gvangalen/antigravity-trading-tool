@@ -1,5 +1,15 @@
 export function scoreSourceSnapshot(report) {
-  const value = report?.score_source_snapshot;
+  let value = report?.score_source_snapshot;
+  // Period reports store their immutable Report 2.0 snapshot in meta_json;
+  // daily reports have a dedicated column for the same contract.
+  if (value == null && report?.meta_json != null) {
+    try {
+      const meta = typeof report.meta_json === 'string' ? JSON.parse(report.meta_json) : report.meta_json;
+      value = meta?.score_source_snapshot;
+    } catch {
+      return null;
+    }
+  }
   if (value && typeof value === 'object' && !Array.isArray(value)) return value;
   if (typeof value !== 'string') return null;
   try {

@@ -1,9 +1,7 @@
+import { scoreSourceSnapshot } from './reportSourceSnapshot.mjs';
+
 export function reportV2Locale(report, browserLocale) {
-  const saved = report?.score_source_snapshot;
-  let snapshot = saved;
-  if (typeof saved === 'string') {
-    try { snapshot = JSON.parse(saved); } catch { snapshot = null; }
-  }
+  const snapshot = scoreSourceSnapshot(report);
   // The report prose is a saved snapshot. Its labels must use that same language
   // in the web view and in a fresh browser used to print the PDF.
   const candidate = snapshot?.content_locale || browserLocale;

@@ -162,13 +162,7 @@ def _saved_curve(value: Any) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
-PERIOD_SECTIONS = (
-    "executive_summary", "market_overview", "macro_trends", "technical_structure",
-    "setup_performance", "bot_performance", "strategic_lessons", "outlook",
-)
-
-
-async def _load_context(user_id: int) -> dict[str, Any]:
+async def _load_context(user_id: int, period: str = "daily") -> dict[str, Any]:
     # Celery invokes this from a short-lived event loop, while preview runs in
     # a thread beside live API requests. Give each invocation its own unpooled
     # connection; disposing the application's shared engines can interrupt a
@@ -208,13 +202,15 @@ async def _load_context(user_id: int) -> dict[str, Any]:
                 logger.warning("Report bot status unavailable for user=%s", user_id, exc_info=True)
                 context["report_bot_status"] = {"bots": [], "status": "unavailable"}
             try:
+                history_start = (date.today() - timedelta(days=7) if period == "daily"
+                                 else _period_start(period, date.today()) - timedelta(days=100))
                 rows = (await session.execute(text("""
                     SELECT report_date, score_source_snapshot
                     FROM daily_reports
                     WHERE user_id = :user_id AND report_date < CURRENT_DATE
-                      AND report_date >= CURRENT_DATE - INTERVAL '7 days'
-                    ORDER BY report_date DESC LIMIT 7
-                """), {"user_id": user_id})).mappings().all()
+                      AND report_date >= :history_start
+                    ORDER BY report_date DESC LIMIT 200
+                """), {"user_id": user_id, "history_start": history_start})).mappings().all()
                 context["report_previous"] = [
                     {"report_date": row["report_date"].isoformat(),
                      "snapshot": row["score_source_snapshot"]}
@@ -580,6 +576,45 @@ def _report_v2_comparison(context: dict[str, Any], facts: dict[str, Any]) -> dic
             "week_earliest_outlook": previous_outlook(earliest)}
 
 
+def _report_v2_period_comparison(context: dict[str, Any], facts: dict[str, Any],
+                                 period: str) -> dict[str, Any]:
+    """Compare pair-scoped saved snapshots from this period with its starting point.
+
+    Daily report snapshots are evidence. A missing baseline leaves the change
+    unknown; it must never become a zero score or an invented trend.
+    """
+    today = date.today()
+    start = _period_start(period, today)
+    previous = sorted((row for row in context.get("report_previous") or []
+                       if isinstance(row.get("snapshot"), dict)),
+                      key=lambda row: str(row.get("report_date") or ""))
+    within = [row for row in previous if str(row.get("report_date") or "") >= start.isoformat()]
+    before = [row for row in previous if str(row.get("report_date") or "") < start.isoformat()]
+    baseline = within[0] if within else (before[-1] if before else None)
+    comparison = _report_v2_comparison(
+        {"report_previous": [baseline] if baseline else []}, facts)
+    observations = []
+    for report in within:
+        for asset in (report.get("snapshot") or {}).get("assets") or []:
+            if not isinstance(asset, dict):
+                continue
+            observations.append({
+                "date": str(report.get("report_date")),
+                "asset": asset.get("pair") or asset.get("symbol") or asset.get("market_id"),
+                "benchmark_score": asset.get("benchmark_score"),
+                "scores": asset.get("reported_scores") or {},
+            })
+    comparison.update({
+        "period": period,
+        "period_start": start.isoformat(),
+        "period_end": today.isoformat(),
+        "observation_days": len(within),
+        "baseline_date": baseline.get("report_date") if baseline else None,
+        "period_observations": observations[:150],
+    })
+    return comparison
+
+
 def _report_v2_factual_fallbacks(context: dict[str, Any], facts: dict[str, Any],
                                   comparison: dict[str, Any], locale: str) -> dict[str, str]:
     """Short factual copy for provider failure, with no inferred trade advice."""
@@ -590,6 +625,13 @@ def _report_v2_factual_fallbacks(context: dict[str, Any], facts: dict[str, Any],
     live = snapshots.get("live") or {}
     comparisons = comparison.get("changes") or []
     prior = comparison.get("previous_observations") or []
+    period = comparison.get("period", "daily")
+    period_labels = {
+        "nl": {"daily": "de afgelopen zeven dagen", "weekly": "deze week", "monthly": "deze maand", "quarterly": "dit kwartaal"},
+        "en": {"daily": "the past seven days", "weekly": "this week", "monthly": "this month", "quarterly": "this quarter"},
+        "de": {"daily": "der letzten sieben Tage", "weekly": "dieser Woche", "monthly": "dieses Monats", "quarterly": "dieses Quartals"},
+    }
+    period_label = period_labels.get(locale, period_labels["en"]).get(period, period)
     change_labels = {
         "nl": {"benchmark_score": "benchmarkscore", "market_score": "marktscore",
                "macro_score": "macroscore", "technical_score": "technische score"},
@@ -604,7 +646,7 @@ def _report_v2_factual_fallbacks(context: dict[str, Any], facts: dict[str, Any],
     if locale == "en":
         retrospective = (f"Compared with {comparison['previous_date']}: " + "; ".join(
             change_text(row) for row in comparisons)
-            if comparisons else "No comparable change from a saved report in the past seven days.")
+            if comparisons else f"No comparable change from a saved report in {period_label}.")
         portfolio = f"Paper valuation: {paper.get('valuation_status', 'unknown')}; Live valuation: {live.get('valuation_status', 'unknown')}."
         states = "; ".join(f"{bot.get('trading_pair') or bot.get('symbol') or bot.get('bot_name') or 'Bot'}: "
                            f"{'active' if bot.get('is_active') else 'paused'}" for bot in bots)
@@ -612,7 +654,7 @@ def _report_v2_factual_fallbacks(context: dict[str, Any], facts: dict[str, Any],
     elif locale == "de":
         retrospective = (f"Gegenüber {comparison['previous_date']}: " + "; ".join(
             change_text(row) for row in comparisons)
-            if comparisons else "Kein vergleichbarer Unterschied zu einem gespeicherten Bericht der letzten sieben Tage.")
+            if comparisons else f"Kein vergleichbarer Unterschied zu einem gespeicherten Bericht {period_label}.")
         portfolio = f"Paper-Bewertung: {paper.get('valuation_status', 'unbekannt')}; Live-Bewertung: {live.get('valuation_status', 'unbekannt')}."
         states = "; ".join(f"{bot.get('trading_pair') or bot.get('symbol') or bot.get('bot_name') or 'Bot'}: "
                            f"{'aktiv' if bot.get('is_active') else 'pausiert'}" for bot in bots)
@@ -620,7 +662,7 @@ def _report_v2_factual_fallbacks(context: dict[str, Any], facts: dict[str, Any],
     else:
         retrospective = (f"Vergeleken met {comparison['previous_date']}: " + "; ".join(
             change_text(row) for row in comparisons)
-            if comparisons else "Er is geen vergelijkbare verandering uit een opgeslagen rapport van de afgelopen zeven dagen.")
+            if comparisons else f"Er is geen vergelijkbare verandering uit een opgeslagen rapport van {period_label}.")
         if prior and not comparisons:
             score_labels = {"market_score": "markt", "macro_score": "macro",
                             "technical_score": "technisch"}
@@ -807,13 +849,15 @@ def _report_v2_contradicts_facts(section: str, value: str, facts: dict[str, Any]
     return False
 
 
-def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
+def generate_unified_daily_report_sections(user_id: int, period: str = "daily") -> dict[str, Any]:
     """Generate prose, preserving the report storage shape without old agent snapshots."""
-    context = asyncio.run(_load_context(user_id))
+    context = asyncio.run(_load_context(user_id) if period == "daily"
+                          else _load_context(user_id, period))
     assets = context.get("assets") or []
     facts = _report_facts(context)
     locale = str(context.get("locale") or "nl").lower()
-    comparison = _report_v2_comparison(context, facts)
+    comparison = (_report_v2_comparison(context, facts) if period == "daily"
+                  else _report_v2_period_comparison(context, facts, period))
     report_v2_evidence = {
         "portfolio": context.get("report_portfolios") or {},
         "automation": context.get("report_bot_status") or {},
@@ -831,7 +875,7 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
     ]}
     result = ask_gpt_json(
         system_role=(
-            "You are FINN, the user's trading coach. Write a complete, readable daily report from only the "
+            f"You are FINN, the user's trading coach. Write a complete, readable {period} report from only the "
             "provided owner-scoped facts. Missing or stale scores are unknown, never zero. "
             "A setup match is not an entry signal; a bot budget is not cash. "
             "Do not claim an order or trade occurred unless the supplied facts prove it. "
@@ -862,7 +906,9 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
             "Do not repeat the same asset inventory in every section. "
             "Never say all measured assets rise or fall unless every supplied 24-hour change has that direction. "
             "Return valid JSON with six Report 2.0 fields: retrospective, portfolio, analysis, plan, "
-            "automation and outlook_v2. The retrospective may compare only the supplied "
+            "automation and outlook_v2. For a weekly, monthly or quarterly report, distinguish "
+            "dated period history from the current snapshot. A trend requires at least two "
+            "comparable dated observations. The retrospective may compare only the supplied "
             "prior observations; never claim a prior forecast was correct without evidence. "
             "Portfolio distinguishes Paper from Live and unknown balances from zero. "
             "Analysis explains the benchmark for each relevant pair, including absent components. "
@@ -872,7 +918,10 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
             "The final outlook names concrete checks grounded in these facts, not a trade command."
         ),
         prompt=json.dumps({
-            "task": "Write the daily report in the requested locale from this snapshot only.",
+            "task": f"Write the {period} report in the requested locale from this snapshot and dated period history only.",
+            "period": period,
+            "period_start": comparison.get("period_start"),
+            "period_end": comparison.get("period_end"),
             "report_v2_sections": REPORT_V2_SECTIONS,
             "report_terminology": REPORT_V2_TERMINOLOGY.get(locale, {}),
             "context": factual_context,
@@ -962,6 +1011,13 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
         for value in (row.get("benchmark_score"), *(row.get("scores") or {}).values())
         if isinstance(value, (int, float)) and not isinstance(value, bool)
     }
+    if period != "daily":
+        prior_scores.update(
+            float(value)
+            for row in comparison.get("period_observations") or []
+            for value in (row.get("benchmark_score"), *(row.get("scores") or {}).values())
+            if isinstance(value, (int, float)) and not isinstance(value, bool)
+        )
     for section, value in prose.items():
         # A reported numeric score must occur in the verified Score 2.0 snapshot.
         claims = [float(number.replace(",", ".")) for number in re.findall(r"(?<!\d)(\d+(?:[.,]\d+)?)/100\b", value)]
@@ -1115,6 +1171,9 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
             "content_locale": locale,
             "report_v2": {
                 "version": 2,
+                "period": period,
+                "period_start": comparison.get("period_start"),
+                "period_end": comparison.get("period_end"),
                 "sections": report_v2_prose,
                 "portfolio": jsonable_encoder(_report_source_times(context.get("report_portfolios") or {})),
                 "automation": jsonable_encoder(_report_source_times(context.get("report_bot_status") or {})),
@@ -1155,83 +1214,29 @@ def _period_start(period: str, today: date) -> date:
     raise ValueError("unsupported_report_period")
 
 
-async def _load_period_context(user_id: int, period: str) -> dict[str, Any]:
-    today = date.today()
-    start = _period_start(period, today)
-    report_engine = create_async_engine(ASYNC_DATABASE_URL, poolclass=NullPool)
-    try:
-        sessions = async_sessionmaker(report_engine, expire_on_commit=False)
-        async with sessions() as session:
-            shared = await FinnSharedContextService(session).for_user(user_id)
-            params = {"user_id": user_id, "start": start, "end": today}
-            scores = (await session.execute(text("""
-            SELECT symbol, report_date, market_score, macro_score, technical_score,
-                   calculated_at, indicator_evidence
-            FROM daily_scores
-            WHERE user_id = :user_id AND report_date BETWEEN :start AND :end
-              AND market_id IS NULL
-            ORDER BY report_date ASC, symbol ASC LIMIT 150
-            """), params)).mappings().all()
-            decisions = (await session.execute(text("""
-            SELECT d.decision_date, d.symbol, d.action, d.status, d.amount_eur,
-                   b.name AS bot_name
-            FROM bot_decisions d
-            JOIN bot_configs b ON b.id = d.bot_id AND b.user_id = d.user_id
-            WHERE d.user_id = :user_id AND d.decision_date BETWEEN :start AND :end
-            ORDER BY d.decision_date ASC, d.id ASC LIMIT 150
-            """), params)).mappings().all()
-    finally:
-        await report_engine.dispose()
-    return jsonable_encoder({
-        "period": period, "period_start": start, "period_end": today,
-        "shared": shared,
-        "dated_scores": [dict(row) for row in scores],
-        "bot_decisions": [dict(row) for row in decisions],
-    })
-
-
 def generate_unified_period_report_sections(user_id: int, period: str) -> dict[str, Any]:
-    """One report writer over dated facts; never infer trades from planned bot actions."""
-    context = asyncio.run(_load_period_context(user_id, period))
-    shared = context["shared"]
-    locale = str(shared.get("locale") or "nl")
-    report_context = {**context, "shared": _report_facts(shared)}
-    result = ask_gpt_json(
-        system_role=(
-            "You are FINN, the user's trading coach. Write a factual period report "
-            "in the supplied locale. Use only this owner's current plan and dated history. "
-            "Missing or stale scores are unknown, not zero. A planned bot decision is "
-            "not an executed trade; a bot budget is not cash. Describe a trend only "
-            "when at least two dated comparable measurements support it. Return JSON "
-            "with exactly the eight requested string fields."
-        ),
-        prompt=json.dumps({"task": f"Write the {period} FINN report", "locale": locale,
-                           "sections": PERIOD_SECTIONS, "context": report_context}, ensure_ascii=False),
-        max_tokens=2600,
-        model_override=os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna"),
-        reasoning_effort="none",
-    )
-    daily_fallback = _fallback_sections(shared)
-    fallback = {
-        "executive_summary": daily_fallback["executive_summary"],
-        "market_overview": daily_fallback["market_analysis"],
-        "macro_trends": daily_fallback["macro_context"],
-        "technical_structure": daily_fallback["technical_analysis"],
-        "setup_performance": daily_fallback["setup_validation"],
-        "bot_performance": daily_fallback["bot_strategy"],
-        "strategic_lessons": daily_fallback["strategy_implication"],
-        "outlook": daily_fallback["outlook"],
-    }
-    sections = {
-        key: str(result.get(key) or "").strip() if isinstance(result, dict)
-        and len(str(result.get(key) or "").strip()) >= 20 else fallback[key]
-        for key in PERIOD_SECTIONS
-    }
+    """Use Report 2.0's frozen owner facts and six-section FINN writer for every period."""
+    if period not in {"weekly", "monthly", "quarterly"}:
+        raise ValueError("unsupported_report_period")
+    report = generate_unified_daily_report_sections(user_id, period=period)
+    snapshot = report["score_source_snapshot"]
+    v2_sections = snapshot["report_v2"]["sections"]
     return {
-        **sections,
+        # Retain the legacy columns for existing readers. The web and PDF use
+        # the frozen Report 2.0 snapshot in meta_json instead.
+        "executive_summary": report["executive_summary"],
+        "market_overview": report["market_analysis"],
+        "macro_trends": report["macro_context"],
+        "technical_structure": report["technical_analysis"],
+        "setup_performance": report["setup_validation"],
+        "bot_performance": report["bot_strategy"],
+        "strategic_lessons": report["strategy_implication"],
+        "outlook": v2_sections["outlook_v2"],
         "macro_score": None, "technical_score": None, "setup_score": None,
-        "meta": {"source": "finn_shared_context.v1", "period": period,
-                 "period_start": context["period_start"], "period_end": context["period_end"]},
+        "score_source_snapshot": snapshot,
+        "meta": {"source": "finn_shared_context.v2", "period": period,
+                 "period_start": snapshot["report_v2"]["period_start"],
+                 "period_end": snapshot["report_v2"]["period_end"]},
     }
 
 

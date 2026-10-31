@@ -835,12 +835,12 @@ def test_report_does_not_claim_best_match_when_setup_score_is_unknown(monkeypatc
 def test_period_report_uses_dated_owner_facts_and_does_not_count_planned_decision_as_trade(monkeypatch):
     captured = {}
     context = {
-        "period": "weekly", "period_start": "2026-10-05", "period_end": "2026-10-07",
-        "shared": {"locale": "nl", "assets": [{"symbol": "BTC", "bots": [],
-            "benchmark": {"source_status": "missing_scores", "matches": []}}]},
-        "dated_scores": [],
-        "bot_decisions": [{"action": "buy", "status": "planned", "amount_eur": 100}],
-        "daily_report_summaries": [],
+        "locale": "nl", "observed_at": "2026-10-31T12:00:00+00:00",
+        "assets": [{"symbol": "BTC", "bots": [],
+            "benchmark": {"source_status": "missing_scores", "matches": []}}],
+        "report_previous": [],
+        "report_bot_status": {"bots": [{"symbol": "BTC", "is_active": True,
+                                          "latest_decision": {"status": "planned", "action": "buy"}}]},
     }
 
     async def _load(user_id, period):
@@ -851,13 +851,16 @@ def test_period_report_uses_dated_owner_facts_and_does_not_count_planned_decisio
         captured.update(kwargs)
         return {"error": "provider_unavailable"}
 
-    monkeypatch.setattr(reports, "_load_period_context", _load)
+    monkeypatch.setattr(reports, "_load_context", _load)
     monkeypatch.setattr(reports, "ask_gpt_json", _provider)
     result = reports.generate_weekly_report_sections(7)
-    assert result["meta"]["source"] == "finn_shared_context.v1"
+    assert result["meta"]["source"] == "finn_shared_context.v2"
+    assert result["score_source_snapshot"]["report_v2"]["period"] == "weekly"
+    assert result["score_source_snapshot"]["report_v2"]["version"] == 2
     assert result["macro_score"] is None
-    assert "geen bevestigde setupmatch" in result["setup_performance"]
-    assert "not an executed trade" in captured["system_role"]
+    assert "geen bevestigde setupmatch" in result["setup_performance"].lower()
+    assert "Do not claim an order or trade occurred unless the supplied facts prove it" in captured["system_role"]
+    assert "weekly" in captured["prompt"]
     assert captured["model_override"] == "gpt-6-luna"
     assert captured["reasoning_effort"] == "none"
 
