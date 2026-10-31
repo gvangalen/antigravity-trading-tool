@@ -6,15 +6,23 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Report 2.0: PDF-kop zichtbaar bij afdrukken (31 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`. Onafhankelijke QA gaf `NOT_ACCEPTED` op live SHA
+Phase: `LIVE_PENDING_QA`. Onafhankelijke QA gaf `NOT_ACCEPTED` op live SHA
 `767e7ae89c9b4c5faf18c404cba25ea236124080`: nieuwe NL-, EN- en
 DE-rapporten en PDF's slaagden zonder 92%-timeout. Gemengde scorebeschikbaarheid
 bleef per handelspaar correct; Paper en Live stonden naast elkaar. In alle drie
 PDF's ontbraken echter de zichtbare rapporttitel en datum bovenaan pagina 1.
 De algemene `print.css` verbergt alle HTML-`header`-elementen, ook de nieuw
 toegevoegde Report 2.0-kop. De kandidaat rendert die kop daarom als gewoon
-documentblok. Frontendbuild, typecheck en i18n-lint slagen. CI, Auto Deploy,
-publieke SHA-controle en onafhankelijke PDF-herkeuring volgen nog.
+documentblok. Frontendbuild, typecheck en i18n-lint slagen. De handmatige
+[CI-run 41234237591](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41234237591)
+en PR-CI slaagden op vijf jobs, inclusief de echte Responses-proef; er is
+geen actiecontract of backendcode gewijzigd. [PR #741](https://github.com/gvangalen/antigravity-trading-tool/pull/741)
+is samengevoegd als `d22c0ec031a2dca5d5b87fdecd4ecdf59353e094`.
+Main-[CI 41234619037](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41234619037)
+en [Auto Deploy 41234880406](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41234880406)
+slaagden. Backend-health en frontend-buildinfo gaven HTTP 200 met dezelfde
+SHA. Deze statuswijziging krijgt na samenvoegen een eigen deployment-SHA;
+daarna volgt de onafhankelijke PDF-herkeuring op die laatste publieke revision.
 
 ## Report 2.0: rapportgeneratie en PDF-presentatie (31 oktober 2026)
 
