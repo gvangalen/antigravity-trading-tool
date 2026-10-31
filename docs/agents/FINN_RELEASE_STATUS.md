@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Report 2.0: week, maand en kwartaal (31 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`. De voorafgaande gerichte NL-PDF-herkeuring is door
+Phase: `CI_VALIDATED_PENDING_DEPLOY`. De voorafgaande gerichte NL-PDF-herkeuring is door
 onafhankelijke QA geaccepteerd op live SHA `8318f37dd59dc8afade5e001c68112bf2dcd9e0d`:
 de kop en datum waren zichtbaar op pagina 1, en Paper en Live stonden naast
 elkaar. Deze nieuwe kandidaat vervangt voor week, maand en kwartaal de oude
@@ -21,8 +21,14 @@ Gerichte regressies voor week/maand/kwartaal, handelspaarisolatie en
 web/PDF-teruglezing slagen. Volledige backend-suite: 4162 geslaagd, vier
 bestaande skips. Frontend productiebuild, typecheck, i18n-lint en 31 i18n-tests
 slagen; mobiele typecheck, lint, chattests en web-bundlesmoke slagen (bestaande
-lintwaarschuwingen). De echte Responses-proef, CI, samenvoegen, Auto Deploy,
-publieke SHA-controle en onafhankelijke live QA zijn nog niet uitgevoerd.
+lintwaarschuwingen). [PR #743](https://github.com/gvangalen/antigravity-trading-tool/pull/743)
+had op kandidaat `f680708bce26940ca0c481440639338f9fb6abe9` vijf geslaagde
+CI-jobs in [PR-run 41238615015](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41238615015).
+De afzonderlijke [provider-run 41238652059](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41238652059)
+slaagde inclusief de echte Responses-proef voor NL/DE/EN en de drie
+perioderapporten. Samenvoegen, Auto Deploy, publieke SHA-controle en
+onafhankelijke live QA volgen nog. Deze statuscommit vereist opnieuw CI op
+de definitieve kandidaat.
 
 ## Report 2.0: PDF-kop zichtbaar bij afdrukken (31 oktober 2026)
 
