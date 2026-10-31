@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Report 2.0 live herkeuring en herstelkandidaat (31 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`. De eerste onafhankelijke ingelogde webherkeuring van
+Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De eerste onafhankelijke ingelogde webherkeuring van
 Report 2.0 op live SHA `56bf954df166f34c84c738cc144dddfbaa381d90`
 eindigde `NOT_ACCEPTED`. Een nieuw rapport verscheen pas na een extra selectie
 of harde refresh wanneer een historisch rapport was geselecteerd. De terugblik
@@ -29,9 +29,15 @@ De echte Luna/Responses-selectorproeven slaagden voor development 20/20
 (SHA-256 `ace67a7f2aa3ca956f5f03d7229716a791410d1ad6962dab74080e20351fac21`)
 en regression 109/109
 (SHA-256 `73e2b8062e96101d46d3b2553ce7adae1724e3100d1055780df4f7deb3b27f66`).
-Ook de twee gerichte PDF-downloadtests slagen. CI, deployment en onafhankelijke
-herkeuring op de definitieve SHA blijven open; dit is geen live of
-QA-acceptatieclaim.
+Ook de twee gerichte PDF-downloadtests slagen. [PR #720](https://github.com/gvangalen/antigravity-trading-tool/pull/720)
+had vijf geslaagde CI-checks en is samengevoegd als
+`07a68c6ff16334680dc52d7503c3741e948cc28c`. Main-CI-run
+`41196444534` en Auto Deploy-run `41196662969` slaagden. Publieke
+backend-health en frontend-buildinfo gaven allebei HTTP 200 en exact die
+SHA. Deze statuswijziging creëert een laatste main-revisie: haar main-CI,
+Auto Deploy en beide publieke SHA's moeten opnieuw overeenkomen voordat
+onafhankelijke QA begint. De herkeuring van inhoud en PDF is nog open;
+dit is geen QA-acceptatieclaim.
 
 ## Report 2.0 releasekandidaat (31 oktober 2026)
 
