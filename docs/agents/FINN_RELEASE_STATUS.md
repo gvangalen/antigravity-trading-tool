@@ -4,6 +4,37 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Report 2.0 terugblik per handelspaar: QA-herstel (31 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. De definitieve Report 2.0-revisie
+`0d13bcad895ba51c10d5f0b2024ff046fc91ea40` had geslaagde main-CI
+(`41200322152`) en Auto Deploy (`41200530061`); publieke backend-health en
+frontend-buildinfo gaven HTTP 200 en exact die SHA. De bestaande
+onafhankelijke QA-agent beoordeelde een nieuw rapport als `NOT_ACCEPTED`.
+De eerdere dagritme- en bedragfout is hersteld, maar de terugblik zei dat de
+BTC/EUR- en BTC/USDT-deelscores gelijk bleven op markt 50, macro 20 en
+technisch 40. Dezelfde nieuwe momentopname toont BTC/USDT-markt 30; het
+rapport van 30 oktober toonde daar markt 50. De PDF-download bleef in de
+browser binnen 50 seconden onwaarneembaar, zonder vastgestelde HTTP-status
+of bestand.
+
+De lokale reparatie vergelijkt nu ook afzonderlijke Markt-, Macro- en
+Technisch-scores per exact handelspaar met de vorige bevroren rapportbron.
+Een tekstclaim dat deelscores gelijk bleven terwijl een component veranderde,
+wordt vervangen door de feitelijke vergelijking. Een gerichte regressietest
+voor BTC/EUR 50 en BTC/USDT 50 → 30 slaagt. De volledige backend-suite
+slaagde met 4147 tests en 4 bestaande skips. Frontend typecheck, i18n,
+command/proposal-tests, productiebuild en high audit slaagden; audit vond
+0 kwetsbaarheden. De lokale worker-actiematrix slaagde 16/16 (artifact
+SHA-256 `f830c5e1900f2af504e5b379773f44a9521ff99490e1df75d1724da3c24495de`)
+en de adapterregistratie 21/21. De echte Luna/Responses development-selectorproef
+slaagde 20/20 met nul provider-, schema-, timeout-, parse- of validatiefouten
+(artifact SHA-256 `7f2738db58a57482a5801f415177bb0094f20b13f3018e3e154242c5ec59d716`).
+De echte regression-selectorproef slaagde 109/109 met nul provider-, schema-,
+timeout-, parse- of validatiefouten (artifact SHA-256
+`65836937793f70cc2a8bd83cef3c076d3eb27b69c6ba645cb7d4ddb6c57f547c`).
+Er is nog geen nieuwe deploy of QA-acceptatie voor deze reparatie.
+
 ## Report 2.0 planfeiten: tweede live QA en lokale reparatie (31 oktober 2026)
 
 Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De definitieve vorige main-revisie
