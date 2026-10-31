@@ -4,6 +4,27 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Report 2.0 PDF: botwaarde en rapporttaal (31 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. De bestaande onafhankelijke QA-agent testte een
+nieuwe ingelogde PDF op live SHA `39878a72809a5b09aecf24b3f20ba7c69ca91394`.
+Verdict: `NOT_ACCEPTED`. De score `36,7/100` en paginering waren hersteld,
+maar de Automatisering-kaart noemde €0 positiewaarde nog `Totale waarde`
+terwijl Portfolio €300 Paper-kassaldo toonde. FINN's Nederlandstalige
+rapportalinea's bevatten Engelse brontermen als `market score`, `total equity`
+en `P&L`.
+
+Kandidaat `codex/report2-pdf-language-fixes` gebruikt op de botkaart nu het
+bestaande label `Positiewaarde`. Het rapportcontract geeft Luna een expliciete
+taalwoordenlijst en lokaliseert alleen nog gelekte brontermen in de zes
+rapportalinea's; gebruikersnamen van plannen en bots blijven onaangetast.
+Er zijn geen vaste coachalinea's toegevoegd. Een gerichte backendregressie,
+38 rapporttests, de volledige backend-suite (4148 geslaagd, 4 bestaande
+skips), frontend typecheck, i18n-lint, 29 i18n-tests en productiebuild
+slaagden lokaal. De lokale runtime heeft geen `OPENAI_API_KEY` voor een echte
+Luna/Responses-proef; deze vereiste releasepoort is nog niet groen. Er is
+geen nieuwe deploy of ingelogde QA-acceptatie voor deze kandidaat.
+
 ## Report 2.0 PDF herkeuring: botwaarde, scoregetal en paginering (31 oktober 2026)
 
 Phase: `LOCAL_VALIDATION`. De bestaande onafhankelijke QA-agent testte op
