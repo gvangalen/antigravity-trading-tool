@@ -11,7 +11,7 @@
     "export": "next build",
     "typecheck": "rm -rf .next/types && tsc --noEmit",
     "lint:i18n": "node scripts/check-i18n-literals.mjs",
-    "test:i18n": "node --test tests/i18n-hardening.test.mjs tests/report-source-snapshot.test.mjs tests/report-bot-decision.test.mjs tests/canonical-score-presentation.test.mjs tests/onboarding-indicator-selection.test.mjs",
+    "test:i18n": "node --test tests/i18n-hardening.test.mjs tests/report-source-snapshot.test.mjs tests/report-v2-presentation.test.mjs tests/report-bot-decision.test.mjs tests/canonical-score-presentation.test.mjs tests/onboarding-indicator-selection.test.mjs",
     "test:commands": "node --test tests/finn-command-search.test.mjs tests/finn-workspace-shell.test.mjs tests/finn-coach-feed-read.test.mjs tests/finn-chat-locale.test.mjs tests/bot-manual-order-currency.test.mjs tests/bot-api-error-message.test.mjs tests/bot-position-math.test.mjs tests/strategy-price-currency-update.test.mjs",
     "test:proposals": "node --test tests/finn-proposal-card-state.test.mjs",
     "test:setups": "node --test tests/dca-weekday.test.mjs tests/setup-score-conditions.test.mjs tests/benchmark-scale.test.mjs",
