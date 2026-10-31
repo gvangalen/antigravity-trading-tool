@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Report 2.0 PDF: leesbare Analyse en Duitse weekdagen (31 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`. Gebruikers-PDF `daily_report_2026-10-31-2.pdf`
+Phase: `LIVE_PENDING_QA`. Gebruikers-PDF `daily_report_2026-10-31-2.pdf`
 bevestigt dat Analyse op de nieuwe rapportindeling als één dichte alinea
 verschijnt. De eerdere onafhankelijke QA meldde daarnaast `Wochentag 5/1`
 in de Duitse Vooruitblik. Kandidaat `codex/report2-pdf-readability` verdeelt
@@ -17,10 +17,15 @@ De bevroren planbron en de modeltekst blijven verder ongewijzigd.
 Lokaal: gerichte backendtest 30 geslaagd; volledige backend-suite 4149
 geslaagd, 4 bestaande skips; frontend typecheck, i18n-lint, 30 i18n-tests
 en productiebuild geslaagd. De actiecontracten zijn niet gewijzigd. De
-synthetische NL/DE-proef met echte Responses-provider draait in de beschermde
-handmatige CI, omdat lokaal geen OpenAI-sleutel beschikbaar is. CI,
-deployment en onafhankelijke live QA zijn nog niet uitgevoerd voor deze
-kandidaat.
+synthetische NL/DE-proef met echte Responses-provider slaagde in de beschermde
+handmatige [CI-run 41220330218](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41220330218),
+omdat lokaal geen OpenAI-sleutel beschikbaar is. [PR #732](https://github.com/gvangalen/antigravity-trading-tool/pull/732)
+is samengevoegd als `0974ec4b4b5c2f74155271e9d61e03501402b2c7`.
+Alle vijf jobs van main-[CI 41220722331](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41220722331)
+en [Auto Deploy 41220978516](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41220978516)
+slaagden. Publieke backend-health en frontend-buildinfo gaven HTTP 200 en
+beide dezelfde SHA `0974ec4b4b5c2f74155271e9d61e03501402b2c7`.
+De live PDF-herkeuring op de definitieve revision is nog niet uitgevoerd.
 
 ## Report 2.0 PDF: botwaarde en rapporttaal (31 oktober 2026)
 
