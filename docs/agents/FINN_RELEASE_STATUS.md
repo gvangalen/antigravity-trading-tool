@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Report 2.0: paargebonden feiten en 24-uurspercentages (31 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`. Onafhankelijke QA gaf `NOT_ACCEPTED` op live
+Phase: `LIVE_PENDING_QA`. Onafhankelijke QA gaf `NOT_ACCEPTED` op de vorige live
 SHA `dd0d182d391ce3a47a4d945b307ea0747d6ebaa3`. Verse NL- en EN-rapporten
 schreven 24-uurswijzigingen ongeveer honderdmaal te groot; EN verbond bovendien
 BTC/EUR-setupnamen en matchscores aan BTC/USDT. De gevraagde NL-alineaopmaak en
@@ -21,8 +21,16 @@ paargebonden claims. Bij een concrete fout laat FINN alleen de Analyse-sectie
 opnieuw schrijven; als ook die tekst feitelijk fout is, volgt een korte
 brongebonden sectie. Er zijn geen vaste coachalinea's toegevoegd. Gerichte
 rapporttests: 32 geslaagd. Volledige backend-suite: 4151 geslaagd, 4 bestaande
-skips. De echte Responses-proef, CI, deploy en onafhankelijke live herkeuring
-zijn voor deze kandidaat nog niet uitgevoerd.
+skips. De beschermde [CI-run 41223793137](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41223793137)
+slaagde op alle vijf jobs, inclusief een echte Responses-proef voor NL, DE en EN
+met synthetische BTC/EUR- en BTC/USDT-feiten. [PR #734](https://github.com/gvangalen/antigravity-trading-tool/pull/734)
+is samengevoegd als `bf680212247adf15de002a79bc7397eedd03930d`.
+Alle vijf jobs van main-[CI 41224162670](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41224162670)
+en [Auto Deploy 41224375847](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41224375847)
+slaagden. Backend-health en frontend-buildinfo gaven HTTP 200 en beide die
+SHA. Deze statuswijziging krijgt na samenvoegen een eigen deploy-SHA; die
+laatste publieke revision moet vóór de onafhankelijke QA nog worden bevestigd.
+De live rapportherkeuring is nog niet uitgevoerd.
 
 ## Report 2.0 PDF: leesbare Analyse en Duitse weekdagen (31 oktober 2026)
 
