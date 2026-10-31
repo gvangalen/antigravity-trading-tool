@@ -96,7 +96,7 @@ export default function ReportV2Layout({ report, isPrint = false }) {
     ? new Intl.DateTimeFormat(language, { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${report.report_date}T12:00:00Z`))
     : null;
   return <div className={`mx-auto max-w-[1100px] space-y-6 pb-20 ${isPrint ? 'print:space-y-4' : ''}`}>
-    <header className="break-after-avoid pb-1"><h1 className="text-3xl font-bold text-slate-950">{t?.pages?.report?.types?.daily}</h1>{reportDate && <p className="mt-1 text-sm text-slate-600">{reportDate}</p>}</header>
+    <div className="break-after-avoid pb-1"><h1 className="text-3xl font-bold text-slate-950">{t?.pages?.report?.types?.daily}</h1>{reportDate && <p className="mt-1 text-sm text-slate-600">{reportDate}</p>}</div>
     <Section title={c.retrospective} prose={prose.retrospective}>
       {(v2.comparison?.changes || []).length > 0 && <div className="mt-4 space-y-2 text-sm text-slate-600">{v2.comparison.changes.map((change, i) => <p key={`${change.asset}-${i}`}>{reportV2Change(change, changeLabels)}</p>)}</div>}
     </Section>

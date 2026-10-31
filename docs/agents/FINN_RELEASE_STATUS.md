@@ -4,6 +4,18 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Report 2.0: PDF-kop zichtbaar bij afdrukken (31 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. Onafhankelijke QA gaf `NOT_ACCEPTED` op live SHA
+`767e7ae89c9b4c5faf18c404cba25ea236124080`: nieuwe NL-, EN- en
+DE-rapporten en PDF's slaagden zonder 92%-timeout. Gemengde scorebeschikbaarheid
+bleef per handelspaar correct; Paper en Live stonden naast elkaar. In alle drie
+PDF's ontbraken echter de zichtbare rapporttitel en datum bovenaan pagina 1.
+De algemene `print.css` verbergt alle HTML-`header`-elementen, ook de nieuw
+toegevoegde Report 2.0-kop. De kandidaat rendert die kop daarom als gewoon
+documentblok. Frontendbuild, typecheck en i18n-lint slagen. CI, Auto Deploy,
+publieke SHA-controle en onafhankelijke PDF-herkeuring volgen nog.
+
 ## Report 2.0: rapportgeneratie en PDF-presentatie (31 oktober 2026)
 
 Phase: `LOCAL_VALIDATION`. Onafhankelijke QA gaf `NOT_ACCEPTED` op live SHA
