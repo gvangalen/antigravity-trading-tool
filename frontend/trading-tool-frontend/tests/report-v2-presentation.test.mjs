@@ -12,6 +12,7 @@ import {
 test('PDF labels follow the saved prose language, not the print browser language', () => {
   const report = { score_source_snapshot: JSON.stringify({ content_locale: 'nl' }) };
   assert.equal(reportV2Locale(report, 'en'), 'nl');
+  assert.equal(reportV2Locale({ meta_json: { score_source_snapshot: { content_locale: 'de' } } }, 'en'), 'de');
   assert.equal(reportV2Locale({}, 'de'), 'de');
 });
 

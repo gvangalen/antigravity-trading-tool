@@ -514,6 +514,15 @@ async def localize_report_payload(
     if locale in _LOCAL_RULE_BASED_LOCALES and allow_ai_translation:
         nested_report = payload.get("report") if isinstance(payload.get("report"), dict) else {}
         source_snapshot = payload.get("score_source_snapshot") or nested_report.get("score_source_snapshot")
+        if not source_snapshot:
+            source_meta = payload.get("meta_json") or nested_report.get("meta_json")
+            if isinstance(source_meta, str):
+                try:
+                    source_meta = json.loads(source_meta)
+                except (TypeError, ValueError):
+                    source_meta = None
+            if isinstance(source_meta, dict):
+                source_snapshot = source_meta.get("score_source_snapshot")
         if isinstance(source_snapshot, str):
             try:
                 source_snapshot = json.loads(source_snapshot)

@@ -4,6 +4,26 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Report 2.0: week, maand en kwartaal (31 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. De voorafgaande gerichte NL-PDF-herkeuring is door
+onafhankelijke QA geaccepteerd op live SHA `8318f37dd59dc8afade5e001c68112bf2dcd9e0d`:
+de kop en datum waren zichtbaar op pagina 1, en Paper en Live stonden naast
+elkaar. Deze nieuwe kandidaat vervangt voor week, maand en kwartaal de oude
+acht-hoofdstukken-generator door dezelfde zes Report 2.0-secties als het
+dagrapport. De periodes bewaren de eigenaargebonden score-, plan-, portfolio-
+en botmomentopname in `meta_json`, inclusief gedateerde eerdere dagrapporten
+voor de terugblik. Web, PDF en mobiel lezen die momentopname en tonen een
+periodetitel en datumbereik. Bestaande acht tekstkolommen blijven voor oude
+lezers beschikbaar; ontbrekende scores worden niet nul.
+
+Gerichte regressies voor week/maand/kwartaal, handelspaarisolatie en
+web/PDF-teruglezing slagen. Volledige backend-suite: 4162 geslaagd, vier
+bestaande skips. Frontend productiebuild, typecheck, i18n-lint en 31 i18n-tests
+slagen; mobiele typecheck, lint, chattests en web-bundlesmoke slagen (bestaande
+lintwaarschuwingen). De echte Responses-proef, CI, samenvoegen, Auto Deploy,
+publieke SHA-controle en onafhankelijke live QA zijn nog niet uitgevoerd.
+
 ## Report 2.0: PDF-kop zichtbaar bij afdrukken (31 oktober 2026)
 
 Phase: `LIVE_PENDING_QA`. Onafhankelijke QA gaf `NOT_ACCEPTED` op live SHA

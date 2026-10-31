@@ -46,7 +46,7 @@ def main() -> None:
             "market_snapshot": {"source_status": "fresh", "change_24h": 0.354},
         }],
     }
-    reports._load_context = lambda _user_id: asyncio.sleep(0, result=context)
+    reports._load_context = lambda _user_id, _period="daily": asyncio.sleep(0, result=context)
     provider_result = []
     real_ask = reports.ask_gpt_json
 
@@ -92,7 +92,24 @@ def main() -> None:
     if not provider_result or not isinstance(provider_result[0], dict):
         raise AssertionError("Provider did not return English Report 2.0 prose")
     check_pair_facts(english_result)
-    print("Report 2.0 real-provider language gate: PASS (NL, DE and EN)")
+    context["locale"] = "nl"
+    for period in ("weekly", "monthly", "quarterly"):
+        provider_result.clear()
+        period_result = reports.generate_unified_period_report_sections(1, period)
+        if not provider_result or not isinstance(provider_result[0], dict):
+            raise AssertionError(f"Provider did not return {period} Report 2.0 prose")
+        period_snapshot = period_result["score_source_snapshot"]["report_v2"]
+        if period_snapshot["period"] != period or any(
+            not isinstance(period_snapshot["sections"].get(section), str)
+            or len(period_snapshot["sections"][section].strip()) < 20
+            for section in reports.REPORT_V2_SECTIONS
+        ):
+            raise AssertionError(f"Incomplete {period} Report 2.0 sections")
+        check_pair_facts(period_result)
+        if any(re.search(r"\b(?:market score|technical scores?|total equity|P&L|outlook)\b", text, re.I)
+               for text in period_snapshot["sections"].values()):
+            raise AssertionError(f"English source terms remain in Dutch {period} report")
+    print("Report 2.0 real-provider language gate: PASS (NL, DE, EN; day, week, month, quarter)")
 
 
 if __name__ == "__main__":

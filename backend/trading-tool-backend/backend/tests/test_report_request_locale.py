@@ -12,6 +12,24 @@ from backend.api import report_api
 from backend.services import locale_service, report_service
 
 
+def test_period_reports_read_frozen_v2_snapshot_for_web_and_pdf(monkeypatch):
+    snapshot = {"content_locale": "nl", "report_v2": {"version": 2, "period": "weekly"}}
+    row = {"report_date": "2026-10-31", "meta_json": json.dumps({"score_source_snapshot": snapshot})}
+    service = report_service.ReportService.__new__(report_service.ReportService)
+    service.repository = SimpleNamespace(
+        get_latest_report=AsyncMock(return_value=row),
+        get_report_by_date=AsyncMock(return_value=row),
+    )
+    monkeypatch.setattr(service, "_get_user_locale", AsyncMock(return_value="nl"))
+    monkeypatch.setattr(report_service, "localize_report_payload", AsyncMock(side_effect=lambda data, _: data))
+
+    latest = asyncio.run(service.get_latest_report(7, "weekly_reports"))
+    by_date = asyncio.run(service.get_report_by_date(7, "weekly_reports", "2026-10-31"))
+
+    assert latest["score_source_snapshot"] == snapshot
+    assert by_date["score_source_snapshot"] == snapshot
+
+
 def test_report_request_locale_wins_over_stored_account_locale(monkeypatch):
     async def translate(**kwargs):
         fields = json.loads(kwargs["prompt"].split("\n\n", 1)[1])

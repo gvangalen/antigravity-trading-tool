@@ -1497,13 +1497,15 @@ function mapMobileReport(
   const outlook = normalizeReportText(String(hydratedReport.outlook_compact || ''));
   const scores = scoresFromKpis(hydratedReport.kpi_metrics);
   const avgScore = scores.reduce((total, item) => total + item.value, 0) / Math.max(1, scores.length);
-  const headline = reportV2Snapshot(fullReport) ? 'FINN dagrapport' : headlineFromReport(summary, avgScore);
+  const headline = reportV2Snapshot(fullReport) ? `FINN ${periodLabel(period, language)}` : headlineFromReport(summary, avgScore);
   const highlights = normalizeHighlights(hydratedReport.highlights);
   const fullSections = fullReportSections(fullReport, hydratedReport, language);
 
   return {
     conclusionTitle: conclusionTitle(avgScore),
-    dateLabel: hydratedReport.report_date || dateRange(hydratedReport.period_start, hydratedReport.period_end) || 'Recent',
+    dateLabel: period === 'daily'
+      ? hydratedReport.report_date || 'Recent'
+      : dateRange(hydratedReport.period_start, hydratedReport.period_end) || hydratedReport.report_date || 'Recent',
     fullSections,
     generatedLabel: timeLabel(hydratedReport.generated_at),
     headline,
