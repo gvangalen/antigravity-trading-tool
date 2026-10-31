@@ -6,6 +6,7 @@ import {
   fetchDailyReportByDate,
   fetchDailyReportDates,
   generateDailyReport,
+  fetchDailyReportGenerationStatus,
   fetchDailyReportPDF,
   fetchDailyTraderStatus,
   fetchWeeklyReportLatest,
@@ -1898,7 +1899,7 @@ LOAD
 GENERATE
 ===================================================== */
 
-  const pollUntilNewReport = async (baselineSignature = '') => {
+  const pollUntilNewReport = async (baselineSignature = '', statusToken = null) => {
     pollTokenRef.current += 1;
     const token = pollTokenRef.current;
 
@@ -1906,6 +1907,13 @@ GENERATE
 
     while (attempts < POLL_MAX_ATTEMPTS) {
       if (pollTokenRef.current !== token) return;
+
+      if (statusToken) {
+        const task = await fetchDailyReportGenerationStatus(statusToken);
+        if (task?.state === 'FAILURE' || task?.state === 'REVOKED') {
+          throw new Error(task?.error_code || 'generation_failed');
+        }
+      }
 
       await sleep(POLL_INTERVAL_MS);
       await waitUntilVisible();
@@ -1957,11 +1965,24 @@ GENERATE
           return;
         }
       }
-      await pollUntilNewReport(baselineSignature);
+      await pollUntilNewReport(baselineSignature, reportType === 'daily' ? generation?.status_token : null);
       showSnackbar(`${fallbackLabel} staat klaar`, 'success');
     } catch (err) {
       console.error(err);
-      setError('Genereren van het rapport mislukt. Probeer het zo opnieuw.');
+      const rateLimitMessage = {
+        nl: 'FINN heeft tijdelijk te veel rapportaanvragen ontvangen. Probeer het later opnieuw.',
+        en: 'FINN has received too many report requests for now. Please try again later.',
+        de: 'FINN hat vorübergehend zu viele Berichtsanfragen erhalten. Bitte versuche es später erneut.',
+      };
+      const failureMessage = {
+        nl: 'Genereren van het rapport mislukt. Probeer het zo opnieuw.',
+        en: 'The report could not be generated. Please try again shortly.',
+        de: 'Der Bericht konnte nicht erstellt werden. Bitte versuche es gleich erneut.',
+      };
+      const language = normalizeLocale(locale);
+      setError(err?.message === 'ai_rate_limited'
+        ? rateLimitMessage[language] || rateLimitMessage.nl
+        : failureMessage[language] || failureMessage.nl);
     } finally {
       setGenerating(false);
       setLoading(false);

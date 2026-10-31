@@ -27,7 +27,7 @@ def test_closed_trade_review_gets_two_scoped_model_attempts(monkeypatch):
     assert slots == [
         ("finn_trade_review:41:237", True, 2),
         ("finn_trade_review:41:237", True, 2),
-        ("daily_report_task:41:237", True, 4),
+        ("daily_report_task:41:237", True, 20),
     ]
 
 
@@ -270,6 +270,12 @@ def test_generate_report_can_refresh_older_same_day_report(monkeypatch):
     result = __import__("asyncio").run(service.generate_report(7, "daily", manual_refresh=True))
 
     assert result["task_id"] == "new-report-task"
+    from backend.utils.auth_utils import decode_token
+    claims = decode_token(result["status_token"])
+    assert claims["sub"] == "7"
+    assert claims["task_id"] == "new-report-task"
+    assert claims["period"] == "daily"
+    assert claims["type"] == "report_generation"
 
 
 def test_daily_generate_endpoint_requests_manual_refresh():

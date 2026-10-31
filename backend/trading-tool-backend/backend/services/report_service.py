@@ -5,7 +5,7 @@ import os
 import time
 from typing import Dict, Any, List, Optional
 from copy import deepcopy
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi.responses import StreamingResponse
 
 from backend.infrastructure.repositories.report_repository import ReportRepository
@@ -18,6 +18,7 @@ from backend.celery_task.weekly_report_task import generate_weekly_report
 from backend.celery_task.monthly_report_task import generate_monthly_report
 from backend.celery_task.quarterly_report_task import generate_quarterly_report
 from backend.services.ai_usage_observability_service import ai_usage_context, get_user_email_snapshot
+from backend.utils.auth_utils import create_token
 
 logger = logging.getLogger(__name__)
 
@@ -483,6 +484,11 @@ class ReportService:
             "message": names[period],
             "task_id": task.id,
             "user_id": user_id,
+            "status_token": create_token(
+                {"sub": str(user_id), "task_id": task.id, "period": period},
+                timedelta(hours=1),
+                "report_generation",
+            ) if period == "daily" else None,
         }
 
     # =================

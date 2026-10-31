@@ -4,6 +4,33 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Report 2.0: rapportgeneratie en PDF-presentatie (31 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. Onafhankelijke QA gaf `NOT_ACCEPTED` op live SHA
+`d4eb62b6e2f23cb8ad15a97d3c30731a383ec3c9`: drie nieuwe rapportaanvragen
+(DE, DE, NL) bleven in de browser vier minuten op een geanimeerde 92% staan en
+eindigden in `Polling timeout`. De bestaande PDF bleef beschikbaar. Een
+read-only inspectie van de productie-workerlogs toonde dat elk van deze taken
+direct faalde met `daily_report_ai_rate_limited`; de per-gebruiker-limiet was
+vier rapportaanroepen per uur. De frontend pollde alleen het nieuwste rapport
+en kon de onmiddellijke taakfout daardoor niet tonen. De fout is dus geen
+bewezen Responses-timeout.
+
+Kandidaat `codex/report2-rate-limit-task-status` verhoogt de begrensde
+rapportlimiet tot twintig aanroepen per eigenaar per uur; handmatige
+regeneratie heeft daarnaast een afzonderlijke cooldown. Het aanmaakantwoord
+geeft nu een kortlevend, eigenaargebonden statustoken. Een nieuwe rapport-API
+geeft uitsluitend taakstatus en gesaniteerde foutcode terug; de webpagina
+stopt direct bij een gefaalde taak en toont de limietmelding in NL, EN of DE.
+De PDF krijgt een gelokaliseerde titel en rapportdatum; Paper en Live worden
+bij printen in dezelfde Portfolio-sectie naast elkaar gehouden. Geen
+actiecontract of botuitvoering is gewijzigd.
+
+Gerichte tests: 15 geslaagd. Volledige backend-suite: 4158 geslaagd, vier
+bestaande skips. Frontend typecheck, i18n-lint, 30 i18n-tests en productiebuild
+slagen. Echte provider-CI, samenvoegen, Auto Deploy, publieke SHA-controle en
+onafhankelijke live herkeuring zijn nog niet uitgevoerd.
+
 ## Report 2.0: Duitse Analyse bij gemengde scorebeschikbaarheid (31 oktober 2026)
 
 Phase: `LIVE_PENDING_QA`. Onafhankelijke QA gaf `NOT_ACCEPTED` op live SHA

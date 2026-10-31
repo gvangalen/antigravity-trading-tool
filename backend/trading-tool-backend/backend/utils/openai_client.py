@@ -675,10 +675,10 @@ def _rate_limit_allows_call() -> bool:
         # that second call and leave a complete Paper dossier unavailable.
         limit_override = 2
     elif context.get("entry_point") == "daily_report_task":
-        # A user may retry a report after a failed or corrected generation.
-        # The generic scheduled limit of one per hour silently turns the next
-        # report into factual fallback copy before Luna can write it.
-        limit_override = 4
+        # Manual regeneration is independently throttled by ReportService.
+        # Leave room for language changes and QA retries within an hour while
+        # keeping a bounded per-owner budget for background generation.
+        limit_override = max(1, int(os.getenv("OPENAI_MAX_DAILY_REPORT_CALLS_PER_SCOPE_WINDOW", "20")))
     allowed = acquire_ai_call_slot(scope, scheduled=scheduled, limit_override=limit_override)
     if not allowed:
         _log_openai_quota_skip("ai_rate_limited")
