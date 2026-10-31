@@ -6,7 +6,7 @@ import {
   fetchDailyReportByDate,
   fetchDailyReportDates,
   generateDailyReport,
-  fetchDailyReportGenerationStatus,
+  fetchReportGenerationStatus,
   fetchDailyReportPDF,
   fetchDailyTraderStatus,
   fetchWeeklyReportLatest,
@@ -45,7 +45,7 @@ import { waitUntilVisible } from '@/hooks/useVisibilityPolling';
 import { actionButtonStyles } from '@/components/ui/actionButtonStyles';
 import { trackAssistantEvent } from '@/lib/api/assistantAnalytics';
 import { useTranslation } from '@/app/providers/I18nProvider';
-import { isReadyReport } from '@/lib/report/reportState';
+import { isReadyReport, isGeneratedReportReady } from '@/lib/report/reportState';
 import { useAsset } from '@/app/providers/AssetProvider';
 import { formatDateTime, getIntlLocale, getLocaleValue, normalizeLocale } from '@/lib/i18n';
 import {
@@ -1905,15 +1905,17 @@ GENERATE
     const token = pollTokenRef.current;
 
     let attempts = 0;
+    let taskSucceeded = false;
 
     while (attempts < POLL_MAX_ATTEMPTS) {
       if (pollTokenRef.current !== token) return;
 
       if (statusToken) {
-        const task = await fetchDailyReportGenerationStatus(statusToken);
+        const task = await fetchReportGenerationStatus(reportType, statusToken);
         if (task?.state === 'FAILURE' || task?.state === 'REVOKED') {
           throw new Error(task?.error_code || 'generation_failed');
         }
+        taskSucceeded = task?.state === 'SUCCESS';
       }
 
       await sleep(POLL_INTERVAL_MS);
@@ -1923,7 +1925,10 @@ GENERATE
 
       const sig = getReportSignature(data);
 
-      if (isReadyReport(data) && sig && sig !== baselineSignature) {
+      // Period reports are upserted for the same report date. Their created_at
+      // stays unchanged, so a successful owner-bound task is the completion
+      // proof even when the row signature is identical to the prior version.
+      if (isGeneratedReportReady(data, sig, baselineSignature, taskSucceeded)) {
         lastSignatureRef.current = sig;
         setSelectedDate('latest');
         setReport(data);
@@ -1966,7 +1971,7 @@ GENERATE
           return;
         }
       }
-      await pollUntilNewReport(baselineSignature, reportType === 'daily' ? generation?.status_token : null);
+      await pollUntilNewReport(baselineSignature, generation?.status_token);
       showSnackbar(`${fallbackLabel} staat klaar`, 'success');
     } catch (err) {
       console.error(err);

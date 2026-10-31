@@ -507,7 +507,7 @@ class ReportService:
                 {"sub": str(user_id), "task_id": task.id, "period": period},
                 timedelta(hours=1),
                 "report_generation",
-            ) if period == "daily" else None,
+            ),
         }
 
     # =================

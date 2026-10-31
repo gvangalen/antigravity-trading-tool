@@ -23,8 +23,8 @@ export const fetchDailyReportDates = async (options = {}) =>
 export const generateDailyReport = async () =>
   fetchAuth('/api/report/daily/generate', { method: 'POST' });
 
-export const fetchDailyReportGenerationStatus = async (statusToken) =>
-  fetchAuth('/api/report/daily/generation-status', {
+export const fetchReportGenerationStatus = async (period, statusToken) =>
+  fetchAuth(`/api/report/${period}/generation-status`, {
     method: 'POST',
     body: JSON.stringify({ status_token: statusToken }),
   });

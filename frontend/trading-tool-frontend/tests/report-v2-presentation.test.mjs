@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import nl from '../dictionaries/nl.json' with { type: 'json' };
+import { isGeneratedReportReady } from '../lib/report/reportState.js';
 import {
   reportV2AnalysisParagraphs,
   reportV2Change,
@@ -9,6 +10,13 @@ import {
   reportV2Locale,
   reportV2PeriodLabel,
 } from '../lib/report/reportV2Presentation.mjs';
+
+test('an upserted period report completes on owner-bound task success despite unchanged created_at', () => {
+  const saved = { report_date: '2026-10-31', created_at: '2026-10-31T18:00:00Z' };
+  assert.equal(isGeneratedReportReady(saved, saved.created_at, saved.created_at, false), false);
+  assert.equal(isGeneratedReportReady(saved, saved.created_at, saved.created_at, true), true);
+  assert.equal(isGeneratedReportReady({ _status: 'pending' }, 'same', 'same', true), false);
+});
 
 test('PDF labels follow the saved prose language, not the print browser language', () => {
   const report = { score_source_snapshot: JSON.stringify({ content_locale: 'nl' }) };

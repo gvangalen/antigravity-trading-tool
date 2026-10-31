@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+import pytest
 
 from backend.api import report_api
 from backend.utils.auth_utils import create_token
@@ -52,3 +53,21 @@ def test_report_generation_status_hides_unknown_worker_error(monkeypatch):
         "/api/report/daily/generation-status", json={"status_token": _token()},
     )
     assert response.json() == {"state": "FAILURE", "error_code": "generation_failed"}
+
+
+@pytest.mark.parametrize("period", ["weekly", "monthly", "quarterly"])
+def test_period_report_generation_status_exposes_typed_failure_to_owner(monkeypatch, period):
+    response = _client(monkeypatch).post(
+        f"/api/report/{period}/generation-status",
+        json={"status_token": _token(period=period)},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"state": "FAILURE", "error_code": "ai_rate_limited"}
+
+
+def test_period_report_generation_status_rejects_mismatched_period(monkeypatch):
+    response = _client(monkeypatch).post(
+        "/api/report/monthly/generation-status",
+        json={"status_token": _token(period="weekly")},
+    )
+    assert response.status_code == 404

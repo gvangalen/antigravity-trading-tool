@@ -4,6 +4,29 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Report 2.0: periodegeneratie afronden (31 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. Onafhankelijke QA gaf `NOT_ACCEPTED` op live SHA
+`42ca1aac579f631359e397757eb454e891161f82`: nieuwe week- en
+maandrapporten werden opgeslagen en hun PDF's bevatten de zes secties,
+correcte perioderanges, gescheiden scores en geen ruwe terugblikvelden.
+De webpagina bleef echter vier minuten op 92% en meldde ten onrechte
+`Polling timeout`. Een nieuwe kwartaalgeneratie is na die twee fouten niet
+uitgevoerd. De rapporttabellen werken met een upsert op dezelfde rapportdatum;
+de webclient vergeleek alleen een `created_at`-achtige handtekening, die bij
+een upsert gelijk kan blijven. Bovendien gaven alleen dagrapporten een
+eigenaargebonden taakstatus aan de webclient.
+
+Kandidaat `codex/report2-period-generation-completion` geeft voor alle vier
+perioden een eigenaargebonden statustoken terug. De lijst- en PDF-routes
+blijven read-only en bestaand. De client gebruikt `SUCCESS` als bewijs dat de
+nieuwe periodeversie is opgeslagen, ook wanneer de rijhandtekening gelijk
+blijft; `FAILURE` en `REVOKED` tonen direct een gesaniteerde foutcode.
+Gerichte backendtests: 22 geslaagd; volledige backend-suite: 4174 geslaagd,
+vier bestaande skips. Frontend typecheck, build, i18n-lint en 33 i18n-tests
+geslaagd. Provider/CI, deploy-SHA en
+nieuwe onafhankelijke live QA zijn nog niet afgerond.
+
 ## Report 2.0: periodeherkeuring (31 oktober 2026)
 
 Phase: `LIVE_PENDING_QA`. Onafhankelijke QA gaf `NOT_ACCEPTED` op live SHA
