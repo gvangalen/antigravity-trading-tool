@@ -6,7 +6,9 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Report 2.0: periodegeneratie afronden (31 oktober 2026)
 
-Phase: `LIVE_PENDING_QA`. Onafhankelijke QA gaf `NOT_ACCEPTED` op live SHA
+Phase: `ACCEPTED` voor de ingelogde week-, maand- en kwartaalmatrix op live
+SHA `b239e92d4a83fd4e8c37977e578349a689848d50`. Onafhankelijke QA gaf
+eerder `NOT_ACCEPTED` op live SHA
 `42ca1aac579f631359e397757eb454e891161f82`: nieuwe week- en
 maandrapporten werden opgeslagen en hun PDF's bevatten de zes secties,
 correcte perioderanges, gescheiden scores en geen ruwe terugblikvelden.
@@ -32,7 +34,19 @@ en [main-CI 41245026271](https://github.com/gvangalen/antigravity-trading-tool/a
 [Auto Deploy 41245269507](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41245269507)
 slaagde. Publieke backend-health en frontend-buildinfo gaven HTTP 200 en beide
 dezelfde SHA. Deze statuswijziging krijgt een eigen laatste deployment-SHA;
-onafhankelijke QA test pas na verificatie van die definitieve revision.
+onafhankelijke QA testte na verificatie van die definitieve revision. Nieuwe
+week-, maand- en kwartaalrapporten werden direct opgeslagen en bleven na
+refresh beschikbaar. De drie nieuwe PDF's bevatten zes Report 2.0-secties,
+de juiste datumbereiken, een leesbare terugblik zonder ruwe velden, en Paper
+en Live op dezelfde pagina. Markt 40 en de totale benchmark 33,3 bleven
+onderscheiden; ontbrekende scores werden niet als nul getoond. De eerste
+weekaanvraag kreeg binnen circa zeven seconden een getypeerde
+`ai_rate_limited`-melding; één herproef na de uurgrens slaagde binnen circa
+dertig seconden. De browsertrace onderscheidde een applicatie- of
+providerlimiet niet. De ingelogde matrix testte geen tweede eigenaar of
+native mobiele runtime en plaatste geen Live-order. Dit verdict betreft de
+productcode van de geteste SHA; deze latere statuswijziging verandert geen
+productgedrag.
 
 ## Report 2.0: periodeherkeuring (31 oktober 2026)
 
