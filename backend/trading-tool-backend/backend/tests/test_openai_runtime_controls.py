@@ -92,6 +92,36 @@ def test_no_budget_mode_never_calls_openai(monkeypatch):
     assert result["ai_status"]["mode"] == "deterministic_only"
 
 
+def test_json_call_passes_report_deadline_to_responses_transport(monkeypatch):
+    options = []
+
+    class _Responses:
+        @staticmethod
+        def create(**_kwargs):
+            return SimpleNamespace(output_text='{"analysis":"ok"}', usage=None, model="test-model")
+
+    class _Client:
+        responses = _Responses()
+
+        def with_options(self, **kwargs):
+            options.append(kwargs)
+            return self
+
+    monkeypatch.setattr(openai_module, "get_ai_availability", lambda: {"available": True})
+    monkeypatch.setattr(openai_module, "_rate_limit_allows_call", lambda: True)
+    monkeypatch.setattr(openai_module, "_quota_breaker_active", lambda: False)
+    monkeypatch.setattr(openai_module, "client", _Client())
+    monkeypatch.setattr(openai_module, "_log_openai_usage", lambda **_kwargs: None)
+
+    result = openai_module.ask_gpt_json(
+        prompt="{}", system_role="Report", retries=1,
+        client_max_retries=0, timeout_seconds=75,
+    )
+
+    assert result == {"analysis": "ok"}
+    assert options == [{"max_retries": 0, "timeout": 75.0}]
+
+
 def test_block_observability_is_deduplicated(monkeypatch):
     monkeypatch.setattr(ai_availability_service, "_redis_client", lambda: None)
     monkeypatch.setenv("OPENAI_BLOCK_LOG_WINDOW_SECONDS", "3600")

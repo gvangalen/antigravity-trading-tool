@@ -708,6 +708,7 @@ def ask_gpt_json(
     retries: int = 2,
     max_tokens: Optional[int] = None,
     client_max_retries: Optional[int] = None,
+    timeout_seconds: Optional[float] = None,
     model_override: Optional[str] = None,
     reasoning_effort: Optional[str] = None,
     image_png: Optional[bytes] = None,
@@ -738,7 +739,12 @@ def ask_gpt_json(
             logger.info(f"🧠 GPT JSON Call (Attempt {attempt})")
             started = start_timer()
             
-            active_client = client.with_options(max_retries=client_max_retries) if client_max_retries is not None else client
+            client_options: Dict[str, Any] = {}
+            if client_max_retries is not None:
+                client_options["max_retries"] = client_max_retries
+            if timeout_seconds is not None:
+                client_options["timeout"] = max(1.0, float(timeout_seconds))
+            active_client = client.with_options(**client_options) if client_options else client
             response = active_client.responses.create(
                 model=model_override or model,
                 input=_json_prompt_messages(prompt, system_role, image_png),

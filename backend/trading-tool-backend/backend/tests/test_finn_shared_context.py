@@ -298,9 +298,16 @@ def test_daily_report_projects_dca_cadence_curve_and_verified_readings(monkeypat
     }]}
     monkeypatch.setattr(reports, "_load_context", lambda _id: asyncio.sleep(0, result=context))
     prompts = []
-    monkeypatch.setattr(reports, "ask_gpt_json", lambda **kw: prompts.append(json.loads(kw["prompt"])) or {})
+    call_options = []
+    def report_writer(**kw):
+        prompts.append(json.loads(kw["prompt"]))
+        call_options.append((kw["retries"] if "retries" in kw else 2,
+                             kw["timeout_seconds"], kw["client_max_retries"]))
+        return {}
+    monkeypatch.setattr(reports, "ask_gpt_json", report_writer)
 
     report = reports.generate_unified_daily_report_sections(7)
+    assert call_options[0] == (2, 75, 0)
     asset = prompts[0]["context"]["assets"][0]
     assert asset["setups"][0]["dca_frequency"] == "weekly"
     assert asset["setups"][0]["purchase_weekday"] == "vrijdag"
@@ -362,8 +369,10 @@ def test_report_v2_repairs_wrong_percent_and_foreign_pair_setup_without_fixed_pr
     ]
     monkeypatch.setattr(reports, "_load_context", lambda _id: asyncio.sleep(0, result={"locale": "en", "assets": assets}))
     calls = []
+    call_options = []
     def writer(**kwargs):
         calls.append(json.loads(kwargs["prompt"]))
+        call_options.append((kwargs.get("retries", 2), kwargs["timeout_seconds"], kwargs["client_max_retries"]))
         if len(calls) == 1:
             answer = {key: f"A useful {key} paragraph about the saved BTC plans." for key in reports.REPORT_V2_SECTIONS}
             answer["analysis"] = ("BTC/EUR: 24-hour change is −29.5%; EUR buying zone applies. "
@@ -374,6 +383,7 @@ def test_report_v2_repairs_wrong_percent_and_foreign_pair_setup_without_fixed_pr
     monkeypatch.setattr(reports, "ask_gpt_json", writer)
     result = reports.generate_unified_daily_report_sections(7)
     assert len(calls) == 2
+    assert call_options == [(2, 75, 0), (1, 30, 0)]
     assert calls[0]["context"]["assets"][0]["market_snapshot"]["change_24h_percent"] == "-0.295%"
     assert "change_24h" not in calls[0]["context"]["assets"][0]["market_snapshot"]
     assert "−0.295%" in result["score_source_snapshot"]["report_v2"]["sections"]["analysis"]
