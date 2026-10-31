@@ -4,6 +4,33 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Report 2.0 PDF-taal en leesbaarheid (31 oktober 2026)
+
+Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De gebruiker leverde een PDF van
+31 oktober aan. Daarin waren de opgeslagen Nederlandstalige rapporttekst,
+Engelse opmaaklabels, Engelse botstatussen en Engelstalige bedragnotatie
+gemengd. De volledige technische indicatoronderbouwing stond bovendien in
+de hoofdweergave. De oorzaak was dat de PDF-renderer zijn eigen browsertaal
+gebruikte in plaats van de opgeslagen `content_locale` van het rapport.
+
+[PR #726](https://github.com/gvangalen/antigravity-trading-tool/pull/726)
+maakt de opgeslagen rapporttaal leidend voor web en PDF. De hoofdweergave
+toont scores en plangegevens beknopt; indicatoronderbouwing is op web
+uitklapbaar. Bedragen, datums, indicatornamen, statussen en terugbliklabels
+volgen NL, EN of DE. De gegenereerde rapportfeiten, scores, FINN-acties en
+providerroute zijn niet gewijzigd.
+
+Lokaal slaagden typecheck, i18n-lint, 29 i18n-tests, 34 command-tests,
+8 proposal-tests en de frontendbuild. Een lokale Chromium-PDF-proef met
+Engelse browser en opgeslagen Nederlandse rapporttaal gaf Nederlandse koppen
+en `€ 1.650,00`. Alle vijf PR-checks en main-CI `41211174594` slaagden.
+Auto Deploy `41211431441` slaagde voor merge-SHA
+`cd6bfcde78b12db06ad3a343e90795eb3649fdc9`; publieke backend-health
+en frontend-buildinfo gaven beide HTTP 200 en exact die SHA. Een nieuwe
+ingelogde PDF met echte rapportdata is nog niet onafhankelijk beoordeeld.
+Deze statuswijziging creëert zelf een nieuwe main-SHA; na haar deployment
+moeten de publieke SHA's opnieuw worden gecontroleerd vóór de QA-handoff.
+
 ## Report 2.0 terugblik per handelspaar: QA-herstel (31 oktober 2026)
 
 Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De definitieve Report 2.0-revisie
