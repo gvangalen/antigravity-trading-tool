@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Report 2.0 PDF: botwaarde en rapporttaal (31 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`. De bestaande onafhankelijke QA-agent testte een
+Phase: `RELEASE_CANDIDATE`. De bestaande onafhankelijke QA-agent testte een
 nieuwe ingelogde PDF op live SHA `39878a72809a5b09aecf24b3f20ba7c69ca91394`.
 Verdict: `NOT_ACCEPTED`. De score `36,7/100` en paginering waren hersteld,
 maar de Automatisering-kaart noemde €0 positiewaarde nog `Totale waarde`
@@ -21,9 +21,16 @@ rapportalinea's; gebruikersnamen van plannen en bots blijven onaangetast.
 Er zijn geen vaste coachalinea's toegevoegd. Een gerichte backendregressie,
 38 rapporttests, de volledige backend-suite (4148 geslaagd, 4 bestaande
 skips), frontend typecheck, i18n-lint, 29 i18n-tests en productiebuild
-slaagden lokaal. De lokale runtime heeft geen `OPENAI_API_KEY` voor een echte
-Luna/Responses-proef; deze vereiste releasepoort is nog niet groen. Er is
-geen nieuwe deploy of ingelogde QA-acceptatie voor deze kandidaat.
+slaagden lokaal. De handmatig gestarte CI op kandidaat `fe1da947e1ef86c59894d034b03a50cc3ea5db3e`
+([run 41215542542](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41215542542))
+slaagde op alle vijf jobs. De Report 2.0-proef gebruikte de beschermde
+OpenAI-secret in CI, kreeg HTTP 200 van de echte Responses-API en controleerde
+zes Nederlandstalige rapportsecties met behoud van een opgeslagen plannaam.
+De lokale runtime zelf heeft geen `OPENAI_API_KEY`; daarom is die proef in
+de beschermde CI-runtime uitgevoerd. De gegenereerde rapporttekst bevatte
+de gecontroleerde Engelse brontermen niet. De actiecontracten en
+selectorroute zijn in deze batch niet gewijzigd. Er is nog geen nieuwe deploy
+of ingelogde QA-acceptatie voor deze kandidaat.
 
 ## Report 2.0 PDF herkeuring: botwaarde, scoregetal en paginering (31 oktober 2026)
 
