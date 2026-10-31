@@ -280,8 +280,8 @@ def _report_facts(context: dict[str, Any]) -> dict[str, Any]:
             "setups": [{"id": row.get("id"), "name": row.get("name"),
                         "timeframe": row.get("timeframe"), "setup_type": row.get("setup_type"),
                         "dca_frequency": row.get("dca_frequency"),
-                        "dca_day": row.get("dca_day"),
-                        "dca_month_day": row.get("dca_month_day"),
+                        "dca_day": row.get("dca_day") if row.get("dca_frequency") == "weekly" else None,
+                        "dca_month_day": row.get("dca_month_day") if row.get("dca_frequency") == "monthly" else None,
                         "min_benchmark_score": row.get("min_benchmark_score"),
                         "max_benchmark_score": row.get("max_benchmark_score")}
                        for row in item.get("setups") or []],
@@ -295,8 +295,10 @@ def _report_facts(context: dict[str, Any]) -> dict[str, Any]:
                                          (setups_by_id.get(row.get("setup_id")) or {}).get("timeframe"),
                             "setup_type": (setups_by_id.get(row.get("setup_id")) or {}).get("setup_type"),
                             "dca_frequency": (setups_by_id.get(row.get("setup_id")) or {}).get("dca_frequency"),
-                            "dca_day": (setups_by_id.get(row.get("setup_id")) or {}).get("dca_day"),
-                            "dca_month_day": (setups_by_id.get(row.get("setup_id")) or {}).get("dca_month_day"),
+                            "dca_day": (setups_by_id.get(row.get("setup_id")) or {}).get("dca_day")
+                                       if (setups_by_id.get(row.get("setup_id")) or {}).get("dca_frequency") == "weekly" else None,
+                            "dca_month_day": (setups_by_id.get(row.get("setup_id")) or {}).get("dca_month_day")
+                                             if (setups_by_id.get(row.get("setup_id")) or {}).get("dca_frequency") == "monthly" else None,
                             "execution_mode": row.get("execution_mode"),
                             "base_amount": row.get("base_amount"),
                             "decision_curve": _saved_curve(row.get("decision_curve")),
@@ -538,11 +540,24 @@ def _report_v2_factual_fallbacks(context: dict[str, Any], facts: dict[str, Any],
             plans.append(f"{asset['display_symbol']} · {setup.get('name') or 'Setup'}: "
                          f"{cadence_label or setup.get('setup_type') or 'unknown'}, "
                          f"{timeframe_label} {setup.get('timeframe') or 'unknown'}")
+        for strategy in asset.get("strategies") or []:
+            amount = strategy.get("base_amount")
+            if isinstance(amount, (int, float)) and not isinstance(amount, bool):
+                amount_label = f"{amount:g}"
+                if locale == "nl":
+                    plans.append(f"{asset['display_symbol']} · {strategy.get('name') or 'Strategie'}: "
+                                 f"basisbedrag {amount_label} per uitvoering")
+                elif locale == "de":
+                    plans.append(f"{asset['display_symbol']} · {strategy.get('name') or 'Strategie'}: "
+                                 f"Basisbetrag {amount_label} pro Ausführung")
+                else:
+                    plans.append(f"{asset['display_symbol']} · {strategy.get('name') or 'Strategy'}: "
+                                 f"base amount {amount_label} per execution")
     return {
         "retrospective": retrospective,
         "portfolio": portfolio,
         "analysis": " ".join((legacy["market_analysis"], legacy["macro_context"], legacy["technical_analysis"])),
-        "plan": "; ".join(plans) + ". " + legacy["strategy_implication"] if plans else legacy["setup_validation"],
+        "plan": "; ".join(plans) + "." if plans else legacy["setup_validation"],
         "automation": automation,
         "outlook_v2": legacy["outlook"],
     }
@@ -582,6 +597,22 @@ def _report_v2_contradicts_facts(section: str, value: str, facts: dict[str, Any]
             r"\b(?:\d+|twee|drie|vier|two|three|four|zwei|drei|vier)\s+"
             r"(?:\w+\s+){0,3}(?:dagelijkse|daily|tägliche)\s+"
             r"(?:\w+\s+){0,2}(?:DCA[- ]?)?(?:plannen|plans|Pläne)\b", value, re.I
+        ):
+            return True
+        if "daily" in frequencies and re.search(
+            r"\b(?:wekelijkse?|wekelijks|weekly|wöchentliche?|wöchentlich)\b", value, re.I
+        ):
+            # The text may be about a different weekly plan. Use the exact
+            # saved plan list instead of risking a wrong cadence assignment.
+            return True
+        has_amount = any(
+            isinstance(strategy.get("base_amount"), (int, float))
+            and not isinstance(strategy.get("base_amount"), bool)
+            for asset in facts["assets"] for strategy in asset.get("strategies") or []
+        )
+        if has_amount and re.search(
+            r"\b(?:geen|no|kein(?:e|en)?|niet|not)\b.{0,45}"
+            r"\b(?:bedrag|amount|Betrag)\b", value, re.I
         ):
             return True
     return False

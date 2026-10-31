@@ -4,6 +4,36 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Report 2.0 planfeiten: tweede live QA en lokale reparatie (31 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. De definitieve vorige main-revisie
+`f0d2fb33a9e67deb9de4a59a5b0fc46f95cb38e9` had geslaagde main-CI
+(`41197107310`) en Auto Deploy (`41197334575`); backend-health en
+frontend-buildinfo gaven HTTP 200 en die SHA. De bestaande onafhankelijke
+QA-agent testte daar een nieuw Report 2.0-rapport. De knop Nieuw, terugblik,
+Paper-portfolio en pauzestatus van bots werkten. Het verdict bleef
+`NOT_ACCEPTED`: de rapporttekst noemde dagelijkse BTC/EUR-plannen wekelijks
+op weekdag 5 en ontkende een opgeslagen bedrag van 10 per uitvoering, terwijl
+de kaarten die gegevens wel toonden. De PDF-knop leverde in die browserproef
+geen waarneembaar downloadresultaat binnen 50 seconden; HTTP-uitkomst en
+bestandsinhoud zijn niet vastgesteld.
+
+De huidige lokale kandidaat `codex/report2-plan-facts` projecteert een
+weekdag alleen voor een wekelijkse DCA en een maanddag alleen voor een
+maandelijkse DCA. Bij een tegenstrijdige tekst gebruikt de rapportsectie de
+opgeslagen frequentie en het basisbedrag. Een gerichte regressietest voor een
+dagelijkse setup met een oud weekdagveld slaagt. De volledige backend-suite
+slaagde met 4146 tests en 4 bestaande skips. Frontend typecheck, i18n,
+command/proposal-tests, productiebuild en high audit slaagden; audit vond
+0 kwetsbaarheden. De lokale worker-actiematrix slaagde 16/16 en de
+adapterregistratie 21/21 (matrix-artifact SHA-256
+`324e67d469d058cbbd52e2f7ee452aac58207e45a42740a1ed05064440ed99f8`).
+De echte Luna/Responses development-selectorproef slaagde 20/20 met nul
+provider-, schema-, timeout-, parse- of validatiefouten. De regressieproef
+slaagde 109/109 met dezelfde nul foutpercentages (artifact SHA-256
+`31b62c5fe5fd199b997ce9ffa7e70ab97518e39d471eee087afc84764d275fb6`).
+Er is nog geen nieuwe PR, deploy of QA-acceptatie voor deze kandidaat.
+
 ## Report 2.0 live herkeuring en herstelkandidaat (31 oktober 2026)
 
 Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De eerste onafhankelijke ingelogde webherkeuring van
