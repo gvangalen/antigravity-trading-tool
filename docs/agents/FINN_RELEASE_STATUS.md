@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Report 2.0 planfeiten: tweede live QA en lokale reparatie (31 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`. De definitieve vorige main-revisie
+Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De definitieve vorige main-revisie
 `f0d2fb33a9e67deb9de4a59a5b0fc46f95cb38e9` had geslaagde main-CI
 (`41197107310`) en Auto Deploy (`41197334575`); backend-health en
 frontend-buildinfo gaven HTTP 200 en die SHA. De bestaande onafhankelijke
@@ -32,7 +32,14 @@ De echte Luna/Responses development-selectorproef slaagde 20/20 met nul
 provider-, schema-, timeout-, parse- of validatiefouten. De regressieproef
 slaagde 109/109 met dezelfde nul foutpercentages (artifact SHA-256
 `31b62c5fe5fd199b997ce9ffa7e70ab97518e39d471eee087afc84764d275fb6`).
-Er is nog geen nieuwe PR, deploy of QA-acceptatie voor deze kandidaat.
+De productreparatie is via [PR #722](https://github.com/gvangalen/antigravity-trading-tool/pull/722)
+samengevoegd als `62cf5f81127868c9d6030079cc1b80e317818462`.
+Alle vijf PR-checks, main-CI `41199628015` en Auto Deploy `41199854082`
+slaagden. Publieke `/api/health` en `/build-info.json` gaven allebei HTTP
+200 en exact die SHA. Deze statuswijziging maakt opnieuw een main-revisie;
+haar CI, Auto Deploy en beide publieke SHA's moeten overeenkomen voordat
+de bestaande onafhankelijke QA-agent de ingelogde Report 2.0-herkeuring
+start. Er is nog geen onafhankelijke QA-acceptatie voor deze reparatie.
 
 ## Report 2.0 live herkeuring en herstelkandidaat (31 oktober 2026)
 
