@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from types import SimpleNamespace
+import pytest
 
 from backend.services.report_service import ReportService
 from backend.services import ai_availability_service
@@ -276,6 +277,21 @@ def test_generate_report_can_refresh_older_same_day_report(monkeypatch):
     assert claims["task_id"] == "new-report-task"
     assert claims["period"] == "daily"
     assert claims["type"] == "report_generation"
+
+
+@pytest.mark.parametrize("period", ["weekly", "monthly", "quarterly"])
+def test_period_report_generation_returns_owner_bound_status_token(monkeypatch, period):
+    service = ReportService(_Repo(None))
+    monkeypatch.setattr(
+        f"backend.services.report_service.generate_{period}_report",
+        SimpleNamespace(delay=lambda **kwargs: SimpleNamespace(id=f"{period}-task")),
+    )
+    result = __import__("asyncio").run(service.generate_report(7, period))
+    from backend.utils.auth_utils import decode_token
+    claims = decode_token(result["status_token"])
+    assert claims["sub"] == "7"
+    assert claims["task_id"] == f"{period}-task"
+    assert claims["period"] == period
 
 
 def test_daily_generate_endpoint_requests_manual_refresh():

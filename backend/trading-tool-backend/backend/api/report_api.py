@@ -102,10 +102,10 @@ async def generate_daily(
         raise _report_internal_error()
 
 
-@router.post("/report/daily/generation-status")
-async def get_daily_generation_status(
+async def _get_generation_status(
     request: ReportGenerationStatusRequest,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict,
+    period: str,
 ):
     """Owner-bound task status; never expose raw Celery errors or task results."""
     try:
@@ -114,7 +114,7 @@ async def get_daily_generation_status(
         raise HTTPException(status_code=404, detail="Rapporttaak niet gevonden.")
     if (
         claims.get("type") != "report_generation"
-        or claims.get("period") != "daily"
+        or claims.get("period") != period
         or claims.get("sub") != str(current_user["id"])
         or not isinstance(claims.get("task_id"), str)
     ):
@@ -132,6 +132,17 @@ async def get_daily_generation_status(
     elif state == "REVOKED":
         response["error_code"] = "generation_failed"
     return response
+
+
+@router.post("/report/{period}/generation-status")
+async def get_report_generation_status(
+    period: str,
+    request: ReportGenerationStatusRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    if period not in {"daily", "weekly", "monthly", "quarterly"}:
+        raise HTTPException(status_code=404, detail="Rapporttaak niet gevonden.")
+    return await _get_generation_status(request, current_user, period)
 
 @router.get("/report/daily/export/pdf")
 async def export_daily_pdf(
