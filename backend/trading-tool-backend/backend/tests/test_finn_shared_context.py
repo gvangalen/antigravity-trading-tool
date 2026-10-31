@@ -399,6 +399,31 @@ def test_report_v2_rejects_blanket_daily_cadence_for_mixed_dca_plans(monkeypatch
     assert "twee dagelijkse" not in plan
 
 
+def test_report_v2_uses_daily_cadence_over_stored_legacy_weekday_and_keeps_amount(monkeypatch):
+    context = {"locale": "nl", "observed_at": "2026-10-31T09:00:00+00:00", "assets": [{
+        "symbol": "BTC", "pair": "BTC/EUR", "benchmark": {"source_status": "missing",
+            "reported_scores": {}, "component_source_status": {}}, "market_snapshot": {},
+        "setups": [{"id": 1, "name": "BTC DCA", "setup_type": "dca", "timeframe": "1D",
+                    "dca_frequency": "daily", "dca_day": "5"}],
+        "strategies": [{"id": 2, "setup_id": 1, "name": "BTC Vast", "base_amount": 10,
+                        "execution_mode": "fixed"}], "bots": [],
+    }]}
+    monkeypatch.setattr(reports, "_load_context", lambda _id: asyncio.sleep(0, result=context))
+    prompts = []
+    answer = {key: f"{key}: verslag op basis van opgeslagen gegevens." for key in reports.REPORT_V2_SECTIONS}
+    answer["plan"] = ("BTC/EUR heeft een wekelijkse DCA op weekdag 5 en voor de "
+                      "strategie is geen bedrag vastgesteld.")
+    monkeypatch.setattr(reports, "ask_gpt_json", lambda **kw: prompts.append(json.loads(kw["prompt"])) or answer)
+
+    plan = reports.generate_unified_daily_report_sections(7)["score_source_snapshot"]["report_v2"]["sections"]["plan"]
+    projected = prompts[0]["context"]["assets"][0]
+    assert projected["setups"][0]["dca_day"] is None
+    assert projected["strategies"][0]["dca_day"] is None
+    assert "dagelijks" in plan
+    assert "basisbedrag 10 per uitvoering" in plan
+    assert "wekelijks" not in plan
+
+
 def test_chat_and_report_project_the_same_verified_score_snapshot(monkeypatch):
     assessment = {
         "symbol": "ETH", "as_of": "2026-10-10", "source_status": "available",
