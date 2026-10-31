@@ -9,6 +9,20 @@ export function reportV2Locale(report, browserLocale) {
   return ['nl', 'en', 'de'].includes(language) ? language : 'nl';
 }
 
+export function reportV2PeriodLabel(report, browserLocale) {
+  const snapshot = scoreSourceSnapshot(report);
+  const period = snapshot?.report_v2;
+  const start = period?.period_start;
+  const end = period?.period_end;
+  if (!period || period.period === 'daily' || !/^\d{4}-\d{2}-\d{2}$/.test(start || '')
+      || !/^\d{4}-\d{2}-\d{2}$/.test(end || '')) return report?.report_date || '—';
+  const language = reportV2Locale(report, browserLocale);
+  const format = (day) => new Intl.DateTimeFormat(language, {
+    day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
+  }).format(new Date(`${day}T12:00:00Z`));
+  return `${format(start)} – ${format(end)}`;
+}
+
 export function reportV2IndicatorName(name, labels = {}) {
   const key = String(name || '').trim().toLowerCase();
   return labels[key] || name;

@@ -6,6 +6,7 @@ import { HUDSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { formatDateTime } from "@/lib/i18n";
 import { parseUtcMoment, scoreSourceSnapshot } from "@/lib/report/reportSourceSnapshot.mjs";
+import { reportV2PeriodLabel } from "@/lib/report/reportV2Presentation.mjs";
 
 export default function ReportTerminalHUD({ report, type = "daily", loading = false }) {
   const { user } = useAuth();
@@ -42,7 +43,7 @@ export default function ReportTerminalHUD({ report, type = "daily", loading = fa
            <div className="flex items-center gap-3 mt-4 text-slate-400">
              <Calendar size={14} className="text-blue-600/40" />
              <span className="text-sm font-bold tracking-tight uppercase">
-               {reportT.hudPeriod}: <span className="text-foreground">{report_date || "—"}</span>
+               {reportT.hudPeriod}: <span className="text-foreground">{reportV2PeriodLabel(report, locale)}</span>
              </span>
            </div>
         </div>

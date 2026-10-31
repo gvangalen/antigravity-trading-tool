@@ -583,7 +583,7 @@ def test_report_v2_retrospective_rejects_unchanged_components_for_changed_pair(m
     assert {tuple(row.values()) for row in report["comparison"]["changes"]} == {
         ("BTC/USDT", "market_score", 50, 30)}
     assert prompts[0]["report_v2_evidence"]["comparison"]["changes"] == report["comparison"]["changes"]
-    assert "BTC/USDT marktscore: 50 → 30" in report["sections"]["retrospective"]
+    assert "BTC/USDT marktscore: 50/100 → 30/100" in report["sections"]["retrospective"]
     assert "gelijk gebleven" not in report["sections"]["retrospective"]
     answer["retrospective"] = "De BTC/USDT-marktscore daalde van 50 naar 30; BTC/EUR bleef op 50."
     correct = reports.generate_unified_daily_report_sections(7)["score_source_snapshot"]["report_v2"]

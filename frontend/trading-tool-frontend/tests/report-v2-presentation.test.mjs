@@ -7,6 +7,7 @@ import {
   reportV2Change,
   reportV2IndicatorName,
   reportV2Locale,
+  reportV2PeriodLabel,
 } from '../lib/report/reportV2Presentation.mjs';
 
 test('PDF labels follow the saved prose language, not the print browser language', () => {
@@ -14,6 +15,14 @@ test('PDF labels follow the saved prose language, not the print browser language
   assert.equal(reportV2Locale(report, 'en'), 'nl');
   assert.equal(reportV2Locale({ meta_json: { score_source_snapshot: { content_locale: 'de' } } }, 'en'), 'de');
   assert.equal(reportV2Locale({}, 'de'), 'de');
+});
+
+test('period report headers show the saved range; daily reports keep their date', () => {
+  const report = { report_date: '2026-10-31', meta_json: { score_source_snapshot: {
+    content_locale: 'nl', report_v2: { period: 'weekly', period_start: '2026-10-26', period_end: '2026-10-31' },
+  } } };
+  assert.match(reportV2PeriodLabel(report, 'en'), /26 okt 2026 – 31 okt 2026/);
+  assert.equal(reportV2PeriodLabel({ report_date: '2026-10-31' }, 'nl'), '2026-10-31');
 });
 
 test('long analysis prose becomes readable paragraphs without changing its words', () => {
