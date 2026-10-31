@@ -74,6 +74,8 @@ export default function DailyTraderStatus({ report, status, loading, error, onRe
               || (decision?.reason_key && copy.reasons?.[decision.reason_key])
               || decision?.reason;
             const decisionAt = dateTime(decision?.at, locale, 'Europe/Amsterdam');
+            const decisionEpoch = parseUtcMoment(decision?.at)?.getTime() ?? NaN;
+            const decisionPredatesReport = Number.isFinite(decisionEpoch) && Number.isFinite(reportEpoch) && decisionEpoch < reportEpoch;
             const lastRun = dateTime(bot.last_run, locale, 'Europe/Amsterdam');
             const priceAt = dateTime(bot.price_source_at, locale, 'Europe/Amsterdam');
             const monitoring = copy.monitoring[bot.exit_monitoring] || copy.monitoring.unknown;
@@ -106,6 +108,7 @@ export default function DailyTraderStatus({ report, status, loading, error, onRe
                   {decision?.at && Number.isFinite(reportEpoch) && new Date(decision.at).getTime() > reportEpoch && (
                     <span className="ml-2 text-blue-700">{copy.afterReport}</span>
                   )}
+                  {decisionPredatesReport && <p className="mt-2 text-amber-800">{copy.beforeReportDecision}</p>}
                 </div>
               </div>
             );

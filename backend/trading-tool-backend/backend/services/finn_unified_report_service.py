@@ -68,6 +68,37 @@ def _regular_session_at(observed_at: Any, asset_class: Any, market_timezone: Any
     return "unknown"
 
 
+def _report_indicator_evidence(raw: Any) -> dict[str, dict[str, dict[str, Any]]]:
+    """Project measured fields only; old interpretation/action copy is not evidence."""
+    if not isinstance(raw, dict):
+        return {}
+    result = {}
+    for category in ("market", "macro", "technical"):
+        rows = raw.get(category)
+        if not isinstance(rows, dict):
+            continue
+        result[category] = {}
+        for name, entry in rows.items():
+            if not isinstance(entry, dict):
+                continue
+            result[category][str(name)] = {
+                key: _report_source_times(value) if key == "source_observed_at" else value
+                for key, value in entry.items()
+                if key in {"value", "score", "source_observed_at", "unit"}
+                and isinstance(value, (str, int, float, type(None)))
+            }
+    return result
+
+
+def _saved_curve(value: Any) -> dict[str, Any] | None:
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except ValueError:
+            return None
+    return value if isinstance(value, dict) else None
+
+
 PERIOD_SECTIONS = (
     "executive_summary", "market_overview", "macro_trends", "technical_structure",
     "setup_performance", "bot_performance", "strategic_lessons", "outlook",
@@ -201,10 +232,17 @@ def _report_facts(context: dict[str, Any]) -> dict[str, Any]:
             "scores": scores,
             "benchmark_score": benchmark.get("benchmark_score") if benchmark.get("source_status") == "available" else None,
             "market_snapshot": item.get("market_snapshot") or {},
+            "verified_indicator_evidence": _report_indicator_evidence(
+                item.get("verified_indicator_evidence")),
             "configured_indicators": configured,
             "indicator_lookup_status": item.get("indicator_lookup_status"),
             "setups": [{"id": row.get("id"), "name": row.get("name"),
-                        "timeframe": row.get("timeframe"), "setup_type": row.get("setup_type")}
+                        "timeframe": row.get("timeframe"), "setup_type": row.get("setup_type"),
+                        "dca_frequency": row.get("dca_frequency"),
+                        "dca_day": row.get("dca_day"),
+                        "dca_month_day": row.get("dca_month_day"),
+                        "min_benchmark_score": row.get("min_benchmark_score"),
+                        "max_benchmark_score": row.get("max_benchmark_score")}
                        for row in item.get("setups") or []],
             "strategies": [{"id": row.get("id"), "setup_id": row.get("setup_id"),
                             "name": row.get("name"),
@@ -214,8 +252,13 @@ def _report_facts(context: dict[str, Any]) -> dict[str, Any]:
                             "pair": item.get("pair"),
                             "timeframe": row.get("timeframe") or
                                          (setups_by_id.get(row.get("setup_id")) or {}).get("timeframe"),
+                            "setup_type": (setups_by_id.get(row.get("setup_id")) or {}).get("setup_type"),
+                            "dca_frequency": (setups_by_id.get(row.get("setup_id")) or {}).get("dca_frequency"),
+                            "dca_day": (setups_by_id.get(row.get("setup_id")) or {}).get("dca_day"),
+                            "dca_month_day": (setups_by_id.get(row.get("setup_id")) or {}).get("dca_month_day"),
                             "execution_mode": row.get("execution_mode"),
                             "base_amount": row.get("base_amount"),
+                            "decision_curve": _saved_curve(row.get("decision_curve")),
                             "entry": row.get("entry"), "stop_loss": row.get("stop_loss"),
                             "targets": row.get("targets")}
                            for row in item.get("strategies") or []],
@@ -351,6 +394,12 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
             "latest stock quote may be from the previous regular session; do not "
             "infer that a market was open from a timestamp alone. "
             "Use the localized indicator display names supplied in the context. "
+            "A setup timeframe is the analysis candle, never a DCA buying cadence. Use dca_frequency "
+            "and the stored weekday or month day for purchase timing. A step decision_curve changes "
+            "the planned amount by benchmark band; do not call such a strategy fixed. "
+            "A DCA plan does not require trade entry, stop-loss or target prices; do not advise "
+            "adding those merely because they are absent from the DCA strategy. "
+            "Only verified_indicator_evidence contains measured indicator values. "
             "Write each of the eight sections as its own useful narrative, naming relevant assets, "
             "measured scores, missing evidence and plan implications in the appropriate section. "
             "Distinguish no configured indicator from a configured indicator without a usable score. "
@@ -490,6 +539,13 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
             "symbol": all_strategies[0].get("symbol"),
             "pair": all_strategies[0].get("pair"),
             "timeframe": all_strategies[0].get("timeframe"),
+            "setup_type": all_strategies[0].get("setup_type"),
+            "dca_frequency": all_strategies[0].get("dca_frequency"),
+            "dca_day": all_strategies[0].get("dca_day"),
+            "dca_month_day": all_strategies[0].get("dca_month_day"),
+            "execution_mode": all_strategies[0].get("execution_mode"),
+            "base_amount": all_strategies[0].get("base_amount"),
+            "decision_curve": all_strategies[0].get("decision_curve"),
             "entry": all_strategies[0].get("entry"),
             "targets": all_strategies[0].get("targets"),
             "stop_loss": all_strategies[0].get("stop_loss"),
@@ -524,8 +580,11 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
                 "score_status": item["score_status"],
                 "component_source_status": item["component_source_status"],
                 "component_source_observed_at": item["component_source_observed_at"],
+                "verified_indicator_evidence": item["verified_indicator_evidence"],
                 "configured_indicators": item["configured_indicators"],
                 "reported_scores": item["scores"],
+                "benchmark_score": item["benchmark_score"],
+                "market_snapshot": item["market_snapshot"],
             } for item in facts["assets"]],
         },
         "meta": {"source": "finn_shared_context.v1", "report_facts_version": 2,

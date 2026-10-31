@@ -20,6 +20,7 @@ from backend.infrastructure.repositories.strategy_repository import StrategyRepo
 from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.services.finn_v2_tool_adapters.indicator_tool_adapter import IndicatorToolAdapter
 from backend.services.setup_market_match_service import SetupMarketMatchService
+from backend.services.setup_market_match_service import verified_indicator_evidence
 from backend.services.pair_indicator_config_service import PairIndicatorConfigService, effective_pair_configs
 from backend.utils.scoring_utils import score_source_is_fresh
 from backend.services.trader_profile_service import normalize_trader_context, normalize_trader_profile_preferences
@@ -79,6 +80,12 @@ class FinnSharedContextService:
             asset_bots = [row for row in owned_bots if row.get("strategy_id") in strategy_ids]
             benchmark = await self.benchmark_for_asset(user_id, asset, setups=asset_setups,
                                                        market_id=market_id)
+            # Read values from the same score row that passed the freshness and
+            # configuration checks. A later reading must not be relabelled as
+            # evidence for this report's saved score.
+            verified_evidence = verified_indicator_evidence(
+                benchmark, self.matches.last_source_row,
+            )
             price_row = (await self.market_data.get_latest_exact_market_snapshot(market_id)
                          if market_id is not None else await self.market_data.get_latest_snapshot(asset))
             price_as_of = getattr(price_row, "source_observed_at", None)
@@ -119,6 +126,7 @@ class FinnSharedContextService:
                 "indicator_configuration": configuration,
                 "indicator_lookup_status": configuration_status,
                 "benchmark": benchmark,
+                "verified_indicator_evidence": verified_evidence,
                 "market_snapshot": market_snapshot,
                 "setups": asset_setups,
                 "strategies": asset_strategies,

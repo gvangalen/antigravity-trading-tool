@@ -271,6 +271,47 @@ def test_unified_report_uses_shared_benchmark_and_does_not_claim_missing_score(m
     }
 
 
+def test_daily_report_projects_dca_cadence_curve_and_verified_readings(monkeypatch):
+    curve = {"input": "benchmark_score", "interpolation": "step", "points": [
+        {"x": 0, "y": 0.6}, {"x": 40, "y": 1}, {"x": 70, "y": 1.4},
+    ]}
+    context = {"locale": "nl", "observed_at": "2026-10-31T09:00:00+00:00", "assets": [{
+        "symbol": "BTC", "pair": "BTC/EUR",
+        "benchmark": {"source_status": "available", "benchmark_score": 65,
+            "reported_scores": {"market_score": 50, "macro_score": 80, "technical_score": 65},
+            "component_source_status": {"market_score": "fresh", "macro_score": "fresh", "technical_score": "fresh"},
+            "matches": []},
+        "indicator_configuration": {"market": [], "macro": [{"indicator": "sp500"}], "technical": []},
+        "verified_indicator_evidence": {"macro": {"sp500": {
+            "value": 7659.44, "score": 80, "source_observed_at": "2026-10-30T00:00:00+00:00",
+            "interpretation": "old model prose", "action": "buy"}}},
+        "market_snapshot": {"source_status": "fresh", "price": 81000},
+        "setups": [{"id": 4, "name": "BTC Smart", "setup_type": "dca", "timeframe": "1D",
+                    "dca_frequency": "weekly", "dca_day": "5"}],
+        "strategies": [{"id": 5, "setup_id": 4, "name": "Smart BTC",
+                        "execution_mode": "custom", "base_amount": 100,
+                        "decision_curve": json.dumps(curve)}],
+        "bots": [],
+    }]}
+    monkeypatch.setattr(reports, "_load_context", lambda _id: asyncio.sleep(0, result=context))
+    prompts = []
+    monkeypatch.setattr(reports, "ask_gpt_json", lambda **kw: prompts.append(json.loads(kw["prompt"])) or {})
+
+    report = reports.generate_unified_daily_report_sections(7)
+    asset = prompts[0]["context"]["assets"][0]
+    assert asset["setups"][0]["dca_frequency"] == "weekly"
+    assert asset["setups"][0]["dca_day"] == "5"
+    assert asset["strategies"][0]["decision_curve"] == curve
+    assert asset["strategies"][0]["base_amount"] == 100
+    assert report["active_strategy"]["setup_type"] == "dca"
+    assert report["active_strategy"]["dca_day"] == "5"
+    assert report["active_strategy"]["decision_curve"] == curve
+    evidence = asset["verified_indicator_evidence"]["macro"]["sp500"]
+    assert evidence == {"value": 7659.44, "score": 80,
+                        "source_observed_at": "2026-10-30T00:00:00+00:00"}
+    assert report["score_source_snapshot"]["assets"][0]["verified_indicator_evidence"]["macro"]["sp500"] == evidence
+
+
 def test_chat_and_report_project_the_same_verified_score_snapshot(monkeypatch):
     assessment = {
         "symbol": "ETH", "as_of": "2026-10-10", "source_status": "available",

@@ -11,6 +11,12 @@ import {
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { formatCurrency } from "@/lib/i18n";
 
+function formatPairPrice(value, locale, quote) {
+  if (!Number.isFinite(Number(value))) return "—";
+  if (quote === "USDT") return `${Number(value).toLocaleString(locale, { maximumFractionDigits: 2 })} USDT`;
+  return formatCurrency(Number(value), locale, quote === "EUR" ? "EUR" : "USD", { maximumFractionDigits: 2 });
+}
+
 /* =======================================================
    Active Strategy — REPORT (V2 PRO REFINED)
 ======================================================= */
@@ -18,7 +24,8 @@ export default function ActiveStrategyReportCard({ report }) {
   const { t, locale } = useTranslation();
   const copy = t?.reports?.blocks?.activeStrategy || {};
   const strategy = report?.active_strategy;
-  const currentPrice = report?.market_snapshot?.price ?? report?.kpi_metrics?.price ?? null;
+  const currentPrice = report?.watchlist?.length === 1
+    ? report?.market_snapshot?.price ?? report?.kpi_metrics?.price ?? null : null;
 
   if (!strategy) {
     return (
@@ -63,7 +70,41 @@ export default function ActiveStrategyReportCard({ report }) {
   } = strategy;
 
   const isDCA = entry === null || entry === undefined;
+  const dca = String(strategy.setup_type || "").toLowerCase() === "dca";
+  if (dca) {
+    const days = copy.weekdays || [];
+    const frequency = strategy.dca_frequency;
+    const day = Number(strategy.dca_day);
+    const cadence = frequency === "weekly"
+      ? `${copy.weekly || "Weekly"}${days[day - 1] ? ` · ${days[day - 1]}` : ""}`
+      : frequency === "monthly"
+        ? `${copy.monthly || "Monthly"}${strategy.dca_month_day ? ` · ${strategy.dca_month_day}` : ""}`
+        : frequency === "daily" ? copy.daily : copy.unknownCadence;
+    const points = Array.isArray(strategy.decision_curve?.points)
+      ? [...strategy.decision_curve.points].sort((a, b) => Number(a.x) - Number(b.x)) : [];
+    const smart = strategy.execution_mode === "custom";
+    return (
+      <ReportCard title={copy.cardTitle} icon={<TrendingUp size={16} />}>
+        <div className="text-lg font-bold text-foreground">{strategy_name || setup_name}</div>
+        <div className="text-xs text-secondary">{strategy.pair || symbol} · {timeframe}</div>
+        <dl className="mt-4 space-y-3 text-sm">
+          <div><dt className="text-secondary">{copy.purchaseSchedule}</dt><dd className="font-semibold">{cadence}</dd></div>
+          <div><dt className="text-secondary">{copy.baseAmount}</dt><dd className="font-semibold">{strategy.base_amount != null ? formatCurrency(Number(strategy.base_amount), locale, "EUR") : "—"}</dd></div>
+          <div><dt className="text-secondary">{copy.amountRule}</dt><dd className="font-semibold">{smart ? copy.scoreBased : strategy.execution_mode === "fixed" ? copy.fixedAmount : copy.unknownCadence}</dd></div>
+        </dl>
+        {smart && points.length > 0 && <div className="mt-4 border-t border-slate-100 pt-3 text-sm">
+          <div className="font-semibold">{copy.scoreBands}</div>
+          <ul className="mt-2 space-y-1">
+            {points.map((point) => <li key={point.x} className="flex justify-between gap-3">
+              <span>{copy.fromScore} {point.x}</span><span>{Math.round(Number(point.y) * 100)}%</span>
+            </li>)}
+          </ul>
+        </div>}
+      </ReportCard>
+    );
+  }
   const referencePrice = isDCA ? currentPrice : entry;
+  const quoteCurrency = String(strategy.pair || "").split("/")[1] || "USD";
 
   const priceDiff =
     currentPrice && referencePrice
@@ -94,10 +135,7 @@ export default function ActiveStrategyReportCard({ report }) {
               </span>
               <span className="text-xl font-bold text-foreground font-mono tracking-tight">
                 {referencePrice !== null && referencePrice !== undefined
-                  ? formatCurrency(Number(referencePrice), locale, "USD", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })
+                  ? formatPairPrice(referencePrice, locale, quoteCurrency)
                   : "—"}
               </span>
             </div>
@@ -138,7 +176,7 @@ export default function ActiveStrategyReportCard({ report }) {
                  <Shield size={14} className="text-red-500" />
                  <span className="text-[15px] font-bold text-foreground font-mono">
                     {stop_loss !== null && stop_loss !== undefined
-                      ? formatCurrency(Number(stop_loss), locale, "USD", { maximumFractionDigits: 2 })
+                      ? formatPairPrice(stop_loss, locale, quoteCurrency)
                       : "—"}
                  </span>
               </div>
