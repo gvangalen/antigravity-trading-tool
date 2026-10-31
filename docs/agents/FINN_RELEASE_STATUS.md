@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Report 2.0 releasekandidaat (31 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`. De gebruiker heeft expliciet gevraagd Report 2.0 nu
+Phase: `CI_VALIDATION`. De gebruiker heeft expliciet gevraagd Report 2.0 nu
 te releasen en de PDF daarna opnieuw op de nieuwe rapportopzet te beoordelen.
 De eerdere PDF-herkeuring van de oude rapportopzet wordt daarmee vervangen.
 Kandidaat `codex/report-context-cards` bouwt het dagrapport uit een bevroren,
@@ -16,9 +16,15 @@ benchmarkschaal als Analyse en toont ontbrekende scores zonder fictieve waarde.
 Oudere opgeslagen rapporten blijven in hun oorspronkelijke indeling leesbaar.
 Backend: 4143 tests geslaagd, 4 overgeslagen. Webproductiebuild en mobiele
 typecheck, lint en iOS-bundelcontrole zijn lokaal geslaagd. Een echte
-Luna/Responses-aanroep vulde alle zes onderdelen. De selector-providerproeven
-voor de definitieve kandidaat, CI, Auto Deploy en onafhankelijke live
-rapport-/PDF-QA volgen nog.
+Luna/Responses-aanroep vulde alle zes onderdelen. De echte selectorproeven
+slaagden: development 20/20 (artifact SHA-256
+`f6dc1155f5f8d870cba583f73d1407ff7e9068cbb416ba3701fb33d3a1b5d06f`)
+en regression 109/109 (artifact SHA-256
+`6392bbf977ca9b084b4d42008971b01ca1e197ddd3c952974c421116196ae5cd`),
+zonder provider-, schema-, timeout-, parse- of validatiefouten. [PR #718](https://github.com/gvangalen/antigravity-trading-tool/pull/718)
+had op productcommit `1e2becbfa` vijf geslaagde CI-checks. Na deze
+statuscommit moeten de definitieve PR-CI, main-CI, Auto Deploy en publieke
+SHA nog worden gecontroleerd. Onafhankelijke live rapport-/PDF-QA volgt daarna.
 
 ## Dagrapport browserdownload (31 oktober 2026)
 
