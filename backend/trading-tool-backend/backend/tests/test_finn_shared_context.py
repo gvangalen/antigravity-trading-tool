@@ -303,7 +303,8 @@ def test_daily_report_projects_dca_cadence_curve_and_verified_readings(monkeypat
     report = reports.generate_unified_daily_report_sections(7)
     asset = prompts[0]["context"]["assets"][0]
     assert asset["setups"][0]["dca_frequency"] == "weekly"
-    assert asset["setups"][0]["dca_day"] == "5"
+    assert asset["setups"][0]["purchase_weekday"] == "vrijdag"
+    assert "dca_day" not in asset["setups"][0]
     assert asset["strategies"][0]["decision_curve"] == curve
     assert asset["strategies"][0]["base_amount"] == 100
     assert report["active_strategy"]["setup_type"] == "dca"
@@ -318,6 +319,16 @@ def test_daily_report_projects_dca_cadence_curve_and_verified_readings(monkeypat
     assert report_v2["plans"][0]["setups"][0]["dca_frequency"] == "weekly"
     assert report_v2["plans"][0]["strategies"][0]["decision_curve"] == curve
     assert report_v2["sections"]["analysis"]
+
+
+def test_report_v2_german_writer_receives_weekday_names_without_storage_codes():
+    friday = {"dca_frequency": "weekly", "dca_day": "5", "name": "Freitag DCA"}
+    monday = {"dca_frequency": "weekly", "dca_day": 1, "name": "Montag DCA"}
+    assert reports._report_v2_prompt_plan(friday, "de") == {
+        "dca_frequency": "weekly", "purchase_weekday": "Freitag", "name": "Freitag DCA",
+    }
+    assert reports._report_v2_prompt_plan(monday, "de")["purchase_weekday"] == "Montag"
+    assert friday["dca_day"] == "5"  # The frozen source plan remains unchanged.
 
 
 def test_report_v2_freezes_portfolio_and_prior_pair_score_without_losing_luna_prose(monkeypatch):
@@ -443,8 +454,8 @@ def test_report_v2_uses_daily_cadence_over_stored_legacy_weekday_and_keeps_amoun
 
     plan = reports.generate_unified_daily_report_sections(7)["score_source_snapshot"]["report_v2"]["sections"]["plan"]
     projected = prompts[0]["context"]["assets"][0]
-    assert projected["setups"][0]["dca_day"] is None
-    assert projected["strategies"][0]["dca_day"] is None
+    assert "dca_day" not in projected["setups"][0]
+    assert "dca_day" not in projected["strategies"][0]
     assert "dagelijks" in plan
     assert "basisbedrag 10 per uitvoering" in plan
     assert "wekelijks" not in plan

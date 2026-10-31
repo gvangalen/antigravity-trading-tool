@@ -4,6 +4,24 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Report 2.0 PDF: leesbare Analyse en Duitse weekdagen (31 oktober 2026)
+
+Phase: `LOCAL_VALIDATION`. Gebruikers-PDF `daily_report_2026-10-31-2.pdf`
+bevestigt dat Analyse op de nieuwe rapportindeling als één dichte alinea
+verschijnt. De eerdere onafhankelijke QA meldde daarnaast `Wochentag 5/1`
+in de Duitse Vooruitblik. Kandidaat `codex/report2-pdf-readability` verdeelt
+alleen de Analyse-presentatie in korte alinea's en geeft Luna voor wekelijkse
+DCA de gelokaliseerde weekdagnaam in plaats van de opgeslagen numerieke code.
+De bevroren planbron en de modeltekst blijven verder ongewijzigd.
+
+Lokaal: gerichte backendtest 30 geslaagd; volledige backend-suite 4149
+geslaagd, 4 bestaande skips; frontend typecheck, i18n-lint, 30 i18n-tests
+en productiebuild geslaagd. De actiecontracten zijn niet gewijzigd. De
+synthetische NL/DE-proef met echte Responses-provider draait in de beschermde
+handmatige CI, omdat lokaal geen OpenAI-sleutel beschikbaar is. CI,
+deployment en onafhankelijke live QA zijn nog niet uitgevoerd voor deze
+kandidaat.
+
 ## Report 2.0 PDF: botwaarde en rapporttaal (31 oktober 2026)
 
 Phase: `ACCEPTED` op `6b084778567e1b51ea15a56998a1abd71ee921d5`.

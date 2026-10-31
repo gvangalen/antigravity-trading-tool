@@ -3,7 +3,7 @@
 import { getDictionary, useTranslation } from '@/app/providers/I18nProvider';
 import { formatDateTime } from '@/lib/i18n';
 import { parseUtcMoment, reportMarketLabel, scoreSourceSnapshot } from '@/lib/report/reportSourceSnapshot.mjs';
-import { reportV2Change, reportV2IndicatorName, reportV2Locale } from '@/lib/report/reportV2Presentation.mjs';
+import { reportV2AnalysisParagraphs, reportV2Change, reportV2IndicatorName, reportV2Locale } from '@/lib/report/reportV2Presentation.mjs';
 
 const ZONES = [
   { min: 0, max: 25, width: 25, color: 'bg-rose-200' },
@@ -28,10 +28,11 @@ function ScoreScale({ score, labels, unknown }) {
   </div>;
 }
 
-function Section({ title, prose, children, keepTogether = false }) {
+function Section({ title, prose, proseParagraphs, children, keepTogether = false }) {
   return <section className={`rounded-2xl border border-slate-200 bg-white p-5 sm:p-7 ${keepTogether ? 'break-inside-avoid' : ''}`}>
     <h2 className="break-after-avoid text-xl font-bold text-slate-950">{title}</h2>
-    {prose && <p className="mt-3 break-inside-avoid whitespace-pre-line text-base leading-relaxed text-slate-700">{prose}</p>}
+    {proseParagraphs?.length ? <div className="mt-3 space-y-3">{proseParagraphs.map((paragraph, index) => <p key={index} className="break-inside-avoid whitespace-pre-line text-base leading-relaxed text-slate-700">{paragraph}</p>)}</div>
+      : prose && <p className="mt-3 break-inside-avoid whitespace-pre-line text-base leading-relaxed text-slate-700">{prose}</p>}
     {children}
   </section>;
 }
@@ -98,7 +99,7 @@ export default function ReportV2Layout({ report, isPrint = false }) {
     <Section title={c.portfolio} prose={prose.portfolio}>
       <div className="mt-5 grid gap-4 md:grid-cols-2">{['paper', 'live'].map((environment) => { const data = v2.portfolio?.[environment] || {}; const total = data.global || {}; return <div key={environment} className="break-inside-avoid rounded-xl border border-slate-200 p-4"><h3 className="font-bold">{c[environment]}</h3><div className="mt-3 grid grid-cols-2 gap-3 text-sm"><p>{c.total}<br /><strong>{money(total.total_equity)}</strong></p><p>{c.cash}<br /><strong>{money(total.cash_balance)}</strong></p><p>{c.positions}<br /><strong>{money(total.current_position_value)}</strong></p><p>{c.result}<br /><strong>{money(number(total.realized_pnl) !== null && number(total.unrealized_pnl) !== null ? total.realized_pnl + total.unrealized_pnl : null)}</strong></p></div><p className="mt-3 text-xs text-slate-500">{c.budget}: {money(total.total_budget_limit)}</p>{(data.bots || []).map((bot) => <p key={bot.bot_id} className="mt-2 border-t pt-2 text-sm">{bot.name || bot.symbol} · {c.total}: {money(bot.equity)} · {c.cash}: {money(bot.cash_eur)}</p>)}</div>; })}</div>
     </Section>
-    <Section title={c.analysis} prose={prose.analysis}>
+    <Section title={c.analysis} proseParagraphs={reportV2AnalysisParagraphs(prose.analysis, language)}>
       <div className="mt-5 space-y-3">
         {assets.map((asset, index) => {
           const score = number(asset.benchmark_score);
