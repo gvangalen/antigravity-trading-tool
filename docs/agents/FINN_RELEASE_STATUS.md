@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Report 2.0: periodegeneratie afronden (31 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`. Onafhankelijke QA gaf `NOT_ACCEPTED` op live SHA
+Phase: `LIVE_PENDING_QA`. Onafhankelijke QA gaf `NOT_ACCEPTED` op live SHA
 `42ca1aac579f631359e397757eb454e891161f82`: nieuwe week- en
 maandrapporten werden opgeslagen en hun PDF's bevatten de zes secties,
 correcte perioderanges, gescheiden scores en geen ruwe terugblikvelden.
@@ -24,8 +24,15 @@ nieuwe periodeversie is opgeslagen, ook wanneer de rijhandtekening gelijk
 blijft; `FAILURE` en `REVOKED` tonen direct een gesaniteerde foutcode.
 Gerichte backendtests: 22 geslaagd; volledige backend-suite: 4174 geslaagd,
 vier bestaande skips. Frontend typecheck, build, i18n-lint en 33 i18n-tests
-geslaagd. Provider/CI, deploy-SHA en
-nieuwe onafhankelijke live QA zijn nog niet afgerond.
+geslaagd. [PR #747](https://github.com/gvangalen/antigravity-trading-tool/pull/747)
+is samengevoegd als `871bf4567e0dd2754f20d8d876b79f938b016bfb`.
+Alle vijf jobs slaagden in [PR-CI 41244687855](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41244687855),
+[echte Responses-provider-CI 41244735644](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41244735644)
+en [main-CI 41245026271](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41245026271).
+[Auto Deploy 41245269507](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41245269507)
+slaagde. Publieke backend-health en frontend-buildinfo gaven HTTP 200 en beide
+dezelfde SHA. Deze statuswijziging krijgt een eigen laatste deployment-SHA;
+onafhankelijke QA test pas na verificatie van die definitieve revision.
 
 ## Report 2.0: periodeherkeuring (31 oktober 2026)
 
