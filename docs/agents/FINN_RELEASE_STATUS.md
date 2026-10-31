@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Report 2.0 terugblik per handelspaar: QA-herstel (31 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`. De definitieve Report 2.0-revisie
+Phase: `LIVE_AWAITING_INDEPENDENT_QA`. De definitieve Report 2.0-revisie
 `0d13bcad895ba51c10d5f0b2024ff046fc91ea40` had geslaagde main-CI
 (`41200322152`) en Auto Deploy (`41200530061`); publieke backend-health en
 frontend-buildinfo gaven HTTP 200 en exact die SHA. De bestaande
@@ -33,7 +33,14 @@ slaagde 20/20 met nul provider-, schema-, timeout-, parse- of validatiefouten
 De echte regression-selectorproef slaagde 109/109 met nul provider-, schema-,
 timeout-, parse- of validatiefouten (artifact SHA-256
 `65836937793f70cc2a8bd83cef3c076d3eb27b69c6ba645cb7d4ddb6c57f547c`).
-Er is nog geen nieuwe deploy of QA-acceptatie voor deze reparatie.
+De productreparatie is via [PR #724](https://github.com/gvangalen/antigravity-trading-tool/pull/724)
+samengevoegd als `0bd017490ae7c31c8cb33b3c44fa7615cf3f0601`.
+Alle vijf PR-checks, main-CI `41202457471` en Auto Deploy `41202658803`
+slaagden. Publieke `/api/health` en `/build-info.json` gaven beide HTTP 200
+en exact die SHA. Deze statuswijziging maakt zelf nog een main-revisie;
+haar CI, Auto Deploy en beide publieke SHA's moeten overeenkomen voordat
+de bestaande onafhankelijke QA-agent de ingelogde herkeuring start. Er is
+nog geen onafhankelijke QA-acceptatie voor deze reparatie.
 
 ## Report 2.0 planfeiten: tweede live QA en lokale reparatie (31 oktober 2026)
 
