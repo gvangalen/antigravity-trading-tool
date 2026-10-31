@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Report 2.0: week, maand en kwartaal (31 oktober 2026)
 
-Phase: `CI_VALIDATED_PENDING_DEPLOY`. De voorafgaande gerichte NL-PDF-herkeuring is door
+Phase: `LIVE_PENDING_QA`. De voorafgaande gerichte NL-PDF-herkeuring is door
 onafhankelijke QA geaccepteerd op live SHA `8318f37dd59dc8afade5e001c68112bf2dcd9e0d`:
 de kop en datum waren zichtbaar op pagina 1, en Paper en Live stonden naast
 elkaar. Deze nieuwe kandidaat vervangt voor week, maand en kwartaal de oude
@@ -26,9 +26,16 @@ had op kandidaat `f680708bce26940ca0c481440639338f9fb6abe9` vijf geslaagde
 CI-jobs in [PR-run 41238615015](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41238615015).
 De afzonderlijke [provider-run 41238652059](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41238652059)
 slaagde inclusief de echte Responses-proef voor NL/DE/EN en de drie
-perioderapporten. Samenvoegen, Auto Deploy, publieke SHA-controle en
-onafhankelijke live QA volgen nog. Deze statuscommit vereist opnieuw CI op
-de definitieve kandidaat.
+perioderapporten. De daaropvolgende statuscommit slaagde opnieuw in
+[PR-CI 41239004863](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41239004863)
+en [provider-CI 41239015379](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41239015379).
+PR #743 is samengevoegd als `a6edcf0e3f9a54a073a4abef218cfcb808dd74e1`.
+Main-[CI 41239354630](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41239354630)
+en [Auto Deploy 41239566227](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41239566227)
+slaagden. Publieke `/api/health` en `/build-info.json` gaven HTTP 200 en
+beide die SHA. Deze statuswijziging krijgt een eigen laatste deployment-SHA;
+pas na verificatie daarvan volgt onafhankelijke ingelogde live QA voor week,
+maand en kwartaal.
 
 ## Report 2.0: PDF-kop zichtbaar bij afdrukken (31 oktober 2026)
 
