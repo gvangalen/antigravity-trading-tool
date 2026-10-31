@@ -439,12 +439,21 @@ def _report_v2_comparison(context: dict[str, Any], facts: dict[str, Any]) -> dic
             if not old:
                 continue
             before, after = old.get("benchmark_score"), asset.get("benchmark_score")
-            if isinstance(before, (int, float)) and isinstance(after, (int, float)):
+            if isinstance(before, (int, float)) and isinstance(after, (int, float)) and before != after:
                 changes.append({"asset": asset["display_symbol"], "fact": "benchmark_score",
                                 "before": before, "after": after})
             elif (before is None) != (after is None):
                 changes.append({"asset": asset["display_symbol"], "fact": "benchmark_availability",
                                 "before": before is not None, "after": after is not None})
+            prior_scores = old.get("reported_scores") or {}
+            current_scores = asset.get("scores") or {}
+            for category in ("market_score", "macro_score", "technical_score"):
+                before, after = prior_scores.get(category), current_scores.get(category)
+                if (isinstance(before, (int, float)) and not isinstance(before, bool)
+                        and isinstance(after, (int, float)) and not isinstance(after, bool)
+                        and before != after):
+                    changes.append({"asset": asset["display_symbol"], "fact": category,
+                                    "before": before, "after": after})
         return changes[:30]
 
     latest = previous[0]
@@ -473,9 +482,20 @@ def _report_v2_factual_fallbacks(context: dict[str, Any], facts: dict[str, Any],
     live = snapshots.get("live") or {}
     comparisons = comparison.get("changes") or []
     prior = comparison.get("previous_observations") or []
+    change_labels = {
+        "nl": {"benchmark_score": "benchmarkscore", "market_score": "marktscore",
+               "macro_score": "macroscore", "technical_score": "technische score"},
+        "en": {"benchmark_score": "benchmark score", "market_score": "market score",
+               "macro_score": "macro score", "technical_score": "technical score"},
+        "de": {"benchmark_score": "Benchmarkwert", "market_score": "Marktwert",
+               "macro_score": "Makrowert", "technical_score": "technischer Wert"},
+    }
+    def change_text(row: dict[str, Any]) -> str:
+        label = change_labels.get(locale, change_labels["en"]).get(row["fact"], row["fact"])
+        return f"{row['asset']} {label}: {row['before']} → {row['after']}"
     if locale == "en":
         retrospective = (f"Compared with {comparison['previous_date']}: " + "; ".join(
-            f"{row['asset']} {row['fact']}: {row['before']} → {row['after']}" for row in comparisons)
+            change_text(row) for row in comparisons)
             if comparisons else "No comparable change from a saved report in the past seven days.")
         portfolio = f"Paper valuation: {paper.get('valuation_status', 'unknown')}; Live valuation: {live.get('valuation_status', 'unknown')}."
         states = "; ".join(f"{bot.get('trading_pair') or bot.get('symbol') or bot.get('bot_name') or 'Bot'}: "
@@ -483,7 +503,7 @@ def _report_v2_factual_fallbacks(context: dict[str, Any], facts: dict[str, Any],
         automation = f"{len(bots)} bot(s) read at report time. {states}. A prior decision is not a new order."
     elif locale == "de":
         retrospective = (f"Gegenüber {comparison['previous_date']}: " + "; ".join(
-            f"{row['asset']} {row['fact']}: {row['before']} → {row['after']}" for row in comparisons)
+            change_text(row) for row in comparisons)
             if comparisons else "Kein vergleichbarer Unterschied zu einem gespeicherten Bericht der letzten sieben Tage.")
         portfolio = f"Paper-Bewertung: {paper.get('valuation_status', 'unbekannt')}; Live-Bewertung: {live.get('valuation_status', 'unbekannt')}."
         states = "; ".join(f"{bot.get('trading_pair') or bot.get('symbol') or bot.get('bot_name') or 'Bot'}: "
@@ -491,7 +511,7 @@ def _report_v2_factual_fallbacks(context: dict[str, Any], facts: dict[str, Any],
         automation = f"{len(bots)} Bot(s) zum Berichtszeitpunkt gelesen. {states}. Eine ältere Entscheidung ist keine neue Order."
     else:
         retrospective = (f"Vergeleken met {comparison['previous_date']}: " + "; ".join(
-            f"{row['asset']} {row['fact']}: {row['before']} → {row['after']}" for row in comparisons)
+            change_text(row) for row in comparisons)
             if comparisons else "Er is geen vergelijkbare verandering uit een opgeslagen rapport van de afgelopen zeven dagen.")
         if prior and not comparisons:
             score_labels = {"market_score": "markt", "macro_score": "macro",
@@ -574,6 +594,17 @@ def _report_v2_contradicts_facts(section: str, value: str, facts: dict[str, Any]
         )
         if prior_has_scores and re.search(
             r"\b(?:geen|no|keine)\b.{0,65}\bbenchmarks?\b", value, re.I
+        ):
+            return True
+        changed_components = any(
+            row.get("fact") in ("market_score", "macro_score", "technical_score")
+            for row in comparison.get("changes") or []
+        )
+        if changed_components and re.search(
+            r"\b(?:deelscores?|component(?:scores?)?|partial scores?)\b.{0,90}"
+            r"\b(?:gelijk gebleven|ongewijzigd|unchanged|unverändert)\b|"
+            r"\b(?:gelijk gebleven|ongewijzigd|unchanged|unverändert)\b.{0,90}"
+            r"\b(?:deelscores?|component(?:scores?)?|partial scores?)\b", value, re.I
         ):
             return True
 

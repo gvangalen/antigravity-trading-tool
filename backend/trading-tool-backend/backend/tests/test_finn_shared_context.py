@@ -424,6 +424,43 @@ def test_report_v2_uses_daily_cadence_over_stored_legacy_weekday_and_keeps_amoun
     assert "wekelijks" not in plan
 
 
+def test_report_v2_retrospective_rejects_unchanged_components_for_changed_pair(monkeypatch):
+    prior = {"report_date": "2026-10-30", "snapshot": {"assets": [
+        {"symbol": "BTC", "pair": "BTC/EUR", "benchmark_score": 36.7,
+         "reported_scores": {"market_score": 50, "macro_score": 20, "technical_score": 40}},
+        {"symbol": "BTC", "pair": "BTC/USDT", "benchmark_score": 30,
+         "reported_scores": {"market_score": 50, "macro_score": 20, "technical_score": 40}},
+    ]}}
+    def current(pair, market, benchmark):
+        return {"symbol": "BTC", "pair": pair, "setups": [], "strategies": [], "bots": [],
+                "benchmark": {"source_status": "available", "benchmark_score": benchmark,
+                    "reported_scores": {"market_score": market, "macro_score": 20,
+                                        "technical_score": 40},
+                    "component_source_status": {"market_score": "fresh", "macro_score": "fresh",
+                                                "technical_score": "fresh"}},
+                "market_snapshot": {}}
+    context = {"locale": "nl", "observed_at": "2026-10-31T12:21:00+00:00",
+               "report_previous": [prior], "assets": [current("BTC/EUR", 50, 36.7),
+                                                       current("BTC/USDT", 30, 30)]}
+    monkeypatch.setattr(reports, "_load_context", lambda _id: asyncio.sleep(0, result=context))
+    answer = {key: f"{key}: verslag op basis van opgeslagen gegevens."
+              for key in reports.REPORT_V2_SECTIONS}
+    answer["retrospective"] = ("De deelscores van BTC/EUR en BTC/USDT zijn gelijk gebleven "
+                               "op markt 50, macro 20 en technisch 40.")
+    prompts = []
+    monkeypatch.setattr(reports, "ask_gpt_json", lambda **kw: prompts.append(json.loads(kw["prompt"])) or answer)
+
+    report = reports.generate_unified_daily_report_sections(7)["score_source_snapshot"]["report_v2"]
+    assert {tuple(row.values()) for row in report["comparison"]["changes"]} == {
+        ("BTC/USDT", "market_score", 50, 30)}
+    assert prompts[0]["report_v2_evidence"]["comparison"]["changes"] == report["comparison"]["changes"]
+    assert "BTC/USDT marktscore: 50 → 30" in report["sections"]["retrospective"]
+    assert "gelijk gebleven" not in report["sections"]["retrospective"]
+    answer["retrospective"] = "De BTC/USDT-marktscore daalde van 50 naar 30; BTC/EUR bleef op 50."
+    correct = reports.generate_unified_daily_report_sections(7)["score_source_snapshot"]["report_v2"]
+    assert correct["sections"]["retrospective"] == answer["retrospective"]
+
+
 def test_chat_and_report_project_the_same_verified_score_snapshot(monkeypatch):
     assessment = {
         "symbol": "ETH", "as_of": "2026-10-10", "source_status": "available",
