@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Report 2.0: Duitse Analyse bij gemengde scorebeschikbaarheid (31 oktober 2026)
 
-Phase: `LOCAL_VALIDATION`. Onafhankelijke QA gaf `NOT_ACCEPTED` op live SHA
+Phase: `LIVE_PENDING_QA`. Onafhankelijke QA gaf `NOT_ACCEPTED` op live SHA
 `f9a3e0ca854bf81feb509e7b4c6b24734ca27722`: de Engelse timeout kwam
 niet terug en de NL-, EN- en DE-PDF's behielden hun paargebonden feiten, maar
 de Duitse Analyse viel terug op algemene tekst over ontbrekende metingen
@@ -21,8 +21,13 @@ de Automatisering-sectie, zodat zij geen Analyse-tekst afkeurt. Luna blijft de
 primaire schrijver; deze wijziging raakt geen actiecontract of botuitvoering.
 Gerichte tests: 38 geslaagd. Volledige backend-suite: 4154 geslaagd, 4
 bestaande skips. Frontend typecheck, i18n-lint, 30 i18n-tests en build
-slaagden. Echte provider-CI, merge, deployment en onafhankelijke herkeuring
-volgen nog.
+slaagden. De handmatige [CI-run 41229358021](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41229358021)
+en PR-[CI-run 41229364335](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41229364335)
+slaagden allebei op vijf jobs, inclusief de echte Responses-providerproef.
+[PR #738](https://github.com/gvangalen/antigravity-trading-tool/pull/738) is
+samengevoegd als `4abad1daa679342ecc37b5297e66e794fe60b5dd`.
+Main-CI, Auto Deploy en de publieke SHA-controle van deze laatste
+statuswijziging volgen nog; daarna herkeurt onafhankelijke QA de live PDF's.
 
 ## Report 2.0: generatie begrensd na Engelse timeout (31 oktober 2026)
 
