@@ -379,6 +379,32 @@ def test_report_v2_rejects_prior_score_absence_and_paused_bot_claims(monkeypatch
     assert v2["comparison"]["previous_observations"][0]["scores"]["technical_score"] == 40
 
 
+def test_report_v2_localizes_source_terms_without_rewriting_plan_names(monkeypatch):
+    context = {"locale": "nl", "observed_at": "2026-10-31T09:00:00+00:00",
+               "assets": [{"symbol": "BTC", "pair": "BTC/EUR",
+                           "setups": [{"id": 1, "name": "Cash Builder"}],
+                           "strategies": [], "bots": [],
+                           "benchmark": {"source_status": "missing", "reported_scores": {},
+                                         "component_source_status": {}},
+                           "market_snapshot": {}}]}
+    monkeypatch.setattr(reports, "_load_context", lambda _id: asyncio.sleep(0, result=context))
+    answer = {key: "Dit verslag beschrijft de opgeslagen toestand van BTC/EUR."
+              for key in reports.REPORT_V2_SECTIONS}
+    answer["portfolio"] = "Cash Builder heeft geen cash; total equity en P&L blijven onbekend."
+    answer["analysis"] = "De market score en technical scores ontbreken voor BTC/EUR."
+    answer["outlook_v2"] = "De outlook vraagt eerst om complete gegevens voor BTC/EUR."
+    prompts = []
+    monkeypatch.setattr(reports, "ask_gpt_json",
+                        lambda **kw: prompts.append(json.loads(kw["prompt"])) or answer)
+
+    sections = reports.generate_unified_daily_report_sections(7)["score_source_snapshot"]["report_v2"]["sections"]
+    assert sections["portfolio"] == (
+        "Cash Builder heeft geen kassaldo; totale portefeuillewaarde en resultaat blijven onbekend.")
+    assert sections["analysis"] == "De marktscore en technische scores ontbreken voor BTC/EUR."
+    assert sections["outlook_v2"] == "De vooruitblik vraagt eerst om complete gegevens voor BTC/EUR."
+    assert prompts[0]["report_terminology"]["total equity"] == "totale portefeuillewaarde"
+
+
 def test_report_v2_rejects_blanket_daily_cadence_for_mixed_dca_plans(monkeypatch):
     context = {"locale": "nl", "observed_at": "2026-10-31T09:00:00+00:00", "assets": [{
         "symbol": "BTC", "pair": "BTC/EUR", "benchmark": {"source_status": "missing",

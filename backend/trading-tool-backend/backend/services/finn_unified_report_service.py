@@ -34,6 +34,44 @@ REPORT_V2_SECTIONS = (
     "retrospective", "portfolio", "analysis", "plan", "automation", "outlook_v2",
 )
 
+REPORT_V2_TERMINOLOGY = {
+    "nl": {
+        "market score": "marktscore", "technical scores": "technische scores",
+        "technical score": "technische score", "total equity": "totale portefeuillewaarde",
+        "p&l": "resultaat", "outlook": "vooruitblik", "cash": "kassaldo",
+        "equity": "portefeuillewaarde",
+    },
+    "de": {
+        "market score": "Marktbewertung", "technical scores": "technische Bewertungen",
+        "technical score": "technische Bewertung", "total equity": "Gesamtportfoliowert",
+        "p&l": "Ergebnis", "outlook": "Ausblick", "cash": "Barguthaben",
+        "equity": "Portfoliowert",
+    },
+}
+
+
+def _localize_report_v2_terms(value: str, locale: str, protected_names: list[str]) -> str:
+    """Translate leaked source labels without rewriting FINN's report narrative."""
+    glossary = REPORT_V2_TERMINOLOGY.get(locale)
+    if not glossary:
+        return value
+    protected_spans = [match.span() for name in protected_names if name
+                       for match in re.finditer(re.escape(name), value, re.I)]
+    terms = "|".join(re.escape(term) for term in sorted(glossary, key=len, reverse=True))
+    pattern = re.compile(rf"(?<!\w)(?:{terms})(?!\w)", re.I)
+
+    def translate(match: re.Match[str]) -> str:
+        start, end = match.span()
+        if any(start < protected_end and end > protected_start
+               for protected_start, protected_end in protected_spans):
+            return match.group()
+        replacement = glossary[match.group().casefold()]
+        begins_sentence = not value[:start].strip() or value[:start].rstrip().endswith((".", "!", "?"))
+        return (replacement[:1].upper() + replacement[1:]
+                if locale == "nl" and begins_sentence else replacement)
+
+    return pattern.sub(translate, value)
+
 
 def _report_source_times(value: Any) -> Any:
     """Keep source instants, but omit subsecond provider precision in reports."""
@@ -678,6 +716,10 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
             "latest stock quote may be from the previous regular session; do not "
             "infer that a market was open from a timestamp alone. "
             "Use the localized indicator display names supplied in the context. "
+            "Write every narrative value fully in the requested locale. JSON keys are data labels, "
+            "not words to copy into the report. Translate financial source terms using the "
+            "report_terminology glossary; preserve exact user-defined plan and bot names, "
+            "asset symbols, trading pairs, and the Paper/Live mode labels. "
             "A setup timeframe is the analysis candle, never a DCA buying cadence. Use dca_frequency "
             "and the stored weekday or month day for purchase timing. A step decision_curve changes "
             "the planned amount by benchmark band; do not call such a strategy fixed. "
@@ -702,6 +744,7 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
         prompt=json.dumps({
             "task": "Write the daily report in the requested locale from this snapshot only.",
             "report_v2_sections": REPORT_V2_SECTIONS,
+            "report_terminology": REPORT_V2_TERMINOLOGY.get(locale, {}),
             "context": factual_context,
             "report_v2_evidence": report_v2_evidence,
         }, ensure_ascii=False, default=str),
@@ -769,6 +812,20 @@ def generate_unified_daily_report_sections(user_id: int) -> dict[str, Any]:
         if (any(claim not in valid_scores for claim in claims) or false_strategy_absence
                 or wrong_direction or _report_v2_contradicts_facts(section, value, facts, context, comparison)):
             report_v2_prose[section] = v2_fallbacks[section]
+    protected_names = [
+        str(row.get("name"))
+        for item in facts["assets"]
+        for group in ("setups", "strategies")
+        for row in item.get(group) or []
+        if row.get("name")
+    ] + [
+        str(bot.get("bot_name")) for bot in (context.get("report_bot_status") or {}).get("bots") or []
+        if bot.get("bot_name")
+    ]
+    report_v2_prose = {
+        section: _localize_report_v2_terms(value, locale, protected_names)
+        for section, value in report_v2_prose.items()
+    }
     if _market_direction_contradicts_snapshot(prose["market_analysis"], facts):
         # Give the report writer one chance to correct its own prose using the
         # same typed facts. A factual fallback is used only if that also fails.

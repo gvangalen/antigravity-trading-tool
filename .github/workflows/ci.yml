@@ -94,6 +94,13 @@ jobs:
           echo "Backend canonical test suite failed twice in the same job." >&2
           exit 1
 
+      - name: Verify Report 2.0 prose with the real Responses provider
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          PYTHONPATH: backend/trading-tool-backend
+        run: python backend/trading-tool-backend/backend/scripts/probe_report_v2_provider_language.py
+
   frontend-quality:
     runs-on: ubuntu-latest
     timeout-minutes: 30
