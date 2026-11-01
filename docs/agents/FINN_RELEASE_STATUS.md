@@ -6,16 +6,19 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Report 2.0: week, maand en kwartaal als echte perioden (1 november 2026)
 
-Phase: `LOCAL_VALIDATION`. Kandidaat `codex/report-period-hierarchy` groepeert
+Phase: `CI_VALIDATED`. Kandidaat `codex/report-period-hierarchy` groepeert
 gedateerde dagmomenten per dag in een weekrapport, per kalenderweek in een
 maandrapport en per kalendermaand in een kwartaalrapport. Lege perioden blijven
 expliciet zonder score. De terugblik toont de gebruikte dekking en de eerste en
 laatste bekende benchmarkwaarde per exact handelspaar; FINN krijgt dezelfde
 structuur voor zijn samenvatting. De kop van een bestaand rapport gebruikt voor
 de interactieve datumweergave de gekozen UI-taal, zodat Engels `Oct` toont.
-Gerichte rapporttests, volledige backend-suite (4187 geslaagd, 4 bestaande
+Gerichte rapporttests (16), volledige backend-suite (4187 geslaagd, 4 bestaande
 skips), frontendproductiebuild, typecheck, i18n-lint en 34 i18n-tests slaagden.
-Dit is nog geen live of onafhankelijk geaccepteerde wijziging.
+Alle vijf jobs van [PR-CI 41327807866](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41327807866)
+en [echte Responses-provider-CI 41327821023](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41327821023)
+slaagden op kandidaat `a1cb12e8d`. Dit is nog geen live of onafhankelijk
+geaccepteerde wijziging.
 
 ## Report 2.0: indicatorverloop en lopende perioden (1 november 2026)
 
