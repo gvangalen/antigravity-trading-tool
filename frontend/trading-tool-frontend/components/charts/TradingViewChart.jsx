@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   buildTradingViewEmbedConfig,
-  buildTradingViewWidgetUrl,
   normalizeTradingViewInterval,
 } from "../../../../shared/tradingViewConfig";
 
@@ -13,7 +12,7 @@ export default function TradingViewChart({
   theme = "light",
   height = 500,
   indicators = [],
-  studyFallbackLabel = "",
+  chartFallbackLabel = "",
   onIntervalChange = () => {},
 }) {
   const lastReportedIntervalRef = useRef(normalizeTradingViewInterval(interval));
@@ -21,15 +20,6 @@ export default function TradingViewChart({
   const [studiesUnavailable, setStudiesUnavailable] = useState(false);
   const normalizedInterval = normalizeTradingViewInterval(interval);
   const studiesKey = JSON.stringify(indicators);
-  const widgetUrl = useMemo(
-    () =>
-      buildTradingViewWidgetUrl({
-        interval: normalizedInterval,
-        symbol,
-        theme,
-      }),
-    [normalizedInterval, symbol, theme]
-  );
 
   useEffect(() => {
     if (normalizedInterval === lastReportedIntervalRef.current) return;
@@ -39,7 +29,7 @@ export default function TradingViewChart({
 
   useEffect(() => {
     const container = widgetContainerRef.current;
-    if (!container || !indicators.length) return;
+    if (!container) return;
     setStudiesUnavailable(false);
 
     const script = document.createElement("script");
@@ -58,14 +48,11 @@ export default function TradingViewChart({
     widget.style.width = "100%";
     container.replaceChildren(widget, script);
 
-    // Keep the price chart available if the third-party embed cannot load.
+    // A failed embed has no reliable price chart to show. Report that state
+    // instead of switching to the older iframe, which can remain blank.
     const showFallback = () => {
       if (!container.isConnected || container.querySelector("iframe")) return;
-      const frame = document.createElement("iframe");
-      frame.title = `TradingView ${symbol}`;
-      frame.src = widgetUrl;
-      frame.className = "h-full w-full border-0";
-      container.replaceChildren(frame);
+      container.replaceChildren();
       setStudiesUnavailable(true);
     };
     script.onerror = showFallback;
@@ -75,27 +62,17 @@ export default function TradingViewChart({
       script.onerror = null;
       container.replaceChildren();
     };
-  }, [indicators.length, normalizedInterval, studiesKey, symbol, theme, widgetUrl]);
+  }, [normalizedInterval, studiesKey, symbol, theme]);
 
   return (
     <div
       className="relative rounded-xl border bg-card overflow-hidden"
       style={{ height }}
     >
-      {indicators.length ? (
-        <div ref={widgetContainerRef} className="tradingview-widget-container h-full w-full" />
-      ) : (
-        <iframe
-          title={`TradingView ${symbol}`}
-          src={widgetUrl}
-          className="h-full w-full border-0"
-          allowTransparency
-          loading="eager"
-        />
-      )}
-      {studiesUnavailable && studyFallbackLabel ? (
+      <div ref={widgetContainerRef} className="tradingview-widget-container h-full w-full" />
+      {studiesUnavailable && chartFallbackLabel ? (
         <p role="status" className="absolute bottom-3 left-3 right-3 rounded-lg bg-white/95 px-3 py-2 text-xs text-slate-700 shadow-sm">
-          {studyFallbackLabel}
+          {chartFallbackLabel}
         </p>
       ) : null}
     </div>
