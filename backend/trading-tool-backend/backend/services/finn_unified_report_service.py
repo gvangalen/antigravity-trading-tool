@@ -720,6 +720,17 @@ def _report_v2_period_comparison(context: dict[str, Any], facts: dict[str, Any],
     return comparison
 
 
+def _report_v2_has_unlabeled_component_triplet(value: str) -> bool:
+    """Catch ambiguous historical component shorthand, not dates or /100 scores."""
+    for match in re.finditer(r"(?<!\d)(\d{1,3})/(\d{1,3})/(\d{1,3})(?!\d)", value):
+        if any(int(part) > 100 for part in match.groups()):
+            continue
+        context = value[max(0, match.start() - 90):match.start()]
+        if re.search(r"(?:deel|component|markt|market|makro|macro|technisch|technical|score)", context, re.I):
+            return True
+    return False
+
+
 def _report_v2_factual_fallbacks(context: dict[str, Any], facts: dict[str, Any],
                                   comparison: dict[str, Any], locale: str) -> dict[str, str]:
     """Short factual copy for provider failure, with no inferred trade advice."""
@@ -1040,6 +1051,9 @@ def generate_unified_daily_report_sections(user_id: int, period: str = "daily") 
             "report's time structure: summarize each observed day in a weekly report, the "
             "observed weeks in a monthly report, and the observed months in a quarterly report. "
             "Only describe changes for the exact asset and dates with comparable scores. "
+            "For historical component scores, never use unlabeled slash-separated triples. "
+            "Always name each value from its own dated record explicitly as Market, Macro and "
+            "Technical (or their requested-language equivalents); do not swap Market and Macro. "
             "Name gaps in coverage; a subperiod with no observations is unknown. The current "
             "day is an unfinished snapshot, not a completed day. A trend requires at least two "
             "comparable dated observations. The retrospective may compare only the supplied "
@@ -1048,7 +1062,9 @@ def generate_unified_daily_report_sections(user_id: int, period: str = "daily") 
             "comparison.included_dates rather than presenting a completed week or month. "
             "Portfolio distinguishes Paper from Live and unknown balances from zero. "
             "Analysis explains the benchmark for each relevant pair, including absent components. "
-            "Plan explains saved cadence, conditions and amount rule. Automation describes the "
+            "Plan explains saved cadence, conditions and amount rule. For every saved weekly "
+            "DCA plan, name its purchase_weekday explicitly in the requested language; for "
+            "every monthly DCA plan, name its saved month day. Automation describes the "
             "bot state at the report instant, identifies old decisions as old, and never asserts "
             "that configured exit levels are being watched without execution evidence. "
             "The final outlook names concrete checks grounded in these facts, not a trade command."
@@ -1194,6 +1210,90 @@ def generate_unified_daily_report_sections(user_id: int, period: str = "daily") 
         if (any(claim not in valid_scores for claim in claims) or false_strategy_absence
                 or wrong_direction or _report_v2_contradicts_facts(section, value, facts, context, comparison)):
             report_v2_prose[section] = v2_fallbacks[section]
+    # A short report can omit a saved plan altogether even when its other
+    # sections are valid. Keep the plan explanation in Luna's voice, but make
+    # the owner-scoped plan identities a required fact for small plan sets.
+    saved_setups = [
+        {"pair": item["display_symbol"], **_report_v2_prompt_plan(row, locale)}
+        for item in facts["assets"] for row in item.get("setups") or []
+        if row.get("name")
+    ]
+    if 0 < len(saved_setups) <= 4 and any(
+        str(row["name"]).casefold() not in report_v2_prose["plan"].casefold()
+        for row in saved_setups
+    ):
+        repaired = ask_gpt_json(
+            system_role=(
+                "You are FINN. Rewrite only the plan section in the requested locale. "
+                "Explain every supplied saved setup by its exact name and trading pair. "
+                "For weekly DCA name its purchase_weekday; for monthly DCA name its month day. "
+                "The timeframe is the analysis candle, not the buying cadence. "
+                "Do not infer an order or add unprovided prices. Return JSON with one plan string."
+            ),
+            prompt=json.dumps({
+                "locale": locale,
+                "saved_setups": saved_setups,
+                "saved_strategies": [
+                    {"pair": item["display_symbol"], **_report_v2_prompt_plan(row, locale)}
+                    for item in facts["assets"] for row in item.get("strategies") or []
+                ],
+                "draft": report_v2_prose["plan"],
+            }, ensure_ascii=False, default=str),
+            max_tokens=1400,
+            retries=1,
+            timeout_seconds=30,
+            client_max_retries=0,
+            model_override=os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna"),
+            reasoning_effort="none",
+        )
+        candidate = str(repaired.get("plan") or "").strip() if isinstance(repaired, dict) else ""
+        report_v2_prose["plan"] = (
+            candidate if len(candidate) >= 20
+            and all(str(row["name"]).casefold() in candidate.casefold() for row in saved_setups)
+            and not _report_v2_contradicts_facts("plan", candidate, facts, context, comparison)
+            else v2_fallbacks["plan"]
+        )
+    if period != "daily" and _report_v2_has_unlabeled_component_triplet(report_v2_prose["retrospective"]):
+        # The provider sometimes reverses Market/Macro in compressed triples.
+        # Ask it to keep the narrative but state every component with its label.
+        repaired = ask_gpt_json(
+            system_role=(
+                "You are FINN. Rewrite only the retrospective in the requested locale. "
+                "Preserve the useful period summary and coverage gaps. Never write a slash-separated "
+                "triple of component scores. For each mentioned date and exact trading pair, "
+                "label the supplied market_score as Market, macro_score as Macro and "
+                "technical_score as Technical in the requested language. Do not swap values, "
+                "invent missing values or claim an unfinished day is complete. "
+                "Return JSON with one retrospective string."
+            ),
+            prompt=json.dumps({
+                "locale": locale,
+                "period": period,
+                "period_start": comparison.get("period_start"),
+                "period_end": comparison.get("period_end"),
+                "dated_component_scores": [{
+                    "date": row.get("date"), "asset": row.get("asset"),
+                    "Market": (row.get("scores") or {}).get("market_score"),
+                    "Macro": (row.get("scores") or {}).get("macro_score"),
+                    "Technical": (row.get("scores") or {}).get("technical_score"),
+                } for row in comparison.get("period_observations") or []],
+                "subperiods": comparison.get("subperiods") or [],
+                "draft": report_v2_prose["retrospective"],
+            }, ensure_ascii=False, default=str),
+            max_tokens=1800,
+            retries=1,
+            timeout_seconds=30,
+            client_max_retries=0,
+            model_override=os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna"),
+            reasoning_effort="none",
+        )
+        candidate = str(repaired.get("retrospective") or "").strip() if isinstance(repaired, dict) else ""
+        report_v2_prose["retrospective"] = (
+            candidate if len(candidate) >= 20
+            and not _report_v2_has_unlabeled_component_triplet(candidate)
+            and not _report_v2_contradicts_facts("retrospective", candidate, facts, context, comparison)
+            else v2_fallbacks["retrospective"]
+        )
     protected_names = [
         str(row.get("name"))
         for item in facts["assets"]
