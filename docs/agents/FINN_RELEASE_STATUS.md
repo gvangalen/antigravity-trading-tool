@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN: taal van de eerste uitvoerbaarheidsreactie (1 november 2026)
 
-Phase: `LOCAL_VALIDATION` voor `codex/finn-capability-locale`. De onafhankelijke
+Phase: `DEPLOYED_PENDING_QA` voor [PR #774](https://github.com/gvangalen/antigravity-trading-tool/pull/774). De onafhankelijke
 QA op live `0782b9d544af61744cd9d8bb32c5bfbdac0dcb28` gaf
 `NOT_ACCEPTED` wegens een taalafwijking: de eerste uitvoerbaarheidsreactie
 na een switch naar Engels of Duits was nog Nederlands. De inhoudelijke
@@ -22,9 +22,14 @@ worker-actiematrix 16/16 zonder productieorder of brokerverbinding
 echte Responses-evaluaties ontwikkeling 20/20 en regressie 109/109.
 Een directe echte Luna-proef met een oude Nederlandse gesprekscontext gaf
 bij de Engelse MA200-vraag meteen Engels en bij de Duitse trendlijnvraag
-meteen Duits. Release-identiteit wordt pas na CI en Auto Deploy vastgelegd.
-Onafhankelijke live QA blijft
-vereist voor de eerste beurt na een werkelijke UI-taalwissel.
+meteen Duits. Alle vijf PR-jobs en de vijf jobs van
+[main-CI 41353584119](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41353584119)
+slaagden. [Auto Deploy 41353847276](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41353847276)
+slaagde op `1dac12515551738eca27689a9bf27cac44fb68be`. Publieke
+backend-health en frontend-buildinfo gaven HTTP 200 met diezelfde SHA.
+Deze statusbijwerking krijgt zelf een laatste deployment-SHA; pas na de
+laatste CI/Auto Deploy en publieke SHA-controle start onafhankelijke live QA
+voor de eerste beurt na een werkelijke UI-taalwissel.
 
 ## FINN: algemene uitvoerbaarheid bij nieuwe planregels (1 november 2026)
 
