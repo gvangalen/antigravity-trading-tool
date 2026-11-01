@@ -1624,9 +1624,11 @@ async def _explain_execution_capability(
                 "Do not invent missing endpoints, thresholds or percentages. "
                 "Do not request a screenshot or list trade-only entry, stop and "
                 "target fields. Do not present a confirmable action or promise an order. "
-                "If the user has not said whether this is a separate new setup, ask that "
-                "single question before asking for a name. Otherwise ask at most one "
-                "useful question about a supported design choice."
+                "The separate_new_setup field records whether the user already chose a "
+                "new plan. When it is true, do not ask again whether the plan is separate "
+                "or should use a saved setup. When it is false and the parent is needed, "
+                "you may ask that one scope question. Otherwise ask at most one useful "
+                "question about a supported design choice."
             ),
             input=json.dumps({
                 "user_request": message,
