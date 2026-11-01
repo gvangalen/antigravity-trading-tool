@@ -41,6 +41,7 @@ async def get_verified_chart_candles(
         "15": ("15m", "15min"), "60": ("1h", "1h"),
         "240": ("4h", "4h"), "D": ("1d", "1day"),
         "W": ("1w", "1week"), "M": ("1M", "1month"),
+        "3M": ("3M", "1month"),
     }
     if interval not in interval_map:
         raise HTTPException(422, "Ongeldige grafiekperiode.")
@@ -89,18 +90,41 @@ async def get_verified_chart_candles(
         logger.warning("Chart candle source unavailable for %s: %s", normalized_symbol, type(exc).__name__)
         raise HTTPException(503, "Grafiekgegevens tijdelijk niet beschikbaar.") from exc
 
+    verified_candles = [candle for candle in candles
+                        if candle.provider_symbol.upper() == str(asset.provider_symbol).upper()]
+    if interval == "3M" and asset.asset_class != "crypto":
+        # Twelve Data supplies monthly bars; combine them into actual quarter bars.
+        quarters = {}
+        for candle in sorted(verified_candles, key=lambda item: item.period_start):
+            key = (candle.period_start.year, (candle.period_start.month - 1) // 3)
+            if key not in quarters:
+                quarters[key] = {
+                    "time": candle.period_start.isoformat(), "open": candle.open,
+                    "high": candle.high, "low": candle.low, "close": candle.close,
+                    "volume": candle.volume,
+                }
+            else:
+                bar = quarters[key]
+                bar["high"] = max(bar["high"], candle.high)
+                bar["low"] = min(bar["low"], candle.low)
+                bar["close"] = candle.close
+                if candle.volume is not None:
+                    bar["volume"] = (bar["volume"] or 0) + candle.volume
+        response_candles = list(quarters.values())
+    else:
+        response_candles = [
+            {"time": candle.period_start.isoformat(), "open": candle.open,
+             "high": candle.high, "low": candle.low, "close": candle.close,
+             "volume": candle.volume}
+            for candle in verified_candles
+        ]
+
     return {
         "symbol": normalized_symbol,
         "source": provider.provider_name,
         "quote_currency": asset.quote_currency,
         "interval": interval,
-        "candles": [
-            {"time": candle.period_start.isoformat(), "open": candle.open,
-             "high": candle.high, "low": candle.low, "close": candle.close,
-             "volume": candle.volume}
-            for candle in candles
-            if candle.provider_symbol.upper() == str(asset.provider_symbol).upper()
-        ],
+        "candles": response_candles,
     }
 
 
