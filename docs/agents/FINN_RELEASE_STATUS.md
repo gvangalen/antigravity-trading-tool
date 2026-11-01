@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Report 2.0: historische deelscores in weektekst (1 november 2026)
 
-Phase: `CI_VALIDATED` voor reparatiekandidaat
+Phase: `DEPLOYED_QA_PENDING` voor reparatiekandidaat
 `codex/report-period-score-facts` in [PR #765](https://github.com/gvangalen/antigravity-trading-tool/pull/765). [PR #764](https://github.com/gvangalen/antigravity-trading-tool/pull/764)
 is na vijf groene PR-jobs, vijf groene main-CI-jobs en succesvolle
 [Auto Deploy 41328802770](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41328802770)
@@ -33,7 +33,13 @@ bevat daarnaast twee synthetische, gedateerde deelscoremomenten en keurt
 onbenoemde historische scoretriplets af. Alle vijf jobs van
 [PR-CI 41331621828](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41331621828)
 en [echte Responses-provider-CI 41331645613](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41331645613)
-slaagden op productcommit `d79fcaab1`. De reparatie is nog niet gemerged of live.
+slaagden op productcommit `d79fcaab1`. [PR #765](https://github.com/gvangalen/antigravity-trading-tool/pull/765)
+is samengevoegd als `ea126138566f6627455b325387aad4393a5ba6a1`.
+Alle vijf jobs van [main-CI 41332289241](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41332289241)
+en [Auto Deploy 41332585230](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41332585230)
+slaagden. Publieke backend-health en frontend-buildinfo gaven beide HTTP 200
+en exact die SHA. De onafhankelijke live herkeuring van weektekst, kalenderopbouw
+en PDF op de uiteindelijke deployment-SHA volgt nog.
 
 ## Report 2.0: week, maand en kwartaal als echte perioden (1 november 2026)
 
