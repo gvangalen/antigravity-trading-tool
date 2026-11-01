@@ -17,6 +17,7 @@ export default function TradingViewSmartChart({
   interval = "D",
   indicators = [],
   chartFallbackLabel = "",
+  chartBackupLabel = "",
   focusedBotId = null,
   setFocusedBotId = () => {},
   height = 500,
@@ -38,6 +39,7 @@ export default function TradingViewSmartChart({
         interval={interval}
         indicators={indicators}
         chartFallbackLabel={chartFallbackLabel}
+        chartBackupLabel={chartBackupLabel}
         height={height}
         onIntervalChange={onIntervalChange}
       />

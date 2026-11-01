@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { normalizeTradingViewInterval } from "../../../../shared/tradingViewConfig";
+import LocalMarketChart from "./LocalMarketChart";
 
 const TRADINGVIEW_MODULE_URL = "https://widgets.tradingview-widget.com/w/en/tv-advanced-chart.js";
 let widgetModulePromise;
@@ -38,11 +39,12 @@ export default function TradingViewChart({
   height = 500,
   indicators = [],
   chartFallbackLabel = "",
+  chartBackupLabel = "",
   onIntervalChange = () => {},
 }) {
   const lastReportedIntervalRef = useRef(normalizeTradingViewInterval(interval));
   const widgetContainerRef = useRef(null);
-  const [widgetUnavailable, setWidgetUnavailable] = useState(false);
+  const [backupVisible, setBackupVisible] = useState(false);
   const normalizedInterval = normalizeTradingViewInterval(interval);
   const studiesKey = JSON.stringify(indicators);
 
@@ -58,7 +60,7 @@ export default function TradingViewChart({
     let cancelled = false;
     let attempt = 0;
     let readyTimeout;
-    setWidgetUnavailable(false);
+    setBackupVisible(false);
     container.replaceChildren();
 
     const mountChart = () => {
@@ -80,14 +82,18 @@ export default function TradingViewChart({
         chart.removeEventListener("tv-widget-ready", onReady);
         chart.removeEventListener("tv-widget-error", retryOrReport);
         if (cancelled || !container.isConnected || container.firstChild !== chart) return;
-        if (attempt < 2) mountChart();
+        if (attempt < 2) {
+          setBackupVisible(true);
+          mountChart();
+        }
         else {
           container.replaceChildren();
-          setWidgetUnavailable(true);
+          setBackupVisible(true);
         }
       };
       const onReady = () => {
         window.clearTimeout(readyTimeout);
+        if (!cancelled && container.firstChild === chart) setBackupVisible(false);
       };
       chart.addEventListener("tv-widget-ready", onReady, { once: true });
       chart.addEventListener("tv-widget-error", retryOrReport, { once: true });
@@ -97,7 +103,7 @@ export default function TradingViewChart({
     };
 
     loadWidgetModule().then(mountChart).catch(() => {
-      if (!cancelled) setWidgetUnavailable(true);
+      if (!cancelled) setBackupVisible(true);
     });
 
     return () => {
@@ -109,11 +115,14 @@ export default function TradingViewChart({
 
   return (
     <div className="relative overflow-hidden rounded-xl border bg-card" style={{ height }}>
-      <div ref={widgetContainerRef} className="h-full w-full" />
-      {widgetUnavailable && chartFallbackLabel ? (
-        <p role="status" className="absolute bottom-3 left-3 right-3 rounded-lg bg-white/95 px-3 py-2 text-xs text-slate-700 shadow-sm">
-          {chartFallbackLabel}
-        </p>
+      <div ref={widgetContainerRef} className={`absolute inset-0 ${backupVisible ? "opacity-0 pointer-events-none" : "opacity-100"}`} />
+      {backupVisible ? (
+        <LocalMarketChart
+          symbol={symbol}
+          interval={normalizedInterval}
+          unavailableLabel={chartFallbackLabel}
+          backupLabel={chartBackupLabel}
+        />
       ) : null}
     </div>
   );

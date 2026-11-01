@@ -4,10 +4,14 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.database import get_db
+from backend.infrastructure.models import AssetCatalog, TradingMarket
+from backend.schemas.market_provider_schema import AssetRecord
 from backend.services.asset_catalog_service import AssetCatalogService
+from backend.services.market_data_provider_registry import MarketDataProviderRegistry
 from backend.services.trading_market_service import MarketUnavailable, TradingMarketService
 from backend.services.market_data_ingestion_service import MarketDataIngestionService
 from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
@@ -16,6 +20,88 @@ from backend.utils.auth_utils import get_current_user
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+@router.get("/assets/chart-candles")
+async def get_verified_chart_candles(
+    tradingview_symbol: str = Query(..., min_length=3, max_length=120),
+    interval: str = Query("D"),
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    """Return provider candles for a catalogued instrument or exact trading pair.
+
+    This read-only route supplies a chart when the third-party TradingView
+    widget does not initialize. A requested symbol is never sent upstream
+    without first resolving its verified catalog identity.
+    """
+    del current_user  # Authentication is required; candles themselves are public market data.
+    normalized_symbol = tradingview_symbol.strip().upper()
+    interval_map = {
+        "15": ("15m", "15min"), "60": ("1h", "1h"),
+        "240": ("4h", "4h"), "D": ("1d", "1day"),
+        "W": ("1w", "1week"), "M": ("1M", "1month"),
+    }
+    if interval not in interval_map:
+        raise HTTPException(422, "Ongeldige grafiekperiode.")
+
+    market = (await session.execute(select(TradingMarket).where(
+        TradingMarket.tradingview_symbol == normalized_symbol,
+        TradingMarket.is_active.is_(True),
+    ).limit(1))).scalars().first()
+    if market is not None:
+        catalog = (await session.execute(select(AssetCatalog).where(
+            AssetCatalog.symbol == market.asset_symbol,
+            AssetCatalog.is_active.is_(True),
+        ).limit(1))).scalars().first()
+        if catalog is None:
+            raise HTTPException(404, "Handelspaar niet beschikbaar.")
+        provider_name = market.provider
+        asset = AssetRecord(
+            symbol=market.asset_symbol, display_name=catalog.display_name,
+            asset_class=catalog.asset_class, provider=provider_name,
+            primary_provider=provider_name, provider_symbol=market.provider_symbol,
+            quote_currency=market.quote_currency, exchange=market.venue,
+            timezone=catalog.timezone or "UTC",
+        )
+    else:
+        catalog = (await session.execute(select(AssetCatalog).where(
+            AssetCatalog.tradingview_symbol == normalized_symbol,
+            AssetCatalog.is_active.is_(True),
+        ).limit(1))).scalars().first()
+        if catalog is None or catalog.asset_class == "crypto":
+            raise HTTPException(404, "Grafiekbron niet beschikbaar.")
+        provider_name = catalog.primary_provider or catalog.provider
+        asset = AssetRecord(
+            symbol=catalog.symbol, display_name=catalog.display_name,
+            asset_class=catalog.asset_class, provider=provider_name or "manual",
+            primary_provider=provider_name or "manual",
+            provider_symbol=catalog.provider_symbol or catalog.symbol,
+            quote_currency=catalog.quote_currency, exchange=catalog.exchange,
+            timezone=catalog.timezone or "UTC",
+        )
+
+    try:
+        provider = MarketDataProviderRegistry().resolve_for_asset(asset)
+        provider_interval = interval_map[interval][0 if asset.asset_class == "crypto" else 1]
+        candles = await provider.fetch_candles(asset, provider_interval, limit=220)
+    except Exception as exc:
+        logger.warning("Chart candle source unavailable for %s: %s", normalized_symbol, type(exc).__name__)
+        raise HTTPException(503, "Grafiekgegevens tijdelijk niet beschikbaar.") from exc
+
+    return {
+        "symbol": normalized_symbol,
+        "source": provider.provider_name,
+        "quote_currency": asset.quote_currency,
+        "interval": interval,
+        "candles": [
+            {"time": candle.period_start.isoformat(), "open": candle.open,
+             "high": candle.high, "low": candle.low, "close": candle.close,
+             "volume": candle.volume}
+            for candle in candles
+            if candle.provider_symbol.upper() == str(asset.provider_symbol).upper()
+        ],
+    }
 
 
 class AssetSearchItemResponse(BaseModel):
