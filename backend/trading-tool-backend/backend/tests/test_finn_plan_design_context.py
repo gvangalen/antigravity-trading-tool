@@ -128,6 +128,31 @@ def test_capability_answer_uses_responses_with_typed_contract(monkeypatch):
     assert "do not ask again whether the plan is separate" in kwargs["instructions"]
 
 
+def test_capability_turn_uses_current_language_after_account_switch():
+    from backend.services.finn_v2_run_service import _capability_turn_locale
+
+    context = {"locale": "nl", "responses_cursor": {"locale": "nl"}}
+    english = SimpleNamespace(
+        message="For this new, separate BTC/EUR DCA idea, can it run?",
+        workspace_hints_json={"locale": "en"}, client_context_json={},
+    )
+    german = SimpleNamespace(
+        message="Kann diese neue DCA-Idee ausgeführt werden?",
+        workspace_hints_json={}, client_context_json={"locale": "de"},
+    )
+    assert _capability_turn_locale(english, context, "nl") == "en"
+    assert _capability_turn_locale(german, context, "nl") == "de"
+    # The saved language also wins when a client omits its optional hint.
+    assert _capability_turn_locale(
+        SimpleNamespace(message=english.message, workspace_hints_json={}, client_context_json={}),
+        context, "en",
+    ) == "en"
+    assert _capability_turn_locale(
+        SimpleNamespace(message="Bitte auf Deutsch antworten", workspace_hints_json={}, client_context_json={}),
+        context, "nl",
+    ) == "de"
+
+
 def test_capability_read_does_not_claim_an_answer_verifier_passed():
     from backend.services.finn_v2_responses_answer_verifier import FinnResponsesVerifiedAnswer
     from backend.services.finn_v2_run_service import FinnV2RunService

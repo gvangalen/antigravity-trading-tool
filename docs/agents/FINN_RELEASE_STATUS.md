@@ -4,9 +4,31 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN: taal van de eerste uitvoerbaarheidsreactie (1 november 2026)
+
+Phase: `LOCAL_VALIDATION` voor `codex/finn-capability-locale`. De onafhankelijke
+QA op live `0782b9d544af61744cd9d8bb32c5bfbdac0dcb28` gaf
+`NOT_ACCEPTED` wegens een taalafwijking: de eerste uitvoerbaarheidsreactie
+na een switch naar Engels of Duits was nog Nederlands. De inhoudelijke
+nieuwe-planscope en algemene contractvergelijking waren in die proef wel
+goed. De speciale capability-route gebruikte nog de bewaarde gesprekstaal;
+zij leest nu de huidige requesttaal en gebruikersvoorkeur vóór Luna antwoordt.
+Er zijn geen MA200-specifieke coachteksten of regels toegevoegd.
+
+Op de huidige lokale code: gerichte suite 9/9, volledige backend-suite
+4199 geslaagd met 4 bestaande skips, frontendproductiebuild geslaagd,
+worker-actiematrix 16/16 zonder productieorder of brokerverbinding
+(artifact SHA-256 `e9fc44cb5dc8796fb740fcd224d88ad1d8423df18db9f4d695075d2dc8eb0b04`),
+echte Responses-evaluaties ontwikkeling 20/20 en regressie 109/109.
+Een directe echte Luna-proef met een oude Nederlandse gesprekscontext gaf
+bij de Engelse MA200-vraag meteen Engels en bij de Duitse trendlijnvraag
+meteen Duits. Release-identiteit wordt pas na CI en Auto Deploy vastgelegd.
+Onafhankelijke live QA blijft
+vereist voor de eerste beurt na een werkelijke UI-taalwissel.
+
 ## FINN: algemene uitvoerbaarheid bij nieuwe planregels (1 november 2026)
 
-Phase: `DEPLOYED_PENDING_QA` voor [PR #772](https://github.com/gvangalen/antigravity-trading-tool/pull/772).
+Phase: `NOT_ACCEPTED` voor [PR #772](https://github.com/gvangalen/antigravity-trading-tool/pull/772).
 De onafhankelijke QA van `ae08171052adaa07d5668ec9e80fb7e099ee1da9` gaf
 `NOT_ACCEPTED`: een natuurlijke vraag of een vloeiende MA200-regel echt als DCA
 kan worden ingesteld kreeg een algemene actiezin, en een expliciet nieuw,
