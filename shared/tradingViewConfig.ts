@@ -1,5 +1,6 @@
 export type TradingViewTheme = 'light' | 'dark';
 export type TradingViewInterval = '15' | '60' | '240' | 'D' | 'W' | 'M' | '3M';
+export type TradingViewStudy = string | { id: string; inputs?: Record<string, number | string> };
 
 export const DEFAULT_TRADINGVIEW_EXCHANGE = 'BINANCE';
 export const DEFAULT_TRADINGVIEW_QUOTE = 'USDT';
@@ -55,7 +56,7 @@ export function toTradingViewTheme(appearance: 'system' | 'dark' | 'light'): Tra
 
 export function buildTradingViewEmbedConfig(options: {
   allowSymbolChange?: boolean;
-  indicators?: string[];
+  indicators?: TradingViewStudy[];
   interval: string;
   symbol: string;
   theme: TradingViewTheme;
