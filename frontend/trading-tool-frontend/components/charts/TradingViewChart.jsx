@@ -32,34 +32,67 @@ export default function TradingViewChart({
     if (!container) return;
     setStudiesUnavailable(false);
 
-    const script = document.createElement("script");
-    script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
-    script.type = "text/javascript";
-    script.async = true;
-    script.textContent = JSON.stringify(buildTradingViewEmbedConfig({
-      interval: normalizedInterval,
-      symbol,
-      theme,
-      indicators: JSON.parse(studiesKey),
-    }));
-    const widget = document.createElement("div");
-    widget.className = "tradingview-widget-container__widget";
-    widget.style.height = "100%";
-    widget.style.width = "100%";
-    container.replaceChildren(widget, script);
+    let cancelled = false;
+    let attempt = 0;
+    let timeout = null;
+    let activeScript = null;
 
-    // A failed embed has no reliable price chart to show. Report that state
-    // instead of switching to the older iframe, which can remain blank.
-    const showFallback = () => {
-      if (!container.isConnected || container.querySelector("iframe")) return;
-      container.replaceChildren();
-      setStudiesUnavailable(true);
+    const hasLoadedFrame = () => {
+      const frame = container.querySelector("iframe");
+      if (!frame) return false;
+      try {
+        const currentUrl = frame.contentWindow?.location?.href;
+        return Boolean(currentUrl && currentUrl !== "about:blank");
+      } catch {
+        // A navigated TradingView frame is cross-origin and cannot be read.
+        return true;
+      }
     };
-    script.onerror = showFallback;
-    const timeout = window.setTimeout(showFallback, 12000);
+
+    const loadWidget = () => {
+      if (cancelled || !container.isConnected) return;
+      attempt += 1;
+      if (activeScript) activeScript.onerror = null;
+      const script = document.createElement("script");
+      activeScript = script;
+      script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
+      script.type = "text/javascript";
+      script.async = true;
+      script.textContent = JSON.stringify(buildTradingViewEmbedConfig({
+        interval: normalizedInterval,
+        symbol,
+        theme,
+        indicators: JSON.parse(studiesKey),
+      }));
+      const widget = document.createElement("div");
+      widget.className = "tradingview-widget-container__widget";
+      widget.style.height = "100%";
+      widget.style.width = "100%";
+      container.replaceChildren(widget, script);
+
+      const retryOrReport = () => {
+        window.clearTimeout(timeout);
+        if (cancelled || !container.isConnected) return;
+        if (attempt < 2) {
+          loadWidget();
+        } else {
+          container.replaceChildren();
+          setStudiesUnavailable(true);
+        }
+      };
+      script.onerror = retryOrReport;
+      timeout = window.setTimeout(() => {
+        // TradingView can insert an iframe that never leaves about:blank.
+        // Its presence alone does not prove the chart has loaded.
+        if (!hasLoadedFrame()) retryOrReport();
+      }, 8000);
+    };
+
+    loadWidget();
     return () => {
+      cancelled = true;
       window.clearTimeout(timeout);
-      script.onerror = null;
+      if (activeScript) activeScript.onerror = null;
       container.replaceChildren();
     };
   }, [normalizedInterval, studiesKey, symbol, theme]);
