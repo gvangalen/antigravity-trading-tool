@@ -173,6 +173,7 @@ function getUiCopy(locale = "nl") {
       chartIndicatorNote: "TradingView uses the selected pair and chart interval for visual indicators. Score 2.0 uses its own source readings and rules.",
       chartLoading: "Loading the selected market's chart…",
       chartStudyFallback: "TradingView could not load the indicators. The price chart is still available.",
+      chartFallback: "TradingView could not load the chart. Try again later.",
       contextScores: "Context scores",
       scoreSourceDate: "Oldest indicator source",
       scoreSourceUnknown: "Source date incomplete",
@@ -370,6 +371,7 @@ function getUiCopy(locale = "nl") {
       chartIndicatorNote: "Für visuelle Indikatoren verwendet TradingView das gewählte Handelspaar und Chartintervall. Score 2.0 verwendet eigene Messwerte und Regeln.",
       chartLoading: "Chart für den gewählten Markt wird geladen…",
       chartStudyFallback: "TradingView konnte die Indikatoren nicht laden. Der Kurschart bleibt verfügbar.",
+      chartFallback: "TradingView konnte den Chart nicht laden. Versuche es später erneut.",
       contextScores: "Kontext-scores",
       scoreSourceDate: "Älteste Indikatorquelle",
       scoreSourceUnknown: "Quelldatum unvollständig",
@@ -566,6 +568,7 @@ function getUiCopy(locale = "nl") {
     chartIndicatorNote: "Voor visuele indicatoren gebruikt TradingView het gekozen handelspaar en grafiektijdsframe. Score 2.0 gebruikt eigen metingen en regels.",
     chartLoading: "Grafiek voor de gekozen markt wordt geladen…",
     chartStudyFallback: "TradingView kon de indicatoren niet laden. De koersgrafiek blijft beschikbaar.",
+    chartFallback: "TradingView kon de grafiek niet laden. Probeer het later opnieuw.",
     contextScores: "Contextscores",
     scoreSourceDate: "Oudste indicatorbron",
     scoreSourceUnknown: "Brondatum onvolledig",
@@ -1780,6 +1783,7 @@ function AnalysisChartSection({ interval, onIntervalChange, tradingViewSymbol, s
               interval={interval}
               indicators={indicators}
               studyFallbackLabel={ui.chartStudyFallback}
+              chartFallbackLabel={ui.chartFallback}
               focusedBotId={null}
               setFocusedBotId={() => {}}
               height={chartHeight}

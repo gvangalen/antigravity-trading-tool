@@ -14,6 +14,7 @@ export default function TradingViewChart({
   height = 500,
   indicators = [],
   studyFallbackLabel = "",
+  chartFallbackLabel = "",
   onIntervalChange = () => {},
 }) {
   const lastReportedIntervalRef = useRef(normalizeTradingViewInterval(interval));
@@ -39,7 +40,7 @@ export default function TradingViewChart({
 
   useEffect(() => {
     const container = widgetContainerRef.current;
-    if (!container || !indicators.length) return;
+    if (!container) return;
     setStudiesUnavailable(false);
 
     const script = document.createElement("script");
@@ -82,20 +83,10 @@ export default function TradingViewChart({
       className="relative rounded-xl border bg-card overflow-hidden"
       style={{ height }}
     >
-      {indicators.length ? (
-        <div ref={widgetContainerRef} className="tradingview-widget-container h-full w-full" />
-      ) : (
-        <iframe
-          title={`TradingView ${symbol}`}
-          src={widgetUrl}
-          className="h-full w-full border-0"
-          allowTransparency
-          loading="eager"
-        />
-      )}
-      {studiesUnavailable && studyFallbackLabel ? (
+      <div ref={widgetContainerRef} className="tradingview-widget-container h-full w-full" />
+      {studiesUnavailable && (indicators.length ? studyFallbackLabel : chartFallbackLabel) ? (
         <p role="status" className="absolute bottom-3 left-3 right-3 rounded-lg bg-white/95 px-3 py-2 text-xs text-slate-700 shadow-sm">
-          {studyFallbackLabel}
+          {indicators.length ? studyFallbackLabel : chartFallbackLabel}
         </p>
       ) : null}
     </div>
