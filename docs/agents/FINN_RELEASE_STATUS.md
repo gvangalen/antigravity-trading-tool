@@ -6,8 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Report 2.0: historische deelscores in weektekst (1 november 2026)
 
-Phase: `LOCAL_VALIDATED` voor reparatiekandidaat
-`codex/report-period-score-facts`. [PR #764](https://github.com/gvangalen/antigravity-trading-tool/pull/764)
+Phase: `CI_VALIDATED` voor reparatiekandidaat
+`codex/report-period-score-facts` in [PR #765](https://github.com/gvangalen/antigravity-trading-tool/pull/765). [PR #764](https://github.com/gvangalen/antigravity-trading-tool/pull/764)
 is na vijf groene PR-jobs, vijf groene main-CI-jobs en succesvolle
 [Auto Deploy 41328802770](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41328802770)
 live gegaan als `0f9ab9c06a1c10576736a90f8660c98aaabe9842`; publieke backend
@@ -21,15 +21,19 @@ terugblik opnieuw formuleren wanneer zo'n triplet toch verschijnt, met de
 gedateerde Markt-, Macro- en Technisch-feiten expliciet erbij. Bij mislukte
 feitelijke reparatie blijft een korte feitelijke terugblik over. Nieuwe
 regressie- en echte Responses-proeven controleren dit pad vóór heruitrol.
-De gerichte rapportsuite (17 geslaagd), volledige backend-suite (4189
-geslaagd, 4 bestaande skips), Python-syntaxcontrole en `git diff --check`
-zijn lokaal geslaagd. Het providerprobe-contract heeft nu ook twee
-synthetische, gedateerde deelscoremomenten en keurt onbenoemde historische
-scoretriplets af; de echte Responses-run volgt in CI.
-De eerste echte provider-run op deze kandidaat maakte in het synthetische
-Duitse voorbeeld de opgeslagen wekelijkse aankoopdag niet expliciet. De
-rapportopdracht noemt die vereiste daarom nu per opgeslagen DCA-plan; een
-nieuwe echte provider-run is vereist voordat de reparatie kan worden gemerged.
+De gerichte rapportsuite (18 geslaagd), volledige backend-suite (4189
+geslaagd, 4 bestaande skips) op de eerdere codecommit, Python-syntaxcontrole
+en `git diff --check` zijn lokaal geslaagd. Een eerste echte providerproef
+liet in een synthetisch Duits rapport de wekelijkse aankoopdag weg; een
+tweede liet een opgeslagen plannaam weg. De rapportopdracht noemt nu de
+opgeslagen DCA-dag, en bij weglating van een klein aantal plannamen laat FINN
+alleen het planonderdeel opnieuw formuleren op basis van getypeerde feiten.
+De nieuwe regressie controleert die gerichte reparatie. Het providercontract
+bevat daarnaast twee synthetische, gedateerde deelscoremomenten en keurt
+onbenoemde historische scoretriplets af. Alle vijf jobs van
+[PR-CI 41331621828](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41331621828)
+en [echte Responses-provider-CI 41331645613](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41331645613)
+slaagden op productcommit `d79fcaab1`. De reparatie is nog niet gemerged of live.
 
 ## Report 2.0: week, maand en kwartaal als echte perioden (1 november 2026)
 
