@@ -1210,6 +1210,49 @@ def generate_unified_daily_report_sections(user_id: int, period: str = "daily") 
         if (any(claim not in valid_scores for claim in claims) or false_strategy_absence
                 or wrong_direction or _report_v2_contradicts_facts(section, value, facts, context, comparison)):
             report_v2_prose[section] = v2_fallbacks[section]
+    # A short report can omit a saved plan altogether even when its other
+    # sections are valid. Keep the plan explanation in Luna's voice, but make
+    # the owner-scoped plan identities a required fact for small plan sets.
+    saved_setups = [
+        {"pair": item["display_symbol"], **_report_v2_prompt_plan(row, locale)}
+        for item in facts["assets"] for row in item.get("setups") or []
+        if row.get("name")
+    ]
+    if 0 < len(saved_setups) <= 4 and any(
+        str(row["name"]).casefold() not in report_v2_prose["plan"].casefold()
+        for row in saved_setups
+    ):
+        repaired = ask_gpt_json(
+            system_role=(
+                "You are FINN. Rewrite only the plan section in the requested locale. "
+                "Explain every supplied saved setup by its exact name and trading pair. "
+                "For weekly DCA name its purchase_weekday; for monthly DCA name its month day. "
+                "The timeframe is the analysis candle, not the buying cadence. "
+                "Do not infer an order or add unprovided prices. Return JSON with one plan string."
+            ),
+            prompt=json.dumps({
+                "locale": locale,
+                "saved_setups": saved_setups,
+                "saved_strategies": [
+                    {"pair": item["display_symbol"], **_report_v2_prompt_plan(row, locale)}
+                    for item in facts["assets"] for row in item.get("strategies") or []
+                ],
+                "draft": report_v2_prose["plan"],
+            }, ensure_ascii=False, default=str),
+            max_tokens=1400,
+            retries=1,
+            timeout_seconds=30,
+            client_max_retries=0,
+            model_override=os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna"),
+            reasoning_effort="none",
+        )
+        candidate = str(repaired.get("plan") or "").strip() if isinstance(repaired, dict) else ""
+        report_v2_prose["plan"] = (
+            candidate if len(candidate) >= 20
+            and all(str(row["name"]).casefold() in candidate.casefold() for row in saved_setups)
+            and not _report_v2_contradicts_facts("plan", candidate, facts, context, comparison)
+            else v2_fallbacks["plan"]
+        )
     if period != "daily" and _report_v2_has_unlabeled_component_triplet(report_v2_prose["retrospective"]):
         # The provider sometimes reverses Market/Macro in compressed triples.
         # Ask it to keep the narrative but state every component with its label.

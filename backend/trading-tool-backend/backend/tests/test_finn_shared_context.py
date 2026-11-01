@@ -475,6 +475,7 @@ def test_report_v2_repairs_wrong_percent_and_foreign_pair_setup_without_fixed_pr
         call_options.append((kwargs.get("retries", 2), kwargs["timeout_seconds"], kwargs["client_max_retries"]))
         if len(calls) == 1:
             answer = {key: f"A useful {key} paragraph about the saved BTC plans." for key in reports.REPORT_V2_SECTIONS}
+            answer["plan"] = "EUR buying zone and USDT buying zone are the saved BTC plans."
             answer["analysis"] = ("BTC/EUR: 24-hour change is −29.5%; EUR buying zone applies. "
                                   "BTC/USDT: 24-hour change is +35.4%; EUR buying zone applies.")
             return answer
@@ -573,6 +574,32 @@ def test_report_v2_localizes_source_terms_without_rewriting_plan_names(monkeypat
     assert sections["analysis"] == "De marktscore en technische scores ontbreken voor BTC/EUR."
     assert sections["outlook_v2"] == "De vooruitblik vraagt eerst om complete gegevens voor BTC/EUR."
     assert prompts[0]["report_terminology"]["total equity"] == "totale portefeuillewaarde"
+
+
+def test_report_v2_repairs_omitted_saved_plan_name(monkeypatch):
+    context = {"locale": "nl", "observed_at": "2026-10-31T09:00:00+00:00",
+               "assets": [{"symbol": "BTC", "pair": "BTC/EUR",
+                           "setups": [{"id": 1, "name": "EUR Cash Builder", "setup_type": "dca",
+                                       "timeframe": "1D", "dca_frequency": "weekly", "dca_day": 5}],
+                           "strategies": [], "bots": [],
+                           "benchmark": {"source_status": "missing", "reported_scores": {},
+                                         "component_source_status": {}},
+                           "market_snapshot": {}}]}
+    monkeypatch.setattr(reports, "_load_context", lambda _id: asyncio.sleep(0, result=context))
+    calls = []
+
+    def writer(**kwargs):
+        calls.append(json.loads(kwargs["prompt"]))
+        if len(calls) == 1:
+            return {key: "Een inhoudelijk verslag over de opgeslagen toestand."
+                    for key in reports.REPORT_V2_SECTIONS}
+        return {"plan": "EUR Cash Builder voor BTC/EUR koopt wekelijks op vrijdag volgens het opgeslagen plan."}
+
+    monkeypatch.setattr(reports, "ask_gpt_json", writer)
+    plan = reports.generate_unified_daily_report_sections(7)["score_source_snapshot"]["report_v2"]["sections"]["plan"]
+    assert len(calls) == 2
+    assert calls[1]["saved_setups"][0]["purchase_weekday"] == "vrijdag"
+    assert "EUR Cash Builder" in plan and "vrijdag" in plan
 
 
 def test_report_v2_rejects_blanket_daily_cadence_for_mixed_dca_plans(monkeypatch):
