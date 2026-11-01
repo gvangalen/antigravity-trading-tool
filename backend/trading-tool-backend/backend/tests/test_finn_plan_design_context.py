@@ -4,8 +4,9 @@ from unittest.mock import AsyncMock
 
 from backend.domain.finn_dca_plan_contract import dca_automation_capabilities, split_confirmed_dca_plan
 from backend.services.finn_v2_plan_design_context import (
-    advance_plan_design_focus, remember_unsupported_ma_design,
-    requests_unsupported_ma_dca_amount, is_new_separate_setup_request,
+    advance_plan_design_focus, remember_unsaved_design,
+    requests_execution_capability_question, is_new_separate_setup_request,
+    is_explicit_saved_plan_read,
 )
 
 
@@ -30,24 +31,25 @@ def test_plan_design_focus_does_not_bind_an_ordinary_saved_plan_read():
     context = {}
     assert not advance_plan_design_focus(context, "Wat staat in mijn bestaande BTC-setup?")
     assert "plan_design_focus" not in context
+    assert is_explicit_saved_plan_read("Wat waren ritme en bedrag van mijn opgeslagen QA BTC EUR-plan?")
+    assert not is_explicit_saved_plan_read("Het oude plan is alleen achtergrond voor een nieuw plan")
 
 
-def test_unsaved_ma_design_remains_separate_from_saved_plan_until_scope_is_chosen():
+def test_unsaved_design_remains_separate_from_saved_plan_until_scope_is_chosen():
     context = {}
-    assert remember_unsupported_ma_design(context)
-    assert context["plan_design_focus"]["kind"] == "unsaved_ma_dca_design"
+    assert remember_unsaved_design(context)
+    assert context["plan_design_focus"]["kind"] == "unsaved_capability_design"
     assert advance_plan_design_focus(context, "Smart BTC test 200ma")
-    assert context["plan_design_focus"]["kind"] == "unsaved_ma_dca_design"
+    assert context["plan_design_focus"]["kind"] == "unsaved_capability_design"
     assert advance_plan_design_focus(context, "Ik bedoel een nieuwe, aparte setup")
     assert context["plan_design_focus"]["kind"] == "new_separate_setup"
-    assert not remember_unsupported_ma_design(context)
+    assert not remember_unsaved_design(context)
 
 
 def test_model_capabilities_match_confirmed_dca_amount_contract():
     facts = dca_automation_capabilities()
     assert facts["supported_amount_modes"] == ("fixed", "score_bands")
-    assert facts["score_band_input"] == ("benchmark_score",)
-    assert facts["score_band_interpolation"] == "step"
+    assert facts["minimum_score_band_percent"] > 0
     assert facts["score_band_percent_order"] == "nondecreasing_as_benchmark_score_rises"
     assert facts["score_band_amount_count"] == 3
     _, strategy = split_confirmed_dca_plan({
@@ -59,22 +61,27 @@ def test_model_capabilities_match_confirmed_dca_amount_contract():
     })
     assert strategy["decision_curve"]["input"] in facts["score_band_input"]
     assert strategy["decision_curve"]["interpolation"] == facts["score_band_interpolation"]
-    assert not facts["direct_ma_distance_input"]
-    assert not facts["linear_ma_distance_sizing"]
+    assert facts["score_band_input"] == ("benchmark_score",)
+    assert facts["score_band_interpolation"] == "step"
 
 
-def test_ma_distance_amount_request_uses_capability_route_without_swallowing_generic_ma_question():
-    assert requests_unsupported_ma_dca_amount(
-        "Smart DCA met een percentage aan de hand van de 200ma"
+def test_generic_capability_questions_include_ma_and_trendline_designs():
+    assert requests_execution_capability_question(
+        "Kan Smart DCA met een percentage aan de hand van de 200ma?"
     )
-    assert requests_unsupported_ma_dca_amount(
-        "Onder MA200 wil ik meer kopen, verder erboven steeds minder"
+    assert requests_execution_capability_question(
+        "BTC/EUR. Voor dit nieuwe plan: koop juist méér naarmate de koers verder onder de MA200 ligt, vloeiend oplopend. Kan dat?",
+        {"plan_design_focus": {"kind": "new_separate_setup"}},
     )
-    assert requests_unsupported_ma_dca_amount(
-        "Laat het DCA-bedrag afhangen van de afstand tot het 200-daags gemiddelde"
+    assert requests_execution_capability_question(
+        "Kan een trendline-breakout automatisch een koop en een stop activeren?",
     )
-    assert not requests_unsupported_ma_dca_amount("Wat is de MA200-waarde vandaag?")
-    assert not requests_unsupported_ma_dca_amount("Maak een vaste DCA voor ETH op maandag")
+    assert not requests_execution_capability_question("Wat is de MA200-waarde vandaag?")
+    assert not requests_execution_capability_question("Kan je mijn opgeslagen plan toelichten?")
+    assert not requests_execution_capability_question("Maak een vaste DCA voor ETH op maandag")
+    assert requests_execution_capability_question("Can this execute automatically?", {
+        "plan_design_focus": {"kind": "new_separate_setup"},
+    })
 
 
 def test_capability_answer_uses_responses_with_typed_contract(monkeypatch):
@@ -86,14 +93,14 @@ def test_capability_answer_uses_responses_with_typed_contract(monkeypatch):
     monkeypatch.setattr(service.openai_client, "async_client", SimpleNamespace(
         responses=SimpleNamespace(create=create),
     ))
-    answer, response_id = asyncio.run(service._explain_unsupported_ma_dca_amount(
+    answer, response_id = asyncio.run(service._explain_execution_capability(
         message="Ik wil meer kopen onder MA200", locale="nl", separate_setup=False,
     ))
     assert response_id == "resp-test"
     assert "MA200" in answer
     kwargs = create.await_args.kwargs
     assert kwargs["tool_choice"] == "none"
-    assert '"linear_ma_distance_sizing": false' in kwargs["input"]
+    assert '"score_band_input": ["benchmark_score"]' in kwargs["input"]
     assert "before asking for a name" in kwargs["instructions"]
 
 

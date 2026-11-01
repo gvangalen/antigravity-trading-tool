@@ -19,6 +19,28 @@ _SAVED_TOPIC = re.compile(
     r"(?:[\w]+-)?(?:setup|plan|strategie|strategy)\b",
     re.I,
 )
+_SAVED_READ = re.compile(
+    r"\b(?:wat|welk\w*|hoe|lees|toon|vertel|beschrijf|what|which|read|show|"
+    r"was|wie|zeig|lies)\b.*\b(?:opgeslagen|bestaande|oude|eerdere|saved|"
+    r"existing|old|previous|gespeichert\w*|bestehend\w*)\b.*\b"
+    r"(?:setup|plan|strategie|strategy|ritme|bedrag|cadence|amount)\b",
+    re.I | re.S,
+)
+_CAPABILITY_QUESTION = re.compile(
+    r"\b(?:kan dat|kan dit|kan\b(?=[^?]{0,100}\b(?:met|via|op basis|"
+    r"afhankelijk|automatisch|uitvoeren|activeren|volgens|onder|boven)\b)|"
+    r"kunnen we|is dat mogelijk|is dit mogelijk|"
+    r"werkt dat|werkt dit|uitvoerbaar|automatiseren|automatisch|"
+    r"can (?:we|you|it|this)|is (?:that|this|it) possible|supported|"
+    r"does (?:it|this) work|kann (?:man|ich|das)|geht das|automatisieren)\b",
+    re.I,
+)
+_DESIGN_SUBJECT = re.compile(
+    r"\b(?:setup|plan|strategie|strategy|dca|regel\w*|rule\w*|"
+    r"indicator\w*|score\w*|benchmark\w*|koop\w*|kopen|aankoop\w*|"
+    r"buy|sell|verkoop\w*|trade\w*|bedrag\w*|amount\w*)\b",
+    re.I,
+)
 
 
 def is_new_separate_setup_request(message: str) -> bool:
@@ -30,7 +52,7 @@ def advance_plan_design_focus(context: dict[str, Any], message: str) -> bool:
     before = context.get("plan_design_focus")
     if is_new_separate_setup_request(message):
         context["plan_design_focus"] = {"kind": "new_separate_setup", "turns_left": 8}
-    elif _SAVED_TOPIC.search(message):
+    elif is_explicit_saved_plan_read(message):
         context.pop("plan_design_focus", None)
     elif isinstance(before, dict):
         remaining = int(before.get("turns_left") or 0) - 1
@@ -41,19 +63,25 @@ def advance_plan_design_focus(context: dict[str, Any], message: str) -> bool:
     return context.get("plan_design_focus") != before
 
 
-def remember_unsupported_ma_design(context: dict[str, Any]) -> bool:
-    """A conceptual rule stays unsaved until the user chooses its parent scope."""
+def is_explicit_saved_plan_read(message: str) -> bool:
+    return bool(_SAVED_TOPIC.search(str(message or "")) or _SAVED_READ.search(str(message or "")))
+
+
+def remember_unsaved_design(context: dict[str, Any]) -> bool:
+    """An exploratory rule stays unsaved until the user chooses its parent scope."""
     before = context.get("plan_design_focus")
     if not isinstance(before, dict) or before.get("kind") != "new_separate_setup":
-        context["plan_design_focus"] = {"kind": "unsaved_ma_dca_design", "turns_left": 8}
+        context["plan_design_focus"] = {"kind": "unsaved_capability_design", "turns_left": 8}
     return context.get("plan_design_focus") != before
 
 
-def requests_unsupported_ma_dca_amount(message: str) -> bool:
-    """Route the MA-distance amount design to capability facts, never an action card."""
+def requests_execution_capability_question(message: str, context: dict[str, Any] | None = None) -> bool:
+    """Route explicit feasibility questions through the executable contracts."""
     text = str(message or "")
-    return bool(
-        re.search(r"\b(?:ma\s*200|200\s*ma|200[-\s]*(?:daags(?:e)?|day|tage)[-\s]*(?:ma|average|gemiddelde))\b", text, re.I)
-        and re.search(r"\b(?:dca|koop\w*|kopen|aankoop\w*|buy|purchase\w*)\b", text, re.I)
-        and re.search(r"\b(?:afstand|distance|percentage\w*|procent\w*|bedrag\w*|amount\w*|meer|minder|more|less|lineair|linear)\b", text, re.I)
-    )
+    focus = (context or {}).get("plan_design_focus")
+    active_design = isinstance(focus, dict) and focus.get("kind") in {
+        "new_separate_setup", "unsaved_capability_design",
+    }
+    return bool(_CAPABILITY_QUESTION.search(text) and (
+        _DESIGN_SUBJECT.search(text) or active_design
+    ) and not re.search(r"\b(?:kan je|can you|kannst du)\b.{0,30}\b(?:maken|aanmaken|create|erstellen)\b", text, re.I))

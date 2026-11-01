@@ -28,9 +28,7 @@ def dca_automation_capabilities() -> dict[str, Any]:
         "score_band_threshold_count": 2,
         "score_band_amount_count": 3,
         "score_band_percent_order": "nondecreasing_as_benchmark_score_rises",
-        "direct_ma_distance_input": False,
-        "linear_ma_distance_sizing": False,
-        "zero_percent_band": False,
+        "minimum_score_band_percent": _SCORE_BAND_PERCENT_RANGE[0],
         "automatic_sell_rule_in_dca_plan": False,
         "separate_setup_creation": True,
     }

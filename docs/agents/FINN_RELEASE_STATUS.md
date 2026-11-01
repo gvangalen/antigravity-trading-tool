@@ -4,9 +4,35 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN: algemene uitvoerbaarheid bij nieuwe planregels (1 november 2026)
+
+Phase: `LOCAL_VALIDATED`. De onafhankelijke QA van de vorige kandidaat
+(`393c5f62aab097de58707437a5d350b6786b9d12`) gaf `NOT_ACCEPTED`:
+FINN noemde een vloeiend oplopend bedrag onder MA200 eerst uitvoerbaar en
+las het oude opgeslagen plan daarna niet betrouwbaar terug. De reparatie
+behandelt MA200 als voorbeeld, net als een getekende trendlijn. Een expliciete
+vraag of een nieuwe regel automatisch kan draaien gaat langs de getypeerde
+setup-, strategie- en DCA-uitvoercontracten. Luna vergelijkt de benodigde
+invoer, berekening en actie met die contracten; er is geen vaste coachtekst
+of indicatorspecifieke uitzondering. Een expliciete vraag naar een oud
+opgeslagen plan verlaat de nieuwe ontwerpfocus en leest het plan opnieuw.
+
+De lokale doorlopende Responses/workerproef las eerst het opgeslagen
+vrijdagplan van €10, behandelde vervolgens het nieuwe BTC/EUR-ontwerp apart,
+wees de vloeiende MA200-regel af en las daarna het oude vrijdagplan opnieuw.
+Echte Luna-proeven wezen zowel de MA200-afstandsregel als een vloeiende
+trendlijnregel af zonder die gelijk te stellen aan de benchmarkscore. De
+gerichte suite (8 geslaagd) en volledige backend-suite (4198 geslaagd,
+4 bestaande skips) zijn groen. De definitieve lokale worker-actiematrix
+slaagde met `16/16` zonder brokerorders of productieverbindingen (artifact
+SHA-256 `db0e125da32a1f689cb0b46124fd664fc03fc076830493927d60e77215bc749b`).
+De echte Responses-selectorevaluaties slaagden met `20/20` ontwikkeling en
+`109/109` regressie. Frontendproductiebuild en `git diff --check` zijn
+groen. CI, deployment en onafhankelijke live QA volgen nog.
+
 ## FINN: nieuwe planscope en uitvoerbare DCA-regels (1 november 2026)
 
-Phase: `DEPLOYED_PENDING_QA`. Kandidaat `codex/finn-new-plan-capabilities`
+Phase: `NOT_ACCEPTED`. Kandidaat `codex/finn-new-plan-capabilities`
 uit [PR #768](https://github.com/gvangalen/antigravity-trading-tool/pull/768).
 Een expliciet nieuw, apart setupgesprek krijgt een eigen kortlevende focus.
 Een eerder concept voor een strategie op een bestaande setup wordt dan niet als
@@ -35,9 +61,11 @@ Alle vijf PR-jobs en alle vijf jobs van
 slaagden. [Auto Deploy 41342217286](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41342217286)
 slaagde op mergecommit `d02409eaedb5bfbe19241df88669c83d082eabd8`.
 Publieke `/api/health` en `/build-info.json` gaven beide HTTP 200 en dezelfde
-SHA. Deze statusbijwerking krijgt zelf een nieuwe deployment-SHA; de
-onafhankelijke QA krijgt pas de laatste publieke SHA nadat ook die CI en
-Auto Deploy zijn afgerond.
+SHA. De onafhankelijke QA testte daarna de laatste publieke SHA
+`393c5f62aab097de58707437a5d350b6786b9d12` en wees de flow af:
+de vraag om vloeiend meer te kopen verder onder MA200 kreeg eerst ten
+onrechte een uitvoerbaarheidsclaim. De bovenste reparatiekandidaat pakt deze
+algemene contractvergelijking en de aansluitende opgeslagen-planlezing op.
 
 ## Report 2.0: historische deelscores in weektekst (1 november 2026)
 
