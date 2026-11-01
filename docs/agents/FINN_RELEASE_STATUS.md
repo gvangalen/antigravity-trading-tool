@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Report 2.0: historische deelscores in weektekst (1 november 2026)
 
-Phase: `DEPLOYED_QA_PENDING` voor reparatiekandidaat
+Phase: `ACCEPTED` voor reparatiekandidaat
 `codex/report-period-score-facts` in [PR #765](https://github.com/gvangalen/antigravity-trading-tool/pull/765). [PR #764](https://github.com/gvangalen/antigravity-trading-tool/pull/764)
 is na vijf groene PR-jobs, vijf groene main-CI-jobs en succesvolle
 [Auto Deploy 41328802770](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41328802770)
@@ -38,8 +38,20 @@ is samengevoegd als `ea126138566f6627455b325387aad4393a5ba6a1`.
 Alle vijf jobs van [main-CI 41332289241](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41332289241)
 en [Auto Deploy 41332585230](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41332585230)
 slaagden. Publieke backend-health en frontend-buildinfo gaven beide HTTP 200
-en exact die SHA. De onafhankelijke live herkeuring van weektekst, kalenderopbouw
-en PDF op de uiteindelijke deployment-SHA volgt nog.
+en exact die SHA. De bestaande onafhankelijke QA-agent gaf `ACCEPTED` op
+productie-SHA `4e52eb39aa32b9bb3fe2af8a6b8e9d9a3e05b6b4`: verse week-,
+maand- en kwartaalrapporten op 1 november, met overeenkomende PDF's. De
+dagscore van 27 oktober BTC Markt/Macro/Technisch 30/20/50 en de BTC/EUR-
+en BTC/USDT-waarden 50/20/50 → 50/20/40 van 29–30 oktober staan nu juist
+in week- en kwartaaltekst. Het kwartaal splitst oktober (15 waarnemingsdagen
+17–31 oktober) en lopend november (1 november), met 1–16 oktober als gat.
+Het maandrapport bevat op 1 november één kalenderweek en claimt daarom
+geen trend; meerdere novemberweken waren nog niet live observeerbaar.
+EN/DE-periodekoppen waren juist, maar nieuwe EN/DE-rapportinhoud werd niet
+gegenereerd. Een eerste kwartaalpoging toonde de oudere momentopname zonder
+zichtbare foutcode; één herprobe na de uurlimietreset slaagde. Geen order.
+Deze verdict-documentatie verandert de productcode niet en krijgt een eigen
+laatste deployment-SHA.
 
 ## Report 2.0: week, maand en kwartaal als echte perioden (1 november 2026)
 
