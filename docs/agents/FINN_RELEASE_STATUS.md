@@ -4,9 +4,28 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Report 2.0: indicatorverloop en lopende perioden (1 november 2026)
+
+Phase: `LOCAL_VALIDATION`. Kandidaat `codex/report-indicator-history` herstelt
+de historische vergelijking per indicator in week-, maand- en kwartaalrapporten.
+Het rapport noemt de gebruikte dagen, toont bij een nog lopende periode
+`Lopende week`, `Lopende maand` of `Lopend kwartaal`, en zet bovenaan per asset
+een compact overzicht van score, setup, koersbron, positie en botstatus. De
+onderliggende indicatorveranderingen staan bij Analyse. Er worden geen
+ontbrekende metingen als nul ingevuld. De gerichte backendtests (38), volledige
+backend-suite (4184 geslaagd, 4 bestaande skips), frontendproductiebuild,
+typecheck, i18n-lint, i18n-tests (33), commandtests (34) en proposaltests (8)
+zijn geslaagd. Echte Responses-provider-CI, PR-CI, deployment en onafhankelijke
+live QA volgen. Er is geen FINN-chat-actiecontract gewijzigd.
+
 ## TradingView-indicatoren bij trage eerste opening (1 november 2026)
 
-Phase: `LIVE_PENDING_QA`. Onafhankelijke QA gaf `NOT_ACCEPTED` op de vorige
+Phase: `ACCEPTED` op productie-SHA `2795c755547df8bf6818fd486f3c976a92b6cdd8`.
+De bestaande onafhankelijke QA-agent heeft op die SHA de ingelogde grafiekflow
+herkeurd: BTC/USDT met RSI bij eerste opening en refresh, afzonderlijke
+SOL/USDT- en SOL/EUR-candles, en de primaire TradingView-grafiek na een
+intervalwissel. Geen consolefouten of orders. De reservegrafiek biedt nog geen
+eigen intervalbediening. Onafhankelijke QA gaf `NOT_ACCEPTED` op de vorige
 live grafiekrelease `1fb85b1d7b35b9df0305a408d831bc103ac87cf9`:
 SOL/USDT en SOL/EUR toonden verifieerbare afzonderlijke candles, maar BTC/USDT
 met ingestelde RSI toonde bij de eerste opening alleen de reservekoersgrafiek.

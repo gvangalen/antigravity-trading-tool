@@ -9,6 +9,7 @@ import {
   reportV2IndicatorName,
   reportV2Locale,
   reportV2PeriodLabel,
+  reportV2PeriodState,
 } from '../lib/report/reportV2Presentation.mjs';
 
 test('an upserted period report completes on owner-bound task success despite unchanged created_at', () => {
@@ -31,6 +32,10 @@ test('period report headers show the saved range; daily reports keep their date'
   } } };
   assert.match(reportV2PeriodLabel(report, 'en'), /26 okt 2026 – 31 okt 2026/);
   assert.equal(reportV2PeriodLabel({ report_date: '2026-10-31' }, 'nl'), '2026-10-31');
+  report.meta_json.score_source_snapshot.report_v2.comparison = { period_complete: false };
+  assert.equal(reportV2PeriodState(report, 'en'), 'Lopende week');
+  report.meta_json.score_source_snapshot.report_v2.comparison.period_complete = true;
+  assert.equal(reportV2PeriodState(report, 'en'), null);
 });
 
 test('long analysis prose becomes readable paragraphs without changing its words', () => {
@@ -53,4 +58,8 @@ test('report evidence uses translated indicator names and explicit score changes
   assert.equal(reportV2Change({ asset: 'BTC/EUR', fact: 'market_score', before: 50, after: 40 }, {
     market_score: 'Markt', unavailable: 'niet beschikbaar', available: 'beschikbaar',
   }), 'BTC/EUR · Markt: 50/100 → 40/100');
+  assert.equal(reportV2Change({ asset: 'BTC/EUR', fact: 'indicator_score', indicator: 'ma_200',
+    before: 40, after: 65, value_before: 79000, value_after: 81000, unit: 'EUR' }, {
+    indicatorNames: names, unavailable: 'niet beschikbaar', locale: 'nl',
+  }), 'BTC/EUR · Voortschrijdend gemiddelde (200 dagen): 40/100 → 65/100 (79.000 → 81.000 EUR)');
 });

@@ -3,7 +3,7 @@ import json
 import os
 import subprocess
 import pytest
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,6 +16,73 @@ from backend.celery_task import daily_report_task
 from backend.services.finn_v2_tool_adapters.score_tool_adapter import ScoreToolAdapter
 from backend.services.report_service import ReportService
 from backend.utils import pdf_playwright
+
+
+def test_report_history_accepts_json_text_and_keeps_dated_pair_scores():
+    saved = {"assets": [{"symbol": "BTC", "pair": "BTC/EUR", "benchmark_score": 65,
+                          "reported_scores": {"market_score": 50}}]}
+    assert reports._saved_report_snapshot(json.dumps(saved)) == saved
+    assert reports._saved_report_snapshot(saved) == saved
+    assert reports._saved_report_snapshot("not JSON") is None
+
+
+def test_report_comparison_identifies_changed_indicator_measurement():
+    prior_indicator = {"value": 80000, "score": 40, "source_observed_at": "2026-10-30T12:00:00Z"}
+    current_indicator = {"value": 82000, "score": 60, "source_observed_at": "2026-10-31T12:00:00Z"}
+    previous = {"report_date": "2026-10-30", "snapshot": {"assets": [{
+        "symbol": "BTC", "pair": "BTC/EUR", "benchmark_score": 50,
+        "reported_scores": {"market_score": 40},
+        "verified_indicator_evidence": {"market": {"price": prior_indicator}},
+    }]}}
+    facts = {"assets": [{"symbol": "BTC", "pair": "BTC/EUR", "display_symbol": "BTC/EUR",
+                         "benchmark_score": 60, "scores": {"market_score": 60},
+                         "verified_indicator_evidence": {"market": {"price": current_indicator}}}]}
+    comparison = reports._report_v2_comparison({"report_previous": [previous]}, facts)
+    assert comparison["previous_observations"][0]["benchmark_score"] == 50
+    assert next(row for row in comparison["changes"] if row["fact"] == "indicator_score") == {
+        "asset": "BTC/EUR", "fact": "indicator_score", "group": "market", "indicator": "price",
+        "before": 40, "after": 60, "value_before": 80000, "value_after": 82000,
+        "unit": None, "source_before": prior_indicator["source_observed_at"],
+        "source_after": current_indicator["source_observed_at"],
+    }
+
+
+def test_report_comparison_shows_indicator_that_became_scorable():
+    previous = {"report_date": "2026-10-30", "snapshot": {"assets": [{
+        "symbol": "BTC", "pair": "BTC/EUR",
+        "verified_indicator_evidence": {"macro": {"dxy": {"value": 102, "score": None}}},
+    }]}}
+    facts = {"assets": [{"symbol": "BTC", "pair": "BTC/EUR", "display_symbol": "BTC/EUR",
+                         "scores": {}, "verified_indicator_evidence": {
+                             "macro": {"dxy": {"value": 101, "score": 65}}}}]}
+    comparison = reports._report_v2_comparison({"report_previous": [previous]}, facts)
+    change = next(row for row in comparison["changes"] if row["fact"] == "indicator_score")
+    assert (change["indicator"], change["before"], change["after"]) == ("dxy", None, 65)
+
+
+def test_current_week_report_names_included_days_and_is_not_complete(monkeypatch):
+    class ReportDay(date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 11, 1)  # Sunday, but the day has not ended.
+
+    monkeypatch.setattr(reports, "date", ReportDay)
+    previous = {"report_date": "2026-10-30", "snapshot": {"assets": [{
+        "symbol": "BTC", "pair": "BTC/EUR", "benchmark_score": 65,
+        "reported_scores": {"market_score": 50},
+    }]}}
+    facts = {"assets": [{"symbol": "BTC", "pair": "BTC/EUR",
+                         "display_symbol": "BTC/EUR", "benchmark_score": 70,
+                         "scores": {"market_score": 60},
+                         "verified_indicator_evidence": {}}]}
+    comparison = reports._report_v2_period_comparison(
+        {"report_previous": [previous]}, facts, "weekly")
+    assert comparison["period_complete"] is False
+    assert comparison["included_dates"] == ["2026-10-30"]
+    assert comparison["period_observations"][0]["benchmark_score"] == 65
+    assert comparison["changes"][0] == {
+        "asset": "BTC/EUR", "fact": "benchmark_score", "before": 65, "after": 70,
+    }
 
 
 def test_pdf_render_uses_deployed_frontend_origin(monkeypatch):

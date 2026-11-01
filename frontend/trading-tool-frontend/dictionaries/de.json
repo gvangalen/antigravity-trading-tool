@@ -1668,6 +1668,7 @@
       }
     },
     "report": {
+      "v2AtGlance": "Auf einen Blick",
       "traderStatus": {
         "title": "Positionen und Botstatus", "separation": "Der Bericht ist eine Momentaufnahme. Positionen und Botstatus wurden separat geladen; die letzte Botentscheidung kann älter sein.",
         "refresh": "Status aktualisieren", "loading": "Lädt…", "reportAt": "Berichtszeit (NL)", "utcAt": "Berichtszeit", "currentAt": "Status abgerufen",
