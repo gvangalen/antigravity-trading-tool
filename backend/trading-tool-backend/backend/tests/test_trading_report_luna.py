@@ -202,6 +202,47 @@ def test_quarter_report_summarizes_three_calendar_months_and_exposes_missing_mon
     assert months[2]["assets"][0]["last"]["benchmark_score"] is None
 
 
+def test_period_report_repairs_ambiguous_historical_component_triplets(monkeypatch):
+    prior_day = (date.today() - timedelta(days=1)).isoformat()
+    context = {
+        "locale": "nl", "observed_at": f"{date.today().isoformat()}T12:00:00+00:00",
+        "assets": [], "report_previous": [{
+            "report_date": prior_day, "snapshot": {"assets": [{
+                "pair": "BTC/EUR", "benchmark_score": 33,
+                "reported_scores": {"market_score": 30, "macro_score": 20,
+                                    "technical_score": 50},
+            }]},
+        }],
+    }
+
+    async def load_context(_user_id, _period="daily"):
+        return context
+
+    calls = []
+
+    def provider(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            return {section: (f"BTC/EUR deelscores {prior_day}: 20/30/50 volgens de momentopname."
+                              if section == "retrospective" else "Er is voor dit onderdeel geen nieuwe beslissing.")
+                    for section in reports.REPORT_V2_SECTIONS}
+        return {"retrospective": (
+            f"BTC/EUR op {prior_day}: Markt 30, Macro 20 en Technisch 50. "
+            "De week loopt nog; dit is een gedateerde momentopname."
+        )}
+
+    monkeypatch.setattr(reports, "_load_context", load_context)
+    monkeypatch.setattr(reports, "ask_gpt_json", provider)
+    result = reports.generate_weekly_report_sections(1)
+
+    assert len(calls) == 2
+    assert "market_score" in calls[1]["prompt"]
+    retrospective = result["score_source_snapshot"]["report_v2"]["sections"]["retrospective"]
+    assert "Markt 30, Macro 20 en Technisch 50" in retrospective
+    assert "20/30/50" not in retrospective
+    assert not reports._report_v2_has_unlabeled_component_triplet("Scores op 2026/10/31 zijn onbekend.")
+
+
 @pytest.mark.parametrize("locale, availability, score", [
     ("nl", "niet beschikbaar → beschikbaar", "40/100 → 20/100"),
     ("en", "unavailable → available", "40/100 → 20/100"),

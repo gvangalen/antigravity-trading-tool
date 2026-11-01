@@ -4,6 +4,29 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Report 2.0: historische deelscores in weektekst (1 november 2026)
+
+Phase: `LOCAL_VALIDATED` voor reparatiekandidaat
+`codex/report-period-score-facts`. [PR #764](https://github.com/gvangalen/antigravity-trading-tool/pull/764)
+is na vijf groene PR-jobs, vijf groene main-CI-jobs en succesvolle
+[Auto Deploy 41328802770](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41328802770)
+live gegaan als `0f9ab9c06a1c10576736a90f8660c98aaabe9842`; publieke backend
+en frontend gaven beide HTTP 200 en dezelfde SHA. De bestaande onafhankelijke
+QA-agent gaf `NOT_ACCEPTED`: het weekrapport zette Markt/Macro-deelscores voor
+27–30 oktober in omgekeerde volgorde als onbenoemde scoretriplets, ook in PDF.
+De kalenderindeling van week, maand en kwartaal, dekkingsgaten en Engelse
+periodekop zijn wel live geslaagd. De reparatie verbiedt onbenoemde
+deelscoretriplets in de rapportopdracht en laat FINN alleen de betrokken
+terugblik opnieuw formuleren wanneer zo'n triplet toch verschijnt, met de
+gedateerde Markt-, Macro- en Technisch-feiten expliciet erbij. Bij mislukte
+feitelijke reparatie blijft een korte feitelijke terugblik over. Nieuwe
+regressie- en echte Responses-proeven controleren dit pad vóór heruitrol.
+De gerichte rapportsuite (17 geslaagd), volledige backend-suite (4189
+geslaagd, 4 bestaande skips), Python-syntaxcontrole en `git diff --check`
+zijn lokaal geslaagd. Het providerprobe-contract heeft nu ook twee
+synthetische, gedateerde deelscoremomenten en keurt onbenoemde historische
+scoretriplets af; de echte Responses-run volgt in CI.
+
 ## Report 2.0: week, maand en kwartaal als echte perioden (1 november 2026)
 
 Phase: `CI_VALIDATED`. Kandidaat `codex/report-period-hierarchy` groepeert

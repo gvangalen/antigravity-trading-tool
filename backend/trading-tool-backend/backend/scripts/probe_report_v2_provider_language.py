@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+from datetime import date, timedelta
 
 from backend.services import finn_unified_report_service as reports
 
@@ -26,6 +27,14 @@ def main() -> None:
             "live": {"global": {"total_equity": None, "cash_balance": None}, "bots": []},
         },
         "report_bot_status": {"observed_at": "2026-10-31T09:00:00+00:00", "bots": []},
+        "report_previous": [{
+            "report_date": (date.today() - timedelta(days=offset)).isoformat(),
+            "snapshot": {"assets": [{
+                "pair": "BTC/EUR", "benchmark_score": 35 + offset,
+                "reported_scores": {"market_score": 30 + offset,
+                                    "macro_score": 20, "technical_score": 50},
+            }]},
+        } for offset in (2, 1)],
         "assets": [{
             "symbol": "BTC", "pair": "BTC/EUR",
             "setups": [{"id": 1, "name": "EUR Cash Builder", "setup_type": "dca",
@@ -109,6 +118,10 @@ def main() -> None:
         if any(re.search(r"\b(?:market score|technical scores?|total equity|P&L|outlook)\b", text, re.I)
                for text in period_snapshot["sections"].values()):
             raise AssertionError(f"English source terms remain in Dutch {period} report")
+        if reports._report_v2_has_unlabeled_component_triplet(
+            period_snapshot["sections"]["retrospective"]
+        ):
+            raise AssertionError(f"Ambiguous component score triplet remains in {period} retrospective")
     print("Report 2.0 real-provider language gate: PASS (NL, DE, EN; day, week, month, quarter)")
 
 
