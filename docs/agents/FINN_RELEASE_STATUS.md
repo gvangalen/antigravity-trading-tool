@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN: nieuwe planscope en uitvoerbare DCA-regels (1 november 2026)
 
-Phase: `LOCAL_VALIDATION`. Kandidaat `codex/finn-new-plan-capabilities`.
+Phase: `DEPLOYED_PENDING_QA`. Kandidaat `codex/finn-new-plan-capabilities`
+uit [PR #768](https://github.com/gvangalen/antigravity-trading-tool/pull/768).
 Een expliciet nieuw, apart setupgesprek krijgt een eigen kortlevende focus.
 Een eerder concept voor een strategie op een bestaande setup wordt dan niet als
 ouderplan voor het nieuwe gesprek gebruikt. Een expliciete vraag naar het
@@ -28,6 +29,15 @@ een expliciet nieuwe BTC-setup van een onduidelijke scope en beschreven
 de uitvoergrens zonder bevestigbaar voorstel. De specifieke vervolgflow
 in een ingelogde browser wacht op onafhankelijke QA na deployment. Er is
 niets aan een bot of order gewijzigd.
+
+Alle vijf PR-jobs en alle vijf jobs van
+[main-CI 41341981252](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41341981252)
+slaagden. [Auto Deploy 41342217286](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41342217286)
+slaagde op mergecommit `d02409eaedb5bfbe19241df88669c83d082eabd8`.
+Publieke `/api/health` en `/build-info.json` gaven beide HTTP 200 en dezelfde
+SHA. Deze statusbijwerking krijgt zelf een nieuwe deployment-SHA; de
+onafhankelijke QA krijgt pas de laatste publieke SHA nadat ook die CI en
+Auto Deploy zijn afgerond.
 
 ## Report 2.0: historische deelscores in weektekst (1 november 2026)
 
