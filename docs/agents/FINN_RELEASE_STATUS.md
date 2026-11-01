@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Report 2.0: indicatorverloop en lopende perioden (1 november 2026)
 
-Phase: `LOCAL_VALIDATION` voor reparatiekandidaat `codex/report-live-qa-fixes`.
+Phase: `LIVE_PENDING_QA` voor reparatiekandidaat `codex/report-live-qa-fixes`.
 Onafhankelijke QA gaf `NOT_ACCEPTED` op productie-SHA
 `c7468c239c2ab10207a3502010da6736175c0b4b`: het eerste openen na
 weekgeneratie kon nog de oude dagsnapshot tonen; de eerste PDF-pagina bevatte
@@ -19,8 +19,16 @@ periodestatus volgens de gekozen UI-taal. De lokale herkeuring is groen: 4184
 backendtests geslaagd (4 bestaande skips), frontendproductiebuild, typecheck,
 i18n-lint, 34 i18n-tests, 34 commandtests en 8 proposaltests geslaagd. Een
 lokaal in Chromium geprint Report 2.0 met drie assets toont op de eerste
-A4-pagina alle overzichtskaarten en de terugblik. CI, echte-providercontrole,
-deployment en onafhankelijke live hertest volgen; deze batch is nog niet
+A4-pagina alle overzichtskaarten en de terugblik. Alle vijf jobs van
+[PR-CI 41312756740](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41312756740)
+en [echte Responses-provider-CI 41312791098](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41312791098)
+slaagden. [PR #761](https://github.com/gvangalen/antigravity-trading-tool/pull/761)
+is samengevoegd als `945dc237b846bf4cbff8ca3614bebde8d384d1df`.
+Alle vijf jobs van [main-CI 41313104034](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41313104034)
+en [Auto Deploy 41313308116](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41313308116)
+slaagden. Publieke `/api/health` en `/build-info.json` gaven beide HTTP 200 en
+dezelfde SHA. Deze statusupdate krijgt een eigen laatste deployment-SHA;
+onafhankelijke QA start na verificatie daarvan. Deze batch is nog niet
 geaccepteerd.
 
 De oorspronkelijke kandidaat `codex/report-indicator-history` herstelt
