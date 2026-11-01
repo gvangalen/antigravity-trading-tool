@@ -12,7 +12,7 @@ function loadWidgetModule() {
   if (!widgetModulePromise) {
     widgetModulePromise = new Promise((resolve, reject) => {
       const script = document.createElement("script");
-      const timeout = window.setTimeout(() => reject(new Error("TradingView module timeout")), 15000);
+      const timeout = window.setTimeout(() => reject(new Error("TradingView module timeout")), 30000);
       script.type = "module";
       script.src = TRADINGVIEW_MODULE_URL;
       script.onload = () => customElements.whenDefined("tv-advanced-chart").then(() => {
@@ -58,14 +58,15 @@ export default function TradingViewChart({
     const container = widgetContainerRef.current;
     if (!container) return;
     let cancelled = false;
-    let attempt = 0;
     let readyTimeout;
+    const backupDelay = window.setTimeout(() => {
+      if (!cancelled) setBackupVisible(true);
+    }, 12000);
     setBackupVisible(false);
     container.replaceChildren();
 
     const mountChart = () => {
       if (cancelled || !container.isConnected) return;
-      attempt += 1;
       const chart = document.createElement("tv-advanced-chart");
       chart.setAttribute("symbol", symbol);
       chart.setAttribute("interval", normalizedInterval === "D" || normalizedInterval === "W" || normalizedInterval === "M" ? `1${normalizedInterval}` : normalizedInterval);
@@ -77,28 +78,22 @@ export default function TradingViewChart({
       chart.style.display = "block";
       chart.style.width = "100%";
       chart.style.height = "100%";
-      const retryOrReport = () => {
+      const showBackup = () => {
         window.clearTimeout(readyTimeout);
-        chart.removeEventListener("tv-widget-ready", onReady);
-        chart.removeEventListener("tv-widget-error", retryOrReport);
         if (cancelled || !container.isConnected || container.firstChild !== chart) return;
-        if (attempt < 2) {
-          setBackupVisible(true);
-          mountChart();
-        }
-        else {
-          container.replaceChildren();
-          setBackupVisible(true);
-        }
+        // Keep the widget mounted: a slow TradingView load may become ready
+        // after the local chart appears, including its configured studies.
+        setBackupVisible(true);
       };
       const onReady = () => {
         window.clearTimeout(readyTimeout);
+        window.clearTimeout(backupDelay);
         if (!cancelled && container.firstChild === chart) setBackupVisible(false);
       };
       chart.addEventListener("tv-widget-ready", onReady, { once: true });
-      chart.addEventListener("tv-widget-error", retryOrReport, { once: true });
+      chart.addEventListener("tv-widget-error", showBackup, { once: true });
       // The element being defined does not mean its chart data has loaded.
-      readyTimeout = window.setTimeout(retryOrReport, 12000);
+      readyTimeout = window.setTimeout(showBackup, 12000);
       container.replaceChildren(chart);
     };
 
@@ -109,6 +104,7 @@ export default function TradingViewChart({
     return () => {
       cancelled = true;
       window.clearTimeout(readyTimeout);
+      window.clearTimeout(backupDelay);
       container.replaceChildren();
     };
   }, [normalizedInterval, studiesKey, symbol, theme]);

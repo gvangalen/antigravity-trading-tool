@@ -4,6 +4,26 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## TradingView grafiek met geverifieerde reservebron (1 november 2026)
+
+Phase: `LOCAL_VALIDATION`. De vorige live kandidaat `a90b1932cb4f2780548beb45c16cdc27bf6fbac3`
+toonde in onafhankelijke browserdiagnostiek SOL/USDT- en SOL/EUR-candles voor de
+juiste afzonderlijke Binance-markten, ook na refresh. Een trage eerste
+TradingView-load van BTC/USDT viel echter terug op een reservegrafiek zonder
+de ingestelde RSI; na heropenen verscheen TradingView met RSI wel. Security
+vond op de nieuwe candle-API een provideruitputtingsrisico.
+
+Kandidaat `codex/chart-candle-rate-limit` laat de reservegrafiek na twaalf
+seconden verschijnen maar houdt een trage TradingView-widget gemonteerd, zodat
+de primaire grafiek inclusief indicatoren alsnog kan verschijnen. De
+geverifieerde candle-route heeft nu een gedeelde Redis-cache per exacte markt
+en interval, één providerverzoek per cachemiss, een gebruikerslimiet en
+globale providerlimieten; bij Redis-storing faalt zij gesloten. Security heeft
+deze grens onafhankelijk herbeoordeeld zonder P1/P2-blokkade. Gerichte
+backendtests: 6 geslaagd; volledige backend-suite: 4180 geslaagd, vier
+bestaande skips. Frontend productiebuild, typecheck, i18n-lint en 33
+i18n-tests geslaagd. Deploymentidentiteit en definitieve live QA volgen.
+
 ## Report 2.0: periodegeneratie afronden (31 oktober 2026)
 
 Phase: `ACCEPTED` voor de ingelogde week-, maand- en kwartaalmatrix op live
