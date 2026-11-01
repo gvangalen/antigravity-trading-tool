@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   buildTradingViewEmbedConfig,
   buildTradingViewWidgetUrl,
@@ -13,10 +13,12 @@ export default function TradingViewChart({
   theme = "light",
   height = 500,
   indicators = [],
+  studyFallbackLabel = "",
   onIntervalChange = () => {},
 }) {
   const lastReportedIntervalRef = useRef(normalizeTradingViewInterval(interval));
   const widgetContainerRef = useRef(null);
+  const [studiesUnavailable, setStudiesUnavailable] = useState(false);
   const normalizedInterval = normalizeTradingViewInterval(interval);
   const studiesKey = JSON.stringify(indicators);
   const widgetUrl = useMemo(
@@ -38,6 +40,7 @@ export default function TradingViewChart({
   useEffect(() => {
     const container = widgetContainerRef.current;
     if (!container || !indicators.length) return;
+    setStudiesUnavailable(false);
 
     const script = document.createElement("script");
     script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
@@ -63,6 +66,7 @@ export default function TradingViewChart({
       frame.src = widgetUrl;
       frame.className = "h-full w-full border-0";
       container.replaceChildren(frame);
+      setStudiesUnavailable(true);
     };
     script.onerror = showFallback;
     const timeout = window.setTimeout(showFallback, 12000);
@@ -75,7 +79,7 @@ export default function TradingViewChart({
 
   return (
     <div
-      className="rounded-xl border bg-card overflow-hidden"
+      className="relative rounded-xl border bg-card overflow-hidden"
       style={{ height }}
     >
       {indicators.length ? (
@@ -89,6 +93,11 @@ export default function TradingViewChart({
           loading="eager"
         />
       )}
+      {studiesUnavailable && studyFallbackLabel ? (
+        <p role="status" className="absolute bottom-3 left-3 right-3 rounded-lg bg-white/95 px-3 py-2 text-xs text-slate-700 shadow-sm">
+          {studyFallbackLabel}
+        </p>
+      ) : null}
     </div>
   );
 }
