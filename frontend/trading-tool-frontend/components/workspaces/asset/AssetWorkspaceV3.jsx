@@ -34,6 +34,7 @@ import {
 import { macroDataAdd } from "@/lib/api/macro";
 import { fetchSetupMarketMatches } from "@/lib/api/setups";
 import { technicalDataAdd } from "@/lib/api/technical";
+import { mapTechnicalToStudies } from "@/config/indicator_mapping";
 import { removeFromWatchlist } from "@/lib/api/watchlist";
 import { fetchTradingMarkets } from "@/lib/api/assets";
 import { updateIntelligenceWeights } from "@/lib/api/scores";
@@ -43,8 +44,8 @@ import {
   ANALYSIS_CHART_INTERVAL_KEY,
   DEFAULT_TRADINGVIEW_INTERVAL,
   normalizeTradingViewInterval,
-  toTradingViewSymbol,
 } from "../../../../../shared/tradingViewConfig";
+import { matchesWorkspaceAsset } from "@/lib/workspace/workspaceAssetScope.mjs";
 import { FINN_INDICATOR_MODAL_COMPLETED_EVENT } from "@/lib/finnCommandSearch";
 import { formatBenchmarkScore, indicatorSourceFreshness, validatedDayEvidence } from "@/lib/workspace/canonicalScorePresentation.mjs";
 import { quotePresentationStatus } from "@/lib/workspace/quotePresentationStatus.mjs";
@@ -168,6 +169,10 @@ function getUiCopy(locale = "nl") {
       chartTitle: "TradingView chart",
       chartClose: "Close chart",
       chartOpen: "Open chart",
+      chartIndicators: "Selected technical indicators",
+      chartIndicatorNote: "TradingView uses the selected pair and chart interval for visual indicators. Score 2.0 uses its own source readings and rules.",
+      chartLoading: "Loading the selected market's chart…",
+      chartStudyFallback: "TradingView could not load the indicators. The price chart is still available.",
       contextScores: "Context scores",
       scoreSourceDate: "Oldest indicator source",
       scoreSourceUnknown: "Source date incomplete",
@@ -361,6 +366,10 @@ function getUiCopy(locale = "nl") {
       chartTitle: "TradingView-chart",
       chartClose: "Chart schließen",
       chartOpen: "Chart öffnen",
+      chartIndicators: "Ausgewählte technische Indikatoren",
+      chartIndicatorNote: "Für visuelle Indikatoren verwendet TradingView das gewählte Handelspaar und Chartintervall. Score 2.0 verwendet eigene Messwerte und Regeln.",
+      chartLoading: "Chart für den gewählten Markt wird geladen…",
+      chartStudyFallback: "TradingView konnte die Indikatoren nicht laden. Der Kurschart bleibt verfügbar.",
       contextScores: "Kontext-scores",
       scoreSourceDate: "Älteste Indikatorquelle",
       scoreSourceUnknown: "Quelldatum unvollständig",
@@ -553,6 +562,10 @@ function getUiCopy(locale = "nl") {
     chartTitle: "TradingView-chart",
     chartClose: "Chart sluiten",
     chartOpen: "Chart openen",
+    chartIndicators: "Geselecteerde technische indicatoren",
+    chartIndicatorNote: "Voor visuele indicatoren gebruikt TradingView het gekozen handelspaar en grafiektijdsframe. Score 2.0 gebruikt eigen metingen en regels.",
+    chartLoading: "Grafiek voor de gekozen markt wordt geladen…",
+    chartStudyFallback: "TradingView kon de indicatoren niet laden. De koersgrafiek blijft beschikbaar.",
     contextScores: "Contextscores",
     scoreSourceDate: "Oudste indicatorbron",
     scoreSourceUnknown: "Brondatum onvolledig",
@@ -1736,8 +1749,12 @@ function ScoreOverview({ assetSymbol, market, macro, technical, combined, sectio
   );
 }
 
-function AnalysisChartSection({ interval, onIntervalChange, symbol, tradingViewSymbol, isOpen, onToggle, ui }) {
-  const tvSymbol = tradingViewSymbol || toTradingViewSymbol(symbol);
+function AnalysisChartSection({ interval, onIntervalChange, tradingViewSymbol, studies, isOpen, onToggle, ui }) {
+  // The TradingView embed accepts multiple studies when every entry uses the
+  // same object shape. Mixing string IDs with configured studies silently
+  // drops later entries (for example RSI after MA 200).
+  const indicators = studies.map(({ id, inputs }) => inputs ? { id, inputs } : { id });
+  const chartHeight = Math.min(760, 420 + indicators.length * 75);
 
   return (
     <section className="rounded-[24px] border border-slate-200/80 bg-white shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
@@ -1756,15 +1773,24 @@ function AnalysisChartSection({ interval, onIntervalChange, symbol, tradingViewS
 
       {isOpen ? (
         <div className="p-3">
-          <TradingViewSmartChart
-            symbol={tvSymbol}
-            interval={interval}
-            indicators={[]}
-            focusedBotId={null}
-            setFocusedBotId={() => {}}
-            height={400}
-            onIntervalChange={onIntervalChange}
-          />
+          {tradingViewSymbol ? (
+            <TradingViewSmartChart
+              key={tradingViewSymbol}
+              symbol={tradingViewSymbol}
+              interval={interval}
+              indicators={indicators}
+              studyFallbackLabel={ui.chartStudyFallback}
+              focusedBotId={null}
+              setFocusedBotId={() => {}}
+              height={chartHeight}
+              onIntervalChange={onIntervalChange}
+            />
+          ) : <p className="py-12 text-center text-sm text-slate-500">{ui.chartLoading}</p>}
+          {tradingViewSymbol && studies.length ? (
+            <p className="mt-2 px-1 text-xs text-slate-500">
+              {ui.chartIndicators}: {studies.map((study) => study.label).join(", ")}. {ui.chartIndicatorNote}
+            </p>
+          ) : null}
         </div>
       ) : null}
     </section>
@@ -2528,7 +2554,8 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   // Resolve saved pair choices before showing any price or score. Otherwise
   // the initial base-asset response can briefly masquerade as a pair plan.
   const workspace = (setupMatches !== null && tradingMarkets.symbol === activeSymbol &&
-    (!quoteSelectionKey || rememberedQuote.key === quoteSelectionKey)) ? loadedWorkspace : null;
+    (!quoteSelectionKey || rememberedQuote.key === quoteSelectionKey) &&
+    matchesWorkspaceAsset(loadedWorkspace, activeSymbol, periods, activeQuoteCurrency)) ? loadedWorkspace : null;
   useEffect(() => {
     setCopyOpen(false);
     setCopyPreview(null);
@@ -2541,6 +2568,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const marketDayData = categoryData.market?.rows || [];
   const macroData = categoryData.macro?.rows || [];
   const technicalData = categoryData.technical?.rows || [];
+  const chartStudies = useMemo(() => mapTechnicalToStudies(technicalData), [technicalData]);
   const market = { score: marketTimeframe === "day" ? workspace?.daily?.market?.score ?? null : categoryData.market?.score?.score ?? null };
   const macro = { score: macroTimeframe === "day" ? workspace?.daily?.macro?.score ?? null : categoryData.macro?.score?.score ?? null };
   const technical = { score: technicalTimeframe === "day" ? workspace?.daily?.technical?.score ?? null : categoryData.technical?.score?.score ?? null };
@@ -2932,10 +2960,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     activeWatchlistRow?.logoUrl || workspaceAsset?.logo_url || null,
     activeWatchlistRow?.assetClass || workspaceAsset?.asset_class || null,
   );
-  const activeTradingViewSymbol =
-    workspaceAsset?.tradingview_symbol ||
-    activeWatchlistRow?.tradingviewSymbol ||
-    null;
+  const activeTradingViewSymbol = workspaceAsset?.tradingview_symbol || null;
 
   const handleEditIndicator = (category, row) => {
     if (!workspace?.market_id || !row?.name) return;
@@ -3135,8 +3160,8 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
 
       <AnalysisChartSection
         interval={analysisChartInterval}
-        symbol={activeSymbol}
         tradingViewSymbol={activeTradingViewSymbol}
+        studies={chartStudies}
         isOpen={showChart}
         onIntervalChange={handleAnalysisChartIntervalChange}
         onToggle={() => setShowChart((current) => !current)}

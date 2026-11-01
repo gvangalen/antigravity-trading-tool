@@ -16,6 +16,7 @@ export default function TradingViewSmartChart({
   symbol = "BINANCE:BTCUSDT",
   interval = "D",
   indicators = [],
+  studyFallbackLabel = "",
   focusedBotId = null,
   setFocusedBotId = () => {},
   height = 500,
@@ -36,6 +37,7 @@ export default function TradingViewSmartChart({
         symbol={symbol}
         interval={interval}
         indicators={indicators}
+        studyFallbackLabel={studyFallbackLabel}
         height={height}
         onIntervalChange={onIntervalChange}
       />

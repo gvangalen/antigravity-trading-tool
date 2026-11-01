@@ -144,7 +144,9 @@ def test_exact_market_rows_show_only_verified_score_evidence(monkeypatch):
                                  source_observed_at=observed)]),
         _Result([]),
         _Result([SimpleNamespace(user_id=7, market_id=43, category="market",
-                                 indicator="price", enabled=True)]),
+                                 indicator="price", enabled=True),
+                 SimpleNamespace(user_id=7, market_id=43, category="technical",
+                                 indicator="ma_200", enabled=True)]),
     ]))
     evidence = {"price": {"value": 2400, "score": 30,
                           "source_observed_at": timestamp,
@@ -176,6 +178,12 @@ def test_exact_market_rows_show_only_verified_score_evidence(monkeypatch):
     result = asyncio.run(module.ExactMarketWorkspaceService(session).get(7, "ETH", "EUR"))
 
     assert result["categories"]["market"]["rows"][0]["score"] == 30
+    assert result["categories"]["technical"]["rows"] == [{
+        "name": "ma_200", "value": None, "score": None, "trend": None,
+        "interpretation": None, "action": None, "timestamp": None,
+        "sample_size": 0, "period_aggregate": False, "configured": True,
+        "data_status": "pending_refresh",
+    }]
     assert result["daily"]["indicator_evidence"]["market"] == evidence
     assert "macro" not in result["daily"]["indicator_evidence"]
 

@@ -14,7 +14,7 @@ from backend.services.setup_market_match_service import SetupMarketMatchService,
 from backend.services.pair_indicator_config_service import PairIndicatorConfigService, effective_pair_configs
 from backend.utils.scoring_utils import normalize_indicator_name
 from backend.services.workspace_data_service import (
-    STALE_AFTER_SECONDS, WorkspaceDataService, _current_indicator_rows, _freshness, _market_row,
+    STALE_AFTER_SECONDS, WorkspaceDataService, _current_indicator_rows, _freshness, _include_configured_rows, _market_row,
     _technical_row,
 )
 
@@ -73,6 +73,11 @@ class ExactMarketWorkspaceService:
         market_rows = [row for row in market_rows if configured("market", row)]
         macro_rows = [row for row in macro_rows if configured("macro", row)]
         technical_rows = [row for row in technical_rows if configured("technical", row)]
+        technical_rows = _include_configured_rows(
+            technical_rows,
+            [row for (owner, category, _), row in selected.items()
+             if owner == user_id and category == "technical"],
+        )
         score_values = assessment["reported_scores"]
         verified_daily = {
             "indicator_evidence": indicator_evidence,
