@@ -1655,6 +1655,20 @@ async def _explain_execution_capability(
     return answer, str(getattr(response, "id", "") or "")
 
 
+def _capability_turn_locale(run: FinnV2Run, context: dict, preferred: str | None) -> str:
+    """Use this request's language before a locale retained from an older turn."""
+    client_locale = normalize_locale(
+        (getattr(run, "workspace_hints_json", None) or {}).get("locale")
+        or (getattr(run, "client_context_json", None) or {}).get("locale")
+    )
+    preferred_locale = normalize_locale(preferred)
+    cursor_locale = normalize_locale((context.get("responses_cursor") or {}).get("locale"))
+    return resolve_chat_locale(
+        preferred_locale, run.message,
+        conversation_locale=client_locale or preferred_locale or cursor_locale,
+    )
+
+
 async def _simple_coach_experiment_answer(
     *, message: str, prepared: FinnResponsesFrontDoorResult,
 ) -> tuple[FinnResponsesVerifiedAnswer, str, str | None]:
@@ -4086,6 +4100,7 @@ class FinnV2RunService:
                     run_shadow = service.tools.flags.should_run_block4_shadow(user_id)
                     run_message = run.message
                     conversation_id = run.conversation_id
+                    capability_locale = None
                     setup_rule_block = {}
                     strategy_rule_block = {}
                     pending_independent_choice = False
@@ -4115,6 +4130,11 @@ class FinnV2RunService:
                             # A capability question must not inherit an unrelated
                             # pending action or strategy-rule waiver.
                             strategy_rule_block = {}
+                            user = await session.get(User, user_id)
+                            capability_locale = _capability_turn_locale(
+                                run, context,
+                                (user.ai_preferences or {}).get("locale") if user else None,
+                            )
                         # Clarification state belongs to the previous sealed
                         # run contract. The conversation projection normally
                         # carries only its Responses cursor, so read that
@@ -4525,7 +4545,7 @@ class FinnV2RunService:
                     focus_changed = advance_plan_design_focus(context, run_message)
                     focus_changed = remember_unsaved_design(context) or focus_changed
                     separate_setup = context.get("plan_design_focus", {}).get("kind") == "new_separate_setup"
-                    locale = str(context.get("locale") or "nl")
+                    locale = capability_locale or "nl"
                     answer_text, response_id = await _explain_execution_capability(
                         message=run_message, locale=locale,
                         separate_setup=separate_setup,
