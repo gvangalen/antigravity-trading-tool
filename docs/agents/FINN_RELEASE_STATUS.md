@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## TradingView grafiek met geverifieerde reservebron (1 november 2026)
 
-Phase: `LOCAL_VALIDATION`. De vorige live kandidaat `a90b1932cb4f2780548beb45c16cdc27bf6fbac3`
+Phase: `LIVE_PENDING_QA`. De vorige live kandidaat `a90b1932cb4f2780548beb45c16cdc27bf6fbac3`
 toonde in onafhankelijke browserdiagnostiek SOL/USDT- en SOL/EUR-candles voor de
 juiste afzonderlijke Binance-markten, ook na refresh. Een trage eerste
 TradingView-load van BTC/USDT viel echter terug op een reservegrafiek zonder
@@ -22,7 +22,15 @@ globale providerlimieten; bij Redis-storing faalt zij gesloten. Security heeft
 deze grens onafhankelijk herbeoordeeld zonder P1/P2-blokkade. Gerichte
 backendtests: 6 geslaagd; volledige backend-suite: 4180 geslaagd, vier
 bestaande skips. Frontend productiebuild, typecheck, i18n-lint en 33
-i18n-tests geslaagd. Deploymentidentiteit en definitieve live QA volgen.
+i18n-tests geslaagd. [PR #755](https://github.com/gvangalen/antigravity-trading-tool/pull/755)
+is na vijf groene checks in [PR-CI 41297206804](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41297206804)
+samengevoegd als `32c47f9eea55e6d52df310fe7fa2a3b58d2e0618`. Alle vijf
+jobs van [main-CI 41297448534](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41297448534)
+en [Auto Deploy 41297663900](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41297663900)
+slaagden. Publieke backend-health en frontend-buildinfo gaven HTTP 200 en
+dezelfde SHA. Deze statuswijziging krijgt een eigen laatste deployment-SHA;
+onafhankelijke QA start pas na verificatie daarvan. De definitieve ingelogde
+grafiekmatrix is nog niet uitgevoerd.
 
 ## Report 2.0: periodegeneratie afronden (31 oktober 2026)
 
