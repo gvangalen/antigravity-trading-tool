@@ -12,8 +12,28 @@ _AMOUNT_FIELDS = frozenset({
     "high_threshold", "low_score_percent", "mid_score_percent", "high_score_percent",
 })
 _SCORE_SOURCES = frozenset({"benchmark_score"})
+_SCORE_BAND_PERCENT_RANGE = (5, 300)
+_SCORE_BAND_INTERPOLATION = "step"
 BENCHMARK_COMPONENTS = ("market_score", "macro_score", "technical_score")
 EQUAL_BENCHMARK_WEIGHTS = {component: 1 / 3 for component in BENCHMARK_COMPONENTS}
+
+
+def dca_automation_capabilities() -> dict[str, Any]:
+    """Model-facing facts from the same limits used to validate saved DCA plans."""
+    return {
+        "supported_amount_modes": ("fixed", "score_bands"),
+        "score_band_input": tuple(sorted(_SCORE_SOURCES)),
+        "score_band_interpolation": _SCORE_BAND_INTERPOLATION,
+        "score_band_percent_range": _SCORE_BAND_PERCENT_RANGE,
+        "score_band_threshold_count": 2,
+        "score_band_amount_count": 3,
+        "score_band_percent_order": "nondecreasing_as_benchmark_score_rises",
+        "direct_ma_distance_input": False,
+        "linear_ma_distance_sizing": False,
+        "zero_percent_band": False,
+        "automatic_sell_rule_in_dca_plan": False,
+        "separate_setup_creation": True,
+    }
 
 
 def validate_dca_setup_only(fields: dict[str, Any]) -> None:
@@ -109,15 +129,15 @@ def split_confirmed_dca_plan(fields: dict[str, Any]) -> tuple[dict[str, Any], di
             _positive_amount(fields.get(key), key)
             for key in ("low_score_percent", "mid_score_percent", "high_score_percent")
         )
-        if not 5 <= percents[0] <= percents[1] <= percents[2] <= 300:
+        if not _SCORE_BAND_PERCENT_RANGE[0] <= percents[0] <= percents[1] <= percents[2] <= _SCORE_BAND_PERCENT_RANGE[1]:
             raise ValueError("score_band_percentages_invalid")
         multipliers = tuple(percent / 100 for percent in percents)
         strategy_fields["decision_curve"] = {
             "input": source,
             "weights_policy": "current_market_benchmark_weights",
-            "interpolation": "step",
-            "min_multiplier": 0.05,
-            "max_multiplier": 3.0,
+            "interpolation": _SCORE_BAND_INTERPOLATION,
+            "min_multiplier": _SCORE_BAND_PERCENT_RANGE[0] / 100,
+            "max_multiplier": _SCORE_BAND_PERCENT_RANGE[1] / 100,
             "points": [
                 {"x": 0, "y": multipliers[0]},
                 {"x": float(low), "y": multipliers[1]},
