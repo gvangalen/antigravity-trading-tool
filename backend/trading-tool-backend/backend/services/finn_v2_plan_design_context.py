@@ -13,6 +13,13 @@ _NEW_SETUP = re.compile(
     r"neu(?:e|en|er|es)?|separate|aparte|independent)\b",
     re.I,
 )
+_NEW_DESIGN = re.compile(
+    r"\b(?:nieuwe?|new|neu(?:e|en|er|es)?)\b[\s,]+"
+    r"(?:(?:aparte|separate|losse|independent|eigen)\b[\s,]+)?"
+    r"(?:(?:[A-Z0-9]+(?:/[A-Z0-9]+)?|trade|trading|smart)\b[\s-]+){0,3}"
+    r"(?:dca[\s-]+)?(?:setup|plan|opzet|idea|idee|concept)\b",
+    re.I,
+)
 _SAVED_TOPIC = re.compile(
     r"\b(?:mijn|my|mein(?:e|en|er|es)?)\s+(?:opgeslagen|bestaande|saved|existing|"
     r"gespeicherte[nrms]?|bestehende[nrms]?)\s+(?:[\w-]+\s+){0,3}"
@@ -27,24 +34,35 @@ _SAVED_READ = re.compile(
     re.I | re.S,
 )
 _CAPABILITY_QUESTION = re.compile(
-    r"\b(?:kan dat|kan dit|kan\b(?=[^?]{0,100}\b(?:met|via|op basis|"
-    r"afhankelijk|automatisch|uitvoeren|activeren|volgens|onder|boven)\b)|"
-    r"kunnen we|is dat mogelijk|is dit mogelijk|"
-    r"werkt dat|werkt dit|uitvoerbaar|automatiseren|automatisch|"
-    r"can (?:we|you|it|this)|is (?:that|this|it) possible|supported|"
-    r"does (?:it|this) work|kann (?:man|ich|das)|geht das|automatisieren)\b",
+    r"\b(?:kan|kunnen|mogelijk|uitvoer\w*|automatiseer\w*|automatisch|"
+    r"instel\w*|can|could|possible|execut\w*|support\w*|automat\w*|"
+    r"configur\w*|kann|können|möglich|ausführ\w*|automatisier\w*|"
+    r"einricht\w*)\b",
     re.I,
 )
 _DESIGN_SUBJECT = re.compile(
     r"\b(?:setup|plan|strategie|strategy|dca|regel\w*|rule\w*|"
     r"indicator\w*|score\w*|benchmark\w*|koop\w*|kopen|aankoop\w*|"
-    r"buy|sell|verkoop\w*|trade\w*|bedrag\w*|amount\w*)\b",
+    r"buy|sell|verkoop\w*|trade\w*|bedrag\w*|amount\w*|"
+    r"kauf\w*|verkauf\w*|betrag\w*|linie\w*)\b",
+    re.I,
+)
+_READ_ONLY_QUESTION = re.compile(
+    r"\b(?:toelichten|uitleggen|teruglezen|voorlezen|summarize|explain|read back|"
+    r"zusammenfassen|erklären|vorlesen)\b",
+    re.I,
+)
+_DIRECT_ACTION_REQUEST = re.compile(
+    r"\b(?:kan je|can you|kannst du)\b.{0,70}\b"
+    r"(?:maken|aanmaken|wijzigen|aanpassen|hernoemen|opslaan|bevestigen|"
+    r"create|change|update|rename|save|confirm|erstellen|ändern|umbenennen|speichern)\b",
     re.I,
 )
 
 
 def is_new_separate_setup_request(message: str) -> bool:
-    return bool(_NEW_SETUP.search(str(message or "")))
+    text = str(message or "")
+    return bool(_NEW_SETUP.search(text) or _NEW_DESIGN.search(text))
 
 
 def advance_plan_design_focus(context: dict[str, Any], message: str) -> bool:
@@ -82,6 +100,7 @@ def requests_execution_capability_question(message: str, context: dict[str, Any]
     active_design = isinstance(focus, dict) and focus.get("kind") in {
         "new_separate_setup", "unsaved_capability_design",
     }
-    return bool(_CAPABILITY_QUESTION.search(text) and (
+    return bool(_CAPABILITY_QUESTION.search(text) and not _READ_ONLY_QUESTION.search(text)
+    and not _DIRECT_ACTION_REQUEST.search(text) and (
         _DESIGN_SUBJECT.search(text) or active_design
-    ) and not re.search(r"\b(?:kan je|can you|kannst du)\b.{0,30}\b(?:maken|aanmaken|create|erstellen)\b", text, re.I))
+    ))

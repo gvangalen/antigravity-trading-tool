@@ -25,6 +25,12 @@ def test_explicit_new_parent_is_distinct_from_a_new_strategy_on_saved_parent():
     assert is_new_separate_setup_request("Nee, ik bedoel een nieuwe aparte setup voor AAPL")
     assert is_new_separate_setup_request("We bespreken een nieuwe opzet los van BTC")
     assert not is_new_separate_setup_request("Voeg een nieuwe strategie aan mijn BTC-setup toe")
+    assert is_new_separate_setup_request(
+        "Ik wil een NIEUW, APART BTC/EUR-DCA-plan ontwerpen; het oude plan is achtergrond."
+    )
+    assert is_new_separate_setup_request(
+        "For this new, separate BTC/EUR DCA idea, let's explore a trendline rule."
+    )
 
 
 def test_plan_design_focus_does_not_bind_an_ordinary_saved_plan_read():
@@ -78,10 +84,28 @@ def test_generic_capability_questions_include_ma_and_trendline_designs():
     )
     assert not requests_execution_capability_question("Wat is de MA200-waarde vandaag?")
     assert not requests_execution_capability_question("Kan je mijn opgeslagen plan toelichten?")
+    assert requests_execution_capability_question(
+        "Kan mijn opgeslagen BTC-plan automatisch verkopen boven een trendlijn?"
+    )
     assert not requests_execution_capability_question("Maak een vaste DCA voor ETH op maandag")
+    assert not requests_execution_capability_question("Kan je mijn BTC-plan aanpassen?")
+    assert not requests_execution_capability_question("Can you update my DCA strategy?")
     assert requests_execution_capability_question("Can this execute automatically?", {
         "plan_design_focus": {"kind": "new_separate_setup"},
     })
+    assert requests_execution_capability_question(
+        "Koop juist méér naarmate BTC/EUR verder onder de MA200 ligt, met een vloeiend "
+        "oplopend bedrag. Kan FINN die regel echt als uitvoerbare DCA instellen?",
+        {"plan_design_focus": {"kind": "new_separate_setup"}},
+    )
+    assert requests_execution_capability_question(
+        "For this new, separate BTC/EUR DCA idea, can the purchase amount vary "
+        "continuously with distance below MA200, with zero at the line and an "
+        "automatic sale above it? Answer only what can actually be executed."
+    )
+    assert requests_execution_capability_question(
+        "Kann der Kaufbetrag stufenlos mit dem Abstand unter einer Trendlinie steigen?"
+    )
 
 
 def test_capability_answer_uses_responses_with_typed_contract(monkeypatch):
@@ -101,7 +125,7 @@ def test_capability_answer_uses_responses_with_typed_contract(monkeypatch):
     kwargs = create.await_args.kwargs
     assert kwargs["tool_choice"] == "none"
     assert '"score_band_input": ["benchmark_score"]' in kwargs["input"]
-    assert "before asking for a name" in kwargs["instructions"]
+    assert "do not ask again whether the plan is separate" in kwargs["instructions"]
 
 
 def test_capability_read_does_not_claim_an_answer_verifier_passed():
