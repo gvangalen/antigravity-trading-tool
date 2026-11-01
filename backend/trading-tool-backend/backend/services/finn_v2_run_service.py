@@ -57,6 +57,11 @@ from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCat
 from backend.services.finn_v2_responses_proposal_selection import FinnResponsesProposalSelection
 from backend.services.finn_v2_hard_claim_boundary import FinnV2HardClaimBoundary
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
+from backend.services.finn_v2_plan_design_context import (
+    advance_plan_design_focus, remember_unsupported_ma_design,
+    requests_unsupported_ma_dca_amount, is_new_separate_setup_request,
+)
+from backend.domain.finn_dca_plan_contract import dca_automation_capabilities
 from backend.services.finn_v2_operation_classification_service import FinnV2OperationClassificationService
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
 from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
@@ -1589,6 +1594,55 @@ def _simple_coach_structural_violations(
     return tuple(name for name, supported in checks if not supported)
 
 
+async def _explain_unsupported_ma_dca_amount(
+    *, message: str, locale: str, separate_setup: bool,
+) -> tuple[str, str]:
+    """Ask Luna to explain an unsupported amount rule from the execution contract."""
+    client = openai_client.async_client
+    if client is None:
+        raise FinnResponsesError("responses_provider_unconfigured")
+    model = os.getenv("FINN_RESPONSES_MODEL") or "gpt-6-luna"
+    options = {"reasoning": {"effort": "none"}} if model == "gpt-6-luna" else {}
+    response = await asyncio.wait_for(
+        client.responses.create(
+            model=model,
+            instructions=(
+                f"You are FINN. Answer in {response_language_name(locale)} ({locale}). "
+                "The user's MA200-distance DCA amount rule is a conceptual design request. "
+                "Explain the current platform capabilities from the typed contract only. "
+                "You may discuss a new separate setup; never attach it to an older saved setup "
+                "or claim that the proposed formula is already saved or executable. "
+                "Be concrete about the exact difference between benchmark-score step bands "
+                "and a direct MA200-distance formula. The currently valid bands are "
+                "nondecreasing as benchmark score rises; do not suggest buying more at a "
+                "lower score. There are three amounts separated by two thresholds. "
+                "Do not offer these bands as equivalent to the user's inverse MA200 rule. "
+                "Preserve the user's direction: more below MA200 and less above it. "
+                "If the user gives a 0%-to-200% range without mapping its endpoints "
+                "to below and above, do not invent that mapping. "
+                "State that a zero-percent band is not supported. "
+                "Do not request a screenshot or list trade-only entry, stop and "
+                "target fields. Do not present a confirmable action or promise an order. "
+                "If the user has not said whether this is a separate new setup, ask that "
+                "single question before asking for a name. Otherwise ask at most one "
+                "useful question about a supported design choice."
+            ),
+            input=json.dumps({
+                "user_request": message,
+                "separate_new_setup": separate_setup,
+                "dca_automation_contract": dca_automation_capabilities(),
+            }, ensure_ascii=False),
+            tool_choice="none",
+            **options,
+        ),
+        timeout=min(20.0, max(0.1, remaining_lifecycle_seconds() or 20.0)),
+    )
+    answer = str(getattr(response, "output_text", "") or "").strip()
+    if not answer:
+        raise FinnResponsesError("capability_explanation_empty")
+    return answer, str(getattr(response, "id", "") or "")
+
+
 async def _simple_coach_experiment_answer(
     *, message: str, prepared: FinnResponsesFrontDoorResult,
 ) -> tuple[FinnResponsesVerifiedAnswer, str, str | None]:
@@ -1794,6 +1848,8 @@ class FinnV2RunService:
         model_only_experiment: bool = False,
         persist_owner_bound_subject: bool = False,
         minimal_source_boundary: bool = False,
+        verifier_ran: bool = True,
+        reasoning_source: str = "responses_tool_loop",
     ) -> None:
         """Publish a verified free-chat read through the same polling/SSE model."""
         run = await self.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
@@ -1818,7 +1874,7 @@ class FinnV2RunService:
             "content": answer.text,
             "response_source": "v2_runtime",
             "verifier_status": (
-                "not_run" if model_only_experiment else
+                "not_run" if model_only_experiment or not verifier_ran else
                 "passed" if status in {"completed", "clarification_required"} else "failed"
             ),
             "evidence": (
@@ -1829,7 +1885,7 @@ class FinnV2RunService:
             "proposal_id": None,
             "confirmation_required": False,
             "reasoning_provenance": {
-                "reasoning_source": "responses_tool_loop",
+                "reasoning_source": reasoning_source,
                 "provider_response_id": response_id,
                 **({"answer_boundary": "minimal_typed_source"} if minimal_source_boundary else {}),
                 **({"local_model_only_experiment": True} if model_only_experiment else {}),
@@ -2696,6 +2752,7 @@ class FinnV2RunService:
         client = openai_client.async_client
         if client is None:
             raise FinnResponsesError("responses_provider_unconfigured")
+        design_focus_changed = advance_plan_design_focus(context, message)
         pending_guided = FinnV2OperationStateService.pending_operation_id(context)
         if not pending_guided:
             context.pop("guided_target_asset_constraint", None)
@@ -2719,6 +2776,22 @@ class FinnV2RunService:
             pending_guided = None
             previous_response = None
             verified_asset = None
+        if (is_new_separate_setup_request(message) and context.get("plan_design_focus")
+                and (pending_guided == "create_strategy" or context.get("strategy_rule_block"))):
+            # A user who switches from an old strategy draft to a separate
+            # setup has changed the parent object. Do not consume the new
+            # setup's name or rules as slots of the old strategy.
+            for key in ("active_guided_operation", "strategy_rule_block", "proposal_revision",
+                        "responses_clarification", "guided_target_asset_constraint"):
+                context.pop(key, None)
+            pending_guided = None
+            pending_clarification = {}
+            guided = {}
+            guided_inputs = {}
+            previous_response = None
+            design_focus_superseded_strategy = True
+        else:
+            design_focus_superseded_strategy = False
         if pending_clarification:
             relevance = FinnResponsesToolRelevanceGuard(client)
             if not await relevance.continues_clarification(
@@ -2960,6 +3033,20 @@ class FinnV2RunService:
                 "general education or a conditional explanation of what FINN can help with. "
                 "For capability questions, give concrete examples but do not imply that the user "
                 "already has a saved plan, profile or market snapshot unless a read proves it. "
+                "The platform DCA automation contract is the following typed data: "
+                + json.dumps(dca_automation_capabilities(), ensure_ascii=False)
+                + ". A fixed amount and stepwise bands of the total benchmark score can be saved; "
+                "the three band percentages must not decrease as benchmark score rises. "
+                "The MA200 may be an indicator in that benchmark, but MA200 distance is not a "
+                "direct DCA amount input; no linear MA-distance amount formula, zero-percent "
+                "band or automatic DCA sell rule is supported. Do not present a conceptual "
+                "MA200 formula as configurable or executable here, and do not ask the user "
+                "for a screenshot of these platform options. You may help design a separate "
+                "hypothetical setup and explain which part cannot yet be saved. "
+                "A new setup and its linked strategy use create_setup; create_strategy "
+                "requires an already saved parent setup. When discussing a new separate "
+                "setup, do not silently attach it to or answer from an older saved setup. "
+                "Read an older plan only when the user explicitly asks to compare it. "
                 "When the user asks FINN to assess whether a saved plan fits their "
                 "risk style or what its weaknesses are, choose the registry-backed read-only "
                 "evaluate_plan tool rather than stopping after separate profile and plan reads. "
@@ -3133,6 +3220,21 @@ class FinnV2RunService:
                     if context.get("proposal_revision") else ""
                 )
                 + (
+                    " The active discussion concerns a NEW SEPARATE setup, not a change to "
+                    "any saved setup. Keep its proposed rules and name in the discussion. "
+                    "Do not treat a short answer to your question as a request to read an "
+                    "existing saved plan. A conceptual proposal is not a confirmable card "
+                    "when its essential execution rule is unsupported. "
+                    if context.get("plan_design_focus", {}).get("kind") == "new_separate_setup" else ""
+                )
+                + (
+                    " The active discussion is an UNSAVED MA200 DCA design. Its MA200-distance "
+                    "amount rule cannot be saved with the present contract. Do not interpret a "
+                    "short follow-up as the name of or a request to read a saved setup. First "
+                    "clarify whether the user means a separate new setup or an existing parent. "
+                    if context.get("plan_design_focus", {}).get("kind") == "unsaved_ma_dca_design" else ""
+                )
+                + (
                     " This turn follows a verified answer in the same conversation. For a short why/how "
                     "follow-up, explain only what the previous verified answer and its tool results establish. "
                     "If the preceding answer was about unavailable market data, a short 'why' asks "
@@ -3174,6 +3276,23 @@ class FinnV2RunService:
                 monotonic() - exchange_started,
             )
             contracts = FinnV2RuntimeContractRepository(session)
+            if design_focus_changed or design_focus_superseded_strategy:
+                conversations = FinnV2ConversationRepository(session)
+                saved_context = await conversations.get_context(
+                    conversation_id=conversation_id, user_id=user_id,
+                )
+                if design_focus_superseded_strategy:
+                    for key in ("active_guided_operation", "strategy_rule_block",
+                                "proposal_revision", "responses_clarification",
+                                "guided_target_asset_constraint"):
+                        saved_context.pop(key, None)
+                if context.get("plan_design_focus"):
+                    saved_context["plan_design_focus"] = context["plan_design_focus"]
+                else:
+                    saved_context.pop("plan_design_focus", None)
+                await conversations.update_context(
+                    conversation_id=conversation_id, user_id=user_id, context=saved_context,
+                )
             await contracts.record_responses_exchange(
                 run_id=run_id, user_id=user_id,
                 response_id=result.response.response_id,
@@ -3962,6 +4081,23 @@ class FinnV2RunService:
                         )
                         setup_rule_block = dict(context.get("setup_rule_block") or {})
                         strategy_rule_block = dict(context.get("strategy_rule_block") or {})
+                        if is_new_separate_setup_request(run_message):
+                            # Switching the parent plan invalidates every
+                            # unsaved strategy action attached to the old one.
+                            for key in ("strategy_rule_block", "active_guided_operation",
+                                        "proposal_revision", "responses_clarification",
+                                        "pending_independent_strategy"):
+                                context.pop(key, None)
+                            strategy_rule_block = {}
+                            await service.conversations.update_context(
+                                conversation_id=conversation_id, user_id=user_id,
+                                context=context,
+                            )
+                            await session.commit()
+                        if requests_unsupported_ma_dca_amount(run_message):
+                            # This is a conceptual DCA amount design. The
+                            # prior trade-strategy waiver must not answer it.
+                            strategy_rule_block = {}
                         # Clarification state belongs to the previous sealed
                         # run contract. The conversation projection normally
                         # carries only its Responses cursor, so read that
@@ -3975,6 +4111,7 @@ class FinnV2RunService:
                         )
                         if (
                             not strategy_rule_block
+                            and not requests_unsupported_ma_dca_amount(run_message)
                             and prior_clarification.get("reason") == "strategy_rule_not_captured"
                         ):
                             # A clarification may be emitted before proposal
@@ -4259,6 +4396,7 @@ class FinnV2RunService:
 
                 if (
                     visible and strategy_rule_block and conversation_id
+                    and not requests_unsupported_ma_dca_amount(run_message)
                     and not dict(strategy_rule_block.get("captured_inputs") or {}).get("setup_id")
                     and FinnV2OperationStateService.is_cancel_intent(run_message)
                 ):
@@ -4360,6 +4498,51 @@ class FinnV2RunService:
                                                "choices": choices},
                             ),
                             locale=locale,
+                        )
+                        await session.commit()
+                    return
+
+                if visible and requests_unsupported_ma_dca_amount(run_message):
+                    # This amount rule is outside the executable DCA contract.
+                    # Let FINN explain the typed capability facts; no action
+                    # selection or confirmable proposal may drop the MA rule.
+                    focus_changed = advance_plan_design_focus(context, run_message)
+                    focus_changed = remember_unsupported_ma_design(context) or focus_changed
+                    separate_setup = context.get("plan_design_focus", {}).get("kind") == "new_separate_setup"
+                    locale = str(context.get("locale") or "nl")
+                    answer_text, response_id = await _explain_unsupported_ma_dca_amount(
+                        message=run_message, locale=locale,
+                        separate_setup=separate_setup,
+                    )
+                    async with async_session_factory() as session:
+                        conversation = await FinnV2ConversationRepository(session).get_by_id_for_user(
+                            conversation_id=conversation_id, user_id=user_id, for_update=True,
+                        )
+                        if conversation is None or conversation.last_run_id != run_id:
+                            raise RuntimeContractConflictError("plan_design_conversation_stale")
+                        if focus_changed:
+                            saved_context = dict(conversation.context_json or {})
+                            if context.get("plan_design_focus"):
+                                saved_context["plan_design_focus"] = context["plan_design_focus"]
+                                for key in ("strategy_rule_block", "active_guided_operation",
+                                            "proposal_revision", "responses_clarification"):
+                                    saved_context.pop(key, None)
+                            else:
+                                saved_context.pop("plan_design_focus", None)
+                            await FinnV2ConversationRepository(session).update_context(
+                                conversation_id=conversation_id, user_id=user_id,
+                                context=saved_context,
+                            )
+                        await cls(session).complete_responses_read(
+                            run_id=run_id, user_id=user_id,
+                            response_id=response_id or f"ma-dca-capability-{run_id}",
+                            answer=FinnResponsesVerifiedAnswer(
+                                status="completed", text=answer_text,
+                                reason="dca_automation_capability", evidence=(),
+                            ),
+                            locale=locale,
+                            verifier_ran=False,
+                            reasoning_source="responses_typed_capability_facts",
                         )
                         await session.commit()
                     return

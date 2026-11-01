@@ -4,6 +4,31 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN: nieuwe planscope en uitvoerbare DCA-regels (1 november 2026)
+
+Phase: `LOCAL_VALIDATION`. Kandidaat `codex/finn-new-plan-capabilities`.
+Een expliciet nieuw, apart setupgesprek krijgt een eigen kortlevende focus.
+Een eerder concept voor een strategie op een bestaande setup wordt dan niet als
+ouderplan voor het nieuwe gesprek gebruikt. Een expliciete vraag naar het
+opgeslagen plan kan die focus weer verlaten. FINN krijgt de DCA-mogelijkheden
+als getypeerde feiten uit hetzelfde contract dat bevestigde DCA-plannen
+valideert. De huidige uitvoering ondersteunt een vast bedrag of drie
+trapsgewijze bedragen uit de totale benchmarkscore, met percentages die niet
+dalen naarmate de score stijgt. Een vloeiende bedragregel op basis van de
+afstand tot MA200, een 0%-band en automatische DCA-verkoop zitten niet in
+dit contract. Luna formuleert de uitleg; er is geen vaste coachtekst voor
+deze beantwoording. Deze wijziging bouwt de MA200-automatisering niet.
+
+Lokale Build-controles op de definitieve productcode: backend `4198 passed,
+4 skipped`; frontendproductiebuild geslaagd; worker-actiematrix `16/16`
+(artifact SHA-256 `f32db4ca5ab5463f1a8645359c7a41c2ae99a23174b9c0ec20c464912ae200b1`);
+echte Responses-selectorevaluaties ontwikkeling `20/20` en regressie
+`109/109` met `gpt-6-luna`. Twee extra echte Luna-antwoorden onderscheidden
+een expliciet nieuwe BTC-setup van een onduidelijke scope en beschreven
+de uitvoergrens zonder bevestigbaar voorstel. De specifieke vervolgflow
+in een ingelogde browser wacht op onafhankelijke QA na deployment. Er is
+niets aan een bot of order gewijzigd.
+
 ## Report 2.0: historische deelscores in weektekst (1 november 2026)
 
 Phase: `ACCEPTED` voor reparatiekandidaat
