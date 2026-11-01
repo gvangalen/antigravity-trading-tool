@@ -45,7 +45,9 @@ test('period report headers show the saved range; daily reports keep their date'
   const report = { report_date: '2026-10-31', meta_json: { score_source_snapshot: {
     content_locale: 'nl', report_v2: { period: 'weekly', period_start: '2026-10-26', period_end: '2026-10-31' },
   } } };
-  assert.match(reportV2PeriodLabel(report, 'en'), /26 okt 2026 – 31 okt 2026/);
+  assert.match(reportV2PeriodLabel(report, 'en'), /Oct 26, 2026 – Oct 31, 2026/);
+  assert.match(reportV2PeriodLabel(report, 'de'), /26\. Okt\. 2026 – 31\. Okt\. 2026/);
+  assert.match(reportV2PeriodLabel(report, 'nl'), /26 okt 2026 – 31 okt 2026/);
   assert.equal(reportV2PeriodLabel({ report_date: '2026-10-31' }, 'nl'), '2026-10-31');
   report.meta_json.score_source_snapshot.report_v2.comparison = { period_complete: false };
   assert.equal(reportV2PeriodState(report, 'en'), 'Week in progress');

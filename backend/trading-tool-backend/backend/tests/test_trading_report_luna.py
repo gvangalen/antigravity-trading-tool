@@ -129,6 +129,79 @@ def test_period_comparison_uses_only_dated_same_pair_scores(period):
     assert all(row["asset"] == "BTC/EUR" for row in comparison["period_observations"])
 
 
+@pytest.mark.parametrize("period, expected_unit, expected_ranges", [
+    ("weekly", "day", [("2026-10-19", "2026-10-19"), ("2026-10-20", "2026-10-20")]),
+    ("monthly", "week", [("2026-10-01", "2026-10-04"), ("2026-10-05", "2026-10-11")]),
+    ("quarterly", "month", [("2026-10-01", "2026-10-23")]),
+])
+def test_period_reports_group_saved_daily_evidence_without_inventing_missing_scores(
+    monkeypatch, period, expected_unit, expected_ranges,
+):
+    class FixedDate(date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 10, 23)
+
+    monkeypatch.setattr(reports, "date", FixedDate)
+    history = [
+        {"report_date": "2026-10-02", "snapshot": {"assets": [
+            {"pair": "BTC/EUR", "benchmark_score": 20, "reported_scores": {"market_score": 20}},
+        ]}},
+        {"report_date": "2026-10-08", "snapshot": {"assets": [
+            {"pair": "BTC/EUR", "benchmark_score": None, "reported_scores": {}},
+            {"pair": "BTC/USDT", "benchmark_score": 90, "reported_scores": {"market_score": 90}},
+        ]}},
+        {"report_date": "2026-10-20", "snapshot": {"assets": [
+            {"pair": "BTC/EUR", "benchmark_score": 40, "reported_scores": {"market_score": 40}},
+        ]}},
+    ]
+    facts = {"assets": [{"pair": "BTC/EUR", "display_symbol": "BTC/EUR",
+                         "benchmark_score": 55, "scores": {"market_score": 55}}]}
+
+    comparison = reports._report_v2_period_comparison({"report_previous": history}, facts, period)
+
+    assert [row["unit"] for row in comparison["subperiods"]] == [expected_unit] * len(comparison["subperiods"])
+    assert [(row["start"], row["end"]) for row in comparison["subperiods"][:len(expected_ranges)]] == expected_ranges
+    assert comparison["period_complete"] is False
+    assert comparison["subperiods"][-1]["end"] == "2026-10-23"
+    assert comparison["subperiods"][-1]["assets"][0]["last"]["benchmark_score"] == 55
+    if period == "monthly":
+        assert comparison["subperiods"][1]["assets"][0]["last"]["benchmark_score"] is None
+        assert comparison["subperiods"][1]["assets"][1]["asset"] == "BTC/USDT"
+        assert comparison["subperiods"][2]["observed_dates"] == []
+    if period == "quarterly":
+        assert len(comparison["subperiods"]) == 1
+        assert comparison["subperiods"][0]["assets"][0]["observation_days"] == 4
+
+
+def test_quarter_report_summarizes_three_calendar_months_and_exposes_missing_month(monkeypatch):
+    class FixedDate(date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 12, 10)
+
+    monkeypatch.setattr(reports, "date", FixedDate)
+    context = {"report_previous": [
+        {"report_date": "2026-10-12", "snapshot": {"assets": [
+            {"pair": "ETH/EUR", "benchmark_score": 30, "reported_scores": {"macro_score": 25}},
+        ]}},
+    ]}
+    facts = {"assets": [{"pair": "ETH/EUR", "display_symbol": "ETH/EUR",
+                         "benchmark_score": None, "scores": {}}]}
+
+    months = reports._report_v2_period_comparison(context, facts, "quarterly")["subperiods"]
+
+    assert [(row["start"], row["end"]) for row in months] == [
+        ("2026-10-01", "2026-10-31"),
+        ("2026-11-01", "2026-11-30"),
+        ("2026-12-01", "2026-12-10"),
+    ]
+    assert months[0]["assets"][0]["last"]["benchmark_score"] == 30
+    assert months[1]["observed_dates"] == []
+    assert months[1]["assets"] == []
+    assert months[2]["assets"][0]["last"]["benchmark_score"] is None
+
+
 @pytest.mark.parametrize("locale, availability, score", [
     ("nl", "niet beschikbaar → beschikbaar", "40/100 → 20/100"),
     ("en", "unavailable → available", "40/100 → 20/100"),

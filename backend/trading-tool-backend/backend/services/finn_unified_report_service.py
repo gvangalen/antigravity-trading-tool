@@ -643,6 +643,66 @@ def _report_v2_period_comparison(context: dict[str, Any], facts: dict[str, Any],
                 "scores": asset.get("reported_scores") or {},
                 "indicators": asset.get("verified_indicator_evidence") or {},
             })
+    # The report hierarchy is built from dated daily evidence, rather than
+    # reusing another report's prose or assuming a missing report means zero.
+    # Month groups its days into calendar weeks; quarter groups them into
+    # calendar months. The current, unfinished day is a separate observation.
+    current = [{
+        "date": today.isoformat(),
+        "asset": asset.get("pair") or asset.get("symbol") or asset.get("market_id"),
+        "benchmark_score": asset.get("benchmark_score"),
+        "scores": asset.get("scores") or {},
+        "indicators": asset.get("verified_indicator_evidence") or {},
+    } for asset in facts["assets"]]
+    all_observations = [*observations, *current]
+    unit = {"weekly": "day", "monthly": "week", "quarterly": "month"}[period]
+    def bucket_start(day: date) -> date:
+        if unit == "week":
+            return max(start, day - timedelta(days=day.weekday()))
+        if unit == "month":
+            return day.replace(day=1)
+        return day
+    buckets: dict[str, list[dict[str, Any]]] = {}
+    for row in all_observations:
+        try:
+            day = date.fromisoformat(row["date"])
+        except (TypeError, ValueError):
+            continue
+        if start <= day <= today:
+            buckets.setdefault(bucket_start(day).isoformat(), []).append(row)
+    subperiods = []
+    cursor = start
+    while cursor <= today:
+        if unit == "week":
+            end = min(today, cursor + timedelta(days=6 - cursor.weekday()))
+        elif unit == "month":
+            next_month = (cursor.replace(day=28) + timedelta(days=4)).replace(day=1)
+            end = min(today, next_month - timedelta(days=1))
+        else:
+            end = cursor
+        rows = buckets.get(cursor.isoformat(), [])
+        by_asset: dict[str, list[dict[str, Any]]] = {}
+        for row in rows:
+            if row.get("asset"):
+                by_asset.setdefault(str(row["asset"]), []).append(row)
+        asset_summaries = []
+        for asset, series in sorted(by_asset.items()):
+            series.sort(key=lambda row: row["date"])
+            first, last = series[0], series[-1]
+            asset_summaries.append({
+                "asset": asset,
+                "observation_days": len({row["date"] for row in series}),
+                "first": {"date": first["date"], "benchmark_score": first["benchmark_score"],
+                          "scores": first["scores"]},
+                "last": {"date": last["date"], "benchmark_score": last["benchmark_score"],
+                         "scores": last["scores"]},
+            })
+        subperiods.append({
+            "unit": unit, "start": cursor.isoformat(), "end": end.isoformat(),
+            "observed_dates": sorted({row["date"] for row in rows}),
+            "assets": asset_summaries,
+        })
+        cursor = end + timedelta(days=1)
     # A report generated during the current calendar day is still a snapshot,
     # including on Sunday or the final day of a month or quarter.
     period_complete = False
@@ -655,6 +715,7 @@ def _report_v2_period_comparison(context: dict[str, Any], facts: dict[str, Any],
         "period_complete": period_complete,
         "baseline_date": baseline.get("report_date") if baseline else None,
         "period_observations": observations[:150],
+        "subperiods": subperiods,
     })
     return comparison
 
@@ -975,7 +1036,12 @@ def generate_unified_daily_report_sections(user_id: int, period: str = "daily") 
             "Never say all measured assets rise or fall unless every supplied 24-hour change has that direction. "
             "Return valid JSON with six Report 2.0 fields: retrospective, portfolio, analysis, plan, "
             "automation and outlook_v2. For a weekly, monthly or quarterly report, distinguish "
-            "dated period history from the current snapshot. A trend requires at least two "
+            "dated period history from the current snapshot. Use comparison.subperiods as the "
+            "report's time structure: summarize each observed day in a weekly report, the "
+            "observed weeks in a monthly report, and the observed months in a quarterly report. "
+            "Only describe changes for the exact asset and dates with comparable scores. "
+            "Name gaps in coverage; a subperiod with no observations is unknown. The current "
+            "day is an unfinished snapshot, not a completed day. A trend requires at least two "
             "comparable dated observations. The retrospective may compare only the supplied "
             "prior observations; never claim a prior forecast was correct without evidence. "
             "When comparison.period_complete is false, call the period ongoing and name the "

@@ -4,6 +4,19 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Report 2.0: week, maand en kwartaal als echte perioden (1 november 2026)
+
+Phase: `LOCAL_VALIDATION`. Kandidaat `codex/report-period-hierarchy` groepeert
+gedateerde dagmomenten per dag in een weekrapport, per kalenderweek in een
+maandrapport en per kalendermaand in een kwartaalrapport. Lege perioden blijven
+expliciet zonder score. De terugblik toont de gebruikte dekking en de eerste en
+laatste bekende benchmarkwaarde per exact handelspaar; FINN krijgt dezelfde
+structuur voor zijn samenvatting. De kop van een bestaand rapport gebruikt voor
+de interactieve datumweergave de gekozen UI-taal, zodat Engels `Oct` toont.
+Gerichte rapporttests, volledige backend-suite (4187 geslaagd, 4 bestaande
+skips), frontendproductiebuild, typecheck, i18n-lint en 34 i18n-tests slaagden.
+Dit is nog geen live of onafhankelijk geaccepteerde wijziging.
+
 ## Report 2.0: indicatorverloop en lopende perioden (1 november 2026)
 
 Phase: `ACCEPTED` voor reparatiekandidaat `codex/report-live-qa-fixes` op
