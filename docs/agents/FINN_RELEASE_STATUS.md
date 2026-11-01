@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## TradingView-indicatoren bij trage eerste opening (1 november 2026)
 
-Phase: `LOCAL_VALIDATION`. Onafhankelijke QA gaf `NOT_ACCEPTED` op de vorige
+Phase: `LIVE_PENDING_QA`. Onafhankelijke QA gaf `NOT_ACCEPTED` op de vorige
 live grafiekrelease `1fb85b1d7b35b9df0305a408d831bc103ac87cf9`:
 SOL/USDT en SOL/EUR toonden verifieerbare afzonderlijke candles, maar BTC/USDT
 met ingestelde RSI toonde bij de eerste opening alleen de reservekoersgrafiek.
@@ -20,8 +20,15 @@ TradingView-widget later alsnog openen zonder de reservegrafiek tijdens het
 laden weg te nemen. De melding heet nu neutraal tijdelijke koersgrafiek.
 Gerichte indicatorberekeningen: 2 geslaagd; volledige backend-suite: 4180
 geslaagd, 4 bestaande skips. Frontend productiebuild, typecheck, i18n-lint en
-33 i18n-tests geslaagd. De definitieve commit, CI, deploy-identiteit en
-onafhankelijke live hertest volgen nog.
+33 i18n-tests geslaagd. [PR #757](https://github.com/gvangalen/antigravity-trading-tool/pull/757)
+is na vijf groene checks in [PR-CI 41299651247](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41299651247)
+samengevoegd als `2cb173e4559e86c80b7fddbddf6d077c639b86b6`. Alle vijf
+jobs van [main-CI 41299893822](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41299893822)
+en [Auto Deploy 41300156271](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41300156271)
+slaagden. Publieke backend-health en frontend-buildinfo gaven HTTP 200 en
+dezelfde product-SHA. Deze statuswijziging krijgt een eigen laatste
+deployment-SHA; onafhankelijke QA start na verificatie daarvan. De ingelogde
+grafiekmatrix op die laatste SHA is nog niet uitgevoerd.
 
 ## TradingView grafiek met geverifieerde reservebron (1 november 2026)
 
