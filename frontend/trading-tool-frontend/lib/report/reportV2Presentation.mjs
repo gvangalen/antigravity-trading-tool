@@ -16,7 +16,10 @@ export function reportV2PeriodLabel(report, browserLocale) {
   const end = period?.period_end;
   if (!period || period.period === 'daily' || !/^\d{4}-\d{2}-\d{2}$/.test(start || '')
       || !/^\d{4}-\d{2}-\d{2}$/.test(end || '')) return report?.report_date || '—';
-  const language = reportV2Locale(report, browserLocale);
+  // This range is an interactive UI label, unlike the frozen report prose.
+  // Switching the UI language must also switch month abbreviations.
+  const requested = String(browserLocale || reportV2Locale(report, browserLocale)).slice(0, 2).toLowerCase();
+  const language = ['nl', 'en', 'de'].includes(requested) ? requested : 'nl';
   const format = (day) => new Intl.DateTimeFormat(language, {
     day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
   }).format(new Date(`${day}T12:00:00Z`));
