@@ -59,11 +59,19 @@ export default function TradingViewChart({
     if (!container) return;
     let cancelled = false;
     let readyTimeout;
+    let retryTimeout;
+    let attempt = 0;
     const backupDelay = window.setTimeout(() => {
       if (!cancelled) setBackupVisible(true);
     }, 12000);
     setBackupVisible(false);
     container.replaceChildren();
+
+    const retry = (delay = 5000) => {
+      if (cancelled || attempt >= 4) return;
+      window.clearTimeout(retryTimeout);
+      retryTimeout = window.setTimeout(startChart, delay);
+    };
 
     const mountChart = () => {
       if (cancelled || !container.isConnected) return;
@@ -81,13 +89,16 @@ export default function TradingViewChart({
       const showBackup = () => {
         window.clearTimeout(readyTimeout);
         if (cancelled || !container.isConnected || container.firstChild !== chart) return;
-        // Keep the widget mounted: a slow TradingView load may become ready
-        // after the local chart appears, including its configured studies.
         setBackupVisible(true);
+        // A slow widget can still finish; keep it mounted while the local
+        // chart is visible, then remount only if it remains unavailable.
+        retry(20000);
       };
       const onReady = () => {
         window.clearTimeout(readyTimeout);
+        window.clearTimeout(retryTimeout);
         window.clearTimeout(backupDelay);
+        chart.removeEventListener("tv-widget-error", showBackup);
         if (!cancelled && container.firstChild === chart) setBackupVisible(false);
       };
       chart.addEventListener("tv-widget-ready", onReady, { once: true });
@@ -97,13 +108,22 @@ export default function TradingViewChart({
       container.replaceChildren(chart);
     };
 
-    loadWidgetModule().then(mountChart).catch(() => {
-      if (!cancelled) setBackupVisible(true);
-    });
+    const startChart = () => {
+      if (cancelled || !container.isConnected) return;
+      attempt += 1;
+      loadWidgetModule().then(mountChart).catch(() => {
+        if (!cancelled) {
+          setBackupVisible(true);
+          retry();
+        }
+      });
+    };
+    startChart();
 
     return () => {
       cancelled = true;
       window.clearTimeout(readyTimeout);
+      window.clearTimeout(retryTimeout);
       window.clearTimeout(backupDelay);
       container.replaceChildren();
     };
@@ -116,6 +136,7 @@ export default function TradingViewChart({
         <LocalMarketChart
           symbol={symbol}
           interval={normalizedInterval}
+          indicators={indicators}
           unavailableLabel={chartFallbackLabel}
           backupLabel={chartBackupLabel}
         />

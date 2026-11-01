@@ -4,6 +4,25 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## TradingView-indicatoren bij trage eerste opening (1 november 2026)
+
+Phase: `LOCAL_VALIDATION`. Onafhankelijke QA gaf `NOT_ACCEPTED` op de vorige
+live grafiekrelease `1fb85b1d7b35b9df0305a408d831bc103ac87cf9`:
+SOL/USDT en SOL/EUR toonden verifieerbare afzonderlijke candles, maar BTC/USDT
+met ingestelde RSI toonde bij de eerste opening alleen de reservekoersgrafiek.
+TradingView met RSI verscheen pas na weg- en terugnavigeren. De reservegrafiek
+toonde ook de misleidende melding dat TradingView-indicatoren niet beschikbaar
+waren.
+
+Kandidaat `codex/chart-fallback-studies` tekent RSI en MA/EMA uit de exacte,
+geverifieerde candles in de reservegrafiek. Een begrensde herpoging laat de
+TradingView-widget later alsnog openen zonder de reservegrafiek tijdens het
+laden weg te nemen. De melding heet nu neutraal tijdelijke koersgrafiek.
+Gerichte indicatorberekeningen: 2 geslaagd; volledige backend-suite: 4180
+geslaagd, 4 bestaande skips. Frontend productiebuild, typecheck, i18n-lint en
+33 i18n-tests geslaagd. De definitieve commit, CI, deploy-identiteit en
+onafhankelijke live hertest volgen nog.
+
 ## TradingView grafiek met geverifieerde reservebron (1 november 2026)
 
 Phase: `LIVE_PENDING_QA`. De vorige live kandidaat `a90b1932cb4f2780548beb45c16cdc27bf6fbac3`
