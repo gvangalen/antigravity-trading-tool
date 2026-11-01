@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN: taal van de eerste uitvoerbaarheidsreactie (1 november 2026)
 
-Phase: `DEPLOYED_PENDING_QA` voor [PR #774](https://github.com/gvangalen/antigravity-trading-tool/pull/774). De onafhankelijke
+Phase: `ACCEPTED` voor [PR #774](https://github.com/gvangalen/antigravity-trading-tool/pull/774). De onafhankelijke
 QA op live `0782b9d544af61744cd9d8bb32c5bfbdac0dcb28` gaf
 `NOT_ACCEPTED` wegens een taalafwijking: de eerste uitvoerbaarheidsreactie
 na een switch naar Engels of Duits was nog Nederlands. De inhoudelijke
@@ -27,9 +27,19 @@ meteen Duits. Alle vijf PR-jobs en de vijf jobs van
 slaagden. [Auto Deploy 41353847276](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41353847276)
 slaagde op `1dac12515551738eca27689a9bf27cac44fb68be`. Publieke
 backend-health en frontend-buildinfo gaven HTTP 200 met diezelfde SHA.
-Deze statusbijwerking krijgt zelf een laatste deployment-SHA; pas na de
-laatste CI/Auto Deploy en publieke SHA-controle start onafhankelijke live QA
-voor de eerste beurt na een werkelijke UI-taalwissel.
+De statusbijwerking in [PR #775](https://github.com/gvangalen/antigravity-trading-tool/pull/775)
+kreeg [main-CI 41354380100](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41354380100)
+en [Auto Deploy 41354633152](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41354633152),
+beide geslaagd. Publieke backend, frontend en `origin/main` stonden daarna
+alle drie op `28e1de7ba10c0953e7117ae7284712c21d279bd0`.
+Dezelfde onafhankelijke QA-agent gaf voor die live SHA `ACCEPTED` op de
+gerichte ingelogde browsermatrix. Het oude vrijdagplan van €10 bleef intact;
+de nieuwe BTC/EUR-MA200- en trendlijnregels werden alleen als ontwerp
+besproken en terecht niet uitvoerbaar genoemd. De eerste Engelse en Duitse
+beurt na UI-taalwissel antwoordden volledig in de gekozen taal. Een gewone
+DCA-kaart met 1D, maandag en €15 kon worden geannuleerd zonder wijziging.
+Geen order, botactivatie of opgeslagen wijziging. De browserroute toont geen
+FINN-run-ID of tooltrace; die worden hier niet als geverifieerd geclaimd.
 
 ## FINN: algemene uitvoerbaarheid bij nieuwe planregels (1 november 2026)
 
