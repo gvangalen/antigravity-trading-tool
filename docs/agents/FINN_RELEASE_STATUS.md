@@ -26,6 +26,10 @@ geslaagd, 4 bestaande skips), Python-syntaxcontrole en `git diff --check`
 zijn lokaal geslaagd. Het providerprobe-contract heeft nu ook twee
 synthetische, gedateerde deelscoremomenten en keurt onbenoemde historische
 scoretriplets af; de echte Responses-run volgt in CI.
+De eerste echte provider-run op deze kandidaat maakte in het synthetische
+Duitse voorbeeld de opgeslagen wekelijkse aankoopdag niet expliciet. De
+rapportopdracht noemt die vereiste daarom nu per opgeslagen DCA-plan; een
+nieuwe echte provider-run is vereist voordat de reparatie kan worden gemerged.
 
 ## Report 2.0: week, maand en kwartaal als echte perioden (1 november 2026)
 
