@@ -83,4 +83,17 @@ canvas {
     width: 100%;
     margin: 0;
   }
+
+  /* Chromium can move an entire responsive grid to the next page while
+     leaving its heading behind. Let each overview card paginate separately. */
+  .report-v2-at-glance-list {
+    display: block !important;
+  }
+
+  .report-v2-at-glance-item {
+    display: block;
+    margin-bottom: 10px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
 }

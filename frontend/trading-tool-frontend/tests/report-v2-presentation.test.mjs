@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import nl from '../dictionaries/nl.json' with { type: 'json' };
-import { isGeneratedReportReady } from '../lib/report/reportState.js';
+import { getReportSignature, isGeneratedReportReady } from '../lib/report/reportState.js';
 import {
   reportV2AnalysisParagraphs,
   reportV2Change,
@@ -12,11 +12,26 @@ import {
   reportV2PeriodState,
 } from '../lib/report/reportV2Presentation.mjs';
 
-test('an upserted period report completes on owner-bound task success despite unchanged created_at', () => {
+test('worker success waits for the changed saved snapshot, even when created_at is unchanged', () => {
   const saved = { report_date: '2026-10-31', created_at: '2026-10-31T18:00:00Z' };
   assert.equal(isGeneratedReportReady(saved, saved.created_at, saved.created_at, false), false);
-  assert.equal(isGeneratedReportReady(saved, saved.created_at, saved.created_at, true), true);
+  assert.equal(isGeneratedReportReady(saved, saved.created_at, saved.created_at, true), false);
+  assert.equal(isGeneratedReportReady(saved, 'new-snapshot', saved.created_at, true), true);
+  assert.equal(isGeneratedReportReady(saved, 'new-snapshot', saved.created_at, false), false);
   assert.equal(isGeneratedReportReady({ _status: 'pending' }, 'same', 'same', true), false);
+});
+
+test('period report identity follows the frozen facts, not the upsert timestamp', () => {
+  const old = { created_at: 'same', meta_json: { score_source_snapshot: {
+    report_v2: { version: 2, period: 'weekly' }, observed_at: '2026-11-01T10:00:00Z',
+  } } };
+  const next = { created_at: 'same', meta_json: { score_source_snapshot: {
+    report_v2: { version: 2, period: 'weekly' }, observed_at: '2026-11-01T10:01:00Z',
+  } } };
+  assert.notEqual(getReportSignature(old), getReportSignature(next));
+  assert.equal(isGeneratedReportReady(old, getReportSignature(old), getReportSignature(old), true), false);
+  assert.equal(isGeneratedReportReady(next, getReportSignature(next), getReportSignature(old), true, 'weekly'), true);
+  assert.equal(isGeneratedReportReady(next, getReportSignature(next), getReportSignature(old), true, 'daily'), false);
 });
 
 test('PDF labels follow the saved prose language, not the print browser language', () => {
@@ -33,7 +48,9 @@ test('period report headers show the saved range; daily reports keep their date'
   assert.match(reportV2PeriodLabel(report, 'en'), /26 okt 2026 – 31 okt 2026/);
   assert.equal(reportV2PeriodLabel({ report_date: '2026-10-31' }, 'nl'), '2026-10-31');
   report.meta_json.score_source_snapshot.report_v2.comparison = { period_complete: false };
-  assert.equal(reportV2PeriodState(report, 'en'), 'Lopende week');
+  assert.equal(reportV2PeriodState(report, 'en'), 'Week in progress');
+  assert.equal(reportV2PeriodState(report, 'de'), 'Laufende Woche');
+  assert.equal(reportV2PeriodState(report, 'nl'), 'Lopende week');
   report.meta_json.score_source_snapshot.report_v2.comparison.period_complete = true;
   assert.equal(reportV2PeriodState(report, 'en'), null);
 });
