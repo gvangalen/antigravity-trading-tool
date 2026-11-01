@@ -34,7 +34,7 @@ import ReportLayout from '@/components/report/layout/ReportLayout';
 import ReportTerminalHUD from '@/components/report/ReportTerminalHUD';
 import DailyTraderStatus from '@/components/report/DailyTraderStatus';
 import { scoreSourceSnapshot } from '@/lib/report/reportSourceSnapshot.mjs';
-import { reportV2PeriodLabel } from '@/lib/report/reportV2Presentation.mjs';
+import { reportV2PeriodLabel, reportV2PeriodState } from '@/lib/report/reportV2Presentation.mjs';
 import FinnTradeReviews from '@/components/report/FinnTradeReviews';
 import { ReportSkeleton } from '@/components/dashboard/DashboardSkeleton';
 import DashboardErrorBoundary from '@/components/ui/DashboardErrorBoundary';
@@ -2102,7 +2102,7 @@ RENDER
                       <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">
                         <span>{reportT.hudPeriod}: {reportV2PeriodLabel(report, locale)}</span>
                         <span className="h-1 w-1 rounded-full bg-slate-300" />
-                        <span>{tradingPanelCopy.statusReady}</span>
+                        <span>{reportV2PeriodState(report, locale) || tradingPanelCopy.statusReady}</span>
                       </div>
                   </div>
                 </div>

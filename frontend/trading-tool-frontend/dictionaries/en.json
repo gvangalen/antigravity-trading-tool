@@ -1663,6 +1663,7 @@
       }
     },
     "report": {
+      "v2AtGlance": "At a glance",
       "traderStatus": {
         "title": "Positions and bot status", "separation": "The report is a snapshot. Positions and bot status were fetched separately; the latest bot decision may be older.",
         "refresh": "Refresh status", "loading": "Loading…", "reportAt": "Report time (NL)", "utcAt": "Report time", "currentAt": "Status retrieved",

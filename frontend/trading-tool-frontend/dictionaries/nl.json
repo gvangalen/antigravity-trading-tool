@@ -1664,6 +1664,7 @@
       }
     },
     "report": {
+      "v2AtGlance": "In één oogopslag",
       "traderStatus": {
         "title": "Posities en botstatus", "separation": "Het rapport is een momentopname. Posities en botstatus zijn apart opgehaald; de laatste botbeslissing kan ouder zijn.",
         "refresh": "Status vernieuwen", "loading": "Laden…", "reportAt": "Rapportmoment (NL)", "utcAt": "Rapportmoment", "currentAt": "Status opgehaald",

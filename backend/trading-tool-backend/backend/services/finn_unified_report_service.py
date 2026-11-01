@@ -162,6 +162,16 @@ def _saved_curve(value: Any) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
+def _saved_report_snapshot(value: Any) -> dict[str, Any] | None:
+    """Raw SQL may return a JSON column as either a mapping or serialized JSON."""
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except ValueError:
+            return None
+    return value if isinstance(value, dict) else None
+
+
 async def _load_context(user_id: int, period: str = "daily") -> dict[str, Any]:
     # Celery invokes this from a short-lived event loop, while preview runs in
     # a thread beside live API requests. Give each invocation its own unpooled
@@ -213,8 +223,9 @@ async def _load_context(user_id: int, period: str = "daily") -> dict[str, Any]:
                 """), {"user_id": user_id, "history_start": history_start})).mappings().all()
                 context["report_previous"] = [
                     {"report_date": row["report_date"].isoformat(),
-                     "snapshot": row["score_source_snapshot"]}
-                    for row in rows if isinstance(row["score_source_snapshot"], dict)
+                     "snapshot": snapshot}
+                    for row in rows
+                    if (snapshot := _saved_report_snapshot(row["score_source_snapshot"])) is not None
                 ]
             except Exception:
                 logger.warning("Prior report snapshots unavailable for user=%s", user_id, exc_info=True)
@@ -531,7 +542,8 @@ def _report_v2_comparison(context: dict[str, Any], facts: dict[str, Any]) -> dic
     def observations(report: dict[str, Any]) -> list[dict[str, Any]]:
         return [{"asset": row.get("pair") or row.get("symbol") or row.get("market_id"),
                  "benchmark_score": row.get("benchmark_score"),
-                 "scores": row.get("reported_scores") or {}}
+                 "scores": row.get("reported_scores") or {},
+                 "indicators": row.get("verified_indicator_evidence") or {}}
                 for row in (report.get("snapshot") or {}).get("assets") or []
                 if isinstance(row, dict)]
     def changes_since(report: dict[str, Any]) -> list[dict[str, Any]]:
@@ -562,6 +574,28 @@ def _report_v2_comparison(context: dict[str, Any], facts: dict[str, Any]) -> dic
                         and before != after):
                     changes.append({"asset": asset["display_symbol"], "fact": category,
                                     "before": before, "after": after})
+            old_indicators = old.get("verified_indicator_evidence") or {}
+            new_indicators = asset.get("verified_indicator_evidence") or {}
+            for group in ("market", "macro", "technical"):
+                before_group = old_indicators.get(group) or {}
+                after_group = new_indicators.get(group) or {}
+                for indicator, current in after_group.items():
+                    prior = before_group.get(indicator)
+                    if not isinstance(prior, dict) or not isinstance(current, dict):
+                        continue
+                    before_score, after_score = prior.get("score"), current.get("score")
+                    before_value, after_value = prior.get("value"), current.get("value")
+                    before_valid = isinstance(before_score, (int, float)) and not isinstance(before_score, bool)
+                    after_valid = isinstance(after_score, (int, float)) and not isinstance(after_score, bool)
+                    if (before_valid or after_valid) and (not before_valid or not after_valid or before_score != after_score):
+                        changes.append({"asset": asset["display_symbol"], "fact": "indicator_score",
+                                        "group": group, "indicator": indicator,
+                                        "before": before_score if before_valid else None,
+                                        "after": after_score if after_valid else None,
+                                        "value_before": before_value, "value_after": after_value,
+                                        "unit": current.get("unit") or prior.get("unit"),
+                                        "source_before": prior.get("source_observed_at"),
+                                        "source_after": current.get("source_observed_at")})
         return changes[:30]
 
     latest = previous[0]
@@ -607,12 +641,18 @@ def _report_v2_period_comparison(context: dict[str, Any], facts: dict[str, Any],
                 "asset": asset.get("pair") or asset.get("symbol") or asset.get("market_id"),
                 "benchmark_score": asset.get("benchmark_score"),
                 "scores": asset.get("reported_scores") or {},
+                "indicators": asset.get("verified_indicator_evidence") or {},
             })
+    # A report generated during the current calendar day is still a snapshot,
+    # including on Sunday or the final day of a month or quarter.
+    period_complete = False
     comparison.update({
         "period": period,
         "period_start": start.isoformat(),
         "period_end": today.isoformat(),
         "observation_days": len(within),
+        "included_dates": [str(row.get("report_date")) for row in within],
+        "period_complete": period_complete,
         "baseline_date": baseline.get("report_date") if baseline else None,
         "period_observations": observations[:150],
     })
@@ -648,7 +688,9 @@ def _report_v2_factual_fallbacks(context: dict[str, Any], facts: dict[str, Any],
                "benchmark_availability": "Benchmark"},
     }
     def change_text(row: dict[str, Any]) -> str:
-        label = change_labels.get(locale, change_labels["en"]).get(row["fact"], row["fact"])
+        label = (_report_indicator_label(row.get("indicator"), locale)
+                 if row["fact"] == "indicator_score" else
+                 change_labels.get(locale, change_labels["en"]).get(row["fact"], row["fact"]))
         def display(value: Any) -> str:
             if row["fact"] == "benchmark_availability":
                 return {
@@ -915,6 +957,10 @@ def generate_unified_daily_report_sections(user_id: int, period: str = "daily") 
             "A DCA plan does not require trade entry, stop-loss or target prices; do not advise "
             "adding those merely because they are absent from the DCA strategy. "
             "Only verified_indicator_evidence contains measured indicator values. "
+            "Explain material changes in individual indicator measurements and scores when "
+            "comparison.changes contains indicator_score entries. Name the indicator and its "
+            "before and after values, then relate it to the category and benchmark without "
+            "claiming causality that the supplied evidence does not prove. "
             "market_snapshot.change_24h_percent is already a percentage, not a fraction; "
             "copy its magnitude and sign without multiplying by 100. "
             "Each setup and match belongs only to the asset's exact display_symbol trading pair. "
@@ -932,6 +978,8 @@ def generate_unified_daily_report_sections(user_id: int, period: str = "daily") 
             "dated period history from the current snapshot. A trend requires at least two "
             "comparable dated observations. The retrospective may compare only the supplied "
             "prior observations; never claim a prior forecast was correct without evidence. "
+            "When comparison.period_complete is false, call the period ongoing and name the "
+            "comparison.included_dates rather than presenting a completed week or month. "
             "Portfolio distinguishes Paper from Live and unknown balances from zero. "
             "Analysis explains the benchmark for each relevant pair, including absent components. "
             "Plan explains saved cadence, conditions and amount rule. Automation describes the "
@@ -1026,6 +1074,13 @@ def generate_unified_daily_report_sections(user_id: int, period: str = "daily") 
         )
         if isinstance(value, (int, float))
     }
+    allowed_scores.update(
+        float(evidence["score"])
+        for item in facts["assets"]
+        for group in (item.get("verified_indicator_evidence") or {}).values() if isinstance(group, dict)
+        for evidence in group.values() if isinstance(evidence, dict)
+        if isinstance(evidence.get("score"), (int, float)) and not isinstance(evidence.get("score"), bool)
+    )
     # The retrospective may quote a prior verified score that no longer
     # appears in today's snapshot. Those values come from saved reports.
     prior_scores = {
@@ -1034,12 +1089,26 @@ def generate_unified_daily_report_sections(user_id: int, period: str = "daily") 
         for value in (row.get("benchmark_score"), *(row.get("scores") or {}).values())
         if isinstance(value, (int, float)) and not isinstance(value, bool)
     }
+    prior_scores.update(
+        float(evidence["score"])
+        for row in comparison.get("previous_observations") or []
+        for group in (row.get("indicators") or {}).values() if isinstance(group, dict)
+        for evidence in group.values() if isinstance(evidence, dict)
+        if isinstance(evidence.get("score"), (int, float)) and not isinstance(evidence.get("score"), bool)
+    )
     if period != "daily":
         prior_scores.update(
             float(value)
             for row in comparison.get("period_observations") or []
             for value in (row.get("benchmark_score"), *(row.get("scores") or {}).values())
             if isinstance(value, (int, float)) and not isinstance(value, bool)
+        )
+        prior_scores.update(
+            float(evidence["score"])
+            for row in comparison.get("period_observations") or []
+            for group in (row.get("indicators") or {}).values() if isinstance(group, dict)
+            for evidence in group.values() if isinstance(evidence, dict)
+            if isinstance(evidence.get("score"), (int, float)) and not isinstance(evidence.get("score"), bool)
         )
     for section, value in prose.items():
         # A reported numeric score must occur in the verified Score 2.0 snapshot.
@@ -1219,6 +1288,7 @@ def generate_unified_daily_report_sections(user_id: int, period: str = "daily") 
                 "configured_indicators": item["configured_indicators"],
                 "reported_scores": item["scores"],
                 "benchmark_score": item["benchmark_score"],
+                "matches": item["matches"],
                 "market_snapshot": item["market_snapshot"],
             } for item in facts["assets"]],
         },

@@ -47,6 +47,11 @@ export default function ReportV2Layout({ report, isPrint = false }) {
     de: { retrospective: 'Rückblick', portfolio: 'Portfolio', analysis: 'Analyse', plan: 'Mein Plan', automation: 'Automatisierung', outlook: 'Ausblick', paper: 'Paper', live: 'Live', total: 'Gesamtwert', positionValue: 'Positionswert', cash: 'Guthaben', positions: 'In Positionen', result: 'Ergebnis', budget: 'Bot-Budgetlimit', unknown: 'Unbekannt', noBots: 'Keine Bots zum Berichtszeitpunkt', noPlans: 'Keine gespeicherten Pläne', noComparison: 'Keine vergleichbare frühere Momentaufnahme', benchmark: 'Benchmark', market: 'Markt', macro: 'Makro', technical: 'Technisch', timeframe: 'Analyse-Zeitrahmen', frequency: 'Kaufplan', amount: 'Basisbetrag je Ausführung', fixed: 'Fester Betrag', curve: 'Scoreabhängiger Betrag', conditions: 'Benchmarkbedingung', noConditions: 'Keine Scorebedingung', decision: 'Letzte Entscheidung', noDecision: 'Keine gespeicherte Entscheidung', observed: 'Quellzeit', zones: ['Starker Druck', 'Unter Druck', 'Keine klare Richtung', 'Markt zieht an', 'Starker Markt'], weekly: 'wöchentlich', monthly: 'monatlich', daily: 'täglich', day: 'Tag', position: 'Position', stop: 'Stop', target: 'Erstes Ziel', exit: 'Exitüberwachung', available: 'verfügbar', unavailable: 'nicht verfügbar', sourceDetails: 'Quellen und Berechnung', noScore: 'Noch keine vollständige Bewertung', noIndicators: 'Keine Indikatoren eingerichtet', score: 'Bewertung', botReason: 'Grund beim Bot ansehen' },
   }[language] || null;
   const c = copy || { unknown: 'Unknown', zones: [] };
+  const focusCopy = {
+    nl: { match: 'Setupvoorwaarde', quote: 'Koersbron', position: 'Open positie', exit: 'Verkoopbewaking', next: 'Volgende stap', indicatorChanges: 'Wat veranderde per indicator?', noQuote: 'Geen betrouwbare koersbron', noPosition: 'Geen open botpositie', noMatch: 'Geen bevestigde match', matches: 'Voorwaarde bereikt', outside: 'Buiten voorwaarden', missing: 'Onvoldoende scoredata', checkData: 'Controleer ontbrekende scorebronnen', wait: 'Volg je opgeslagen voorwaarden', review: 'Bekijk je plan en botstatus', dates: 'Vergelijkingsdagen' },
+    en: { match: 'Setup condition', quote: 'Quote source', position: 'Open position', exit: 'Exit monitoring', next: 'Next step', indicatorChanges: 'What changed per indicator?', noQuote: 'No reliable quote source', noPosition: 'No open bot position', noMatch: 'No confirmed match', matches: 'Condition met', outside: 'Outside conditions', missing: 'Insufficient score data', checkData: 'Check missing score sources', wait: 'Follow your saved conditions', review: 'Review your plan and bot status', dates: 'Comparison dates' },
+    de: { match: 'Setupbedingung', quote: 'Kursquelle', position: 'Offene Position', exit: 'Exitüberwachung', next: 'Nächster Schritt', indicatorChanges: 'Was änderte sich je Indikator?', noQuote: 'Keine verlässliche Kursquelle', noPosition: 'Keine offene Botposition', noMatch: 'Keine bestätigte Übereinstimmung', matches: 'Bedingung erfüllt', outside: 'Außerhalb der Bedingungen', missing: 'Unzureichende Scoredaten', checkData: 'Fehlende Scorequellen prüfen', wait: 'Gespeicherten Bedingungen folgen', review: 'Plan und Botstatus prüfen', dates: 'Vergleichstage' },
+  }[language];
   const traderCopy = t?.pages?.report?.traderStatus || {};
   const snapshot = scoreSourceSnapshot(report) || {};
   const v2 = snapshot.report_v2 || {};
@@ -55,6 +60,7 @@ export default function ReportV2Layout({ report, isPrint = false }) {
   const assets = Array.isArray(snapshot.assets) ? snapshot.assets : [];
   const plans = Array.isArray(v2.plans) ? v2.plans : [];
   const bots = Array.isArray(v2.automation?.bots) ? v2.automation.bots : [];
+  const indicatorChanges = (v2.comparison?.changes || []).filter((row) => row.fact === 'indicator_score');
   const money = (value) => number(value) === null ? c.unknown : new Intl.NumberFormat(language, { style: 'currency', currency: 'EUR' }).format(value);
   const measured = (value) => number(value) !== null
     ? new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(value)
@@ -84,6 +90,8 @@ export default function ReportV2Layout({ report, isPrint = false }) {
     technical_score: c.technical,
     available: c.available,
     unavailable: c.unavailable,
+    indicatorNames: indicatorLabels,
+    locale: language,
   };
   const evidenceLine = (asset, category) => {
     const names = asset.configured_indicators?.[category] || [];
@@ -103,14 +111,40 @@ export default function ReportV2Layout({ report, isPrint = false }) {
     ? `${periodDate(v2.period_start)} – ${periodDate(v2.period_end)}` : reportDate;
   return <div className={`mx-auto max-w-[1100px] space-y-6 pb-20 ${isPrint ? 'print:space-y-4' : ''}`}>
     <div className="break-after-avoid pb-1"><h1 className="text-3xl font-bold text-slate-950">{t?.pages?.report?.types?.[period]}</h1>{periodRange && <p className="mt-1 text-sm text-slate-600">{periodRange}</p>}</div>
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-7">
+      <h2 className="text-xl font-bold text-slate-950">{t?.pages?.report?.v2AtGlance}</h2>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">{assets.map((asset, index) => {
+        const label = reportMarketLabel(asset);
+        const match = (asset.matches || []).find((row) => row.status === 'matches')
+          || (asset.matches || []).find((row) => row.status === 'outside_conditions');
+        const relatedBots = bots.filter((bot) => (bot.trading_pair && bot.trading_pair === asset.pair)
+          || (!asset.pair && bot.symbol === asset.symbol));
+        const openBot = relatedBots.find((bot) => number(bot.position_qty) > 0);
+        const asOf = asset.market_snapshot?.as_of;
+        const quoteMoment = parseUtcMoment(asOf);
+        const reportMoment = parseUtcMoment(snapshot.observed_at);
+        const ageHours = quoteMoment && reportMoment ? Math.max(0, (reportMoment - quoteMoment) / 3600000) : null;
+        const quoteText = asOf ? `${timestamp(asOf)}${ageHours !== null ? ` · ${new Intl.NumberFormat(language, { maximumFractionDigits: 1 }).format(ageHours)} h` : ''}` : focusCopy.noQuote;
+        const matchText = number(asset.benchmark_score) === null ? focusCopy.missing
+          : match?.status === 'matches' ? `${match.name}: ${focusCopy.matches}`
+          : match?.status === 'outside_conditions' ? `${match.name}: ${focusCopy.outside}` : focusCopy.noMatch;
+        const next = number(asset.benchmark_score) === null ? focusCopy.checkData
+          : match?.status === 'outside_conditions' ? focusCopy.wait : focusCopy.review;
+        return <div key={`${label}-${index}`} className="break-inside-avoid rounded-xl border border-slate-200 p-4">
+          <h3 className="font-bold">{label} · {number(asset.benchmark_score) === null ? c.noScore : `${c.benchmark} ${measured(asset.benchmark_score)}/100`}</h3>
+          <dl className="mt-2 space-y-1 text-sm text-slate-700"><div><dt className="inline font-semibold">{focusCopy.match}: </dt><dd className="inline">{matchText}</dd></div><div><dt className="inline font-semibold">{focusCopy.quote}: </dt><dd className="inline">{quoteText}</dd></div><div><dt className="inline font-semibold">{focusCopy.position}: </dt><dd className="inline">{openBot ? `${measured(openBot.position_qty)} · ${money(openBot.position_value_eur)}` : v2.automation?.status === 'unavailable' ? c.unknown : focusCopy.noPosition}</dd></div>{openBot && <div><dt className="inline font-semibold">{focusCopy.exit}: </dt><dd className="inline">{traderCopy.monitoring?.[openBot.exit_monitoring] || c.unknown}</dd></div>}<div><dt className="inline font-semibold">{focusCopy.next}: </dt><dd className="inline">{next}</dd></div></dl>
+        </div>;
+      })}</div>
+    </section>
     <Section title={c.retrospective} prose={prose.retrospective}>
-      {period !== 'daily' && <p className="mt-3 text-xs text-slate-500">{periodRange} · {v2.comparison?.observation_days || 0} {language === 'nl' ? 'opgeslagen vergelijkingsdagen' : language === 'de' ? 'gespeicherte Vergleichstage' : 'saved comparison days'}</p>}
-      {(v2.comparison?.changes || []).length > 0 && <div className="mt-4 space-y-2 text-sm text-slate-600">{v2.comparison.changes.map((change, i) => <p key={`${change.asset}-${i}`}>{reportV2Change(change, changeLabels)}</p>)}</div>}
+      {period !== 'daily' && <p className="mt-3 text-xs text-slate-500">{periodRange} · {focusCopy.dates}: {(v2.comparison?.included_dates || []).join(', ') || '—'}</p>}
+      {(v2.comparison?.changes || []).filter((row) => row.fact !== 'indicator_score').length > 0 && <div className="mt-4 space-y-2 text-sm text-slate-600">{v2.comparison.changes.filter((row) => row.fact !== 'indicator_score').map((change, i) => <p key={`${change.asset}-${i}`}>{reportV2Change(change, changeLabels)}</p>)}</div>}
     </Section>
     <Section title={c.portfolio} prose={prose.portfolio}>
       <div className="mt-5 grid gap-4 md:grid-cols-2 print:grid-cols-2 print:break-inside-avoid">{['paper', 'live'].map((environment) => { const data = v2.portfolio?.[environment] || {}; const total = data.global || {}; return <div key={environment} className="break-inside-avoid rounded-xl border border-slate-200 p-4"><h3 className="font-bold">{c[environment]}</h3><div className="mt-3 grid grid-cols-2 gap-3 text-sm"><p>{c.total}<br /><strong>{money(total.total_equity)}</strong></p><p>{c.cash}<br /><strong>{money(total.cash_balance)}</strong></p><p>{c.positions}<br /><strong>{money(total.current_position_value)}</strong></p><p>{c.result}<br /><strong>{money(number(total.realized_pnl) !== null && number(total.unrealized_pnl) !== null ? total.realized_pnl + total.unrealized_pnl : null)}</strong></p></div><p className="mt-3 text-xs text-slate-500">{c.budget}: {money(total.total_budget_limit)}</p>{(data.bots || []).map((bot) => <p key={bot.bot_id} className="mt-2 border-t pt-2 text-sm">{bot.name || bot.symbol} · {c.total}: {money(bot.equity)} · {c.cash}: {money(bot.cash_eur)}</p>)}</div>; })}</div>
     </Section>
     <Section title={c.analysis} proseParagraphs={reportV2AnalysisParagraphs(prose.analysis, language)}>
+      {indicatorChanges.length > 0 && <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 p-4"><h3 className="font-semibold text-slate-950">{focusCopy.indicatorChanges}</h3><div className="mt-2 space-y-1 text-sm text-slate-700">{indicatorChanges.map((change, index) => <p key={`${change.asset}-${change.indicator}-${index}`}>{reportV2Change(change, changeLabels)}</p>)}</div></div>}
       <div className="mt-5 space-y-3">
         {assets.map((asset, index) => {
           const score = number(asset.benchmark_score);

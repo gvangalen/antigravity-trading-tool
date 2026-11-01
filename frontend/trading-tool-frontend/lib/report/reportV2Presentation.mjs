@@ -30,13 +30,31 @@ export function reportV2IndicatorName(name, labels = {}) {
 
 export function reportV2Change(change, labels) {
   const fact = change?.fact;
-  const title = labels?.[fact] || fact;
+  const title = fact === 'indicator_score'
+    ? reportV2IndicatorName(change.indicator, labels?.indicatorNames || {})
+    : labels?.[fact] || fact;
   if (!title) return null;
   const value = (item) => {
     if (fact === 'benchmark_availability') return item ? labels.available : labels.unavailable;
     return typeof item === 'number' && Number.isFinite(item) ? `${item}/100` : labels.unavailable;
   };
-  return `${change.asset} · ${title}: ${value(change.before)} → ${value(change.after)}`;
+  const formatMeasurement = (item) => typeof item === 'number' && Number.isFinite(item)
+    ? new Intl.NumberFormat(labels?.locale || 'nl', { maximumFractionDigits: 2 }).format(item) : String(item);
+  const measurement = fact === 'indicator_score' && change.value_before != null && change.value_after != null
+    ? ` (${formatMeasurement(change.value_before)} → ${formatMeasurement(change.value_after)}${change.unit ? ` ${change.unit}` : ''})` : '';
+  return `${change.asset} · ${title}: ${value(change.before)} → ${value(change.after)}${measurement}`;
+}
+
+export function reportV2PeriodState(report, browserLocale) {
+  const v2 = scoreSourceSnapshot(report)?.report_v2;
+  if (!v2 || v2.period === 'daily' || v2.comparison?.period_complete !== false) return null;
+  const language = reportV2Locale(report, browserLocale);
+  const labels = {
+    nl: { weekly: 'Lopende week', monthly: 'Lopende maand', quarterly: 'Lopend kwartaal' },
+    en: { weekly: 'Week in progress', monthly: 'Month in progress', quarterly: 'Quarter in progress' },
+    de: { weekly: 'Laufende Woche', monthly: 'Laufender Monat', quarterly: 'Laufendes Quartal' },
+  };
+  return labels[language]?.[v2.period] || null;
 }
 
 export function reportV2AnalysisParagraphs(value, locale = 'nl') {
