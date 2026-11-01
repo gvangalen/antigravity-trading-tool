@@ -58,8 +58,9 @@ from backend.services.finn_v2_responses_proposal_selection import FinnResponsesP
 from backend.services.finn_v2_hard_claim_boundary import FinnV2HardClaimBoundary
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 from backend.services.finn_v2_plan_design_context import (
-    advance_plan_design_focus, remember_unsupported_ma_design,
-    requests_unsupported_ma_dca_amount, is_new_separate_setup_request,
+    advance_plan_design_focus, remember_unsaved_design,
+    requests_execution_capability_question, is_new_separate_setup_request,
+    is_explicit_saved_plan_read,
 )
 from backend.domain.finn_dca_plan_contract import dca_automation_capabilities
 from backend.services.finn_v2_operation_classification_service import FinnV2OperationClassificationService
@@ -1594,10 +1595,10 @@ def _simple_coach_structural_violations(
     return tuple(name for name, supported in checks if not supported)
 
 
-async def _explain_unsupported_ma_dca_amount(
+async def _explain_execution_capability(
     *, message: str, locale: str, separate_setup: bool,
 ) -> tuple[str, str]:
-    """Ask Luna to explain an unsupported amount rule from the execution contract."""
+    """Ask Luna to compare a proposed rule with the executable contracts."""
     client = openai_client.async_client
     if client is None:
         raise FinnResponsesError("responses_provider_unconfigured")
@@ -1608,19 +1609,19 @@ async def _explain_unsupported_ma_dca_amount(
             model=model,
             instructions=(
                 f"You are FINN. Answer in {response_language_name(locale)} ({locale}). "
-                "The user's MA200-distance DCA amount rule is a conceptual design request. "
-                "Explain the current platform capabilities from the typed contract only. "
+                "The user asks whether a proposed trading rule is executable here. "
+                "Compare its exact input, transformation, direction and action with the typed "
+                "contracts. Explain the current platform capabilities from those facts only. "
                 "You may discuss a new separate setup; never attach it to an older saved setup "
-                "or claim that the proposed formula is already saved or executable. "
-                "Be concrete about the exact difference between benchmark-score step bands "
-                "and a direct MA200-distance formula. The currently valid bands are "
-                "nondecreasing as benchmark score rises; do not suggest buying more at a "
-                "lower score. There are three amounts separated by two thresholds. "
-                "Do not offer these bands as equivalent to the user's inverse MA200 rule. "
-                "Preserve the user's direction: more below MA200 and less above it. "
-                "If the user gives a 0%-to-200% range without mapping its endpoints "
-                "to below and above, do not invent that mapping. "
-                "State that a zero-percent band is not supported. "
+                "or claim that the proposed rule is already saved. Do not say a rule can run "
+                "unless all its inputs, mapping and actions are represented by the contracts. "
+                "A similar score band is not equivalent to another indicator or formula. "
+                "Do not infer how an external indicator maps to the benchmark score. "
+                "If the exact rule cannot run, say so clearly, then describe the nearest "
+                "actually available option without changing the user's intent. "
+                "Use plain language for contract field names in the answer. "
+                "Answer the proposed rule directly; omit unrelated capabilities. "
+                "Do not invent missing endpoints, thresholds or percentages. "
                 "Do not request a screenshot or list trade-only entry, stop and "
                 "target fields. Do not present a confirmable action or promise an order. "
                 "If the user has not said whether this is a separate new setup, ask that "
@@ -1631,6 +1632,15 @@ async def _explain_unsupported_ma_dca_amount(
                 "user_request": message,
                 "separate_new_setup": separate_setup,
                 "dca_automation_contract": dca_automation_capabilities(),
+                "setup_action_contract": {
+                    "inputs": FinnV2OperationRegistry().require_supported("create_setup").required_inputs,
+                    "optional_inputs": FinnV2OperationRegistry().require_supported("create_setup").optional_inputs,
+                    "conditional_inputs": FinnV2OperationRegistry().require_supported("create_setup").conditional_required_inputs,
+                },
+                "strategy_action_contract": {
+                    "inputs": FinnV2OperationRegistry().require_supported("create_strategy").required_inputs,
+                    "optional_inputs": FinnV2OperationRegistry().require_supported("create_strategy").optional_inputs,
+                },
             }, ensure_ascii=False),
             tool_choice="none",
             **options,
@@ -3037,12 +3047,10 @@ class FinnV2RunService:
                 + json.dumps(dca_automation_capabilities(), ensure_ascii=False)
                 + ". A fixed amount and stepwise bands of the total benchmark score can be saved; "
                 "the three band percentages must not decrease as benchmark score rises. "
-                "The MA200 may be an indicator in that benchmark, but MA200 distance is not a "
-                "direct DCA amount input; no linear MA-distance amount formula, zero-percent "
-                "band or automatic DCA sell rule is supported. Do not present a conceptual "
-                "MA200 formula as configurable or executable here, and do not ask the user "
-                "for a screenshot of these platform options. You may help design a separate "
-                "hypothetical setup and explain which part cannot yet be saved. "
+                "A proposed automatic rule is executable only if its inputs, mapping and "
+                "action exist in the typed plan and operation contracts. Do not equate a "
+                "similar benchmark score band with a different indicator formula. You may "
+                "help design a hypothetical setup and explain which part cannot yet be saved. "
                 "A new setup and its linked strategy use create_setup; create_strategy "
                 "requires an already saved parent setup. When discussing a new separate "
                 "setup, do not silently attach it to or answer from an older saved setup. "
@@ -3139,8 +3147,8 @@ class FinnV2RunService:
                 "market effect or personalized trade conclusion unless fresh evidence supports it. "
                 "For a question about current or last known prices or market conditions of named assets, read the "
                 "market snapshot for each named asset separately before relating it to a plan. "
-                "For a question about current indicator readings or what RSI and MA200 say "
-                "together now, use get_current_technical_snapshot for the relevant asset. "
+                "For a question about current technical indicator readings, use "
+                "get_current_technical_snapshot for the relevant asset. "
                 "get_indicator_snapshot reads which indicators are saved/configured; it does NOT "
                 "provide their current readings. Both tools accept only their declared arguments. "
                 "Do not use a saved-plan read as a substitute for current indicator evidence or "
@@ -3228,11 +3236,18 @@ class FinnV2RunService:
                     if context.get("plan_design_focus", {}).get("kind") == "new_separate_setup" else ""
                 )
                 + (
-                    " The active discussion is an UNSAVED MA200 DCA design. Its MA200-distance "
-                    "amount rule cannot be saved with the present contract. Do not interpret a "
+                    " The active discussion is an UNSAVED capability design. Do not interpret a "
                     "short follow-up as the name of or a request to read a saved setup. First "
                     "clarify whether the user means a separate new setup or an existing parent. "
-                    if context.get("plan_design_focus", {}).get("kind") == "unsaved_ma_dca_design" else ""
+                    if context.get("plan_design_focus", {}).get("kind") == "unsaved_capability_design" else ""
+                )
+                + (
+                    " The user explicitly asks to read an older saved plan. Clear any "
+                    "hypothetical plan focus and use get_active_plan_and_strategy to read "
+                    "the named saved setup and linked strategy again before answering. "
+                    "Do not infer that the saved cadence or amount is missing from a "
+                    "previous discussion about a separate hypothetical plan. "
+                    if is_explicit_saved_plan_read(message) else ""
                 )
                 + (
                     " This turn follows a verified answer in the same conversation. For a short why/how "
@@ -4094,9 +4109,9 @@ class FinnV2RunService:
                                 context=context,
                             )
                             await session.commit()
-                        if requests_unsupported_ma_dca_amount(run_message):
-                            # This is a conceptual DCA amount design. The
-                            # prior trade-strategy waiver must not answer it.
+                        if requests_execution_capability_question(run_message, context):
+                            # A capability question must not inherit an unrelated
+                            # pending action or strategy-rule waiver.
                             strategy_rule_block = {}
                         # Clarification state belongs to the previous sealed
                         # run contract. The conversation projection normally
@@ -4111,7 +4126,7 @@ class FinnV2RunService:
                         )
                         if (
                             not strategy_rule_block
-                            and not requests_unsupported_ma_dca_amount(run_message)
+                            and not requests_execution_capability_question(run_message, context)
                             and prior_clarification.get("reason") == "strategy_rule_not_captured"
                         ):
                             # A clarification may be emitted before proposal
@@ -4396,7 +4411,7 @@ class FinnV2RunService:
 
                 if (
                     visible and strategy_rule_block and conversation_id
-                    and not requests_unsupported_ma_dca_amount(run_message)
+                    and not requests_execution_capability_question(run_message, context)
                     and not dict(strategy_rule_block.get("captured_inputs") or {}).get("setup_id")
                     and FinnV2OperationStateService.is_cancel_intent(run_message)
                 ):
@@ -4502,15 +4517,14 @@ class FinnV2RunService:
                         await session.commit()
                     return
 
-                if visible and requests_unsupported_ma_dca_amount(run_message):
-                    # This amount rule is outside the executable DCA contract.
-                    # Let FINN explain the typed capability facts; no action
-                    # selection or confirmable proposal may drop the MA rule.
+                if visible and requests_execution_capability_question(run_message, context):
+                    # Compare the proposed rule with the executable contracts
+                    # before any action selection can produce a card.
                     focus_changed = advance_plan_design_focus(context, run_message)
-                    focus_changed = remember_unsupported_ma_design(context) or focus_changed
+                    focus_changed = remember_unsaved_design(context) or focus_changed
                     separate_setup = context.get("plan_design_focus", {}).get("kind") == "new_separate_setup"
                     locale = str(context.get("locale") or "nl")
-                    answer_text, response_id = await _explain_unsupported_ma_dca_amount(
+                    answer_text, response_id = await _explain_execution_capability(
                         message=run_message, locale=locale,
                         separate_setup=separate_setup,
                     )
@@ -4535,10 +4549,10 @@ class FinnV2RunService:
                             )
                         await cls(session).complete_responses_read(
                             run_id=run_id, user_id=user_id,
-                            response_id=response_id or f"ma-dca-capability-{run_id}",
+                            response_id=response_id or f"plan-capability-{run_id}",
                             answer=FinnResponsesVerifiedAnswer(
                                 status="completed", text=answer_text,
-                                reason="dca_automation_capability", evidence=(),
+                                reason="plan_execution_capability", evidence=(),
                             ),
                             locale=locale,
                             verifier_ran=False,
