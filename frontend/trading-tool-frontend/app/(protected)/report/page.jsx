@@ -45,7 +45,7 @@ import { waitUntilVisible } from '@/hooks/useVisibilityPolling';
 import { actionButtonStyles } from '@/components/ui/actionButtonStyles';
 import { trackAssistantEvent } from '@/lib/api/assistantAnalytics';
 import { useTranslation } from '@/app/providers/I18nProvider';
-import { isReadyReport, isGeneratedReportReady } from '@/lib/report/reportState';
+import { getReportSignature, isReadyReport, isGeneratedReportReady } from '@/lib/report/reportState';
 import { useAsset } from '@/app/providers/AssetProvider';
 import { formatDateTime, getIntlLocale, getLocaleValue, normalizeLocale } from '@/lib/i18n';
 import {
@@ -135,16 +135,6 @@ function behavioralPriorityBadgeTone(item = {}) {
   if (bias === 'up') return 'border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300';
   if (bias === 'down') return 'border-rose-200 bg-rose-100 text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300';
   return 'border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300';
-}
-
-function getReportSignature(report) {
-  if (!report) return '';
-  return (
-    report.generated_at ||
-    report.updated_at ||
-    report.created_at ||
-    JSON.stringify(report)
-  );
 }
 
 function getNested(obj, path, fallback = null) {
@@ -1771,7 +1761,9 @@ export default function ReportPage() {
   const tradingPanelCopy = useMemo(() => getTradingReportPanelCopy(locale, reportT.marketReportDescription), [locale, reportT.marketReportDescription]);
 
   const [reportType, setReportType] = useState('daily');
-  const [report, setReport] = useState(null);
+  const [loadedReport, setLoadedReport] = useState({ type: 'daily', data: null });
+  const report = loadedReport.type === reportType ? loadedReport.data : null;
+  const setReport = (data, type = reportType) => setLoadedReport({ type, data });
   const [traderStatus, setTraderStatus] = useState(null);
   const [traderStatusLoading, setTraderStatusLoading] = useState(false);
   const [traderStatusError, setTraderStatusError] = useState(false);
@@ -1879,7 +1871,7 @@ LOAD
       if (loadToken !== loadTokenRef.current) return;
       setDates(sortDatesDesc(rawDates || []));
 
-      setReport(data || null);
+      setReport(data || null, reportType);
       lastSignatureRef.current = getReportSignature(data);
     } catch {
       if (loadToken === loadTokenRef.current) {
@@ -1925,10 +1917,9 @@ GENERATE
 
       const sig = getReportSignature(data);
 
-      // Period reports are upserted for the same report date. Their created_at
-      // stays unchanged, so a successful owner-bound task is the completion
-      // proof even when the row signature is identical to the prior version.
-      if (isGeneratedReportReady(data, sig, baselineSignature, taskSucceeded)) {
+      // The task can finish before the new row is visible to the read route.
+      // Require the saved snapshot to change before showing it as complete.
+      if (isGeneratedReportReady(data, sig, baselineSignature, taskSucceeded, reportType)) {
         lastSignatureRef.current = sig;
         setSelectedDate('latest');
         setReport(data);
@@ -1942,6 +1933,8 @@ GENERATE
   };
 
   const handleGenerate = async (fromAuto = false) => {
+    // An earlier history fetch must not overwrite the report generated below.
+    loadTokenRef.current += 1;
     setGenerating(true);
     setLoading(true);
     setGenerateInfo(

@@ -48,7 +48,10 @@ export function reportV2Change(change, labels) {
 export function reportV2PeriodState(report, browserLocale) {
   const v2 = scoreSourceSnapshot(report)?.report_v2;
   if (!v2 || v2.period === 'daily' || v2.comparison?.period_complete !== false) return null;
-  const language = reportV2Locale(report, browserLocale);
+  // This badge belongs to the live UI. Saved report prose and PDFs retain
+  // their original language, while controls follow the user's current choice.
+  const candidate = String(browserLocale || 'nl').slice(0, 2).toLowerCase();
+  const language = ['nl', 'en', 'de'].includes(candidate) ? candidate : 'nl';
   const labels = {
     nl: { weekly: 'Lopende week', monthly: 'Lopende maand', quarterly: 'Lopend kwartaal' },
     en: { weekly: 'Week in progress', monthly: 'Month in progress', quarterly: 'Quarter in progress' },

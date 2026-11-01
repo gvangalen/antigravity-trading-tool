@@ -6,7 +6,24 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Report 2.0: indicatorverloop en lopende perioden (1 november 2026)
 
-Phase: `LIVE_PENDING_QA`. Kandidaat `codex/report-indicator-history` herstelt
+Phase: `LOCAL_VALIDATION` voor reparatiekandidaat `codex/report-live-qa-fixes`.
+Onafhankelijke QA gaf `NOT_ACCEPTED` op productie-SHA
+`c7468c239c2ab10207a3502010da6736175c0b4b`: het eerste openen na
+weekgeneratie kon nog de oude dagsnapshot tonen; de eerste PDF-pagina bevatte
+alleen de titel en kop; de assetkaart miste botstatus en laatste beslissing;
+de periodestatus bleef Nederlands na omschakelen naar EN/DE. De reparatie
+wacht nu op de daadwerkelijk gewijzigde opgeslagen snapshot, koppelt de
+weergave aan het geselecteerde rapporttype, laat PDF-overzichtskaarten apart
+afbreken, toont botstatus en beslissing per asset, en vertaalt de interactieve
+periodestatus volgens de gekozen UI-taal. De lokale herkeuring is groen: 4184
+backendtests geslaagd (4 bestaande skips), frontendproductiebuild, typecheck,
+i18n-lint, 34 i18n-tests, 34 commandtests en 8 proposaltests geslaagd. Een
+lokaal in Chromium geprint Report 2.0 met drie assets toont op de eerste
+A4-pagina alle overzichtskaarten en de terugblik. CI, echte-providercontrole,
+deployment en onafhankelijke live hertest volgen; deze batch is nog niet
+geaccepteerd.
+
+De oorspronkelijke kandidaat `codex/report-indicator-history` herstelt
 de historische vergelijking per indicator in week-, maand- en kwartaalrapporten.
 Het rapport noemt de gebruikte dagen, toont bij een nog lopende periode
 `Lopende week`, `Lopende maand` of `Lopend kwartaal`, en zet bovenaan per asset
