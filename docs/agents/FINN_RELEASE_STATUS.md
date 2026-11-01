@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Report 2.0: indicatorverloop en lopende perioden (1 november 2026)
 
-Phase: `LIVE_PENDING_QA` voor reparatiekandidaat `codex/report-live-qa-fixes`.
+Phase: `ACCEPTED` voor reparatiekandidaat `codex/report-live-qa-fixes` op
+productie-SHA `900414dd05a21abffc292cb76705ab9dc5a63e05`.
 Onafhankelijke QA gaf `NOT_ACCEPTED` op productie-SHA
 `c7468c239c2ab10207a3502010da6736175c0b4b`: het eerste openen na
 weekgeneratie kon nog de oude dagsnapshot tonen; de eerste PDF-pagina bevatte
@@ -27,9 +28,19 @@ is samengevoegd als `945dc237b846bf4cbff8ca3614bebde8d384d1df`.
 Alle vijf jobs van [main-CI 41313104034](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41313104034)
 en [Auto Deploy 41313308116](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41313308116)
 slaagden. Publieke `/api/health` en `/build-info.json` gaven beide HTTP 200 en
-dezelfde SHA. Deze statusupdate krijgt een eigen laatste deployment-SHA;
-onafhankelijke QA start na verificatie daarvan. Deze batch is nog niet
-geaccepteerd.
+dezelfde SHA. De laatste [main-CI 41313863676](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41313863676)
+en [Auto Deploy 41314138973](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41314138973)
+slaagden; publieke backend en frontend gaven beide HTTP 200 en exact
+`900414dd05a21abffc292cb76705ab9dc5a63e05`. De bestaande onafhankelijke
+QA-agent gaf op die SHA `ACCEPTED`: verse week-, maand- en kwartaalrapporten
+openden direct juist; historische indicatorveranderingen waren herleidbaar;
+assetkaarten toonden botstatus en gedateerde beslissingen; alle drie PDF's
+hadden titel, periode en assetkaarten op pagina 1; EN/DE-periodestatussen
+waren vertaald. Er zijn geen Live-orders of botwijzigingen uitgevoerd.
+P3-restpunt: een Engelse periodekop bij een opgeslagen NL-rapport gebruikt nog
+de afkorting `OKT` in plaats van `OCT`. Nieuwe EN/DE-rapportinhoud is in deze
+hertest niet gegenereerd. Deze verdict-documentatie verandert de productcode
+niet en krijgt een eigen laatste deployment-SHA.
 
 De oorspronkelijke kandidaat `codex/report-indicator-history` herstelt
 de historische vergelijking per indicator in week-, maand- en kwartaalrapporten.
