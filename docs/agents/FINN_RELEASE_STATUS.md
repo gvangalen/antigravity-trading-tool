@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN: algemene uitvoerbaarheid bij nieuwe planregels (1 november 2026)
 
-Phase: `LOCAL_VALIDATED`. De onafhankelijke QA van de vorige kandidaat
+Phase: `DEPLOYED_PENDING_QA`. De onafhankelijke QA van de vorige kandidaat
 (`393c5f62aab097de58707437a5d350b6786b9d12`) gaf `NOT_ACCEPTED`:
 FINN noemde een vloeiend oplopend bedrag onder MA200 eerst uitvoerbaar en
 las het oude opgeslagen plan daarna niet betrouwbaar terug. De reparatie
@@ -28,7 +28,13 @@ slaagde met `16/16` zonder brokerorders of productieverbindingen (artifact
 SHA-256 `db0e125da32a1f689cb0b46124fd664fc03fc076830493927d60e77215bc749b`).
 De echte Responses-selectorevaluaties slaagden met `20/20` ontwikkeling en
 `109/109` regressie. Frontendproductiebuild en `git diff --check` zijn
-groen. CI, deployment en onafhankelijke live QA volgen nog.
+groen. Alle vijf PR-jobs van [PR #770](https://github.com/gvangalen/antigravity-trading-tool/pull/770)
+en alle vijf jobs van [main-CI 41347203753](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41347203753)
+slaagden. [Auto Deploy 41347444731](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41347444731)
+slaagde op `b51048a8e7abba8573cb3c3c1b87d194e41e7556`. Publieke
+backend-health en frontend-buildinfo gaven beide HTTP 200 en exact die SHA.
+Deze statusbijwerking krijgt zelf een laatste deployment-SHA; pas na de
+laatste CI/Auto Deploy en publieke SHA-controle start onafhankelijke live QA.
 
 ## FINN: nieuwe planscope en uitvoerbare DCA-regels (1 november 2026)
 
