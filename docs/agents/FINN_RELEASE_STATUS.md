@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Report 2.0: indicatorverloop en lopende perioden (1 november 2026)
 
-Phase: `LOCAL_VALIDATION`. Kandidaat `codex/report-indicator-history` herstelt
+Phase: `LIVE_PENDING_QA`. Kandidaat `codex/report-indicator-history` herstelt
 de historische vergelijking per indicator in week-, maand- en kwartaalrapporten.
 Het rapport noemt de gebruikte dagen, toont bij een nog lopende periode
 `Lopende week`, `Lopende maand` of `Lopend kwartaal`, en zet bovenaan per asset
@@ -15,8 +15,16 @@ onderliggende indicatorveranderingen staan bij Analyse. Er worden geen
 ontbrekende metingen als nul ingevuld. De gerichte backendtests (38), volledige
 backend-suite (4184 geslaagd, 4 bestaande skips), frontendproductiebuild,
 typecheck, i18n-lint, i18n-tests (33), commandtests (34) en proposaltests (8)
-zijn geslaagd. Echte Responses-provider-CI, PR-CI, deployment en onafhankelijke
-live QA volgen. Er is geen FINN-chat-actiecontract gewijzigd.
+zijn geslaagd. Er is geen FINN-chat-actiecontract gewijzigd. Alle vijf jobs
+van [PR-CI 41308645182](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41308645182)
+en [echte Responses-provider-CI 41308668275](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41308668275)
+slaagden; de providerstap gebruikte de echte Responses-route. [PR #759](https://github.com/gvangalen/antigravity-trading-tool/pull/759)
+is samengevoegd als `6183beda9896f33a1209d73a674750273ee7fda5`.
+Alle vijf jobs van [main-CI 41309021226](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41309021226)
+en [Auto Deploy 41309282615](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41309282615)
+slaagden. Publieke `/api/health` en `/build-info.json` gaven beide HTTP 200 en
+diezelfde SHA. Deze statusupdate krijgt een eigen laatste deployment-SHA;
+onafhankelijke QA start na de verificatie daarvan.
 
 ## TradingView-indicatoren bij trage eerste opening (1 november 2026)
 
