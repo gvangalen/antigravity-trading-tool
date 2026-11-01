@@ -31,7 +31,7 @@ export default function LocalMarketChart({ symbol, interval, unavailableLabel, b
     setPayload(null);
     setFailed(false);
     const params = new URLSearchParams({ tradingview_symbol: symbol, interval });
-    apiGet(`/api/assets/chart-candles?${params}`, { forceFresh: true })
+    apiGet(`/api/assets/chart-candles?${params}`)
       .then((data) => { if (active) setPayload(data); })
       .catch(() => { if (active) setFailed(true); });
     return () => { active = false; };

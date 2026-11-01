@@ -17,6 +17,7 @@ from backend.services.market_data_ingestion_service import MarketDataIngestionSe
 from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
 from backend.services.exact_market_workspace_service import ExactMarketWorkspaceService
 from backend.utils.auth_utils import get_current_user
+from backend.services.chart_candle_cache_service import cached_chart_candles, check_chart_request
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -35,7 +36,8 @@ async def get_verified_chart_candles(
     widget does not initialize. A requested symbol is never sent upstream
     without first resolving its verified catalog identity.
     """
-    del current_user  # Authentication is required; candles themselves are public market data.
+    # Public market candles still require authentication and a per-user budget.
+    check_chart_request(int(current_user["id"]))
     normalized_symbol = tradingview_symbol.strip().upper()
     interval_map = {
         "15": ("15m", "15min"), "60": ("1h", "1h"),
@@ -82,50 +84,54 @@ async def get_verified_chart_candles(
             timezone=catalog.timezone or "UTC",
         )
 
-    try:
-        provider = MarketDataProviderRegistry().resolve_for_asset(asset)
-        provider_interval = interval_map[interval][0 if asset.asset_class == "crypto" else 1]
-        candles = await provider.fetch_candles(asset, provider_interval, limit=220)
-    except Exception as exc:
-        logger.warning("Chart candle source unavailable for %s: %s", normalized_symbol, type(exc).__name__)
-        raise HTTPException(503, "Grafiekgegevens tijdelijk niet beschikbaar.") from exc
+    async def fetch_verified():
+        try:
+            provider = MarketDataProviderRegistry().resolve_for_asset(asset)
+            provider_interval = interval_map[interval][0 if asset.asset_class == "crypto" else 1]
+            candles = await provider.fetch_candles(asset, provider_interval, limit=220)
+        except Exception as exc:
+            logger.warning("Chart candle source unavailable for %s: %s", normalized_symbol, type(exc).__name__)
+            raise HTTPException(503, "Grafiekgegevens tijdelijk niet beschikbaar.") from exc
 
-    verified_candles = [candle for candle in candles
-                        if candle.provider_symbol.upper() == str(asset.provider_symbol).upper()]
-    if interval == "3M" and asset.asset_class != "crypto":
-        # Twelve Data supplies monthly bars; combine them into actual quarter bars.
-        quarters = {}
-        for candle in sorted(verified_candles, key=lambda item: item.period_start):
-            key = (candle.period_start.year, (candle.period_start.month - 1) // 3)
-            if key not in quarters:
-                quarters[key] = {
-                    "time": candle.period_start.isoformat(), "open": candle.open,
-                    "high": candle.high, "low": candle.low, "close": candle.close,
-                    "volume": candle.volume,
-                }
-            else:
-                bar = quarters[key]
-                bar["high"] = max(bar["high"], candle.high)
-                bar["low"] = min(bar["low"], candle.low)
-                bar["close"] = candle.close
-                if candle.volume is not None:
-                    bar["volume"] = (bar["volume"] or 0) + candle.volume
-        response_candles = list(quarters.values())
-    else:
-        response_candles = [
-            {"time": candle.period_start.isoformat(), "open": candle.open,
-             "high": candle.high, "low": candle.low, "close": candle.close,
-             "volume": candle.volume}
-            for candle in verified_candles
-        ]
+        verified_candles = [candle for candle in candles
+                            if candle.provider_symbol.upper() == str(asset.provider_symbol).upper()]
+        if interval == "3M" and asset.asset_class != "crypto":
+            # Twelve Data supplies monthly bars; combine them into actual quarter bars.
+            quarters = {}
+            for candle in sorted(verified_candles, key=lambda item: item.period_start):
+                key = (candle.period_start.year, (candle.period_start.month - 1) // 3)
+                if key not in quarters:
+                    quarters[key] = {
+                        "time": candle.period_start.isoformat(), "open": candle.open,
+                        "high": candle.high, "low": candle.low, "close": candle.close,
+                        "volume": candle.volume,
+                    }
+                else:
+                    bar = quarters[key]
+                    bar["high"] = max(bar["high"], candle.high)
+                    bar["low"] = min(bar["low"], candle.low)
+                    bar["close"] = candle.close
+                    if candle.volume is not None:
+                        bar["volume"] = (bar["volume"] or 0) + candle.volume
+            response_candles = list(quarters.values())
+        else:
+            response_candles = [
+                {"time": candle.period_start.isoformat(), "open": candle.open,
+                 "high": candle.high, "low": candle.low, "close": candle.close,
+                 "volume": candle.volume}
+                for candle in verified_candles
+            ]
 
-    return {
-        "symbol": normalized_symbol,
-        "source": provider.provider_name,
-        "quote_currency": asset.quote_currency,
-        "interval": interval,
-        "candles": response_candles,
-    }
+        return {
+            "symbol": normalized_symbol,
+            "source": provider.provider_name,
+            "quote_currency": asset.quote_currency,
+            "interval": interval,
+            "candles": response_candles,
+        }
+
+    identity = f"{provider_name}:{asset.provider_symbol}:{interval}"
+    return await cached_chart_candles(identity, asset.asset_class, provider_name, fetch_verified)
 
 
 class AssetSearchItemResponse(BaseModel):
