@@ -10,5 +10,5 @@ export function restoreOnboardingIndicator(preferences, catalog, stepCompleted) 
 }
 
 export function hasSavedOnboardingAnalysisChoices({ asset, market, macro, technical }) {
-  return Boolean(asset && market && technical);
+  return Boolean(asset && market && macro && technical);
 }

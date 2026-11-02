@@ -38,14 +38,15 @@ REQUIRED_COMPLETION_STEPS: List[str] = [
     "profile",
     "asset",
     "market",
+    "macro",
     "technical",
     "setup",
 ]
 
-# Macro context enriches an analysis but is not a prerequisite for a user to
-# complete a valid asset, market and technical onboarding flow.
-ANALYSIS_REQUIRED_FLAGS = ("has_asset", "has_market", "has_technical")
-ANALYSIS_OPTIONAL_FLAGS = {"macro_indicator": "has_macro"}
+# All three categories must be configured for the user's benchmark. Score
+# calculation and source sync may still finish after onboarding.
+ANALYSIS_REQUIRED_FLAGS = ("has_asset", "has_market", "has_macro", "has_technical")
+ANALYSIS_OPTIONAL_FLAGS = {}
 
 PHASE_ORDER: List[str] = ["profile", "analysis", "plan", "automation", "complete"]
 
@@ -244,6 +245,7 @@ class OnboardingService:
                 for token, done in [
                     ("asset", status_kwargs.get("has_asset")),
                     ("market_indicator", status_kwargs.get("has_market")),
+                    ("macro_indicator", status_kwargs.get("has_macro")),
                     ("technical_indicator", status_kwargs.get("has_technical")),
                 ]
                 if not done

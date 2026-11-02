@@ -45,7 +45,7 @@ test("sync classification distinguishes source and scoring states", () => {
 test("saved onboarding choices allow continuing while scores are pending", () => {
   const choices = { asset: { symbol: "ETH" }, market: { name: "price" }, macro: { name: "dxy" }, technical: { name: "rsi" } };
   assert.equal(hasSavedOnboardingAnalysisChoices(choices), true);
-  assert.equal(hasSavedOnboardingAnalysisChoices({ ...choices, macro: null }), true);
+  assert.equal(hasSavedOnboardingAnalysisChoices({ ...choices, macro: null }), false);
   assert.equal(hasSavedOnboardingAnalysisChoices({ ...choices, technical: null }), false);
   assert.equal(classifyOnboardingIndicatorSync({ synced: [{ indicator: "dxy", payload: { status: "pending_source", value: null } }], failed: [] }, "dxy"), "failed");
   assert.equal(hasSavedOnboardingAnalysisChoices(choices), true);
