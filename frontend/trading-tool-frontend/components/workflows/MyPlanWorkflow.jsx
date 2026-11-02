@@ -102,6 +102,10 @@ const COPY = {
     technical: "technisch",
     amountPerExecution: "Bedrag per uitvoering",
     entry: "Entry",
+    signalClose: "Afgesloten dagkoers kruist",
+    signalAbove: "boven",
+    signalBelow: "onder",
+    signalTrendline: "trendlijn",
     stopLoss: "Stop-loss",
     targets: "Targets",
     fixed: "Vast bedrag",
@@ -188,6 +192,10 @@ const COPY = {
     technical: "technical",
     amountPerExecution: "Amount per execution",
     entry: "Entry",
+    signalClose: "Closed daily price crosses",
+    signalAbove: "above",
+    signalBelow: "below",
+    signalTrendline: "trend line",
     stopLoss: "Stop loss",
     targets: "Targets",
     fixed: "Fixed amount",
@@ -274,6 +282,10 @@ const COPY = {
     technical: "Technik",
     amountPerExecution: "Betrag pro Ausführung",
     entry: "Einstieg",
+    signalClose: "Geschlossener Tageskurs kreuzt",
+    signalAbove: "über",
+    signalBelow: "unter",
+    signalTrendline: "Trendlinie",
     stopLoss: "Stop-Loss",
     targets: "Ziele",
     fixed: "Fester Betrag",
@@ -1059,5 +1071,11 @@ function getExecutionSummary(plan, copy) {
   const targets = Array.isArray(strategy.targets)
     ? strategy.targets.map((target) => typeof target === "object" ? target.price : target).filter((value) => value != null)
     : [];
-  return `${copy.entry}: ${formatNumber(strategy.entry)} · ${copy.stopLoss}: ${formatNumber(strategy.stop_loss)} · ${copy.targets}: ${targets.map(formatNumber).join(", ") || "–"}`;
+  const rule = strategy.entry_signal;
+  const reference = rule?.reference?.kind === "sma" ? `SMA ${rule.reference.period}` : copy.signalTrendline;
+  const anchors = rule?.reference?.kind === "trendline"
+    ? ` (${rule.reference.anchors.map((anchor) => `${String(anchor.at).slice(0, 10)}: ${anchor.price} ${strategy.price_currency || ""}`).join(" → ")})`
+    : "";
+  const signal = rule ? ` · ${copy.signalClose} ${rule.direction === "above" ? copy.signalAbove : copy.signalBelow} ${reference}${anchors} · 1D` : "";
+  return `${copy.entry}: ${formatNumber(strategy.entry)} · ${copy.stopLoss}: ${formatNumber(strategy.stop_loss)} · ${copy.targets}: ${targets.map(formatNumber).join(", ") || "–"}${signal}`;
 }

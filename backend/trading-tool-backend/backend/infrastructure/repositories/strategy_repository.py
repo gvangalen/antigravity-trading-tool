@@ -13,8 +13,10 @@ class StrategyRepository:
     async def get_setup_for_verification(self, setup_id: int, user_id: int) -> Optional[dict]:
         query = text("""
             SELECT s.id, s.name, s.symbol, s.timeframe, s.setup_type,
-                   s.market_id, tm.quote_currency AS market_quote_currency
+                   s.market_id, tm.quote_currency AS market_quote_currency,
+                   ac.asset_class AS market_asset_class
             FROM setups s LEFT JOIN trading_markets tm ON tm.id = s.market_id
+            LEFT JOIN asset_catalog ac ON ac.symbol = tm.asset_symbol
             WHERE s.id = :setup_id AND s.user_id = :user_id
         """)
         result = await self.session.execute(query, {"setup_id": setup_id, "user_id": user_id})

@@ -76,7 +76,7 @@ class _Cursor:
         return None
 
     def fetchone(self):
-        return ("trade", self.strategy, self.plan)
+        return ("trade", self.strategy, self.plan, None, None, 1)
 
 
 class _Connection:

@@ -5964,6 +5964,10 @@ def test_plain_action_fields_do_not_need_rule_review():
         owner_setup_name="BTC", strategy_name="Matrix Nieuwe Strategie",
     )
     assert _strategy_rule_is_unencoded("Gebruik MA200 als instapfilter.")
+    assert not _strategy_rule_is_unencoded(
+        "Maak een BTC-strategie: koop wanneer de afgesloten dagkoers boven SMA 200 kruist."
+    )
+    assert _strategy_rule_is_unencoded("Maak een strategie als SMA200 kruist.")
     assert _explicit_fresh_create_operation_request(
         "Ik wil een nieuwe strategie voor mijn opgeslagen BTC-setup."
     ) == "create_strategy"

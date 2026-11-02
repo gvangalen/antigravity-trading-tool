@@ -39,7 +39,7 @@ class FinnResponsesToolRelevanceGuard:
                 "base_amount", "entry", "stop_loss", "targets", "price_currency", "risk_profile",
                 "dca_amount_mode", "score_source", "low_threshold",
                 "high_threshold", "low_score_percent", "mid_score_percent",
-                "high_score_percent",
+                "high_score_percent", "entry_signal",
             }
         }
         try:
@@ -49,8 +49,11 @@ class FinnResponsesToolRelevanceGuard:
                     instructions=(
                         "Compare the ENTIRE user request with the supplied strategy fields. "
                         "The trade strategy contract can save fixed absolute entry, stop-loss "
-                        "and target prices and a qualitative risk style. It cannot enforce an "
-                        "RSI crossover, trend confirmation, an entry triggered by an indicator, "
+                        "and target prices, a qualitative risk style, and an optional validated "
+                        "entry_signal: a daily CLOSED-candle close crossing a typed SMA or "
+                        "two-anchor trendline. That signal is an additional gate on an already "
+                        "valid price-level and benchmark plan; it does not replace them. It cannot "
+                        "enforce arbitrary RSI or trend confirmation, an intraday crossover, "
                         "a stop or target expressed as a percentage relative to a future entry, "
                         "or a maximum percent risk per trade. A number extracted from '5% below "
                         "entry' as stop_loss=5 is NOT coverage. A risk style is NOT coverage for "

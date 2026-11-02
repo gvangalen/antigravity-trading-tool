@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.repositories.strategy_repository import StrategyRepository
 from backend.domain.strategy_level_geometry import strategy_level_geometry
+from backend.domain.entry_signal import validate_entry_signal
 from backend.domain.finn_dca_plan_contract import is_confirmed_dca_amount_rule
 from backend.schemas.trading_schema import StrategyCreateSchema
 from backend.utils.data_normalizers import (
@@ -67,7 +68,7 @@ class StrategyService:
     UPDATE_ALLOWED_FIELDS = frozenset({
         "name", "symbol", "timeframe", "execution_mode", "base_amount", "decision_curve",
         "decision_curve_name", "decision_curve_id", "entry", "entry_type",
-        "trade_execution_mode", "targets", "stop_loss", "price_currency", "explanation",
+        "trade_execution_mode", "targets", "stop_loss", "price_currency", "entry_signal", "explanation",
         "ai_explanation", "risk_profile", "automation", "tags", "favorite",
     })
     def __init__(self, db_session: AsyncSession):
@@ -160,6 +161,7 @@ class StrategyService:
             "price_currency": data.get("price_currency", "EUR"),
             "price_currency_confirmed": bool(data.get("price_currency_confirmed")),
             "entry_type": entry_type,
+            "entry_signal": data.get("entry_signal"),
             "trade_execution_mode": entry_type,
             "targets": targets,
             "stop_loss": stop_loss,
@@ -266,6 +268,14 @@ class StrategyService:
         setup_type = (setup_row.get("setup_type") or "").lower()
         if setup_type not in ["dca", "trade", "position"]:
             raise HTTPException(400, "Ongeldig setup_type")
+        if raw_data.get("entry_signal") is not None:
+            if (setup_type != "trade" or market_id is None
+                    or str(setup_row.get("market_asset_class") or "").lower() != "crypto"):
+                raise HTTPException(422, "Een signaalregel vereist een crypto trade-setup met een bevestigd spotpaar.")
+            try:
+                raw_data["entry_signal"] = validate_entry_signal(raw_data["entry_signal"])
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from exc
         if raw_data.get("dca_amount_semantics") is not None and not is_confirmed_dca_amount_rule({
             **raw_data, "setup_type": setup_type, "execution_mode": execution_mode,
             "base_amount": payload.base_amount,
@@ -369,6 +379,7 @@ class StrategyService:
             "entry": strategy.get("entry"),
             "price_currency": strategy.get("price_currency", "EUR"),
             "entry_type": strategy.get("entry_type"),
+            "entry_signal": strategy.get("entry_signal"),
             "trade_execution_mode": strategy.get("trade_execution_mode"),
             "targets": strategy.get("targets"),
             "stop_loss": strategy.get("stop_loss"),
@@ -432,6 +443,18 @@ class StrategyService:
             raise HTTPException(400, "decision_curve verplicht")
 
         setup_type = (existing.get("existing_setup_type") or "").lower()
+        if merged_data.get("entry_signal") is not None:
+            if setup_type != "trade" or existing.get("setup_market_id") is None:
+                raise HTTPException(422, "Een signaalregel vereist een trade-setup met een vast handelspaar.")
+            signal_setup = await self.repository.get_setup_for_verification(
+                int(existing["setup_id"]), user_id,
+            )
+            if str((signal_setup or {}).get("market_asset_class") or "").lower() != "crypto":
+                raise HTTPException(422, "Deze signaalregel ondersteunt alleen een crypto-spothandelspaar.")
+            try:
+                merged_data["entry_signal"] = validate_entry_signal(merged_data["entry_signal"])
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from exc
         if merged_data.get("dca_amount_semantics") is not None and not is_confirmed_dca_amount_rule({
             **merged_data, "setup_type": setup_type,
         }):

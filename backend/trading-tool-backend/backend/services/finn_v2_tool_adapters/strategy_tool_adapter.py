@@ -5,6 +5,7 @@ from typing import Any
 
 from backend.schemas.finn_v2_evidence_schema import LinkedStrategyData
 from backend.engine.curve_engine import calculate_position_size
+from backend.domain.entry_signal import validate_entry_signal
 
 
 class StrategyToolAdapter:
@@ -16,6 +17,11 @@ class StrategyToolAdapter:
             except (TypeError, ValueError):
                 stored = {}
         raw_data = stored if isinstance(stored, dict) else {}
+        try:
+            entry_signal = (validate_entry_signal(raw_data["entry_signal"])
+                            if raw_data.get("entry_signal") is not None else None)
+        except ValueError:
+            entry_signal = None
         targets = strategy.get("targets")
         if isinstance(targets, str):
             targets = [item.strip() for item in targets.split(",") if item.strip()]
@@ -47,6 +53,7 @@ class StrategyToolAdapter:
             price_currency=str(saved_currency).upper() if confirmed else None,
             price_currency_status="confirmed" if confirmed else "unconfirmed",
             entry_type=self._entry_type(strategy, raw_data),
+            entry_signal=entry_signal,
             stop_loss=strategy.get("stop_loss"),
             targets=targets,
             base_amount=self._coerce_float(strategy.get("base_amount")),

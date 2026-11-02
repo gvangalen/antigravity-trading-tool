@@ -1909,12 +1909,19 @@ function AIAssistantContent({
       : isBot
         ? `Paper · ${at("draftCards.linkedToName", "gekoppeld aan {name}", { name: linkedName })}`
         : [isIndicator && supplied.quote_currency ? `${supplied.asset || context.symbol}/${supplied.quote_currency}` : supplied.asset || context.symbol, isIndicator ? ({ technical: at("draftCards.technicalEvidence", "Technisch bewijs"), macro: "Macro", market: at("draftCards.marketIndicators", "Marktindicatoren") }[supplied.category] || supplied.category) : "Watchlist"].filter(Boolean).join(" · ");
-    const labels = { name: "naam", setup_id: "setup", strategy_id: "strategie", symbol: "asset", timeframe: "timeframe", execution_mode: "uitvoering", base_amount: "bedrag", entry: "entry", stop_loss: "stop-loss", targets: "targets", price_currency: "valuta koersniveaus", risk_profile: "risico", budget_total_eur: "budget", dca_amount_mode: "bedragregel", score_source: "totale benchmark", low_threshold: "grens lage/middenscore", high_threshold: "grens midden/hoge score", low_score_percent: "percentage lage score", mid_score_percent: "percentage middenscore", high_score_percent: "percentage hoge score" };
+    const labels = { name: "naam", setup_id: "setup", strategy_id: "strategie", symbol: "asset", timeframe: "timeframe", execution_mode: "uitvoering", base_amount: "bedrag", entry: "entry", stop_loss: "stop-loss", targets: "targets", price_currency: "valuta koersniveaus", risk_profile: "risico", budget_total_eur: "budget", dca_amount_mode: "bedragregel", score_source: "totale benchmark", low_threshold: "grens lage/middenscore", high_threshold: "grens midden/hoge score", low_score_percent: "percentage lage score", mid_score_percent: "percentage middenscore", high_score_percent: "percentage hoge score", entry_signal: "instapregel" };
     const missing = (draft.missing_inputs || []).map((field) => at(`draftCards.inputs.${field}`, labels[field] || field));
     const formatValue = (value) => formatDraftCardValue(value, locale);
     const euro = (value) => new Intl.NumberFormat(locale || "nl-NL", { style: "currency", currency: "EUR" }).format(Number(value));
     const dcaBand = (percent) => supplied.base_amount != null && percent != null
       ? `${percent}% · ${euro(supplied.base_amount * percent / 100)}`
+      : null;
+    const signal = supplied.entry_signal;
+    const signalReference = signal?.reference?.kind === "sma"
+      ? `SMA ${signal.reference.period}`
+      : signal?.reference?.kind === "trendline" ? ({ en: "trendline", de: "Trendlinie" }[locale] || "trendlijn") : null;
+    const signalLabel = signal?.event === "close_crosses_reference" && signalReference
+      ? `${({ en: "Daily close", de: "Tagesschlusskurs" }[locale] || "Dagslotkoers")} ${signal.direction === "above" ? ({ en: "crosses above", de: "kreuzt über" }[locale] || "kruist boven") : ({ en: "crosses below", de: "kreuzt unter" }[locale] || "kruist onder")} ${signalReference}`
       : null;
     const rows = isStrategy
       ? supplied.setup_type === "dca"
@@ -1931,6 +1938,8 @@ function AIAssistantContent({
           ["Entry", supplied.entry != null ? `${formatValue(supplied.entry)} ${supplied.price_currency || "EUR"}` : null],
           ["Stop-loss", supplied.stop_loss != null ? `${formatValue(supplied.stop_loss)} ${supplied.price_currency || "EUR"}` : null],
           ["Targets", supplied.targets?.length ? `${supplied.targets.map(formatValue).join(", ")} ${supplied.price_currency || "EUR"}` : null],
+          [({ en: "Additional entry condition", de: "Zusätzliche Einstiegsbedingung" }[locale] || "Extra instapvoorwaarde"), signalLabel],
+          [({ en: "Trendline anchors", de: "Trendlinien-Anker" }[locale] || "Trendlijnpunten"), signal?.reference?.kind === "trendline" ? signal.reference.anchors?.map((point) => `${point.at} · ${formatValue(point.price)} ${supplied.price_currency || ""}`).join(" → ") : null],
           [at("draftCards.fieldRisk", "Risico"), supplied.risk_profile]]
       : isBot
         ? [[({ en: "Bot budget limit", de: "Bot-Budgetlimit" }[locale] || "Botbudgetlimiet"), supplied.budget_total_eur ? `€${supplied.budget_total_eur}` : null],

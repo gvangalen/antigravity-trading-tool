@@ -7,6 +7,7 @@ from typing import Mapping, Optional
 
 from backend.domain.finn_v2_operation_registry import OperationContract
 from backend.domain.finn_v2_setup_input_catalog import FinnV2SetupInputCatalog
+from backend.domain.entry_signal import explicit_entry_signal_from_text, validate_entry_signal
 from backend.domain.saved_setup_market_condition import explicit_benchmark_bounds
 from backend.domain.technical_indicator_catalog import get_active_technical_indicator_definitions
 from backend.domain.macro_indicator_catalog import get_active_macro_indicator_definitions
@@ -1233,6 +1234,10 @@ class FinnV2OperationStateService:
                     values["name"] = natural_name.group(1).strip(" .\"'")
             strategy_values = self._strategy_trade_inputs(text)
             values.update({key: value for key, value in strategy_values.items() if key in accepted_inputs})
+            if "entry_signal" in accepted_inputs:
+                signal = explicit_entry_signal_from_text(text)
+                if signal is not None:
+                    values["entry_signal"] = signal
             if "price_currency" in accepted_inputs:
                 currency = self._explicit_trade_price_currency(text)
                 if currency:
@@ -2345,6 +2350,11 @@ class FinnV2OperationStateService:
 
     @staticmethod
     def _canonical_input(field: str, value: object) -> object:
+        if field == "entry_signal":
+            try:
+                return validate_entry_signal(value)
+            except ValueError:
+                return None
         if field == "price_currency":
             return str(value).strip().upper() if str(value).strip().upper() in {"EUR", "USD", "USDT"} else None
         if field in {"entry", "stop_loss", "base_amount"}:

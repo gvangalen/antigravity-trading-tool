@@ -11,6 +11,7 @@ from backend.engine.bot_brain import run_bot_brain
 from backend.engine.guardrails_engine import apply_guardrails
 from backend.domain.finn_dca_plan_contract import benchmark_score, normalize_benchmark_weights, is_confirmed_dca_amount_rule
 from backend.domain.setup_market_match import match_setup_from_daily_scores
+from backend.domain.entry_signal import evaluate_entry_signal, validate_entry_signal
 import asyncio
 from backend.services.exchange_service import ExchangeService
 from backend.services.platform_metrics import increment_execution_safety_counter
@@ -750,6 +751,13 @@ def _get_strategy_setup_payload(
         "price_currency": str(stored_data.get("price_currency", "EUR")).upper(),
         "price_currency_confirmed": stored_data.get("price_currency_confirmed") is True,
     }
+    if normalized_type == "trade" and stored_data.get("entry_signal") is not None:
+        # A corrupt or legacy free-form value is retained as an invalid gate.
+        # It must never silently fall through to the ordinary price-level buy.
+        try:
+            payload["entry_signal"] = validate_entry_signal(stored_data["entry_signal"])
+        except ValueError:
+            payload["entry_signal"] = {"invalid": True}
 
     if execution_mode == "custom":
         payload["decision_curve"] = curve or {}
@@ -771,6 +779,53 @@ def _get_strategy_setup_payload(
         payload["dca_amount_semantics"] = "planned_exact"
 
     return payload
+
+
+def _closed_pair_candles(conn, market_id: int, *, limit: int = 220) -> list[dict]:
+    """Read dated, completed 1D OHLC bars from the saved trading pair."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT DISTINCT ON (DATE(source_observed_at)) source_observed_at, price
+               FROM market_data
+               WHERE market_id=%s AND source_observed_at IS NOT NULL
+                 AND source_observed_at < DATE_TRUNC('day', NOW() AT TIME ZONE 'UTC')
+                 AND source_observed_at::time = TIME '23:59:59'
+                 AND is_final_candle = TRUE
+                 AND price IS NOT NULL AND high IS NOT NULL AND low IS NOT NULL
+               ORDER BY DATE(source_observed_at) DESC, source_observed_at DESC, id DESC
+               LIMIT %s""",
+            (market_id, limit),
+        )
+        rows = cur.fetchall()
+    return [{"at": at.isoformat() + ("Z" if at.tzinfo is None else ""),
+             "close": float(close)} for at, close in reversed(rows)]
+
+
+def _assess_saved_entry_signal(conn, rule: dict, market_id: int | None) -> dict:
+    if not market_id or rule.get("invalid"):
+        return {"status": "invalid_or_unbound_rule"}
+    try:
+        return evaluate_entry_signal(
+            rule, _closed_pair_candles(conn, market_id), market_id=market_id,
+            now=datetime.now(timezone.utc),
+        )
+    except (ValueError, TypeError, OverflowError):
+        return {"status": "invalid_candle_evidence"}
+
+
+def _enforce_entry_signal(brain: dict, assessment: dict | None) -> dict:
+    if assessment is None:
+        return brain
+    result = dict(brain)
+    result["entry_signal"] = assessment
+    if _normalize_action(brain.get("action")) == "sell":
+        return result
+    if assessment.get("status") == "triggered":
+        return result
+    result.update(action="hold", amount_eur=0.0, position_size=0.0,
+                  execution_position_size=0.0,
+                  reason=f"Opgeslagen instapregel: {assessment.get('status', 'unavailable')}.")
+    return result
 
 # =====================================================
 # 📦 Build setup match (UI CONTRACT)
@@ -1852,6 +1907,7 @@ def _persist_decision_and_order(
         "amount_eur": amount_eur,
 
         "trade_plan": decision.get("trade_plan"),
+        "entry_signal": decision.get("entry_signal"),
         "strategy_reason": decision.get("strategy_reason"),
         "guardrail_reason": decision.get("guardrail_reason"),
         "guardrails_result": decision.get("guardrails_result"),
@@ -2382,6 +2438,29 @@ def run_trading_bot_execution(
             if setup_payload.get("symbol") and setup_payload["symbol"].upper() != symbol:
                 logger.warning("Bot %s asset differs from linked strategy; skipping decision", bot["bot_id"])
                 continue
+            signal_assessment = None
+            if "entry_signal" in setup_payload:
+                # The existing trade-level and Score 2.0 checks still apply.
+                # Live has no matching execution-time signal recheck.
+                signal_assessment = (
+                    {"status": "paper_only"} if bot.get("is_live") else
+                    _assess_saved_entry_signal(conn, setup_payload["entry_signal"], market_id)
+                )
+                if signal_assessment.get("status") == "triggered":
+                    with conn.cursor() as cur:
+                        cur.execute("SELECT pg_advisory_xact_lock(%s, %s)",
+                                    (user_id, bot["bot_id"]))
+                        cur.execute(
+                            """SELECT 1 FROM bot_decisions
+                               WHERE user_id=%s AND bot_id=%s
+                                 AND decision_kind='assessment' AND action='buy'
+                                 AND status='executed'
+                                 AND scores_json->'entry_signal'->>'signal_key'=%s
+                               LIMIT 1""",
+                            (user_id, bot["bot_id"], signal_assessment["signal_key"]),
+                        )
+                        if cur.fetchone():
+                            signal_assessment = {**signal_assessment, "status": "already_executed"}
             try:
                 scores["_benchmark_weights"], scores["_benchmark_weight_source"] = _get_current_benchmark_weights(conn, user_id, symbol, market_id)
             except Exception:
@@ -2540,6 +2619,7 @@ def run_trading_bot_execution(
                 portfolio_context=portfolio_context,
             )
             brain = _enforce_setup_match_on_buy(brain, current_match, setup_payload)
+            brain = _enforce_entry_signal(brain, signal_assessment)
 
             # All comparisons and sizing now use EUR. Ambiguous old levels or
             # a missing dated FX rate still fail closed before an order.
@@ -2668,6 +2748,7 @@ def run_trading_bot_execution(
                 "structure_bias": brain.get("structure_bias"),
 
                 "trade_plan": trade_plan,
+                "entry_signal": brain.get("entry_signal"),
                 "watch_levels": brain.get("watch_levels"),
                 "monitoring": brain.get("monitoring"),
                 "alerts_active": brain.get("alerts_active"),
@@ -2913,11 +2994,13 @@ def _recheck_paper_trade_entry(conn, *, user_id: int, decision_id: int, symbol: 
     """Return a fresh EUR execution price for a trade or None for DCA."""
     with conn.cursor() as cur:
         cur.execute(
-            """SELECT s.setup_type, s.data, d.scores_json->'trade_plan'
+            """SELECT s.setup_type, s.data, d.scores_json->'trade_plan',
+                      d.scores_json->'entry_signal', st.market_id, d.bot_id
                FROM bot_decisions d
                JOIN strategies s ON s.id=d.strategy_id AND s.user_id=d.user_id
+               JOIN setups st ON st.id=s.setup_id AND st.user_id=d.user_id
                WHERE d.id=%s AND d.user_id=%s AND d.symbol=%s
-               FOR SHARE OF s""",
+               FOR SHARE OF s, st""",
             (decision_id, user_id, symbol),
         )
         row = cur.fetchone()
@@ -2927,6 +3010,36 @@ def _recheck_paper_trade_entry(conn, *, user_id: int, decision_id: int, symbol: 
         return None
     saved = _safe_json(row[1], {})
     plan = _safe_json(row[2], {})
+    stored_signal = saved.get("entry_signal")
+    decision_signal = _safe_json(row[3], {})
+    if bool(stored_signal) != bool(decision_signal):
+        raise BotSafetyBlock("De instapregel is gewijzigd. Maak een nieuwe Paper-beslissing.")
+    if stored_signal is not None:
+        saved_market_id = row[4]
+        if (market_id is None or saved_market_id != market_id
+                or decision_signal.get("status") != "triggered"):
+            raise BotSafetyBlock("Het handelspaar of instapsignaal van deze Paper-beslissing is niet meer bevestigd.")
+        try:
+            canonical_rule = validate_entry_signal(stored_signal)
+        except (ValueError, TypeError) as exc:
+            raise BotSafetyBlock("De opgeslagen instapregel is ongeldig.") from exc
+        if decision_signal.get("rule") != canonical_rule:
+            raise BotSafetyBlock("De instapregel is gewijzigd. Maak een nieuwe Paper-beslissing.")
+        current_signal = _assess_saved_entry_signal(conn, canonical_rule, market_id)
+        if (current_signal.get("status") != "triggered"
+                or current_signal.get("signal_key") != decision_signal.get("signal_key")):
+            raise BotSafetyBlock("De afgesloten koerskaars bevestigt dit signaal niet meer.")
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT 1 FROM bot_decisions
+                   WHERE user_id=%s AND bot_id=%s AND id<>%s AND action='buy'
+                     AND status='executed'
+                     AND scores_json->'entry_signal'->>'signal_key'=%s
+                   LIMIT 1""",
+                (user_id, row[5], decision_id, current_signal["signal_key"]),
+            )
+            if cur.fetchone():
+                raise BotSafetyBlock("Deze afgesloten koerskruising is al uitgevoerd.")
     source = str(plan.get("source_price_currency") or "").upper()
     levels = plan.get("source_levels") or {}
     if source == "USDT" and market_id is None:
