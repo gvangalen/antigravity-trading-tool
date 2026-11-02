@@ -6,7 +6,14 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Begeleide onboarding zonder verplichte strategie of bot (2 november 2026)
 
-Phase: `LOCAL_VALIDATION` voor de correctie op [PR #788](https://github.com/gvangalen/antigravity-trading-tool/pull/788).
+Phase: `LOCAL_VALIDATION` voor de selector-herstelrelease na [PR #789](https://github.com/gvangalen/antigravity-trading-tool/pull/789).
+PR #789 maakte de drie categorieën weer verplicht, maar onafhankelijke QA vond
+op live SHA `9d2813f2c0ca6692cc8549892bbe241967665247` een frontendblokkade:
+de Macro-kiezer vereiste ten onrechte al een Macro-keuze, terwijl Technisch te
+vroeg open ging. De huidige batch herstelt de ontgrendelvolgorde Markt → Macro
+→ Technisch en legt die volgorde in een gerichte frontendtest vast. Lokale
+frontend typecheck, i18n-lint, i18n-tests inclusief de nieuwe regressie,
+commandtests en productiebuild zijn geslaagd. Productie-QA volgt na deployment.
 De begeleide planstap maakt een DCA-setup; een handmatige Trade-setup wordt
 na onboarding in Mijn Plan ingericht. De gebruiker kan terug naar opgeslagen
 stappen. Een strategie en Paper-bot zijn vervolgstappen, geen voorwaarden om
