@@ -949,8 +949,10 @@
       "continuingLabel": "Mijn Plan openen…",
       "loadError": "Laden van de analyse-onboarding is mislukt. Probeer het opnieuw.",
       "saveError": "Opslaan van deze analyse-stap is mislukt. Probeer het opnieuw.",
+      "syncFailed": "Je keuzes zijn opgeslagen, maar de bronmeting ontbreekt of het ophalen is mislukt. Probeer het later opnieuw in Analyse; je kunt wel verder naar Mijn Plan.",
+      "syncRuleMissing": "Je keuzes zijn opgeslagen, maar voor een indicator ontbreekt een scoreregel. Controleer die in Analyse; je kunt wel verder naar Mijn Plan.",
       "pendingEyebrow": "Keuzes opgeslagen",
-      "pendingScore": "Je keuzes zijn opgeslagen. De scores verschijnen zodra de brongegevens beschikbaar zijn; je kunt nu verder naar Mijn plan."
+      "pendingScore": "Je keuzes zijn opgeslagen. De score wordt nog berekend; je kunt nu verder naar Mijn Plan."
     },
     "planOnboardingStep": {
       "tradingMarketLabel": "Handelspaar",

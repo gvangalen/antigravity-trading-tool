@@ -345,7 +345,10 @@ export default function OnboardingAnalysisPage() {
     macro: selectedMacro,
     technical: selectedTechnical,
   });
-  const hasPendingScore = Object.values(pendingScores).some(Boolean);
+  const scoreStates = Object.values(pendingScores);
+  const hasPendingScore = scoreStates.some(Boolean);
+  const hasMissingScoreRule = scoreStates.includes("missing_rule");
+  const hasFailedScoreSync = scoreStates.includes("failed");
 
   useEffect(() => {
     if (pathname !== "/onboarding/analysis") return;
@@ -476,9 +479,9 @@ export default function OnboardingAnalysisPage() {
         setSelectedMacro(savedMacro);
         setSelectedTechnical(savedTechnical);
         setPendingScores({
-          market: Boolean(savedMarket && marketState !== "ready"),
-          macro: Boolean(savedMacro && macroState !== "ready"),
-          technical: Boolean(savedTechnical && technicalState !== "ready"),
+          market: savedMarket && marketState !== "ready" ? marketState : null,
+          macro: savedMacro && macroState !== "ready" ? macroState : null,
+          technical: savedTechnical && technicalState !== "ready" ? technicalState : null,
         });
         setOpenSelector(savedMarket ? (savedMacro ? (savedTechnical ? null : "technical") : "macro") : "market");
         hydratedSelectionsSymbolRef.current = symbol;
@@ -625,7 +628,7 @@ export default function OnboardingAnalysisPage() {
       }
       // The first source reading and score can take time. Keep the saved
       // onboarding choice and run synchronization without gating the plan step.
-      setPendingScores((current) => ({ ...current, [kind]: true }));
+      setPendingScores((current) => ({ ...current, [kind]: "pending_score" }));
       const generation = ++syncGenerationRef.current[kind];
       const sync = {
         market: syncMarketPreferences,
@@ -639,11 +642,12 @@ export default function OnboardingAnalysisPage() {
           syncState = classifyOnboardingWorkspaceChoice(workspace, kind, option.name);
         }
         if (syncGenerationRef.current[kind] === generation) {
-          setPendingScores((current) => ({ ...current, [kind]: syncState !== "ready" }));
+          setPendingScores((current) => ({ ...current, [kind]: syncState === "ready" ? null : syncState }));
         }
       }).catch((err) => {
         if (syncGenerationRef.current[kind] === generation) {
           console.warn(`Onboarding ${kind} source sync pending`, err);
+          setPendingScores((current) => ({ ...current, [kind]: "failed" }));
         }
       });
     } catch (err) {
@@ -778,6 +782,8 @@ export default function OnboardingAnalysisPage() {
           }}
           onSelect={(option) => void handleSelectIndicator("market", option)}
           onReset={() => {
+            syncGenerationRef.current.market += 1;
+            setPendingScores((current) => ({ ...current, market: null }));
             setSelectedMarket(null);
             setOpenSelector("market");
           }}
@@ -808,6 +814,8 @@ export default function OnboardingAnalysisPage() {
           }}
           onSelect={(option) => void handleSelectIndicator("macro", option)}
           onReset={() => {
+            syncGenerationRef.current.macro += 1;
+            setPendingScores((current) => ({ ...current, macro: null }));
             setSelectedMacro(null);
             setOpenSelector("macro");
           }}
@@ -838,6 +846,8 @@ export default function OnboardingAnalysisPage() {
           }}
           onSelect={(option) => void handleSelectIndicator("technical", option)}
           onReset={() => {
+            syncGenerationRef.current.technical += 1;
+            setPendingScores((current) => ({ ...current, technical: null }));
             setSelectedTechnical(null);
             setOpenSelector("technical");
           }}
@@ -872,7 +882,11 @@ export default function OnboardingAnalysisPage() {
               </p>
               {hasPendingScore ? (
                 <p className="mt-2 text-sm font-semibold text-amber-800">
-                  {copy.pendingScore || "Your choices are saved. Scores will appear when the source data is ready; you can continue to My Plan now."}
+                  {hasMissingScoreRule
+                    ? (copy.syncRuleMissing || "Your choices are saved, but a score rule is missing. Check the indicator in Analysis; you can continue to My Plan.")
+                    : hasFailedScoreSync
+                      ? (copy.syncFailed || "Your choices are saved, but a source reading is unavailable or sync failed. Retry in Analysis later; you can continue to My Plan.")
+                      : (copy.pendingScore || "Your choices are saved. A score is still being calculated; you can continue to My Plan now.")}
                 </p>
               ) : null}
               <div className="mt-3 flex flex-wrap gap-2">
