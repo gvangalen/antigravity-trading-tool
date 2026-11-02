@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Beurskoers buiten reguliere sessie en FINN-positievragen (2 november 2026)
 
-Phase: `LOCAL_VALIDATION` voor [PR #782](https://github.com/gvangalen/antigravity-trading-tool/pull/782).
+Phase: `LIVE_CANDIDATE` voor [PR #782](https://github.com/gvangalen/antigravity-trading-tool/pull/782),
+in afwachting van onafhankelijke ingelogde QA.
 Een Amerikaanse vrijdagse slotkoers krijgt op maandag vóór 09:30 New York-tijd
 het label `Beurs gesloten · laatst beschikbare koers` bij aandelen en indices.
 De kaart legt uit dat voor een nieuwe instap verse marktdata nodig zijn.
@@ -21,8 +22,15 @@ gerichte beursstatus- en FINN-runtime-regressies geslaagd. Worker-actiematrix
 `4adb9e07773f0c568669784125ed8995e1b52060458df94f2777b21811709036`),
 echte Responses-selectorevaluaties ontwikkeling `20/20` en regressie `109/109`.
 Geen broker- of Live-order. De gemelde ontbrekende S&P 500-score is nog niet
-gereproduceerd en wordt niet als opgelost geclaimd. CI, deployment en
-onafhankelijke ingelogde QA staan nog open.
+gereproduceerd en wordt niet als opgelost geclaimd.
+
+De vijf jobs van [PR-CI 41495341737](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41495341737)
+en [main-CI 41496056641](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41496056641)
+slaagden. [Auto Deploy 41496603457](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41496603457)
+slaagde op `89213071d215b3102fd1974c5daad1c25ca02e5d`.
+Publieke backend-health en frontend-buildinfo gaven beide HTTP 200 en exact
+die SHA. De statusbijwerking zelf moet nog door main-CI en Auto Deploy voordat
+QA de definitieve SHA test.
 
 ## FINN: getypeerde koerskruising als aanvullende Paper-instapregel (2 november 2026)
 
