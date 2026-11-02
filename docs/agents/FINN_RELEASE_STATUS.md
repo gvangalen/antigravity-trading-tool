@@ -6,8 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Beurskoers buiten reguliere sessie en FINN-positievragen (2 november 2026)
 
-Phase: `LIVE_CANDIDATE` voor [PR #782](https://github.com/gvangalen/antigravity-trading-tool/pull/782),
-in afwachting van onafhankelijke ingelogde QA.
+Phase: `NOT_ACCEPTED` als volledige live acceptatie, zonder opnieuw gevonden
+productfout, voor [PR #782](https://github.com/gvangalen/antigravity-trading-tool/pull/782).
 Een Amerikaanse vrijdagse slotkoers krijgt op maandag vóór 09:30 New York-tijd
 het label `Beurs gesloten · laatst beschikbare koers` bij aandelen en indices.
 De kaart legt uit dat voor een nieuwe instap verse marktdata nodig zijn.
@@ -29,8 +29,22 @@ en [main-CI 41496056641](https://github.com/gvangalen/antigravity-trading-tool/a
 slaagden. [Auto Deploy 41496603457](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41496603457)
 slaagde op `89213071d215b3102fd1974c5daad1c25ca02e5d`.
 Publieke backend-health en frontend-buildinfo gaven beide HTTP 200 en exact
-die SHA. De statusbijwerking zelf moet nog door main-CI en Auto Deploy voordat
-QA de definitieve SHA test.
+die SHA. De statusbijwerking via [PR #783](https://github.com/gvangalen/antigravity-trading-tool/pull/783)
+kreeg [main-CI 41497672060](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41497672060)
+en [Auto Deploy 41498210102](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41498210102),
+beide geslaagd. Publieke backend en frontend gaven HTTP 200 en exact
+`39612f1c15b9dd6a6e4f77e8015008bf04040f40`.
+
+Onafhankelijke ingelogde web-QA op die SHA zag AAPL tijdens de reguliere
+beurssessie als `VEROUDERD` en zonder verzonnen benchmark of instapsignaal.
+Vanuit BTC-context las FINN de eigenaargebonden portefeuille en antwoordde
+correct dat het gebruikte QA-account geen AAPL-positie heeft; een SOL-botlimiet
+werd niet als cash of positie gepresenteerd. De vrijdagkoers vóór de opening,
+een positieve AAPL-positie en een S&P 500-score konden in dit account en op dit
+tijdstip niet live worden getoetst. S&P 500 was niet geconfigureerd.
+Er was geen order, botactie of planwijziging. De code- en regressietests zijn
+aanvullend bewijs voor de vóór-openingroute, geen vervanging voor de ontbrekende
+live observatie.
 
 ## FINN: getypeerde koerskruising als aanvullende Paper-instapregel (2 november 2026)
 
