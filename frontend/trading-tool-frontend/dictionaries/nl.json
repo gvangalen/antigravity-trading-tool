@@ -991,6 +991,8 @@
       "setupTypeLabel": "Type",
       "setupTypeTrade": "Trade",
       "setupTypeDca": "DCA",
+      "onboardingDcaOnlyHint": "Begin met een periodiek plan zonder verplichte marktscore. Een handmatige Trade-setup kun je na onboarding in Mijn Plan maken zodra je entry, stop-loss en koersdoelen hebt bepaald.",
+      "editSavedPlan": "Opgeslagen plan aanpassen in Mijn Plan",
       "setupTimeframeLabel": "Timeframe",
       "dcaFrequencyLabel": "Aankoopritme",
       "dcaDaily": "Dagelijks",
@@ -1308,6 +1310,7 @@
         "exchange_connection": "Exchange-koppeling"
       },
       "viewCta": "Bekijk onboarding",
+      "previousCta": "Terug naar vorige stap",
       "missingPrefix": "Ontbreekt",
       "completeSuffix": "voltooid",
       "inProgressSuffix": "bezig",

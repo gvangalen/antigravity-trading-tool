@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { ArrowRight, CheckCircle2, Lock, Sparkles } from "lucide-react";
 
 import { useTranslation } from "@/app/providers/I18nProvider";
@@ -21,8 +22,8 @@ import {
 
 const DEFAULT_SETUP = {
   name: "",
-  setupType: "trade",
-  timeframe: "4H",
+  setupType: "dca",
+  timeframe: "1D",
   dcaFrequency: "weekly",
   dcaDay: "monday",
   dcaMonthDay: "1",
@@ -33,7 +34,7 @@ const DCA_WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "s
 const DEFAULT_STRATEGY = {
   name: "",
   executionMode: "fixed",
-  baseAmount: "100",
+  baseAmount: "",
   entry: "",
   targets: "",
   stopLoss: "",
@@ -128,7 +129,7 @@ export default function OnboardingPlanPage() {
   const [error, setError] = useState(null);
 
   const [setup, setSetup] = useState(DEFAULT_SETUP);
-  const [conditionChoice, setConditionChoice] = useState(null);
+  const [conditionChoice, setConditionChoice] = useState("off");
   const [strategy, setStrategy] = useState(DEFAULT_STRATEGY);
   const [savedSetup, setSavedSetup] = useState(null);
   const [savedStrategy, setSavedStrategy] = useState(null);
@@ -168,7 +169,7 @@ export default function OnboardingPlanPage() {
         setSavedStrategy(null);
         setSetup(DEFAULT_SETUP);
         setStrategy(DEFAULT_STRATEGY);
-        setConditionChoice(null);
+        setConditionChoice("off");
 
         const [lastSetup, savedSetups, lastStrategy] = await Promise.all([
           fetchLastSetup().catch(() => null),
@@ -492,21 +493,10 @@ export default function OnboardingPlanPage() {
               />
             </Field>
 
-            <Field label={copy.setupTypeLabel || "Type"}>
-              <select
-                value={setup.setupType}
-                onChange={(event) => {
-                  const nextType = event.target.value;
-                  setSetup((current) => ({ ...current, setupType: nextType }));
-                  if (nextType === "trade" && conditionChoice === "off") setConditionChoice(null);
-                  if (nextType === "dca" && !conditionChoice) setConditionChoice("off");
-                }}
-                disabled={setupDone || savingSetup || loading}
-                className={inputClassName}
-              >
-                <option value="trade">{copy.setupTypeTrade || "Trade"}</option>
-                <option value="dca">{copy.setupTypeDca || "DCA"}</option>
-              </select>
+            <Field label={copy.setupTypeLabel || "Type"} hint={!setupDone ? copy.onboardingDcaOnlyHint : undefined}>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900">
+                {isTrade ? copy.setupTypeTrade || "Trade" : copy.setupTypeDca || "DCA"}
+              </div>
             </Field>
 
             <Field label={copy.setupTimeframeLabel || "Timeframe"}>
@@ -599,6 +589,9 @@ export default function OnboardingPlanPage() {
                 />
               ) : null}
               <SummaryRow label={copy.scoreConditionLabel || "Score condition"} value={conditionLabel} />
+              <Link href="/setup" className="text-sm font-semibold text-blue-700 underline-offset-2 hover:underline md:col-span-3">
+                {copy.editSavedPlan || "Edit saved plan in My Plan"}
+              </Link>
             </div>
           )}
         </Section>

@@ -990,6 +990,8 @@
       "setupTypeLabel": "Type",
       "setupTypeTrade": "Trade",
       "setupTypeDca": "DCA",
+      "onboardingDcaOnlyHint": "Start with a recurring plan that does not require a market score. After onboarding, you can create a manual Trade setup in My Plan once you have chosen an entry, stop loss and targets.",
+      "editSavedPlan": "Edit saved plan in My Plan",
       "setupTimeframeLabel": "Timeframe",
       "dcaFrequencyLabel": "Purchase schedule",
       "dcaDaily": "Daily",
@@ -1289,6 +1291,7 @@
     "onboardingBanner": {
       "eyebrow": "Guided onboarding",
       "viewCta": "View onboarding",
+      "previousCta": "Back to previous step",
       "missingPrefix": "Missing",
       "completeSuffix": "complete",
       "inProgressSuffix": "in progress",

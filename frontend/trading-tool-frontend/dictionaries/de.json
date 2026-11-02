@@ -995,6 +995,8 @@
       "setupTypeLabel": "Typ",
       "setupTypeTrade": "Trade",
       "setupTypeDca": "DCA",
+      "onboardingDcaOnlyHint": "Beginne mit einem regelmäßigen Plan ohne erforderlichen Marktscore. Nach dem Onboarding kannst du unter Mein Plan ein manuelles Trade-Setup anlegen, sobald Einstieg, Stop-Loss und Kursziele feststehen.",
+      "editSavedPlan": "Gespeicherten Plan unter Mein Plan bearbeiten",
       "setupTimeframeLabel": "Zeitrahmen",
       "dcaFrequencyLabel": "Kaufrhythmus",
       "dcaDaily": "Täglich",
@@ -1294,6 +1296,7 @@
     "onboardingBanner": {
       "eyebrow": "Geführtes Onboarding",
       "viewCta": "Onboarding ansehen",
+      "previousCta": "Zurück zum vorherigen Schritt",
       "missingPrefix": "Fehlt",
       "completeSuffix": "abgeschlossen",
       "inProgressSuffix": "in Arbeit",
