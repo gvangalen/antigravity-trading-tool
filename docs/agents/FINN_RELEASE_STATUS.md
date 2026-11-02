@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN: getypeerde koerskruising als aanvullende Paper-instapregel (2 november 2026)
 
-Phase: `LOCAL_VALIDATION`. Kandidaat `codex/typed-signal-strategies`.
+Phase: `DEPLOYED_PENDING_QA`. [PR #777](https://github.com/gvangalen/antigravity-trading-tool/pull/777)
+is op `main` samengevoegd.
 Een crypto-trade-setup met een opgeslagen spothandelspaar kan nu een getypeerde
 instapregel bevatten: een afgesloten dagkoers kruist een SMA met instelbare
 periode of een trendlijn met twee gedateerde ankerpunten, omhoog of omlaag.
@@ -29,8 +30,14 @@ Echte Responses-selectorevaluatie ontwikkeling `20/20` en regressie
 bevestigbaar BTC/EUR-strategievoorstel met de gevraagde getypeerde
 SMA50-kruising; er is niets bevestigd of uitgevoerd. Een onvolledige
 kruising kan geen gewone vaste-prijsstrategie zonder regel worden.
-Deze status claimt geen CI, deployment, ingelogde live QA of
-daadwerkelijke Paper-fill op productie.
+Alle vijf PR-CI-jobs en alle vijf jobs van
+[main-CI 41405794909](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41405794909)
+slaagden. [Auto Deploy 41406169532](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41406169532)
+slaagde op `5e3baa30906412aa04a22220345585046d6c31a5`.
+Publieke `/api/health` en `/build-info.json` gaven beide HTTP 200 en exact
+die SHA. Een ingelogde, onafhankelijke live QA of daadwerkelijk Paper-fill op
+productie wordt hiermee niet geclaimd. De statusbijwerking zelf moet nog
+door main-CI en Auto Deploy voordat QA de definitieve SHA test.
 
 ## FINN: taal van de eerste uitvoerbaarheidsreactie (1 november 2026)
 
