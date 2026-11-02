@@ -28,6 +28,16 @@ def test_score_source_age_matches_release_cadence_and_asset_market():
     assert not score_source_is_fresh("market", "fear_greed_index", None, now=now)
 
 
+def test_friday_sp500_observation_remains_eligible_before_monday_us_open():
+    friday_close = datetime(2026, 10, 30, 20, tzinfo=timezone.utc)
+    monday_before_open = datetime(2026, 11, 2, 12, tzinfo=timezone.utc)
+    assert score_source_is_fresh("macro", "sp500", friday_close, symbol="AAPL", now=monday_before_open)
+    assert not score_source_is_fresh(
+        "macro", "sp500", friday_close, symbol="AAPL",
+        now=datetime(2026, 11, 4, 21, tzinfo=timezone.utc),
+    )
+
+
 def test_legacy_receipt_timestamp_does_not_substitute_for_source_observation(monkeypatch):
     from backend.utils import scoring_utils
 

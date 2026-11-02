@@ -26,6 +26,29 @@ test("an older stock quote remains stale even on a closed-market weekend", () =>
   }), "stale");
 });
 
+test("Friday's closing quote is the last available US stock quote before Monday's regular session", () => {
+  assert.equal(quotePresentationStatus({
+    ...stock,
+    sourceAt: "2026-10-30T19:59:00Z",
+    now: "2026-11-02T12:00:00Z",
+  }), "closed_session");
+  assert.equal(quotePresentationStatus({
+    ...stock,
+    sourceAt: "2026-10-29T19:59:00Z",
+    now: "2026-11-02T12:00:00Z",
+  }), "stale");
+  assert.equal(quotePresentationStatus({
+    ...stock,
+    sourceAt: "2026-10-30T19:59:00Z",
+    now: "2026-11-02T15:00:00Z",
+  }), "stale");
+  assert.equal(quotePresentationStatus({
+    ...stock, assetClass: "index",
+    sourceAt: "2026-10-30T19:59:00Z",
+    now: "2026-11-02T12:00:00Z",
+  }), "closed_session");
+});
+
 test("a stale stock quote during the open week remains stale", () => {
   assert.equal(quotePresentationStatus({
     ...stock,
