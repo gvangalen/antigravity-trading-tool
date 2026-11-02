@@ -412,6 +412,7 @@ class FinnResponsesFrontDoor:
         strategy_fields = (
             "name", "execution_mode", "risk_profile", "entry", "entry_type",
             "stop_loss", "targets", "price_currency", "base_amount", "level_geometry",
+            "entry_signal",
         )
         grouped = []
         for row in rows:

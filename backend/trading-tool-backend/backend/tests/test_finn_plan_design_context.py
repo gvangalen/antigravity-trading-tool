@@ -88,6 +88,9 @@ def test_generic_capability_questions_include_ma_and_trendline_designs():
         "Kan mijn opgeslagen BTC-plan automatisch verkopen boven een trendlijn?"
     )
     assert not requests_execution_capability_question("Maak een vaste DCA voor ETH op maandag")
+    assert not requests_execution_capability_question(
+        "Maak voor Matrix Strategy Parent een strategie met vaste uitvoering van 100 euro"
+    )
     assert not requests_execution_capability_question("Kan je mijn BTC-plan aanpassen?")
     assert not requests_execution_capability_question("Can you update my DCA strategy?")
     assert requests_execution_capability_question("Can this execute automatically?", {

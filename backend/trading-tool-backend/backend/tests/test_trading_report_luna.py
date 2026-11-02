@@ -203,9 +203,16 @@ def test_quarter_report_summarizes_three_calendar_months_and_exposes_missing_mon
 
 
 def test_period_report_repairs_ambiguous_historical_component_triplets(monkeypatch):
-    prior_day = (date.today() - timedelta(days=1)).isoformat()
+    # Keep the prior observation inside the same reporting week on Mondays.
+    class ReportDay(date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 10, 28)
+
+    monkeypatch.setattr(reports, "date", ReportDay)
+    prior_day = (ReportDay.today() - timedelta(days=1)).isoformat()
     context = {
-        "locale": "nl", "observed_at": f"{date.today().isoformat()}T12:00:00+00:00",
+        "locale": "nl", "observed_at": f"{ReportDay.today().isoformat()}T12:00:00+00:00",
         "assets": [], "report_previous": [{
             "report_date": prior_day, "snapshot": {"assets": [{
                 "pair": "BTC/EUR", "benchmark_score": 33,

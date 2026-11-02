@@ -4,6 +4,34 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN: getypeerde koerskruising als aanvullende Paper-instapregel (2 november 2026)
+
+Phase: `LOCAL_VALIDATION`. Kandidaat `codex/typed-signal-strategies`.
+Een crypto-trade-setup met een opgeslagen spothandelspaar kan nu een getypeerde
+instapregel bevatten: een afgesloten dagkoers kruist een SMA met instelbare
+periode of een trendlijn met twee gedateerde ankerpunten, omhoog of omlaag.
+De regel is aanvullend op de bestaande absolute entry, stop, targets en
+Score 2.0-setupvoorwaarden. Alleen Paper kan een nieuwe aankoop op deze regel
+beoordelen; Live houdt een aankoop met deze regel vast. Een bestaande
+verkoop/exit wordt niet door de nieuwe instapregel tegengehouden.
+Beslissingen bewaren de gebruikte directe handelspaarcandles en worden vlak
+voor een Paper-uitvoering opnieuw tegen dezelfde regel en bron gecontroleerd.
+Een onvolledige, gewijzigde of al uitgevoerde kruising levert geen tweede koop.
+
+Lokale Build-controles op de definitieve code: volledige backend-suite
+`4209 passed, 4 skipped`;
+frontendproductiebuild en typecheck geslaagd; i18n-lint, voorstel- en
+commandtests geslaagd; worker-actiematrix `16/16` zonder productieorder
+(artifact SHA-256
+`b074f795aec18827b64b474265dcbe50c562d5a8cf7140e2d7009833a7436c1c`).
+Echte Responses-selectorevaluatie ontwikkeling `20/20` en regressie
+`109/109`, zonder providerfout. Een echte lokale FINN-run maakte een
+bevestigbaar BTC/EUR-strategievoorstel met de gevraagde getypeerde
+SMA50-kruising; er is niets bevestigd of uitgevoerd. Een onvolledige
+kruising kan geen gewone vaste-prijsstrategie zonder regel worden.
+Deze status claimt geen CI, deployment, ingelogde live QA of
+daadwerkelijke Paper-fill op productie.
+
 ## FINN: taal van de eerste uitvoerbaarheidsreactie (1 november 2026)
 
 Phase: `ACCEPTED` voor [PR #774](https://github.com/gvangalen/antigravity-trading-tool/pull/774). De onafhankelijke

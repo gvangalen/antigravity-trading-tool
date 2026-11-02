@@ -205,6 +205,7 @@ class LinkedStrategyData(BaseModel):
     price_currency: Optional[str] = None
     price_currency_status: str = "unconfirmed"
     entry_type: Optional[str] = None
+    entry_signal: Optional[Dict[str, Any]] = None
     stop_loss: Optional[str] = None
     targets: List[str] = Field(default_factory=list)
     base_amount: Optional[float] = None

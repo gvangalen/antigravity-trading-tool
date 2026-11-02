@@ -105,7 +105,7 @@ export const updateStrategy = async (id, data) => {
   const allowedFields = [
     'name', 'symbol', 'timeframe', 'execution_mode', 'base_amount',
     'decision_curve', 'decision_curve_name', 'decision_curve_id', 'entry',
-    'entry_type', 'trade_execution_mode', 'targets', 'stop_loss', 'price_currency',
+    'entry_type', 'trade_execution_mode', 'targets', 'stop_loss', 'price_currency', 'entry_signal',
     'explanation', 'ai_explanation', 'risk_profile', 'automation', 'tags',
     'favorite',
   ];

@@ -188,6 +188,23 @@ def test_create_dca_setup_preserves_explicit_periodic_investment_amount():
         assert "timeframe" not in supplied
 
 
+def test_create_strategy_keeps_explicit_generic_sma_cross_in_proposal_inputs():
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    supplied = FinnV2OperationStateService().explicit_inputs(
+        contract=contract,
+        message=(
+            "Maak voor mijn trade-setup een strategie SMA50 Kruising QA. "
+            "De afgesloten dagkoers kruist SMA50 van onder naar boven als "
+            "extra instapvoorwaarde."
+        ),
+        explicit_asset="BTC",
+    )
+    assert supplied["entry_signal"] == {
+        "version": 1, "event": "close_crosses_reference", "direction": "above",
+        "timeframe": "1D", "reference": {"kind": "sma", "period": 50},
+    }
+
+
 def test_smart_dca_amount_staffel_is_not_stored_as_setup_minimum():
     contract = FinnV2OperationRegistry().require_supported("create_setup")
     supplied = FinnV2OperationStateService().explicit_inputs(

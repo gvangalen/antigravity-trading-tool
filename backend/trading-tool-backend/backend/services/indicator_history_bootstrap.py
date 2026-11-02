@@ -42,6 +42,7 @@ class IndicatorHistoryBootstrap:
         existing = (await self.session.execute(
             select(MarketData.source_observed_at).where(
                 MarketData.market_id == market.id,
+                MarketData.is_final_candle.is_(True),
                 MarketData.source_observed_at >= datetime.combine(cutoff_day, time.min),
                 MarketData.source_observed_at < datetime.combine(today, time.min),
                 MarketData.price.is_not(None),
@@ -85,6 +86,7 @@ class IndicatorHistoryBootstrap:
                 price=price, volume=volume,
                 open=candle.open, high=candle.high, low=candle.low,
                 timestamp=observed_at, source_observed_at=observed_at,
+                is_final_candle=True,
             ))
             existing_days.add(day)
             inserted += 1

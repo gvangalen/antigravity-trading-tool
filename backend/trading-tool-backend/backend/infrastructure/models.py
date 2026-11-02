@@ -156,6 +156,7 @@ class MarketData(Base):
     is_updated = Column(Boolean, default=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
     source_observed_at = Column(DateTime, nullable=True)
+    is_final_candle = Column(Boolean, nullable=False, default=False)
     quote_currency = Column(String(8), nullable=True)
     price_provider = Column(String(80), nullable=True)
 

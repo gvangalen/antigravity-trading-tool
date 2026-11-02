@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 
 from backend.infrastructure.repositories.finn_v2_policy_repository import FinnV2PolicyRepository
 from backend.infrastructure.repositories.finn_v2_proposal_repository import FinnV2ProposalRepository
@@ -211,6 +212,9 @@ class FinnV2ProposalService:
                 split_confirmed_dca_plan(setup_fields)
         if operation == "create_strategy":
             strategy_fields = dict(change.strategy_fields or {})
+            if strategy_fields.get("entry_signal") is not None:
+                from backend.domain.entry_signal import validate_entry_signal
+                strategy_fields["entry_signal"] = validate_entry_signal(strategy_fields["entry_signal"])
             setup_id = strategy_fields.get("setup_id")
             if setup_id is None:
                 raise ValueError("strategy_setup_required")
@@ -220,6 +224,18 @@ class FinnV2ProposalService:
                 asset=proposal_input.target.asset,
             )
             setup = dict(resolved["setup"] or {})
+            if strategy_fields.get("entry_signal") is not None and (
+                str(setup.get("setup_type") or "").lower() != "trade"
+                or setup.get("market_id") is None
+            ):
+                raise ValueError("entry_signal_requires_pair_bound_trade_setup")
+            if strategy_fields.get("entry_signal") is not None:
+                asset_class = (await self.session.execute(text(
+                    "SELECT ac.asset_class FROM trading_markets tm "
+                    "JOIN asset_catalog ac ON ac.symbol=tm.asset_symbol WHERE tm.id=:market_id"
+                ), {"market_id": setup["market_id"]})).scalar_one_or_none()
+                if str(asset_class or "").lower() != "crypto":
+                    raise ValueError("entry_signal_requires_supported_spot_market")
             if str(setup.get("setup_type") or "").lower() == "dca":
                 from backend.domain.finn_dca_plan_contract import split_confirmed_dca_plan
 

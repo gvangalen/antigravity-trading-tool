@@ -58,6 +58,12 @@ _DIRECT_ACTION_REQUEST = re.compile(
     r"create|change|update|rename|save|confirm|erstellen|ändern|umbenennen|speichern)\b",
     re.I,
 )
+_IMPERATIVE_ACTION_REQUEST = re.compile(
+    r"^\s*(?:maak|creëer|bereid|wijzig|pas|hernoem|sla|verwijder|"
+    r"create|prepare|change|update|rename|save|delete|"
+    r"erstelle|bereite|ändere|benenne|speichere|lösche)\b",
+    re.I,
+)
 
 
 def is_new_separate_setup_request(message: str) -> bool:
@@ -101,6 +107,6 @@ def requests_execution_capability_question(message: str, context: dict[str, Any]
         "new_separate_setup", "unsaved_capability_design",
     }
     return bool(_CAPABILITY_QUESTION.search(text) and not _READ_ONLY_QUESTION.search(text)
-    and not _DIRECT_ACTION_REQUEST.search(text) and (
+    and not _DIRECT_ACTION_REQUEST.search(text) and not _IMPERATIVE_ACTION_REQUEST.search(text) and (
         _DESIGN_SUBJECT.search(text) or active_design
     ))

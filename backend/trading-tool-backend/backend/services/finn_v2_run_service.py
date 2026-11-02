@@ -63,6 +63,7 @@ from backend.services.finn_v2_plan_design_context import (
     is_explicit_saved_plan_read,
 )
 from backend.domain.finn_dca_plan_contract import dca_automation_capabilities
+from backend.domain.entry_signal import entry_signal_capabilities, explicit_entry_signal_from_text
 from backend.services.finn_v2_operation_classification_service import FinnV2OperationClassificationService
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
 from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
@@ -1310,6 +1311,16 @@ def _rejects_guided_strategy_parent(message: str) -> bool:
 
 def _strategy_rule_is_unencoded(message: str) -> bool:
     """High-confidence relative/dynamic rules cannot become fixed prices."""
+    # A closed daily candle crossing one typed reference is now executable.
+    # The model still has to produce a validated entry_signal in the proposal;
+    # this only lets the request reach that contract instead of being rejected
+    # as an unsupported strategy before the model can see the capabilities.
+    supported_cross = explicit_entry_signal_from_text(message) is not None
+    unresolved_cross = bool(
+        re.search(r"\b(?:kruis\w*|cross\w*|kreuz\w*)\b", message, re.I)
+        and re.search(r"\b(?:sma\s*\d+|ma\s*\d+|moving\s+average\s*\d+|trendlijn|trendline|trendlinie)\b", message, re.I)
+        and not supported_cross
+    )
     dynamic_entry = bool(re.search(
         r"\b(?:instapvoorwaarde|instapregel|entry\s*(?:rule|condition)|"
         r"einstiegsbedingung)\b[^.!?\n]{0,110}\b(?:rsi|trend|moving\s+average|"
@@ -1346,8 +1357,8 @@ def _strategy_rule_is_unencoded(message: str) -> bool:
         r"(?:trend|rsi|macd|adx|score|signaal|signal)\b",
         message, re.I,
     ))
-    return (dynamic_entry or relative_level or percent_risk or execution_limit
-            or indicator_filter or conditional_trade_rule)
+    return (unresolved_cross or ((dynamic_entry or indicator_filter or conditional_trade_rule) and not supported_cross)
+            or relative_level or percent_risk or execution_limit)
 
 
 def _previous_strategy_clarification(previous_contract: Any, conversation_id: str) -> dict:
@@ -1634,6 +1645,7 @@ async def _explain_execution_capability(
                 "user_request": message,
                 "separate_new_setup": separate_setup,
                 "dca_automation_contract": dca_automation_capabilities(),
+                "entry_signal_contract": entry_signal_capabilities(),
                 "setup_action_contract": {
                     "inputs": FinnV2OperationRegistry().require_supported("create_setup").required_inputs,
                     "optional_inputs": FinnV2OperationRegistry().require_supported("create_setup").optional_inputs,
@@ -3061,6 +3073,8 @@ class FinnV2RunService:
                 "already has a saved plan, profile or market snapshot unless a read proves it. "
                 "The platform DCA automation contract is the following typed data: "
                 + json.dumps(dca_automation_capabilities(), ensure_ascii=False)
+                + ". The platform closed-candle trade entry contract is: "
+                + json.dumps(entry_signal_capabilities(), ensure_ascii=False)
                 + ". A fixed amount and stepwise bands of the total benchmark score can be saved; "
                 "the three band percentages must not decrease as benchmark score rises. "
                 "A proposed automatic rule is executable only if its inputs, mapping and "

@@ -188,7 +188,7 @@ async def _sync_exact_market_snapshots() -> dict:
             try:
                 snapshot = await MarketDataIngestionService(session).ingest_exact_market_snapshot(market)
                 history = await IndicatorHistoryBootstrap(session).bootstrap_exact_market(
-                    market, required_days=200)
+                    market, required_days=220)
                 indicators = await ExactMarketIndicatorService(session).materialize(market)
                 score_outcomes = []
                 for user_id in indicators["owners"]:

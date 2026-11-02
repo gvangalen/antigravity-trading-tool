@@ -123,7 +123,7 @@ def test_exact_market_refresh_uses_persisted_pair_identity(monkeypatch):
             pass
 
         async def bootstrap_exact_market(self, market, *, required_days):
-            assert required_days == 200
+            assert required_days == 220
             calls.append((market.id, "history"))
             return {"status": "ready", "observed_days": 16}
 

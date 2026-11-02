@@ -63,6 +63,7 @@ const StrategyForm = forwardRef(function StrategyForm({
       ? strategy.targets.map(t => typeof t === 'object' ? t.price : t).join(", ")
       : "",
     stop_loss: strategy?.stop_loss || "",
+    entry_signal: strategy?.entry_signal || null,
     price_currency: strategy?.price_currency_confirmed ? strategy.price_currency : "",
 
     base_amount:
@@ -98,6 +99,7 @@ const StrategyForm = forwardRef(function StrategyForm({
           ? strategy.targets.map(t => typeof t === 'object' ? t.price : t).join(", ")
           : "",
         stop_loss: strategy.stop_loss || "",
+        entry_signal: strategy.entry_signal || null,
         price_currency: strategy.price_currency_confirmed ? strategy.price_currency : "",
         base_amount: strategy.base_amount || strategy.amount || "",
         execution_mode: strategy.execution_mode || "fixed",
@@ -298,6 +300,7 @@ const StrategyForm = forwardRef(function StrategyForm({
       payload.targets = targets;
       payload.stop_loss = form.stop_loss !== "" ? Number(form.stop_loss) : null;
       payload.price_currency = form.price_currency;
+      payload.entry_signal = form.entry_signal;
     }
 
     try {
@@ -422,6 +425,25 @@ const StrategyForm = forwardRef(function StrategyForm({
             placeholder={copy.stopLossPlaceholder}
             className="input"
           />
+          {form.entry_signal && (
+            <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-4 text-sm dark:border-blue-900 dark:bg-blue-950/20">
+              <p className="font-semibold">{copy.entrySignalLabel}</p>
+              <p className="mt-1">{form.entry_signal.reference?.kind === "sma"
+                ? `${copy.entrySignalClose} ${form.entry_signal.direction === "above" ? copy.entrySignalAbove : copy.entrySignalBelow} SMA ${form.entry_signal.reference.period} · 1D`
+                : `${copy.entrySignalClose} ${form.entry_signal.direction === "above" ? copy.entrySignalAbove : copy.entrySignalBelow} ${copy.entrySignalTrendline} · 1D`}</p>
+              {form.entry_signal.reference?.kind === "trendline" && (
+                <p className="mt-1 text-secondary">
+                  {form.entry_signal.reference.anchors.map((anchor) =>
+                    `${String(anchor.at).slice(0, 10)}: ${anchor.price} ${form.price_currency || ""}`
+                  ).join(" → ")}
+                </p>
+              )}
+              <p className="mt-1 text-secondary">{copy.entrySignalHelp}</p>
+              <button type="button" className="mt-2 font-semibold text-rose-700 underline" onClick={() => setForm((current) => ({ ...current, entry_signal: null }))}>
+                {copy.entrySignalRemove}
+              </button>
+            </div>
+          )}
         </>
       )}
 
