@@ -173,14 +173,13 @@ export function useOnboarding() {
 
     return {
       profile: !!status.has_profile,
-      analysis: !!status.has_asset && !!status.has_market && !!status.has_macro && !!status.has_technical,
+      analysis: !!status.has_asset && !!status.has_market && !!status.has_technical,
       plan: !!status.has_setup,
       automation: !!status.has_bot,
       complete:
         !!status.has_profile &&
         !!status.has_asset &&
         !!status.has_market &&
-        !!status.has_macro &&
         !!status.has_technical &&
         !!status.has_setup,
     };
@@ -206,7 +205,6 @@ export function useOnboarding() {
       analysis: [
         !status.has_asset ? "asset" : null,
         !status.has_market ? "market_indicator" : null,
-        !status.has_macro ? "macro_indicator" : null,
         !status.has_technical ? "technical_indicator" : null,
       ].filter(Boolean),
       plan: !status.has_setup ? ["setup"] : [],
@@ -227,7 +225,6 @@ export function useOnboarding() {
         stepStatus &&
         stepStatus.asset &&
         stepStatus.market &&
-        stepStatus.macro &&
         stepStatus.technical &&
         stepStatus.setup
       )
@@ -250,7 +247,7 @@ export function useOnboarding() {
     asset: stepStatus?.profile ?? false,
     market: stepStatus?.asset ?? false,
     macro: stepStatus?.market ?? false,
-    technical: stepStatus?.macro ?? false,
+    technical: stepStatus?.market ?? false,
     setup: stepStatus?.technical ?? false,
     strategy: stepStatus?.setup ?? false,
     bot: stepStatus?.strategy ?? false,
@@ -266,7 +263,6 @@ export function useOnboarding() {
     currentPhase === "profile" ? "complete_profile" :
     currentPhase === "analysis" && !status?.has_asset ? "select_asset" :
     currentPhase === "analysis" && !status?.has_market ? "add_market_indicator" :
-    currentPhase === "analysis" && !status?.has_macro ? "add_macro_indicator" :
     currentPhase === "analysis" && !status?.has_technical ? "add_technical_indicator" :
     currentPhase === "plan" && !status?.has_setup ? "create_setup" :
     "go_to_analysis"
