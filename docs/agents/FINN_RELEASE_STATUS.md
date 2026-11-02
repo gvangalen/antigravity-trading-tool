@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN: getypeerde koerskruising als aanvullende Paper-instapregel (2 november 2026)
 
-Phase: `DEPLOYED_PENDING_QA`. [PR #777](https://github.com/gvangalen/antigravity-trading-tool/pull/777)
+Phase: `NOT_ACCEPTED` (live keten nog onbewezen; geen geobserveerde productfout).
+[PR #777](https://github.com/gvangalen/antigravity-trading-tool/pull/777)
 is op `main` samengevoegd.
 Een crypto-trade-setup met een opgeslagen spothandelspaar kan nu een getypeerde
 instapregel bevatten: een afgesloten dagkoers kruist een SMA met instelbare
@@ -38,6 +39,24 @@ Publieke `/api/health` en `/build-info.json` gaven beide HTTP 200 en exact
 die SHA. Een ingelogde, onafhankelijke live QA of daadwerkelijk Paper-fill op
 productie wordt hiermee niet geclaimd. De statusbijwerking zelf moet nog
 door main-CI en Auto Deploy voordat QA de definitieve SHA test.
+
+De statusbijwerking [PR #778](https://github.com/gvangalen/antigravity-trading-tool/pull/778)
+kreeg [main-CI 41406920181](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41406920181)
+en [Auto Deploy 41407243355](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41407243355),
+beide geslaagd. Publieke backend, frontend en `origin/main` stonden daarna
+op `422a58df7284cfb4e52d5b5ac095dc1800629772` met HTTP 200.
+De bestaande onafhankelijke QA-agent gaf op die exacte SHA `NOT_ACCEPTED`:
+de [beschermde preflight 41407702926](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41407702926)
+slaagde (auth 200, geen bevestiging, uitvoering of Live-order; gesaniteerd
+artifact SHA-256 `cc44401b2189b23c437361995ad8b1c132bec8d4189a7f1e2d6897d2f2242419`).
+Voor de inhoudsmatrix is geen goedgekeurd QA-owned manifest met binding aan
+de getypeerde instapregel beschikbaar; de bestaande Paper-runnerprofielen
+dekken geen nieuwe regel en laten geen Paper-orderuitvoering toe. FINN-voorstel,
+teruglezing, directe handelspaarcandles, positieve en negatieve Paper-beslissing,
+Live-hold en exits zijn daardoor niet onafhankelijk live getest. Er is een
+QA-owned sealed manifest en een gecontroleerd Paper-workerprofiel voor deze
+regel nodig voordat een volledige acceptatie mogelijk is. De afzonderlijke
+ingelogde TEST QA AGENT-browser is geen vervanging voor de beschermde fixture.
 
 ## FINN: taal van de eerste uitvoerbaarheidsreactie (1 november 2026)
 
