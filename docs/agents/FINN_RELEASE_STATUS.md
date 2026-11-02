@@ -4,6 +4,26 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Beurskoers buiten reguliere sessie en FINN-positievragen (2 november 2026)
+
+Phase: `LOCAL_VALIDATION` voor [PR #782](https://github.com/gvangalen/antigravity-trading-tool/pull/782).
+Een Amerikaanse vrijdagse slotkoers krijgt op maandag vóór 09:30 New York-tijd
+het label `Beurs gesloten · laatst beschikbare koers` bij aandelen en indices.
+De kaart legt uit dat voor een nieuwe instap verse marktdata nodig zijn.
+Bij een feitelijke vraag naar open posities leest FINN nu de eigenaargebonden
+portefeuille, ook als de chat op een andere assetpagina staat. Er wordt geen
+vaste coachreactie voorgeschreven.
+
+Lokale Build-evidence: backend-suite `4213 passed, 4 skipped`; frontend
+typecheck, i18n-lint, i18n-tests, commandtests en productiebuild geslaagd;
+gerichte beursstatus- en FINN-runtime-regressies geslaagd. Worker-actiematrix
+`16/16` (artifact SHA-256
+`4adb9e07773f0c568669784125ed8995e1b52060458df94f2777b21811709036`),
+echte Responses-selectorevaluaties ontwikkeling `20/20` en regressie `109/109`.
+Geen broker- of Live-order. De gemelde ontbrekende S&P 500-score is nog niet
+gereproduceerd en wordt niet als opgelost geclaimd. CI, deployment en
+onafhankelijke ingelogde QA staan nog open.
+
 ## FINN: getypeerde koerskruising als aanvullende Paper-instapregel (2 november 2026)
 
 Phase: `NOT_ACCEPTED` (live keten nog onbewezen; geen geobserveerde productfout).
