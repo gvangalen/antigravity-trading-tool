@@ -483,7 +483,7 @@ export default function OnboardingAnalysisPage() {
           macro: savedMacro && macroState !== "ready" ? macroState : null,
           technical: savedTechnical && technicalState !== "ready" ? technicalState : null,
         });
-        setOpenSelector(savedMarket ? (savedTechnical ? null : "technical") : "market");
+        setOpenSelector(savedMarket ? (savedMacro ? (savedTechnical ? null : "technical") : "macro") : "market");
         hydratedSelectionsSymbolRef.current = symbol;
       } catch (err) {
         console.error("Failed to load onboarding analysis step", err);
@@ -608,7 +608,7 @@ export default function OnboardingAnalysisPage() {
         if (!status?.has_market && !(await completeStep("market"))) throw new Error("market-step-failed");
         setSelectedMarket(option);
         setMarketQuery("");
-        setOpenSelector("technical");
+        setOpenSelector("macro");
       }
 
       if (kind === "macro") {
@@ -672,7 +672,7 @@ export default function OnboardingAnalysisPage() {
               {copy.title || "Add your first analysis base"}
             </h1>
             <p className="mt-4 text-sm font-medium leading-relaxed text-slate-500">
-              {(copy.description || "Choose one asset, then add a market and technical indicator. Macro is optional.").replace("{symbol}", symbol)}
+              {(copy.description || "Choose one asset and one indicator in each category. You can continue while scores are still being calculated.").replace("{symbol}", symbol)}
             </p>
           </div>
 
@@ -682,7 +682,7 @@ export default function OnboardingAnalysisPage() {
               {copy.finnSaysLabel || "Finn says"}
             </div>
             <p className="mt-2 max-w-sm">
-              {(copy.finnSaysBody || "Start with a market and technical indicator. Add macro context if it helps your plan.").replace("{symbol}", symbol)}
+              {(copy.finnSaysBody || "Choose market, macro, and technical indicators for your benchmark.").replace("{symbol}", symbol)}
             </p>
           </div>
         </div>
@@ -825,7 +825,7 @@ export default function OnboardingAnalysisPage() {
           addedLabel={copy.addedLabel || "Added"}
           isOpen={openSelector === "macro"}
           onOpen={() => setOpenSelector("macro")}
-          disabled={!assetDone || !marketDone}
+          disabled={!assetDone || !marketDone || !macroDone}
         />
 
         <IndicatorSelector
@@ -878,7 +878,7 @@ export default function OnboardingAnalysisPage() {
                 {copy.successTitle || "Your first analysis base is saved"}
               </div>
               <p className="mt-2 text-sm font-semibold text-slate-600">
-                {copy.successMessage || "Your asset, market, and technical indicators are saved. Add macro context if you want, or continue to My Plan."}
+                {copy.successMessage || "Your asset and three indicator choices are saved. Continue to My Plan while scores are still being calculated."}
               </p>
               {hasPendingScore ? (
                 <p className="mt-2 text-sm font-semibold text-amber-800">
@@ -896,11 +896,9 @@ export default function OnboardingAnalysisPage() {
                 <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-700">
                   {getOptionLabel(selectedMarket, copy.indicatorNames)}
                 </span>
-                {selectedMacro ? (
-                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-700">
-                    {getOptionLabel(selectedMacro, copy.indicatorNames)}
-                  </span>
-                ) : null}
+                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-700">
+                  {getOptionLabel(selectedMacro, copy.indicatorNames)}
+                </span>
                 <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-700">
                   {getOptionLabel(selectedTechnical, copy.indicatorNames)}
                 </span>

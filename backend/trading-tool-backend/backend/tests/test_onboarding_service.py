@@ -351,7 +351,7 @@ def test_status_marks_automation_complete_without_exchange_for_v1_onboarding():
     assert status.next_route == "/dashboard?symbol=BTC"
 
 
-def test_macro_indicator_is_optional_for_the_canonical_analysis_phase():
+def test_macro_indicator_is_required_for_the_canonical_analysis_phase():
     repo = FakeOnboardingRepository(
         steps=[
             SimpleNamespace(step_key=key, completed=True, pipeline_started=False)
@@ -372,15 +372,15 @@ def test_macro_indicator_is_optional_for_the_canonical_analysis_phase():
     service = OnboardingService(repo)
     status = asyncio.run(service.get_status_dict(user_id=12))
 
-    assert status.phases_completed["analysis"] is True
-    assert status.onboarding_complete is True
-    assert status.phase_missing["analysis"] == []
-    assert status.optional_missing["analysis"] == ["macro_indicator"]
-    assert status.current_phase == "complete"
+    assert status.phases_completed["analysis"] is False
+    assert status.onboarding_complete is False
+    assert status.phase_missing["analysis"] == ["macro_indicator"]
+    assert status.optional_missing["analysis"] == []
+    assert status.current_phase == "analysis"
 
 
 def test_strategy_and_bot_are_optional_after_a_saved_setup():
-    required = {"profile", "asset", "market", "technical", "setup"}
+    required = {"profile", "asset", "market", "macro", "technical", "setup"}
     repo = FakeOnboardingRepository(
         steps=[
             SimpleNamespace(step_key=key, completed=key in required, pipeline_started=False)

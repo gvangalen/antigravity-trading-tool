@@ -6,13 +6,13 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Begeleide onboarding zonder verplichte strategie of bot (2 november 2026)
 
-Phase: `LOCAL_VALIDATION` voor de vervolgfix op [PR #786](https://github.com/gvangalen/antigravity-trading-tool/pull/786).
+Phase: `LOCAL_VALIDATION` voor de correctie op [PR #788](https://github.com/gvangalen/antigravity-trading-tool/pull/788).
 De begeleide planstap maakt een DCA-setup; een handmatige Trade-setup wordt
 na onboarding in Mijn Plan ingericht. De gebruiker kan terug naar opgeslagen
 stappen. Een strategie en Paper-bot zijn vervolgstappen, geen voorwaarden om
-onboarding af te ronden. Markt- en technische indicatorconfiguratie zijn wel
-vereist; Macro is optioneel. De UI mag doorgaan met opgeslagen configuratie
-terwijl de scoreberekening nog loopt.
+onboarding af te ronden. Markt-, Macro- en technische indicatorconfiguratie
+zijn vereist voor de volledige benchmark. De UI mag doorgaan met opgeslagen
+configuratie terwijl de scoreberekening nog loopt.
 
 Lokale Build-evidence: backend-suite `4214 passed, 4 skipped`, gerichte
 onboardingtests `14 passed`, frontend typecheck, i18n-lint, i18n-tests
@@ -35,14 +35,16 @@ en onboarding afronden. De volledige nieuwe-gebruikerstest kreeg
 en de Analyse-UI zei nog dat Macro verplicht was. De aparte FINN-feed gaf
 tijdens die proef HTTP 502.
 
-De vervolgfix maakt Macro ook in de web-Analyse-stap optioneel: Technisch is
-zonder Macro bereikbaar, doorgaan vereist alleen asset, Markt en Technisch,
-en de uitleg in NL/EN/DE benoemt dat de volledige benchmark zonder Macro nog
-niet beschikbaar is. Gerichte onboardingtest `5/5`, frontend typecheck,
-i18n-lint, i18n-tests `35/35`, commandtests `34/34` en productiebuild slaagden.
-Geen FINN-actiecontract of modelroute gewijzigd; worker-actiematrix en
-Responses-providerproeven zijn voor deze UI-fix niet van toepassing.
-Deployment en onafhankelijke herkeuring met een leeg nieuw account volgen.
+[PR #788](https://github.com/gvangalen/antigravity-trading-tool/pull/788)
+maakte Macro ook in de web-Analyse-stap optioneel en slaagde in PR-CI, maar de
+gebruiker heeft die productkeuze direct gecorrigeerd: voor Analyse moeten alle
+drie indicatorcategorieën worden ingevuld. De huidige correctie maakt Macro
+weer vereist in backendfasen en webnavigatie. Alleen het wachten op
+bronmetingen en scoreberekening blijft optioneel. De eerdere lokale controles
+voor PR #788 waren gerichte onboardingtest `5/5`, frontend typecheck,
+i18n-lint, i18n-tests `35/35`, commandtests `34/34` en productiebuild. De
+correctie krijgt nieuwe validatie, deployment en onafhankelijke herkeuring met
+een leeg nieuw account.
 
 ## Beurskoers buiten reguliere sessie en FINN-positievragen (2 november 2026)
 
