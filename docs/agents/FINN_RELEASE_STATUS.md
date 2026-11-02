@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Begeleide onboarding zonder verplichte strategie of bot (2 november 2026)
 
-Phase: `LIVE_AWAITING_QA` voor [PR #786](https://github.com/gvangalen/antigravity-trading-tool/pull/786).
+Phase: `LOCAL_VALIDATION` voor de vervolgfix op [PR #786](https://github.com/gvangalen/antigravity-trading-tool/pull/786).
 De begeleide planstap maakt een DCA-setup; een handmatige Trade-setup wordt
 na onboarding in Mijn Plan ingericht. De gebruiker kan terug naar opgeslagen
 stappen. Een strategie en Paper-bot zijn vervolgstappen, geen voorwaarden om
@@ -27,8 +27,22 @@ slaagde op `e7a0863d2998c3b5377555e45f2b31ffaa23615f`. Publieke
 backend-health en frontend-buildinfo gaven beide HTTP 200 en exact die SHA.
 Geen plan, bot of order in productie gewijzigd door Build. Onafhankelijke
 ingelogde QA volgt nog; deze sectie is geen live acceptatie. Deze
-statusbijwerking zelf moet nog door main-CI en Auto Deploy voordat QA de
-definitieve publieke SHA test.
+statusbijwerking zelf is daarna door main-CI en Auto Deploy gegaan; backend en
+frontend stonden op `d598e25309803c4c51eb0c8b51853726268039f6`.
+Onafhankelijke browser-QA kon een BTC DCA-setup zonder strategie of bot opslaan
+en onboarding afronden. De volledige nieuwe-gebruikerstest kreeg
+`NOT_ACCEPTED`: QA gebruikte een reeds ingelogd account met bestaande plannen,
+en de Analyse-UI zei nog dat Macro verplicht was. De aparte FINN-feed gaf
+tijdens die proef HTTP 502.
+
+De vervolgfix maakt Macro ook in de web-Analyse-stap optioneel: Technisch is
+zonder Macro bereikbaar, doorgaan vereist alleen asset, Markt en Technisch,
+en de uitleg in NL/EN/DE benoemt dat de volledige benchmark zonder Macro nog
+niet beschikbaar is. Gerichte onboardingtest `5/5`, frontend typecheck,
+i18n-lint, i18n-tests `35/35`, commandtests `34/34` en productiebuild slaagden.
+Geen FINN-actiecontract of modelroute gewijzigd; worker-actiematrix en
+Responses-providerproeven zijn voor deze UI-fix niet van toepassing.
+Deployment en onafhankelijke herkeuring met een leeg nieuw account volgen.
 
 ## Beurskoers buiten reguliere sessie en FINN-positievragen (2 november 2026)
 
