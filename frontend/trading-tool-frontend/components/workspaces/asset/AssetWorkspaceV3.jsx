@@ -267,6 +267,7 @@ function getUiCopy(locale = "nl") {
       fallbackData: "Fallback",
       staleData: "Stale",
       closedMarketQuote: "Market closed · last available quote",
+      closedSessionScore: "The quote comes from the last available market session. A new entry needs fresh market data.",
       fallbackReady: "Fallback data is available. Detailed context will return automatically once the full workspace feed responds again.",
       scoreContribution: "Score contribution",
       sampleSize: "Readings in period",
@@ -465,6 +466,7 @@ function getUiCopy(locale = "nl") {
       fallbackData: "Fallback",
       staleData: "Veraltet",
       closedMarketQuote: "Börse geschlossen · letzter verfügbarer Kurs",
+      closedSessionScore: "Der Kurs stammt aus der letzten verfügbaren Börsensitzung. Für einen neuen Einstieg sind frische Marktdaten nötig.",
       fallbackReady: "Fallback-Daten sind verfügbar. Die Detailkontexte erscheinen automatisch wieder, sobald der vollständige Workspace-Feed erneut antwortet.",
       scoreContribution: "Score-Beitrag",
       sampleSize: "Messungen im Zeitraum",
@@ -662,6 +664,7 @@ function getUiCopy(locale = "nl") {
     fallbackData: "Fallback",
     staleData: "Verouderd",
     closedMarketQuote: "Beurs gesloten · laatst beschikbare koers",
+    closedSessionScore: "De koers komt uit de laatst beschikbare beurssessie. Een nieuwe instap vraagt verse marktdata.",
     fallbackReady: "Fallback-data is beschikbaar. De detailcontext komt automatisch terug zodra de volledige workspace-feed weer antwoord geeft.",
     scoreContribution: "Scorebijdrage",
     sampleSize: "Metingen in periode",
@@ -1510,7 +1513,7 @@ function buildSectionInsight(sectionId, sectionScore, ui, sourceStatus = null, r
   );
 }
 
-function ScoreOverview({ assetSymbol, market, macro, technical, combined, sections, weights, loading, onSaveWeights, onOpenPlan, onSelectSetup, selectedSetupId, setupMatches, setupMatchError, ui, locale, conditionOptions, isDailyBenchmark }) {
+function ScoreOverview({ assetSymbol, market, macro, technical, combined, sections, weights, loading, onSaveWeights, onOpenPlan, onSelectSetup, selectedSetupId, setupMatches, setupMatchError, ui, locale, conditionOptions, isDailyBenchmark, quoteStatus }) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [localWeights, setLocalWeights] = useState(() => normalizeWeights(weights));
@@ -1622,6 +1625,10 @@ function ScoreOverview({ assetSymbol, market, macro, technical, combined, sectio
             </div>
           </div>
         </div>
+
+        {isDailyBenchmark && currentScore !== null && quoteStatus === "closed_session" ? (
+          <p className="mt-2 text-xs text-amber-700">{ui.closedSessionScore}</p>
+        ) : null}
 
         <div className="mt-5 min-w-0 pb-1">
           <div className="w-full min-w-0">
@@ -1809,6 +1816,7 @@ function ActiveAssetCard({
   change24h,
   updatedAt,
   statusLabel,
+  quoteStatus,
   combinedSummary,
   conditionOptions,
   isDailyBenchmark,
@@ -1880,6 +1888,9 @@ function ActiveAssetCard({
             </span>
           </div>
           <p className="mt-1 text-[11px] leading-relaxed text-slate-600">{ui.benchmarkExplanation}</p>
+          {quoteStatus === "closed_session" && combinedSummary.score !== null ? (
+            <p className="mt-1 text-[11px] text-amber-700">{ui.closedSessionScore}</p>
+          ) : null}
           <a href="#benchmark-uitleg" className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 hover:underline">
             {ui.benchmarkDetails} <ArrowRight size={12} aria-hidden="true" />
           </a>
@@ -3120,6 +3131,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         change24h={assetLive?.change_24h}
         updatedAt={formatTimestamp(assetLive?.as_of || workspace?.generated_at, locale)}
         statusLabel={isFallbackWorkspace ? ui.fallbackData : quoteStatus === "closed_session" ? ui.closedMarketQuote : quoteStatus === "stale" ? ui.staleData : null}
+        quoteStatus={quoteStatus}
         combinedSummary={combinedSummary}
         conditionOptions={t?.setups?.marketConditions?.options}
         isDailyBenchmark={Object.values(periods).every((period) => period === "day")}
@@ -3207,6 +3219,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         ui={ui}
         conditionOptions={t?.setups?.marketConditions?.options}
         isDailyBenchmark={Object.values(periods).every((period) => period === "day")}
+        quoteStatus={quoteStatus}
       />
 
       {workspace?.market_id ? (

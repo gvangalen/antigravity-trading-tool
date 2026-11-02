@@ -13198,6 +13198,85 @@ def test_open_bot_finance_projection_keeps_an_enabled_cap_and_funded_cash():
     assert "optional_budget_cap_status" not in row
 
 
+def test_open_position_question_reads_owner_portfolio_without_bot_page(monkeypatch):
+    assert FinnResponsesFrontDoor._asks_about_open_position(
+        "Welke open AAPL-positie heb ik naast mijn BTC/EUR-plan?"
+    )
+    assert not FinnResponsesFrontDoor._asks_about_open_position(
+        "Welke AAPL-positie zou ik kunnen openen?"
+    )
+
+    @asynccontextmanager
+    async def session_factory():
+        yield SimpleNamespace(commit=AsyncMock())
+
+    selected_calls = []
+
+    class FakeRead:
+        async def __call__(self, call):
+            selected_calls.append(call)
+            if "read_portfolio" in call.read_tools:
+                return {"status": "completed", "results": [{
+                    "scope": "read_portfolio", "status": "completed", "data": {
+                        "bots": [{"bot_id": 130, "symbol": "AAPL", "is_live": False,
+                                  "position_qty": 1.29094597}],
+                    },
+                }]}
+            return {"status": "completed", "results": [{
+                "scope": "read_saved_setup", "status": "completed", "data": {
+                    "name": "BTC/EUR plan", "symbol": "BTC",
+                },
+            }]}
+
+    FakeRead.session_factory = staticmethod(session_factory)
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnV2RuntimeContractRepository.record_responses_progress",
+        AsyncMock(),
+    )
+    fake = FakeResponses(
+        response("position-read", calls=[tool_call(
+            "call-plan", "get_active_plan_and_strategy", {"asset": "BTC", "quote_currency": "EUR"},
+        )]),
+        response("position-answer", text="Er staat 1,29094597 AAPL open in Paper."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session_factory=session_factory,
+        user_id=7, run_id="cross-page-open-position", model_led_coach=True,
+    )
+    front.reads = FakeRead()
+    result = asyncio.run(front.run(
+        message="Welke open AAPL-positie heb ik naast mijn BTC/EUR-plan? Alleen uitleg.",
+        instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="BTC",
+        workspace_hints={"page": "/asset", "symbol": "BTC"},
+    ))
+    assert selected_calls[-1].inputs == {}
+    assert selected_calls[-1].read_tools == ("read_portfolio",)
+    results = result.response.tool_trace[0]["result"]["results"]
+    assert any(item["scope"] == "read_portfolio" and item["data"]["bots"][0]["position_qty"] == 1.29094597
+               for item in results)
+
+
+def test_open_position_question_requires_portfolio_read_before_model_answer(monkeypatch):
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="position-read-required")
+    front.model_led_coach = True
+    captured = {}
+
+    async def capture_loop(_self, **kwargs):
+        captured.update(kwargs)
+        return FinnResponsesResult("Ik lees de open positie.", "answer", ())
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run", capture_loop,
+    )
+    asyncio.run(front.run(
+        message="Welke open AAPL-positie heb ik?", instructions="Lees feiten",
+        conversation_context={}, verified_asset="BTC",
+        workspace_hints={"page": "/asset", "symbol": "BTC"},
+    ))
+    assert captured["required_read_tool_name"] == "get_portfolio_and_exposure"
+
+
 @pytest.mark.parametrize("question,selected_tool", [
     ("Welke bot heb ik op deze pagina open, aan welke strategie is hij gekoppeld, en kan hij nu een Paper-order plaatsen? Alleen uitleg.", "get_saved_bots"),
     ("Waarom kan de bot die ik hier bekijk vandaag geen Paper-aankoop uitvoeren? Noem zijn naam en gekoppelde strategie.", "get_saved_bots"),

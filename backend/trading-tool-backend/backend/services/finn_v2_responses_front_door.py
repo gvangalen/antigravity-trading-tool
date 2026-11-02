@@ -724,6 +724,14 @@ class FinnResponsesFrontDoor:
         )
 
     @staticmethod
+    def _asks_about_open_position(message: str) -> bool:
+        """A factual position question needs the owner's portfolio on every page."""
+        return bool(
+            re.search(r"\b(?:open|lopende|huidige|actuele|existing|current|offene|aktuelle)\b", message, re.I)
+            and re.search(r"\b(?:positie|posities|position|positions|positionen)\b", message, re.I)
+        )
+
+    @staticmethod
     def _focus_portfolio_on_open_bot(read_result: dict[str, Any], bot_id: int | None) -> dict[str, Any]:
         """Keep a singular, owner-verified bot read about the visible bot."""
         projected = []
@@ -2749,6 +2757,12 @@ class FinnResponsesFrontDoor:
                     workspace_hints.get("page") == "/bot"
                     and self._refers_to_open_bot(message)
                 )
+                position_read_requested = (
+                    is_read_only_turn and not pending_operation
+                    and self._asks_about_open_position(message)
+                )
+                if position_read_requested and call.name == "get_portfolio_and_exposure":
+                    call = replace(call, inputs={})
                 if call.name == "get_active_plan_and_strategy" and not pending_operation:
                     workspace_selector = await self._workspace_bot_plan_selector(
                         workspace_hints=workspace_hints, message=message,
@@ -2792,6 +2806,22 @@ class FinnResponsesFrontDoor:
                     }
                 else:
                     read_result = await self.reads(call)
+                if position_read_requested and call.name != "get_portfolio_and_exposure":
+                    # The selected plan or score read can be correct yet omit an
+                    # existing Paper position. Add only owner-scoped facts; Luna
+                    # still decides how to answer the user.
+                    portfolio_result = await self.reads(replace(
+                        call, name="get_portfolio_and_exposure", inputs={},
+                        read_tools=("read_portfolio",),
+                    ))
+                    read_result = {
+                        **read_result,
+                        "results": [
+                            *(item for item in read_result.get("results") or []
+                              if item.get("scope") != "read_portfolio"),
+                            *(portfolio_result.get("results") or []),
+                        ],
+                    }
                 if collection_score_match:
                     pair_quotes: dict[str, set[str]] = {}
                     for pair_asset, pair_quote in mentioned_pairs:
@@ -3573,6 +3603,9 @@ class FinnResponsesFrontDoor:
                 else "get_saved_setup_inventory"
                 if normalized_inventory_read and pending_operation is None
                 and not resuming_clarification
+                else "get_portfolio_and_exposure"
+                if is_read_only_turn and self._asks_about_open_position(message)
+                and pending_operation is None and not resuming_clarification
                 else "get_active_plan_and_strategy"
                 if is_read_only_turn and request_facts.action_polarity == "evaluate"
                 and not (collection_cue or requests_comparison(message))
