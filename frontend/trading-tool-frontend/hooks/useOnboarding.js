@@ -173,18 +173,15 @@ export function useOnboarding() {
 
     return {
       profile: !!status.has_profile,
-      analysis: !!status.has_asset && !!status.has_market && !!status.has_macro && !!status.has_technical,
-      plan: !!status.has_setup && !!status.has_strategy,
+      analysis: !!status.has_asset && !!status.has_market && !!status.has_technical,
+      plan: !!status.has_setup,
       automation: !!status.has_bot,
       complete:
         !!status.has_profile &&
         !!status.has_asset &&
         !!status.has_market &&
-        !!status.has_macro &&
         !!status.has_technical &&
-        !!status.has_setup &&
-        !!status.has_strategy &&
-        !!status.has_bot,
+        !!status.has_setup,
     };
   }, [status]);
 
@@ -197,7 +194,7 @@ export function useOnboarding() {
       analysis: !!phaseStatus?.profile,
       plan: !!phaseStatus?.analysis,
       automation: !!phaseStatus?.plan,
-      complete: !!phaseStatus?.automation,
+      complete: !!phaseStatus?.plan,
     };
   }, [status, phaseStatus]);
 
@@ -208,16 +205,10 @@ export function useOnboarding() {
       analysis: [
         !status.has_asset ? "asset" : null,
         !status.has_market ? "market_indicator" : null,
-        !status.has_macro ? "macro_indicator" : null,
         !status.has_technical ? "technical_indicator" : null,
       ].filter(Boolean),
-      plan: [
-        !status.has_setup ? "setup" : null,
-        !status.has_strategy ? "strategy" : null,
-      ].filter(Boolean),
-      automation: [
-        !status.has_bot ? "bot" : null,
-      ].filter(Boolean),
+      plan: !status.has_setup ? ["setup"] : [],
+      automation: [],
       complete: [],
     };
   }, [status, phaseStatus]);
@@ -234,11 +225,8 @@ export function useOnboarding() {
         stepStatus &&
         stepStatus.asset &&
         stepStatus.market &&
-        stepStatus.macro &&
         stepStatus.technical &&
-        stepStatus.setup &&
-        stepStatus.strategy &&
-        stepStatus.bot
+        stepStatus.setup
       )
     );
   }, [status, stepStatus, phaseStatus]);
@@ -259,7 +247,7 @@ export function useOnboarding() {
     asset: stepStatus?.profile ?? false,
     market: stepStatus?.asset ?? false,
     macro: stepStatus?.market ?? false,
-    technical: stepStatus?.macro ?? false,
+    technical: stepStatus?.market ?? false,
     setup: stepStatus?.technical ?? false,
     strategy: stepStatus?.setup ?? false,
     bot: stepStatus?.strategy ?? false,
@@ -269,18 +257,14 @@ export function useOnboarding() {
     !phaseStatus?.profile ? "profile" :
     !phaseStatus?.analysis ? "analysis" :
     !phaseStatus?.plan ? "plan" :
-    !phaseStatus?.automation ? "automation" :
     "complete"
   );
   const nextAction = status?.next_action || (
     currentPhase === "profile" ? "complete_profile" :
     currentPhase === "analysis" && !status?.has_asset ? "select_asset" :
     currentPhase === "analysis" && !status?.has_market ? "add_market_indicator" :
-    currentPhase === "analysis" && !status?.has_macro ? "add_macro_indicator" :
     currentPhase === "analysis" && !status?.has_technical ? "add_technical_indicator" :
     currentPhase === "plan" && !status?.has_setup ? "create_setup" :
-    currentPhase === "plan" && !status?.has_strategy ? "create_strategy" :
-    currentPhase === "automation" && !status?.has_bot ? "create_bot" :
     "go_to_analysis"
   );
   const nextRoute = status?.next_route || "/onboarding";

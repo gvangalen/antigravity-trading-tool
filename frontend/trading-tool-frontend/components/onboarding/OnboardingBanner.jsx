@@ -64,6 +64,7 @@ export default function OnboardingBanner({ step, phaseStatusOverrides = {} }) {
   const { t } = useTranslation();
   const bannerCopy = t?.traderProfile?.onboardingBanner || {};
   const {
+    activeAsset,
     currentPhase,
     loading,
     onboardingComplete,
@@ -81,8 +82,17 @@ export default function OnboardingBanner({ step, phaseStatusOverrides = {} }) {
     ? Boolean(phaseStatusOverrides[phase])
     : Boolean(phaseStatus?.[phase]);
   const isPhaseComplete = phaseComplete(stepPhase);
-  const completedPhaseCount = phaseOrder.filter(phaseComplete).length;
-  const progressPercent = Math.round((completedPhaseCount / phaseOrder.length) * 100);
+  const requiredPhases = phaseOrder.filter((phase) => phase !== "automation");
+  const completedPhaseCount = requiredPhases.filter(phaseComplete).length;
+  const progressPercent = Math.round((completedPhaseCount / requiredPhases.length) * 100);
+  const previousPhase = phaseOrder[phaseOrder.indexOf(stepPhase) - 1];
+  const phaseHref = (phase) => {
+    const symbolQuery = activeAsset ? `&symbol=${encodeURIComponent(activeAsset)}` : "";
+    if (phase === "profile") return "/onboarding/profile";
+    if (phase === "analysis") return `/onboarding/analysis?onboarding=1&step=analysis${symbolQuery}`;
+    if (phase === "plan") return `/onboarding/plan?onboarding=1&step=plan${symbolQuery}`;
+    return `/onboarding/automation?onboarding=1&step=automation${symbolQuery}`;
+  };
 
   if (loading || onboardingComplete || !stepPhase || !meta || !Icon) return null;
 
@@ -148,7 +158,7 @@ export default function OnboardingBanner({ step, phaseStatusOverrides = {} }) {
                 {bannerCopy?.progressLabel || "Progress"}
               </div>
               <div className="text-sm font-black text-blue-700 dark:text-blue-300">
-                {completedPhaseCount}/{phaseOrder.length}
+                {completedPhaseCount}/{requiredPhases.length}
               </div>
             </div>
             <div className="mt-3 h-2 overflow-hidden rounded-full bg-blue-100 dark:bg-blue-950/40">
@@ -172,6 +182,11 @@ export default function OnboardingBanner({ step, phaseStatusOverrides = {} }) {
               {bannerCopy?.viewCta || "View onboarding"}
               <ArrowRight size={13} />
             </Link>
+            {previousPhase ? (
+              <Link href={phaseHref(previousPhase)} className="mt-3 block text-sm font-semibold text-blue-700 underline-offset-2 hover:underline dark:text-blue-300">
+                {bannerCopy?.previousCta || "Back to previous step"}: {phaseLabels?.[previousPhase] || PHASE_META[previousPhase].label}
+              </Link>
+            ) : null}
           </div>
         </div>
       </div>
@@ -186,8 +201,8 @@ export default function OnboardingBanner({ step, phaseStatusOverrides = {} }) {
             : Boolean(phaseUnlocks?.[phase]);
           const active = phase === stepPhase;
 
-          return (
-            <div key={phase} className="bg-white px-4 py-4 dark:bg-[#06101f]">
+          const phaseContent = (
+            <>
               <div className="flex items-center gap-3">
                 <div
                   className={`flex h-10 w-10 items-center justify-center rounded-2xl ${
@@ -218,7 +233,15 @@ export default function OnboardingBanner({ step, phaseStatusOverrides = {} }) {
                   </div>
                 </div>
               </div>
-            </div>
+            </>
+          );
+          const canOpen = !active && (complete || unlocked);
+          return canOpen ? (
+            <Link key={phase} href={phaseHref(phase)} className="bg-white px-4 py-4 transition hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 dark:bg-[#06101f] dark:hover:bg-blue-950/20">
+              {phaseContent}
+            </Link>
+          ) : (
+            <div key={phase} className="bg-white px-4 py-4 dark:bg-[#06101f]">{phaseContent}</div>
           );
         })}
       </div>

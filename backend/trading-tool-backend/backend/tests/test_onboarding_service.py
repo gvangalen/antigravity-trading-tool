@@ -379,6 +379,33 @@ def test_macro_indicator_is_optional_for_the_canonical_analysis_phase():
     assert status.current_phase == "complete"
 
 
+def test_strategy_and_bot_are_optional_after_a_saved_setup():
+    required = {"profile", "asset", "market", "technical", "setup"}
+    repo = FakeOnboardingRepository(
+        steps=[
+            SimpleNamespace(step_key=key, completed=key in required, pipeline_started=False)
+            for key in ("profile", "asset", "market", "macro", "technical", "setup", "strategy", "bot")
+        ],
+        inferred_completed={key: key in required for key in
+                            ("profile", "asset", "market", "macro", "technical", "setup", "strategy", "bot")},
+    )
+    service = OnboardingService(repo)
+    async def skip_pipeline(_user_id):
+        return None
+    service._kickstart_user_pipeline = skip_pipeline
+    status = asyncio.run(service.finish_onboarding(user_id=25))
+
+    assert status.onboarding_complete is True
+    assert status.has_strategy is False
+    assert status.has_bot is False
+    assert status.phases_completed["plan"] is True
+    assert status.phases_completed["automation"] is False
+    assert status.phase_missing["plan"] == []
+    assert status.optional_missing["plan"] == ["strategy"]
+    assert status.optional_missing["automation"] == ["bot"]
+    assert status.current_phase == "complete"
+
+
 def test_infer_onboarding_state_requires_explicit_asset_and_symbol_scoped_indicator_rows():
     class FakeUser:
         ai_preferences = {}

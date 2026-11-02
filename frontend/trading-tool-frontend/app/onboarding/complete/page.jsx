@@ -49,7 +49,7 @@ export default function OnboardingCompletePage() {
 
       <p className="mx-auto mb-10 max-w-xl text-lg leading-relaxed text-[var(--text-light)]">
         {t?.traderProfile?.onboardingComplete?.description ||
-          "Je analyse, plan en automatisering zijn ingesteld. FINN houdt vanaf nu je markt, regels en voortgang bij."}
+          "Je profiel, analyse en eerste setup zijn opgeslagen. Je kunt later een strategie en bot toevoegen."}
       </p>
 
       <div className="mx-auto mb-10 max-w-2xl rounded-3xl border border-blue-100 bg-blue-50 p-6 text-left shadow-sm">
@@ -59,7 +59,7 @@ export default function OnboardingCompletePage() {
         </div>
         <p className="mt-3 text-sm font-semibold leading-relaxed text-slate-700">
           {t?.traderProfile?.onboardingComplete?.finnBody ||
-            "Your profile, first analysis flow and automation baseline are ready. Start in Analysis and FINN will keep guiding you from there."}
+            "Your profile, analysis and first setup are ready. Add a strategy or bot whenever you need one."}
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           <span className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-3 py-1.5 text-xs font-bold text-blue-700">
@@ -72,7 +72,7 @@ export default function OnboardingCompletePage() {
           </span>
           <span className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-3 py-1.5 text-xs font-bold text-blue-700">
             <Sparkles size={12} />
-            {t?.traderProfile?.onboardingComplete?.chips?.askFinn || "Automation saved"}
+            {t?.traderProfile?.onboardingComplete?.chips?.askFinn || "Ask FINN"}
           </span>
         </div>
       </div>

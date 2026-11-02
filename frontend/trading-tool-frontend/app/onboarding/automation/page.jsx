@@ -135,6 +135,13 @@ function AutomationStep() {
         </p>
       ) : null}
 
+      {status?.has_setup && !completedBot ? (
+        <button type="button" onClick={handleContinue} disabled={continuing}
+          className="mb-6 rounded-2xl border border-blue-200 px-5 py-3 text-sm font-bold text-blue-700 hover:bg-blue-50 disabled:opacity-60">
+          {guide.skipBotCta || "Verder zonder bot"}
+        </button>
+      ) : null}
+
       {!requestedStrategyId && availableStrategies.length > 1 ? (
         <div className="mb-6 rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
           <label htmlFor="onboarding-automation-strategy" className="block text-sm font-black text-slate-900">

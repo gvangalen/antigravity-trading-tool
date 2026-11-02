@@ -4,6 +4,25 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Begeleide onboarding zonder verplichte strategie of bot (2 november 2026)
+
+Phase: `LOCAL_VALIDATION` voor branch `codex/onboarding-trade-navigation`.
+De begeleide planstap maakt een DCA-setup; een handmatige Trade-setup wordt
+na onboarding in Mijn Plan ingericht. De gebruiker kan terug naar opgeslagen
+stappen. Een strategie en Paper-bot zijn vervolgstappen, geen voorwaarden om
+onboarding af te ronden. Markt- en technische indicatorconfiguratie zijn wel
+vereist; Macro is optioneel. De UI mag doorgaan met opgeslagen configuratie
+terwijl de scoreberekening nog loopt.
+
+Lokale Build-evidence: backend-suite `4214 passed, 4 skipped`, gerichte
+onboardingtests `14 passed`, frontend typecheck, i18n-lint, i18n-tests
+`35/35`, commandtests `34/34`, voorsteltests `8/8`, setuptests `20/20` en
+productiebuild geslaagd; `audit:high` meldde geen kwetsbaarheden. Geen FINN
+actiecontract of modelroute is gewijzigd; de worker-actiematrix en
+Responses-providerproeven zijn daarom niet van toepassing op deze batch.
+Geen plan, bot of order in productie gewijzigd door Build. CI, deployment en
+onafhankelijke ingelogde QA volgen nog; deze sectie is geen live acceptatie.
+
 ## Beurskoers buiten reguliere sessie en FINN-positievragen (2 november 2026)
 
 Phase: `NOT_ACCEPTED` als volledige live acceptatie, zonder opnieuw gevonden

@@ -97,8 +97,9 @@ export default function OnboardingPage() {
     [phaseMeta, phaseMissing, phaseStatus, phaseUnlocks],
   );
 
-  const completedCount = phases.filter((phase) => phase.complete).length;
-  const progressPercent = Math.round((completedCount / phases.length) * 100);
+  const requiredPhases = phases.filter((phase) => phase.key !== "automation");
+  const completedCount = requiredPhases.filter((phase) => phase.complete).length;
+  const progressPercent = Math.round((completedCount / requiredPhases.length) * 100);
   const activePhase = phases.find((phase) => phase.key === currentPhase) || phases[0];
 
   if (loading) {
@@ -136,7 +137,7 @@ export default function OnboardingPage() {
                   {onboardingPageCopy?.activeAssetLabel || "Asset"}: {activeAsset || "BTC"}
                 </span>
                 <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-bold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                  {completedCount}/{phases.length} {onboardingPageCopy?.phasesCompleteLabel || "phases complete"}
+                  {completedCount}/{requiredPhases.length} {onboardingPageCopy?.phasesCompleteLabel || "phases complete"}
                 </span>
               </div>
             </div>
@@ -168,7 +169,7 @@ export default function OnboardingPage() {
               </h2>
               <p className="mt-3 text-sm font-medium leading-7 text-slate-600 dark:text-slate-400">
                 {onboardingPageCopy?.completeDescription ||
-                  "Your profile, analysis flow, plan and automation are configured. FINN can now keep tracking your market context and help you follow the plan you set."}
+                  "Your profile, analysis and first setup are saved. You can add a strategy or bot later."}
               </p>
             </div>
             <Link
