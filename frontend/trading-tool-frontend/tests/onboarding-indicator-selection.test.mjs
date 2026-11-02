@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { hasSavedOnboardingAnalysisChoices, restoreOnboardingIndicator } from "../lib/onboardingIndicatorSelection.mjs";
+import { canChooseOnboardingIndicator, hasSavedOnboardingAnalysisChoices, restoreOnboardingIndicator } from "../lib/onboardingIndicatorSelection.mjs";
 import { classifyOnboardingIndicatorSync, classifyOnboardingWorkspaceChoice } from "../lib/onboardingIndicatorSync.mjs";
 
 test("completed onboarding restores the saved indicator by stable name across languages", () => {
@@ -49,4 +49,12 @@ test("saved onboarding choices allow continuing while scores are pending", () =>
   assert.equal(hasSavedOnboardingAnalysisChoices({ ...choices, technical: null }), false);
   assert.equal(classifyOnboardingIndicatorSync({ synced: [{ indicator: "dxy", payload: { status: "pending_source", value: null } }], failed: [] }, "dxy"), "failed");
   assert.equal(hasSavedOnboardingAnalysisChoices(choices), true);
+});
+
+test("indicator choices unlock in market, macro, technical order", () => {
+  const state = { asset: true, market: true, macro: false };
+  assert.equal(canChooseOnboardingIndicator("macro", state), true);
+  assert.equal(canChooseOnboardingIndicator("technical", state), false);
+  assert.equal(canChooseOnboardingIndicator("technical", { ...state, macro: true }), true);
+  assert.equal(canChooseOnboardingIndicator("macro", { ...state, market: false }), false);
 });

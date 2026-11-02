@@ -12,3 +12,11 @@ export function restoreOnboardingIndicator(preferences, catalog, stepCompleted) 
 export function hasSavedOnboardingAnalysisChoices({ asset, market, macro, technical }) {
   return Boolean(asset && market && macro && technical);
 }
+
+export function canChooseOnboardingIndicator(kind, { asset, market, macro }) {
+  if (!asset) return false;
+  if (kind === "market") return true;
+  if (kind === "macro") return Boolean(market);
+  if (kind === "technical") return Boolean(market && macro);
+  return false;
+}

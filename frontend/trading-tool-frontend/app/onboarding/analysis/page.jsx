@@ -31,7 +31,7 @@ import {
   updateTechnicalPreferences,
 } from "@/lib/api/technical";
 import { buildOnboardingAssetPreferencePatch, normalizeOnboardingAsset } from "@/lib/onboardingAsset";
-import { hasSavedOnboardingAnalysisChoices, restoreOnboardingIndicator } from "@/lib/onboardingIndicatorSelection.mjs";
+import { canChooseOnboardingIndicator, hasSavedOnboardingAnalysisChoices, restoreOnboardingIndicator } from "@/lib/onboardingIndicatorSelection.mjs";
 import { classifyOnboardingIndicatorSync, classifyOnboardingWorkspaceChoice } from "@/lib/onboardingIndicatorSync.mjs";
 import { fetchAssetWorkspace } from "@/lib/api/workspace";
 
@@ -825,7 +825,7 @@ export default function OnboardingAnalysisPage() {
           addedLabel={copy.addedLabel || "Added"}
           isOpen={openSelector === "macro"}
           onOpen={() => setOpenSelector("macro")}
-          disabled={!assetDone || !marketDone || !macroDone}
+          disabled={!canChooseOnboardingIndicator("macro", { asset: assetDone, market: marketDone, macro: macroDone })}
         />
 
         <IndicatorSelector
@@ -857,7 +857,7 @@ export default function OnboardingAnalysisPage() {
           addedLabel={copy.addedLabel || "Added"}
           isOpen={openSelector === "technical"}
           onOpen={() => setOpenSelector("technical")}
-          disabled={!assetDone || !marketDone}
+          disabled={!canChooseOnboardingIndicator("technical", { asset: assetDone, market: marketDone, macro: macroDone })}
         />
       </div>
 
