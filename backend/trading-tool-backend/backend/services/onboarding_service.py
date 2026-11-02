@@ -105,7 +105,8 @@ class OnboardingService:
             for s in DEFAULT_STEPS
         }
         # A completed flag alone cannot validate a changed indicator choice.
-        # Reconcile analysis steps with the currently configured scored row.
+        # Reconcile analysis steps with the saved asset-scoped configuration;
+        # a score may legitimately arrive after onboarding.
         for step in ("market", "macro", "technical"):
             flag = STEP_FLAG_MAP[step]
             status_kwargs[flag] = bool(status_kwargs[flag] and inferred_state.get(flag))

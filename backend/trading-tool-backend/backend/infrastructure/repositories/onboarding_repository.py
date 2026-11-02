@@ -126,41 +126,11 @@ class OnboardingRepository:
             else {"market": [], "macro": [], "technical": []}
         )
 
-        async def _has_scored_choice(category: str) -> bool:
-            if not onboarding_asset:
-                return False
-            table = {
-                "market": "market_data_indicators",
-                "macro": "macro_data",
-                "technical": "technical_indicators",
-            }[category]
-            name_column = "indicator" if category == "technical" else "name"
-            interpretation_column = "uitleg" if category == "technical" else "interpretation"
-            names = configured_indicators.get(category) or []
-            if not names:
-                return False
-            for name in names:
-                result = await self.db.execute(text(f"""
-                    SELECT value, score,
-                           {interpretation_column} AS interpretation
-                    FROM {table}
-                    WHERE user_id = :user_id
-                      AND UPPER(COALESCE(symbol, '')) = :symbol
-                      AND LOWER({name_column}) = :name
-                    ORDER BY timestamp DESC, id DESC
-                    LIMIT 1
-                """), {
-                    "user_id": user_id,
-                    "symbol": onboarding_asset,
-                    "name": name.lower(),
-                })
-                row = result.first()
-                # Completion is durable once the chosen indicator was scored.
-                # Runtime source freshness is checked by the workspace and bot.
-                if (row and row.value is not None and row.score is not None
-                        and "fallback" not in str(row.interpretation or "").lower()):
-                    return True
-            return False
+        def _has_configured_choice(category: str) -> bool:
+            # Onboarding records a user's saved, asset-scoped choice. Score
+            # availability and source freshness belong to the analysis and
+            # execution paths; a new user must not wait for their first score.
+            return bool(onboarding_asset and configured_indicators.get(category))
 
         has_setup = bool(
             await _scalar(
@@ -222,9 +192,9 @@ class OnboardingRepository:
             "active_asset": onboarding_asset or None,
             "has_profile": has_trader_profile(profile),
             "has_asset": bool(onboarding_asset),
-            "has_market": await _has_scored_choice("market"),
-            "has_macro": await _has_scored_choice("macro"),
-            "has_technical": await _has_scored_choice("technical"),
+            "has_market": _has_configured_choice("market"),
+            "has_macro": _has_configured_choice("macro"),
+            "has_technical": _has_configured_choice("technical"),
             "has_setup": has_setup,
             "has_strategy": has_strategy,
             "has_bot": has_bot,

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { restoreOnboardingIndicator } from "../lib/onboardingIndicatorSelection.mjs";
+import { hasSavedOnboardingAnalysisChoices, restoreOnboardingIndicator } from "../lib/onboardingIndicatorSelection.mjs";
 import { classifyOnboardingIndicatorSync, classifyOnboardingWorkspaceChoice } from "../lib/onboardingIndicatorSync.mjs";
 
 test("completed onboarding restores the saved indicator by stable name across languages", () => {
@@ -34,10 +34,18 @@ test("a default or incomplete indicator is never counted as a chosen onboarding 
   assert.equal(restoreOnboardingIndicator({ scope: "symbol_override", indicators: [] }, [], true), null);
 });
 
-test("onboarding does not complete a failed or unscored sync as if it were ready", () => {
+test("sync classification distinguishes source and scoring states", () => {
   assert.equal(classifyOnboardingIndicatorSync({ synced: [], failed: [{ indicator: "sp500" }] }, "sp500"), "failed");
   assert.equal(classifyOnboardingIndicatorSync({ synced: [{ indicator: "sp500", payload: { value: 5800, score: null } }], failed: [] }, "sp500"), "pending_score");
   assert.equal(classifyOnboardingIndicatorSync({ synced: [{ indicator: "ma_200", payload: { value: 1.03, score: null, uitleg: "Geen vastgelegde scoreregel voor deze indicator." } }], failed: [] }, "ma_200"), "missing_rule");
   assert.equal(classifyOnboardingIndicatorSync({ synced: [{ indicator: "ma_200", payload: { value: 1.03, score: 65 } }], failed: [] }, "ma_200"), "ready");
   assert.equal(classifyOnboardingIndicatorSync({ synced: [{ indicator: "sp500", payload: { status: "pending_source", value: null } }], failed: [] }, "sp500"), "failed");
+});
+
+test("saved onboarding choices allow continuing while scores are pending", () => {
+  const choices = { asset: { symbol: "ETH" }, market: { name: "price" }, macro: { name: "dxy" }, technical: { name: "rsi" } };
+  assert.equal(hasSavedOnboardingAnalysisChoices(choices), true);
+  assert.equal(hasSavedOnboardingAnalysisChoices({ ...choices, technical: null }), false);
+  assert.equal(classifyOnboardingIndicatorSync({ synced: [{ indicator: "dxy", payload: { status: "pending_source", value: null } }], failed: [] }, "dxy"), "failed");
+  assert.equal(hasSavedOnboardingAnalysisChoices(choices), true);
 });

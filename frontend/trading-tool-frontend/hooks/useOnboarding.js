@@ -82,6 +82,7 @@ export function useOnboarding() {
         action_type: step,
       });
       await fetchStatus();
+      return true;
 
     } catch (err) {
       console.error(
@@ -89,6 +90,7 @@ export function useOnboarding() {
         err
       );
       setError("Stap kon niet worden voltooid.");
+      return false;
     } finally {
       setSaving(false);
     }
