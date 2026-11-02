@@ -114,6 +114,7 @@ export default function OnboardingPlanPage() {
   const { t } = useTranslation();
   const { status, completeStep } = useOnboarding();
   const strategySectionRef = useRef(null);
+  const completionSectionRef = useRef(null);
 
   const symbol = useMemo(
     () => String(searchParams.get("symbol") || status?.active_asset || "BTC").toUpperCase(),
@@ -236,7 +237,6 @@ export default function OnboardingPlanPage() {
   }, [copy.loadError, symbol]);
 
   const { setupDone, strategyDone } = getPlanCompletionForAsset(symbol, savedSetup, savedStrategy);
-  const allDone = setupDone && strategyDone;
   const isTrade = String(setup.setupType || "").toLowerCase() === "trade";
 
   const setupValid = Boolean(
@@ -304,7 +304,7 @@ export default function OnboardingPlanPage() {
       }
 
       window.setTimeout(() => {
-        strategySectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        completionSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 150);
     } catch (err) {
       console.error("Failed to save onboarding setup", err);
@@ -362,12 +362,10 @@ export default function OnboardingPlanPage() {
 
   const handleContinue = () => {
     setContinuing(true);
-    const strategyId = savedStrategy?.strategy_id ?? savedStrategy?.id;
-    const strategyQuery = strategyId ? `&strategy_id=${encodeURIComponent(strategyId)}` : "";
-    router.push(`/onboarding/automation?symbol=${encodeURIComponent(symbol)}${strategyQuery}`);
+    router.push(`/onboarding/complete?symbol=${encodeURIComponent(symbol)}`);
   };
 
-  const reviewReady = setupDone && strategyDone;
+  const reviewReady = setupDone;
   const savedCondition = MARKET_CONDITIONS.find(({ id }) => id === conditionChoice);
   const savedLegacyRanges = [
     ["market", savedSetup?.min_market_score, savedSetup?.max_market_score],
@@ -388,7 +386,7 @@ export default function OnboardingPlanPage() {
 
   return (
     <div className="mx-auto max-w-5xl py-8">
-      <OnboardingBanner step="setup" phaseStatusOverrides={{ plan: allDone }} />
+      <OnboardingBanner step="setup" phaseStatusOverrides={{ plan: setupDone }} />
 
       <div className="mb-10 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
         <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
@@ -726,8 +724,8 @@ export default function OnboardingPlanPage() {
         </div>
       ) : null}
 
-      {allDone ? (
-        <section className="mt-6 rounded-[28px] border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
+      {setupDone ? (
+        <section ref={completionSectionRef} className="mt-6 rounded-[28px] border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
           <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
             <div className="min-w-0">
               <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">
@@ -735,10 +733,10 @@ export default function OnboardingPlanPage() {
                 {copy.successEyebrow || "Plan ready"}
               </div>
               <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900">
-                {copy.successTitle || "Your first setup and strategy are saved"}
+                {strategyDone ? copy.successTitle || "Your setup and strategy are saved" : copy.optionalPlanTitle || "Je setup is opgeslagen"}
               </h2>
               <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-600">
-                {copy.successMessage || "Review your first plan briefly, then continue to Automation when you are ready."}
+                {strategyDone ? copy.successMessage || "Review your plan, then continue when you are ready." : copy.optionalPlanBody || "Je kunt nu afronden. Een strategie en bot toevoegen kan later."}
               </p>
             </div>
 
@@ -748,7 +746,7 @@ export default function OnboardingPlanPage() {
               disabled={continuing}
               className="inline-flex items-center justify-center rounded-2xl bg-blue-600 px-5 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-blue-500/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {continuing ? copy.continuingLabel || "Opening Automation…" : copy.continueLabel || "Continue to Automation"}
+              {continuing ? copy.continuingLabel || "Onboarding afronden…" : copy.finishWithoutAutomation || "Onboarding afronden"}
             </button>
           </div>
 
@@ -758,15 +756,22 @@ export default function OnboardingPlanPage() {
               label={copy.setupTitle || "1. Setup"}
               value={setup.name.trim() || `${symbol} Setup`}
             />
-            <SummaryRow
-              label={copy.strategyTitle || "2. Strategy"}
-              value={strategy.name.trim() || `${symbol} Strategy`}
-            />
+            <SummaryRow label={copy.strategyTitle || "2. Strategy"} value={strategyDone ? savedStrategy?.name || strategy.name.trim() : copy.optionalLater || "Later toevoegen"} />
           </div>
+          {!strategyDone ? (
+            <button type="button" onClick={() => strategySectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} className="mt-4 block text-sm font-bold text-blue-700 underline-offset-2 hover:underline">
+              {copy.optionalStrategyLink || "Optioneel: strategie toevoegen"}
+            </button>
+          ) : null}
+          {strategyDone ? (
+            <Link href={`/onboarding/automation?symbol=${encodeURIComponent(symbol)}&strategy_id=${encodeURIComponent(savedStrategy?.strategy_id ?? savedStrategy?.id ?? "")}`} className="mt-4 inline-block text-sm font-bold text-blue-700 underline-offset-2 hover:underline">
+              {copy.optionalAutomationLink || "Optioneel: Paper-bot instellen"}
+            </Link>
+          ) : null}
         </section>
       ) : null}
 
-      {!allDone ? (
+      {!setupDone ? (
         <section className="mt-6 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
@@ -774,13 +779,11 @@ export default function OnboardingPlanPage() {
                 {copy.nextStepLabel || "Next step"}
               </div>
               <p className="mt-2 text-sm font-semibold text-slate-700">
-                {setupDone
-                  ? copy.nextStepStrategy || "Save one strategy for this setup. Then Automation opens automatically."
-                  : copy.nextStepSetup || "Start by saving one setup. After that the strategy step unlocks immediately."}
+                {copy.nextStepSetup || "Save your setup to finish onboarding. You can add a strategy later."}
               </p>
             </div>
             <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-700">
-              {setupDone ? (copy.strategyTitle || "2. Strategy") : (copy.setupTitle || "1. Setup")}
+              {copy.setupTitle || "1. Setup"}
               <ArrowRight size={13} />
             </div>
           </div>

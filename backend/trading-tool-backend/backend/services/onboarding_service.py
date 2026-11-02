@@ -19,6 +19,8 @@ DEFAULT_STEPS: List[str] = [
     "bot",
 ]
 
+# Keep the existing pipeline marker on the bot row for users who already
+# completed onboarding; a bot itself is no longer required.
 PIPELINE_STEP = "bot"
 
 STEP_FLAG_MAP = {
@@ -33,12 +35,11 @@ STEP_FLAG_MAP = {
 }
 
 REQUIRED_COMPLETION_STEPS: List[str] = [
+    "profile",
     "asset",
     "market",
     "technical",
     "setup",
-    "strategy",
-    "bot",
 ]
 
 # Macro context enriches an analysis but is not a prerequisite for a user to
@@ -148,25 +149,25 @@ class OnboardingService:
         
         steps = await self.repository.get_user_steps(user_id, DEFAULT_FLOW)
         
-        strategy_step = next((s for s in steps if s.step_key == PIPELINE_STEP), None)
-        if not strategy_step:
-            logger.warning(f"[Onboarding] Geen strategy-step voor user_id={user_id}")
+        pipeline_step = next((s for s in steps if s.step_key == PIPELINE_STEP), None)
+        if not pipeline_step:
+            logger.warning(f"[Onboarding] Geen pipeline-marker voor user_id={user_id}")
             return
-            
-        strategy_completed = strategy_step.completed
-        pipeline_started = strategy_step.pipeline_started
+
+        setup_completed = any(s.completed for s in steps if s.step_key == "setup")
+        pipeline_started = pipeline_step.pipeline_started
         
         completed_map = {s.step_key: s.completed for s in steps}
         all_completed = all(completed_map.get(s, False) for s in REQUIRED_COMPLETION_STEPS)
 
         logger.info(
             f"[Onboarding] Pipeline check user_id={user_id} "
-            f"strategy_completed={strategy_completed} "
+            f"setup_completed={setup_completed} "
             f"all_completed={all_completed} "
             f"pipeline_started={pipeline_started}"
         )
 
-        if not all_completed or not strategy_completed or pipeline_started:
+        if not all_completed or not setup_completed or pipeline_started:
             return
 
         await self.repository.mark_pipeline_started(user_id, DEFAULT_FLOW, PIPELINE_STEP)
@@ -213,15 +214,15 @@ class OnboardingService:
     def _build_phase_completion_map(self, status_kwargs: Dict[str, bool], inferred_state: Dict[str, object]) -> Dict[str, bool]:
         profile_complete = bool(status_kwargs.get("has_profile"))
         analysis_complete = all(bool(status_kwargs.get(key)) for key in ANALYSIS_REQUIRED_FLAGS)
-        plan_complete = bool(status_kwargs.get("has_setup")) and bool(status_kwargs.get("has_strategy"))
-        # V1 onboarding finishes after one saved bot. Exchange connection can be added later.
+        plan_complete = bool(status_kwargs.get("has_setup"))
+        # Strategy and automation are optional after the first saved setup.
         automation_complete = bool(status_kwargs.get("has_bot"))
         return {
             "profile": profile_complete,
             "analysis": analysis_complete,
             "plan": plan_complete,
             "automation": automation_complete,
-            "complete": profile_complete and analysis_complete and plan_complete and automation_complete,
+            "complete": profile_complete and analysis_complete and plan_complete,
         }
 
     def _build_phase_unlock_map(self, phases_completed: Dict[str, bool]) -> Dict[str, bool]:
@@ -230,7 +231,7 @@ class OnboardingService:
             "analysis": phases_completed.get("profile", False),
             "plan": phases_completed.get("analysis", False),
             "automation": phases_completed.get("plan", False),
-            "complete": phases_completed.get("automation", False),
+            "complete": phases_completed.get("plan", False),
         }
 
     def _build_phase_missing_map(self, status_kwargs: Dict[str, bool], inferred_state: Dict[str, object]) -> Dict[str, List[str]]:
@@ -247,21 +248,8 @@ class OnboardingService:
                 ]
                 if not done
             ],
-            "plan": [
-                token
-                for token, done in [
-                    ("setup", status_kwargs.get("has_setup")),
-                    ("strategy", status_kwargs.get("has_strategy")),
-                ]
-                if not done
-            ],
-            "automation": [
-                token
-                for token, done in [
-                    ("bot", status_kwargs.get("has_bot")),
-                ]
-                if not done
-            ],
+            "plan": ["setup"] if not status_kwargs.get("has_setup") else [],
+            "automation": [],
             "complete": [],
         }
 
@@ -271,11 +259,13 @@ class OnboardingService:
                 token
                 for token, flag in ANALYSIS_OPTIONAL_FLAGS.items()
                 if not status_kwargs.get(flag)
-            ]
+            ],
+            "plan": ["strategy"] if not status_kwargs.get("has_strategy") else [],
+            "automation": ["bot"] if not status_kwargs.get("has_bot") else [],
         }
 
     def _resolve_current_phase(self, phases_completed: Dict[str, bool]) -> str:
-        for phase in PHASE_ORDER[:-1]:
+        for phase in ("profile", "analysis", "plan"):
             if not phases_completed.get(phase, False):
                 return phase
         return "complete"
@@ -299,13 +289,7 @@ class OnboardingService:
         if current_phase == "plan":
             if not status_kwargs.get("has_setup"):
                 return "create_setup"
-            if not status_kwargs.get("has_strategy"):
-                return "create_strategy"
             return "confirm_plan"
-        if current_phase == "automation":
-            if not status_kwargs.get("has_bot"):
-                return "create_bot"
-            return "review_automation"
         return "go_to_analysis"
 
     def _resolve_next_route(

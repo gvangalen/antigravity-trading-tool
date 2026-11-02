@@ -62,9 +62,7 @@ export default function AuthGuard({ children }) {
         status?.has_market &&
         status?.has_macro &&
         status?.has_setup &&
-        status?.has_technical &&
-        status?.has_strategy &&
-        status?.has_bot
+        status?.has_technical
       );
       verifiedComplete.current = Boolean(isComplete);
       verifiedUserId.current = user.id;

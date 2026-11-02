@@ -82,8 +82,9 @@ export default function OnboardingBanner({ step, phaseStatusOverrides = {} }) {
     ? Boolean(phaseStatusOverrides[phase])
     : Boolean(phaseStatus?.[phase]);
   const isPhaseComplete = phaseComplete(stepPhase);
-  const completedPhaseCount = phaseOrder.filter(phaseComplete).length;
-  const progressPercent = Math.round((completedPhaseCount / phaseOrder.length) * 100);
+  const requiredPhases = phaseOrder.filter((phase) => phase !== "automation");
+  const completedPhaseCount = requiredPhases.filter(phaseComplete).length;
+  const progressPercent = Math.round((completedPhaseCount / requiredPhases.length) * 100);
   const previousPhase = phaseOrder[phaseOrder.indexOf(stepPhase) - 1];
   const phaseHref = (phase) => {
     const symbolQuery = activeAsset ? `&symbol=${encodeURIComponent(activeAsset)}` : "";
@@ -157,7 +158,7 @@ export default function OnboardingBanner({ step, phaseStatusOverrides = {} }) {
                 {bannerCopy?.progressLabel || "Progress"}
               </div>
               <div className="text-sm font-black text-blue-700 dark:text-blue-300">
-                {completedPhaseCount}/{phaseOrder.length}
+                {completedPhaseCount}/{requiredPhases.length}
               </div>
             </div>
             <div className="mt-3 h-2 overflow-hidden rounded-full bg-blue-100 dark:bg-blue-950/40">
