@@ -73,6 +73,11 @@ class ExactMarketWorkspaceService:
         market_rows = [row for row in market_rows if configured("market", row)]
         macro_rows = [row for row in macro_rows if configured("macro", row)]
         technical_rows = [row for row in technical_rows if configured("technical", row)]
+        market_rows = _include_configured_rows(
+            market_rows,
+            [row for (owner, category, _), row in selected.items()
+             if owner == user_id and category == "market"],
+        )
         technical_rows = _include_configured_rows(
             technical_rows,
             [row for (owner, category, _), row in selected.items()

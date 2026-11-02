@@ -192,3 +192,44 @@ def test_exact_market_rows_show_only_verified_score_evidence(monkeypatch):
         {"component_source_status": {"market_score": "stale_source"}},
         matcher.last_source_row,
     ) == {}
+
+
+def test_exact_market_shows_saved_market_indicator_while_source_is_pending(monkeypatch):
+    market = SimpleNamespace(id=43, asset_symbol="ETH", quote_currency="EUR",
+                             tradingview_symbol="BINANCE:ETHEUR")
+    config = SimpleNamespace(user_id=7, market_id=43, category="market",
+                             indicator="price", enabled=True)
+    session = SimpleNamespace(execute=AsyncMock(side_effect=[
+        _Result([market]), _Result([]), _Result([]), _Result([config]),
+    ]))
+    matcher = SimpleNamespace(for_asset=AsyncMock(return_value={
+        "benchmark_score": None,
+        "benchmark_weights": {"market": 1 / 3, "macro": 1 / 3, "technical": 1 / 3},
+        "reported_scores": {"market_score": None, "macro_score": None,
+                            "technical_score": None},
+        "component_source_status": {"market_score": "missing_score",
+                                    "macro_score": "missing_score",
+                                    "technical_score": "missing_score"},
+        "source_status": "missing_scores", "matches": [],
+        "component_source_observed_at": {},
+    }))
+    workspace = SimpleNamespace(
+        _macro_rows=AsyncMock(return_value=[]),
+        get_watchlist=AsyncMock(return_value={"rows": []}),
+        _category_payload=lambda rows, *_args, **_kwargs: {"rows": rows, "score": {}},
+    )
+    monkeypatch.setattr(module, "MarketDataRepository", lambda _session: SimpleNamespace(
+        get_latest_exact_market_snapshot=AsyncMock(return_value=None)))
+    monkeypatch.setattr(module, "SetupMarketMatchService", lambda _session: matcher)
+    monkeypatch.setattr(module, "WorkspaceDataService", lambda _session: workspace)
+
+    result = asyncio.run(module.ExactMarketWorkspaceService(session).get(7, "ETH", "EUR"))
+
+    assert result["categories"]["market"]["rows"] == [{
+        "name": "price", "value": None, "score": None, "trend": None,
+        "interpretation": None, "action": None, "timestamp": None,
+        "sample_size": 0, "period_aggregate": False, "configured": True,
+        "data_status": "pending_refresh",
+    }]
+    assert result["daily"]["market"]["score"] is None
+    assert result["combined"]["score"] is None
