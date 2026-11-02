@@ -94,11 +94,12 @@ function ProgressStep({ index, title, subtitle, active, complete, locked }) {
   );
 }
 
-function Field({ label, children }) {
+function Field({ label, hint, children }) {
   return (
     <label className="block space-y-2">
       <span className="text-sm font-semibold text-slate-700">{label}</span>
       {children}
+      {hint ? <span className="block text-xs font-medium text-slate-500">{hint}</span> : null}
     </label>
   );
 }
@@ -480,12 +481,12 @@ export default function OnboardingPlanPage() {
                   <span className="mt-1 block text-xs text-amber-700">{copy.tradingMarketUnavailable}</span> : null}
               </Field>
             ) : null}
-            <Field label={copy.setupNameLabel || "Name"}>
+            <Field label={copy.setupNameLabel || "Setup name"} hint={copy.setupNameHint || "Give your setup a recognizable name."}>
               <input
                 type="text"
                 value={setup.name}
                 onChange={(event) => setSetup((current) => ({ ...current, name: event.target.value }))}
-                placeholder={copy.setupNamePlaceholder || `${symbol} Setup`}
+                placeholder={copy.setupNamePlaceholder || "E.g. Smart DCA – 200MA"}
                 disabled={setupDone || savingSetup || loading}
                 className={inputClassName}
               />
