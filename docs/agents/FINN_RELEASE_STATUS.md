@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Begeleide onboarding zonder verplichte strategie of bot (2 november 2026)
 
-Phase: `LOCAL_VALIDATION` voor branch `codex/onboarding-trade-navigation`.
+Phase: `LIVE_AWAITING_QA` voor [PR #786](https://github.com/gvangalen/antigravity-trading-tool/pull/786).
 De begeleide planstap maakt een DCA-setup; een handmatige Trade-setup wordt
 na onboarding in Mijn Plan ingericht. De gebruiker kan terug naar opgeslagen
 stappen. Een strategie en Paper-bot zijn vervolgstappen, geen voorwaarden om
@@ -20,8 +20,15 @@ onboardingtests `14 passed`, frontend typecheck, i18n-lint, i18n-tests
 productiebuild geslaagd; `audit:high` meldde geen kwetsbaarheden. Geen FINN
 actiecontract of modelroute is gewijzigd; de worker-actiematrix en
 Responses-providerproeven zijn daarom niet van toepassing op deze batch.
-Geen plan, bot of order in productie gewijzigd door Build. CI, deployment en
-onafhankelijke ingelogde QA volgen nog; deze sectie is geen live acceptatie.
+De vijf jobs van [PR-CI 41522212834](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41522212834)
+en [main-CI 41522758125](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41522758125)
+slaagden. [Auto Deploy 41523274604](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41523274604)
+slaagde op `e7a0863d2998c3b5377555e45f2b31ffaa23615f`. Publieke
+backend-health en frontend-buildinfo gaven beide HTTP 200 en exact die SHA.
+Geen plan, bot of order in productie gewijzigd door Build. Onafhankelijke
+ingelogde QA volgt nog; deze sectie is geen live acceptatie. Deze
+statusbijwerking zelf moet nog door main-CI en Auto Deploy voordat QA de
+definitieve publieke SHA test.
 
 ## Beurskoers buiten reguliere sessie en FINN-positievragen (2 november 2026)
 
