@@ -474,9 +474,7 @@ def test_onboarding_repository_reads_canonical_symbol_scoped_indicator_configura
     assert state["has_technical"] is True
 
 
-def test_onboarding_repository_uses_latest_scored_row_without_reopening_stale_completion(monkeypatch):
-    from datetime import timedelta
-
+def test_onboarding_repository_keeps_saved_choices_complete_without_runtime_scores(monkeypatch):
     class Configured:
         def __init__(self, _session):
             pass
@@ -488,14 +486,8 @@ def test_onboarding_repository_uses_latest_scored_row_without_reopening_stale_co
     monkeypatch.setattr(onboarding_repository_module, "TechnicalDataRepository", Configured)
 
     class Result:
-        def __init__(self, row=None):
-            self.row = row
-
         def scalar(self):
             return False
-
-        def first(self):
-            return self.row
 
     class Session:
         async def get(self, _model, _user_id):
@@ -503,22 +495,12 @@ def test_onboarding_repository_uses_latest_scored_row_without_reopening_stale_co
 
         async def execute(self, query, params=None):
             sql = str(query)
-            if "FROM market_data_indicators" in sql:
-                assert "ORDER BY timestamp DESC, id DESC" in sql
-                # An older scored row exists, but the latest failed refresh has no score.
-                return Result(SimpleNamespace(value=2.5, score=None, source_observed_at=datetime.now(timezone.utc)))
-            if "FROM technical_indicators" in sql:
-                # A previously scored choice stays complete when its runtime source ages.
-                return Result(SimpleNamespace(value=58, score=70,
-                                              source_observed_at=datetime.now(timezone.utc) - timedelta(days=3),
-                                              interpretation="Validated"))
-            if "FROM macro_data" in sql:
-                return Result(SimpleNamespace(value=6000, score=50,
-                                              source_observed_at=datetime.now(timezone.utc),
-                                              interpretation="Fallback bucket rule (auto)."))
+            assert "FROM market_data_indicators" not in sql
+            assert "FROM technical_indicators" not in sql
+            assert "FROM macro_data" not in sql
             return Result()
 
     state = asyncio.run(OnboardingRepository(Session()).infer_onboarding_state(user_id=42))
-    assert state["has_market"] is False
-    assert state["has_macro"] is False
+    assert state["has_market"] is True
+    assert state["has_macro"] is True
     assert state["has_technical"] is True

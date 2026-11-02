@@ -948,10 +948,10 @@
       "continuingLabel": "Opening My Plan…",
       "loadError": "Loading the analysis onboarding step failed. Please try again.",
       "saveError": "Saving this analysis step failed. Please try again.",
-      "syncFailed": "This indicator was saved, but its source reading could not be fetched. Try again or choose another indicator; this step is not complete yet.",
-      "syncRuleMissing": "This indicator has a reading but no valid score rule. Choose another indicator for now; this step is not complete yet.",
+      "syncFailed": "Your choices are saved, but the source reading is unavailable or could not be fetched. Retry later in Analysis; you can continue to My Plan.",
+      "syncRuleMissing": "Your choices are saved, but an indicator has no score rule. Check it in Analysis; you can continue to My Plan.",
       "pendingEyebrow": "Choices saved",
-      "pendingScore": "The score or freshness of a selected indicator has not been confirmed yet. Try syncing it again; you cannot continue to My Plan until then."
+      "pendingScore": "Your choices are saved. The score is still being calculated; you can continue to My Plan now."
     },
     "planOnboardingStep": {
       "tradingMarketLabel": "Trading pair",

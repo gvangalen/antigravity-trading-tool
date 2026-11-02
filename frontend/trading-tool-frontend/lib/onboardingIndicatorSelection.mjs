@@ -8,3 +8,7 @@ export function restoreOnboardingIndicator(preferences, catalog, stepCompleted) 
     (item) => String(item?.name || "").trim().toLowerCase() === name.toLowerCase(),
   ) || { name, display_name: name };
 }
+
+export function hasSavedOnboardingAnalysisChoices({ asset, market, macro, technical }) {
+  return Boolean(asset && market && macro && technical);
+}
