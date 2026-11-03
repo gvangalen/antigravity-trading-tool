@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Getypeerde instapregels van FINN tot Paper (3 november 2026)
 
-Phase: `LOCAL_VALIDATION`. De eerdere onafhankelijke QA vond dat FINN een
+Phase: `LIVE_CANDIDATE_AWAITING_QA` na [PR #801](https://github.com/gvangalen/antigravity-trading-tool/pull/801). De eerdere onafhankelijke QA vond dat FINN een
 natuurlijk SMA50-verzoek binnen hetzelfde gesprek verloor en ten onrechte
 meldde dat de regel niet uitvoerbaar was. De reparatie behoudt het actieve
 Trade-concept bij vervolgantwoorden, vraagt ontbrekende handelsgegevens uit,
@@ -26,9 +26,15 @@ idempotent. Een afzonderlijke lokale Paper-workerproef gaf bij een verse
 exact-paar-kruising één virtuele koop, bij geen kruising geen order, en bij
 ontbrekende macrodata geen order. De echte Luna/Responses-selectorevaluaties
 slaagden `20/20` ontwikkeling en `109/109` regressie, zonder provider-,
-schema-, timeout-, parse- of validatiefouten. CI volgt; deze kandidaat staat
-nog niet live en heeft nog geen
-onafhankelijk eindverdict.
+schema-, timeout-, parse- of validatiefouten. Alle vijf jobs van
+[PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41729178256)
+en [main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41729766047)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41730261931)
+slaagde. Publieke backend-health en frontend-buildinfo gaven HTTP 200 en exact
+dezelfde SHA `aaa54a8909ff801de70507f1ebd7fc572e10e18f`. Na deze
+statusbijwerking moeten de laatste main-CI, Auto Deploy en beide publieke
+SHA's opnieuw samenvallen voordat onafhankelijke ingelogde QA begint. Er is
+nog geen onafhankelijk eindverdict.
 
 ## Handmatige Paper-trade en Reflectie-weergave (3 november 2026)
 
