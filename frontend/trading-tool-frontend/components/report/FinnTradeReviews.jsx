@@ -7,6 +7,7 @@ import { useTranslation } from '@/app/providers/I18nProvider';
 import { fetchFinnTradeReview, fetchFinnTradeReviews, fetchFinnExchangeTradeImports, fetchFinnExchangeImportFills, syncFinnExchangeTradeImport, createFinnExchangeTradeReview, saveFinnTradeReviewNote, saveFinnTradeReviewLesson, fetchFinnTradeChart, analyzeFinnTradeReview, fetchFinnTradeMessages, askFinnTradeReview, uploadFinnTradeScreenshot, deleteFinnTradeScreenshot, fetchFinnTradeScreenshot } from '@/lib/api/botApi';
 import BybitDerivativeReviews from './BybitDerivativeReviews';
 import PaperExitEvidence from '../bot/PaperExitEvidence';
+import { formatTradeReviewDate } from '@/lib/report/tradeReviewDate.mjs';
 
 const number = (value) => Number(value) || 0;
 
@@ -19,11 +20,7 @@ function formatQuote(value, currency, locale) {
 }
 
 function formatDate(value, locale) {
-  // Legacy trade-review timestamps without an offset are stored in UTC.
-  const instant = typeof value === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d/.test(value)
-    && !/(?:Z|[+-]\d\d:\d\d)$/.test(value) ? `${value}Z` : value;
-  const date = new Date(instant);
-  return Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short', timeZoneName: 'short' }).format(date);
+  return formatTradeReviewDate(value, locale);
 }
 
 function sourceLabel(sources, copy) {
