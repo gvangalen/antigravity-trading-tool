@@ -3366,6 +3366,7 @@
       "sellSuccess": "Verkauf",
       "orderFailed": "Order fehlgeschlagen",
       "validationNoBalance": "Kein verfügbares Guthaben",
+      "paperCashRequired": "Lege zuerst virtuelles Paper-Guthaben in der Bot-Übersicht fest. Das Bot-Limit ist kein Guthaben.",
       "validationInvalidPrice": "Ungültiger Preis",
       "validationZeroAmount": "Betrag ist 0",
       "validationUnknownOrderValue": "Orderwert unbekannt",

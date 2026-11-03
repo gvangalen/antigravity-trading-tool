@@ -210,7 +210,7 @@ export default function FinnWorkspaceShell({ children }) {
     <>
       {!isOnboardingRoute ? <NavBar /> : null}
 
-      <div className={`min-h-screen bg-[linear-gradient(180deg,#f8fbff_0%,#ffffff_42%,#f7f9fc_100%)] transition-[padding] duration-200 dark:bg-[#020617] ${isOnboardingRoute ? "" : "lg:pl-64"} ${chatOpen ? assistantExpanded ? "xl:pr-[560px]" : "xl:pr-[440px]" : ""}`}>
+      <div className={`min-h-screen bg-[linear-gradient(180deg,#f8fbff_0%,#ffffff_42%,#f7f9fc_100%)] transition-[padding] duration-200 dark:bg-[#020617] ${isOnboardingRoute ? "" : "lg:pl-64"} ${chatOpen ? assistantExpanded ? "min-[1150px]:pr-[560px]" : "min-[1150px]:pr-[400px] xl:pr-[440px]" : ""}`}>
         <div className={isOnboardingRoute ? "pt-0" : "pt-16 lg:pt-0"}>
           <header className={`${isOnboardingRoute ? "border-b border-slate-200/80 bg-white/90" : "sticky top-16 z-30 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl lg:top-0"} dark:border-slate-800 dark:bg-[#020617]/90`}>
             <div className="px-4 py-4 lg:px-8 lg:py-5">
@@ -386,7 +386,7 @@ export default function FinnWorkspaceShell({ children }) {
           </div>
         ) : null}
         <div
-          className={`${chatOpen ? "fixed" : "hidden"} inset-0 z-[75] bg-white dark:bg-slate-950 xl:inset-y-0 xl:left-auto xl:right-0 ${assistantExpanded ? "xl:w-[560px]" : "xl:w-[440px]"} xl:border-l xl:border-slate-200 xl:shadow-xl xl:dark:border-slate-800`}
+          className={`${chatOpen ? "fixed" : "hidden"} inset-0 z-[75] bg-white dark:bg-slate-950 min-[1150px]:inset-y-0 min-[1150px]:left-auto min-[1150px]:right-0 ${assistantExpanded ? "min-[1150px]:w-[560px]" : "min-[1150px]:w-[400px] xl:w-[440px]"} min-[1150px]:border-l min-[1150px]:border-slate-200 min-[1150px]:shadow-xl min-[1150px]:dark:border-slate-800`}
           data-feed-handoff-id={feedDiscussion?.request.context.feed_item_id || undefined}
           data-testid="finn-chat-panel"
         >

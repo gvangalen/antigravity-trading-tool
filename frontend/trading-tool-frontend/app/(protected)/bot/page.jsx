@@ -142,14 +142,11 @@ function BotPageInner() {
   const botFormRef = useRef(null);
   const budgetFormRef = useRef(null);
   const hasInitializedExpansionRef = useRef(false);
-  const botListColumnRef = useRef(null);
-  const botRowRefs = useRef(new Map());
 
   const { activeBot, setActiveBot } = useActiveBot();
 
   const [expandedBotId, setExpandedBotId] = useState(null);
   const [tradePanelBotId, setTradePanelBotId] = useState(null);
-  const [tradePanelOffset, setTradePanelOffset] = useState(0);
   const [drawer, setDrawer] = useState(null);
   const [pendingFocusedBotId, setPendingFocusedBotId] = useState(null);
   const [statusFilter, setStatusFilter] = useState("all");
@@ -384,43 +381,15 @@ function BotPageInner() {
   }, [rankedBots, statusFilter, assetFilter, portfolios]);
 
   useEffect(() => {
-    if (!tradePanelBotId) {
-      setTradePanelOffset(0);
-      return;
-    }
-
-    const updateTradePanelOffset = () => {
-      const column = botListColumnRef.current;
-      const row = botRowRefs.current.get(String(tradePanelBotId));
-      if (!column || !row) return;
-
-      const nextOffset = Math.max(
-        0,
-        Math.round(row.getBoundingClientRect().top - column.getBoundingClientRect().top)
-      );
-      setTradePanelOffset((currentOffset) => (
-        currentOffset === nextOffset ? currentOffset : nextOffset
-      ));
-    };
-
-    const animationFrame = window.requestAnimationFrame(updateTradePanelOffset);
-    window.addEventListener("resize", updateTradePanelOffset);
-
-    const resizeObserver = typeof ResizeObserver === "undefined"
-      ? null
-      : new ResizeObserver(updateTradePanelOffset);
-    if (resizeObserver) {
-      resizeObserver.observe(botListColumnRef.current);
-      const selectedRow = botRowRefs.current.get(String(tradePanelBotId));
-      if (selectedRow) resizeObserver.observe(selectedRow);
-    }
-
-    return () => {
-      window.cancelAnimationFrame(animationFrame);
-      window.removeEventListener("resize", updateTradePanelOffset);
-      resizeObserver?.disconnect();
-    };
-  }, [expandedBotId, filteredBots, tradePanelBotId]);
+    if (!tradePanelBotId || tradePanelBotId !== activeBot?.id) return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById("execution-guardrail-panel")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [tradePanelBotId, activeBot?.id]);
 
   useEffect(() => {
     if (!filteredBots.length) {
@@ -987,8 +956,8 @@ function BotPageInner() {
       ) : null}
 
       {!showOnboardingGuide ? (
-        <div ref={botListColumnRef} className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_350px]">
-          <div className={tradePanelBotId === activeBot?.id ? "min-w-0" : "min-w-0 lg:col-span-2"}>
+        <div className="space-y-5">
+          <div className="min-w-0">
             {error && <p role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</p>}
             <BotFocusView
               bots={rankedBots.map((bot) => ({ ...bot, decision: decisionsByBot?.[bot.id], pendingOrder: today?.orders?.find((order) => order.bot_id === bot.id) }))}
@@ -1024,7 +993,7 @@ function BotPageInner() {
             />
           </div>
           {tradePanelBotId === activeBot?.id && (
-            <div className="min-w-0 lg:sticky lg:top-24 lg:self-start">
+            <div className="min-w-0 max-w-2xl scroll-mt-24">
               <GlobalTradePanel
                 decision={decisionsByBot?.[activeBot?.id]}
                 portfolio={portfolios.find((item) => item.bot_id === activeBot?.id)}

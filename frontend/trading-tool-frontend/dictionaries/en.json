@@ -3348,6 +3348,7 @@
       "sellSuccess": "Sell",
       "orderFailed": "Order failed",
       "validationNoBalance": "No available balance",
+      "paperCashRequired": "Set virtual Paper cash in the bot overview first. The bot limit is not a cash balance.",
       "validationInvalidPrice": "Invalid price",
       "validationZeroAmount": "Amount is 0",
       "validationUnknownOrderValue": "Order value unknown",

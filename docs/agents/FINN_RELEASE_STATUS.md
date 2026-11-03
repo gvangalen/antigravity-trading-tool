@@ -4,9 +4,30 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Handmatige Paper-trade en Reflectie-weergave (3 november 2026)
+
+Phase: `LOCAL_VALIDATION`. De handmatige tradekaart staat in de hoofdinhoud
+onder de bot en gebruikt niet langer een tweede rechterkolom naast FINN. Op
+desktopbreedtes vanaf 1150 px opent FINN als zijpaneel, zodat de tradekaart
+zichtbaar blijft. Bij een Paper-bot zonder ingesteld virtueel kassaldo toont
+de kaart waarom een koop niet mogelijk is; de budgetlimiet telt niet als cash.
+De bevestigingsgrens en orderberekening zijn niet gewijzigd.
+
+Onafhankelijke QA op de vorige live SHA `d6d5397f622179b1cf1d04c197d5a718886498e4`
+kon het historische AAPL-exitdossier niet eigenaargebonden vinden in TEST QA
+AGENT. Dat dossier is daarmee niet afgetekend. QA vond wel een reproduceerbare
+Reflectie-crash: de tradelijst combineerde onverenigbare `Intl.DateTimeFormat`
+opties. Deze batch gebruikt expliciete datumvelden en Amsterdamse tijdzone.
+
+Lokale Build-controles: gerichte regressies `14/14`, i18n `37/37`, commands
+`34/34`, i18n-lint, typecheck en productiebuild geslaagd. De wijzigingen raken
+geen FINN-actiecontract, modelroute of backend; worker-actiematrix en
+Responses-proeven zijn daarom niet van toepassing. CI, Auto Deploy en
+onafhankelijke ingelogde QA volgen nog. Er is geen order uitgevoerd.
+
 ## Paper-exit tijd, bewijs en FINN-teruglezing (3 november 2026)
 
-Phase: `LIVE_CANDIDATE_AWAITING_QA` na [PR #797](https://github.com/gvangalen/antigravity-trading-tool/pull/797).
+Phase: `NOT_ACCEPTED` voor de volledige historische AAPL-dossiercontrole na [PR #797](https://github.com/gvangalen/antigravity-trading-tool/pull/797); de eigenaargebonden exit was niet zichtbaar in TEST QA AGENT.
 De bot-API maakt UTC-tijdstippen expliciet, zodat de botgeschiedenis dezelfde
 uitvoeringstijd als meldingen en Reflectie kan tonen. Een toekomstige automatische
 Paper-exit bewaart zowel de besliskoers als de opnieuw gecontroleerde koers en
