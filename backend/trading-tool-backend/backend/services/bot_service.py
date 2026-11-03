@@ -37,6 +37,46 @@ LIVE_MARKET_PRICE_STALE_AFTER_SECONDS = int(os.getenv("LIVE_MARKET_PRICE_STALE_A
 PAPER_PREVIEW_TTL_MINUTES = 5
 
 
+def _utc_iso(value: datetime | None) -> str | None:
+    """Legacy bot timestamps are stored as naive UTC; make the API instant explicit."""
+    if value is None:
+        return None
+    return (value.replace(tzinfo=timezone.utc) if value.tzinfo is None
+            else value.astimezone(timezone.utc)).isoformat()
+
+
+_PAPER_EXIT_EVIDENCE_FIELDS = (
+    "trigger", "market_id", "market_quote_currency",
+    "source_price_currency", "source_price", "source_price_at",
+    "saved_stop_loss", "saved_first_target", "fx_eur_per_unit", "fx_observed_at",
+    "execution_source_price_currency", "execution_source_price",
+    "execution_source_price_at", "execution_eur_price",
+    "execution_fx_eur_per_unit", "execution_fx_observed_at",
+)
+
+
+def _paper_exit_evidence(kind: str | None, raw: Any) -> dict | None:
+    if kind != "paper_exit":
+        return None
+    data = raw if isinstance(raw, dict) else {}
+    if isinstance(raw, str):
+        try:
+            data = json.loads(raw)
+        except (ValueError, TypeError):
+            data = {}
+    if not isinstance(data, dict):
+        return None
+    result = {key: data[key] for key in _PAPER_EXIT_EVIDENCE_FIELDS if data.get(key) is not None}
+    for key in ("source_price_at", "fx_observed_at", "execution_source_price_at", "execution_fx_observed_at"):
+        raw_time = result.get(key)
+        if isinstance(raw_time, str):
+            try:
+                result[key] = _utc_iso(datetime.fromisoformat(raw_time.replace("Z", "+00:00")))
+            except ValueError:
+                result.pop(key, None)
+    return result
+
+
 def _dca_schedule_status(setup: Optional[dict], report_date: date, strategy_row: Optional[dict]) -> Optional[dict]:
     """Describe the saved DCA cadence without creating a bot decision."""
     if not setup or not strategy_row or str(setup.get("setup_type") or "").lower() != "dca":
@@ -1854,11 +1894,12 @@ class BotService:
                 "bot_name": r["bot_name"],
                 "symbol": r["symbol"],
                 "date": str(r["decision_date"]),
-                "decision_ts": r["decision_ts"].isoformat() if r.get("decision_ts") else None,
+                "decision_ts": _utc_iso(r.get("decision_ts")),
                 "decision_kind": r.get("decision_kind") or "assessment",
                 "action": r["action"],
                 "confidence": r["confidence"],
                 "decision_basis": scores.get("decision_basis"),
+                "exit_evidence": _paper_exit_evidence(r.get("decision_kind"), scores),
                 "amount_eur": r["amount_eur"],
                 "setup_match": setup_match,
                 "reasons": reasons,
@@ -1870,7 +1911,7 @@ class BotService:
                 "safety_check": self._safety_contract({
                     "id": r["id"], "bot_id": r["bot_id"],
                     "status": r["status"],
-                    "created_at": r["decision_ts"],
+                    "created_at": _utc_iso(r.get("decision_ts")),
                     "guardrails_result": scores.get("guardrails_result"),
                     "guardrails_checked_at": scores.get("guardrails_checked_at"),
                     "requested_amount_eur": scores.get("requested_amount_eur"),
@@ -2628,10 +2669,11 @@ class BotService:
                 "qty": float(r["filled_qty"] or 0),
                 "price": float(r["avg_fill_price"]) if r["avg_fill_price"] is not None else None,
                 "amount_eur": round(float(r["filled_qty"] or 0) * float(r["avg_fill_price"] or 0), 2),
-                "executed_at": r["created_at"].isoformat() if r.get("created_at") else None,
+                "executed_at": _utc_iso(r.get("created_at")),
                 "mode": r.get("executed_by") or ("manual" if r.get("source") == "manual" else "unknown"),
                 "environment": r.get("execution_environment") or "unknown",
                 "status": r["status"],
+                "exit_evidence": _paper_exit_evidence(r.get("decision_kind"), r.get("decision_evidence")),
             })
         return out
 
@@ -2645,10 +2687,11 @@ class BotService:
             "qty": float(r["filled_qty"] or 0),
             "price": float(r["avg_fill_price"]) if r["avg_fill_price"] is not None else None,
             "amount_eur": round(float(r["filled_qty"] or 0) * float(r["avg_fill_price"] or 0), 2),
-            "executed_at": r["executed_at"].isoformat() if r.get("executed_at") else None,
+            "executed_at": _utc_iso(r.get("executed_at")),
             "environment": r.get("execution_environment") or "unknown",
             "execution_mode": r.get("executed_by") or ("manual" if r.get("source") == "manual" else "unknown"),
             "status": r["status"],
+            "exit_evidence": _paper_exit_evidence(r.get("decision_kind"), r.get("decision_evidence")),
         } for r in rows[:limit]]
         return {"items": items, "has_more": len(rows) > limit,
                 "next_offset": offset + limit if len(rows) > limit else None}

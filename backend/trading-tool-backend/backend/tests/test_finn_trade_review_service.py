@@ -9,6 +9,29 @@ from backend.services.finn_trade_review_service import FinnTradeReviewService, b
 START = datetime(2026, 10, 16, tzinfo=timezone.utc)
 
 
+def test_paper_review_exposes_exit_evidence_with_explicit_utc_instants():
+    row = {
+        "execution_environment": "paper",
+        "entry_at": datetime(2026, 11, 1, 12, 0),
+        "exit_at": datetime(2026, 11, 2, 14, 45),
+        "paper_exit_evidence": {
+            "trigger": "stop_loss", "saved_stop_loss": 347.14,
+            "source_price": 346.61, "source_price_currency": "USD",
+            "source_price_at": "2026-11-02T14:44:00",
+            "execution_source_price": 346.50,
+            "execution_source_price_at": "2026-11-02T14:45:00Z",
+            "execution_fx_eur_per_unit": 0.92,
+            "execution_fx_observed_at": "2026-11-02T14:45:00Z",
+            "untrusted_field": "never expose",
+        },
+    }
+    presented = FinnTradeReviewService._presented_review(row)
+    assert presented["exit_at"] == datetime(2026, 11, 2, 14, 45)
+    assert presented["paper_exit_evidence"]["source_price_at"] == "2026-11-02T14:44:00+00:00"
+    assert presented["paper_exit_evidence"]["execution_fx_eur_per_unit"] == 0.92
+    assert "untrusted_field" not in presented["paper_exit_evidence"]
+
+
 def test_reflection_uses_completed_amsterdam_calendar_weeks_across_dst():
     # 19 October starts a new local week; the one ending on 26 October is
     # 169 UTC hours because Amsterdam returns to winter time on the Sunday.

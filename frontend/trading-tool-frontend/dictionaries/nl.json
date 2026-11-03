@@ -2803,6 +2803,8 @@
       "lockedLabel": "Vastgezet"
     },
     "history": {
+      "exitEvidence": {"title": "Bewijs van Paper-exit", "trigger": "Reden", "savedStop": "Opgeslagen stop", "decisionQuote": "Koers bij beslissing", "executionQuote": "Koers bij uitvoering", "fx": "EUR-omrekening bij uitvoering", "notRecorded": "Niet vastgelegd voor deze exit", "triggers": {"stop_loss": "Stop-loss", "first_target": "Eerste koersdoel"}},
+
       "scoreBandBasis": "Setupscore bevestigd; geen aparte confidence berekend",
       "title": "Botgeschiedenis",
       "reason": "Reden",

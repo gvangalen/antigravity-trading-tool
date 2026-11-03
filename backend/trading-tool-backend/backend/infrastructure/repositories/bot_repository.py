@@ -946,10 +946,10 @@ class BotRepository:
               e.filled_qty, e.avg_fill_price, o.quote_amount_eur, e.status, e.created_at,
               o.execution_environment,
               CASE WHEN o.decision_id IS NULL THEN 'manual' ELSE 'decision' END AS source,
-              d.executed_by
+              d.executed_by, d.decision_kind, d.scores_json AS decision_evidence
             FROM bot_executions e
-            JOIN bot_orders o ON o.id = e.bot_order_id
-            LEFT JOIN bot_decisions d ON d.id = o.decision_id AND d.user_id=e.user_id
+            JOIN bot_orders o ON o.id = e.bot_order_id AND o.user_id = e.user_id
+            LEFT JOIN bot_decisions d ON d.id = o.decision_id AND d.user_id=e.user_id AND d.bot_id=o.bot_id
             WHERE e.user_id = :user_id AND o.bot_id = :bot_id AND e.status IN ('filled', 'partial')
             ORDER BY e.created_at DESC
             LIMIT :limit
@@ -964,11 +964,11 @@ class BotRepository:
                    o.quote_amount_eur, e.status, e.updated_at AS executed_at,
                    o.execution_environment,
                    CASE WHEN o.decision_id IS NULL THEN 'manual' ELSE 'decision' END AS source,
-                   d.executed_by
+                   d.executed_by, d.decision_kind, d.scores_json AS decision_evidence
             FROM bot_executions e
             JOIN bot_orders o ON o.id=e.bot_order_id AND o.user_id=e.user_id
             JOIN bot_configs b ON b.id=o.bot_id AND b.user_id=e.user_id
-            LEFT JOIN bot_decisions d ON d.id=o.decision_id AND d.user_id=e.user_id
+            LEFT JOIN bot_decisions d ON d.id=o.decision_id AND d.user_id=e.user_id AND d.bot_id=o.bot_id
             WHERE e.user_id=:user_id AND e.status IN ('filled', 'partial')
             ORDER BY e.updated_at DESC, e.id DESC
             LIMIT :limit OFFSET :offset

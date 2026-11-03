@@ -8,7 +8,24 @@ from datetime import date, datetime, timedelta, timezone
 
 from backend.schemas.bot_schema import BotConfigCreateSchema, BotConfigUpdateSchema, BotManualOrderSchema
 from backend.domain.finn_dca_plan_contract import split_confirmed_dca_plan
-from backend.services.bot_service import BotService, _dca_schedule_status
+from backend.services.bot_service import BotService, _dca_schedule_status, _paper_exit_evidence, _utc_iso
+
+
+def test_paper_exit_evidence_preserves_known_quote_and_utc_moments():
+    evidence = _paper_exit_evidence("paper_exit", {
+        "trigger": "stop_loss", "source_price": 347.14,
+        "source_price_at": "2026-10-30T14:45:00",
+        "saved_stop_loss": 348, "execution_source_price": 347.10,
+        "execution_source_price_at": "2026-10-30T14:45:30+00:00",
+        "execution_fx_eur_per_unit": 0.86,
+        "execution_fx_observed_at": "2026-10-30T14:44:55",
+        "position_qty": 1.2,
+    })
+    assert evidence["source_price_at"] == "2026-10-30T14:45:00+00:00"
+    assert evidence["execution_fx_observed_at"] == "2026-10-30T14:44:55+00:00"
+    assert "position_qty" not in evidence
+    assert _paper_exit_evidence("assessment", {"trigger": "stop_loss"}) is None
+    assert _utc_iso(datetime(2026, 10, 30, 14, 45)) == "2026-10-30T14:45:00+00:00"
 
 
 def test_paper_price_reads_saved_exact_market_only():

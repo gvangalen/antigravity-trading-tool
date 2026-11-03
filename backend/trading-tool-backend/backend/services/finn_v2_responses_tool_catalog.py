@@ -112,7 +112,9 @@ class FinnResponsesToolCatalog:
         self.read_tools["get_linked_strategies"] = ("read_active_setup", "read_linked_strategies")
         # An explicitly named closed-trade dossier needs only its owner-scoped
         # review, not the unrelated daily report bundled in decision history.
-        self.read_tools["get_closed_trade_review"] = ("read_review_history",)
+        # A closed trade question often asks for the resulting cash and open
+        # exposure in the same turn. Both reads are owner-scoped and read-only.
+        self.read_tools["get_closed_trade_review"] = ("read_review_history", "read_portfolio")
         self.evaluation_contracts = {
             contract.operation_id: contract
             for contract in self.registry.list()

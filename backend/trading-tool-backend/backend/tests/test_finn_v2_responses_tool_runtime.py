@@ -106,12 +106,13 @@ def test_model_only_coach_experiment_cannot_be_enabled_outside_local_fixture(mon
     "What can you verify about my recently closed Paper trade and its result? "
     "Read only; do not propose a trade.",
     "Wat was het resultaat van mijn laatste Paper-trade? Geen voorstel of actie.",
+    "Kun je de uitgevoerde AAPL-trade en mijn huidige Paper-portefeuille controleren?",
     "Wat weet je over mijn laatst afgesloten Paper-trade en de les die ik "
     "daarbij heb bevestigd? Alleen teruglezen; geen voorstel of actie.",
 ])
 def test_explicit_closed_trade_review_forces_owner_scoped_dossier_read(message):
     catalog = FinnResponsesToolCatalog()
-    assert catalog.validate("get_closed_trade_review", {}).read_tools == ("read_review_history",)
+    assert catalog.validate("get_closed_trade_review", {}).read_tools == ("read_review_history", "read_portfolio")
     assert next(tool for tool in catalog.definitions() if tool["name"] == "get_closed_trade_review")["parameters"]["properties"] == {}
     with pytest.raises(FinnResponsesToolError, match="read_arguments_invalid"):
         catalog.validate("get_closed_trade_review", {"asset": "BTC"})
@@ -210,7 +211,8 @@ def test_confirmed_lesson_followup_rereads_the_verified_dossier():
     assert fake.requests[0]["tool_choice"] == {
         "type": "function", "name": "get_closed_trade_review",
     }
-    assert front.reads.reads.execute_tool.await_args.kwargs["selector"] == {"_verified_review_id": 123}
+    assert any(call.kwargs["selector"] == {"_verified_review_id": 123}
+               for call in front.reads.reads.execute_tool.await_args_list)
     assert result.response.tool_trace[0]["result"]["results"][0]["scope"] == "read_review_history"
 
 

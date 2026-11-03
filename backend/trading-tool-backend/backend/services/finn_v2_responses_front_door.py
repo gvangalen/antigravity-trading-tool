@@ -1278,7 +1278,14 @@ class FinnResponsesFrontDoor:
                  r"\b(?:laatste|recentste|recent|last|latest)\s+"
                  r"(?:(?:paper|live)\s*[- ]?)?trade\b",
                  message, re.I,
-             ))
+             )
+             or re.search(
+                 r"\b(?:uitgevoerde|verkochte|gesloten|afgesloten|executed|sold|closed)\s+"
+                 r"(?:(?:paper|live|[A-Z]{2,6})\s*[- ]?)?(?:trade|positie|position)\b"
+                 r"|\b(?:stop[- ]?loss|koersdoel|target)\s*[- ]?(?:exit|verkoop|sale)\b",
+                 message, re.I,
+             )
+            )
             and request_facts.action_polarity not in {
                 "create", "update", "remove", "execute", "activate", "deactivate",
             }

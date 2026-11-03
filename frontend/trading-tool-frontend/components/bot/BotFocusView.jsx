@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ChevronRight, ShieldCheck } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { formatCurrency, formatDateTime } from "@/lib/i18n";
+import PaperExitEvidence from "@/components/bot/PaperExitEvidence";
 import SystemConnectivity from "@/components/dashboard/SystemConnectivity";
 import StrategyTestPanel from "@/components/bot/StrategyTestPanel";
 import BotHistoryTable from "@/components/bot/BotHistoryTable";
@@ -103,6 +104,7 @@ export default function BotFocusView({
       status: trade.status || "executed",
       symbol: trade.symbol,
       is_trade: true,
+      exit_evidence: trade.exit_evidence,
     }));
     return [...executions, ...decisions].sort((a, b) =>
       new Date(b.created_at || b.date || 0) - new Date(a.created_at || a.date || 0));
@@ -196,13 +198,13 @@ export default function BotFocusView({
               </tr></thead>
               <tbody>{allTrades.items.map((trade) => (
                 <tr key={trade.id} className="border-b border-slate-100 dark:border-slate-800">
-                  <td className="p-3">{trade.executed_at ? formatDateTime(trade.executed_at, locale) : "—"}</td>
+                  <td className="p-3">{trade.executed_at ? formatDateTime(trade.executed_at, locale, { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short" }) : "—"}</td>
                   <td className="p-3">{trade.bot_name}</td>
                   <td className="p-3">{trade.side === "buy" ? copy.buy : copy.sell} {trade.symbol}</td>
                   <td className="p-3">{money(trade.amount_eur)}</td>
                   <td className="p-3">{trade.environment === "unknown" ? copy.legacyEnvironment : copy.environments?.[trade.environment] || copy.unknown}</td>
                   <td className="p-3">{copy.executionModes?.[trade.execution_mode] || copy.unknown}</td>
-                  <td className="p-3">{copy.tradeStatuses?.[trade.status] || copy.unknown}</td>
+                  <td className="p-3">{copy.tradeStatuses?.[trade.status] || copy.unknown}<PaperExitEvidence evidence={trade.exit_evidence} /></td>
                 </tr>
               ))}</tbody>
             </table>
