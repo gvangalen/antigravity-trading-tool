@@ -8,11 +8,13 @@ import { ArrowRight, CheckCircle2, Lock, Sparkles } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
 import { useOnboarding } from "@/hooks/useOnboarding";
-import { fetchLastSetup, fetchSetups, saveNewSetup } from "@/lib/api/setups";
+import { fetchLastSetup, fetchSetups, saveNewSetup, updateSetup } from "@/lib/api/setups";
 import { fetchTradingMarkets } from "@/lib/api/assets";
 import MarketConditionPicker from "@/components/setup/MarketConditionPicker";
 import { MARKET_CONDITIONS, marketConditionChoiceFromSetup, marketConditionPayload } from "@/lib/setup/scoreConditions.mjs";
-import { createStrategy, fetchLastStrategy, fetchStrategyBySetup } from "@/lib/api/strategy";
+import { createStrategy, fetchLastStrategy, fetchStrategyBySetup, updateStrategy } from "@/lib/api/strategy";
+import { fetchBotConfigs } from "@/lib/api/botApi";
+import { setupPatchForOnboarding, strategyPatchForOnboarding } from "@/lib/onboarding/planEdits.mjs";
 import {
   findSavedSetupForAsset,
   getPlanCompletionForAsset,
@@ -30,6 +32,32 @@ const DEFAULT_SETUP = {
   min_benchmark_score: 46, max_benchmark_score: 60,
 };
 const DCA_WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+
+function setupDraftFromSaved(candidate, symbol) {
+  return {
+    name: candidate.name || `${symbol} Setup`,
+    setupType: String(candidate.setup_type || "trade").toLowerCase(),
+    timeframe: candidate.timeframe || "4H",
+    dcaFrequency: candidate.dca_frequency || "weekly",
+    dcaDay: DCA_WEEKDAYS[Number(candidate.dca_day) - 1] || candidate.dca_day || "monday",
+    dcaMonthDay: String(candidate.dca_month_day || 1),
+    min_benchmark_score: candidate.min_benchmark_score ?? DEFAULT_SETUP.min_benchmark_score,
+    max_benchmark_score: candidate.max_benchmark_score ?? DEFAULT_SETUP.max_benchmark_score,
+  };
+}
+
+function strategyDraftFromSaved(candidate, symbol) {
+  return {
+    name: candidate.name || `${symbol} Strategy`,
+    executionMode: candidate.execution_mode || "fixed",
+    baseAmount: String(candidate.base_amount ?? candidate.amount ?? 100),
+    entry: candidate.entry != null ? String(candidate.entry) : "",
+    targets: Array.isArray(candidate.targets)
+      ? candidate.targets.map((item) => (typeof item === "object" ? item.price : item)).join(", ")
+      : "",
+    stopLoss: candidate.stop_loss != null ? String(candidate.stop_loss) : "",
+  };
+}
 
 const DEFAULT_STRATEGY = {
   name: "",
@@ -137,6 +165,12 @@ export default function OnboardingPlanPage() {
   const [marketChoices, setMarketChoices] = useState([]);
   const [marketChoiceStatus, setMarketChoiceStatus] = useState("loading");
   const [quoteCurrency, setQuoteCurrency] = useState("");
+  const [editingSetup, setEditingSetup] = useState(false);
+  const [reviewingSetup, setReviewingSetup] = useState(false);
+  const [setupScoreTouched, setSetupScoreTouched] = useState(false);
+  const [editingStrategy, setEditingStrategy] = useState(false);
+  const [reviewingStrategy, setReviewingStrategy] = useState(false);
+  const [bots, setBots] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -171,14 +205,21 @@ export default function OnboardingPlanPage() {
         setSetup(DEFAULT_SETUP);
         setStrategy(DEFAULT_STRATEGY);
         setConditionChoice("off");
+        setEditingSetup(false);
+        setReviewingSetup(false);
+        setSetupScoreTouched(false);
+        setEditingStrategy(false);
+        setReviewingStrategy(false);
 
-        const [lastSetup, savedSetups, lastStrategy] = await Promise.all([
+        const [lastSetup, savedSetups, lastStrategy, botConfigs] = await Promise.all([
           fetchLastSetup().catch(() => null),
           fetchSetups(),
           fetchLastStrategy().catch(() => null),
+          fetchBotConfigs().catch(() => null),
         ]);
 
         if (cancelled) return;
+        setBots(botConfigs);
 
         const setupCandidate = findSavedSetupForAsset(symbol, lastSetup, savedSetups);
 
@@ -186,36 +227,17 @@ export default function OnboardingPlanPage() {
           setConditionChoice(marketConditionChoiceFromSetup(setupCandidate));
           const setupId = getSetupId(setupCandidate);
           setSavedSetup(setupCandidate);
-          setSetup({
-            name: setupCandidate.name || `${symbol} Setup`,
-            setupType: String(setupCandidate.setup_type || "trade").toLowerCase(),
-            timeframe: setupCandidate.timeframe || "4H",
-            dcaFrequency: setupCandidate.dca_frequency || "weekly",
-            dcaDay: DCA_WEEKDAYS[Number(setupCandidate.dca_day) - 1] || setupCandidate.dca_day || "monday",
-            dcaMonthDay: String(setupCandidate.dca_month_day || 1),
-            min_benchmark_score: setupCandidate.min_benchmark_score ?? DEFAULT_SETUP.min_benchmark_score,
-            max_benchmark_score: setupCandidate.max_benchmark_score ?? DEFAULT_SETUP.max_benchmark_score,
-          });
+          setSetup(setupDraftFromSaved(setupCandidate, symbol));
 
           const bySetup = setupId
             ? await fetchStrategyBySetup(setupId).catch(() => null)
             : null;
           if (!cancelled && bySetup) {
             setSavedStrategy({ setup_id: setupId, ...bySetup });
-            setStrategy({
-              name: bySetup.name || `${symbol} Strategy`,
-              executionMode: bySetup.execution_mode || "fixed",
-              baseAmount: String(bySetup.base_amount || bySetup.amount || 100),
-              entry: bySetup.entry != null ? String(bySetup.entry) : "",
-              targets: Array.isArray(bySetup.targets)
-                ? bySetup.targets
-                    .map((item) => (typeof item === "object" ? item.price : item))
-                    .join(", ")
-                : "",
-              stopLoss: bySetup.stop_loss != null ? String(bySetup.stop_loss) : "",
-            });
+            setStrategy(strategyDraftFromSaved(bySetup, symbol));
           } else if (!cancelled && Number(lastStrategy?.strategy?.setup_id) === Number(setupId)) {
             setSavedStrategy(lastStrategy.strategy);
+            setStrategy(strategyDraftFromSaved(lastStrategy.strategy, symbol));
           }
         }
       } catch (err) {
@@ -265,6 +287,70 @@ export default function OnboardingPlanPage() {
       Number(strategy.baseAmount) > 0 &&
       (!isTrade || (strategy.entry.trim() && strategy.targets.trim() && strategy.stopLoss.trim())),
   );
+  const setupPatch = setupDone ? setupPatchForOnboarding(savedSetup, setup, conditionChoice, setupScoreTouched) : {};
+  const strategyPatch = strategyDone ? strategyPatchForOnboarding(savedStrategy, strategy, isTrade) : {};
+  const linkedBots = Array.isArray(bots)
+    ? bots.filter((bot) => Number(bot.strategy_id ?? bot.strategy?.id) === Number(savedStrategy?.strategy_id ?? savedStrategy?.id))
+    : [];
+  const setupReadOnly = setupDone && (!editingSetup || reviewingSetup);
+  const strategyReadOnly = strategyDone && (!editingStrategy || reviewingStrategy);
+
+  const cancelSetupEdit = () => {
+    setSetup(setupDraftFromSaved(savedSetup, symbol));
+    setConditionChoice(marketConditionChoiceFromSetup(savedSetup));
+    setSetupScoreTouched(false);
+    setReviewingSetup(false);
+    setEditingSetup(false);
+    setError(null);
+  };
+
+  const cancelStrategyEdit = () => {
+    setStrategy(strategyDraftFromSaved(savedStrategy, symbol));
+    setReviewingStrategy(false);
+    setEditingStrategy(false);
+    setError(null);
+  };
+
+  const handleUpdateSetup = async () => {
+    if (!setupValid || !Object.keys(setupPatch).length || !getSetupId(savedSetup)) return;
+    try {
+      setSavingSetup(true);
+      setError(null);
+      const response = await updateSetup(getSetupId(savedSetup), setupPatch);
+      const updated = response?.setup || { ...savedSetup, ...setupPatch };
+      setSavedSetup(updated);
+      setSetup(setupDraftFromSaved(updated, symbol));
+      setConditionChoice(marketConditionChoiceFromSetup(updated));
+      setSetupScoreTouched(false);
+      setReviewingSetup(false);
+      setEditingSetup(false);
+    } catch (err) {
+      console.error("Failed to update onboarding setup", err);
+      setError(copy.setupUpdateError || "Updating the setup failed. Your changes were not saved.");
+    } finally {
+      setSavingSetup(false);
+    }
+  };
+
+  const handleUpdateStrategy = async () => {
+    const strategyId = savedStrategy?.strategy_id ?? savedStrategy?.id;
+    if (!strategyValid || !Object.keys(strategyPatch).length || !strategyId) return;
+    try {
+      setSavingStrategy(true);
+      setError(null);
+      await updateStrategy(strategyId, strategyPatch);
+      const updated = { ...savedStrategy, ...strategyPatch };
+      setSavedStrategy(updated);
+      setStrategy(strategyDraftFromSaved(updated, symbol));
+      setReviewingStrategy(false);
+      setEditingStrategy(false);
+    } catch (err) {
+      console.error("Failed to update onboarding strategy", err);
+      setError(copy.strategyUpdateError || "Updating the strategy failed. Your changes were not saved.");
+    } finally {
+      setSavingStrategy(false);
+    }
+  };
 
   const handleSaveSetup = async () => {
     if (!setupValid) {
@@ -361,6 +447,7 @@ export default function OnboardingPlanPage() {
   };
 
   const handleContinue = () => {
+    if (editingSetup || editingStrategy || savingSetup || savingStrategy) return;
     setContinuing(true);
     router.push(`/onboarding/complete?symbol=${encodeURIComponent(symbol)}`);
   };
@@ -383,6 +470,9 @@ export default function OnboardingPlanPage() {
       : savedCondition
         ? `${t?.setups?.marketConditions?.options?.[conditionChoice]?.title || savedCondition.id} (${savedCondition.min}–${savedCondition.max})`
         : "—";
+  const reviewConditionLabel = conditionChoice === "custom" && (setupScoreTouched || !savedLegacyRanges.length)
+    ? `${setup.min_benchmark_score}–${setup.max_benchmark_score}`
+    : conditionLabel;
 
   return (
     <div className="mx-auto max-w-5xl py-8">
@@ -486,7 +576,7 @@ export default function OnboardingPlanPage() {
                 value={setup.name}
                 onChange={(event) => setSetup((current) => ({ ...current, name: event.target.value }))}
                 placeholder={copy.setupNamePlaceholder || "E.g. Smart DCA – 200MA"}
-                disabled={setupDone || savingSetup || loading}
+                disabled={setupReadOnly || savingSetup || loading}
                 className={inputClassName}
               />
             </Field>
@@ -501,7 +591,7 @@ export default function OnboardingPlanPage() {
               <select
                 value={setup.timeframe}
                 onChange={(event) => setSetup((current) => ({ ...current, timeframe: event.target.value }))}
-                disabled={setupDone || savingSetup || loading}
+                disabled={setupReadOnly || strategyDone || savingSetup || loading}
                 className={inputClassName}
               >
                 <option value="1D">1D</option>
@@ -514,7 +604,7 @@ export default function OnboardingPlanPage() {
           {!isTrade ? (
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <Field label={copy.dcaFrequencyLabel || "Frequency"}>
-                <select value={setup.dcaFrequency} onChange={(event) => setSetup((current) => ({ ...current, dcaFrequency: event.target.value }))} disabled={setupDone || savingSetup || loading} className={inputClassName}>
+                <select value={setup.dcaFrequency} onChange={(event) => setSetup((current) => ({ ...current, dcaFrequency: event.target.value }))} disabled={setupReadOnly || savingSetup || loading} className={inputClassName}>
                   <option value="daily">{copy.dcaDaily || "Daily"}</option>
                   <option value="weekly">{copy.dcaWeekly || "Weekly"}</option>
                   <option value="monthly">{copy.dcaMonthly || "Monthly"}</option>
@@ -522,7 +612,7 @@ export default function OnboardingPlanPage() {
               </Field>
               {setup.dcaFrequency === "weekly" ? (
                 <Field label={copy.dcaWeekdayLabel || "Weekday"}>
-                  <select value={setup.dcaDay} onChange={(event) => setSetup((current) => ({ ...current, dcaDay: event.target.value }))} disabled={setupDone || savingSetup || loading} className={inputClassName}>
+                  <select value={setup.dcaDay} onChange={(event) => setSetup((current) => ({ ...current, dcaDay: event.target.value }))} disabled={setupReadOnly || savingSetup || loading} className={inputClassName}>
                     {DCA_WEEKDAYS.map((day) => (
                       <option key={day} value={day}>{copy.dcaWeekdays?.[day] || day}</option>
                     ))}
@@ -531,14 +621,14 @@ export default function OnboardingPlanPage() {
               ) : null}
               {setup.dcaFrequency === "monthly" ? (
                 <Field label={copy.dcaMonthDayLabel || "Day of month"}>
-                  <input type="number" min="1" max="28" step="1" value={setup.dcaMonthDay} onChange={(event) => setSetup((current) => ({ ...current, dcaMonthDay: event.target.value }))} disabled={setupDone || savingSetup || loading} className={inputClassName} />
+                  <input type="number" min="1" max="28" step="1" value={setup.dcaMonthDay} onChange={(event) => setSetup((current) => ({ ...current, dcaMonthDay: event.target.value }))} disabled={setupReadOnly || savingSetup || loading} className={inputClassName} />
                 </Field>
               ) : null}
             </div>
           ) : null}
 
           <div className="mt-8 border-t border-slate-200 pt-8">
-            <MarketConditionPicker choice={conditionChoice} onChange={setConditionChoice} copy={t?.setups?.marketConditions} symbol={symbol} disabled={setupDone || savingSetup || loading} allowOff={!isTrade || (setupDone && conditionChoice === "off")} isDca={!isTrade}>
+            <MarketConditionPicker choice={conditionChoice} onChange={setConditionChoice} copy={t?.setups?.marketConditions} symbol={symbol} disabled={setupReadOnly || savingSetup || loading} allowOff={!isTrade || (setupDone && conditionChoice === "off")} isDca={!isTrade}>
               <div className="grid gap-3">
                   <div className="rounded-xl border border-slate-200 bg-white p-3">
                     <div className="mb-2 text-xs font-bold text-slate-700">{copy.benchmarkScoreLabel || "Jouw benchmarkscore"}</div>
@@ -547,8 +637,8 @@ export default function OnboardingPlanPage() {
                         <Field key={bound} label={bound === "min" ? copy.scoreMinLabel : copy.scoreMaxLabel}>
                           <input type="number" min="0" max="100" step="1"
                             value={setup[`${bound}_benchmark_score`]}
-                            onChange={(event) => setSetup((current) => ({ ...current, [`${bound}_benchmark_score`]: event.target.value }))}
-                            disabled={setupDone || savingSetup || loading} className={inputClassName} />
+                            onChange={(event) => { setSetup((current) => ({ ...current, [`${bound}_benchmark_score`]: event.target.value })); setSetupScoreTouched(true); }}
+                            disabled={setupReadOnly || savingSetup || loading} className={inputClassName} />
                         </Field>
                       ))}
                     </div>
@@ -567,6 +657,35 @@ export default function OnboardingPlanPage() {
               >
                 {savingSetup ? copy.setupSaving || "Saving setup…" : copy.setupSave || "Save setup"}
               </button>
+            </div>
+          ) : editingSetup ? (
+            <div className="mt-5 space-y-4">
+              <p className="text-sm text-slate-600">{copy.savedPlanEditScope || "The trading pair and setup type stay the same. A linked strategy keeps its timeframe."}</p>
+              {reviewingSetup ? (
+                <div className="space-y-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
+                  <p className="font-bold text-slate-900">{copy.reviewChanges || "Review your changes"}</p>
+                  <SummaryRow label={copy.setupNameLabel || "Setup name"} value={setup.name.trim()} />
+                  {!isTrade ? <SummaryRow label={copy.dcaFrequencyLabel || "Purchase schedule"} value={[
+                    copy[`dca${setup.dcaFrequency?.[0]?.toUpperCase()}${setup.dcaFrequency?.slice(1)}`] || setup.dcaFrequency,
+                    setup.dcaFrequency === "weekly" ? copy.dcaWeekdays?.[setup.dcaDay] : null,
+                    setup.dcaFrequency === "monthly" ? setup.dcaMonthDay : null,
+                  ].filter(Boolean).join(" · ")} /> : null}
+                  <SummaryRow label={copy.scoreConditionLabel || "Score condition"} value={reviewConditionLabel} />
+                  <p className="text-sm text-slate-700">{copy.setupUpdateImpact || "This updates the saved setup. A linked bot may use the new schedule and conditions at its next assessment; saving does not start a bot or place an order."}</p>
+                  {linkedBots.length ? <p className="text-sm font-semibold text-amber-800">{copy.linkedBotImpact?.replace("{bots}", linkedBots.map((bot) => bot.name).join(", "))}</p> : null}
+                  <div className="flex flex-wrap gap-3">
+                    <button type="button" onClick={handleUpdateSetup} disabled={savingSetup} className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white disabled:opacity-60">
+                      {savingSetup ? copy.updating || "Updating…" : copy.confirmUpdate || "Update saved setup"}
+                    </button>
+                    <button type="button" onClick={() => setReviewingSetup(false)} disabled={savingSetup} className="rounded-2xl border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700">{copy.backToEdit || "Back to editing"}</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-3">
+                  <button type="button" onClick={() => { setError(null); setReviewingSetup(true); }} disabled={!setupValid || !Object.keys(setupPatch).length || savingSetup} className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white disabled:opacity-60">{copy.reviewChanges || "Review changes"}</button>
+                  <button type="button" onClick={cancelSetupEdit} className="rounded-2xl border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700">{copy.cancelEdit || "Cancel"}</button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="mt-5 grid gap-3 md:grid-cols-3">
@@ -587,9 +706,9 @@ export default function OnboardingPlanPage() {
                 />
               ) : null}
               <SummaryRow label={copy.scoreConditionLabel || "Score condition"} value={conditionLabel} />
-              <Link href="/setup" className="text-sm font-semibold text-blue-700 underline-offset-2 hover:underline md:col-span-3">
-                {copy.editSavedPlan || "Edit saved plan in My Plan"}
-              </Link>
+              <button type="button" onClick={() => { setError(null); setEditingSetup(true); }} className="text-left text-sm font-semibold text-blue-700 underline-offset-2 hover:underline md:col-span-3">
+                {copy.editSavedSetup || "Edit this setup"}
+              </button>
             </div>
           )}
         </Section>
@@ -620,7 +739,7 @@ export default function OnboardingPlanPage() {
                       value={strategy.name}
                       onChange={(event) => setStrategy((current) => ({ ...current, name: event.target.value }))}
                       placeholder={copy.strategyNamePlaceholder || `${symbol} Strategy`}
-                      disabled={strategyDone || savingStrategy || loading}
+                      disabled={strategyReadOnly || savingStrategy || loading}
                       className={inputClassName}
                     />
                   </Field>
@@ -634,7 +753,7 @@ export default function OnboardingPlanPage() {
                         step="1"
                         value={strategy.baseAmount}
                         onChange={(event) => setStrategy((current) => ({ ...current, baseAmount: event.target.value }))}
-                        disabled={strategyDone || savingStrategy || loading}
+                        disabled={strategyReadOnly || savingStrategy || loading}
                         className={`${inputClassName} pl-10`}
                       />
                     </div>
@@ -649,7 +768,7 @@ export default function OnboardingPlanPage() {
                         step="0.01"
                         value={strategy.entry}
                         onChange={(event) => setStrategy((current) => ({ ...current, entry: event.target.value }))}
-                        disabled={strategyDone || savingStrategy || loading}
+                        disabled={strategyReadOnly || savingStrategy || loading}
                         className={inputClassName}
                       />
                     </Field>
@@ -660,7 +779,7 @@ export default function OnboardingPlanPage() {
                         value={strategy.targets}
                         onChange={(event) => setStrategy((current) => ({ ...current, targets: event.target.value }))}
                         placeholder={copy.strategyTargetsPlaceholder || "64500, 67000"}
-                        disabled={strategyDone || savingStrategy || loading}
+                        disabled={strategyReadOnly || savingStrategy || loading}
                         className={inputClassName}
                       />
                     </Field>
@@ -671,7 +790,7 @@ export default function OnboardingPlanPage() {
                         step="0.01"
                         value={strategy.stopLoss}
                         onChange={(event) => setStrategy((current) => ({ ...current, stopLoss: event.target.value }))}
-                        disabled={strategyDone || savingStrategy || loading}
+                        disabled={strategyReadOnly || savingStrategy || loading}
                         className={inputClassName}
                       />
                     </Field>
@@ -700,6 +819,32 @@ export default function OnboardingPlanPage() {
                       {savingStrategy ? copy.strategySaving || "Saving strategy…" : copy.strategySave || "Save strategy"}
                     </button>
                   </div>
+                ) : editingStrategy ? (
+                  <div className="mt-5 space-y-4">
+                    {reviewingStrategy ? (
+                      <div className="space-y-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
+                        <p className="font-bold text-slate-900">{copy.reviewChanges || "Review your changes"}</p>
+                        <SummaryRow label={copy.strategyNameLabel || "Name"} value={strategy.name.trim()} />
+                        <SummaryRow label={isTrade ? copy.strategyAmountLabel : copy.strategyDcaAmountLabel} value={`€${strategy.baseAmount}`} />
+                        {isTrade ? <>
+                          <SummaryRow label={copy.strategyEntryLabel || "Entry"} value={strategy.entry} />
+                          <SummaryRow label={copy.strategyTargetsLabel || "Targets"} value={strategy.targets} />
+                          <SummaryRow label={copy.strategyStopLabel || "Stop loss"} value={strategy.stopLoss} />
+                        </> : null}
+                        <p className="text-sm text-slate-700">{copy.strategyUpdateImpact || "This updates the saved strategy. A linked bot may use the new amount or risk levels at its next assessment; saving does not start a bot or place an order."}</p>
+                        {linkedBots.length ? <p className="text-sm font-semibold text-amber-800">{copy.linkedBotImpact?.replace("{bots}", linkedBots.map((bot) => bot.name).join(", "))}</p> : null}
+                        <div className="flex flex-wrap gap-3">
+                          <button type="button" onClick={handleUpdateStrategy} disabled={savingStrategy} className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white disabled:opacity-60">{savingStrategy ? copy.updating || "Updating…" : copy.confirmStrategyUpdate || "Update saved strategy"}</button>
+                          <button type="button" onClick={() => setReviewingStrategy(false)} disabled={savingStrategy} className="rounded-2xl border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700">{copy.backToEdit || "Back to editing"}</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap gap-3">
+                        <button type="button" onClick={() => { setError(null); setReviewingStrategy(true); }} disabled={!strategyValid || !Object.keys(strategyPatch).length || savingStrategy} className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white disabled:opacity-60">{copy.reviewChanges || "Review changes"}</button>
+                        <button type="button" onClick={cancelStrategyEdit} className="rounded-2xl border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700">{copy.cancelEdit || "Cancel"}</button>
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <div className="mt-5 grid gap-3 md:grid-cols-2">
                     <SummaryRow
@@ -710,6 +855,7 @@ export default function OnboardingPlanPage() {
                       label={isTrade ? copy.strategyAmountLabel : copy.strategyDcaAmountLabel}
                       value={`€${String(strategy.baseAmount || "100")}`}
                     />
+                    <button type="button" onClick={() => { setError(null); setEditingStrategy(true); }} className="text-left text-sm font-semibold text-blue-700 underline-offset-2 hover:underline md:col-span-2">{copy.editSavedStrategy || "Edit this strategy"}</button>
                   </div>
                 )}
               </>
@@ -743,7 +889,7 @@ export default function OnboardingPlanPage() {
             <button
               type="button"
               onClick={handleContinue}
-              disabled={continuing}
+              disabled={continuing || editingSetup || editingStrategy || savingSetup || savingStrategy}
               className="inline-flex items-center justify-center rounded-2xl bg-blue-600 px-5 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-blue-500/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {continuing ? copy.continuingLabel || "Onboarding afronden…" : copy.finishWithoutAutomation || "Onboarding afronden"}
