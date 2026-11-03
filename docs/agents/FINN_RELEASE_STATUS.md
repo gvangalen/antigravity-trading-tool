@@ -4,6 +4,28 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Opgeslagen onboardingplan aanpassen (3 november 2026)
+
+Phase: `LOCAL_VALIDATION`. De gebruiker kan in de onboarding naar eerdere
+stappen teruggaan. Op de planstap kan een eerder opgeslagen DCA-setup of
+gekoppelde strategie nu expliciet worden teruggelezen, aangepast en opnieuw
+opgeslagen. De setup- en strategie-ID blijven gelijk; er wordt geen nieuw plan
+of bot gemaakt. Bij meerdere plannen voor een asset wordt de exacte keuze uit
+de vorige stap gebruikt. Een ongeldige of niet-eigen selectie toont een fout
+en schrijft niets weg. Een gekoppelde bot krijgt een waarschuwing vóór de
+bevestiging. Voor Smart DCA worden het basisbedrag en de bestaande scorecurve
+getoond en blijft de curve bij een bedragwijziging behouden. De UI maakt
+onderscheid tussen stapgewijze en lineaire curves.
+
+Lokale Build-controles: frontend i18n-lint, typecheck en productiebuild
+geslaagd; gerichte planregressies `4/4`. Eerder op dezelfde bronbatch:
+i18n-tests `36/36`, commandtests `34/34`, voorsteltests `8/8`, setuptests
+`20/20`, `audit:high` zonder hoge kwetsbaarheden. Onafhankelijke gerichte
+QA-codeherkeuring: `PASS`, zonder live browserclaim. Geen backend-, FINN-
+actiecontract- of modelroutewijziging; worker-actiematrix en Responses-proeven
+zijn daarom niet van toepassing. PR-CI, Auto Deploy, publieke SHA-pariteit en
+ingelogde productie-QA volgen.
+
 ## Begeleide onboarding zonder verplichte strategie of bot (2 november 2026)
 
 Phase: `LOCAL_VALIDATION` voor de selector-herstelrelease na [PR #789](https://github.com/gvangalen/antigravity-trading-tool/pull/789).

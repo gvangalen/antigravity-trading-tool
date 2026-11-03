@@ -73,7 +73,8 @@ test("onboarding reopens the full saved setup instead of an active-match project
   assert.doesNotMatch(page, /fetchActiveSetup/);
   assert.match(page, /findSavedSetupForAsset\(symbol, lastSetup, savedSetups\)/);
   assert.match(page, /marketConditionChoiceFromSetup\(setupCandidate\)/);
-  assert.match(page, /DCA_WEEKDAYS\[Number\(setupCandidate\.dca_day\) - 1\]/);
+  assert.match(page, /setSetup\(setupDraftFromSaved\(setupCandidate, symbol\)\)/);
+  assert.match(page, /DCA_WEEKDAYS\[Number\(candidate\.dca_day\) - 1\]/);
   assert.match(page, /scoreConditionLabel/);
   assert.match(page, /setup_id:\s*getSetupId\(savedSetup\)/);
   assert.match(page, /normalizeSetupSaveResponse\(response\)/);

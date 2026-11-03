@@ -67,7 +67,7 @@ function AutomationStep() {
     Number(item.strategy_id || item.strategy?.id) === Number(strategy?.id)
   ) || null, [bots, strategy]);
   const completedBot = savedBot?.bot || savedBot || existingBot;
-  const backHref = `/onboarding/plan?onboarding=1&step=setup${symbol ? `&symbol=${encodeURIComponent(symbol)}` : ""}`;
+  const backHref = `/onboarding/plan?onboarding=1&step=setup${symbol ? `&symbol=${encodeURIComponent(symbol)}` : ""}${setup ? `&setup_id=${encodeURIComponent(setup.id ?? setup.setup_id)}` : ""}${strategy ? `&strategy_id=${encodeURIComponent(strategy.id)}` : ""}`;
 
   useEffect(() => {
     if (statusLoading || !status) return;
@@ -95,7 +95,7 @@ function AutomationStep() {
 
   return (
     <div className="mx-auto max-w-5xl py-8">
-      <OnboardingBanner step="bot" phaseStatusOverrides={{ plan: hasAssetPlan, automation: Boolean(completedBot && hasSelectedPlan) }} />
+      <OnboardingBanner step="bot" phaseStatusOverrides={{ plan: hasAssetPlan, automation: Boolean(completedBot && hasSelectedPlan) }} phaseHrefOverrides={{ plan: backHref }} />
 
       <div className="mb-8 rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <div className="flex flex-wrap items-start justify-between gap-5">

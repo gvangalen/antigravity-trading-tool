@@ -31,18 +31,18 @@ export const fetchSetups = async ({ setup_type = '' } = {}) => {
 // =========================================================
 // SETUP UPDATEN
 // =========================================================
-export const updateSetup = async (id, updatedData) => {
+export const updateSetup = async (id, updatedData, { silent = false } = {}) => {
   try {
     const res = await fetchAuth(`/api/setups/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(updatedData),
     });
 
-    toast.success('Setup bijgewerkt!');
+    if (!silent) toast.success('Setup bijgewerkt!');
     return res;
   } catch (err) {
     console.error('❌ [updateSetup] Fout:', err);
-    toast.error('Bijwerken mislukt.');
+    if (!silent) toast.error('Bijwerken mislukt.');
     throw err;
   }
 };
