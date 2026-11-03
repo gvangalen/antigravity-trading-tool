@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Opgeslagen onboardingplan aanpassen (3 november 2026)
 
-Phase: `LIVE_PENDING_QA`. De gebruiker kan in de onboarding naar eerdere
+Phase: `LOCAL_VALIDATION` voor het herstel van de Smart-DCA-teruglezing. De gebruiker kan in de onboarding naar eerdere
 stappen teruggaan. Op de planstap kan een eerder opgeslagen DCA-setup of
 gekoppelde strategie nu expliciet worden teruggelezen, aangepast en opnieuw
 opgeslagen. De setup- en strategie-ID blijven gelijk; er wordt geen nieuw plan
@@ -28,8 +28,15 @@ had vijf geslaagde CI-jobs. [Main-CI 41590971172](https://github.com/gvangalen/a
 had eveneens vijf geslaagde jobs. [Auto Deploy 41591307016](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41591307016)
 slaagde voor `3083d42445320c49e274f94019b6e461697f49ad`. Publieke
 `/api/health` en `/build-info.json` gaven HTTP 200 en exact die SHA.
-Ingelogde productie-QA volgt. De SHA van deze statusbijwerking zelf moet eerst
-door main-CI en Auto Deploy voordat QA de definitieve release kan testen.
+De statusbijwerking via [PR #792](https://github.com/gvangalen/antigravity-trading-tool/pull/792)
+kwam op `8390579484225807e81e17417c0a5fb413c91eeb` live met geslaagde
+main-CI en Auto Deploy. Onafhankelijke ingelogde QA gaf `NOT_ACCEPTED`: vanuit
+Analyse werd alleen de setup-ID doorgegeven. De route `strategies/by_setup`
+leverde voor een Smart DCA wel `execution_mode=custom`, maar geen `decision_curve`,
+zodat de onboarding ten onrechte een vast bedrag zonder curve kon tonen.
+De huidige reparatie leest de volledige eigenaargebonden strategie uit de
+strategielijst en weigert een onvolledige custom curve. Een nieuwe lokale
+validatie, deployment en ingelogde herkeuring zijn vereist.
 
 ## Begeleide onboarding zonder verplichte strategie of bot (2 november 2026)
 

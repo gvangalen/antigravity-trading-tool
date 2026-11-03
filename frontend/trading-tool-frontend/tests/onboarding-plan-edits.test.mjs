@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveSavedOnboardingPlan, setupPatchForOnboarding, strategyPatchForOnboarding } from "../lib/onboarding/planEdits.mjs";
+import { resolveOnboardingStrategyDetails, resolveSavedOnboardingPlan, setupPatchForOnboarding, strategyPatchForOnboarding } from "../lib/onboarding/planEdits.mjs";
 
 test("editing a saved weekly DCA plan updates its schedule without changing its pair or identity", () => {
   const saved = {
@@ -64,4 +64,15 @@ test("returning from Automation selects the exact strategy among plans for one a
   assert.equal(resolveSavedOnboardingPlan({
     symbol: "BTC", setups, strategies, fallbackSetup: setups[0], setupId: 42, strategyId: 99,
   }).invalid, true);
+});
+
+test("onboarding hydrates a Smart DCA curve from the detailed strategy list", () => {
+  const bySetup = { id: 17, setup_id: 42, execution_mode: "custom", base_amount: 10, decision_curve_id: 8, decision_curve: null };
+  const detailed = { ...bySetup, decision_curve: { interpolation: "linear", points: [
+    { x: 10, y: 1.5 }, { x: 80, y: 0.5 },
+  ] } };
+  assert.deepEqual(resolveOnboardingStrategyDetails(bySetup, [detailed], 42), { invalid: false, strategy: detailed });
+  assert.equal(resolveOnboardingStrategyDetails(bySetup, [bySetup], 42).invalid, true);
+  assert.equal(resolveOnboardingStrategyDetails(bySetup, [detailed], 41).invalid, true);
+  assert.equal(resolveOnboardingStrategyDetails(bySetup, [], 42).invalid, true);
 });
