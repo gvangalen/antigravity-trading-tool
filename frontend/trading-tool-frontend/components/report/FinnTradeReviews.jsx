@@ -6,6 +6,7 @@ import { ArrowDownRight, ArrowUpRight, Brain, ChevronRight, FileText, Loader2, R
 import { useTranslation } from '@/app/providers/I18nProvider';
 import { fetchFinnTradeReview, fetchFinnTradeReviews, fetchFinnExchangeTradeImports, fetchFinnExchangeImportFills, syncFinnExchangeTradeImport, createFinnExchangeTradeReview, saveFinnTradeReviewNote, saveFinnTradeReviewLesson, fetchFinnTradeChart, analyzeFinnTradeReview, fetchFinnTradeMessages, askFinnTradeReview, uploadFinnTradeScreenshot, deleteFinnTradeScreenshot, fetchFinnTradeScreenshot } from '@/lib/api/botApi';
 import BybitDerivativeReviews from './BybitDerivativeReviews';
+import PaperExitEvidence from '../bot/PaperExitEvidence';
 
 const number = (value) => Number(value) || 0;
 
@@ -18,8 +19,11 @@ function formatQuote(value, currency, locale) {
 }
 
 function formatDate(value, locale) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+  // Legacy trade-review timestamps without an offset are stored in UTC.
+  const instant = typeof value === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d/.test(value)
+    && !/(?:Z|[+-]\d\d:\d\d)$/.test(value) ? `${value}Z` : value;
+  const date = new Date(instant);
+  return Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short', timeZoneName: 'short' }).format(date);
 }
 
 function sourceLabel(sources, copy) {
@@ -322,6 +326,7 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
               <span className="font-bold">{isExchange ? formatQuote(fill.price_quote, fill.quote_currency, locale) : fill.price_eur ? formatMoney(fill.price_eur, locale, 4) : formatMoney(number(fill.cash_eur) / number(fill.qty), locale, 4)}</span>
             </li>)}
           </ol>
+          {isPaper && <PaperExitEvidence evidence={review.paper_exit_evidence} />}
         </div>
       </div>
 

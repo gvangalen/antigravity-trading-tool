@@ -4,6 +4,7 @@ import CardLoader from "@/components/ui/CardLoader";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { formatCurrency, formatDateTime, formatNumber } from "@/lib/i18n";
 import { paperPriceMessageKey } from "@/lib/bot/paperPriceMessage.mjs";
+import PaperExitEvidence from "@/components/bot/PaperExitEvidence";
 
 export default function BotHistoryTable({
   history = [],
@@ -113,7 +114,7 @@ export default function BotHistoryTable({
                   || (status === "executed" ? copy.executedDecisionReason : copy.reasonNotRecorded));
               const dateValue = h.is_trade ? h.created_at : safety.checked_at || h.decision_ts || h.created_at || h.date;
               const dateLabel = dateValue
-                ? formatDateTime(dateValue, locale, { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })
+                ? formatDateTime(dateValue, locale, { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short" })
                 : "—";
               const action = String(h.action || h.side || "").toLowerCase();
               const actionLabel = h.is_trade
@@ -168,7 +169,7 @@ export default function BotHistoryTable({
                   <td className={`font-medium capitalize ${statusClass}`}>
                     {statusLabel}
                   </td>
-                  <td className="max-w-xs py-2 text-xs text-[var(--text-muted)]">{reason}</td>
+                  <td className="max-w-xs py-2 text-xs text-[var(--text-muted)]">{reason}<PaperExitEvidence evidence={h.exit_evidence} /></td>
                 </tr>
               );
             })}

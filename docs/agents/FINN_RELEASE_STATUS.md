@@ -4,6 +4,28 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Paper-exit tijd, bewijs en FINN-teruglezing (3 november 2026)
+
+Phase: `LOCAL_VALIDATION` op branch `codex/paper-exit-evidence`.
+De bot-API maakt UTC-tijdstippen expliciet, zodat de botgeschiedenis dezelfde
+uitvoeringstijd als meldingen en Reflectie kan tonen. Een toekomstige automatische
+Paper-exit bewaart zowel de besliskoers als de opnieuw gecontroleerde koers en
+FX-bron bij uitvoering. Botgeschiedenis en het gesloten tradedossier lezen dat
+eigenaargebonden bewijs uit de opgeslagen beslissing. Voor historische exits
+zonder uitvoerings-FX-bronmoment wordt dit als onbekend getoond; die gegevens
+worden niet achteraf geconstrueerd. FINN's gesloten-trade-leesactie haalt ook de
+actuele eigenaargebonden portefeuille op en onderscheidt die van het saldo op
+het historische exitmoment.
+
+Build-evidence op de werkbranch: volledige backend-suite `4218 passed, 4 skipped`;
+frontend typecheck, i18n-lint, i18n-tests `37/37` en productiebuild geslaagd.
+Lokale worker-actiematrix `16/16`; echte Responses-development `20/20` en
+regressie `109/109`. Onafhankelijke Security- en Architecture-codecontrole
+vonden geen releaseblocker; de owner-joins zijn aangescherpt. CI, deployment,
+publieke SHA en onafhankelijke live QA volgen nog. De eerdere registratie- en
+onboardingkandidaat kreeg van onafhankelijke QA `PASS` op
+`3d5c100b5fee21d90df18fbb7596401b95fbe086`.
+
 ## Registratie en onboarding-voltooiing (3 november 2026)
 
 Phase: `LIVE_CANDIDATE_AWAITING_QA`. De eerste registratiepoging van onafhankelijke QA

@@ -49,6 +49,10 @@ class FinnClosedTradeReflectionService:
                    native_pnl_status,
                    pnl_eur_before_fees, plan_snapshot, plan_provenance,
                    analysis_status, analysis_json, candles_status,
+                   (SELECT d.scores_json FROM bot_ledger l
+                    JOIN bot_decisions d ON d.id=l.decision_id AND d.user_id=l.user_id
+                    WHERE l.id=r.closing_ledger_id AND l.user_id=r.user_id
+                      AND d.decision_kind='paper_exit') AS paper_exit_evidence,
                    (SELECT jsonb_build_object(
                         'lesson_text',l.lesson_text,'confirmed_at',l.confirmed_at,
                         'evidence_revision',l.evidence_revision)
@@ -95,6 +99,10 @@ class FinnClosedTradeReflectionService:
                    native_pnl_status,
                    pnl_eur_before_fees, plan_snapshot, plan_provenance,
                    analysis_status, analysis_json, candles_status,
+                   (SELECT d.scores_json FROM bot_ledger l
+                    JOIN bot_decisions d ON d.id=l.decision_id AND d.user_id=l.user_id
+                    WHERE l.id=r.closing_ledger_id AND l.user_id=r.user_id
+                      AND d.decision_kind='paper_exit') AS paper_exit_evidence,
                    (SELECT jsonb_build_object(
                         'lesson_text',l.lesson_text,'confirmed_at',l.confirmed_at,
                         'evidence_revision',l.evidence_revision)
@@ -119,6 +127,7 @@ class FinnClosedTradeReflectionService:
 
     @staticmethod
     def _safe_row(row: dict) -> dict:
+        from backend.services.bot_service import _paper_exit_evidence
         analysis = row.get("analysis_json") or {}
         observations = analysis.get("observations") if isinstance(analysis, dict) else []
         themes = sorted({str(item.get("theme")) for item in observations or []
@@ -174,6 +183,8 @@ class FinnClosedTradeReflectionService:
             "settle_currency": row.get("settle_currency") if derivative else None,
             "native_pnl_status": row.get("native_pnl_status") if derivative else None,
             "execution_sources": row.get("execution_sources") or [],
+            "paper_exit_evidence": _paper_exit_evidence("paper_exit", row.get("paper_exit_evidence"))
+            if str(row.get("execution_environment") or "").lower() == "paper" else None,
             "entry_at": row["entry_at"].isoformat(), "exit_at": row["exit_at"].isoformat(),
             "pnl_eur_before_fees": str(row["pnl_eur_before_fees"]) if row.get("pnl_eur_before_fees") is not None else None,
             "has_plan": has_proven_plan,

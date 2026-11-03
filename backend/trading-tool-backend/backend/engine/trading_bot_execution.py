@@ -2222,6 +2222,11 @@ def _maybe_execute_paper_position_exit(
         "market_id": bot.get("market_id"),
         "market_quote_currency": context.get("quote_currency"),
         "source_price_at": checked_at.isoformat() if checked_at else None,
+        "fx_eur_per_unit": context.get("market_fx_eur_per_unit"),
+        "fx_observed_at": (
+            context["market_fx_as_of"].isoformat()
+            if context.get("market_fx_as_of") else None
+        ),
         "saved_entry": entry, "saved_stop_loss": stop,
         "saved_first_target": first_target,
         "position_open_ledger_id": position_open_ledger_id,
@@ -3168,6 +3173,24 @@ def _recheck_paper_position_exit(
             or (trigger == "first_target" and source_price < target)
             or trigger not in {"stop_loss", "first_target"}):
         raise BotSafetyBlock("Het opgeslagen uitstapniveau is niet meer bereikt.")
+    # Keep the quote actually checked at execution separate from the quote
+    # that first created the exit decision. They can differ between runs.
+    with conn.cursor() as cur:
+        cur.execute("""
+            UPDATE bot_decisions
+            SET scores_json = COALESCE(scores_json, '{}'::jsonb) || %s::jsonb
+            WHERE id=%s AND user_id=%s AND bot_id=%s AND decision_kind='paper_exit'
+        """, (json.dumps({
+            "execution_source_price": source_price,
+            "execution_source_price_at": context["market_price_at"].isoformat(),
+            "execution_source_price_currency": source,
+            "execution_eur_price": eur_price,
+            "execution_fx_eur_per_unit": context.get("market_fx_eur_per_unit"),
+            "execution_fx_observed_at": (
+                context["market_fx_as_of"].isoformat()
+                if context.get("market_fx_as_of") else None
+            ),
+        }), decision_id, user_id, bot_id))
     return eur_price
 
 

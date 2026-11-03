@@ -244,6 +244,10 @@ def build_closed_positions(
 class FinnTradeReviewService:
     @staticmethod
     def _presented_review(row: dict) -> dict:
+        from backend.services.bot_service import _paper_exit_evidence
+        row = dict(row)
+        if str(row.get("execution_environment") or "").lower() == "paper":
+            row["paper_exit_evidence"] = _paper_exit_evidence("paper_exit", row.get("paper_exit_evidence"))
         if str(row.get("execution_environment")).lower() == "paper":
             presented = {**row, "pnl_status": "paper_cash_flow_including_simulated_costs"}
             analysis = row.get("analysis_json")
@@ -525,6 +529,10 @@ class FinnTradeReviewService:
                    exchange_name, attested_at, attestation_source_ids,
                    derivative_category, position_idx, direction, settle_currency,
                    native_pnl, native_pnl_status, fee_legs_by_currency,
+                   (SELECT d.scores_json FROM bot_ledger l
+                    JOIN bot_decisions d ON d.id=l.decision_id AND d.user_id=l.user_id
+                    WHERE l.id=finn_trade_reviews.closing_ledger_id AND l.user_id=:user_id
+                      AND d.decision_kind='paper_exit') AS paper_exit_evidence,
                    (SELECT a.identity_basis FROM finn_exchange_review_attestations a
                     WHERE a.user_id=:user_id AND a.review_id=:id) AS attestation_identity_basis,
                    (SELECT a.same_account_confirmed FROM finn_exchange_review_attestations a
