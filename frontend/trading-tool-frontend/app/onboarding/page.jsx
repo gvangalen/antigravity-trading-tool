@@ -15,6 +15,7 @@ import {
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
+import { onboardingCompletionDescription } from "@/lib/onboardingCompletionCopy";
 
 const PHASE_ICONS = {
   profile: User,
@@ -36,6 +37,7 @@ export default function OnboardingPage() {
     phaseUnlocks,
     phaseMissing,
     activeAsset,
+    status,
   } = useOnboarding();
 
   useEffect(() => {
@@ -168,7 +170,7 @@ export default function OnboardingPage() {
                 {onboardingPageCopy?.completeTitle || "You are ready to work with FINN"}
               </h2>
               <p className="mt-3 text-sm font-medium leading-7 text-slate-600 dark:text-slate-400">
-                {onboardingPageCopy?.completeDescription ||
+                {onboardingCompletionDescription(onboardingPageCopy, status) ||
                   "Your profile, analysis and first setup are saved. You can add a strategy or bot later."}
               </p>
             </div>

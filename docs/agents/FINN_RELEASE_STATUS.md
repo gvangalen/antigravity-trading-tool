@@ -4,6 +4,25 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Registratie en onboarding-voltooiing (3 november 2026)
+
+Phase: `LOCAL_VALIDATION`. De eerste registratiepoging van onafhankelijke QA
+had een onbekende HTTP-status; de oorzaak is niet vastgesteld. De web-UI toont
+bij een afgewezen registratie nu een blijvende, vertaalde melding met
+inlog-/herstelroute. Een rate-limituitzondering behoudt server-side HTTP 429
+in plaats van als 500 te eindigen. De voltooiingstekst volgt de werkelijk
+opgeslagen strategie- en botstatus; de optionele stappen worden niet opnieuw
+als ontbrekend voorgesteld wanneer ze al bestaan.
+
+Build-evidence: volledige backend-suite `4215 passed, 4 skipped`, inclusief
+de nieuwe registratie-regressie.
+Frontend `test:i18n` `37/37`, typecheck, i18n-lint en productiebuild geslaagd.
+Onafhankelijke Security-review vond geen blocker; 15 gerichte auth/securitytests
+slaagden en `audit:high` meldde 0 kwetsbaarheden.
+Geen FINN-actiecontract of Responses-modelroute gewijzigd; worker-actiematrix
+en providerproeven zijn daarom niet van toepassing. CI, deployment en live QA
+volgen.
+
 ## Opgeslagen onboardingplan aanpassen (3 november 2026)
 
 Phase: `LIVE_QA_PASS` voor de gerichte onboardingplanflow. De gebruiker kan in de onboarding naar eerdere

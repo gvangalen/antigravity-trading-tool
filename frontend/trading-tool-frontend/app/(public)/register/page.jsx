@@ -44,6 +44,7 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [registrationError, setRegistrationError] = useState("");
 
   // voorkomt dubbele redirects zoals bij login
   const redirected = useRef(false);
@@ -72,6 +73,7 @@ export default function RegisterPage() {
     }
 
     setLoading(true);
+    setRegistrationError("");
 
     try {
       // 1️⃣ Account aanmaken
@@ -88,12 +90,12 @@ export default function RegisterPage() {
       });
 
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        showSnackbar(
-          data.detail || t?.auth?.registerFailed,
-          "danger"
-        );
-        setLoading(false);
+        const message = res.status === 429
+          ? t?.auth?.registerRateLimited
+          : res.status === 400
+            ? t?.auth?.registerFailed
+            : t?.auth?.registerUnavailable;
+        setRegistrationError(message || t?.auth?.registerFailed);
         return;
       }
 
@@ -113,12 +115,9 @@ export default function RegisterPage() {
       router.replace(destination);
     } catch (err) {
       console.error("❌ Register fout:", err);
-      showSnackbar(
-        typeof navigator !== "undefined" && !navigator.onLine
-          ? t?.auth?.offline
-          : t?.auth?.serverUnreachable,
-        "danger"
-      );
+      setRegistrationError(typeof navigator !== "undefined" && !navigator.onLine
+        ? t?.auth?.offline
+        : t?.auth?.serverUnreachable);
     } finally {
       setLoading(false);
     }
@@ -167,6 +166,11 @@ export default function RegisterPage() {
         </div>
 
         <form onSubmit={handleRegister} className="space-y-6">
+          {registrationError && (
+            <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800">
+              {registrationError}
+            </p>
+          )}
 
           {/* Naam */}
           <div className="space-y-3">
