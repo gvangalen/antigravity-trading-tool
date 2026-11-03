@@ -46,6 +46,7 @@ ALLOWED_PROFILES = {
     "closed_paper_trade_review_chat",
     "auto_paper_trade_history",
     "portfolio_paper_fx",
+    "typed_entry_paper",
 }
 SAFE_CLOSED_PAPER_CHAT_ERRORS = frozenset({
     "closed_paper_review_fixture_not_authorized",
@@ -2133,6 +2134,25 @@ def main() -> int:
                 from backend.scripts.probe_protected_portfolio_paper_fx import run as run_portfolio_probe
 
                 run_protected_portfolio_probe(report, run_portfolio_probe, fixture_namespace or "")
+            elif args.profile == "typed_entry_paper":
+                if args.manifest_id != "none" or args.manifest_bundle_path:
+                    raise ValueError("typed_entry_paper_manifest_forbidden")
+                if os.getenv("FINN_QA_ALLOW_TYPED_ENTRY_PAPER_FIXTURE") != "1":
+                    raise ValueError("typed_entry_paper_fixture_not_authorized")
+                from backend.scripts.probe_protected_typed_entry_paper import run as run_typed_probe
+
+                report["safety"]["read_only_profile"] = False
+                report["safety"]["execution_calls"] = None
+                report["protected_profile_attempted"] = True
+                report["qa_status"] = "INCOMPLETE"
+                report["typed_entry_paper"] = run_typed_probe(fixture_namespace or "")
+                report["safety"]["execution_calls"] = report["typed_entry_paper"]["execution_calls"]
+                report["outcome"] = (
+                    "passed" if report["typed_entry_paper"]["result"] == "PASS"
+                    else "failed"
+                )
+                if report["outcome"] == "passed":
+                    report["qa_status"] = "COMPLETED"
             else:
                 if args.manifest_id == "none":
                     raise ValueError("manifest_required")

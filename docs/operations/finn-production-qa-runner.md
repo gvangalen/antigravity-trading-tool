@@ -21,7 +21,7 @@ The manual workflow `.github/workflows/finn-production-qa.yml` requires:
 | Input | Meaning |
 | --- | --- |
 | `release_sha` | Full, already-live SHA. It must be an ancestor of `main`. |
-| `qa_profile` | `auth_preflight`, `trade_review_preflight`, `manifest_key`, `targeted_regression`, `runtime_acceptance`, `action_contract_acceptance`, `full_release_acceptance`, `safety`, `latency`, `score2_stale_paper`, `auto_paper_trade_history`, or `portfolio_paper_fx`. |
+| `qa_profile` | `auth_preflight`, `trade_review_preflight`, `manifest_key`, `targeted_regression`, `runtime_acceptance`, `action_contract_acceptance`, `full_release_acceptance`, `safety`, `latency`, `score2_stale_paper`, `auto_paper_trade_history`, `portfolio_paper_fx`, or `typed_entry_paper`. The workflow dropdown is the authoritative full list. |
 | `manifest_id` | Approved QA-owned manifest identifier. `auth_preflight` uses `none`. |
 | `run_label` | Safe trace label; no user, fixture, or credential data. |
 | `manifest_bundle` | Optional encrypted QA-owned manifest. It is decrypted only on the protected host. |
@@ -285,4 +285,38 @@ QA invocation after the candidate is live and authorized:
 FINN_QA_ALLOW_FIXTURE_ACTIONS=true FINN_QA_ALLOW_FIXTURE_EXECUTION=true \
   ./ops/qa/run_finn_production_qa.sh \
   <FULL_LIVE_SHA> portfolio_paper_fx none qa-portfolio-paper-fx
+```
+
+## Typed Entry Paper Probe
+
+`typed_entry_paper` is a separate protected QA profile for the saved typed
+entry rules. It requires `manifest_id=none`, an empty manifest bundle, and
+both fixture authorization inputs set to `true`. Because it writes a new kind
+of protected Paper fixture, independent QA needs explicit user authorization
+for this profile before its first official run. Build cannot run it against
+the protected QA fixture.
+
+The probe verifies the bound QA user and creates four isolated inactive QA
+owners and four random inactive asset-catalog records, one per case. Each
+temporary exact EUR market is active only during its direct assessment. It
+does not change BTC, ETH, shared market quotes, or ordinary accounts. Each
+bot is Paper, has no exchange key, and receives EUR 100 virtual cash. The
+cases are: a closed-candle SMA crossing with a virtual filled buy; no SMA
+crossing with Hold and no order; a crossing with an incomplete Score 2.0
+benchmark with Hold and no order; and a closed-candle trendline crossing with
+a virtual filled buy. The decision and order must refer to the temporary
+exact market. Successful fixtures are deleted; failed fixtures are
+quarantined by deactivating their bot and market. Results contain no user or
+order identifiers.
+
+This profile proves the saved rule and Paper executor with controlled candles.
+It does not prove the natural FINN chat, proposal confirmation, web display,
+or Live execution; QA assesses those separately on the same live SHA.
+
+QA invocation after the candidate is live and explicitly authorized:
+
+```bash
+FINN_QA_ALLOW_FIXTURE_ACTIONS=true FINN_QA_ALLOW_FIXTURE_EXECUTION=true \
+  ./ops/qa/run_finn_production_qa.sh \
+  <FULL_LIVE_SHA> typed_entry_paper none qa-typed-entry-paper
 ```

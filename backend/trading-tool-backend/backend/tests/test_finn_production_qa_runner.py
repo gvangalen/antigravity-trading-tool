@@ -50,6 +50,59 @@ def test_workflow_is_manual_protected_and_serialized():
     assert "timeout-minutes: 90" in workflow
 
 
+def test_typed_entry_paper_profile_requires_explicit_fixture_scope(monkeypatch):
+    module = _module()
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    dispatch = DISPATCH_SCRIPT_PATH.read_text(encoding="utf-8")
+    probe_path = (REPO_ROOT / "backend" / "trading-tool-backend" / "backend" /
+                  "scripts" / "probe_protected_typed_entry_paper.py")
+    spec = importlib.util.spec_from_file_location("protected_typed_entry_probe", probe_path)
+    probe = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(probe)
+
+    assert "typed_entry_paper" in module.ALLOWED_PROFILES
+    assert "typed_entry_paper" in workflow and "typed_entry_paper" in dispatch
+    assert "FINN_QA_ALLOW_TYPED_ENTRY_PAPER_FIXTURE=0" in workflow
+    assert "FINN_QA_ALLOW_TYPED_ENTRY_PAPER_FIXTURE=1" in workflow
+    assert "export FINN_QA_ALLOW_TYPED_ENTRY_PAPER_FIXTURE=$(printf '%q'" in workflow
+    assert '"$allow_safe_fixture_execution" != "true"' in dispatch
+    monkeypatch.delenv("FINN_QA_ALLOW_TYPED_ENTRY_PAPER_FIXTURE", raising=False)
+    with pytest.raises(RuntimeError, match="typed_entry_fixture_not_authorized"):
+        probe._require_run("qa-20261103-2245-aabbccdd-11223344")
+    monkeypatch.setenv("FINN_QA_ALLOW_TYPED_ENTRY_PAPER_FIXTURE", "1")
+    with pytest.raises(RuntimeError, match="typed_entry_fixture_namespace_invalid"):
+        probe._require_run("../unsafe")
+
+
+def test_typed_entry_paper_cases_keep_running_and_report_safe_error_codes(monkeypatch):
+    probe_path = (REPO_ROOT / "backend" / "trading-tool-backend" / "backend" /
+                  "scripts" / "probe_protected_typed_entry_paper.py")
+    spec = importlib.util.spec_from_file_location("protected_typed_entry_sequence", probe_path)
+    probe = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(probe)
+    monkeypatch.setattr(probe, "_require_run", lambda _namespace: 42)
+    seen = []
+
+    def run_case(_namespace, case, execution_attempts):
+        seen.append(case)
+        if case == "sma_no_cross":
+            raise RuntimeError("typed_entry_signal_status_wrong")
+        if case == "sma_missing_score":
+            raise RuntimeError("private owner 42")
+        execution_attempts.append(case)
+        return {"case": case, "result": "PASS"}
+
+    monkeypatch.setattr(probe, "_run_case", run_case)
+    result = probe.run("qa-20261103-2245-aabbccdd-11223344")
+    assert result["result"] == "FAIL"
+    assert seen == list(probe.CASES)
+    assert result["cases"][1]["error_code"] == "typed_entry_signal_status_wrong"
+    assert result["cases"][2]["error_code"] == "RuntimeError"
+    assert result["execution_calls"] == 2
+
+
 def test_trade_review_preflight_reads_only_and_redacts_fixture_data(monkeypatch):
     module = _module()
     called = []
