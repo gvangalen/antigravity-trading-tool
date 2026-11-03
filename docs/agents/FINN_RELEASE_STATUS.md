@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Registratie en onboarding-voltooiing (3 november 2026)
 
-Phase: `LOCAL_VALIDATION`. De eerste registratiepoging van onafhankelijke QA
+Phase: `LIVE_CANDIDATE_AWAITING_QA`. De eerste registratiepoging van onafhankelijke QA
 had een onbekende HTTP-status; de oorzaak is niet vastgesteld. De web-UI toont
 bij een afgewezen registratie nu een blijvende, vertaalde melding met
 inlog-/herstelroute. Een rate-limituitzondering behoudt server-side HTTP 429
@@ -20,8 +20,13 @@ Frontend `test:i18n` `37/37`, typecheck, i18n-lint en productiebuild geslaagd.
 Onafhankelijke Security-review vond geen blocker; 15 gerichte auth/securitytests
 slaagden en `audit:high` meldde 0 kwetsbaarheden.
 Geen FINN-actiecontract of Responses-modelroute gewijzigd; worker-actiematrix
-en providerproeven zijn daarom niet van toepassing. CI, deployment en live QA
-volgen.
+en providerproeven zijn daarom niet van toepassing. [PR #795](https://github.com/gvangalen/antigravity-trading-tool/pull/795)
+had vijf geslaagde CI-jobs. [Main-CI 41605932104](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41605932104)
+en [Auto Deploy 41606331321](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41606331321)
+slaagden. Publieke backend-health en frontend-buildinfo gaven HTTP 200 en
+exact `021f1c075d26731e5a3334bee68f343690288d73`. Na deze statusbijwerking
+moeten de laatste main-CI, Auto Deploy en publieke SHA opnieuw samenvallen
+voordat onafhankelijke ingelogde QA begint.
 
 ## Opgeslagen onboardingplan aanpassen (3 november 2026)
 
