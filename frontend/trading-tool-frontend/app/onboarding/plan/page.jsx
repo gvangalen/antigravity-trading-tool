@@ -14,7 +14,7 @@ import MarketConditionPicker from "@/components/setup/MarketConditionPicker";
 import { MARKET_CONDITIONS, marketConditionChoiceFromSetup, marketConditionPayload } from "@/lib/setup/scoreConditions.mjs";
 import { createStrategy, fetchLastStrategy, fetchStrategies, fetchStrategyBySetup, updateStrategy } from "@/lib/api/strategy";
 import { fetchBotConfigs } from "@/lib/api/botApi";
-import { resolveSavedOnboardingPlan, setupPatchForOnboarding, strategyPatchForOnboarding } from "@/lib/onboarding/planEdits.mjs";
+import { resolveOnboardingStrategyDetails, resolveSavedOnboardingPlan, setupPatchForOnboarding, strategyPatchForOnboarding } from "@/lib/onboarding/planEdits.mjs";
 import {
   findSavedSetupForAsset,
   getPlanCompletionForAsset,
@@ -220,7 +220,7 @@ export default function OnboardingPlanPage() {
           fetchSetups(),
           fetchLastStrategy().catch(() => null),
           fetchBotConfigs().catch(() => null),
-          requestedStrategyId > 0 ? fetchStrategies(symbol) : Promise.resolve([]),
+          fetchStrategies(symbol),
         ]);
 
         if (cancelled) return;
@@ -245,15 +245,19 @@ export default function OnboardingPlanPage() {
           setSavedSetup(setupCandidate);
           setSetup(setupDraftFromSaved(setupCandidate, symbol));
 
-          const bySetup = exactStrategy || (setupId
-            ? await fetchStrategyBySetup(setupId).catch(() => null)
-            : null);
-          if (!cancelled && bySetup) {
-            setSavedStrategy({ setup_id: setupId, ...bySetup });
-            setStrategy(strategyDraftFromSaved(bySetup, symbol));
-          } else if (!cancelled && Number(lastStrategy?.strategy?.setup_id) === Number(setupId)) {
-            setSavedStrategy(lastStrategy.strategy);
-            setStrategy(strategyDraftFromSaved(lastStrategy.strategy, symbol));
+          const bySetup = exactStrategy || (setupId ? await fetchStrategyBySetup(setupId) : null);
+          const candidateStrategy = bySetup || (Number(lastStrategy?.strategy?.setup_id) === Number(setupId)
+            ? lastStrategy.strategy : null);
+          const resolvedStrategy = resolveOnboardingStrategyDetails(candidateStrategy, savedStrategies, setupId);
+          if (cancelled) return;
+          if (resolvedStrategy.invalid) {
+            setError(copy.planSelectionError || "The selected plan is no longer available. Go back to My Plan and choose it again.");
+            setSelectionUnavailable(true);
+            return;
+          }
+          if (!cancelled && resolvedStrategy.strategy) {
+            setSavedStrategy(resolvedStrategy.strategy);
+            setStrategy(strategyDraftFromSaved(resolvedStrategy.strategy, symbol));
           }
         }
       } catch (err) {

@@ -71,3 +71,15 @@ export function resolveSavedOnboardingPlan({ symbol, setups, strategies, fallbac
   }
   return { invalid: false, setup: selectedSetup || null, strategy: selectedStrategy || null };
 }
+
+export function resolveOnboardingStrategyDetails(candidate, strategies, setupId) {
+  if (!candidate) return { invalid: false, strategy: null };
+  const candidateId = Number(candidate.id ?? candidate.strategy_id);
+  const detailed = strategies.find((item) => Number(item.id ?? item.strategy_id) === candidateId);
+  if (!detailed || Number(detailed.setup_id) !== Number(setupId) ||
+      (detailed.execution_mode === "custom" &&
+        (!Array.isArray(detailed.decision_curve?.points) || detailed.decision_curve.points.length < 2))) {
+    return { invalid: true, strategy: null };
+  }
+  return { invalid: false, strategy: detailed };
+}
