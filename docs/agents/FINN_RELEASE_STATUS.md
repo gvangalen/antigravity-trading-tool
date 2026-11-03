@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Handmatige Paper-trade en Reflectie-weergave (3 november 2026)
 
-Phase: `LOCAL_VALIDATION`. De handmatige tradekaart staat in de hoofdinhoud
+Phase: `LIVE_CANDIDATE_AWAITING_QA` na [PR #799](https://github.com/gvangalen/antigravity-trading-tool/pull/799). De handmatige tradekaart staat in de hoofdinhoud
 onder de bot en gebruikt niet langer een tweede rechterkolom naast FINN. Op
 desktopbreedtes vanaf 1150 px opent FINN als zijpaneel, zodat de tradekaart
 zichtbaar blijft. Bij een Paper-bot zonder ingesteld virtueel kassaldo toont
@@ -22,8 +22,14 @@ opties. Deze batch gebruikt expliciete datumvelden en Amsterdamse tijdzone.
 Lokale Build-controles: gerichte regressies `14/14`, i18n `37/37`, commands
 `34/34`, i18n-lint, typecheck en productiebuild geslaagd. De wijzigingen raken
 geen FINN-actiecontract, modelroute of backend; worker-actiematrix en
-Responses-proeven zijn daarom niet van toepassing. CI, Auto Deploy en
-onafhankelijke ingelogde QA volgen nog. Er is geen order uitgevoerd.
+Responses-proeven zijn daarom niet van toepassing. Alle vijf jobs van
+[PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41691174689)
+en [main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41691930488)
+slaagden; [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41692483280)
+slaagde. Publieke `/api/health` en `/build-info.json` gaven HTTP 200 en
+dezelfde SHA `308f20c5edb75db851dc38bb49a0817107c0d714`.
+Deze statusbijwerking vereist opnieuw main-CI, Auto Deploy en een gelijke
+publieke SHA voordat onafhankelijke ingelogde QA start. Er is geen order uitgevoerd.
 
 ## Paper-exit tijd, bewijs en FINN-teruglezing (3 november 2026)
 
