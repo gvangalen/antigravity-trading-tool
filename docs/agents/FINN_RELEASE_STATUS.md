@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Opgeslagen onboardingplan aanpassen (3 november 2026)
 
-Phase: `LOCAL_VALIDATION` voor het herstel van de Smart-DCA-teruglezing. De gebruiker kan in de onboarding naar eerdere
+Phase: `LIVE_QA_PASS` voor de gerichte onboardingplanflow. De gebruiker kan in de onboarding naar eerdere
 stappen teruggaan. Op de planstap kan een eerder opgeslagen DCA-setup of
 gekoppelde strategie nu expliciet worden teruggelezen, aangepast en opnieuw
 opgeslagen. De setup- en strategie-ID blijven gelijk; er wordt geen nieuw plan
@@ -34,9 +34,26 @@ main-CI en Auto Deploy. Onafhankelijke ingelogde QA gaf `NOT_ACCEPTED`: vanuit
 Analyse werd alleen de setup-ID doorgegeven. De route `strategies/by_setup`
 leverde voor een Smart DCA wel `execution_mode=custom`, maar geen `decision_curve`,
 zodat de onboarding ten onrechte een vast bedrag zonder curve kon tonen.
-De huidige reparatie leest de volledige eigenaargebonden strategie uit de
-strategielijst en weigert een onvolledige custom curve. Een nieuwe lokale
-validatie, deployment en ingelogde herkeuring zijn vereist.
+De reparatie leest de volledige eigenaargebonden strategie uit de
+strategielijst en weigert een onvolledige custom curve. [PR #793](https://github.com/gvangalen/antigravity-trading-tool/pull/793)
+had vijf geslaagde CI-jobs. Lokale frontendcontroles, inclusief gerichte
+regressies `5/5`, i18n `36/36`, commands `34/34`, proposals `8/8`, setups
+`20/20`, typecheck, i18n-lint en productiebuild, slaagden. [Main-CI 41595030760](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41595030760)
+en [Auto Deploy 41595350111](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41595350111)
+slaagden. `origin/main`, publieke backend-health en frontend-buildinfo gaven
+HTTP 200 en exact `0c1722086fd2b2cb314bfa385ecce3e8d06abbab`.
+
+Onafhankelijke ingelogde productie-QA op die SHA gaf `PASS` voor de eerdere
+P1: met alleen de setup-ID werd de Smart DCA als custom getoond, met vier
+lineaire curvepunten en de uitleg over geleidelijke verandering. Refresh
+behield die weergave. Een conceptbedrag van €11 herberekende de curve in de
+review; annuleren liet de opgeslagen €10 intact. De teruglink uit
+Automatisering behield beide IDs, een gemengde selectie werd zonder
+bewerkknoppen afgewezen, de botwaarschuwing verscheen en een setup zonder
+strategie of bot bleef afrondbaar. QA sloeg niets op en plaatste geen order.
+Een stapcurve en het scenario met ontbrekende curvepunten konden in het
+gebruikte account niet afzonderlijk live worden geforceerd; de lokale
+regressie dekt de weigering van een onvolledige custom curve.
 
 ## Begeleide onboarding zonder verplichte strategie of bot (2 november 2026)
 
