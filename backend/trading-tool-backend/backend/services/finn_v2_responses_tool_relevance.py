@@ -116,7 +116,8 @@ class FinnResponsesToolRelevanceGuard:
                 "dca_month_day", "dca_amount_mode", "base_amount", "score_source",
                 "low_threshold", "high_threshold", "low_score_percent",
                 "mid_score_percent", "high_score_percent", "min_benchmark_score",
-                "max_benchmark_score", "description",
+                "max_benchmark_score", "description", "plan_scope", "entry_signal",
+                "execution_mode", "entry", "stop_loss", "targets", "risk_profile", "price_currency",
             }
         }
         try:
@@ -128,7 +129,9 @@ class FinnResponsesToolRelevanceGuard:
                         "Does the user require FINN to automatically enforce a trading, entry, "
                         "purchase, market or trend condition that these fields do not encode? "
                         "A timeframe is only a chart interval; it does not enforce a rising "
-                        "trend or 4H confirmation. A description is only a note and is not "
+                        "trend or 4H confirmation. A validated typed entry_signal in a "
+                        "combined setup-and-strategy plan does enforce the represented "
+                        "closed-candle crossing after confirmation. A description is only a note and is not "
                         "enforced. For DCA, a fixed amount, scheduled cadence and weekday "
                         "are already represented by the amount mode, amount and schedule "
                         "fields; they are not additional market-entry conditions. "

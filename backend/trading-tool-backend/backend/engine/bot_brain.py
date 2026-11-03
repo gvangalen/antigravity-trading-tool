@@ -248,7 +248,9 @@ def _build_action_decision(
             "confidence_score": confidence_score,
         }
 
-    if market_score is not None and market_score < min_market_score_to_buy:
+    # A measured match against the owner's saved total-benchmark band is the
+    # Trade score rule. Do not add an unrelated hidden market-score threshold.
+    if market_score is not None and market_score < min_market_score_to_buy and not confirmed_trade_match:
         return {
             "action": "hold",
             "reason": f"Market score too weak ({market_score:.1f})",

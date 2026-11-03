@@ -72,11 +72,19 @@ def test_missing_daily_candle_or_older_latest_candle_cannot_trigger():
 
 
 def test_explicit_crossing_is_preserved_even_when_name_repeats_sma_period():
+    assert explicit_entry_signal_from_text(
+        "Koop €10 alleen wanneer een afgesloten dagcandle van BTC/EUR de SMA over "
+        "50 afgesloten dagcandles van onder naar boven kruist."
+    ) == rule({"kind": "sma", "period": 50})
     message = (
         "Maak SMA50 Kruising QA. Als extra instapvoorwaarde moet de afgesloten "
         "dagkoers de SMA50 van onder naar boven kruisen."
     )
     assert explicit_entry_signal_from_text(message) == rule({"kind": "sma", "period": 50})
+    assert explicit_entry_signal_from_text(
+        "Extra getypeerde instapregel: alleen als de afgesloten 1D-slotkoers van "
+        "BTC/EUR de SMA50 van onder naar boven kruist."
+    ) == rule({"kind": "sma", "period": 50})
     assert explicit_entry_signal_from_text(
         "Koop wanneer de afgesloten dagkoers de SMA200 van boven naar onder kruist."
     ) == rule({"kind": "sma", "period": 200}, direction="below")

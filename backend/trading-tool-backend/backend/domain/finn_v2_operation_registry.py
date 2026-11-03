@@ -73,6 +73,10 @@ _MODEL_TOOL_INPUT_TYPES: dict[str, tuple[tuple[str, str], ...]] = {
         ("score_source", "string"), ("low_threshold", "number"),
         ("high_threshold", "number"), ("low_score_percent", "number"),
         ("mid_score_percent", "number"), ("high_score_percent", "number"),
+        ("entry_signal", "object"), ("execution_mode", "string"),
+        ("entry", "number"), ("stop_loss", "number"),
+        ("targets", "array"), ("risk_profile", "string"),
+        ("price_currency", "string"),
     ),
     "update_setup": (("setup_id", "integer"), ("changed_fields", "object")),
     "delete_setup": (("setup_id", "integer"),),
@@ -360,6 +364,12 @@ class OperationContract:
                 required.append("dca_day")
             elif frequency == "monthly":
                 required.append("dca_month_day")
+            return tuple(required)
+        if self.operation_id == "create_setup" and supplied_inputs.get("setup_type") == "trade" and supplied_inputs.get("plan_scope") == "setup_and_strategy":
+            required = list(self.required_inputs)
+            if crypto_pair_required:
+                required.append("quote_currency")
+            required.extend(("entry_signal", "execution_mode", "base_amount", "entry", "stop_loss", "targets", "risk_profile", "min_benchmark_score", "max_benchmark_score"))
             return tuple(required)
         if self.operation_id == "create_strategy" and supplied_inputs.get("setup_type") == "dca":
             required = ["setup_id", "name", "dca_amount_mode", "base_amount"]
@@ -1074,7 +1084,7 @@ _CONTRACTS: tuple[OperationContract, ...] = (
     # SetupService validates the persisted setup fields unconditionally.
     # Score and market-condition details are useful trusted inputs, but must
     # not be invented by FINN.
-    OperationContract("create_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("maak setup", "create setup", "setup voor"), action_polarity=ActionPolarity.CREATE, required_inputs=("setup_type", "timeframe", "name", "symbol"), optional_inputs=("quote_currency", "plan_scope", "min_investment", "min_benchmark_score", "max_benchmark_score"), input_allowed_values=(("plan_scope", ("setup_only", "setup_and_strategy")), ("dca_frequency", ("daily", "weekly", "monthly")), ("dca_amount_mode", ("fixed", "score_bands")), ("score_source", ("benchmark_score",))), conditional_required_inputs=(("dca_frequency", "setup_type", "dca"), ("dca_amount_mode", "setup_type", "dca"), ("base_amount", "setup_type", "dca"), ("dca_day", "dca_frequency", "weekly"), ("dca_month_day", "dca_frequency", "monthly"), ("score_source", "dca_amount_mode", "score_bands"), ("low_threshold", "dca_amount_mode", "score_bands"), ("high_threshold", "dca_amount_mode", "score_bands"), ("low_score_percent", "dca_amount_mode", "score_bands"), ("mid_score_percent", "dca_amount_mode", "score_bands"), ("high_score_percent", "dca_amount_mode", "score_bands")), required_scopes=("active_asset",), optional_scopes=("profile", "preferences", "indicator_configuration", "active_setup", "linked_strategy"), model_policy="optional", response_strategy="proposal_draft", policy_class="proposal", proposal_type="create_setup", confirmation_required=True, execution_adapter="create_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_created;strategy_created_only_when_included"),
+    OperationContract("create_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("maak setup", "create setup", "setup voor"), action_polarity=ActionPolarity.CREATE, required_inputs=("setup_type", "timeframe", "name", "symbol"), optional_inputs=("quote_currency", "plan_scope", "min_investment", "min_benchmark_score", "max_benchmark_score", "entry_signal", "execution_mode", "entry", "stop_loss", "targets", "risk_profile", "price_currency"), input_allowed_values=(("plan_scope", ("setup_only", "setup_and_strategy")), ("dca_frequency", ("daily", "weekly", "monthly")), ("dca_amount_mode", ("fixed", "score_bands")), ("score_source", ("benchmark_score",))), conditional_required_inputs=(("dca_frequency", "setup_type", "dca"), ("dca_amount_mode", "setup_type", "dca"), ("base_amount", "setup_type", "dca"), ("dca_day", "dca_frequency", "weekly"), ("dca_month_day", "dca_frequency", "monthly"), ("score_source", "dca_amount_mode", "score_bands"), ("low_threshold", "dca_amount_mode", "score_bands"), ("high_threshold", "dca_amount_mode", "score_bands"), ("low_score_percent", "dca_amount_mode", "score_bands"), ("mid_score_percent", "dca_amount_mode", "score_bands"), ("high_score_percent", "dca_amount_mode", "score_bands")), required_scopes=("active_asset",), optional_scopes=("profile", "preferences", "indicator_configuration", "active_setup", "linked_strategy"), model_policy="optional", response_strategy="proposal_draft", policy_class="proposal", proposal_type="create_setup", confirmation_required=True, execution_adapter="create_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_created;strategy_created_only_when_included"),
     OperationContract("update_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("wijzig setup", "update setup", "setup andern"), action_polarity=ActionPolarity.UPDATE, required_inputs=("setup_id", "changed_fields"), contextual_reference_inputs=("setup_id",), required_scopes=("active_asset", "active_setup"), proposal_type="update_setup", confirmation_required=True, execution_adapter="update_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_updated_for_user", response_strategy="proposal_draft", policy_class="proposal"),
     OperationContract("delete_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("verwijder setup", "delete setup", "lösche setup"), action_polarity=ActionPolarity.DELETE, required_inputs=("setup_id",), contextual_reference_inputs=("setup_id",), required_scopes=("active_asset", "active_setup"), proposal_type="delete_setup", confirmation_required=True, execution_adapter="delete_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_deleted_for_user", response_strategy="proposal_draft", policy_class="proposal"),
     OperationContract("evaluate_setup", FinnV2OperationRegistry.VERSION, "setup", "EVALUATE", ("beoordeel setup",), required_scopes=("active_asset", "active_setup"), optional_scopes=("indicator_configuration",), model_policy="required", response_strategy="model_reasoning", policy_class="advice"),

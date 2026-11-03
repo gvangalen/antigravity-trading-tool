@@ -90,7 +90,8 @@ def explicit_entry_signal_from_text(message: str) -> dict[str, Any] | None:
     remain unresolved instead of becoming an ordinary fixed-price strategy.
     """
     text = str(message or "")
-    if not (re.search(r"\b(?:afgesloten\s+dag(?:slot)?koers|afgesloten\s+dagkaars|"
+    if not (re.search(r"\b(?:afgesloten\s+(?:1D[- ]?)?(?:dag)?slotkoers|"
+                      r"afgesloten\s+dagkoers|afgesloten\s+(?:1D[- ]?)?(?:dagkaars|dagcandle)|"
                       r"dag(?:slot)?koers|daily\s+close|closed\s+daily\s+candle|"
                       r"tagesschlusskurs)\b", text, re.I)
             and re.search(r"\b(?:kruis\w*|cross\w*|kreuz\w*)\b", text, re.I)):
@@ -105,7 +106,10 @@ def explicit_entry_signal_from_text(message: str) -> dict[str, Any] | None:
                            r"cross\w*\s+below|kreuz\w*\s+unter)\b", text, re.I))
     if above == below:
         return None
-    sma = re.findall(r"\b(?:sma|ma|moving\s+average)\s*[- ]?(\d{1,3})\b", text, re.I)
+    sma = re.findall(
+        r"\b(?:sma|ma|moving\s+average)\s*(?:over\s+)?[- ]?(\d{1,3})\b",
+        text, re.I,
+    )
     line = bool(re.search(r"\b(?:trendlijn|trendline|trendlinie)\b", text, re.I))
     if bool(sma) == line or len(set(sma)) > 1:
         return None

@@ -79,6 +79,38 @@ def test_confirmed_dca_creates_setup_and_strategy_in_one_transaction(monkeypatch
     session.commit.assert_awaited_once()
 
 
+def test_confirmed_sma_trade_plan_saves_exact_pair_and_rule_atomically(monkeypatch):
+    monkeypatch.setattr("backend.infrastructure.repositories.onboarding_repository.OnboardingRepository.mark_step_completed", AsyncMock())
+
+    @asynccontextmanager
+    async def savepoint():
+        yield
+
+    session = SimpleNamespace(commit=AsyncMock(), begin_nested=savepoint)
+    registry = FinnV2ActionAdapterRegistry(session)
+    registry.flags.execute_setup_changes_enabled = lambda: True
+    registry.setups.save_setup = AsyncMock(return_value={"setup_id": 91, "name": "BTC SMA50"})
+    registry.setups._mark_setup_step_completed_best_effort = AsyncMock()
+    registry.strategies.save_strategy = AsyncMock(return_value={"strategy_id": 92})
+    rule = {"version": 1, "event": "close_crosses_reference", "direction": "above", "timeframe": "1D", "reference": {"kind": "sma", "period": 50}}
+    fields = {"name": "BTC SMA50", "symbol": "BTC", "quote_currency": "EUR", "timeframe": "1D", "setup_type": "trade", "plan_scope": "setup_and_strategy", "entry_signal": rule, "execution_mode": "fixed", "base_amount": 10, "entry": 68000, "stop_loss": 60000, "targets": [80000], "risk_profile": "balanced", "min_benchmark_score": 61, "max_benchmark_score": 75}
+
+    result = asyncio.run(registry._create_setup(390, {"change": {"setup_fields": fields}}))
+
+    assert result["setup_id"] == 91
+    assert result["strategy_id"] == 92
+    setup_args, setup_kwargs = registry.setups.save_setup.await_args
+    assert setup_kwargs == {"commit": False}
+    assert setup_args[1]["quote_currency"] == "EUR"
+    assert "entry_signal" not in setup_args[1]
+    strategy_args, strategy_kwargs = registry.strategies.save_strategy.await_args
+    assert strategy_kwargs == {"commit": False}
+    assert strategy_args[1]["entry_signal"] == rule
+    assert strategy_args[1]["price_currency"] == "EUR"
+    assert strategy_args[1]["setup_id"] == 91
+    session.commit.assert_awaited_once()
+
+
 def test_confirmed_setup_only_dca_creates_no_strategy_and_keeps_score_zone():
     registry = FinnV2ActionAdapterRegistry(SimpleNamespace())
     registry.flags.execute_setup_changes_enabled = lambda: True

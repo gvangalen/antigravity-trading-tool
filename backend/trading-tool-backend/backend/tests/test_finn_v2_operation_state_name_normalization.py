@@ -58,6 +58,9 @@ def test_generic_buy_condition_does_not_promote_a_price_range_to_benchmark():
     assert explicit_benchmark_bounds(
         "Mijn koopvoorwaarde is een totale benchmarkscore van 26 tot 45."
     ) == {"min_benchmark_score": 26, "max_benchmark_score": 45}
+    assert explicit_benchmark_bounds(
+        "Mijn scorevoorwaarde voor de totale benchmark is 61–75."
+    ) == {"min_benchmark_score": 61, "max_benchmark_score": 75}
 
 
 def test_strategy_deferral_completes_an_existing_dca_draft_without_losing_setup_fields():

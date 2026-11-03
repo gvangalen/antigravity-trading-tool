@@ -4,6 +4,32 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Getypeerde instapregels van FINN tot Paper (3 november 2026)
+
+Phase: `LOCAL_VALIDATION`. De eerdere onafhankelijke QA vond dat FINN een
+natuurlijk SMA50-verzoek binnen hetzelfde gesprek verloor en ten onrechte
+meldde dat de regel niet uitvoerbaar was. De reparatie behoudt het actieve
+Trade-concept bij vervolgantwoorden, vraagt ontbrekende handelsgegevens uit,
+en legt een getypeerde instapregel samen met setup en strategie atomair vast.
+Een wijziging van asset of plantype trekt de oude handelsvelden in. Een
+modelvoorstel alleen mag geen bedrag, koersniveaus of risicoprofiel invullen.
+
+Gemeten lokale Build-evidence op de definitieve bron: volledige backend-suite
+`4241 passed, 4 skipped`; frontend typecheck, i18n-lint, i18n-, command-,
+voorstel- en setuptests en productiebuild geslaagd. De herhaalde lokale
+FastAPI/Celery-actiematrix slaagde `16/16`, met nul brokerorders en nul Live
+trading calls. Een natuurlijke vierbeurtige Luna/Responses-chat leverde een
+BTC/EUR-SMA50-concept met de door de gebruiker gegeven naam, bedragen,
+koersniveaus, risico en benchmarkzone. Bevestiging schreef setup en strategie
+op hetzelfde markt-ID; eigenaarwisseling werd geweigerd en replay was
+idempotent. Een afzonderlijke lokale Paper-workerproef gaf bij een verse
+exact-paar-kruising één virtuele koop, bij geen kruising geen order, en bij
+ontbrekende macrodata geen order. De echte Luna/Responses-selectorevaluaties
+slaagden `20/20` ontwikkeling en `109/109` regressie, zonder provider-,
+schema-, timeout-, parse- of validatiefouten. CI volgt; deze kandidaat staat
+nog niet live en heeft nog geen
+onafhankelijk eindverdict.
+
 ## Handmatige Paper-trade en Reflectie-weergave (3 november 2026)
 
 Phase: `LIVE_CANDIDATE_AWAITING_QA` na [PR #799](https://github.com/gvangalen/antigravity-trading-tool/pull/799). De handmatige tradekaart staat in de hoofdinhoud

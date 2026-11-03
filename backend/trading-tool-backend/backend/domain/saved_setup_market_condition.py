@@ -58,6 +58,10 @@ def explicit_benchmark_bounds(text: str) -> dict[str, int]:
         )
         condition = re.sub(r"^(?:een|a|an|eine)\s+", "", condition)
         condition = re.sub(
+            r"^(?:voor\s+)?(?:de\s+)?totale\s+benchmark(?:score)?\s+(?:is|van|tussen)\s+",
+            "", condition,
+        )
+        condition = re.sub(
             r"^(?:de\s+)?(?:totale\s+)?(?:benchmarkscore|totaalscore)\s*", "", condition,
         )
         condition = re.sub(r"^(?:van|tussen|between|from)\s+", "", condition)

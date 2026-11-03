@@ -102,6 +102,14 @@ def remember_unsaved_design(context: dict[str, Any]) -> bool:
 def requests_execution_capability_question(message: str, context: dict[str, Any] | None = None) -> bool:
     """Route explicit feasibility questions through the executable contracts."""
     text = str(message or "")
+    # A guided plan answer can contain words such as "uitvoering" and an
+    # active design focus. Those words do not turn supplied fields into a
+    # capability question, even when the answer spans several sentences.
+    if "?" not in text and not re.match(
+        r"^\s*(?:kan|kunnen|kann|können|can|could|is\s+het\s+mogelijk)\b",
+        text, re.I,
+    ):
+        return False
     focus = (context or {}).get("plan_design_focus")
     active_design = isinstance(focus, dict) and focus.get("kind") in {
         "new_separate_setup", "unsaved_capability_design",

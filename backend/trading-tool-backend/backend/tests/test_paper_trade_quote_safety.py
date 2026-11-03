@@ -76,7 +76,11 @@ class _Cursor:
         return None
 
     def fetchone(self):
-        return ("trade", self.strategy, self.plan, None, None, 1)
+        strategy_data = {key: value for key, value in self.strategy.items()
+                         if key not in {"entry", "stop_loss", "targets"}}
+        return ("trade", strategy_data, self.plan, None, None, 1,
+                self.strategy["entry"], self.strategy["stop_loss"],
+                self.strategy["targets"])
 
 
 class _Connection:

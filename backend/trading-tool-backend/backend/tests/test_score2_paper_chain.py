@@ -79,6 +79,25 @@ def test_setup_match_gate_never_blocks_a_sell_exit():
     ) == brain
 
 
+def test_confirmed_trade_band_does_not_get_a_second_hidden_market_threshold():
+    decision = bot_brain._build_action_decision(
+        setup_type="trade",
+        snapshot={"confidence_score": 20},
+        levels={"entry": 100, "stop_loss": 90, "targets": [120]},
+        normalized_scores={"market_score": 40, "macro_score": 80, "technical_score": 75},
+        rules=bot_brain.DEFAULT_ACTION_RULES,
+        live_price=100.5,
+        final_amount=10,
+        confirmed_trade_match=True,
+        saved_trade_match_status="matches",
+    )
+    assert decision["action"] == "buy"
+    assert paper_worker._enforce_setup_match_on_buy(
+        decision, {"status": "matches", "conditions": {"benchmark": {"minimum": 61, "maximum": 75}}},
+        {"setup_type": "trade", "execution_mode": "fixed"},
+    )["action"] == "buy"
+
+
 class _SourceStore:
     def __init__(self, *, missing=None, stale=None):
         now = datetime.now(timezone.utc)

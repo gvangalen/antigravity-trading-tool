@@ -72,6 +72,11 @@ def test_model_capabilities_match_confirmed_dca_amount_contract():
 
 
 def test_generic_capability_questions_include_ma_and_trendline_designs():
+    assert not requests_execution_capability_question(
+        "Noem het SMA50 Doorloop QA. Vaste uitvoering, gebalanceerd risico, "
+        "entry €68000, stop-loss €60000 en target €80000.",
+        {"plan_design_focus": {"kind": "new_separate_setup"}},
+    )
     assert requests_execution_capability_question(
         "Kan Smart DCA met een percentage aan de hand van de 200ma?"
     )

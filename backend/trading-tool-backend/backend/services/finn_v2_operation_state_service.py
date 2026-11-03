@@ -289,10 +289,49 @@ class FinnV2OperationStateService:
                 } or not model_tool_inputs
                 else {}
             )
+        if contract.operation_id == "create_setup" and prior_plan_scope == "setup_and_strategy":
+            if not self._is_explicit_correction(message) and explicit.get("setup_type") == "dca":
+                # "Check the daily candle" describes the signal cadence of
+                # this Trade draft, not a request to turn it into daily DCA.
+                explicit.pop("setup_type", None)
+                explicit.pop("dca_frequency", None)
+            # The active Trade-plan draft already carries its typed entry
+            # signal. Later answers can supply several strategy fields at once
+            # without repeating the signal in every message.
+            for key, value in self._strategy_trade_inputs(message).items():
+                if key in accepted_inputs and key not in collected and not self._is_missing(value):
+                    explicit.setdefault(key, value)
+            if "execution_mode" in accepted_inputs and "execution_mode" not in collected:
+                if re.search(r"\b(?:vast(?:e)?|fixed)\s+(?:bedrag|uitvoering|aankoop|amount)\b", message, re.I):
+                    explicit.setdefault("execution_mode", "fixed")
         if contract.operation_id == "create_setup":
             pair = requested_catalog_trading_pair(message)
+            if pair is None and existing is not None and self._is_explicit_correction(message):
+                # "ETH/EUR in plaats van BTC/EUR" names two markets, but the
+                # first is the replacement. The general pair resolver must
+                # stay conservative for ordinary multi-market questions.
+                replacement_clause = re.split(
+                    r"\b(?:in plaats van|instead of|anstatt)\b", message,
+                    maxsplit=1, flags=re.I,
+                )[0]
+                if replacement_clause != message:
+                    pair = requested_catalog_trading_pair(replacement_clause)
             if pair is not None:
                 explicit["symbol"], explicit["quote_currency"] = pair
+            elif existing is not None and self._is_explicit_correction(message):
+                replacement = re.search(
+                    r"\b(?:bedoel|naar|gebruik|use|mean|statt)\s+"
+                    r"(?:een\s+|de\s+|het\s+)?([A-Z]{2,10})\b",
+                    message, re.I,
+                )
+                if replacement:
+                    symbol = resolve_catalog_symbol_mention(replacement.group(1))
+                    if symbol is not None:
+                        explicit["symbol"] = symbol
+            if existing is not None and self._is_explicit_correction(message):
+                corrected_type = FinnV2SetupInputCatalog.setup_type_from_text(message)
+                if corrected_type and corrected_type != collected.get("setup_type"):
+                    explicit["setup_type"] = corrected_type
             # A benchmark number is a score condition, never a currency amount.
             # Use only bounds stated by the user; a tool candidate cannot
             # invent or reinterpret either end of this eligibility range.
@@ -359,6 +398,9 @@ class FinnV2OperationStateService:
             explicit.pop("timeframe", None)
             if explicit_chart_timeframe:
                 explicit["timeframe"] = explicit_chart_timeframe
+            elif explicit.get("entry_signal") is not None:
+                # The typed rule itself names the closed-candle interval.
+                explicit["timeframe"] = explicit["entry_signal"]["timeframe"]
         if (
             contract.operation_id == "create_setup"
             and collected.get("setup_type") == "dca"
@@ -406,6 +448,14 @@ class FinnV2OperationStateService:
             if contract.operation_id == "create_setup" and key == "quote_currency" and key not in explicit:
                 # A quote cannot be inferred from a workspace default, an
                 # amount written in euros, or the model's own suggestion.
+                continue
+            if contract.operation_id == "create_setup" and key in {
+                "entry_signal", "execution_mode", "base_amount", "entry",
+                "stop_loss", "targets", "risk_profile", "price_currency",
+            } and key not in explicit:
+                # A model candidate cannot supply execution terms for a
+                # confirmable Trade plan. These must come from the user's
+                # text or the owner-bound active draft.
                 continue
             if contract.operation_id == "update_indicator_configuration" and key == "quote_currency" and key not in explicit:
                 # Never let a model choose the market for a financial edit.
@@ -486,7 +536,52 @@ class FinnV2OperationStateService:
         sources = dict(existing.input_sources) if existing is not None else {}
         provenance = dict(existing.input_provenance) if existing is not None else {}
         target_field = "symbol" if contract.operation_id == "create_setup" else "asset"
-        if (contract.operation_id in {"create_setup", "update_indicator_configuration"} and existing is not None
+        asset_changed = bool(
+            contract.operation_id == "create_setup" and existing is not None
+            and explicit.get("symbol") and explicit["symbol"] != collected.get("symbol")
+        )
+        pair_changed = bool(
+            contract.operation_id == "create_setup" and existing is not None
+            and explicit.get("quote_currency") and collected.get("quote_currency")
+            and explicit["quote_currency"] != collected["quote_currency"]
+        )
+        type_changed = bool(
+            contract.operation_id == "create_setup" and existing is not None
+            and explicit.get("setup_type") and collected.get("setup_type")
+            and explicit["setup_type"] != collected["setup_type"]
+        )
+        if asset_changed or pair_changed or type_changed:
+            # An open proposal belongs to its original instrument and plan
+            # type. Never carry financial terms or eligibility from that
+            # instrument into a new confirmable card. Values explicitly
+            # repeated in this turn are added below.
+            invalidated = {
+                "name", "entry_signal", "execution_mode", "base_amount",
+                "entry", "stop_loss", "targets", "risk_profile",
+                "price_currency", "min_benchmark_score", "max_benchmark_score",
+                "dca_amount_mode", "dca_frequency", "dca_day", "dca_month_day",
+                "score_source", "low_threshold", "high_threshold",
+                "low_score_percent", "mid_score_percent", "high_score_percent",
+            }
+            if collected.get("setup_type") == "dca" and not type_changed:
+                # An asset correction in a DCA draft keeps the schedule and
+                # amount the user already chose. Trade entry levels and
+                # signal rules belong to the old instrument and cannot move.
+                invalidated.difference_update({
+                    "execution_mode", "base_amount", "dca_amount_mode",
+                    "dca_frequency", "dca_day", "dca_month_day",
+                    "score_source", "low_threshold", "high_threshold",
+                    "low_score_percent", "mid_score_percent", "high_score_percent",
+                })
+            if asset_changed or type_changed:
+                invalidated.add("quote_currency")
+            if type_changed:
+                invalidated.add("plan_scope")
+            for field in invalidated:
+                collected.pop(field, None)
+                sources.pop(field, None)
+                provenance.pop(field, None)
+        elif (contract.operation_id in {"create_setup", "update_indicator_configuration"} and existing is not None
                 and explicit.get(target_field) and explicit[target_field] != collected.get(target_field)
                 and "quote_currency" not in explicit):
             collected.pop("quote_currency", None)
@@ -520,7 +615,11 @@ class FinnV2OperationStateService:
                 sources[key] = "verified_parent_setup"
                 provenance[key] = {"source": "verified_parent_setup", "state_revision": next_revision}
                 continue
-            if key in accepted_inputs and key not in collected and not self._is_missing(value):
+            if key in accepted_inputs and key not in collected and not self._is_missing(value) and not (
+                contract.operation_id == "create_setup"
+                and (asset_changed or pair_changed or type_changed)
+                and key in invalidated and key not in explicit
+            ):
                 collected[key] = self._canonical_input(key, value)
                 sources[key] = "default"
                 provenance[key] = {"source": "default", "state_revision": next_revision}
@@ -532,6 +631,20 @@ class FinnV2OperationStateService:
                 collected.pop(key, None)
                 sources.pop(key, None)
                 provenance.pop(key, None)
+        if contract.operation_id == "create_setup" and collected.get("entry_signal") is not None:
+            # The requested rule is a strategy field, never setup-only.
+            collected["setup_type"] = "trade"
+            collected["plan_scope"] = "setup_and_strategy"
+            sources["plan_scope"] = "entry_signal_contract"
+            provenance["plan_scope"] = {"source": "entry_signal_contract", "state_revision": next_revision}
+            for key in (
+                "dca_frequency", "dca_day", "dca_month_day", "dca_amount_mode",
+                "score_source", "low_threshold", "high_threshold",
+                "low_score_percent", "mid_score_percent", "high_score_percent",
+            ):
+                collected.pop(key, None)
+                sources.pop(key, None)
+                provenance.pop(key, None)
         if contract.operation_id == "create_setup" and collected.get("plan_scope") == "setup_only":
             # A cancelled proposal may donate prior inputs through derived_inputs.
             # Apply the scope boundary after that merge so future strategy
@@ -540,7 +653,7 @@ class FinnV2OperationStateService:
                 collected.pop(key, None)
                 sources.pop(key, None)
                 provenance.pop(key, None)
-        elif (contract.operation_id == "create_setup" and collected.get("setup_type") == "dca"
+        if (contract.operation_id == "create_setup" and collected.get("setup_type") == "dca"
               and collected.get("dca_amount_mode") == "fixed"):
             for key in ("score_source", "low_threshold", "high_threshold",
                         "low_score_percent", "mid_score_percent", "high_score_percent"):
@@ -1050,6 +1163,27 @@ class FinnV2OperationStateService:
                 timeframe = None
             if timeframe:
                 values["timeframe"] = timeframe
+            if "entry_signal" in accepted_inputs:
+                signal = explicit_entry_signal_from_text(text)
+                if signal is not None:
+                    values["entry_signal"] = signal
+                    values["setup_type"] = "trade"
+                    values["plan_scope"] = "setup_and_strategy"
+                    values.setdefault("timeframe", signal["timeframe"])
+                    for key, value in self._strategy_trade_inputs(text).items():
+                        if key in accepted_inputs:
+                            values[key] = value
+                    if re.search(r"\b(?:fixed|vast(?:e)?)\b", lowered):
+                        values["execution_mode"] = "fixed"
+                    if "base_amount" not in values:
+                        amount = re.search(r"\b(?:koop|buy|kauf\w*)\s*(?:voor\s*)?(?:€|eur)\s*(\d+(?:[.,]\d+)?)", lowered)
+                        if amount:
+                            values["base_amount"] = self._numeric_value(amount.group(1))
+                            if not re.search(r"\b(?:variabel|variable|custom|afhankelijk van (?:de )?score)\b", lowered):
+                                values.setdefault("execution_mode", "fixed")
+                    currency = self._explicit_trade_price_currency(text)
+                    if currency and currency != "MIXED":
+                        values["price_currency"] = currency
             # The registry exposes this conditional slot for create_setup, but
             # cadence words are inputs only after the user selected a DCA
             # setup. A market's daily trend must not become a DCA schedule.
