@@ -85,12 +85,13 @@ def test_typed_entry_paper_cases_keep_running_and_report_safe_error_codes(monkey
     monkeypatch.setattr(probe, "_require_run", lambda _namespace: 42)
     seen = []
 
-    def run_case(_namespace, case):
+    def run_case(_namespace, case, execution_attempts):
         seen.append(case)
         if case == "sma_no_cross":
             raise RuntimeError("typed_entry_signal_status_wrong")
         if case == "sma_missing_score":
             raise RuntimeError("private owner 42")
+        execution_attempts.append(case)
         return {"case": case, "result": "PASS"}
 
     monkeypatch.setattr(probe, "_run_case", run_case)
@@ -99,6 +100,7 @@ def test_typed_entry_paper_cases_keep_running_and_report_safe_error_codes(monkey
     assert seen == list(probe.CASES)
     assert result["cases"][1]["error_code"] == "typed_entry_signal_status_wrong"
     assert result["cases"][2]["error_code"] == "RuntimeError"
+    assert result["execution_calls"] == 2
 
 
 def test_trade_review_preflight_reads_only_and_redacts_fixture_data(monkeypatch):

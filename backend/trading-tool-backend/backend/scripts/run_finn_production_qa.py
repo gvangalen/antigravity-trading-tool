@@ -2142,10 +2142,11 @@ def main() -> int:
                 from backend.scripts.probe_protected_typed_entry_paper import run as run_typed_probe
 
                 report["safety"]["read_only_profile"] = False
-                report["safety"]["execution_calls"] = 4
+                report["safety"]["execution_calls"] = None
                 report["protected_profile_attempted"] = True
                 report["qa_status"] = "INCOMPLETE"
                 report["typed_entry_paper"] = run_typed_probe(fixture_namespace or "")
+                report["safety"]["execution_calls"] = report["typed_entry_paper"]["execution_calls"]
                 report["outcome"] = (
                     "passed" if report["typed_entry_paper"]["result"] == "PASS"
                     else "failed"

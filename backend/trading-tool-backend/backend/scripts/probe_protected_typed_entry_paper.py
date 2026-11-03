@@ -265,7 +265,7 @@ def _finalize(namespace: str, owner: int, bot_id: int, market_id: int,
         conn.close()
 
 
-def _run_case(namespace: str, case: str) -> dict:
+def _run_case(namespace: str, case: str, execution_attempts: list[str]) -> dict:
     from backend.celery_task.store_daily_scores_task import build_daily_scores_for_market
     from backend.engine.trading_bot_execution import _assess_saved_entry_signal, run_trading_bot_execution
 
@@ -288,6 +288,7 @@ def _run_case(namespace: str, case: str) -> dict:
         expected = "not_triggered" if case == "sma_no_cross" else "triggered"
         if signal_result.get("status") != expected:
             raise RuntimeError("typed_entry_candle_control_invalid")
+        execution_attempts.append(case)
         result = run_trading_bot_execution(
             owner, report_date=datetime.now(timezone.utc).date(), bot_id=bot_id,
             paper_only=True,
@@ -305,14 +306,16 @@ def _run_case(namespace: str, case: str) -> dict:
 def run(namespace: str) -> dict:
     _require_run(namespace)
     results = []
+    execution_attempts: list[str] = []
     for case in CASES:
         # Continue all four cases, retaining only safe error classes in output.
         try:
-            results.append(_run_case(namespace, case))
+            results.append(_run_case(namespace, case, execution_attempts))
         except Exception as exc:
             known_code = str(exc) if isinstance(exc, (RuntimeError, ValueError)) else ""
             if not known_code.startswith("typed_entry_"):
                 known_code = type(exc).__name__
             results.append({"case": case, "result": "FAIL", "error_code": known_code})
     return {"result": "PASS" if all(item["result"] == "PASS" for item in results) else "FAIL",
-            "cases": results, "case_count": len(results)}
+            "cases": results, "case_count": len(results),
+            "execution_calls": len(execution_attempts)}
