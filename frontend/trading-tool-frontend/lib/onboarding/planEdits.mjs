@@ -54,3 +54,20 @@ export function strategyPatchForOnboarding(saved, draft, isTrade) {
   }
   return patch;
 }
+
+export function resolveSavedOnboardingPlan({ symbol, setups, strategies, fallbackSetup, setupId = 0, strategyId = 0 }) {
+  const requestedSetupId = Number(setupId);
+  const requestedStrategyId = Number(strategyId);
+  const selectedStrategy = requestedStrategyId > 0
+    ? strategies.find((item) => Number(item.id ?? item.strategy_id) === requestedStrategyId)
+    : null;
+  const selectedSetupId = requestedSetupId > 0 ? requestedSetupId : Number(selectedStrategy?.setup_id);
+  const selectedSetup = selectedSetupId > 0
+    ? setups.find((item) => Number(item.id ?? item.setup_id) === selectedSetupId && String(item.symbol).toUpperCase() === symbol)
+    : fallbackSetup;
+  if ((requestedSetupId > 0 && !selectedSetup) ||
+      (requestedStrategyId > 0 && (!selectedStrategy || Number(selectedStrategy.setup_id) !== Number(selectedSetup?.id ?? selectedSetup?.setup_id)))) {
+    return { invalid: true, setup: null, strategy: null };
+  }
+  return { invalid: false, setup: selectedSetup || null, strategy: selectedStrategy || null };
+}

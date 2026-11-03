@@ -12,9 +12,9 @@ import { fetchLastSetup, fetchSetups, saveNewSetup, updateSetup } from "@/lib/ap
 import { fetchTradingMarkets } from "@/lib/api/assets";
 import MarketConditionPicker from "@/components/setup/MarketConditionPicker";
 import { MARKET_CONDITIONS, marketConditionChoiceFromSetup, marketConditionPayload } from "@/lib/setup/scoreConditions.mjs";
-import { createStrategy, fetchLastStrategy, fetchStrategyBySetup, updateStrategy } from "@/lib/api/strategy";
+import { createStrategy, fetchLastStrategy, fetchStrategies, fetchStrategyBySetup, updateStrategy } from "@/lib/api/strategy";
 import { fetchBotConfigs } from "@/lib/api/botApi";
-import { setupPatchForOnboarding, strategyPatchForOnboarding } from "@/lib/onboarding/planEdits.mjs";
+import { resolveSavedOnboardingPlan, setupPatchForOnboarding, strategyPatchForOnboarding } from "@/lib/onboarding/planEdits.mjs";
 import {
   findSavedSetupForAsset,
   getPlanCompletionForAsset,
@@ -148,6 +148,8 @@ export default function OnboardingPlanPage() {
     () => String(searchParams.get("symbol") || status?.active_asset || "BTC").toUpperCase(),
     [searchParams, status?.active_asset],
   );
+  const requestedSetupId = Number(searchParams.get("setup_id"));
+  const requestedStrategyId = Number(searchParams.get("strategy_id"));
 
   const copy = t?.traderProfile?.planOnboardingStep || {};
 
@@ -156,6 +158,7 @@ export default function OnboardingPlanPage() {
   const [savingSetup, setSavingSetup] = useState(false);
   const [savingStrategy, setSavingStrategy] = useState(false);
   const [error, setError] = useState(null);
+  const [selectionUnavailable, setSelectionUnavailable] = useState(false);
 
   const [setup, setSetup] = useState(DEFAULT_SETUP);
   const [conditionChoice, setConditionChoice] = useState("off");
@@ -200,6 +203,7 @@ export default function OnboardingPlanPage() {
       try {
         setLoading(true);
         setError(null);
+        setSelectionUnavailable(false);
         setSavedSetup(null);
         setSavedStrategy(null);
         setSetup(DEFAULT_SETUP);
@@ -211,17 +215,29 @@ export default function OnboardingPlanPage() {
         setEditingStrategy(false);
         setReviewingStrategy(false);
 
-        const [lastSetup, savedSetups, lastStrategy, botConfigs] = await Promise.all([
+        const [lastSetup, savedSetups, lastStrategy, botConfigs, savedStrategies] = await Promise.all([
           fetchLastSetup().catch(() => null),
           fetchSetups(),
           fetchLastStrategy().catch(() => null),
           fetchBotConfigs().catch(() => null),
+          requestedStrategyId > 0 ? fetchStrategies(symbol) : Promise.resolve([]),
         ]);
 
         if (cancelled) return;
         setBots(botConfigs);
 
-        const setupCandidate = findSavedSetupForAsset(symbol, lastSetup, savedSetups);
+        const selected = resolveSavedOnboardingPlan({
+          symbol, setups: savedSetups, strategies: savedStrategies,
+          fallbackSetup: findSavedSetupForAsset(symbol, lastSetup, savedSetups),
+          setupId: requestedSetupId, strategyId: requestedStrategyId,
+        });
+        if (selected.invalid) {
+          setError(copy.planSelectionError || "The selected plan is no longer available. Go back to My Plan and choose it again.");
+          setSelectionUnavailable(true);
+          return;
+        }
+        const setupCandidate = selected.setup;
+        const exactStrategy = selected.strategy;
 
         if (setupCandidate) {
           setConditionChoice(marketConditionChoiceFromSetup(setupCandidate));
@@ -229,9 +245,9 @@ export default function OnboardingPlanPage() {
           setSavedSetup(setupCandidate);
           setSetup(setupDraftFromSaved(setupCandidate, symbol));
 
-          const bySetup = setupId
+          const bySetup = exactStrategy || (setupId
             ? await fetchStrategyBySetup(setupId).catch(() => null)
-            : null;
+            : null);
           if (!cancelled && bySetup) {
             setSavedStrategy({ setup_id: setupId, ...bySetup });
             setStrategy(strategyDraftFromSaved(bySetup, symbol));
@@ -256,7 +272,7 @@ export default function OnboardingPlanPage() {
     return () => {
       cancelled = true;
     };
-  }, [copy.loadError, symbol]);
+  }, [copy.loadError, copy.planSelectionError, requestedSetupId, requestedStrategyId, symbol]);
 
   const { setupDone, strategyDone } = getPlanCompletionForAsset(symbol, savedSetup, savedStrategy);
   const isTrade = String(setup.setupType || "").toLowerCase() === "trade";
@@ -292,6 +308,15 @@ export default function OnboardingPlanPage() {
   const linkedBots = Array.isArray(bots)
     ? bots.filter((bot) => Number(bot.strategy_id ?? bot.strategy?.id) === Number(savedStrategy?.strategy_id ?? savedStrategy?.id))
     : [];
+  const scoreCurvePoints = savedStrategy?.execution_mode === "custom" && Array.isArray(savedStrategy?.decision_curve?.points)
+    ? [...savedStrategy.decision_curve.points].sort((left, right) => Number(left.x) - Number(right.x))
+    : [];
+  const scoreCurveIsStep = savedStrategy?.decision_curve?.interpolation === "step";
+  const scoreCurveTitle = scoreCurveIsStep ? copy.savedScoreCurveLabel : copy.savedLinearCurveLabel;
+  const scoreCurvePointPrefix = scoreCurveIsStep ? copy.fromScore : copy.atScore;
+  const scoreCurveDescription = scoreCurvePoints.map((point) =>
+    `${scoreCurvePointPrefix} ${point.x}: ${Math.round(Number(point.y) * 100)}% · €${(Number(strategy.baseAmount) * Number(point.y)).toFixed(2)}`
+  ).join(" · ");
   const setupReadOnly = setupDone && (!editingSetup || reviewingSetup);
   const strategyReadOnly = strategyDone && (!editingStrategy || reviewingStrategy);
 
@@ -316,7 +341,7 @@ export default function OnboardingPlanPage() {
     try {
       setSavingSetup(true);
       setError(null);
-      const response = await updateSetup(getSetupId(savedSetup), setupPatch);
+      const response = await updateSetup(getSetupId(savedSetup), setupPatch, { silent: true });
       const updated = response?.setup || { ...savedSetup, ...setupPatch };
       setSavedSetup(updated);
       setSetup(setupDraftFromSaved(updated, symbol));
@@ -473,6 +498,17 @@ export default function OnboardingPlanPage() {
   const reviewConditionLabel = conditionChoice === "custom" && (setupScoreTouched || !savedLegacyRanges.length)
     ? `${setup.min_benchmark_score}–${setup.max_benchmark_score}`
     : conditionLabel;
+
+  if (selectionUnavailable && !loading) {
+    return <div className="mx-auto max-w-3xl py-12">
+      <div className="rounded-3xl border border-amber-200 bg-amber-50 p-8 text-slate-900">
+        <p className="font-semibold">{error}</p>
+        <Link href="/setup" className="mt-4 inline-block font-semibold text-blue-700 underline">
+          {copy.editSavedPlan || "Choose a plan in My Plan"}
+        </Link>
+      </div>
+    </div>;
+  }
 
   return (
     <div className="mx-auto max-w-5xl py-8">
@@ -744,7 +780,7 @@ export default function OnboardingPlanPage() {
                     />
                   </Field>
 
-                  <Field label={isTrade ? copy.strategyAmountLabel : copy.strategyDcaAmountLabel}>
+                  <Field label={scoreCurvePoints.length ? copy.strategyBaseAmountLabel : (isTrade ? copy.strategyAmountLabel : copy.strategyDcaAmountLabel)}>
                     <div className="relative">
                       <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-4 flex items-center font-bold text-slate-700">€</span>
                       <input
@@ -759,6 +795,8 @@ export default function OnboardingPlanPage() {
                     </div>
                   </Field>
                 </div>
+
+                {scoreCurvePoints.length ? <p className="mt-3 text-sm text-slate-600">{scoreCurveTitle}: {scoreCurveDescription}{!scoreCurveIsStep ? ` ${copy.linearCurveNote}` : ""}</p> : null}
 
                 {isTrade ? (
                   <div className="mt-4 grid gap-4 md:grid-cols-3">
@@ -825,7 +863,12 @@ export default function OnboardingPlanPage() {
                       <div className="space-y-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
                         <p className="font-bold text-slate-900">{copy.reviewChanges || "Review your changes"}</p>
                         <SummaryRow label={copy.strategyNameLabel || "Name"} value={strategy.name.trim()} />
-                        <SummaryRow label={isTrade ? copy.strategyAmountLabel : copy.strategyDcaAmountLabel} value={`€${strategy.baseAmount}`} />
+                        <SummaryRow label={scoreCurvePoints.length ? copy.strategyBaseAmountLabel || "Base amount (100%)" : (isTrade ? copy.strategyAmountLabel : copy.strategyDcaAmountLabel)} value={`€${strategy.baseAmount}`} />
+                        {scoreCurvePoints.length ? <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800">
+                          <p className="font-bold">{scoreCurveTitle}</p>
+                          <p className="mt-1">{scoreCurveDescription}</p>
+                          {!scoreCurveIsStep ? <p className="mt-1 text-slate-600">{copy.linearCurveNote}</p> : null}
+                        </div> : null}
                         {isTrade ? <>
                           <SummaryRow label={copy.strategyEntryLabel || "Entry"} value={strategy.entry} />
                           <SummaryRow label={copy.strategyTargetsLabel || "Targets"} value={strategy.targets} />
@@ -852,7 +895,7 @@ export default function OnboardingPlanPage() {
                       value={strategy.name.trim() || `${symbol} Strategy`}
                     />
                     <SummaryRow
-                      label={isTrade ? copy.strategyAmountLabel : copy.strategyDcaAmountLabel}
+                      label={scoreCurvePoints.length ? copy.strategyBaseAmountLabel : (isTrade ? copy.strategyAmountLabel : copy.strategyDcaAmountLabel)}
                       value={`€${String(strategy.baseAmount || "100")}`}
                     />
                     <button type="button" onClick={() => { setError(null); setEditingStrategy(true); }} className="text-left text-sm font-semibold text-blue-700 underline-offset-2 hover:underline md:col-span-2">{copy.editSavedStrategy || "Edit this strategy"}</button>

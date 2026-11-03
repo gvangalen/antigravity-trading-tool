@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { setupPatchForOnboarding, strategyPatchForOnboarding } from "../lib/onboarding/planEdits.mjs";
+import { resolveSavedOnboardingPlan, setupPatchForOnboarding, strategyPatchForOnboarding } from "../lib/onboarding/planEdits.mjs";
 
 test("editing a saved weekly DCA plan updates its schedule without changing its pair or identity", () => {
   const saved = {
@@ -41,4 +41,27 @@ test("updating a Smart DCA base amount preserves its curve and setup association
   };
   const patch = strategyPatchForOnboarding(saved, { name: "Smart ETH", baseAmount: "90" }, false);
   assert.deepEqual(patch, { base_amount: 90 });
+});
+
+test("returning from Automation selects the exact strategy among plans for one asset", () => {
+  const setups = [
+    { id: 41, symbol: "BTC", quote_currency: "EUR" },
+    { id: 42, symbol: "BTC", quote_currency: "USDT" },
+  ];
+  const strategies = [
+    { id: 10, setup_id: 41, name: "EUR plan" },
+    { id: 11, setup_id: 42, name: "USDT plan" },
+  ];
+  const chosen = resolveSavedOnboardingPlan({
+    symbol: "BTC", setups, strategies, fallbackSetup: setups[0], setupId: 42, strategyId: 11,
+  });
+  assert.equal(chosen.setup.id, 42);
+  assert.equal(chosen.strategy.id, 11);
+  assert.equal(chosen.invalid, false);
+  assert.equal(resolveSavedOnboardingPlan({
+    symbol: "BTC", setups, strategies, fallbackSetup: setups[0], setupId: 41, strategyId: 11,
+  }).invalid, true);
+  assert.equal(resolveSavedOnboardingPlan({
+    symbol: "BTC", setups, strategies, fallbackSetup: setups[0], setupId: 42, strategyId: 99,
+  }).invalid, true);
 });

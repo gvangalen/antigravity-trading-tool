@@ -60,7 +60,7 @@ function humanizeToken(token) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-export default function OnboardingBanner({ step, phaseStatusOverrides = {} }) {
+export default function OnboardingBanner({ step, phaseStatusOverrides = {}, phaseHrefOverrides = {} }) {
   const { t } = useTranslation();
   const bannerCopy = t?.traderProfile?.onboardingBanner || {};
   const {
@@ -87,6 +87,7 @@ export default function OnboardingBanner({ step, phaseStatusOverrides = {} }) {
   const progressPercent = Math.round((completedPhaseCount / requiredPhases.length) * 100);
   const previousPhase = phaseOrder[phaseOrder.indexOf(stepPhase) - 1];
   const phaseHref = (phase) => {
+    if (phaseHrefOverrides[phase]) return phaseHrefOverrides[phase];
     const symbolQuery = activeAsset ? `&symbol=${encodeURIComponent(activeAsset)}` : "";
     if (phase === "profile") return "/onboarding/profile";
     if (phase === "analysis") return `/onboarding/analysis?onboarding=1&step=analysis${symbolQuery}`;
