@@ -6,21 +6,30 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Onafhankelijke typed-entry Paper-proef (3 november 2026)
 
-Phase: `LOCAL_VALIDATION`. De getypeerde instapregelcode staat live op
+Phase: `LIVE_CANDIDATE_AWAITING_QA`. De getypeerde instapregelcode stond live op
 `b001c527e1b4b6a78e20fa084e398174718e6be9`. Onafhankelijke QA heeft
 daarop de eigenaargebonden authenticatie en release-identiteit bevestigd,
 maar gaf `NOT_ACCEPTED` voor de volledige instapregelketen omdat een
 beschermd profiel voor gecontroleerde SMA-/trendlijn-Paperbeslissingen en een
 passende QA-manifestbinding ontbraken. Er was geen aangetoonde productfout.
 
-Deze kandidaat voegt het afzonderlijke, expliciet geautoriseerde profiel
+Deze kandidaat voegt het afzonderlijke, afgeschermde profiel
 `typed_entry_paper` toe. Het gebruikt per geval een tijdelijke eigenaar,
 markt en Paper-bot en controleert: SMA-kruising geeft één virtuele koop,
 geen kruising geeft geen order, ontbrekende Score 2.0-data geeft geen order,
 en trendlijnkruising geeft één virtuele koop. De lokale test op de disposable
 database slaagde `4/4`; na afloop bleven nul fixture-eigenaren en nul
 fixture-assets over. De volledige backend-suite slaagde `4243 passed, 4
-skipped`. Er is geen Live-order geplaatst. De runner zelf, de natuurlijke
+skipped`. Security en Architectuur beoordeelden dit profiel zonder resterende
+blokkade. De vijf jobs van [PR-CI](https://github.com/gvangalen/antigravity-trading-tool/pull/803/checks)
+en [main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41736752448)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41737198710)
+slaagde; backend-health en frontend-buildinfo gaven HTTP 200 en exact
+`bf5890f5e4327ae1abc48e7a3b6bee4fd2706d83`. Na deze statusbijwerking
+moeten de laatste main-CI, Auto Deploy en beide publieke SHA's opnieuw
+samenvallen voordat onafhankelijke ingelogde QA begint.
+
+Er is geen Live-order geplaatst. De runner zelf, de natuurlijke
 FINN-voorstelbevestiging en de webweergave moeten na deployment nog
 onafhankelijk op dezelfde SHA worden beoordeeld. Voor de eerste beschermde
 run van dit nieuwe fixturetype is volgens `FINN_RELEASE_PROCESS.md`
