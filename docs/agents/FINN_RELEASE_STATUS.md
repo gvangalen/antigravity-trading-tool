@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Paper-exit tijd, bewijs en FINN-teruglezing (3 november 2026)
 
-Phase: `LOCAL_VALIDATION` op branch `codex/paper-exit-evidence`.
+Phase: `LIVE_CANDIDATE_AWAITING_QA` na [PR #797](https://github.com/gvangalen/antigravity-trading-tool/pull/797).
 De bot-API maakt UTC-tijdstippen expliciet, zodat de botgeschiedenis dezelfde
 uitvoeringstijd als meldingen en Reflectie kan tonen. Een toekomstige automatische
 Paper-exit bewaart zowel de besliskoers als de opnieuw gecontroleerde koers en
@@ -21,8 +21,15 @@ Build-evidence op de werkbranch: volledige backend-suite `4218 passed, 4 skipped
 frontend typecheck, i18n-lint, i18n-tests `37/37` en productiebuild geslaagd.
 Lokale worker-actiematrix `16/16`; echte Responses-development `20/20` en
 regressie `109/109`. Onafhankelijke Security- en Architecture-codecontrole
-vonden geen releaseblocker; de owner-joins zijn aangescherpt. CI, deployment,
-publieke SHA en onafhankelijke live QA volgen nog. De eerdere registratie- en
+vonden geen releaseblocker; de owner-joins zijn aangescherpt. Alle vijf
+[PR-CI-jobs](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41642204468)
+en alle vijf [main-CI-jobs](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41642708638)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41643216414)
+slaagde. `origin/main`, publieke backend-health en frontend-buildinfo gaven
+HTTP 200 en exact `127818ebd972bba00b9fe5167f6aa69eb71631ab`.
+Na deze statusbijwerking moeten de laatste main-CI, Auto Deploy en publieke
+SHA opnieuw samenvallen voordat onafhankelijke ingelogde QA begint.
+De eerdere registratie- en
 onboardingkandidaat kreeg van onafhankelijke QA `PASS` op
 `3d5c100b5fee21d90df18fbb7596401b95fbe086`.
 
