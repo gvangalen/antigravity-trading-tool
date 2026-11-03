@@ -3000,7 +3000,8 @@ def _recheck_paper_trade_entry(conn, *, user_id: int, decision_id: int, symbol: 
     with conn.cursor() as cur:
         cur.execute(
             """SELECT s.setup_type, s.data, d.scores_json->'trade_plan',
-                      d.scores_json->'entry_signal', st.market_id, d.bot_id
+                      d.scores_json->'entry_signal', st.market_id, d.bot_id,
+                      s.entry, s.stop_loss, s.targets
                FROM bot_decisions d
                JOIN strategies s ON s.id=d.strategy_id AND s.user_id=d.user_id
                JOIN setups st ON st.id=s.setup_id AND st.user_id=d.user_id
@@ -3055,10 +3056,10 @@ def _recheck_paper_trade_entry(conn, *, user_id: int, decision_id: int, symbol: 
         raise BotSafetyBlock("De koersvaluta van de strategie is gewijzigd. Maak een nieuwe beslissing.")
     try:
         entry = float(levels["entry"])
-        current_entry = float(saved["entry"])
-        current_stop = float(saved["stop_loss"])
+        current_entry = float(row[6])
+        current_stop = float(row[7])
         planned_stop = float(levels["stop_loss"])
-        current_targets = [float(value) for value in saved["targets"]]
+        current_targets = [float(value) for value in _safe_json(row[8], row[8])]
         planned_targets = [float(value) for value in levels["targets"]]
     except (KeyError, TypeError, ValueError, OverflowError) as exc:
         raise BotSafetyBlock("De opgeslagen prijsniveaus zijn onvolledig. Maak een nieuwe beslissing.") from exc

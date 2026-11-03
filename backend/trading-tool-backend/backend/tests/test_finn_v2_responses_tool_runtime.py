@@ -14,6 +14,7 @@ from backend.services.finn_v2_responses_loop import (
 )
 from backend.services.finn_v2_responses_tool_catalog import (
     FinnResponsesToolCatalog,
+    FinnResponsesToolCall,
     FinnResponsesToolError,
     _FORBIDDEN_MODEL_FIELDS,
     _PROPOSAL_OPERATIONS,
@@ -4982,6 +4983,164 @@ def test_target_only_correction_keeps_prior_base_amount_despite_model_price_conf
 ])
 def test_explicit_strategy_draft_request_accepts_domain_modifiers(message):
     assert _explicit_strategy_proposal_request(message)
+
+
+def test_full_sma_strategy_review_request_reaches_owner_bound_proposal():
+    message = (
+        "Maak alleen een voorstel, zonder te bevestigen, voor een NIEUWE aparte "
+        "Paper-tradestrategie bij mijn bestaande BTC/EUR-setup “QA BTC EUR Binnen 26-45 2810”. "
+        "Naam: QA SMA50 Strategy Review 0311. Vast bedrag €10, uitvoering fixed, "
+        "risicoprofiel balanced, koersvaluta EUR, absolute entry €68.000, stop €60.000, "
+        "target €80.000. Extra getypeerde instapregel: alleen als de afgesloten "
+        "1D-slotkoers van BTC/EUR de SMA50 van onder naar boven kruist. "
+        "Laat op de kaart de volledige regel en het exacte paar zien; wijzig niets voordat ik bevestig."
+    )
+    assert _explicit_strategy_proposal_request(message)
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.run_id = "sma-review"
+    front.user_id = 12
+    front.reads = SimpleNamespace(session_factory=None)
+    front.relevance_guard = None
+    front.proposals = SimpleNamespace(
+        registry=FinnV2OperationRegistry(),
+        from_call=Mock(return_value=SimpleNamespace(
+            request_plan=SimpleNamespace(operation_id="create_strategy")
+        )),
+    )
+    front._verified_strategy_parent = AsyncMock(return_value={
+        "setup_id": 91, "symbol": "BTC", "quote_currency": "EUR", "setup_type": "trade",
+    })
+    result = asyncio.run(front.run(
+        message=message, instructions="", conversation_context={}, verified_asset="BTC",
+    ))
+    assert result.proposal_analysis.request_plan.operation_id == "create_strategy"
+    assert front.proposals.from_call.call_args.kwargs["verified_parent_setup"]["setup_id"] == 91
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    selected = FinnResponsesProposalSelection().from_call(
+        call=FinnResponsesToolCall(
+            name="create_or_update_trade_plan_proposal", operation_id="create_strategy",
+            inputs={}, read_tools=(), required_inputs=contract.required_inputs,
+            missing_inputs=(), draft_intent="new",
+        ),
+        message=message, conversation_context={}, verified_asset="BTC",
+        verified_parent_setup={
+            "setup_id": 91, "setup_type": "trade", "symbol": "BTC", "timeframe": "1D",
+        },
+    )
+    state = selected.request_plan.operation_state
+    assert state["missing_required_inputs"] == []
+    assert state["collected_inputs"]["entry_signal"] == {
+        "version": 1, "event": "close_crosses_reference", "direction": "above",
+        "timeframe": "1D", "reference": {"kind": "sma", "period": 50},
+    }
+    assert state["collected_inputs"]["setup_id"] == 91
+    assert state["collected_inputs"]["price_currency"] == "EUR"
+
+
+def test_new_sma_plan_keeps_rule_and_daily_candle_when_model_omits_inputs():
+    message = (
+        "Maak een nieuw BTC/EUR Paper plan: koop €10 alleen wanneer de afgesloten "
+        "dagcandle de SMA over 50 afgesloten dagcandles van onder naar boven kruist."
+    )
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    selected = FinnResponsesProposalSelection().from_call(
+        call=FinnResponsesToolCall(
+            name="create_or_update_trade_plan_proposal", operation_id="create_setup",
+            inputs={}, read_tools=(), required_inputs=contract.required_inputs,
+            missing_inputs=(), draft_intent="new",
+        ),
+        message=message, conversation_context={}, verified_asset="BTC",
+    )
+    state = selected.request_plan.operation_state
+    assert state["collected_inputs"]["quote_currency"] == "EUR"
+    assert state["collected_inputs"]["timeframe"] == "1D"
+    assert state["collected_inputs"]["base_amount"] == 10
+    assert state["collected_inputs"]["plan_scope"] == "setup_and_strategy"
+    assert state["collected_inputs"]["entry_signal"]["reference"] == {"kind": "sma", "period": 50}
+    assert state["collected_inputs"]["execution_mode"] == "fixed"
+    assert set(state["missing_required_inputs"]) == {
+        "name", "entry", "stop_loss", "targets", "risk_profile",
+        "min_benchmark_score", "max_benchmark_score",
+    }
+
+
+def test_complete_new_sma_plan_is_ready_for_one_confirmation():
+    message = (
+        "Maak een nieuw BTC/EUR Trade-plan met naam SMA50 Testplan. "
+        "Koop €10 met vaste uitvoering, gebalanceerd risico, entry €68000, "
+        "stop-loss €60000 en target €80000. Koop alleen wanneer de afgesloten "
+        "dagkoers de SMA50 van onder naar boven kruist. Mijn scorevoorwaarde "
+        "voor de totale benchmark is 61–75. Toon eerst het voorstel."
+    )
+    assert _explicit_create_operation_request(message) == "create_setup"
+    assert _explicit_create_operation_request(
+        "Koop nu BTC/EUR voor €10 zonder voorstel."
+    ) is None
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    selected = FinnResponsesProposalSelection().from_call(
+        call=FinnResponsesToolCall(
+            name="create_or_update_trade_plan_proposal", operation_id="create_setup",
+            inputs={}, read_tools=(), required_inputs=contract.required_inputs,
+            missing_inputs=(), draft_intent="new",
+        ),
+        message=message, conversation_context={}, verified_asset="BTC",
+    )
+    state = selected.request_plan.operation_state
+    assert state["missing_required_inputs"] == []
+    fields = state["collected_inputs"]
+    assert fields["symbol"] == "BTC" and fields["quote_currency"] == "EUR"
+    assert fields["timeframe"] == "1D" and fields["plan_scope"] == "setup_and_strategy"
+    assert fields["entry_signal"]["reference"] == {"kind": "sma", "period": 50}
+    assert fields["base_amount"] == 10 and fields["execution_mode"] == "fixed"
+    assert fields["entry"] == 68000 and fields["stop_loss"] == 60000
+    assert fields["targets"] == [80000]
+
+
+def test_open_sma_plan_keeps_signal_when_followup_supplies_all_missing_trade_fields():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    call = FinnResponsesToolCall(
+        name="create_or_update_trade_plan_proposal", operation_id="create_setup",
+        inputs={}, read_tools=(), required_inputs=contract.required_inputs,
+        missing_inputs=(), draft_intent="new",
+    )
+    first = FinnResponsesProposalSelection().from_call(
+        call=call,
+        message="Maak een BTC/EUR plan: koop €10 wanneer de afgesloten dagkoers de SMA50 van onder naar boven kruist.",
+        conversation_context={}, verified_asset="BTC",
+    )
+    state = first.request_plan.operation_state
+    second = FinnResponsesProposalSelection().from_call(
+        call=call,
+        message="Noem dit SMA50 Gesprek. Gebruik een vast bedrag van €10, gebalanceerd risico, entry €68000, stop-loss €60000 en target €80000. Mijn scorevoorwaarde voor de totale benchmark is 61–75.",
+        conversation_context={"active_guided_operation": state}, verified_asset="BTC",
+    )
+    resolved = second.request_plan.operation_state
+    assert resolved["missing_required_inputs"] == []
+    assert resolved["collected_inputs"]["entry_signal"] == state["collected_inputs"]["entry_signal"]
+    assert resolved["collected_inputs"]["entry"] == 68000
+    assert resolved["collected_inputs"]["targets"] == [80000]
+
+
+def test_open_sma_plan_binds_multi_field_answer_to_existing_draft():
+    registry = FinnV2OperationRegistry()
+    contract = registry.require_supported("create_setup")
+    collected = {
+        "symbol": "BTC", "setup_type": "trade", "plan_scope": "setup_and_strategy",
+        "entry_signal": {"kind": "closed_candle_cross", "reference": {"kind": "sma", "period": 50}},
+    }
+    answer = "Vast bedrag €10, gebalanceerd risico, entry €68000, stop-loss €60000 en target €80000."
+    assert FinnResponsesFrontDoor.binds_guided_slot(
+        message=answer, contract=contract, registry=registry,
+        requested_slot="execution_mode", collected_inputs=collected,
+    )
+    assert not FinnResponsesFrontDoor.binds_guided_slot(
+        message="Vast bedrag €10 voor ETH, entry €68000", contract=contract,
+        registry=registry, requested_slot="execution_mode", collected_inputs=collected,
+    )
+    assert not FinnResponsesFrontDoor.binds_guided_slot(
+        message="Waarom zou ik de stop-loss veranderen?", contract=contract,
+        registry=registry, requested_slot="execution_mode", collected_inputs=collected,
+    )
 
 
 @pytest.mark.parametrize("message", [

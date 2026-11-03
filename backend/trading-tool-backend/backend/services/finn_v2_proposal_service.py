@@ -210,6 +210,13 @@ class FinnV2ProposalService:
                 validate_dca_setup_only(setup_fields)
             else:
                 split_confirmed_dca_plan(setup_fields)
+        if operation == "create_setup" and (change.setup_fields or {}).get("entry_signal") is not None:
+            from backend.domain.finn_trade_plan_contract import split_confirmed_trade_plan
+            from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
+
+            setup_fields, _ = split_confirmed_trade_plan(dict(change.setup_fields))
+            if DEFAULT_ASSET_CATALOG.get(str(setup_fields.get("symbol") or "").upper(), {}).get("asset_class") != "crypto":
+                raise ValueError("entry_signal_requires_supported_spot_market")
         if operation == "create_strategy":
             strategy_fields = dict(change.strategy_fields or {})
             if strategy_fields.get("entry_signal") is not None:

@@ -61,12 +61,12 @@ def test_paper_execution_rejects_changed_or_replayed_signal(monkeypatch):
         "entry": 100, "stop_loss": 90, "targets": [110],
     }}
     monkeypatch.setattr(execution, "_assess_saved_entry_signal", lambda *_: evidence)
-    rows = [("trade", saved, plan, evidence, 7, 9), (1,)]
+    rows = [("trade", saved, plan, evidence, 7, 9, 100, 90, [110]), (1,)]
     with pytest.raises(execution.BotSafetyBlock, match="al uitgevoerd"):
         execution._recheck_paper_trade_entry(
             Connection(rows), user_id=1, decision_id=10, symbol="BTC", market_id=7,
         )
-    rows = [("trade", saved, plan, {**evidence, "signal_key": "old"}, 7, 9)]
+    rows = [("trade", saved, plan, {**evidence, "signal_key": "old"}, 7, 9, 100, 90, [110])]
     with pytest.raises(execution.BotSafetyBlock, match="niet meer"):
         execution._recheck_paper_trade_entry(
             Connection(rows), user_id=1, decision_id=10, symbol="BTC", market_id=7,
@@ -77,8 +77,7 @@ def test_paper_execution_accepts_same_closed_candle_evidence_and_fresh_pair_pric
     evidence = {"status": "triggered", "rule": RULE, "market_id": 7,
                 "signal_key": "verified-candle-values"}
     saved = {"entry_signal": RULE, "price_currency_confirmed": True,
-             "price_currency": "EUR", "entry": 100, "stop_loss": 90,
-             "targets": [110]}
+             "price_currency": "EUR"}
     plan = {"source_price_currency": "EUR", "source_levels": {
         "entry": 100, "stop_loss": 90, "targets": [110],
     }}
@@ -86,7 +85,7 @@ def test_paper_execution_accepts_same_closed_candle_evidence_and_fresh_pair_pric
     monkeypatch.setattr(execution, "_get_trade_quote_fx_context", lambda *_args, **_kwargs: {
         "market_price_eur": 100.5, "quote_currency": "EUR",
     })
-    rows = [("trade", saved, plan, evidence, 7, 9), None]
+    rows = [("trade", saved, plan, evidence, 7, 9, 100, 90, [110]), None]
     assert execution._recheck_paper_trade_entry(
         Connection(rows), user_id=1, decision_id=10, symbol="BTC", market_id=7,
     ) == 100.5

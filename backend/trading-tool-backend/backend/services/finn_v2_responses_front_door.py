@@ -17,6 +17,7 @@ from backend.services.asset_catalog_service import (
     unsupported_catalog_pair_mention,
 )
 from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
+from backend.domain.finn_v2_setup_input_catalog import FinnV2SetupInputCatalog
 from backend.schemas.finn_v2_orchestrator_schema import RequestAnalysisResult
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 from backend.services.finn_v2_responses_loop import (
@@ -178,7 +179,11 @@ def _explicit_create_operation_request(message: str) -> str | None:
     # A later sentence may describe a hypothetical future strategy and make
     # the discourse label "evaluation". The leading imperative still asks for
     # a setup draft; the typed operation classifier resolves its object.
-    if facts.action_polarity != "create":
+    # A plan request can contain an imperative buy *rule* ("Koop €10 alleen
+    # wanneer ..."). The coarse polarity classifier may call that execution,
+    # while the leading imperative still targets a new plan draft. Resolve the
+    # object from the request instead of letting the embedded rule veto it.
+    if facts.action_polarity not in {"create", "execute"}:
         return None
     return FinnV2OperationClassificationService._explicit_guided_create_operation(
         message=message, facts=facts,
@@ -257,6 +262,20 @@ def _explicit_strategy_proposal_request(message: str) -> bool:
     ):
         return False
     if _independent_strategy_concept_request(text):
+        return True
+    # A user may ask for a proposal first and name the new strategy only
+    # after its parent setup. This is still an explicit create request, not a
+    # question about an existing strategy or permission to execute a trade.
+    if re.match(
+        r"^\s*(?:maak|cre(?:ate|eer)|erstelle)\s+"
+        r"(?:(?:alleen|eerst|only|first|nur|zuerst)\s+)?"
+        r"(?:een|a|an|einen?)\s+(?:voorstel|proposal|concept|draft|entwurf)\b",
+        text, re.I,
+    ) and re.search(
+        r"\b(?:nieuwe|nieuw|new|neue[nrms]?|zweite|tweede|second)\b"
+        r"[^.!?\n]{0,70}\b(?:paper[- ]?)?(?:trade[- ]?)?(?:strategie|strategy)\b",
+        text, re.I,
+    ):
         return True
     if re.match(r"^\s*(?:ik\s+wil|i\s+want|ich\s+(?:will|möchte))\b", text, re.I):
         return bool(re.search(
@@ -813,6 +832,37 @@ class FinnResponsesFrontDoor:
         ):
             return False
         slot_value = states._requested_slot_value(field=requested_slot, text=message, contract=contract)
+        active_trade_plan = (
+            contract.operation_id == "create_setup"
+            and str((collected_inputs or {}).get("plan_scope") or "") == "setup_and_strategy"
+            and str((collected_inputs or {}).get("setup_type") or "").casefold() == "trade"
+            and bool((collected_inputs or {}).get("entry_signal"))
+        )
+        separate_action = re.search(
+            r"(?:^|[.;!?]\s*)\s*(?:maak|create|erstelle|verwijder|delete|lösche|"
+            r"start|activeer|activate)\s+"
+            r"(?:(?:(?:ook|een|de|het|mijn|the|a|an|my|neue?|nieuw(?:e)?|andere)\s+){0,4})"
+            r"(?:setup|strategie|strategy|bot|indicator)\b",
+            message, re.I,
+        )
+        if active_trade_plan:
+            draft_asset = str((collected_inputs or {}).get("symbol") or "").upper()
+            mentioned_assets = mentioned_catalog_symbols(message)
+            if mentioned_assets and mentioned_assets != {draft_asset}:
+                return False
+            # A follow-up can fill several missing plan fields at once. The
+            # general setup extractor intentionally does not parse strategy
+            # fields unless the signal is repeated, so bind this answer to the
+            # owner-bound draft before asking the model to select a new intent.
+            supplied = states._strategy_trade_inputs(message)
+            chart_timeframe = FinnV2SetupInputCatalog.explicit_chart_timeframe_from_text(message)
+            if not separate_action and chart_timeframe is not None:
+                return True
+            if not separate_action and (supplied or re.search(
+                r"\b(?:vast(?:e)?|fixed)\s+(?:bedrag|uitvoering|aankoop|amount)\b",
+                message, re.I,
+            )):
+                return True
         if slot_value is None:
             # The user may fill another DCA field before the currently asked
             # slot. Keep a short, unambiguous answer in this owner-bound draft;
@@ -1350,7 +1400,7 @@ class FinnResponsesFrontDoor:
                 ),
                 selected, previous_response, locale=locale,
             )
-        if request_facts.action_polarity == "execute" and not imperative_operation:
+        if request_facts.action_polarity == "execute" and not imperative_operation and not explicit_create_request:
             # An execution request without a supported action contract must
             # never be converted into an unrelated proposal by tool selection.
             language = locale.split("-")[0].lower()
