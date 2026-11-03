@@ -170,6 +170,8 @@ async def register_user(
         user = await service.register_user(body)
         sys_logger.log_info(f"User registered: {body.email}", source="auth", endpoint="/auth/register")
         return user
+    except HTTPException:
+        raise
     except ValueError as e:
         sys_logger.log_warning(f"Registration failed: {str(e)}", source="auth", endpoint="/auth/register", metadata={"email": body.email})
         raise _safe_auth_error("Registratie mislukt.", 400)

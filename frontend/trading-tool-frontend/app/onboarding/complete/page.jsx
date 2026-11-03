@@ -6,12 +6,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
+import { onboardingCompletionDescription } from "@/lib/onboardingCompletionCopy";
 
 export default function OnboardingCompletePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { t } = useTranslation();
-  const { activeAsset, finish, saving, error } = useOnboarding();
+  const { activeAsset, finish, saving, error, status } = useOnboarding();
 
   useEffect(() => {
     trackAssistantEvent({
@@ -48,7 +49,12 @@ export default function OnboardingCompletePage() {
       </h1>
 
       <p className="mx-auto mb-10 max-w-xl text-lg leading-relaxed text-[var(--text-light)]">
-        {t?.traderProfile?.onboardingComplete?.description ||
+        {onboardingCompletionDescription({
+          completeDescription: t?.traderProfile?.onboardingComplete?.description,
+          completeDescriptionWithStrategy: t?.traderProfile?.onboardingComplete?.descriptionWithStrategy,
+          completeDescriptionWithBot: t?.traderProfile?.onboardingComplete?.descriptionWithBot,
+          completeDescriptionWithStrategyAndBot: t?.traderProfile?.onboardingComplete?.descriptionWithStrategyAndBot,
+        }, status) ||
           "Je profiel, analyse en eerste setup zijn opgeslagen. Je kunt later een strategie en bot toevoegen."}
       </p>
 
