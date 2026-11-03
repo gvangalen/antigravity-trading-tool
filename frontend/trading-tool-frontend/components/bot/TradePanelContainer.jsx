@@ -392,6 +392,7 @@ export default function TradePanelContainer({
       <TradePanel
         price={price}
         availableQuote={availableQuote}
+        paperCashConfigured={Boolean(portfolio?.stats?.paper_cash_configured || Number(bot?.paper_initial_cash_eur || 0) > 0)}
         balanceBase={balanceBase}
         quoteSymbol={bot?.is_live ? (bot?.base_currency || "EUR") : "EUR"}
         baseSymbol={tradeSymbol}

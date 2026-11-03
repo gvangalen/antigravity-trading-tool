@@ -39,6 +39,7 @@ export default function TradePanel({
   price = 66744,
   balanceBase = 0,
   availableQuote = 0,
+  paperCashConfigured = true,
   quoteSymbol = "EUR",
   baseSymbol = "BTC",
   strategy = {},
@@ -191,7 +192,9 @@ export default function TradePanel({
       return { ok: false, reason: disabledReason || copy.pausedBotTradingBlocked };
 
     if (!hasBalance)
-      return { ok: false, reason: copy.validationNoBalance };
+      return { ok: false, reason: paperMarketOnly && side === "buy" && !paperCashConfigured
+        ? copy.paperCashRequired
+        : copy.validationNoBalance };
 
     const p = num(effectivePrice, null);
     const q = num(qtyBase, null);
@@ -219,9 +222,13 @@ export default function TradePanel({
     orderValueQuote,
     balanceBase,
     side,
+    paperMarketOnly,
+    paperCashConfigured,
     disabled,
     disabledReason,
     copy.pausedBotTradingBlocked,
+    copy.paperCashRequired,
+    copy.validationNoBalance,
   ]);
 
   const canSubmit = validation.ok && !loading && !disabled;
@@ -433,8 +440,10 @@ export default function TradePanel({
         </div>
 
         {!hasBalance && (
-          <div className="flex items-center gap-2 p-3 bg-rose-50 text-rose-600 rounded-xl border border-rose-100 text-[10px] font-black uppercase tracking-widest">
-            <XCircle size={14}/> {copy.insufficientAsset.replace("{asset}", side === "buy" ? quoteSymbol : baseSymbol)}
+          <div className="flex items-start gap-2 rounded-xl border border-rose-100 bg-rose-50 p-3 text-sm font-medium text-rose-700">
+            <XCircle size={14}/> {paperMarketOnly && side === "buy" && !paperCashConfigured
+              ? copy.paperCashRequired
+              : copy.insufficientAsset.replace("{asset}", side === "buy" ? quoteSymbol : baseSymbol)}
           </div>
         )}
       </div>

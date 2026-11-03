@@ -3349,6 +3349,7 @@
       "sellSuccess": "Verkoop",
       "orderFailed": "Order mislukt",
       "validationNoBalance": "Geen beschikbaar saldo",
+      "paperCashRequired": "Stel eerst virtueel Paper-kassaldo in bij het botoverzicht. De botlimiet is geen kassaldo.",
       "validationInvalidPrice": "Geen geldige prijs",
       "validationZeroAmount": "Aantal is 0",
       "validationUnknownOrderValue": "Orderwaarde onbekend",
