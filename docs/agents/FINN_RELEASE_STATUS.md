@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Opgeslagen onboardingplan aanpassen (3 november 2026)
 
-Phase: `LOCAL_VALIDATION`. De gebruiker kan in de onboarding naar eerdere
+Phase: `LIVE_PENDING_QA`. De gebruiker kan in de onboarding naar eerdere
 stappen teruggaan. Op de planstap kan een eerder opgeslagen DCA-setup of
 gekoppelde strategie nu expliciet worden teruggelezen, aangepast en opnieuw
 opgeslagen. De setup- en strategie-ID blijven gelijk; er wordt geen nieuw plan
@@ -23,8 +23,13 @@ i18n-tests `36/36`, commandtests `34/34`, voorsteltests `8/8`, setuptests
 `20/20`, `audit:high` zonder hoge kwetsbaarheden. Onafhankelijke gerichte
 QA-codeherkeuring: `PASS`, zonder live browserclaim. Geen backend-, FINN-
 actiecontract- of modelroutewijziging; worker-actiematrix en Responses-proeven
-zijn daarom niet van toepassing. PR-CI, Auto Deploy, publieke SHA-pariteit en
-ingelogde productie-QA volgen.
+zijn daarom niet van toepassing. [PR #791](https://github.com/gvangalen/antigravity-trading-tool/pull/791)
+had vijf geslaagde CI-jobs. [Main-CI 41590971172](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41590971172)
+had eveneens vijf geslaagde jobs. [Auto Deploy 41591307016](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41591307016)
+slaagde voor `3083d42445320c49e274f94019b6e461697f49ad`. Publieke
+`/api/health` en `/build-info.json` gaven HTTP 200 en exact die SHA.
+Ingelogde productie-QA volgt. De SHA van deze statusbijwerking zelf moet eerst
+door main-CI en Auto Deploy voordat QA de definitieve release kan testen.
 
 ## Begeleide onboarding zonder verplichte strategie of bot (2 november 2026)
 
