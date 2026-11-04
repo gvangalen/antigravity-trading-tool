@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Leesbare Paper-beslissingen in de FINN-feed (4 november 2026)
 
-Phase: `LOCAL_VALIDATION`. Kandidaat: `codex/finn-readable-coach-feed`,
+Phase: `LIVE_CANDIDATE_AWAITING_QA`. Kandidaat: `codex/finn-readable-coach-feed`,
 [PR #823](https://github.com/gvangalen/antigravity-trading-tool/pull/823).
 Een Paper-botmelding gebruikt nu de eigenaargebonden opgeslagen beslissing:
 koop/verkoop, gepland/uitgevoerd/overgeslagen/mislukt, bedrag en redenen.
@@ -26,7 +26,14 @@ beperkte feitcontrole verworpen. Echte selectorproeven: development `20/20`
 en regression `109/109`, telkens zonder provider-, schema-, timeout-, parse-
 of validatiefout. FINN-actiecontracten zijn niet gewijzigd, dus de
 worker-actiematrix is voor deze tekst- en feedwijziging niet van toepassing.
-CI, deploymentidentiteit en onafhankelijk live QA-verdict staan nog open.
+[PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41877660341)
+en [main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41881377072)
+slaagden alle vijf checks. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41882201191)
+slaagde. Git-main, publieke `/api/health` en `/build-info.json` gaven
+alle drie `44b5bbd07a67c514f81ca472585376ad80affab6`, met HTTP 200
+voor beide routes. Deze statuswijziging maakt zelf een nieuwe commit;
+vóór de QA-handoff moeten de laatste main-CI, Auto Deploy en publieke SHA's
+opnieuw samenvallen. Het onafhankelijke ingelogde feedverdict staat nog open.
 
 ## Getypeerde strategie-opslag en teruglezing in beschermde QA (4 november 2026)
 
