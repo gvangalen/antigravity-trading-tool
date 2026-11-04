@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Herkeuring volledige getypeerde instapflow (4 november 2026)
 
-Phase: `LOCAL_VALIDATION`. Kandidaatbranch `codex/typed-entry-review-runtime`.
+Phase: `LIVE_CANDIDATE_AWAITING_QA`. De productwijzigingen staan op
+[PR #809](https://github.com/gvangalen/antigravity-trading-tool/pull/809).
 De onafhankelijke live QA van de vorige kandidaat bleef `NOT_ACCEPTED` omdat
 een volledig ingevulde SMA34-aanvraag een bevestigbare kaart zonder de
 strategievelden toonde. Deze batch bindt de kaart aan het eigenaargebonden,
@@ -31,6 +32,14 @@ high-severity audit slaagden. De echte Luna/Responses-evaluaties slaagden
 `20/20` development en `109/109` regression, met nul provider-, schema-,
 timeout-, parse- of validatiefouten. De onafhankelijke ingelogde web- en
 beschermde Paper-herkeuring moet nog op de definitieve live SHA gebeuren.
+De [PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41775892241)
+en [main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41776224525)
+slaagden elk met vijf jobs. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41776548052)
+slaagde; publieke backend-health en frontend-buildinfo gaven HTTP 200 en
+beide `e938b612a10ccefd2c59558e1558c7aff2885ab2`. Deze statusbijwerking
+maakt zelf een nieuwe commit; voor de QA-handoff moeten de laatste main-CI,
+Auto Deploy en beide publieke SHA's opnieuw samenvallen. Build heeft geen
+Live-order geplaatst en geen beschermde QA-fixture gebruikt.
 
 ## Volledige getypeerde instapregelkaart (4 november 2026)
 
