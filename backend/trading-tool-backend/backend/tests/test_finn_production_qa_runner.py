@@ -144,6 +144,34 @@ def test_typed_entry_paper_seed_reports_only_static_datatype_stage(monkeypatch):
     assert conn.rolled_back and conn.closed
 
 
+@pytest.mark.parametrize(
+    ("database_type", "expected_sql", "expected_value"),
+    [
+        ("_text", "ARRAY[%s]::text[]", "120"),
+        ("_varchar", "ARRAY[%s]::varchar[]", "120"),
+        ("_numeric", "ARRAY[%s]::numeric[]", 120),
+    ],
+)
+def test_typed_entry_paper_strategy_target_uses_database_array_type(
+        database_type, expected_sql, expected_value):
+    probe_path = (REPO_ROOT / "backend" / "trading-tool-backend" / "backend" /
+                  "scripts" / "probe_protected_typed_entry_paper.py")
+    spec = importlib.util.spec_from_file_location("protected_typed_entry_targets", probe_path)
+    probe = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(probe)
+
+    class Cursor:
+        def execute(self, statement):
+            assert "information_schema.columns" in statement
+            assert "column_name = 'targets'" in statement
+
+        def fetchone(self):
+            return (database_type,)
+
+    assert probe._strategy_target_sql(Cursor()) == (expected_sql, expected_value)
+
+
 def test_trade_review_preflight_reads_only_and_redacts_fixture_data(monkeypatch):
     module = _module()
     called = []

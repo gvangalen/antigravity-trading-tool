@@ -19,6 +19,28 @@ MARKER = "finn_typed_entry_paper_qa_v1"
 CASES = ("sma_cross", "sma_no_cross", "sma_missing_score", "trendline_cross")
 
 
+def _strategy_target_sql(cur) -> tuple[str, object]:
+    """Adapt the QA target to either historical strategy array schema.
+
+    Older production installations can retain a numeric[] targets column;
+    the newer action migration adds text[] only when the column is absent.
+    Both represent the same single QA target, but PostgreSQL cannot assign a
+    bound text[] directly to numeric[]. Keep the selected SQL cast whitelisted.
+    """
+    cur.execute("""SELECT udt_name FROM information_schema.columns
+        WHERE table_schema = current_schema() AND table_name = 'strategies'
+          AND column_name = 'targets'""")
+    row = cur.fetchone()
+    target_type = row[0] if row else None
+    if target_type == "_text":
+        return "ARRAY[%s]::text[]", "120"
+    if target_type == "_varchar":
+        return "ARRAY[%s]::varchar[]", "120"
+    if target_type == "_numeric":
+        return "ARRAY[%s]::numeric[]", 120
+    raise RuntimeError("typed_entry_strategy_targets_schema_unsupported")
+
+
 def _require_run(namespace: str) -> int:
     if os.getenv("FINN_QA_ALLOW_TYPED_ENTRY_PAPER_FIXTURE") != "1":
         raise RuntimeError("typed_entry_fixture_not_authorized")
@@ -99,12 +121,13 @@ def _seed(namespace: str, case: str) -> tuple[int, int, int, str, dict]:
             strategy_data = {"entry_signal": signal, "price_currency": "EUR",
                              "price_currency_confirmed": True}
             stage = "strategies"
-            cur.execute("""INSERT INTO strategies
+            target_sql, target_value = _strategy_target_sql(cur)
+            cur.execute(f"""INSERT INTO strategies
                 (user_id,setup_id,name,symbol,timeframe,setup_type,execution_mode,
                  base_amount,entry,stop_loss,targets,risk_profile,data,market_id,created_at)
-                VALUES (%s,%s,%s,%s,'1D','trade','fixed',10,100,90,%s,
+                VALUES (%s,%s,%s,%s,'1D','trade','fixed',10,100,90,{target_sql},
                         'balanced',%s::jsonb,%s,%s) RETURNING id""",
-                (owner, setup_id, f"Typed entry {case}", symbol, ['120'],
+                (owner, setup_id, f"Typed entry {case}", symbol, target_value,
                  json.dumps(strategy_data), market_id, now))
             strategy_id = int(cur.fetchone()[0])
             stage = "bot_configs"

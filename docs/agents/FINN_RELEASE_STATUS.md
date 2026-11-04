@@ -4,6 +4,28 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Herstel beschermde Paper-strategie-insert (4 november 2026)
+
+Phase: `LOCAL_VALIDATION`. Onafhankelijke QA op live SHA
+`f13cf2c9d608ed3721a656f0626acaffde410f36` gaf `NOT_ACCEPTED`.
+De korte natuurlijke SMA34-vraag leverde een volledig BTC/EUR-concept op en
+werd zonder opslag geannuleerd. De beschermde preflight slaagde, maar alle
+vier Paper-cases stopten vóór uitvoering met
+`typed_entry_seed_strategies_datatype_mismatch`. Er waren nul bevestigingen,
+uitvoeringen of Live-orders. [QA-Paper-run](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41794098967).
+
+De strategy-seed kiest nu een expliciete doelarray-cast op basis van het
+bestaande `strategies.targets`-kolomtype (`text[]`, `varchar[]` of `numeric[]`). De
+databasekolom kan per installatie verschillen omdat de idempotente migratie
+een bestaande kolom niet van type verandert. Tests, CI, deployment en een
+nieuwe onafhankelijke Paper-proef volgen; Paper-uitvoering is nog niet bewezen.
+De gerichte casttests slaagden `6/6`; de volledige backend-suite slaagde
+`4256/4256` met 4 bestaande skips. Frontend typecheck, i18n-, command- en
+voorsteltests, productiebuild en high-severity audit slaagden. De lokale
+worker-actiematrix slaagde `16/16` en de adapters `22/22`. De echte
+Responses-development- en regressiesets slaagden `20/20` en `109/109`, met
+nul provider-, schema-, timeout-, parse- en validatiefouten.
+
 ## Natuurlijke SMA-vraag en beschermde Paper-diagnose (4 november 2026)
 
 Phase: `LIVE_CANDIDATE_AWAITING_QA`. Onafhankelijke QA gaf op de vorige live SHA
