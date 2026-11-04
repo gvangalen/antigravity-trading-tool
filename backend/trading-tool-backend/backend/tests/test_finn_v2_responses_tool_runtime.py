@@ -3944,7 +3944,7 @@ def test_catalog_uses_registry_for_required_and_conditional_inputs():
     )
     assert call.missing_inputs == ("timeframe", "name", "quote_currency", "dca_frequency", "dca_amount_mode", "base_amount")
     assert call.operation_id == "create_setup"
-    assert len(catalog.definitions()) == 2 + len(catalog.read_tools) + len(catalog.proposal_operations) + len(catalog.evaluation_contracts)
+    assert len(catalog.definitions()) == 3 + len(catalog.read_tools) + len(catalog.proposal_operations) + len(catalog.evaluation_contracts)
     assert "answer_directly" not in {item["name"] for item in catalog.definitions()}
     proposal = next(item for item in catalog.definitions() if item["name"] == "create_dca_plan_proposal")
     assert proposal["parameters"]["properties"]["payload"]["properties"]["inputs"]["properties"]["min_investment"]["type"] == "number"
@@ -5784,6 +5784,23 @@ def test_setup_rule_coverage_fails_closed_when_provider_cannot_classify():
     )) == "unclear"
 
 
+def test_setup_rule_coverage_allows_bounded_provider_transport_retry():
+    fake = FakeResponses(response("coverage-1", text='{"verdict":"none"}'))
+    class RetryClient:
+        responses = fake
+        def with_options(self, **options):
+            self.options = options
+            return self
+    client = RetryClient()
+    guard = FinnResponsesToolRelevanceGuard(client)
+    assert asyncio.run(guard.setup_rule_coverage(
+        message="Maak een BTC-setup zonder extra instapregel.",
+        collected_inputs={"symbol": "BTC"},
+    )) == "none"
+    assert client.options["max_retries"] == 1
+    assert 0 < client.options["timeout"] <= 12
+
+
 def test_explicit_action_audit_waits_for_a_valid_late_provider_result():
     class SlowResponses:
         async def create(self, **_kwargs):
@@ -7180,6 +7197,26 @@ def test_strategy_rule_coverage_detects_unstored_dynamic_rule():
     sent = json.loads(fake.requests[0]["input"])
     assert sent["captured_strategy_fields"]["entry"] == 76000
     assert fake.requests[0]["tool_choice"] == "none"
+
+
+def test_strategy_rule_coverage_allows_bounded_provider_transport_retry():
+    fake = FakeResponses(response("coverage-1", text='{"verdict":"none"}'))
+
+    class RetryClient:
+        responses = fake
+
+        def with_options(self, **options):
+            self.options = options
+            return self
+
+    client = RetryClient()
+    guard = FinnResponsesToolRelevanceGuard(client)
+    assert asyncio.run(guard.strategy_rule_coverage(
+        message="Create a fixed trade strategy with entry 62, stop 59 and target 65.",
+        collected_inputs={"entry": 62, "stop_loss": 59, "targets": [65]},
+    )) == "none"
+    assert client.options["max_retries"] == 1
+    assert 0 < client.options["timeout"] <= 8
 
 
 def test_model_led_feed_follow_up_receives_pending_change_in_provider_prompt():

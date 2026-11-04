@@ -31,6 +31,19 @@ export function setupDraftFromProposal(draft, requestedState) {
   };
 }
 
+export function tradeSetupReviewComplete(draft, requestedState) {
+  const reviewed = setupDraftFromProposal(draft, requestedState);
+  const fields = reviewed?.supplied_inputs || {};
+  if (fields.setup_type !== "trade" || fields.plan_scope !== "setup_and_strategy") return true;
+  const signal = fields.entry_signal;
+  if (!signal) return true;
+  return Boolean(signal?.event === "close_crosses_reference"
+    && ["sma", "trendline"].includes(signal?.reference?.kind)
+    && fields.base_amount != null && fields.entry != null
+    && fields.stop_loss != null && Array.isArray(fields.targets) && fields.targets.length
+    && fields.risk_profile && fields.price_currency);
+}
+
 export function suspendedProposalIds(proposalIds, settledResults, clarificationRequired = false) {
   return new Set(proposalIds.filter((_, index) =>
     settledResults[index]?.status !== "fulfilled"
@@ -118,6 +131,7 @@ export function mapBackendSessionMessages(messages = []) {
       return {
         ...base,
         setupDraft: isSetup ? draft : null,
+        proposalRequestedState: isSetup ? pending?.requested_state : null,
         actionDraft: !isSetup && isDraftCard ? draft : null,
         canConfirm: !confirmationSuspended,
         confirmationSuspended,

@@ -390,6 +390,17 @@ class FinnResponsesToolCatalog:
             "strict": True,
             "parameters": {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
         })
+        definitions.append({
+            "type": "function",
+            "name": "get_open_plan_draft",
+            "description": (
+                "Read the owner's current unconfirmed guided plan concept in this conversation. "
+                "Use when the user asks which fields have already been collected or which are "
+                "still missing. This read does not create, revise, or save a proposal."
+            ),
+            "strict": True,
+            "parameters": {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
+        })
         for contract in self.evaluation_contracts.values():
             optional_properties = {}
             if "environment" in contract.optional_inputs:
@@ -581,7 +592,7 @@ class FinnResponsesToolCatalog:
                 ):
                     inputs["choices"] = normalized
             return FinnResponsesToolCall(name, None, inputs, (), (), ())
-        if name == "get_open_dca_draft":
+        if name in {"get_open_dca_draft", "get_open_plan_draft"}:
             if arguments:
                 raise FinnResponsesToolError("draft_read_arguments_invalid")
             return FinnResponsesToolCall(name, None, {}, (), (), ())

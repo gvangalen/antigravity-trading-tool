@@ -98,11 +98,13 @@ def explicit_entry_signal_from_text(message: str) -> dict[str, Any] | None:
             and re.search(r"\b(?:kruis\w*|cross\w*|kreuz\w*)\b", text, re.I)):
         return None
     above = bool(re.search(r"\b(?:opwaartse\s+kruising|upward\s+cross(?:ing)?|"
+                           r"kruis\w*\s+opwaarts|"
                            r"van\s+onder\s+naar\s+boven|from\s+below\s+to\s+above|"
                            r"von\s+unten\s+nach\s+oben|kruis\w*\s+boven|"
                            r"boven\s+(?:de\s+|het\s+)?(?:sma|ma)\s*\d+\s+kruis\w*|"
                            r"cross\w*\s+above|kreuz\w*\s+(?:über|ueber))\b", text, re.I))
     below = bool(re.search(r"\b(?:neerwaartse\s+kruising|downward\s+cross(?:ing)?|"
+                           r"kruis\w*\s+neerwaarts|"
                            r"van\s+boven\s+naar\s+onder|from\s+above\s+to\s+below|"
                            r"von\s+oben\s+nach\s+unten|kruis\w*\s+onder|"
                            r"onder\s+(?:de\s+|het\s+)?(?:sma|ma)\s*\d+\s+kruis\w*|"
@@ -119,15 +121,24 @@ def explicit_entry_signal_from_text(message: str) -> dict[str, Any] | None:
     if sma:
         reference = {"kind": "sma", "period": int(sma[0])}
     else:
+        # A clock time without a timezone cannot be mapped safely to a candle.
+        if re.search(r"\b\d{4}-\d{2}-\d{2}\s+\d{1,2}:\d{2}(?::\d{2})?\b(?!\s*(?:UTC|Z)\b)", text, re.I):
+            return None
         anchors = re.findall(
-            r"\b(\d{4}-\d{2}-\d{2})\s*(?:(?:op|at|bei|:|=)\s*)?"
+            r"\b(\d{4}-\d{2}-\d{2})"
+            r"(?:\s+(\d{1,2}:\d{2}(?::\d{2})?)\s*(?:UTC|Z))?\s*"
+            r"(?:(?:op|at|bei|:|=)\s*)?(?:€|\$|EUR|USD|USDT)?\s*"
             r"(\d+(?:[.,]\d+)?)\b", text, re.I,
         )
         if len(anchors) != 2:
             return None
+        def anchor_price(raw: str) -> float:
+            if re.fullmatch(r"\d{1,3}(?:[.,]\d{3})+", raw):
+                return float(raw.replace(".", "").replace(",", ""))
+            return float(raw.replace(",", "."))
         reference = {"kind": "trendline", "anchors": [
-            {"at": f"{day}T00:00:00Z", "price": float(price.replace(",", "."))}
-            for day, price in anchors
+            {"at": f"{day}T{clock if clock else '00:00'}Z", "price": anchor_price(price)}
+            for day, clock, price in anchors
         ]}
     try:
         return validate_entry_signal({

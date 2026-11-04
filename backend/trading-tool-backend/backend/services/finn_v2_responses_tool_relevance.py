@@ -29,7 +29,7 @@ class FinnResponsesToolRelevanceGuard:
             return "unclear"
         timeout = min(8.0, remaining - 4 if remaining is not None else 8.0)
         client = (
-            self.client.with_options(max_retries=0, timeout=timeout)
+            self.client.with_options(max_retries=1, timeout=timeout)
             if hasattr(self.client, "with_options") else self.client
         )
         fields = {
@@ -104,9 +104,9 @@ class FinnResponsesToolRelevanceGuard:
         remaining = remaining_lifecycle_seconds()
         if remaining is not None and remaining <= 8:
             return "unclear"
-        timeout = min(8.0, remaining - 4 if remaining is not None else 8.0)
+        timeout = min(12.0, remaining - 4 if remaining is not None else 12.0)
         client = (
-            self.client.with_options(max_retries=0, timeout=timeout)
+            self.client.with_options(max_retries=1, timeout=timeout)
             if hasattr(self.client, "with_options") else self.client
         )
         fields = {

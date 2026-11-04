@@ -46,7 +46,7 @@ PUBLIC_PROBES = (
     ("unsupported", "Koop zonder voorstel automatisch BTC voor mijn beleggingsrekening.", "unsupported_financial_operation"),
     ("clarify", "Doe hetzelfde ermee.", "clarify_request"),
     ("guided_setup", "Create a swing setup for ETH.", "create_setup"),
-    ("read_setup", "Toon mijn actieve setup.", "read_active_setup"),
+    ("read_setup", "Toon de opgeslagen setup Matrix Probe BTC Setup.", "read_active_setup"),
     ("read_bot", "Show the bot linked to my strategy.", "read_linked_bot"),
     ("scores", "Zeig mir meine Scores.", "read_scores"),
     ("portfolio", "Read my portfolio summary.", "read_portfolio"),
@@ -261,7 +261,7 @@ def main() -> None:
     chain_path = output.with_suffix(".action-chain.json")
     chain_command = [
         sys.executable,
-        str(Path(__file__).with_name("run_finn_v2_sequential_action_chain.py")),
+        "-m", "backend.scripts.run_finn_v2_sequential_action_chain",
         "--base-url", base_url,
         "--output", str(chain_path),
         "--fixture-namespace", namespace,

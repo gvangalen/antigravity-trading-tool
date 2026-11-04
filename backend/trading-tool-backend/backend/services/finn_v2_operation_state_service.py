@@ -2020,6 +2020,17 @@ class FinnV2OperationStateService:
         # after "naam" into a user-chosen title.
         if FinnV2OperationStateService._requests_name_prompt(text):
             return None
+        prior_name_reference = re.search(
+            r"\b(?:de\s+)?naam\s+staat\s+in\s+(?:mijn\s+)?(?:vorige|vorig)\s+bericht\b",
+            text, re.IGNORECASE,
+        )
+        if prior_name_reference:
+            explicit_after_colon = re.match(
+                r"\s*:\s*([^.!?\n]{2,80})", text[prior_name_reference.end():],
+            )
+            if explicit_after_colon:
+                return explicit_after_colon.group(1).strip(" .\"'“”‘’") or None
+            return None
         named_correction = re.search(
             r"\b(?:conceptnaam|naam|name)\s+(?:exact\s+)?(?:naar|to)\s*[\"'“‘]([^\"'”’]{2,80})[\"'”’]",
             text, re.IGNORECASE,

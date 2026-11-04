@@ -31,7 +31,7 @@ def explicit_benchmark_bounds(text: str) -> dict[str, int]:
     request = " ".join(str(text or "").casefold().split())
     condition_words = ("koopzone", "koopvoorwaarde", "setupvoorwaarde",
                        "setupscorezone", "scorevoorwaarde", "scorefilter", "benchmarkband",
-                       "scoregrens", "scorezone", "benchmarkvoorwaarde")
+                       "scoregrens", "scorezone", "scoreband", "benchmarkvoorwaarde")
     for clause in re.split(r"[.;?!\n]+", request):
         cue = re.search(r"\b(?:" + "|".join(condition_words) + r")\b", clause)
         if cue is not None and cue.group(0) in {"koopvoorwaarde", "setupvoorwaarde"}:
@@ -42,6 +42,8 @@ def explicit_benchmark_bounds(text: str) -> dict[str, int]:
         if cue is None and not re.search(r"\b(?:smart\s*dca|staffel|basisbedrag)\b", request):
             cue = re.search(r"\b(?:benchmarkscore|totaalscore|total(?:e)? score)\b", clause)
         if cue is None:
+            continue
+        if cue.group(0) == "scoreband" and re.search(r"\b(?:smart\s*dca|staffel)\b", request):
             continue
         if re.search(r"\b(?:geen|zonder|no|without|ohne)\s+(?:extra\s+)?"
                      r"(?:scorevoorwaarde|scorefilter|scoregrens|koopzone)\b", clause):

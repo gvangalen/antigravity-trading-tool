@@ -183,7 +183,15 @@ def _explicit_create_operation_request(message: str) -> str | None:
     # wanneer ..."). The coarse polarity classifier may call that execution,
     # while the leading imperative still targets a new plan draft. Resolve the
     # object from the request instead of letting the embedded rule veto it.
-    if facts.action_polarity not in {"create", "execute"}:
+    # The trailing "toon ...; niets opslaan" in a proposal request can make
+    # the coarse polarity classifier call the whole turn an evaluation. The
+    # leading imperative still requests a draft, whose action contract owns
+    # validation and explicit confirmation.
+    if facts.action_polarity not in {"create", "execute"} and not re.search(
+        r"^\s*(?:maak|cre(?:ate|eer)|erstelle|lege\s+an)\b"
+        r"[^.!?\n]{0,100}\b(?:voorstel(?:kaart)?|concept(?:kaart)?|proposal|draft)\b",
+        message, re.I,
+    ):
         return None
     return FinnV2OperationClassificationService._explicit_guided_create_operation(
         message=message, facts=facts,
@@ -1150,6 +1158,17 @@ class FinnResponsesFrontDoor:
         completed_read_calls: set[tuple[str, str]] = set()
         pending_operation = FinnV2OperationStateService.pending_operation_id(conversation_context)
         guided_state = dict(conversation_context.get("active_guided_operation") or {})
+        guided_draft_question = bool(
+            pending_operation
+            and guided_state.get("status") == "collecting"
+            and "?" in message
+            and any(word in message.casefold() for word in ("concept", "draft", "entwurf"))
+            and any(word in message.casefold() for word in (
+                "welke velden", "wat heb", "al onthouden", "blijven nodig",
+                "which fields", "what have", "already collected", "still missing",
+                "welche felder", "was hast", "noch fehlen",
+            ))
+        )
         requested_slot = str(guided_state.get("next_missing_input") or "")
         pending_clarification = dict(conversation_context.get("responses_clarification") or {})
         choice_entity = {"setup_id": "setup", "strategy_id": "strategy", "bot_id": "bot"}.get(requested_slot)
@@ -1196,7 +1215,7 @@ class FinnResponsesFrontDoor:
                         ),
                         selected, previous_response, locale=locale,
                     )
-        if (pending_operation and requested_slot
+        if (pending_operation and requested_slot and not guided_draft_question
                 and not FinnV2OperationStateService.is_cancel_intent(message)
                 and not unsupported_catalog_pair_mention(message)):
             contract = self.proposals.registry.require_supported(pending_operation)
@@ -1360,11 +1379,11 @@ class FinnResponsesFrontDoor:
             (request_facts.action_polarity == "read" and not imperative_operation and not explicit_create_request)
             or explicit_closed_review_read
         )
-        is_read_only_turn = not explicit_create_request and _is_read_only_coach_turn(
+        is_read_only_turn = guided_draft_question or (not explicit_create_request and _is_read_only_coach_turn(
             polarity=request_facts.action_polarity,
             imperative_operation=imperative_operation,
             explicit_closed_review_read=explicit_closed_review_read,
-        )
+        ))
         scheduled_revision = dict(conversation_context.get("proposal_correction_result") or {})
         if (
             scheduled_revision.get("scheduled_dca_revision") is True
@@ -2138,6 +2157,32 @@ class FinnResponsesFrontDoor:
             and guided_draft.get("open_proposal_id") == revision.get("proposal_id")
             and str(draft_fields.get("setup_type") or "").lower() == "dca"
         )
+        open_guided_draft = (
+            guided_state if guided_state.get("status") == "collecting" else {}
+        )
+
+        def read_open_plan_draft() -> dict[str, Any]:
+            if not open_guided_draft:
+                return {"status": "unavailable", "reason": "open_plan_draft_not_found"}
+            draft_read = {
+                "status": "completed",
+                "results": [{
+                    "scope": "read_open_plan_draft", "status": "completed",
+                    "data": {
+                        "confirmed": False,
+                        "saved": False,
+                        "operation_id": open_guided_draft.get("operation_id"),
+                        "fields": {
+                            key: value for key, value in dict(
+                                open_guided_draft.get("collected_inputs") or {}
+                            ).items() if not key.endswith("_id")
+                        },
+                        "missing_fields": open_guided_draft.get("missing_required_inputs") or [],
+                    },
+                }],
+            }
+            read_context.append(draft_read)
+            return draft_read
 
         def read_open_dca_draft() -> dict[str, Any]:
             if not open_dca_draft:
@@ -2262,6 +2307,8 @@ class FinnResponsesFrontDoor:
                 }
             if call.name == "get_open_dca_draft":
                 return read_open_dca_draft()
+            if call.name == "get_open_plan_draft":
+                return read_open_plan_draft()
             if saved_read_targets_open_draft(call):
                 # The model may select a saved-plan read for the name of the
                 # still-open proposal. Bind the source, not the answer, to
@@ -3613,7 +3660,10 @@ class FinnResponsesFrontDoor:
                 str(previous_response.get("antecedent_verified_answer") or "")[:1600]
                 if previous_response and use_verified_turn else None
             ),
-            guided_operation_id=None if unsupported_pair else pending_operation or explicit_create_request or imperative_operation,
+            guided_operation_id=(
+                None if unsupported_pair or guided_draft_question
+                else pending_operation or explicit_create_request or imperative_operation
+            ),
             resuming_clarification=resuming_clarification,
             resumed_clarification_reason=(
                 str(pending_clarification.get("reason") or "") or None
@@ -3645,7 +3695,9 @@ class FinnResponsesFrontDoor:
             locale=locale,
             force_read_repair=force_read_repair,
             required_read_tool_name=(
-                "get_closed_trade_review"
+                "get_open_plan_draft"
+                if guided_draft_question
+                else "get_closed_trade_review"
                 if (explicit_closed_review_read or contextual_closed_review_read)
                 and pending_operation is None and not resuming_clarification
                 else "get_indicator_snapshot"
@@ -3673,7 +3725,7 @@ class FinnResponsesFrontDoor:
             rejection_feedback=rejection_feedback,
             model_led_coach=getattr(self, "model_led_coach", False),
             read_only_turn=is_read_only_turn or bool(unsupported_pair),
-            open_draft_available=bool(conversation_context.get("proposal_revision")),
+            open_draft_available=bool(conversation_context.get("proposal_revision") or open_guided_draft),
             catalog_boundary_only=bool(unsupported_pair),
         )
         logger.info("FINN Responses tool loop completed in %.2fs", monotonic() - loop_started)
@@ -3723,7 +3775,7 @@ class FinnResponsesFrontDoor:
             and selected is None
         ):
             result = replace(result, uses_previous_response=True)
-        if pending_operation and selected is None and not unsupported_pair:
+        if pending_operation and selected is None and not unsupported_pair and not guided_draft_question:
             raise FinnResponsesError("guided_proposal_tool_call_required")
         if getattr(self, "model_led_coach", False) and selected is None:
             contract_trace = (*prior_tool_trace, *result.tool_trace)
