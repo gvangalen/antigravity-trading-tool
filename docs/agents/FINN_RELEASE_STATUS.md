@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Getypeerde strategie-opslag en teruglezing in beschermde QA (4 november 2026)
 
-Phase: `LIVE_CANDIDATE_AWAITING_QA`. Onafhankelijke QA op vorige live SHA
+Phase: `ACCEPTED` voor de beschermde getypeerde SMA34-aanmaak en teruglezing.
+Onafhankelijke QA op vorige live SHA
 `8d43fe8b772dc050ed51f366c3c7737e675659b1` liet de beschermde
 [preflight](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41823271311)
 en [runtimeproef](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41823699414)
@@ -41,7 +42,27 @@ voor beide publieke routes. Deze statuswijziging maakt zelf een nieuwe
 commit. Vóór QA-handoff moeten de laatste main-CI, Auto Deploy en beide
 publieke SHA's opnieuw samenvallen. De onafhankelijke QA-agent heeft een
 beschermd, gevalideerd vervolgmanifest voorbereid; de nieuwe live run en
-het inhoudelijke verdict staan nog open. Er is geen Live-order geplaatst.
+het inhoudelijke verdict stonden bij deze statuscommit nog open. Er is geen
+Live-order geplaatst.
+
+Daarna bevestigde onafhankelijke QA op exact live SHA
+`acd4ea6076773fd1f1cc29568109902fae5d27da` de volledige beschermde
+voorstel-, bevestigings-, opslag- en terugleesflow met verdict `ACCEPTED`.
+[Preflight](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41832524695)
+en [runtimeproef](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41832830143)
+slaagden; de runtime voltooide `2/2` gevallen. Een nieuwe eigenaargebonden
+setup en precies één gekoppelde strategie zijn opgeslagen. De strategie
+voldeed aan alle vijf getypeerde controles: juiste setupkoppeling, dezelfde
+markt, exact BTC/EUR, €10 basisbedrag en de volledige SMA34-instapregel.
+Een herhaalde bevestiging maakte geen duplicaat. De READ-vervolgbeurt
+voldeed aan `4/4` door QA gekozen antwoordtermen; polling en SSE kwamen
+overeen. Er waren nul brokerorders, Live-acties en botactivaties.
+Het gesaniteerde runtime-artifact heeft SHA-256
+`9575493c352067b1266b7957bf2b7a99a1314b91578a1e01d977f71b706ca76c`.
+Een negatieve tweede-eigenaarproef is niet beschikbaar in de huidige runner;
+het artifact toont ook geen afzonderlijke read-toolprovenance. Dit verdict
+geldt voor de genoemde live SHA en deze beschermde flow. Deze toevoeging
+aan de status is uitsluitend documentatie en wijzigt geen productcode.
 
 ## Volledige getypeerde setupvraag blijft een aanmaakverzoek (4 november 2026)
 
