@@ -4,6 +4,30 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Leesbare Paper-beslissingen in de FINN-feed (4 november 2026)
+
+Phase: `LOCAL_VALIDATION`. Kandidaat: `codex/finn-readable-coach-feed`,
+[PR #823](https://github.com/gvangalen/antigravity-trading-tool/pull/823).
+Een Paper-botmelding gebruikt nu de eigenaargebonden opgeslagen beslissing:
+koop/verkoop, gepland/uitgevoerd/overgeslagen/mislukt, bedrag en redenen.
+FINN schrijft per gebeurtenis korte teksten in NL, EN en DE via Luna/Responses;
+als die generatie faalt, verschijnt een feitelijke terugvaltekst. Een
+beslissing wordt niet als uitgevoerde order geformuleerd. Herhaalde actieve
+meldingen met dezelfde botstatus en reden worden samengevoegd; de historie
+blijft intact. Het web en mobiel noemen de wegwerkactie nu “Markeer als
+gelezen” in de lokale taal.
+
+Gerichte feed- en taaktests: `38 passed`. Volledige backend-suite:
+`4265 passed, 4 skipped`; frontend typecheck, i18n-controles, commandtests
+en productiebuild: geslaagd; mobiele typecheck en lint: geslaagd, zonder
+lintfouten. Een echte Luna/Responses-aanroep leverde HTTP 200 en een
+drie­talige Paper-melding; een foutieve uitvoeringsclaim werd lokaal door de
+beperkte feitcontrole verworpen. Echte selectorproeven: development `20/20`
+en regression `109/109`, telkens zonder provider-, schema-, timeout-, parse-
+of validatiefout. FINN-actiecontracten zijn niet gewijzigd, dus de
+worker-actiematrix is voor deze tekst- en feedwijziging niet van toepassing.
+CI, deploymentidentiteit en onafhankelijk live QA-verdict staan nog open.
+
 ## Getypeerde strategie-opslag en teruglezing in beschermde QA (4 november 2026)
 
 Phase: `ACCEPTED` voor de beschermde getypeerde SMA34-aanmaak en teruglezing.

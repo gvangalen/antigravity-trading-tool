@@ -24,6 +24,119 @@ def test_fallback_preserves_subject_and_never_claims_an_entry_signal():
     assert "not an entry signal" in copy["en"]["body"]
 
 
+def test_paper_bot_fallback_distinguishes_decision_from_execution():
+    planned = module._fallback("bot_decision", "AAPL plan", {
+        "symbol": "AAPL", "action": "buy", "status": "planned", "amount_eur": 400,
+    })
+    executed = module._fallback("bot_decision", "AAPL plan", {
+        "symbol": "AAPL", "action": "buy", "status": "executed", "amount_eur": 400,
+    })
+    assert "wil kopen" in planned["nl"]["title"]
+    assert "nog niet bevestigd" in planned["nl"]["body"]
+    assert "heeft gekocht" in executed["nl"]["title"]
+    assert "€400,00" in executed["nl"]["body"]
+
+
+def test_paper_bot_fallback_covers_other_persisted_outcomes():
+    for status in ("ready", "approved", "awaiting_exchange"):
+        assert "wil kopen" in module._bot_fallback("AAPL plan", {
+            "symbol": "AAPL", "action": "buy", "status": status,
+        })["nl"]["title"]
+    assert "kon niet kopen" in module._bot_fallback("AAPL plan", {
+        "symbol": "AAPL", "action": "buy", "status": "failed",
+    })["nl"]["title"]
+    skipped = module._bot_fallback("AAPL plan", {
+        "symbol": "AAPL", "action": "buy", "status": "skipped", "amount_eur": 400,
+    })["nl"]
+    assert "niet gekocht" in skipped["title"]
+    assert "€400" not in skipped["body"]
+
+
+def test_bot_copy_verifies_identity_amount_and_execution_boundary():
+    evidence = {"symbol": "AAPL", "action": "buy", "status": "planned",
+                "amount_eur": 400, "reasons": ["Score 50; setup 61–75"]}
+    copy = {locale: {"title": f"AAPL Paper {locale}", "body": "AAPL bot plans to buy €400."}
+            for locale in module.LOCALES}
+    assert module._verified_bot_copy(copy, "AAPL plan", evidence)
+    copy["nl"]["body"] = "AAPL bot heeft gekocht voor €400."
+    assert not module._verified_bot_copy(copy, "AAPL plan", evidence)
+    copy["nl"]["body"] = "AAPL bot plans to buy €900."
+    assert not module._verified_bot_copy(copy, "AAPL plan", evidence)
+    copy["nl"]["body"] = "AAPL koopt niet; er is geen koop gepland."
+    assert not module._verified_bot_copy(copy, "AAPL plan", evidence)
+
+
+def test_legacy_bot_copy_renders_factual_outcome():
+    row = {"id": "00000000-0000-0000-0000-000000000001", "event_type": "bot_decision",
+           "symbol": "AAPL", "evidence": {"subject": "AAPL plan", "symbol": "AAPL",
+                                          "action": "buy", "status": "planned"},
+           "copy_json": {"nl": {"title": "Paper-beslissing",
+                                "body": "Voor AAPL plan is een Paper-beslissing vastgelegd."}}}
+    rendered = module.FinnCoachFeedService._serialize(row, "nl")
+    assert "wil kopen" in rendered["title"]
+    assert "Paper-beslissing vastgelegd" not in rendered["description"]
+
+
+def test_luna_writes_paper_outcome_from_typed_decision(monkeypatch):
+    writes = []
+
+    class Result:
+        def first(self):
+            return (1,)
+
+    async def execute(_sql, params):
+        writes.append(params)
+        return Result()
+
+    async def detail(_self, **_kwargs):
+        return {"event_type": "bot_decision", "copy_source": "fact_fallback",
+                "status": "unread", "fingerprint": "fingerprint", "source_observed_at": None,
+                "evidence": {"subject": "AAPL plan", "symbol": "AAPL", "action": "buy",
+                             "status": "executed", "amount_eur": 400,
+                             "reasons": ["Planvoorwaarden bereikt"]}}
+
+    async def provider(**kwargs):
+        assert kwargs["model_override"] == "gpt-6-luna"
+        assert "executed" in kwargs["prompt"]
+        return {"parsed": {
+            "title_nl": "Je AAPL-bot heeft gekocht · Paper",
+            "body_nl": "AAPL is gekocht voor €400. De planvoorwaarden waren bereikt.",
+            "title_en": "Your AAPL bot bought · Paper",
+            "body_en": "AAPL was bought for €400. The plan conditions were met.",
+            "title_de": "Dein AAPL-Bot hat gekauft · Paper",
+            "body_de": "AAPL wurde für €400 gekauft. Die Planbedingungen waren erfüllt.",
+        }}
+
+    monkeypatch.setattr(module.FinnCoachFeedService, "detail", detail)
+    monkeypatch.setattr(module, "ask_gpt_structured_response_async", provider)
+    session = SimpleNamespace(execute=execute, commit=AsyncMock())
+    assert asyncio.run(module.FinnCoachFeedService(session).generate_copy(
+        user_id=7, item_id="00000000-0000-0000-0000-000000000001"))
+    assert any("copy" in params and "heeft gekocht" in params["copy"] for params in writes)
+
+
+def test_active_feed_collapses_repeated_planned_decisions_but_keeps_history():
+    class Result:
+        def mappings(self):
+            return self
+
+        def all(self):
+            return [
+                {"id": f"00000000-0000-0000-0000-{number:012d}",
+                 "event_type": "bot_decision", "subject_id": "bot-7", "symbol": "AAPL",
+                 "evidence": {"subject": "AAPL plan", "action": "buy", "status": "planned",
+                              "reasons": ["Planvoorwaarden bereikt"]},
+                 "copy_json": {"nl": {"title": "AAPL Paper", "body": "Koopbeslissing voor AAPL."}}}
+                for number in (2, 1)]
+
+    async def execute(_sql, _params):
+        return Result()
+
+    service = module.FinnCoachFeedService(SimpleNamespace(execute=execute))
+    assert len(asyncio.run(service.list(user_id=7))) == 1
+    assert len(asyncio.run(service.list(user_id=7, history=True))) == 2
+
+
 def test_paused_live_bot_feed_explains_deferred_execution_in_each_locale():
     copy = module._fallback("live_bot_paused", "BTC Live Later", {
         "status": "paused", "is_live": True, "is_active": False,
