@@ -567,6 +567,23 @@ def test_new_setup_and_existing_setup_have_distinct_create_contracts(message, ex
     assert CLASSIFIER._explicit_guided_create_operation(message=message, facts=facts) == expected
 
 
+def test_long_typed_setup_request_remains_a_create_proposal():
+    from backend.services.finn_v2_responses_front_door import _explicit_create_operation_request
+
+    message = (
+        "Maak een nieuwe aparte BTC/EUR Paper trade-setup met de naam QA Typed SMA34 Plan, "
+        "analysetijdsframe 1D, totale benchmarkband 26–45, instapniveau €50.000, "
+        "stop €45.000, doel €60.000, gebalanceerd risico en €10 per aankoop. "
+        "Extra getypeerde instapregel: koop alleen bij opwaartse kruising van een "
+        "afgesloten 1D BTC/EUR-slotkoers door SMA34 berekend uit afgesloten candles. "
+        "Toon het volledige voorstel voor setup en gekoppelde strategie; start geen bot of order."
+    )
+    assert CLASSIFIER.preprocessor.preprocess(message=message).action_polarity == "evaluate"
+    assert _explicit_create_operation_request(message) == "create_setup"
+    assert _explicit_create_operation_request("Maak geen nieuwe BTC/EUR-setup.") is None
+    assert _explicit_create_operation_request("Maak een hypothetische BTC/EUR-setup.") is None
+
+
 def test_declassified_action_contract_acceptance_handoff_is_complete_and_immutable():
     """Keep every Build-authorized regression record available to public tests."""
     fixture = Path(__file__).parent / "fixtures" / "finn_v2_declassified_34746230528_regression.json"

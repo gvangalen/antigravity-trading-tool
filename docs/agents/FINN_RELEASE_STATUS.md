@@ -4,6 +4,35 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Volledige getypeerde setupvraag blijft een aanmaakverzoek (4 november 2026)
+
+Phase: `LOCAL_VALIDATION`. Onafhankelijke QA op live SHA
+`d4353be7461fbf4af8da0044172a88aa6e6f0121` gaf `NOT_ACCEPTED`:
+de beschermde [preflight](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41809419822)
+slaagde, maar de [runtimeproef](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41809833379)
+leidde de volledig ingevulde BTC/EUR-SMA34-vraag naar `READ` en eindigde
+zonder voorstel. Er was geen bevestiging, opslag, botstart of order.
+Een afzonderlijke ingelogde browserproef vroeg ten onrechte of het expliciet
+genoemde BTC/EUR-paar bedoeld was.
+
+De oorzaak was een extra polariteitsfilter vóór de getypeerde operatiekeuze:
+de slotzin “start geen bot of order” maakte de lange aanmaakvraag voor die
+grove filter een evaluatie. Het leidende “Maak een nieuwe ... setup” bereikt
+nu de bestaande getypeerde classifier en het voorstelcontract. Een gerichte
+negatie-/hypothesetest beschermt leesvragen tegen onbedoelde voorstellen.
+Lokaal gaf dezelfde volledige QA-vraag via backend, Celery-worker en echte
+Responses-route `create_setup` met voorstel. De opgeslagen voorsteldetails
+bevatten BTC/EUR, 1D, scoreband 26–45, €10, instap €50.000, stop €45.000,
+doel €60.000 en een SMA34-kruising van afgesloten dagcandles. De lokale
+meerbeurtige probe slaagde ook voor voorstel, bevestiging, eigenaarsscheiding
+en idempotentie. De volledige backend-suite slaagde `4257 passed, 4 skipped`.
+De lokale actiematrix slaagde `16/16` en de adaptertests `22/22`.
+Frontend typecheck, i18n-, command- en voorsteltests, productiebuild en
+high-severity audit slaagden. De echte Responses-developmentset slaagde
+`20/20` en de regressieset `109/109`, beide met nul provider-, schema-,
+timeout-, parse- en validatiefouten. CI, deployment en onafhankelijke live
+herkeuring volgen nog. Er is geen Live-order geplaatst.
+
 ## Herstel beschermde Paper-strategie-insert (4 november 2026)
 
 Phase: `PARTIAL_ACCEPTANCE`. Onafhankelijke QA op vorige live SHA
