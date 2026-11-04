@@ -374,7 +374,7 @@ function ReflectionOverview({ weekly, weeks, selectedWeek, onWeekChange, locale,
   const analyzed = number(weekly.analyzed);
   const patterns = (Array.isArray(weekly.patterns) ? weekly.patterns : []).filter((pattern) => number(pattern.count) > 1);
   const lessons = (Array.isArray(weekly.confirmed_lesson_repetitions) ? weekly.confirmed_lesson_repetitions : []).filter((pattern) => number(pattern.count) > 1);
-  const hasFindings = patterns.length > 0;
+  const hasFindings = patterns.length > 0 || lessons.length > 0;
 
   return (
     <div className="rounded-[28px] border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-950 sm:p-8">
