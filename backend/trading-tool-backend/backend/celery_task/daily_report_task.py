@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from celery import shared_task
@@ -54,6 +54,31 @@ def jsonb(v, fallback=None):
 # =====================================================
 # 🧾 DAILY REPORT TASK
 # =====================================================
+
+def _publish_daily_report_ready_feed(user_id: int, report_date: date) -> None:
+    """Publish only after the report and its snapshot have been saved."""
+    from backend.infrastructure.database import async_session_factory, run_celery_coroutine
+    from backend.services.finn_coach_feed_service import FinnCoachFeedService
+
+    async def publish():
+        async with async_session_factory() as session:
+            item_id = await FinnCoachFeedService(session).publish(
+                user_id=user_id,
+                event_key=f"daily-report:{report_date.isoformat()}",
+                event_type="daily_report_ready",
+                subject_type="report",
+                subject_id=report_date.isoformat(),
+                subject="Dagrapport",
+                symbol=None,
+                evidence={"report_type": "daily", "report_date": report_date.isoformat()},
+                source_observed_at=datetime.now(timezone.utc),
+                priority=2,
+                revision=report_date.isoformat(),
+            )
+            await session.commit()
+            return item_id
+
+    run_celery_coroutine(publish())
 
 @shared_task(name="backend.celery_task.daily_report_task.generate_daily_report")
 def generate_daily_report(user_id: int):
@@ -173,6 +198,11 @@ def generate_daily_report(user_id: int):
 
     # Notify only after a report was stored and its snapshot was created.
     try:
+        _publish_daily_report_ready_feed(user_id, today)
+    except Exception:
+        logger.exception("⚠️ Failed to publish report feed item for user_id=%s", user_id)
+
+    try:
         from backend.services.push_service import push_service
 
         push_service.notify_user(
@@ -180,7 +210,7 @@ def generate_daily_report(user_id: int):
             user_id=user_id,
             title="Nieuw Rapport Beschikbaar",
             message=f"Je dagelijkse rapport voor {today} staat voor je klaar.",
-            url="/reports",
+            url=f"/report?date={today.isoformat()}",
         )
         logger.info("🔔 Push notification sent to user %s", user_id)
     except Exception:

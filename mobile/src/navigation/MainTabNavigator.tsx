@@ -20,7 +20,7 @@ export type MainTabParamList = {
   Setup: { notificationType?: string; symbol?: string } | undefined;
   Automation: { notificationType?: string; symbol?: string } | undefined;
   Portfolio: undefined;
-  Report: { notificationType?: string; symbol?: string } | undefined;
+  Report: { notificationType?: string; symbol?: string; reportDate?: string } | undefined;
   Settings: undefined;
 };
 

@@ -1769,6 +1769,7 @@ export default function ReportPage() {
   const [traderStatusError, setTraderStatusError] = useState(false);
   const [dates, setDates] = useState([]);
   const [selectedDate, setSelectedDate] = useState('latest');
+  const initialReportLinkReadRef = useRef(false);
 
   const [loading, setLoading] = useState(true);
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -1883,7 +1884,12 @@ LOAD
   };
 
   useEffect(() => {
-    const date = loadedReportTypeRef.current === reportType ? selectedDate : 'latest';
+    let date = loadedReportTypeRef.current === reportType ? selectedDate : 'latest';
+    if (!initialReportLinkReadRef.current && typeof window !== 'undefined') {
+      initialReportLinkReadRef.current = true;
+      const requested = new URLSearchParams(window.location.search).get('date');
+      if (reportType === 'daily' && /^\d{4}-\d{2}-\d{2}$/.test(requested || '')) date = requested;
+    }
     loadedReportTypeRef.current = reportType;
     loadData(date);
   }, [reportType, locale]);

@@ -1051,6 +1051,9 @@ def test_daily_report_task_persists_typed_report_facts(monkeypatch):
     monkeypatch.setattr(daily_report_task, "get_user_email_snapshot", lambda _id: None)
     monkeypatch.setattr(daily_report_task, "ai_usage_context", lambda **_: nullcontext())
     monkeypatch.setattr(daily_report_task, "create_report_snapshot", lambda **_: (1, "local"))
+    monkeypatch.setattr(daily_report_task, "_publish_daily_report_ready_feed",
+                        lambda user_id, report_date: captured.update(feed=(user_id, report_date,
+                                                                           captured.get("committed"))))
     monkeypatch.setattr(daily_report_task, "generate_unified_daily_report_sections", lambda **_: {
         "executive_summary": "ETH plan opgeslagen; actuele benchmark onvolledig.",
         "market_analysis": "ETH: Price ingesteld; geen bruikbare actuele score.",
@@ -1067,8 +1070,66 @@ def test_daily_report_task_persists_typed_report_facts(monkeypatch):
 
     saved = captured["write"]
     assert captured["committed"] is True
+    assert captured["feed"] == (7, date.today(), True)
     assert saved["market_score"] is None
     assert saved["sections"]["score_source_snapshot"]["observed_at"] == "2026-10-08T08:00:00+00:00"
     assert saved["sections"]["active_strategy"]["setup_name"] == "ETH maandelijkse DCA"
     assert saved["sections"]["macro_indicator_highlights"] == [
         {"indicator": "DXY", "symbol": "ETH"}]
+
+
+def test_daily_report_feed_is_not_published_when_snapshot_fails(monkeypatch):
+    class DB:
+        def commit(self):
+            pass
+
+        def rollback(self):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(daily_report_task, "SessionLocal", DB)
+    monkeypatch.setattr(daily_report_task, "DailyReportWriteRepository",
+                        lambda _db: SimpleNamespace(upsert_daily_report=lambda **_: None))
+    monkeypatch.setattr(daily_report_task, "get_user_email_snapshot", lambda _id: None)
+    monkeypatch.setattr(daily_report_task, "ai_usage_context", lambda **_: nullcontext())
+    monkeypatch.setattr(daily_report_task, "generate_unified_daily_report_sections", lambda **_: {})
+    monkeypatch.setattr(daily_report_task, "create_report_snapshot",
+                        lambda **_: (_ for _ in ()).throw(RuntimeError("snapshot_failed")))
+    monkeypatch.setattr(daily_report_task, "_publish_daily_report_ready_feed",
+                        lambda *_: pytest.fail("feed published before snapshot"))
+
+    with pytest.raises(RuntimeError, match="snapshot_failed"):
+        daily_report_task.generate_daily_report.run(7)
+
+
+def test_daily_report_feed_uses_owner_and_date_as_deduplication_key(monkeypatch):
+    from backend.infrastructure import database
+    from backend.services import finn_coach_feed_service
+
+    captured = {}
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            pass
+
+        async def commit(self):
+            captured["committed"] = True
+
+    async def publish(_self, **kwargs):
+        captured["event"] = kwargs
+        return "feed-item"
+
+    monkeypatch.setattr(database, "async_session_factory", Session)
+    monkeypatch.setattr(finn_coach_feed_service.FinnCoachFeedService, "publish", publish)
+    daily_report_task._publish_daily_report_ready_feed(7, date(2026, 11, 4))
+
+    assert captured["committed"] is True
+    assert captured["event"]["user_id"] == 7
+    assert captured["event"]["event_key"] == "daily-report:2026-11-04"
+    assert captured["event"]["revision"] == "2026-11-04"
+    assert captured["event"]["subject_type"] == "report"

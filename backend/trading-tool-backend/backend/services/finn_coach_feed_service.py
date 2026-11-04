@@ -232,6 +232,12 @@ def _fallback(kind: str, subject: str, evidence: dict, *, focus: str = "brief") 
     name = str(subject or "").strip()[:120]
     if kind == "bot_decision":
         return _bot_fallback(name, evidence)
+    if kind == "daily_report_ready":
+        return {
+            "nl": {"title": "Je dagrapport staat klaar", "body": "Lees wat er is veranderd en wat volgens je plan aandacht vraagt."},
+            "en": {"title": "Your daily report is ready", "body": "See what changed and what needs attention in your plan."},
+            "de": {"title": "Dein Tagesbericht ist bereit", "body": "Lies, was sich geändert hat und was in deinem Plan Aufmerksamkeit braucht."},
+        }
     if kind == "plan_match":
         body = {
             "nl": f"De opgeslagen scorevoorwaarden van {name} passen bij de gemeten benchmark. Dit is geen instapsignaal.",
@@ -367,7 +373,7 @@ class FinnCoachFeedService:
                       expires_at: datetime | None = None,
                       revision: str | None = None) -> str | None:
         """One row per owner/event. Unchanged evidence never reopens or regenerates."""
-        if not event_key or event_type not in {"plan_match", "data_blocked", "proposal_pending", "market_move", "bot_decision", "live_bot_paused"}:
+        if not event_key or event_type not in {"plan_match", "data_blocked", "proposal_pending", "market_move", "bot_decision", "live_bot_paused", "daily_report_ready"}:
             raise ValueError("feed_event_invalid")
         facts = {**evidence, "subject": str(subject or "")[:120]}
         digest = hashlib.sha256(str(revision or _json(facts)).encode()).hexdigest()

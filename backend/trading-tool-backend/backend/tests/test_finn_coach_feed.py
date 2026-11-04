@@ -24,6 +24,14 @@ def test_fallback_preserves_subject_and_never_claims_an_entry_signal():
     assert "not an entry signal" in copy["en"]["body"]
 
 
+def test_daily_report_notification_has_one_factual_translation_per_locale():
+    copy = module._fallback("daily_report_ready", "Dagrapport", {"report_date": "2026-11-04"})
+    assert set(copy) == {"nl", "en", "de"}
+    assert all(item["body"] for item in copy.values())
+    assert "staat klaar" in copy["nl"]["title"]
+    assert "Paper" not in copy["nl"]["body"]
+
+
 def test_paper_bot_fallback_distinguishes_decision_from_execution():
     planned = module._fallback("bot_decision", "AAPL plan", {
         "symbol": "AAPL", "action": "buy", "status": "planned", "amount_eur": 400,
