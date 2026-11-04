@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Natuurlijke SMA-vraag en beschermde Paper-diagnose (4 november 2026)
 
-Phase: `LOCAL_VALIDATED_AWAITING_RELEASE`. Onafhankelijke QA gaf op de vorige live SHA
+Phase: `LIVE_CANDIDATE_AWAITING_QA`. Onafhankelijke QA gaf op de vorige live SHA
 `0a647e2c323f22b4fa53c231a815f3710240ba9b` `NOT_ACCEPTED`.
 De ingelogde SMA34-, meerbeurtige SMA50-, trendlijn- en assetwisselproeven
 slaagden, maar de beschermde Paper-proef strandde in alle vier gevallen met
@@ -28,8 +28,14 @@ slaagde `16/16`, zonder Live-order; de bijbehorende adaptertests slaagden
 `22/22`. De echte Responses-developmentset slaagde `20/20`, met nul
 provider-, schema-, timeout-, parse- of validatiefouten. De echte Responses-
 regressieset slaagde `109/109`, eveneens zonder deze fouten. Een lokale
-FINN-run maakte uit de korte SMA34-vraag direct een conceptvoorstel. CI,
-deployment en onafhankelijke QA volgen.
+FINN-run maakte uit de korte SMA34-vraag direct een conceptvoorstel.
+[PR #813](https://github.com/gvangalen/antigravity-trading-tool/pull/813),
+[main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41791928390)
+en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41792311675)
+slaagden. Op `66685ae61186d5fd3b66a79c2fd34280ac436824` gaven publieke
+backend-health en frontend-buildinfo HTTP 200 en dezelfde SHA. Deze
+statusbijwerking vergt opnieuw main-CI en Auto Deploy; de definitieve SHA
+wordt publiek vastgesteld vóór het onafhankelijke QA-handoff.
 
 ## Herstel getypeerd instapconcept en Paper-fixture (4 november 2026)
 
