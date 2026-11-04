@@ -491,7 +491,8 @@ _DATABASE_SCOPE_BY_OPERATION = {
 
 
 async def _load_owner_scoped_database_snapshot(
-    *, operation_id: str, fixture_namespace: str
+    *, operation_id: str, fixture_namespace: str,
+    expected_linked_strategy: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Read a sanitized owner-only state fingerprint around an approved write."""
     from sqlalchemy import text
@@ -528,6 +529,19 @@ async def _load_owner_scoped_database_snapshot(
         """)
     async with async_session_factory() as session:
         rows = (await session.execute(statement, params)).mappings().all()
+        linked_strategy_rows = []
+        if operation_id == "create_setup":
+            linked_strategy_rows = (await session.execute(text("""
+                SELECT st.id, st.setup_id, st.market_id AS strategy_market_id,
+                       su.market_id AS setup_market_id, st.base_amount,
+                       st.data -> 'entry_signal' AS entry_signal,
+                       tm.asset_symbol, tm.quote_currency
+                FROM strategies AS st
+                JOIN setups AS su ON su.id = st.setup_id AND su.user_id = st.user_id
+                LEFT JOIN trading_markets AS tm ON tm.id = su.market_id
+                WHERE st.user_id = :user_id AND su.name LIKE :namespace
+                ORDER BY st.id
+            """), params)).mappings().all()
         domain_rows = (await session.execute(text("""
             SELECT 'setups' AS domain, id, to_jsonb(t) - ARRAY['user_id', 'created_at', 'updated_at', 'last_run'] AS state
             FROM setups AS t WHERE user_id = :user_id
@@ -575,6 +589,9 @@ async def _load_owner_scoped_database_snapshot(
         "owner_scoped": True,
         "row_count": len(normalized),
         "entity_ids": [row["id"] for row in normalized],
+        "linked_strategy_evidence": linked_strategy_evidence(
+            linked_strategy_rows, rows, expected_linked_strategy,
+        ) if operation_id == "create_setup" else None,
         "state_sha256": digest,
         "owner_domain_state_sha256": domain_digest,
         "live_bot_count": live_bot_count,
@@ -582,7 +599,34 @@ async def _load_owner_scoped_database_snapshot(
     }
 
 
-def owner_scoped_database_snapshot(*, operation_id: str, fixture_namespace: str) -> Dict[str, Any]:
+def linked_strategy_evidence(
+    strategy_rows: list[Any], setup_rows: list[Any], expected: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Publish typed fixture checks, never strategy IDs or saved rule contents."""
+    result: Dict[str, Any] = {"count": len(strategy_rows)}
+    if expected is None:
+        return result
+    setup_ids = {int(row["id"]) for row in setup_rows}
+    market = str(expected["market"]).upper()
+    checked = [{
+        "setup_link_matches": int(row["setup_id"]) in setup_ids,
+        "same_market": row["strategy_market_id"] == row["setup_market_id"] and row["setup_market_id"] is not None,
+        "market_matches": f"{row['asset_symbol']}/{row['quote_currency']}" == market,
+        "amount_matches": row["base_amount"] is not None and float(row["base_amount"]) == float(expected["base_amount"]),
+        "entry_signal_matches": row["entry_signal"] == expected["entry_signal"],
+    } for row in strategy_rows]
+    result["expected_count"] = 1
+    result["checks"] = {
+        key: len(checked) == 1 and checked[0][key]
+        for key in ("setup_link_matches", "same_market", "market_matches",
+                    "amount_matches", "entry_signal_matches")
+    }
+    result["passed"] = all(result["checks"].values())
+    return result
+
+
+def owner_scoped_database_snapshot(*, operation_id: str, fixture_namespace: str,
+                                   expected_linked_strategy: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Keep database evidence on one private loop and expose only safe fingerprints."""
     try:
         if operation_id not in _DATABASE_SCOPE_BY_OPERATION:
@@ -591,6 +635,7 @@ def owner_scoped_database_snapshot(*, operation_id: str, fixture_namespace: str)
             _load_owner_scoped_database_snapshot(
                 operation_id=operation_id,
                 fixture_namespace=validate_fixture_namespace(fixture_namespace),
+                expected_linked_strategy=expected_linked_strategy,
             )
         )
     except Exception as error:
@@ -854,6 +899,16 @@ def safe_projection(envelope: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def answer_term_evidence(envelope: Dict[str, Any], terms: list[str]) -> Dict[str, Any]:
+    """Check QA-owned readback assertions without persisting answer text."""
+    response = envelope.get("response") if isinstance(envelope.get("response"), dict) else {}
+    content = str(response.get("content") or "").casefold()
+    expected = [term.casefold() for term in terms]
+    matched = sum(term in content for term in expected)
+    return {"expected_count": len(expected), "matched_count": matched,
+            "passed": bool(content) and matched == len(expected)}
+
+
 def manifest_path(*, manifest_root: Path, manifest_id: str) -> Path:
     if not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,80}", manifest_id):
         raise ValueError("manifest_id_invalid")
@@ -906,6 +961,24 @@ def load_manifest(
             not isinstance(expected_missing, list) or not all(isinstance(item, str) and item for item in expected_missing)
         ):
             raise ValueError("manifest_expected_missing_inputs_invalid")
+        expected_answer_terms = case.get("expected_answer_terms")
+        if expected_answer_terms is not None and (
+            not isinstance(expected_answer_terms, list)
+            or not expected_answer_terms
+            or not all(isinstance(item, str) and 1 <= len(item) <= 100 for item in expected_answer_terms)
+        ):
+            raise ValueError("manifest_expected_answer_terms_invalid")
+        expected_linked = case.get("expected_linked_strategy")
+        if expected_linked is not None and (
+            action_mode != "safe_execution" or case.get("expected_operation_id") != "create_setup"
+            or not isinstance(expected_linked, dict)
+            or set(expected_linked) != {"market", "base_amount", "entry_signal"}
+            or not isinstance(expected_linked.get("market"), str)
+            or not re.fullmatch(r"[A-Z0-9]+/[A-Z0-9]+", expected_linked["market"])
+            or not isinstance(expected_linked.get("base_amount"), (int, float))
+            or not isinstance(expected_linked.get("entry_signal"), dict)
+        ):
+            raise ValueError("manifest_expected_linked_strategy_invalid")
     return cases
 
 
@@ -1211,6 +1284,9 @@ def classify_case_failure(case_result: Dict[str, Any]) -> Optional[str]:
         return "product"
     evidence = case_result.get("contract_evidence")
     if isinstance(evidence, dict) and not all(evidence.values()):
+        return "product"
+    answer_evidence = case_result.get("answer_evidence")
+    if isinstance(answer_evidence, dict) and answer_evidence.get("passed") is False:
         return "product"
     return None
 
@@ -1525,6 +1601,7 @@ def _run_fixture_action(
         return owner_scoped_database_snapshot(
             operation_id=operation_id,
             fixture_namespace=fixture_namespace,
+            expected_linked_strategy=case.get("expected_linked_strategy"),
         )
     def action_timeout() -> float:
         if remaining_seconds is None:
@@ -1660,6 +1737,9 @@ def _run_fixture_action(
         return result
     if database_evidence_required:
         result["database_after_execution"] = database_snapshot()
+        linked_evidence = result["database_after_execution"].get("linked_strategy_evidence") or {}
+        if case.get("expected_linked_strategy") and linked_evidence.get("passed") is not True:
+            result["error_category"] = "linked_strategy_postcondition_failed"
     if case.get("idempotency_replay") is True:
         replay_status, _replayed, replay_latency, replay_error = request_json(
             url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}/execute",
@@ -1909,6 +1989,10 @@ def run_cases(
         actual = projection["runtime_trace"].get("final_operation_id") or projection["runtime_trace"].get("initial_operation_id")
         result["terminal"] = projection
         result["sse_terminal"] = sse_projection
+        if case.get("expected_answer_terms"):
+            result["answer_evidence"] = answer_term_evidence(
+                terminal, case["expected_answer_terms"]
+            )
         if terminal.get("status") in {"failed", "downgraded", "rejected", "blocked"}:
             result["runtime_diagnostic"] = runtime_diagnostic(run_id)
         if actual == "create_bot" and "strategy_id" in (projection["runtime_trace"].get("missing_inputs") or []):

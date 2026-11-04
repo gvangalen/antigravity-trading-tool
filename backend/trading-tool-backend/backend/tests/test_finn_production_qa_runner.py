@@ -29,6 +29,42 @@ def _module():
     return module
 
 
+def test_readback_terms_are_checked_without_persisting_the_answer():
+    module = _module()
+    terminal = {"response": {"content": "De opgeslagen QA-strategie gebruikt SMA34 op BTC/EUR."}}
+    evidence = module.answer_term_evidence(terminal, ["SMA34", "BTC/EUR"])
+    assert evidence == {"expected_count": 2, "matched_count": 2, "passed": True}
+    assert "QA-strategie" not in str(evidence)
+    missing = module.answer_term_evidence(terminal, ["SMA34", "trendline"])
+    assert missing["passed"] is False
+    assert module.classify_case_failure({
+        "create_http_status": 200,
+        "terminal": {"status": "completed"},
+        "polling_sse_equal": True,
+        "answer_evidence": missing,
+    }) == "product"
+
+
+def test_linked_strategy_evidence_checks_saved_rule_without_exposing_fixture_data():
+    module = _module()
+    signal = {"version": 1, "event": "close_crosses_reference", "direction": "above",
+              "timeframe": "1D", "reference": {"kind": "sma", "period": 34}}
+    rows = [{"id": 91, "setup_id": 41, "strategy_market_id": 7,
+             "setup_market_id": 7, "asset_symbol": "BTC", "quote_currency": "EUR",
+             "base_amount": 10, "entry_signal": signal}]
+    expected = {"market": "BTC/EUR", "base_amount": 10, "entry_signal": signal}
+    evidence = module.linked_strategy_evidence(rows, [{"id": 41}], expected)
+    assert evidence["passed"] is True
+    assert evidence["count"] == 1
+    assert all(evidence["checks"].values())
+    assert "91" not in str(evidence) and "SMA" not in str(evidence)
+    wrong = module.linked_strategy_evidence(rows, [{"id": 41}], {
+        **expected, "entry_signal": {**signal, "reference": {"kind": "sma", "period": 200}},
+    })
+    assert wrong["checks"]["entry_signal_matches"] is False
+    assert wrong["passed"] is False
+
+
 def test_workflow_is_manual_protected_and_serialized():
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
     assert "workflow_dispatch:" in workflow
@@ -1238,7 +1274,7 @@ def test_bot_lineage_diagnostic_uses_snapshot_database_loop(monkeypatch):
     module = _module()
     observed = []
 
-    async def snapshot(*, operation_id, fixture_namespace):
+    async def snapshot(*, operation_id, fixture_namespace, expected_linked_strategy=None):
         observed.append(asyncio.get_running_loop())
         return {"status": "available"}
 

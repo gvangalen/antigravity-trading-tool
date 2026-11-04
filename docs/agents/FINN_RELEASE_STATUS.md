@@ -4,6 +4,35 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Getypeerde strategie-opslag en teruglezing in beschermde QA (4 november 2026)
+
+Phase: `LOCAL_VALIDATION`. Onafhankelijke QA op live SHA
+`8d43fe8b772dc050ed51f366c3c7737e675659b1` liet de beschermde
+[preflight](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41823271311)
+en [runtimeproef](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41823699414)
+slagen (`2/2`). Voorstel, bevestiging, precies één eigenaargebonden setup,
+idempotentie en een afgeronde vervolgbeurt zijn bewezen; er was geen Live-actie.
+Het volledige verdict bleef `NOT_ACCEPTED` omdat het artifact niet aantoonde
+dat de gekoppelde strategie de exacte SMA34-regel had opgeslagen en FINN die
+inhoudelijk teruggaf. Er is geen productfout in de opslag aangetoond.
+
+De beschermde QA-runner krijgt daarom een getypeerde controle op de opgeslagen
+strategie: koppeling aan de nieuwe setup, hetzelfde BTC/EUR-handelspaar,
+basisbedrag en exacte instapregel. Een vervolgantwoord wordt op door QA
+gekozen feiten gecontroleerd. Het artifact bevat alleen aantallen en
+ja/nee-uitkomsten; strategie-ID's, regelinhoud en antwoordtekst worden niet
+aan Build gepubliceerd. De bestaande onafhankelijke QA-agent beheert de
+beschermde vraag en fixture. De gerichte runnertests slaagden `103/103`, de
+volledige backend-suite `4259 passed, 4 skipped`, frontend typecheck, i18n-,
+commandtests en productiebuild slaagden, evenals de high-severity audit met
+nul kwetsbaarheden. De lokale worker-actiematrix slaagde `16/16` met nul
+Live-orders; de adaptertests slaagden `22/22`. Echte Responses-selectorproeven
+slaagden `20/20` development en `109/109` regression, telkens met nul
+provider-, schema-, timeout-, parse- en validatiefouten. De lokale artifacts
+hebben SHA-256 `44c54a3b709b456509f37eafe3066c00d1badb3540bf28aafdffd7d94c447d61`
+en `82ce50338fb648f058a9c8fe1d4c748c6a718c5a70d80f4a9e181544cacf5bf2`.
+CI, deployment en de nieuwe onafhankelijke live herkeuring volgen.
+
 ## Volledige getypeerde setupvraag blijft een aanmaakverzoek (4 november 2026)
 
 Phase: `LIVE_CANDIDATE_AWAITING_QA`. Onafhankelijke QA op vorige live SHA
