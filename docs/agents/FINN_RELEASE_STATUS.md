@@ -4,6 +4,33 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Natuurlijke SMA-vraag en beschermde Paper-diagnose (4 november 2026)
+
+Phase: `LOCAL_VALIDATED_AWAITING_RELEASE`. Onafhankelijke QA gaf op de vorige live SHA
+`0a647e2c323f22b4fa53c231a815f3710240ba9b` `NOT_ACCEPTED`.
+De ingelogde SMA34-, meerbeurtige SMA50-, trendlijn- en assetwisselproeven
+slaagden, maar de beschermde Paper-proef strandde in alle vier gevallen met
+`DatatypeMismatch` vóór een execution call. Het gepubliceerde artifact en
+de bestaande workflowlog bevatten geen SQL-fase, tabel of kolom. Een korte
+natuurlijke vraag, “koop pas als de afgesloten dagkoers SMA34 opwaarts kruist”,
+werd bovendien ten onrechte als niet uitvoerbaar afgewezen.
+
+De parser herkent nu die expliciete kruisingsformulering. De beschermde
+Paper-probe geeft bij een database-typefout uitsluitend een statische
+fase-/tabelcode door en rolt een mislukte seed terug. De probe blijft
+eigenaargebonden en kan geen Live-order plaatsen. De typefout zelf en de
+positieve Paper-uitvoering zijn nog niet hersteld of bewezen; de volgende
+beschermde run moet eerst de foutlocatie bepalen. Lokaal zijn de gerichte
+parsertests en de gesaniteerde foutcodeproef geslaagd (106 tests), evenals
+de volledige backend-suite (4253 geslaagd, 4 overgeslagen) en de webbuild,
+typecheck, i18n-, command- en auditcontroles. De lokale worker-actiematrix
+slaagde `16/16`, zonder Live-order; de bijbehorende adaptertests slaagden
+`22/22`. De echte Responses-developmentset slaagde `20/20`, met nul
+provider-, schema-, timeout-, parse- of validatiefouten. De echte Responses-
+regressieset slaagde `109/109`, eveneens zonder deze fouten. Een lokale
+FINN-run maakte uit de korte SMA34-vraag direct een conceptvoorstel. CI,
+deployment en onafhankelijke QA volgen.
+
 ## Herstel getypeerd instapconcept en Paper-fixture (4 november 2026)
 
 Phase: `LIVE_CANDIDATE_AWAITING_QA`. De onafhankelijke QA op de vorige live kandidaat

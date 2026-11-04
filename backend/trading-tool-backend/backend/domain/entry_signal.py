@@ -99,12 +99,14 @@ def explicit_entry_signal_from_text(message: str) -> dict[str, Any] | None:
         return None
     above = bool(re.search(r"\b(?:opwaartse\s+kruising|upward\s+cross(?:ing)?|"
                            r"kruis\w*\s+opwaarts|"
+                           r"opwaarts\b.{0,40}\bkruis\w*|"
                            r"van\s+onder\s+naar\s+boven|from\s+below\s+to\s+above|"
                            r"von\s+unten\s+nach\s+oben|kruis\w*\s+boven|"
                            r"boven\s+(?:de\s+|het\s+)?(?:sma|ma)\s*\d+\s+kruis\w*|"
                            r"cross\w*\s+above|kreuz\w*\s+(?:über|ueber))\b", text, re.I))
     below = bool(re.search(r"\b(?:neerwaartse\s+kruising|downward\s+cross(?:ing)?|"
                            r"kruis\w*\s+neerwaarts|"
+                           r"neerwaarts\b.{0,40}\bkruis\w*|"
                            r"van\s+boven\s+naar\s+onder|from\s+above\s+to\s+below|"
                            r"von\s+oben\s+nach\s+unten|kruis\w*\s+onder|"
                            r"onder\s+(?:de\s+|het\s+)?(?:sma|ma)\s*\d+\s+kruis\w*|"
