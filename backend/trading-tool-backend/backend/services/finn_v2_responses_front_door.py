@@ -174,25 +174,9 @@ def _explicit_create_operation_request(message: str) -> str | None:
     ) or re.match(r"^\s*maak\s+geen\b", message, re.I):
         return None
     facts = FinnV2RequestPreprocessorService().preprocess(message=message)
-    # A named recent parent makes this a contextual follow-up, even when the
-    # user explicitly asks to create a new child object.
-    # A later sentence may describe a hypothetical future strategy and make
-    # the discourse label "evaluation". The leading imperative still asks for
-    # a setup draft; the typed operation classifier resolves its object.
-    # A plan request can contain an imperative buy *rule* ("Koop €10 alleen
-    # wanneer ..."). The coarse polarity classifier may call that execution,
-    # while the leading imperative still targets a new plan draft. Resolve the
-    # object from the request instead of letting the embedded rule veto it.
-    # The trailing "toon ...; niets opslaan" in a proposal request can make
-    # the coarse polarity classifier call the whole turn an evaluation. The
-    # leading imperative still requests a draft, whose action contract owns
-    # validation and explicit confirmation.
-    if facts.action_polarity not in {"create", "execute"} and not re.search(
-        r"^\s*(?:maak|cre(?:ate|eer)|erstelle|lege\s+an)\b"
-        r"[^.!?\n]{0,100}\b(?:voorstel(?:kaart)?|concept(?:kaart)?|proposal|draft)\b",
-        message, re.I,
-    ):
-        return None
+    # An embedded buy rule or trailing "start geen bot" can make the coarse
+    # preprocessor classify a draft request as evaluation. The imperative
+    # still requests a proposal; the typed classifier resolves its object.
     return FinnV2OperationClassificationService._explicit_guided_create_operation(
         message=message, facts=facts,
     )
