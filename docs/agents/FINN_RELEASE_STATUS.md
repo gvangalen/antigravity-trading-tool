@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Leesbare Paper-beslissingen in de FINN-feed (4 november 2026)
 
-Phase: `LIVE_CANDIDATE_AWAITING_QA`. Kandidaat: `codex/finn-readable-coach-feed`,
+Phase: `NOT_ACCEPTED` voor de volledige live feedmatrix. Kandidaat: `codex/finn-readable-coach-feed`,
 [PR #823](https://github.com/gvangalen/antigravity-trading-tool/pull/823).
 Een Paper-botmelding gebruikt nu de eigenaargebonden opgeslagen beslissing:
 koop/verkoop, gepland/uitgevoerd/overgeslagen/mislukt, bedrag en redenen.
@@ -33,7 +33,23 @@ slaagde. Git-main, publieke `/api/health` en `/build-info.json` gaven
 alle drie `44b5bbd07a67c514f81ca472585376ad80affab6`, met HTTP 200
 voor beide routes. Deze statuswijziging maakt zelf een nieuwe commit;
 vóór de QA-handoff moeten de laatste main-CI, Auto Deploy en publieke SHA's
-opnieuw samenvallen. Het onafhankelijke ingelogde feedverdict staat nog open.
+opnieuw samenvallen. Het onafhankelijke ingelogde feedverdict staat hieronder.
+
+Onafhankelijke ingelogde QA controleerde daarna exact live SHA
+`45082b153e57d825580ed258e2fd171a8d94f217` en gaf voor de **volledige**
+feedmatrix `NOT_ACCEPTED` wegens ontbrekend live testbewijs, zonder aangetoonde
+productfout. Historische Paper-meldingen waren leesbaar met Paper-label en
+zonder onbewezen uitvoeringsclaim. “Markeer als gelezen” verwijderde een item
+uit de actieve feed, bleef zo na refresh, en het item bleef in de historie.
+Titel, bewijszin en knop verschenen in NL, EN en DE; “Bekijk details” opende de
+betrokken Paper-bot. Er zijn geen Live-orders of botactivaties uitgevoerd.
+De zichtbare fixture bevatte geen nieuwe meldingen voor uitgevoerd,
+overgeslagen of mislukt met reden en vervolgstap. Deduplicatie van herhaalde
+wachtbeslissingen, tweede-eigenaarisolatie en afwezigheid van modelruns bij
+feed-GET zijn niet live aangetoond. De bestaande beschermde QA-goal is voor
+een andere typed-entry-proef geblokkeerd; QA heeft daarom geen nieuwe
+fixture-run of botbeslissing gestart. Deze statusaanvulling is alleen
+documentatie; het verdict geldt voor de genoemde product-SHA.
 
 ## Getypeerde strategie-opslag en teruglezing in beschermde QA (4 november 2026)
 
