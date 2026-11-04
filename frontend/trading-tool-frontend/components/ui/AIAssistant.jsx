@@ -1046,6 +1046,23 @@ function AIAssistantContent({
     }
   };
 
+  const changeChatAsset = async (nextAsset) => {
+    const previousAsset = (chatAssetOverride || context.symbol || globalSymbol || "").split("/")[0];
+    setChatAssetOverride(nextAsset || null);
+    if (!nextAsset || nextAsset === previousAsset) return;
+    const openIds = [...new Set(messagesRef.current.flatMap((message) =>
+      (message.actions || [])
+        .filter((action) => action?.type === "v2_proposal" && action.proposal_id && !message.draftCanceled)
+        .map((action) => action.proposal_id)
+    ))];
+    if (!openIds.length) return;
+    setMessages((prev) => suspendFinnProposalCards(prev, new Set(openIds)));
+    const results = await Promise.allSettled(openIds.map(cancelFinnV2Proposal));
+    const canceled = new Set(openIds.filter((_, index) => results[index].status === "fulfilled"));
+    if (canceled.size) retireProposalCards(canceled);
+    if (canceled.size !== openIds.length) await refreshProposalCards();
+  };
+
   async function pollPendingFinnV2Run(runId, streamId) {
     const terminalStatuses = new Set(["completed", "blocked", "failed", "canceled", "unavailable", "downgraded", "rejected", "clarification_required"]);
     const sseController = new AbortController();
@@ -2456,7 +2473,7 @@ function AIAssistantContent({
                     aria-label={at("uiText.assetContext")}
                     value={(pathname === "/bot" && context.bot_id ? context.symbol : chatAssetOverride || context.symbol) || globalSymbol || ""}
                     disabled={pathname === "/bot" && Boolean(context.bot_id)}
-                    onChange={(event) => setChatAssetOverride(event.target.value || null)}
+                    onChange={(event) => { void changeChatAsset(event.target.value || null); }}
                     className="max-w-24 cursor-pointer bg-transparent font-semibold text-slate-600 outline-none disabled:cursor-default dark:text-slate-300"
                   >
                     {!FINN_ASSETS.some((asset) => asset.symbol === (pathname === "/bot" && context.bot_id ? context.symbol : chatAssetOverride || context.symbol || globalSymbol)) ? (

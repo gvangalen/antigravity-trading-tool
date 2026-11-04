@@ -67,6 +67,15 @@ def test_generic_buy_condition_does_not_promote_a_price_range_to_benchmark():
     assert explicit_benchmark_bounds(
         "Smart DCA met scoreband 26–45 als bedragstaffel."
     ) == {}
+    assert explicit_benchmark_bounds(
+        "Nieuw BTC/EUR Paper trade-plan: benchmark 26–45, entry €50.000."
+    ) == {"min_benchmark_score": 26, "max_benchmark_score": 45}
+
+
+def test_read_only_open_proposal_instruction_is_not_correction():
+    assert not FinnV2OperationStateService._is_explicit_correction(
+        "Lees alleen de trendlijnankers terug. Verander of bevestig het voorstel niet."
+    )
 
 
 def test_signal_period_is_never_used_as_a_guided_purchase_amount():

@@ -2158,7 +2158,7 @@ class FinnResponsesFrontDoor:
             and str(draft_fields.get("setup_type") or "").lower() == "dca"
         )
         open_guided_draft = (
-            guided_state if guided_state.get("status") == "collecting" else {}
+            guided_state if guided_state.get("status") == "collecting" else guided_draft
         )
 
         def read_open_plan_draft() -> dict[str, Any]:

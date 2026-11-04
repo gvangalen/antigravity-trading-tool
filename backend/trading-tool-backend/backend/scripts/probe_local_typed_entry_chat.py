@@ -102,9 +102,11 @@ def run(base_url: str) -> dict:
     ).get("status") != "collecting":
         raise AssertionError(f"guided_signal_capability_question_lost_draft: {guided}")
     explanation = guided[3]
-    if explanation["status"] != "completed" or not all(
-        term in explanation["answer"].casefold()
-        for term in ("sma50", "instapkoers", "niet")
+    explanation_text = explanation["answer"].casefold()
+    if explanation["status"] != "completed" or not (
+        "sma50" in explanation_text
+        and ("instapkoers" in explanation_text or "instapprijs" in explanation_text)
+        and "niet" in explanation_text
     ) or explanation["proposal"] or (explanation["guided_state"] or {}).get("status") != "collecting":
         raise AssertionError(f"guided_signal_contract_explanation_missing: {guided}")
     last = guided[-1]

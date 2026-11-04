@@ -3302,7 +3302,7 @@ class FinnV2RunService:
                     "proposal tool with draft_intent=revise and only changed inputs; FINN retains prior fields. "
                     "Use draft_intent=new only for an explicitly separate new object. "
                     "If the user asks a read-only question about this open draft, call "
-                    "get_open_dca_draft instead of a saved-plan read. Use its typed fields "
+                    "get_open_plan_draft instead of a saved-plan read. Use its typed fields "
                     "for a hypothetical explanation or calculation. Distinguish "
                     "the unconfirmed draft from saved settings, current market readings and an actual purchase. "
                     "Do not claim the draft fields are unavailable merely because the draft was not saved."
