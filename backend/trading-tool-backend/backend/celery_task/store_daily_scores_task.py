@@ -342,14 +342,32 @@ def publish_coach_bot_decision(user_id: int, decision_id: int):
         async with async_session_factory() as session:
             result = await session.execute(text("""
                 SELECT d.id, d.bot_id, d.symbol, d.action, d.status, d.decision_ts,
+                       d.amount_eur, d.reason_json, o.quote_amount_eur AS filled_amount_eur,
+                       o.status AS order_status,
                        b.name AS bot_name, b.is_live
                 FROM bot_decisions d JOIN bot_configs b
                   ON b.id=d.bot_id AND b.user_id=d.user_id
+                LEFT JOIN LATERAL (
+                    SELECT quote_amount_eur, status FROM bot_orders
+                    WHERE decision_id=d.id AND bot_id=d.bot_id AND user_id=d.user_id
+                      AND execution_environment='paper'
+                    ORDER BY id DESC LIMIT 1
+                ) o ON TRUE
                 WHERE d.id=:decision_id AND d.user_id=:user_id
             """), {"decision_id": decision_id, "user_id": user_id})
             row = result.mappings().first()
             if not row or row["is_live"] or str(row["action"] or "").lower() in {"hold", "houd_vast", "none"}:
                 return None
+            raw_reasons = row["reason_json"]
+            if isinstance(raw_reasons, str):
+                try:
+                    raw_reasons = json.loads(raw_reasons)
+                except (ValueError, TypeError):
+                    raw_reasons = []
+            reasons = [reason[:240] for reason in (raw_reasons if isinstance(raw_reasons, list) else [])
+                       if isinstance(reason, str) and reason.strip()][:2]
+            amount = (row["filled_amount_eur"] if row["status"] == "executed"
+                      and row["order_status"] == "filled" else row["amount_eur"])
             item_id = await FinnCoachFeedService(session).publish(
                 user_id=user_id, event_key=f"bot-decision:{decision_id}",
                 event_type="bot_decision", subject_type="bot",
@@ -357,9 +375,12 @@ def publish_coach_bot_decision(user_id: int, decision_id: int):
                 symbol=row["symbol"], priority=2,
                 source_observed_at=row["decision_ts"],
                 evidence={"status": row["status"], "action": row["action"],
+                          "symbol": row["symbol"], "amount_eur": amount,
+                          "order_status": row["order_status"],
+                          "reasons": reasons,
                           "decision_id": row["id"], "bot_id": row["bot_id"],
                           "source_observed_at": row["decision_ts"]},
-                revision=f"{row['action']}:{row['status']}",
+                revision=f"{row['action']}:{row['status']}:{amount}:{reasons}",
             )
             await session.commit()
             return item_id
