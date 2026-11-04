@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Herstel getypeerd instapconcept en Paper-fixture (4 november 2026)
 
-Phase: `LOCAL_VALIDATION`. De onafhankelijke QA op de vorige live kandidaat
+Phase: `LIVE_CANDIDATE_AWAITING_QA`. De onafhankelijke QA op de vorige live kandidaat
 `e31660ab5e891b634b8045f41868df88fa760229` gaf `NOT_ACCEPTED`.
 Een meerbeurtige SMA50-aanvraag verloor de expliciete benchmarkband na een
 read-only tussenvraag; een read-only trendlijnvraag trok de kaart in. Een
@@ -32,9 +32,15 @@ Echte Responses-selectorevaluaties: development `20/20` en regression
 validatiefouten. De lokale chat- en opslagprobe slaagde: volledig SMA34-
 voorstel, vijfbeurtig SMA50-voorstel, bevestiging, eigenaarsscheiding,
 idempotentie en dezelfde markt voor setup en strategie. De probe accepteert
-zowel `instapprijs` als `instapkoers` in de vrije modeluitleg. CI, deployment
-en onafhankelijke ingelogde web- en beschermde Paper-herkeuring zijn nog niet
-afgerond.
+zowel `instapprijs` als `instapkoers` in de vrije modeluitleg.
+[PR #811](https://github.com/gvangalen/antigravity-trading-tool/pull/811)
+en de [main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41785045332)
+slaagden met vijf jobs; [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41785426096)
+slaagde. Publieke backend-health en frontend-buildinfo gaven HTTP 200 en
+beide `4424c0003eaf1fd4df9353d8ef8d174b77b10140`. Deze statusbijwerking
+maakt een nieuwe commit; vóór de QA-handoff moeten de laatste main-CI,
+Auto Deploy en beide publieke SHA's opnieuw samenvallen. Onafhankelijke
+ingelogde web- en beschermde Paper-herkeuring staat nog open.
 
 ## Herkeuring volledige getypeerde instapflow (4 november 2026)
 
