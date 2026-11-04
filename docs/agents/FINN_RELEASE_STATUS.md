@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Herstel beschermde Paper-strategie-insert (4 november 2026)
 
-Phase: `LIVE_CANDIDATE_AWAITING_QA`. Onafhankelijke QA op vorige live SHA
+Phase: `PARTIAL_ACCEPTANCE`. Onafhankelijke QA op vorige live SHA
 `f13cf2c9d608ed3721a656f0626acaffde410f36` gaf `NOT_ACCEPTED`.
 De korte natuurlijke SMA34-vraag leverde een volledig BTC/EUR-concept op en
 werd zonder opslag geannuleerd. De beschermde preflight slaagde, maar alle
@@ -17,8 +17,8 @@ uitvoeringen of Live-orders. [QA-Paper-run](https://github.com/gvangalen/antigra
 De strategy-seed kiest nu een expliciete doelarray-cast op basis van het
 bestaande `strategies.targets`-kolomtype (`text[]`, `varchar[]` of `numeric[]`). De
 databasekolom kan per installatie verschillen omdat de idempotente migratie
-een bestaande kolom niet van type verandert. Paper-uitvoering is nog niet
-bewezen; een nieuwe onafhankelijke Paper-proef volgt op de definitieve live SHA.
+een bestaande kolom niet van type verandert. De onafhankelijke Paper-proef
+op de uiteindelijke live SHA staat hieronder.
 De gerichte casttests slaagden `6/6`; de volledige backend-suite slaagde
 `4256/4256` met 4 bestaande skips. Frontend typecheck, i18n-, command- en
 voorsteltests, productiebuild en high-severity audit slaagden. De lokale
@@ -30,9 +30,28 @@ nul provider-, schema-, timeout-, parse- en validatiefouten.
 en [main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41796745614)
 slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41797136884)
 slaagde. Publieke backend-health en frontend-buildinfo gaven beide HTTP 200
-en dezelfde SHA `60701f70963f0858c2131768762dcaeeb9049ad4`. Deze
-statusbijwerking maakt opnieuw een commit; de laatste main-CI, Auto Deploy
-en publieke SHA's worden vóór QA opnieuw vergeleken.
+en dezelfde SHA `60701f70963f0858c2131768762dcaeeb9049ad4`. Daarna
+slaagden ook [status-PR #816](https://github.com/gvangalen/antigravity-trading-tool/pull/816),
+[laatste main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41798095836)
+en [laatste Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41798447121).
+Git-main, publieke backend en frontend toonden vervolgens alle drie
+`3957409ce5ddcd79e33bc59812ba0b9438a63faf`.
+
+Onafhankelijke QA controleerde de uiteindelijke live SHA
+`3957409ce5ddcd79e33bc59812ba0b9438a63faf`: de beschermde
+[preflight](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41798749226)
+slaagde en de beschermde
+[Paper-run](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41798864771)
+slaagde `4/4`. SMA- en trendlijnkruisingen gaven een virtuele koop; zonder
+kruising of complete score volgde geen order. Er waren nul Live-orders en nul
+Live-botactivaties. Het artifact heeft SHA256
+`0b8fee93438d1e79c65d6f9a76f9e034dd7c92f88d5592fc869dfa32da42f245`.
+De ingelogde webproef op dezelfde SHA toonde een volledig SMA34-concept en
+intrekking bij assetwissel. De Paper-run seedt de strategie direct; een
+beschermde FINN-bevestiging, opslag en eigenaargebonden teruglezing zijn nog
+niet onafhankelijk live bewezen. De lokale FINN-probe bewees die keten wel op
+een synthetisch account. Het volledige typed-entry-verdict blijft daarom
+`NOT_ACCEPTED` wegens ontbrekend live bewijs, zonder aangetoonde productfout.
 
 ## Natuurlijke SMA-vraag en beschermde Paper-diagnose (4 november 2026)
 
