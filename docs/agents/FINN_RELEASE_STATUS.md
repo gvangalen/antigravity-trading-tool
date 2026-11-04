@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Volledige getypeerde instapregelkaart (4 november 2026)
 
-Phase: `LOCAL_VALIDATION_COMPLETE`. Onafhankelijke QA op live
+Phase: `LIVE_CANDIDATE_AWAITING_QA`. Onafhankelijke QA op live
 `e18751e2745cef08300030a98f1ff8025209c7e5` gaf `NOT_ACCEPTED`: de
 volledig ingevulde SMA34-vraag leverde een bevestigbare kaart op die alleen
 setupvelden toonde. QA annuleerde zonder opslag. De beschermde Paper-proef is
@@ -32,8 +32,15 @@ productiebuild en high-severity audit slaagden. De lokale worker-actiematrix
 slaagde `16/16` met nul Live-orders of productieverbindingen, en de
 adaptertests `22/22`. De echte Responses-development-evaluatie slaagde
 `20/20`; de regression-evaluatie slaagde `109/109`. Beide hadden nul provider-,
-schema-, timeout-, parse- en validatiefouten. CI, deployment en onafhankelijke
-live QA zijn voor deze batch nog niet uitgevoerd.
+schema-, timeout-, parse- en validatiefouten. [PR #807](https://github.com/gvangalen/antigravity-trading-tool/pull/807)
+en [main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41757624057)
+slaagden met vijf jobs. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41757959802)
+slaagde; publieke backend-health en frontend-buildinfo gaven HTTP 200 en exact
+`f984e4130370c94d9eed1eb1fc247c872c65aa15`. Deze statusbijwerking
+maakt een nieuwe commit; de laatste main-CI, Auto Deploy en beide publieke
+SHA's moeten opnieuw samenvallen voordat onafhankelijke ingelogde QA start.
+Er is geen Live-order geplaatst. De volledige bevestigbare kaart en de
+beschermde Paper-fixture zijn nog niet onafhankelijk live geaccepteerd.
 
 ## Herstel natuurlijke instapregelgesprekken (4 november 2026)
 
