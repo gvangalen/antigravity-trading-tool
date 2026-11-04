@@ -57,24 +57,28 @@ def _seed(namespace: str, case: str) -> tuple[int, int, int, str, dict]:
     )
     fresh = now - timedelta(minutes=5)
     conn = fixture._connection()
+    stage = "asset_catalog"
     try:
         with conn.cursor() as cur:
             cur.execute("""INSERT INTO asset_catalog
                 (symbol,display_name,asset_class,provider,is_active,metadata)
                 VALUES (%s,'Protected Paper fixture','crypto','qa',FALSE,%s::json)""",
                 (symbol, json.dumps({"qa_namespace": namespace, "qa_fixture": MARKER})))
+            stage = "trading_markets"
             cur.execute("""INSERT INTO trading_markets
                 (asset_symbol,quote_currency,venue,provider,provider_symbol,
                  tradingview_symbol,source_verified_at,is_active)
                 VALUES (%s,'EUR','BINANCE','QA',%s,%s,%s,TRUE) RETURNING id""",
                 (symbol, f"{symbol}EUR", f"BINANCE:{symbol}EUR", now))
             market_id = int(cur.fetchone()[0])
+            stage = "users"
             cur.execute("""INSERT INTO users (email,password_hash,role,is_active,ai_preferences)
                 VALUES (%s,%s,'user',FALSE,%s::jsonb) RETURNING id""",
                 (f"typed-entry-{case}-{namespace}@tradamind.example",
                  hash_password(secrets.token_urlsafe(48)),
                  json.dumps({"qa_fixture": MARKER, "qa_namespace": namespace})))
             owner = int(cur.fetchone()[0])
+            stage = "setups"
             cur.execute("""INSERT INTO setups
                 (user_id,name,symbol,timeframe,setup_type,min_benchmark_score,
                  max_benchmark_score,market_id,created_at,last_validated)
@@ -94,6 +98,7 @@ def _seed(namespace: str, case: str) -> tuple[int, int, int, str, dict]:
                 }
             strategy_data = {"entry_signal": signal, "price_currency": "EUR",
                              "price_currency_confirmed": True}
+            stage = "strategies"
             cur.execute("""INSERT INTO strategies
                 (user_id,setup_id,name,symbol,timeframe,setup_type,execution_mode,
                  base_amount,entry,stop_loss,targets,risk_profile,data,market_id,created_at)
@@ -102,6 +107,7 @@ def _seed(namespace: str, case: str) -> tuple[int, int, int, str, dict]:
                 (owner, setup_id, f"Typed entry {case}", symbol, ['120'],
                  json.dumps(strategy_data), market_id, now))
             strategy_id = int(cur.fetchone()[0])
+            stage = "bot_configs"
             cur.execute("""INSERT INTO bot_configs
                 (user_id,strategy_id,cadence,symbol,name,mode,is_live,is_active,
                  risk_profile,budget_total_eur,budget_daily_limit_eur,
@@ -111,16 +117,19 @@ def _seed(namespace: str, case: str) -> tuple[int, int, int, str, dict]:
                         1,20,100,'EUR',100,%s,%s,%s) RETURNING id""",
                 (owner, strategy_id, symbol, f"Typed entry {case}", market_id, now, now))
             bot_id = int(cur.fetchone()[0])
+            stage = "bot_ledger"
             cur.execute("""INSERT INTO bot_ledger
                 (user_id,bot_id,entry_type,symbol,market_id,cash_delta_eur,
                  qty_delta,note,meta,ts)
                 VALUES (%s,%s,'paper_initial_funding',%s,%s,100,0,
                         'Protected Paper funding',%s::jsonb,NOW())""",
                 (owner, bot_id, symbol, market_id, json.dumps({"qa_fixture": MARKER})))
+            stage = "bot_portfolios"
             cur.execute("""INSERT INTO bot_portfolios
                 (bot_id,user_id,symbol,cash_eur,position_qty,invested_eur,realized_pnl_eur)
                 VALUES (%s,%s,%s,100,0,0,0)""", (bot_id, owner, symbol))
             for index in range(51):
+                stage = "market_data"
                 observed = latest_close - timedelta(days=50-index)
                 close = 100 if case == "sma_no_cross" or index < 50 else 101
                 cur.execute("""INSERT INTO market_data
@@ -139,6 +148,7 @@ def _seed(namespace: str, case: str) -> tuple[int, int, int, str, dict]:
                 if case == "sma_missing_score" and category == "macro":
                     continue
                 scoped_market = market_id if category != "macro" else None
+                stage = "user_indicator_configs"
                 cur.execute("""INSERT INTO user_indicator_configs
                     (user_id,indicator,category,symbol,asset_class,market_id,
                      priority,enabled,created_at,updated_at)
@@ -146,17 +156,20 @@ def _seed(namespace: str, case: str) -> tuple[int, int, int, str, dict]:
                     (owner, indicator, category, symbol, scoped_market,
                      now - timedelta(hours=3), now - timedelta(hours=3)))
                 if scoped_market is None:
+                    stage = "macro_data"
                     cur.execute("""INSERT INTO macro_data
                         (user_id,name,value,timestamp,source_observed_at,symbol)
                         VALUES (%s,%s,%s,%s,%s,%s)""",
                         (owner, indicator, value, fresh, fresh, symbol))
                 else:
+                    stage = table
                     cur.execute(f"""INSERT INTO {table}
                         (user_id,market_id,{name_column},value,timestamp,source_observed_at,symbol)
                         VALUES (%s,%s,%s,%s,%s,%s,%s)""",
                         (owner, market_id, indicator, value, fresh, fresh, symbol))
             if case != "sma_missing_score":
                 for days_ago in range(1, 5):
+                    stage = "macro_data"
                     observed = fresh - timedelta(days=days_ago)
                     cur.execute("""INSERT INTO macro_data
                         (user_id,symbol,name,value,timestamp,source_observed_at)
@@ -164,8 +177,10 @@ def _seed(namespace: str, case: str) -> tuple[int, int, int, str, dict]:
                         (owner, symbol, 102.2 - days_ago * 0.1, observed, observed))
         conn.commit()
         return owner, bot_id, market_id, symbol, signal
-    except Exception:
+    except Exception as exc:
         conn.rollback()
+        if type(exc).__name__ == "DatatypeMismatch":
+            raise RuntimeError(f"typed_entry_seed_{stage}_datatype_mismatch") from exc
         raise
     finally:
         conn.close()
@@ -217,6 +232,7 @@ def _verify(owner: int, bot_id: int, market_id: int, case: str) -> dict:
 def _finalize(namespace: str, owner: int, bot_id: int, market_id: int,
               symbol: str, *, passed: bool) -> None:
     conn = fixture._connection()
+    stage = "owner_lock"
     try:
         with conn.cursor() as cur:
             cur.execute("SELECT ai_preferences FROM users WHERE id=%s FOR UPDATE", (owner,))
@@ -224,10 +240,12 @@ def _finalize(namespace: str, owner: int, bot_id: int, market_id: int,
             if (not row or (row[0] or {}).get("qa_fixture") != MARKER or
                     (row[0] or {}).get("qa_namespace") != namespace):
                 raise RuntimeError("typed_entry_cleanup_owner_mismatch")
+            stage = "bot_deactivate"
             cur.execute("UPDATE bot_configs SET is_active=FALSE WHERE id=%s AND user_id=%s AND is_live=FALSE",
                         (bot_id, owner))
             if cur.rowcount != 1:
                 raise RuntimeError("typed_entry_cleanup_bot_mismatch")
+            stage = "market_deactivate"
             cur.execute("UPDATE trading_markets SET is_active=FALSE WHERE id=%s AND asset_symbol=%s",
                         (market_id, symbol))
             if cur.rowcount != 1:
@@ -241,17 +259,22 @@ def _finalize(namespace: str, owner: int, bot_id: int, market_id: int,
                     "macro_data", "technical_indicators", "market_data_indicators",
                     "user_indicator_configs",
                 ):
+                    stage = "delete_" + table
                     cur.execute("SELECT to_regclass(%s)", (f"public.{table}",))
                     if cur.fetchone()[0] is not None:
                         cur.execute(f"DELETE FROM {table} WHERE user_id=%s", (owner,))
+                stage = "delete_users"
                 cur.execute("DELETE FROM users WHERE id=%s", (owner,))
+                stage = "delete_market_data"
                 cur.execute("DELETE FROM market_data WHERE market_id=%s", (market_id,))
+                stage = "delete_trading_markets"
                 cur.execute("DELETE FROM trading_markets WHERE id=%s AND asset_symbol=%s AND is_active=FALSE",
                             (market_id, symbol))
+                stage = "delete_asset_catalog"
                 cur.execute("DELETE FROM asset_catalog WHERE symbol=%s AND is_active=FALSE",
                             (symbol,))
         conn.commit()
-    except Exception:
+    except Exception as exc:
         conn.rollback()
         # The failed fixture must never remain capable of executing.
         with conn.cursor() as cur:
@@ -260,6 +283,8 @@ def _finalize(namespace: str, owner: int, bot_id: int, market_id: int,
             cur.execute("UPDATE trading_markets SET is_active=FALSE WHERE id=%s AND asset_symbol=%s",
                         (market_id, symbol))
         conn.commit()
+        if type(exc).__name__ == "DatatypeMismatch":
+            raise RuntimeError(f"typed_entry_finalize_{stage}_datatype_mismatch") from exc
         raise
     finally:
         conn.close()
@@ -272,8 +297,10 @@ def _run_case(namespace: str, case: str, execution_attempts: list[str]) -> dict:
     owner = bot_id = market_id = None
     symbol = ""
     passed = False
+    stage = "seed"
     try:
         owner, bot_id, market_id, symbol, signal = _seed(namespace, case)
+        stage = "score"
         score = build_daily_scores_for_market(owner, market_id)
         if case == "sma_missing_score":
             if score["scores"].get("macro") is not None:
@@ -282,6 +309,7 @@ def _run_case(namespace: str, case: str, execution_attempts: list[str]) -> dict:
             raise RuntimeError("typed_entry_complete_score_control_invalid")
         conn = fixture._connection()
         try:
+            stage = "signal"
             signal_result = _assess_saved_entry_signal(conn, signal, market_id)
         finally:
             conn.close()
@@ -289,15 +317,21 @@ def _run_case(namespace: str, case: str, execution_attempts: list[str]) -> dict:
         if signal_result.get("status") != expected:
             raise RuntimeError("typed_entry_candle_control_invalid")
         execution_attempts.append(case)
+        stage = "execution"
         result = run_trading_bot_execution(
             owner, report_date=datetime.now(timezone.utc).date(), bot_id=bot_id,
             paper_only=True,
         )
         if not result.get("ok") or len(result.get("decisions") or []) != 1:
             raise RuntimeError("typed_entry_assessment_failed")
+        stage = "verify"
         output = _verify(owner, bot_id, market_id, case)
         passed = True
         return output
+    except Exception as exc:
+        if type(exc).__name__ == "DatatypeMismatch":
+            raise RuntimeError(f"typed_entry_{stage}_datatype_mismatch") from exc
+        raise
     finally:
         if owner is not None and bot_id is not None and market_id is not None:
             _finalize(namespace, owner, bot_id, market_id, symbol, passed=passed)

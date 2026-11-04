@@ -103,6 +103,47 @@ def test_typed_entry_paper_cases_keep_running_and_report_safe_error_codes(monkey
     assert result["execution_calls"] == 2
 
 
+def test_typed_entry_paper_seed_reports_only_static_datatype_stage(monkeypatch):
+    probe_path = (REPO_ROOT / "backend" / "trading-tool-backend" / "backend" /
+                  "scripts" / "probe_protected_typed_entry_paper.py")
+    spec = importlib.util.spec_from_file_location("protected_typed_entry_seed", probe_path)
+    probe = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(probe)
+
+    class DatatypeMismatch(Exception):
+        pass
+
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, *_args):
+            raise DatatypeMismatch("private fixture value and schema detail")
+
+    class Connection:
+        rolled_back = False
+        closed = False
+
+        def cursor(self):
+            return Cursor()
+
+        def rollback(self):
+            self.rolled_back = True
+
+        def close(self):
+            self.closed = True
+
+    conn = Connection()
+    monkeypatch.setattr(probe.fixture, "_connection", lambda: conn)
+    with pytest.raises(RuntimeError, match="^typed_entry_seed_asset_catalog_datatype_mismatch$"):
+        probe._seed("qa-20261103-2245-aabbccdd-11223344", "sma_cross")
+    assert conn.rolled_back and conn.closed
+
+
 def test_trade_review_preflight_reads_only_and_redacts_fixture_data(monkeypatch):
     module = _module()
     called = []

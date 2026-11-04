@@ -88,6 +88,12 @@ def test_explicit_crossing_is_preserved_even_when_name_repeats_sma_period():
     assert explicit_entry_signal_from_text(
         "Koop wanneer de afgesloten dagkoers de SMA200 van boven naar onder kruist."
     ) == rule({"kind": "sma", "period": 200}, direction="below")
+    assert explicit_entry_signal_from_text(
+        "Koop pas als de afgesloten dagkoers SMA34 opwaarts kruist."
+    ) == rule({"kind": "sma", "period": 34})
+    assert explicit_entry_signal_from_text(
+        "Verkoop als de afgesloten dagkoers neerwaarts de SMA34 kruist."
+    ) == rule({"kind": "sma", "period": 34}, direction="below")
 
 
 def test_ambiguous_crossing_is_not_silently_interpreted_as_fixed_price():
