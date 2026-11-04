@@ -44,6 +44,24 @@ def run(base_url: str) -> dict:
     }
     if proposal is None or observed["final_operation_id"] != "create_setup":
         raise AssertionError(f"complete_sma_proposal_missing: {complete}")
+    with sync_engine.connect() as conn:
+        complete_payload = conn.execute(text(
+            "SELECT payload_json FROM finn_v2_proposals WHERE id=:proposal_id"
+        ), {"proposal_id": proposal["id"]}).scalar_one()
+    complete_fields = ((complete_payload or {}).get("change") or {}).get("setup_fields") or {}
+    complete_expected = {
+        "name": "QA BTC EUR SMA34 Concept 0411", "symbol": "BTC", "quote_currency": "EUR",
+        "timeframe": "1D", "setup_type": "trade", "plan_scope": "setup_and_strategy",
+        "execution_mode": "fixed", "base_amount": 10.0, "entry": 50000.0,
+        "stop_loss": 45000.0, "targets": [60000.0], "risk_profile": "balanced",
+        "price_currency": "EUR", "min_benchmark_score": 26, "max_benchmark_score": 45,
+        "entry_signal": {
+            "version": 1, "event": "close_crosses_reference", "direction": "above",
+            "timeframe": "1D", "reference": {"kind": "sma", "period": 34},
+        },
+    }
+    if any(complete_fields.get(key) != value for key, value in complete_expected.items()):
+        raise AssertionError(f"complete_sma_proposal_fields_invalid: {complete_fields}")
 
     conversation_id = None
     guided = []

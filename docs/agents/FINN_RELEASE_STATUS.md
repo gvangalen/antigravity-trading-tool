@@ -4,6 +4,35 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Volledige getypeerde instapregelkaart (4 november 2026)
+
+Phase: `LOCAL_VALIDATION_COMPLETE`. Onafhankelijke QA op live
+`e18751e2745cef08300030a98f1ff8025209c7e5` gaf `NOT_ACCEPTED`: de
+volledig ingevulde SMA34-vraag leverde een bevestigbare kaart op die alleen
+setupvelden toonde. QA annuleerde zonder opslag. De beschermde Paper-proef is
+nog niet onafhankelijk afgetekend.
+
+De lokale echte Luna/Responses-run met exact die vraag bewaart alle ingevulde
+velden in het eigenaargebonden servervoorstel: BTC/EUR, 1D, SMA34, €10 per
+uitvoering, instap €50.000, stop €45.000, doel €60.000, risicoprofiel en
+benchmarkband 26–45. De fout zat in de kaartprojectie: deze gebruikte de
+gespreksprojectie die na een model-/toolronde achter het opgeslagen voorstel
+kan lopen. De webkaart leest de te bevestigen velden nu uit de eigenaargebonden
+voorsteldetailroute, ook bij heropenen van het gesprek, en toont alle
+strategievelden vóór bevestiging.
+
+Gericht lokaal bewezen: de complete éénbeurtige aanvraag maakt een voorstel
+met alle genoemde velden; de vijfbeurtige aanvraag blijft intact; bevestiging
+schrijft setup en strategie op dezelfde markt, weigert een andere eigenaar en
+is idempotent. De volledige backend-suite slaagde `4246 passed, 4 skipped`.
+Frontend typecheck, i18n-lint, i18n-, command-, setup- en voorsteltests,
+productiebuild en high-severity audit slaagden. De lokale worker-actiematrix
+slaagde `16/16` met nul Live-orders of productieverbindingen, en de
+adaptertests `22/22`. De echte Responses-development-evaluatie slaagde
+`20/20`; de regression-evaluatie slaagde `109/109`. Beide hadden nul provider-,
+schema-, timeout-, parse- en validatiefouten. CI, deployment en onafhankelijke
+live QA zijn voor deze batch nog niet uitgevoerd.
+
 ## Herstel natuurlijke instapregelgesprekken (4 november 2026)
 
 Phase: `LIVE_CANDIDATE_AWAITING_QA`. De vorige onafhankelijke QA op live
