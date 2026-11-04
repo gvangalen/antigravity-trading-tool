@@ -1588,7 +1588,8 @@ def test_collecting_strategy_and_bot_drafts_use_contract_questions_not_internal_
     )
 
     assert "execution_mode" not in strategy["content"]
-    assert "fixed" in strategy["content"].lower()
+    assert "vast bedrag" in strategy["content"].lower()
+    assert "eigen curve" in strategy["content"].lower()
     assert "name" not in bot["content"].lower()
     assert "bot" in bot["content"].lower()
 
