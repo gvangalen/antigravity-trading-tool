@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Getypeerde strategie-opslag en teruglezing in beschermde QA (4 november 2026)
 
-Phase: `LOCAL_VALIDATION`. Onafhankelijke QA op live SHA
+Phase: `LIVE_CANDIDATE_AWAITING_QA`. Onafhankelijke QA op vorige live SHA
 `8d43fe8b772dc050ed51f366c3c7737e675659b1` liet de beschermde
 [preflight](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41823271311)
 en [runtimeproef](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41823699414)
@@ -31,7 +31,17 @@ slaagden `20/20` development en `109/109` regression, telkens met nul
 provider-, schema-, timeout-, parse- en validatiefouten. De lokale artifacts
 hebben SHA-256 `44c54a3b709b456509f37eafe3066c00d1badb3540bf28aafdffd7d94c447d61`
 en `82ce50338fb648f058a9c8fe1d4c748c6a718c5a70d80f4a9e181544cacf5bf2`.
-CI, deployment en de nieuwe onafhankelijke live herkeuring volgen.
+[PR #820](https://github.com/gvangalen/antigravity-trading-tool/pull/820),
+[PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41829606478)
+en [main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41830185325)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41830640814)
+slaagde. Git-main, publieke `/api/health` en `/build-info.json` gaven
+alle drie `0463c56a157f5dc74d99bab7dc46f183d95d3e6c`, met HTTP 200
+voor beide publieke routes. Deze statuswijziging maakt zelf een nieuwe
+commit. Vóór QA-handoff moeten de laatste main-CI, Auto Deploy en beide
+publieke SHA's opnieuw samenvallen. De onafhankelijke QA-agent heeft een
+beschermd, gevalideerd vervolgmanifest voorbereid; de nieuwe live run en
+het inhoudelijke verdict staan nog open. Er is geen Live-order geplaatst.
 
 ## Volledige getypeerde setupvraag blijft een aanmaakverzoek (4 november 2026)
 
