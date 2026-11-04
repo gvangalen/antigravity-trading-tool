@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Dagrapport klaar in de FINN-feed (4 november 2026)
 
-Phase: `LOCAL_VALIDATION`. Kandidaat: `codex/finn-daily-report-feed`.
+Phase: `DEPLOYED_AWAITING_QA`. Kandidaat: `codex/finn-daily-report-feed`,
+[PR #826](https://github.com/gvangalen/antigravity-trading-tool/pull/826).
 Na succesvolle opslag van het dagrapport én zijn snapshot publiceert de
 nachtelijke rapporttaak één eigenaargebonden feedmelding per rapportdatum.
 Een mislukte rapportpoging publiceert niets; een herhaalde geslaagde run
@@ -21,8 +22,15 @@ fouten en Expo-bundels voor web, iOS en Android slaagden. De echte
 Responses-selecties slaagden `20/20` development en `109/109` regression,
 zonder provider-, schema-, timeout-, parse- of validatiefout.
 FINN-actiecontracten zijn niet gewijzigd; de worker-actiematrix
-is daarom niet van toepassing. Er is nog geen deployment of onafhankelijke
-ingelogde QA voor deze wijziging uitgevoerd.
+is daarom niet van toepassing. De vijf [PR-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41896997038)
+slaagden op de uiteindelijke kandidaat. [Main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41897584208)
+en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41898161954)
+slaagden. Git-main, publieke `/api/health` en `/build-info.json` gaven
+alle drie `191d4a30edffaf6dca4353523ef4af5fdbc876ad`; beide routes
+antwoordden HTTP 200. Deze statuswijziging creëert zelf een nieuwe commit:
+vóór QA moet de laatste main-CI, Auto Deploy en publieke SHA opnieuw
+samenvallen. Een onafhankelijke ingelogde QA-controle van de melding
+staat nog open; er is geen rapport gegenereerd voor deze Build-check.
 
 ## Leesbare Paper-beslissingen in de FINN-feed (4 november 2026)
 
