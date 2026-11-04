@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Herstel natuurlijke instapregelgesprekken (4 november 2026)
 
-Phase: `LOCAL_VALIDATION`. De vorige onafhankelijke QA op live
+Phase: `LIVE_CANDIDATE_AWAITING_QA`. De vorige onafhankelijke QA op live
 `75dc098eeaa16bc7e67162dc3a49c58ab19cda67` gaf `NOT_ACCEPTED`:
 een natuurlijke meerbeurtige SMA50-vraag verloor het lopende concept en een
 volledig ingevulde SMA34-vraag leverde geen voorstelkaart. De afgeschermde
@@ -36,8 +36,19 @@ Security vond geen concrete blokkade; Architecture vond een extra verliespad
 voor gewone capability-vragen, dat in deze batch is hersteld en lokaal
 meebeproefd. De volledige backend-suite slaagde `4246 passed, 4 skipped`.
 De definitieve lokale worker-actiematrix slaagde `16/16` en de adaptertests
-`22/22`, met nul brokerorders, Live-calls of productieverbindingen. Er is
-geen Live-order geplaatst en de nieuwe kandidaat is nog niet gedeployed.
+`22/22`, met nul brokerorders, Live-calls of productieverbindingen. De
+definitieve backend-suite slaagde opnieuw met `4246 passed, 4 skipped`.
+[PR #805](https://github.com/gvangalen/antigravity-trading-tool/pull/805)
+en [main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41750281130)
+slaagden elk met vijf jobs. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41750691871)
+slaagde; publieke backend-health en frontend-buildinfo gaven HTTP 200 en
+dezelfde SHA `09de3639783ae8c0a9eeb2e0b680b56cf7fe48a7`. Deze
+statusbijwerking maakt een nieuwe commit; vóór de QA-handoff moeten de laatste
+main-CI, Auto Deploy en beide publieke SHA's opnieuw samenvallen. Er is geen
+Live-order geplaatst. De ingelogde natuurlijke chat- en bevestigingsflow en
+de beschermde Paper-fixture zijn nog niet onafhankelijk op deze reparatie
+beoordeeld. Voor de eerste beschermde `typed_entry_paper`-run blijft de
+expliciete gebruikersautorisatie uit `FINN_RELEASE_PROCESS.md` nodig.
 
 ## Onafhankelijke typed-entry Paper-proef (3 november 2026)
 
