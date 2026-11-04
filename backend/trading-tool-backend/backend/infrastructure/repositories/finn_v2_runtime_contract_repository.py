@@ -349,6 +349,19 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
             return row
         return await self._write_revision(row=row, state=next_state)
 
+    async def carry_guided_draft_through_read(
+        self, *, run_id: str, user_id: int, guided_state: Dict[str, Any],
+    ) -> FinnV2RuntimeContract:
+        """Keep a pending draft across a read-only answer about its contract."""
+        row = await self._required_for_update(run_id)
+        if row.user_id != user_id or (row.state_json or {}).get("terminal_status") != PENDING_STATUS:
+            raise RuntimeContractConflictError("guided_read_context_invalid")
+        if guided_state.get("status") != "collecting" or not guided_state.get("missing_required_inputs"):
+            raise RuntimeContractConflictError("guided_read_context_not_collecting")
+        state = deepcopy(row.state_json or {})
+        state["guided_state"] = deepcopy(guided_state)
+        return await self._write_revision(row=row, state=state)
+
     async def seal_resolved_action_envelope(
         self,
         *,

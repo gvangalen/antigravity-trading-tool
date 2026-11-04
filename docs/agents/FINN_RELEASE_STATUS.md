@@ -4,6 +4,41 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Herstel natuurlijke instapregelgesprekken (4 november 2026)
+
+Phase: `LOCAL_VALIDATION`. De vorige onafhankelijke QA op live
+`75dc098eeaa16bc7e67162dc3a49c58ab19cda67` gaf `NOT_ACCEPTED`:
+een natuurlijke meerbeurtige SMA50-vraag verloor het lopende concept en een
+volledig ingevulde SMA34-vraag leverde geen voorstelkaart. De afgeschermde
+Paper-fixture zelf is hierdoor nog niet onafhankelijk geaccepteerd.
+
+De herstelbatch herkent de expliciete voorstelvraag, verwerkt kruising,
+benchmarkband en bedragen in het bestaande getypeerde actiecontract en bewaart
+een eigenaargebonden open concept bij read-only vragen over de instapregel.
+Een nieuwe aparte setup of expliciete lezing van een opgeslagen plan erft dat
+concept niet. FINN krijgt het uitvoerbare contract als feiten; Luna formuleert
+zelf de uitleg. De huidige contractgrens blijft zichtbaar: een SMA-/trendlijn-
+kruising is een extra instapfilter en vervangt nog geen vast instapniveau.
+
+Gemeten lokaal: een echte Luna/Responses-aanvraag met alle SMA34-velden gaf
+een voorstel; een vijfbeurtig SMA50-gesprek bleef na twee tussenvragen intact
+en gaf een voorstel met BTC/EUR, 1D, SMA50, €10, instap €50.000, stop €45.000,
+doel €60.000 en benchmarkband 26–45. Bevestiging schreef setup en strategie
+op dezelfde markt; cross-owner bevestiging werd geweigerd en herhaling was
+idempotent. Een lokale Paper-workerproef gaf één virtuele koop bij een
+bevestigde kruising met complete Score 2.0-data, geen order zonder kruising,
+en geen order bij ontbrekende macroscore. Eerdere lokale viercasusproef voor
+het onveranderde SMA-/trendlijn-workerpad slaagde `4/4` op de disposable
+database. Frontend typecheck, i18n-lint, i18n-, command-, voorstel- en
+setuptests en productiebuild slaagden. Echte Luna/Responses-selectorevaluaties
+slaagden `20/20` ontwikkeling en `109/109` regressie, alle foutpercentages nul.
+Security vond geen concrete blokkade; Architecture vond een extra verliespad
+voor gewone capability-vragen, dat in deze batch is hersteld en lokaal
+meebeproefd. De volledige backend-suite slaagde `4246 passed, 4 skipped`.
+De definitieve lokale worker-actiematrix slaagde `16/16` en de adaptertests
+`22/22`, met nul brokerorders, Live-calls of productieverbindingen. Er is
+geen Live-order geplaatst en de nieuwe kandidaat is nog niet gedeployed.
+
 ## Onafhankelijke typed-entry Paper-proef (3 november 2026)
 
 Phase: `LIVE_CANDIDATE_AWAITING_QA`. De getypeerde instapregelcode stond live op

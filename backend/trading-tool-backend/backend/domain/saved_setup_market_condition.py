@@ -30,7 +30,7 @@ def explicit_benchmark_bounds(text: str) -> dict[str, int]:
     """
     request = " ".join(str(text or "").casefold().split())
     condition_words = ("koopzone", "koopvoorwaarde", "setupvoorwaarde",
-                       "setupscorezone", "scorevoorwaarde", "scorefilter",
+                       "setupscorezone", "scorevoorwaarde", "scorefilter", "benchmarkband",
                        "scoregrens", "scorezone", "benchmarkvoorwaarde")
     for clause in re.split(r"[.;?!\n]+", request):
         cue = re.search(r"\b(?:" + "|".join(condition_words) + r")\b", clause)

@@ -63,6 +63,23 @@ def test_generic_buy_condition_does_not_promote_a_price_range_to_benchmark():
     ) == {"min_benchmark_score": 61, "max_benchmark_score": 75}
 
 
+def test_signal_period_is_never_used_as_a_guided_purchase_amount():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    service = FinnV2OperationStateService()
+    assert service._requested_slot_value(
+        field="base_amount", text="Alleen de SMA50-kruising, zonder vaste instapkoers.",
+        contract=contract,
+    ) is None
+    assert service._requested_slot_value(
+        field="base_amount", text="SMA50 met een bedrag van €10 per aankoop",
+        contract=contract,
+    ) == 10
+    assert service._requested_slot_value(
+        field="base_amount", text="SMA50 kruist bij een koers van €50.000",
+        contract=contract,
+    ) is None
+
+
 def test_strategy_deferral_completes_an_existing_dca_draft_without_losing_setup_fields():
     contract = FinnV2OperationRegistry().require_supported("create_setup")
     service = FinnV2OperationStateService()
