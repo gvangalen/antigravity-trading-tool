@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { inactiveProposalIds, isFinnProposalCorrection, mapBackendSessionMessages, retireEarlierFinnProposalCards, retireFinnProposalCards, setupDraftFrequencyLabel, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "../lib/finnProposalCardState.mjs";
+import { inactiveProposalIds, isFinnProposalCorrection, mapBackendSessionMessages, retireEarlierFinnProposalCards, retireFinnProposalCards, setupDraftFrequencyLabel, setupDraftFromProposal, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "../lib/finnProposalCardState.mjs";
 import { hasConfirmableDraft } from "../lib/finnDraftConversation.mjs";
 
 test("only an active server proposal restores its confirmable draft card", () => {
@@ -19,6 +19,28 @@ test("only an active server proposal restores its confirmable draft card", () =>
   assert.equal(messages[1].actions[0].proposal_id, "open");
   assert.equal(messages[1].actions[0].display_context.conversation_id, "finn-v2-conv-owned");
   assert.equal(JSON.stringify(messages).includes("confirmation_token"), false);
+});
+
+test("a confirmed Trade card reads every term from the owner-scoped proposal", () => {
+  const requested = {
+    name: "QA BTC EUR SMA34", symbol: "BTC", quote_currency: "EUR",
+    setup_type: "trade", timeframe: "1D", min_benchmark_score: 26,
+    max_benchmark_score: 45, base_amount: 10, entry: 50000,
+    stop_loss: 45000, targets: [60000], risk_profile: "balanced",
+    entry_signal: { version: 1, event: "close_crosses_reference", direction: "above",
+      timeframe: "1D", reference: { kind: "sma", period: 34 } },
+  };
+  const draft = { operation_id: "create_setup", draft_status: "complete",
+    supplied_inputs: { name: requested.name, symbol: "BTC", setup_type: "trade" },
+    missing_inputs: [] };
+  assert.deepEqual(setupDraftFromProposal(draft, requested).supplied_inputs, requested);
+  const [restored] = mapBackendSessionMessages([{ role: "assistant", content: "Voorstel", pending_proposal: {
+    proposal_id: "owned", operation_id: "create_setup", draft,
+    requested_state: requested,
+  } }]);
+  assert.equal(hasConfirmableDraft(restored), true);
+  assert.deepEqual(restored.setupDraft.supplied_inputs, requested);
+  assert.deepEqual(restored.actions[0].display_context.supplied_inputs, requested);
 });
 
 test("trade drafts have no DCA frequency and DCA labels cannot stringify objects", () => {

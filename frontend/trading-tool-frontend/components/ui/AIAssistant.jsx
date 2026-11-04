@@ -26,7 +26,7 @@ import { formatDraftCardValue, formatExecutionMode } from "@/lib/contractValueFo
 import { clearActiveFinnConversation, readActiveFinnConversation, writeActiveFinnConversation } from "@/lib/finnActiveConversation.mjs";
 import { parseFinnChatText } from "@/lib/finnChatText.mjs";
 import { finnSubmissionLocale } from "@/lib/finnChatLocale.mjs";
-import { inactiveProposalIds, isFinnProposalCorrection, mapBackendSessionMessages, retireEarlierFinnProposalCards, retireFinnProposalCards, setupDraftFrequencyLabel, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "@/lib/finnProposalCardState.mjs";
+import { inactiveProposalIds, isFinnProposalCorrection, mapBackendSessionMessages, retireEarlierFinnProposalCards, retireFinnProposalCards, setupDraftFrequencyLabel, setupDraftFromProposal, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "@/lib/finnProposalCardState.mjs";
 import { clarificationQuestionChoices, draftConversationCopy, draftQuestionChoices, hasConfirmableDraft, isCollectingDraft, isOpenClarification } from "@/lib/finnDraftConversation.mjs";
 
 const INDICATOR_MODAL_OPEN_EVENT = "finn-indicator-config:open";
@@ -1097,15 +1097,20 @@ function AIAssistantContent({
       let verifiedBotStrategyName = null;
       let resolvedBotName = activeBot?.name || null;
       let immutableProposalState = null;
+      if (verified?.proposal_id) {
+        try {
+          immutableProposalState = await fetchFinnV2Proposal(verified.proposal_id);
+        } catch (error) {
+          console.warn("FINN kon het opgeslagen voorstel niet ophalen:", error);
+        }
+      }
       try {
         if (operationId?.includes("setup") || operationId?.includes("strategy") || operationId?.includes("bot")) {
-          const [ownerSetups, ownerStrategies, ownerBots, proposalSummary] = await Promise.all([
+          const [ownerSetups, ownerStrategies, ownerBots] = await Promise.all([
             fetchSetups(),
             fetchStrategies(),
             fetchBotConfigs(),
-            verified?.proposal_id ? fetchFinnV2Proposal(verified.proposal_id) : Promise.resolve(null),
           ]);
-          immutableProposalState = proposalSummary;
           const setupId = actionDraft?.supplied_inputs?.setup_id || projection?.supplied_inputs?.setup_id;
           const strategyId = actionDraft?.supplied_inputs?.strategy_id || projection?.supplied_inputs?.strategy_id;
           const botId = actionDraft?.supplied_inputs?.bot_id || projection?.supplied_inputs?.bot_id;
@@ -1134,6 +1139,11 @@ function AIAssistantContent({
         console.warn("FINN kon gekoppelde conceptnamen niet verversen:", error);
       }
       if (activeStreamIdRef.current !== streamId) return;
+      const reviewedSetupDraft = verified?.proposal_id && immutableProposalState?.operation_type === "create_setup"
+        ? setupDraftFromProposal(setupDraft, immutableProposalState.requested_state)
+        : setupDraft;
+      const setupProposalReviewMissing = Boolean(verified?.proposal_id && operationId === "create_setup"
+        && immutableProposalState?.operation_type !== "create_setup");
       const visibleActionDraft = actionDraft
         ? {
             ...actionDraft,
@@ -1169,16 +1179,19 @@ function AIAssistantContent({
                 run_id: runId,
                 run_status: run?.status,
                 clarification: projection?.clarification || null,
-                setup_draft: setupDraft,
+                setup_draft: reviewedSetupDraft,
                 action_draft: visibleActionDraft,
               },
-              setupDraft,
+              setupDraft: reviewedSetupDraft,
               actionDraft: visibleActionDraft,
               reasoning: null,
               canConfirm: Boolean(verified?.confirmation_required && verified?.proposal_id
+                && !setupProposalReviewMissing
                 && (operationId !== "create_bot" || verifiedBotStrategyName)
                 && (!requiresNamedTargetReview || reviewedTargetName)),
               confirmationSuspended: Boolean(verified?.proposal_id && (
+                setupProposalReviewMissing
+                ||
                 (operationId === "create_bot" && !verifiedBotStrategyName)
                 || (requiresNamedTargetReview && !reviewedTargetName)
               )),
@@ -1196,17 +1209,17 @@ function AIAssistantContent({
                   operation_id: operationId || projection?.final_operation_id,
                   review_target_name: reviewedTargetName,
                   name: actionDraft?.supplied_inputs?.name
-                    || setupDraft?.supplied_inputs?.name
+                    || reviewedSetupDraft?.supplied_inputs?.name
                     || projection?.action_result?.canonical_name
                     || (operationId?.includes("setup") ? resolvedSetupName : null)
                     || (operationId?.includes("strategy") ? resolvedStrategyName : null)
                     || (operationId?.includes("bot") ? resolvedBotName : null)
                     || null,
-                  symbol: actionDraft?.supplied_inputs?.symbol || setupDraft?.supplied_inputs?.symbol || projection?.canonical_target || activeSetup?.symbol || null,
-                  timeframe: actionDraft?.supplied_inputs?.timeframe || setupDraft?.supplied_inputs?.timeframe || null,
+                  symbol: actionDraft?.supplied_inputs?.symbol || reviewedSetupDraft?.supplied_inputs?.symbol || projection?.canonical_target || activeSetup?.symbol || null,
+                  timeframe: actionDraft?.supplied_inputs?.timeframe || reviewedSetupDraft?.supplied_inputs?.timeframe || null,
                   setup_name: resolvedSetupName,
                   strategy_name: operationId === "create_bot" ? verifiedBotStrategyName : resolvedStrategyName,
-                  supplied_inputs: projection?.supplied_inputs || {},
+                  supplied_inputs: reviewedSetupDraft?.supplied_inputs || projection?.supplied_inputs || {},
                   before_state: immutableProposalState?.before_state || {},
                   requested_state: immutableProposalState?.requested_state || projection?.supplied_inputs?.changed_fields || {},
                   target_revision: immutableProposalState?.target_revision || null,
@@ -1844,6 +1857,8 @@ function AIAssistantContent({
     const labels = { name: "naam", setup_type: "type", symbol: "asset", quote_currency: "koersvaluta", timeframe: "timeframe", dca_frequency: "frequentie", dca_day: "weekdag", dca_month_day: "dag van de maand", min_investment: "minimuminvestering", min_benchmark_score: "ondergrens totale benchmark", max_benchmark_score: "bovengrens totale benchmark", dca_amount_mode: "bedragregel", base_amount: "basisbedrag", score_source: "totale benchmark (markt + macro + technisch)", low_threshold: "grens lage/middenscore", high_threshold: "grens midden/hoge score", low_score_percent: "percentage lage score", mid_score_percent: "percentage middenscore", high_score_percent: "percentage hoge score" };
     const missing = (draft.missing_inputs || []).map((field) => at(`draftCards.inputs.${field}`, labels[field] || field));
     const euro = (value) => new Intl.NumberFormat(locale || "nl-NL", { style: "currency", currency: "EUR" }).format(Number(value));
+    const priceCurrency = String(supplied.price_currency || supplied.quote_currency || "EUR").toUpperCase();
+    const tradeAmount = (value) => new Intl.NumberFormat(locale || "nl-NL", { style: "currency", currency: priceCurrency }).format(Number(value));
     const scoreLabels = {
       benchmark_score: at("dcaDraft.benchmarkSource", "eigen benchmark (markt + macro + technisch)"),
     };
@@ -1885,7 +1900,12 @@ function AIAssistantContent({
           <p className="font-semibold">{at("draftCards.tradePlan", ({ en: "Setup and linked strategy", de: "Setup und verknüpfte Strategie" }[locale] || "Setup en gekoppelde strategie"))}</p>
           <p className="mt-1">{at("draftCards.entrySignal", ({ en: "Entry rule", de: "Einstiegsregel" }[locale] || "Instapregel"))}: {({ en: "Daily close", de: "Tagesschlusskurs" }[locale] || "Dagslotkoers")} {supplied.entry_signal.direction === "above" ? ({ en: "crosses above", de: "kreuzt über" }[locale] || "kruist boven") : ({ en: "crosses below", de: "kreuzt unter" }[locale] || "kruist onder")} {supplied.entry_signal.reference?.kind === "sma" ? `SMA ${supplied.entry_signal.reference.period}` : at("draftCards.trendline", "trendlijn")}</p>
           {supplied.entry_signal.reference?.kind === "trendline" && <p className="mt-1">{({ en: "Trendline anchors", de: "Trendlinien-Anker" }[locale] || "Trendlijnpunten")}: {supplied.entry_signal.reference.anchors?.map((point) => `${point.at} · ${point.price} ${supplied.quote_currency || ""}`).join(" → ")}</p>}
-          <p className="mt-1">{[supplied.base_amount != null ? euro(supplied.base_amount) : null, supplied.entry != null ? `Entry ${supplied.entry} ${supplied.quote_currency}` : null, supplied.stop_loss != null ? `Stop ${supplied.stop_loss} ${supplied.quote_currency}` : null, supplied.targets?.length ? `Targets ${supplied.targets.join(", ")} ${supplied.quote_currency}` : null].filter(Boolean).join(" · ")}</p>
+          <p className="mt-1">{at("draftCards.tradeAmount", ({ en: "Amount per execution", de: "Betrag pro Ausführung" }[locale] || "Bedrag per uitvoering"))}: <span className="font-semibold">{supplied.base_amount != null ? euro(supplied.base_amount) : "—"}</span></p>
+          <p className="mt-1">{at("draftCards.priceCurrency", ({ en: "Price currency", de: "Kurswährung" }[locale] || "Koersvaluta"))}: <span className="font-semibold">{priceCurrency}</span></p>
+          <p className="mt-1">{at("draftCards.entryLevel", ({ en: "Entry level", de: "Einstiegsniveau" }[locale] || "Instapniveau"))}: <span className="font-semibold">{supplied.entry != null ? tradeAmount(supplied.entry) : "—"}</span></p>
+          <p className="mt-1">{at("draftCards.stopLevel", ({ en: "Stop", de: "Stop" }[locale] || "Stop"))}: <span className="font-semibold">{supplied.stop_loss != null ? tradeAmount(supplied.stop_loss) : "—"}</span></p>
+          <p className="mt-1">{at("draftCards.targets", ({ en: "Targets", de: "Ziele" }[locale] || "Doelen"))}: <span className="font-semibold">{supplied.targets?.length ? supplied.targets.map(tradeAmount).join(", ") : "—"}</span></p>
+          <p className="mt-1">{at("draftCards.riskProfile", ({ en: "Risk profile", de: "Risikoprofil" }[locale] || "Risicoprofiel"))}: <span className="font-semibold">{humanValue(supplied.risk_profile) || "—"}</span></p>
           <p className="mt-2 text-xs">{at("draftCards.tradeEntryGates", ({ en: "A Paper buy requires all three: your current total benchmark within the saved range, a confirmed close crossing, and the current price within 1% above the saved entry level. Missing data means no buy.", de: "Ein Paper-Kauf erfordert alle drei Bedingungen: den aktuellen Gesamtbenchmark im gespeicherten Bereich, eine bestätigte Schlusskurskreuzung und einen aktuellen Kurs bis 1 % über dem gespeicherten Einstieg. Bei fehlenden Daten kein Kauf." }[locale] || "Een Paper-aankoop vereist alle drie: je actuele totale benchmark binnen de opgeslagen grenzen, een bevestigde slotkoerskruising en een actuele koers tot 1% boven het opgeslagen instapniveau. Bij ontbrekende data geen aankoop."))}</p>
           <p className="mt-2 text-xs">{at("draftCards.tradePlanOnly", ({ en: "Confirmation saves both records. No bot or order starts.", de: "Die Bestätigung speichert beide Einträge. Kein Bot und keine Order werden gestartet." }[locale] || "Bevestigen slaat beide onderdelen op. Er start geen bot of order."))}</p>
         </div>}

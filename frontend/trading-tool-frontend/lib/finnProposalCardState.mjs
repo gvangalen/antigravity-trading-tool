@@ -16,6 +16,21 @@ export function setupDraftFrequencyLabel(supplied, translate) {
     .filter(Boolean).join(" · ");
 }
 
+// The owner-scoped proposal is the confirmation source of truth. The guided
+// conversation projection can lag behind it after a model/tool round.
+export function setupDraftFromProposal(draft, requestedState) {
+  if (draft?.operation_id !== "create_setup") return draft;
+  const review = requestedState && typeof requestedState === "object" ? requestedState : {};
+  const fields = review.setup && typeof review.setup === "object"
+    ? { ...review.setup, ...(review.strategy && typeof review.strategy === "object" ? review.strategy : {}) }
+    : review;
+  if (!fields.name || !fields.symbol || !fields.setup_type) return draft;
+  return {
+    ...draft,
+    supplied_inputs: { ...(draft.supplied_inputs || {}), ...fields },
+  };
+}
+
 export function suspendedProposalIds(proposalIds, settledResults, clarificationRequired = false) {
   return new Set(proposalIds.filter((_, index) =>
     settledResults[index]?.status !== "fulfilled"
@@ -90,7 +105,9 @@ export function mapBackendSessionMessages(messages = []) {
       };
       const pending = message.role === "assistant" ? message.pending_proposal : null;
       const operationId = String(pending?.operation_id || "");
-      const draft = pending?.draft;
+      const draft = pending?.operation_id === "create_setup"
+        ? setupDraftFromProposal(pending?.draft, pending?.requested_state)
+        : pending?.draft;
       if (!pending?.proposal_id || !operationId || !draft
           || draft.operation_id !== operationId || (draft.missing_inputs || []).length) return base;
       const supplied = draft.supplied_inputs || {};
