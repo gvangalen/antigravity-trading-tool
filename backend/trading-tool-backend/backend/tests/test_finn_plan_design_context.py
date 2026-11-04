@@ -6,6 +6,7 @@ from backend.domain.finn_dca_plan_contract import dca_automation_capabilities, s
 from backend.services.finn_v2_plan_design_context import (
     advance_plan_design_focus, remember_unsaved_design,
     requests_execution_capability_question, is_new_separate_setup_request,
+    supersedes_guided_setup,
     is_explicit_saved_plan_read, asks_why_guided_signal_needs_entry,
 )
 
@@ -31,6 +32,22 @@ def test_explicit_new_parent_is_distinct_from_a_new_strategy_on_saved_parent():
     assert is_new_separate_setup_request(
         "For this new, separate BTC/EUR DCA idea, let's explore a trendline rule."
     )
+
+
+def test_same_guided_trade_concept_survives_readback_and_proposal_request():
+    guided = {"operation_id": "create_setup", "collected_inputs": {
+        "symbol": "BTC", "quote_currency": "EUR", "setup_type": "trade",
+        "entry_signal": {"reference": {"kind": "sma", "period": 50}},
+    }}
+    assert not supersedes_guided_setup(
+        "Voordat ik een naam kies: welke velden heb je voor dit nieuwe concept onthouden?", guided,
+    )
+    assert not supersedes_guided_setup(
+        "Maak nu alleen de conceptvoorstelkaart voor de aparte BTC/EUR trade-setup.", guided,
+    )
+    assert supersedes_guided_setup("Nee, ik bedoel een nieuwe aparte setup voor AAPL", guided)
+    assert supersedes_guided_setup("Maak een nieuw plan voor aapl", guided)
+    assert supersedes_guided_setup("Maak een nieuwe ETH/EUR trade-setup", guided)
 
 
 def test_plan_design_focus_does_not_bind_an_ordinary_saved_plan_read():

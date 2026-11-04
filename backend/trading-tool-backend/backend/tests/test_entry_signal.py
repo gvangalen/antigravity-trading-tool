@@ -101,3 +101,29 @@ def test_ambiguous_crossing_is_not_silently_interpreted_as_fixed_price():
     )
     assert line["reference"]["kind"] == "trendline"
     assert [point["price"] for point in line["reference"]["anchors"]] == [70000.0, 76000.0]
+
+
+def test_explicit_trendline_with_utc_times_and_localized_prices():
+    line = explicit_entry_signal_from_text(
+        "De afgesloten 1D-slotkoers kruist opwaarts door de trendlijn met punten "
+        "2026-09-01 00:00 UTC op €50.000 en 2026-10-01 00:00 UTC op €55.000."
+    )
+    assert line == rule({"kind": "trendline", "anchors": [
+        {"at": "2026-09-01T00:00:00+00:00", "price": 50000.0},
+        {"at": "2026-10-01T00:00:00+00:00", "price": 55000.0},
+    ]})
+
+
+def test_explicit_trendline_preserves_nonmidnight_utc_anchors():
+    line = explicit_entry_signal_from_text(
+        "De afgesloten dagkoers kruist de trendlijn van onder naar boven; "
+        "ankers 2026-09-01 14:30 UTC op 50000 en 2026-10-01 16:45 UTC op 55000."
+    )
+    assert line["reference"]["anchors"] == [
+        {"at": "2026-09-01T14:30:00+00:00", "price": 50000.0},
+        {"at": "2026-10-01T16:45:00+00:00", "price": 55000.0},
+    ]
+    assert explicit_entry_signal_from_text(
+        "De afgesloten dagkoers kruist de trendlijn van onder naar boven; "
+        "ankers 2026-09-01 14:30 op 50000 en 2026-10-01 16:45 op 55000."
+    ) is None

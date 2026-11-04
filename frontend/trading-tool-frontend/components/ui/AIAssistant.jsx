@@ -26,7 +26,7 @@ import { formatDraftCardValue, formatExecutionMode } from "@/lib/contractValueFo
 import { clearActiveFinnConversation, readActiveFinnConversation, writeActiveFinnConversation } from "@/lib/finnActiveConversation.mjs";
 import { parseFinnChatText } from "@/lib/finnChatText.mjs";
 import { finnSubmissionLocale } from "@/lib/finnChatLocale.mjs";
-import { inactiveProposalIds, isFinnProposalCorrection, mapBackendSessionMessages, retireEarlierFinnProposalCards, retireFinnProposalCards, setupDraftFrequencyLabel, setupDraftFromProposal, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "@/lib/finnProposalCardState.mjs";
+import { inactiveProposalIds, isFinnProposalCorrection, mapBackendSessionMessages, retireEarlierFinnProposalCards, retireFinnProposalCards, setupDraftFrequencyLabel, setupDraftFromProposal, tradeSetupReviewComplete, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "@/lib/finnProposalCardState.mjs";
 import { clarificationQuestionChoices, draftConversationCopy, draftQuestionChoices, hasConfirmableDraft, isCollectingDraft, isOpenClarification } from "@/lib/finnDraftConversation.mjs";
 
 const INDICATOR_MODAL_OPEN_EVENT = "finn-indicator-config:open";
@@ -1142,6 +1142,8 @@ function AIAssistantContent({
       const reviewedSetupDraft = verified?.proposal_id && immutableProposalState?.operation_type === "create_setup"
         ? setupDraftFromProposal(setupDraft, immutableProposalState.requested_state)
         : setupDraft;
+      const tradeReviewMissing = Boolean(verified?.proposal_id && operationId === "create_setup"
+        && !tradeSetupReviewComplete(reviewedSetupDraft, immutableProposalState?.requested_state));
       const setupProposalReviewMissing = Boolean(verified?.proposal_id && operationId === "create_setup"
         && immutableProposalState?.operation_type !== "create_setup");
       const visibleActionDraft = actionDraft
@@ -1183,14 +1185,16 @@ function AIAssistantContent({
                 action_draft: visibleActionDraft,
               },
               setupDraft: reviewedSetupDraft,
+              proposalRequestedState: immutableProposalState?.requested_state || null,
               actionDraft: visibleActionDraft,
               reasoning: null,
               canConfirm: Boolean(verified?.confirmation_required && verified?.proposal_id
                 && !setupProposalReviewMissing
+                && !tradeReviewMissing
                 && (operationId !== "create_bot" || verifiedBotStrategyName)
                 && (!requiresNamedTargetReview || reviewedTargetName)),
               confirmationSuspended: Boolean(verified?.proposal_id && (
-                setupProposalReviewMissing
+                setupProposalReviewMissing || tradeReviewMissing
                 ||
                 (operationId === "create_bot" && !verifiedBotStrategyName)
                 || (requiresNamedTargetReview && !reviewedTargetName)
@@ -1840,9 +1844,13 @@ function AIAssistantContent({
 
   const renderV2SetupDraftCard = (message, messageIndex) => {
     if (message?.draftCanceled || message?.draftExecuted) return null;
-    const draft = message.setupDraft || message.state?.setup_draft;
+    const draft = setupDraftFromProposal(
+      message.setupDraft || message.state?.setup_draft,
+      message.proposalRequestedState,
+    );
     if (!draft || draft.operation_id !== "create_setup") return null;
     if (!hasConfirmableDraft(message)) return null;
+    if (!tradeSetupReviewComplete(draft, message.proposalRequestedState)) return null;
     const supplied = draft.supplied_inputs || {};
     const humanValue = (value) => {
       if (typeof value !== "string" && typeof value !== "number") return null;

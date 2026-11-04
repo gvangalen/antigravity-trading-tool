@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { inactiveProposalIds, isFinnProposalCorrection, mapBackendSessionMessages, retireEarlierFinnProposalCards, retireFinnProposalCards, setupDraftFrequencyLabel, setupDraftFromProposal, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "../lib/finnProposalCardState.mjs";
+import { inactiveProposalIds, isFinnProposalCorrection, mapBackendSessionMessages, retireEarlierFinnProposalCards, retireFinnProposalCards, setupDraftFrequencyLabel, setupDraftFromProposal, tradeSetupReviewComplete, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "../lib/finnProposalCardState.mjs";
 import { hasConfirmableDraft } from "../lib/finnDraftConversation.mjs";
 
 test("only an active server proposal restores its confirmable draft card", () => {
@@ -24,9 +24,9 @@ test("only an active server proposal restores its confirmable draft card", () =>
 test("a confirmed Trade card reads every term from the owner-scoped proposal", () => {
   const requested = {
     name: "QA BTC EUR SMA34", symbol: "BTC", quote_currency: "EUR",
-    setup_type: "trade", timeframe: "1D", min_benchmark_score: 26,
+    setup_type: "trade", plan_scope: "setup_and_strategy", timeframe: "1D", min_benchmark_score: 26,
     max_benchmark_score: 45, base_amount: 10, entry: 50000,
-    stop_loss: 45000, targets: [60000], risk_profile: "balanced",
+    stop_loss: 45000, targets: [60000], risk_profile: "balanced", price_currency: "EUR",
     entry_signal: { version: 1, event: "close_crosses_reference", direction: "above",
       timeframe: "1D", reference: { kind: "sma", period: 34 } },
   };
@@ -41,6 +41,10 @@ test("a confirmed Trade card reads every term from the owner-scoped proposal", (
   assert.equal(hasConfirmableDraft(restored), true);
   assert.deepEqual(restored.setupDraft.supplied_inputs, requested);
   assert.deepEqual(restored.actions[0].display_context.supplied_inputs, requested);
+  assert.equal(tradeSetupReviewComplete(restored.setupDraft, restored.proposalRequestedState), true);
+  assert.equal(tradeSetupReviewComplete({ ...draft, supplied_inputs: {
+    ...requested, targets: [],
+  } }, null), false);
 });
 
 test("trade drafts have no DCA frequency and DCA labels cannot stringify objects", () => {

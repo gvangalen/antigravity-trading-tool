@@ -73,6 +73,31 @@ def is_new_separate_setup_request(message: str) -> bool:
     return bool(_NEW_SETUP.search(text) or _NEW_DESIGN.search(text))
 
 
+def supersedes_guided_setup(message: str, guided: dict[str, Any] | None) -> bool:
+    """A mention of the *current* new concept is not another new concept.
+
+    Guided setup slots survive read-only questions and requests to show the
+    current proposal. An explicit asset change or a fresh differently named
+    setup is a new parent and must still retire the old draft.
+    """
+    if not is_new_separate_setup_request(message):
+        return False
+    collected = dict((guided or {}).get("collected_inputs") or {})
+    if not collected or (guided or {}).get("operation_id") != "create_setup":
+        return True
+    text = str(message or "")
+    if re.search(r"\b(?:in plaats van|niet langer|instead of|rather than|statt|anstelle)\b", text, re.I):
+        return True
+    current_symbol = str(collected.get("symbol") or "").upper()
+    from backend.services.asset_catalog_service import mentioned_catalog_symbols
+    if any(symbol != current_symbol for symbol in mentioned_catalog_symbols(text)):
+        return True
+    current_name = str(collected.get("name") or "").casefold().strip()
+    if current_name and re.search(r"\b(?:andere|tweede|another|second|andere|zweite)\s+(?:setup|plan|concept)\b", text, re.I):
+        return True
+    return False
+
+
 def advance_plan_design_focus(context: dict[str, Any], message: str) -> bool:
     """Return whether the context changed; expire the focus after a short discussion."""
     before = context.get("plan_design_focus")

@@ -61,6 +61,12 @@ def test_generic_buy_condition_does_not_promote_a_price_range_to_benchmark():
     assert explicit_benchmark_bounds(
         "Mijn scorevoorwaarde voor de totale benchmark is 61–75."
     ) == {"min_benchmark_score": 61, "max_benchmark_score": 75}
+    assert explicit_benchmark_bounds(
+        "Nieuw Paper trade-plan: scoreband 26–45, entry €50.000."
+    ) == {"min_benchmark_score": 26, "max_benchmark_score": 45}
+    assert explicit_benchmark_bounds(
+        "Smart DCA met scoreband 26–45 als bedragstaffel."
+    ) == {}
 
 
 def test_signal_period_is_never_used_as_a_guided_purchase_amount():

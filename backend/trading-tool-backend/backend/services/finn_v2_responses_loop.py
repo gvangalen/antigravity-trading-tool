@@ -533,7 +533,10 @@ class FinnResponsesLoop:
                 retry_operation_id=retry_operation_id,
             )
             if not open_draft_available:
-                definitions = [item for item in definitions if item["name"] != "get_open_dca_draft"]
+                definitions = [
+                    item for item in definitions
+                    if item["name"] not in {"get_open_dca_draft", "get_open_plan_draft"}
+                ]
             if catalog_boundary_only:
                 definitions = []
             if model_led_coach and not guided_operation_id:

@@ -4,6 +4,34 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Herkeuring volledige getypeerde instapflow (4 november 2026)
+
+Phase: `LOCAL_VALIDATION`. Kandidaatbranch `codex/typed-entry-review-runtime`.
+De onafhankelijke live QA van de vorige kandidaat bleef `NOT_ACCEPTED` omdat
+een volledig ingevulde SMA34-aanvraag een bevestigbare kaart zonder de
+strategievelden toonde. Deze batch bindt de kaart aan het eigenaargebonden,
+opgeslagen voorsteldetail en schakelt bevestigen uit als die gegevens niet
+volledig zijn. Een open getypeerd concept blijft door read-only tussenvragen
+beschikbaar; een expliciete andere asset trekt het oude concept in. Een
+trendlijn bewaart UTC-tijden van beide ankerpunten. De bestaande grenzen
+voor prijsniveau, benchmark en Paper-uitvoering blijven van kracht.
+
+Gemeten op deze lokale kandidaat: een natuurlijke vijfbeurtige SMA50-flow,
+inclusief een tussenvraag of de kruising zonder vaste instapprijs kan draaien,
+eindigde in een volledig voorstel; een éénbeurtige trendlijn met twee
+UTC-ankerpunten gaf eveneens een volledig voorstel. De lokale Paper-worker
+plaatste één virtuele koop bij een bevestigde kruising met complete Score 2.0-
+bronnen, geen order zonder kruising en geen order bij ontbrekende macroscore.
+De volledige niet-afgeschermde actiematrix slaagde `38/38`, waaronder `16/16`
+actiecontracten, `9/9` lineagechecks en `22/22` leesoperaties; alle
+oorspronkelijke HTTP-responses waren 200, zonder Live-bot of brokerorder.
+De volledige backend-suite slaagde `4251 passed, 4 skipped`; frontend
+typecheck, i18n-lint, i18n-, command- en voorsteltests, productiebuild en
+high-severity audit slaagden. De echte Luna/Responses-evaluaties slaagden
+`20/20` development en `109/109` regression, met nul provider-, schema-,
+timeout-, parse- of validatiefouten. De onafhankelijke ingelogde web- en
+beschermde Paper-herkeuring moet nog op de definitieve live SHA gebeuren.
+
 ## Volledige getypeerde instapregelkaart (4 november 2026)
 
 Phase: `LIVE_CANDIDATE_AWAITING_QA`. Onafhankelijke QA op live
