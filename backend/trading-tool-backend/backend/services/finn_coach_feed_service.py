@@ -27,9 +27,11 @@ def _bot_state(evidence: dict) -> str:
         return "unknown"
     if status == "executed":
         return f"{action}_executed"
-    if status in {"failed_execution", "cancelled", "unknown_exchange_state"}:
+    if status in {"failed", "failed_execution", "cancelled", "unknown_exchange_state"}:
         return f"{action}_failed"
-    if status in {"planned", "executing"}:
+    if status == "skipped":
+        return f"{action}_skipped"
+    if status in {"planned", "ready", "approved", "executing", "awaiting_exchange"}:
         return f"{action}_planned"
     return "unknown"
 
@@ -81,6 +83,16 @@ def _bot_fallback(subject: str, evidence: dict) -> dict:
             "en": (f"Your {label} bot could not sell · Paper", "The Paper sale was not executed. Check the bot details for the reason."),
             "de": (f"Dein {label}-Bot konnte nicht verkaufen · Paper", "Der Paper-Verkauf wurde nicht ausgeführt. Prüfe die Botdetails für den Grund."),
         },
+        "buy_skipped": {
+            "nl": (f"Je {label}-bot heeft niet gekocht · Paper", "Deze koopbeslissing is overgeslagen. Bekijk de botdetails voor de reden."),
+            "en": (f"Your {label} bot did not buy · Paper", "This buy decision was skipped. Check the bot details for the reason."),
+            "de": (f"Dein {label}-Bot hat nicht gekauft · Paper", "Diese Kaufentscheidung wurde übersprungen. Prüfe die Botdetails für den Grund."),
+        },
+        "sell_skipped": {
+            "nl": (f"Je {label}-bot heeft niet verkocht · Paper", "Deze verkoopbeslissing is overgeslagen. Bekijk de botdetails voor de reden."),
+            "en": (f"Your {label} bot did not sell · Paper", "This sell decision was skipped. Check the bot details for the reason."),
+            "de": (f"Dein {label}-Bot hat nicht verkauft · Paper", "Diese Verkaufsentscheidung wurde übersprungen. Prüfe die Botdetails für den Grund."),
+        },
     }
     if state not in lines:
         return {locale: {"title": {"nl": "Botstatus gewijzigd · Paper", "en": "Bot status changed · Paper", "de": "Botstatus geändert · Paper"}[locale],
@@ -92,7 +104,7 @@ def _bot_fallback(subject: str, evidence: dict) -> dict:
     for locale in LOCALES:
         title, body = lines[state][locale]
         amount = _bot_amount(evidence, locale)
-        if amount:
+        if amount and not state.endswith("_skipped"):
             if state.endswith("_executed"):
                 body += {"nl": f" Uitgevoerd bedrag: {amount}.", "en": f" Executed amount: {amount}.",
                          "de": f" Ausgeführter Betrag: {amount}."}[locale]
@@ -152,7 +164,7 @@ def _verified_bot_copy(copy: dict, subject: str, evidence: dict) -> bool:
             return False
         if contradictory_outcome and re.search(contradictory_outcome[locale], title + " " + body, re.IGNORECASE):
             return False
-        if state.endswith("_planned") or state.endswith("_failed"):
+        if state.endswith(("_planned", "_failed", "_skipped")):
             forbidden = {
                 "nl": r"\b(?:is|werd|zijn) (?:uitgevoerd|gekocht|verkocht|verwerkt)\b|\b(?:heeft gekocht|heeft verkocht|kocht|order geplaatst)\b",
                 "en": r"\b(?:was|has been|is) (?:executed|bought|sold|filled)\b|\b(?:bought|sold|order placed)\b",
@@ -542,7 +554,7 @@ class FinnCoachFeedService:
         for row in rows:
             if row["event_type"] == "bot_decision":
                 state = _bot_state(row.get("evidence") or {})
-                if state.endswith("_planned") or state.endswith("_failed"):
+                if state.endswith(("_planned", "_failed", "_skipped")):
                     key = (row["subject_id"], state,
                            _json((row.get("evidence") or {}).get("reasons") or []))
                     if key in seen_bot_states:

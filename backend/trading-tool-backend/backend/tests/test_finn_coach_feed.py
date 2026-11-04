@@ -37,6 +37,21 @@ def test_paper_bot_fallback_distinguishes_decision_from_execution():
     assert "€400,00" in executed["nl"]["body"]
 
 
+def test_paper_bot_fallback_covers_other_persisted_outcomes():
+    for status in ("ready", "approved", "awaiting_exchange"):
+        assert "wil kopen" in module._bot_fallback("AAPL plan", {
+            "symbol": "AAPL", "action": "buy", "status": status,
+        })["nl"]["title"]
+    assert "kon niet kopen" in module._bot_fallback("AAPL plan", {
+        "symbol": "AAPL", "action": "buy", "status": "failed",
+    })["nl"]["title"]
+    skipped = module._bot_fallback("AAPL plan", {
+        "symbol": "AAPL", "action": "buy", "status": "skipped", "amount_eur": 400,
+    })["nl"]
+    assert "niet gekocht" in skipped["title"]
+    assert "€400" not in skipped["body"]
+
+
 def test_bot_copy_verifies_identity_amount_and_execution_boundary():
     evidence = {"symbol": "AAPL", "action": "buy", "status": "planned",
                 "amount_eur": 400, "reasons": ["Score 50; setup 61–75"]}
