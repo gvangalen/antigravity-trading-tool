@@ -4,6 +4,38 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Herstel getypeerd instapconcept en Paper-fixture (4 november 2026)
+
+Phase: `LOCAL_VALIDATION`. De onafhankelijke QA op de vorige live kandidaat
+`e31660ab5e891b634b8045f41868df88fa760229` gaf `NOT_ACCEPTED`.
+Een meerbeurtige SMA50-aanvraag verloor de expliciete benchmarkband na een
+read-only tussenvraag; een read-only trendlijnvraag trok de kaart in. Een
+assetwissel in de chatkop liet de oude kaart bevestigbaar. De beschermde
+Paper-run stopte bij de fixture-insert met `DatatypeMismatch`, vóór de worker.
+
+Deze kandidaat bewaart de eigenaargebonden open conceptgegevens bij read-only
+vragen, herkent een gewone benchmarkband en een expliciete wissel van
+handelspaar, en annuleert open voorstellen bij een assetwissel in de chatkop.
+De lokale beschermde fixture-seed gebruikt de werkelijke JSON-kolom; een
+transactieproef van die insert is teruggedraaid zonder productiegegevens te
+wijzigen. De Paper-workerlogica en de Live-ordergrens zijn niet gewijzigd.
+
+Gemeten lokaal: de exacte vierbeurtige SMA50-regressie eindigde in een volledig
+voorstel met scoreband 26–45 en bleef bij de vervolgvraag beschikbaar. Een
+trendlijnvoorstel behield beide ankers na de read-only vraag; een expliciete
+overstap naar ETH/EUR annuleerde het oude BTC/EUR-voorstel serverzijdig.
+De backend-suite slaagde `4252 passed, 4 skipped`; frontend typecheck,
+i18n-lint, i18n-, command- en voorsteltests, productiebuild en high-severity
+audit slaagden. De lokale worker-actiematrix slaagde `16/16`, zonder Live-order.
+Echte Responses-selectorevaluaties: development `20/20` en regression
+`109/109`, beide met nul provider-, schema-, timeout-, parse- en
+validatiefouten. De lokale chat- en opslagprobe slaagde: volledig SMA34-
+voorstel, vijfbeurtig SMA50-voorstel, bevestiging, eigenaarsscheiding,
+idempotentie en dezelfde markt voor setup en strategie. De probe accepteert
+zowel `instapprijs` als `instapkoers` in de vrije modeluitleg. CI, deployment
+en onafhankelijke ingelogde web- en beschermde Paper-herkeuring zijn nog niet
+afgerond.
+
 ## Herkeuring volledige getypeerde instapflow (4 november 2026)
 
 Phase: `LIVE_CANDIDATE_AWAITING_QA`. De productwijzigingen staan op

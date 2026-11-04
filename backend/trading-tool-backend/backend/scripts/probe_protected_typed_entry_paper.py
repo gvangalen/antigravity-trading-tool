@@ -61,7 +61,7 @@ def _seed(namespace: str, case: str) -> tuple[int, int, int, str, dict]:
         with conn.cursor() as cur:
             cur.execute("""INSERT INTO asset_catalog
                 (symbol,display_name,asset_class,provider,is_active,metadata)
-                VALUES (%s,'Protected Paper fixture','crypto','qa',FALSE,%s::jsonb)""",
+                VALUES (%s,'Protected Paper fixture','crypto','qa',FALSE,%s::json)""",
                 (symbol, json.dumps({"qa_namespace": namespace, "qa_fixture": MARKER})))
             cur.execute("""INSERT INTO trading_markets
                 (asset_symbol,quote_currency,venue,provider,provider_symbol,

@@ -755,6 +755,8 @@ def corrected_catalog_instrument(value: object) -> str | None:
                 return symbol
     instrument = r"[A-Za-z0-9]{2,20}(?:/[A-Za-z0-9]{2,10})?"
     patterns = (
+        rf"\b(?:wissel|schakel|switch)\b[^.!?]{{0,60}}\b(?:naar|to)\s+"
+        rf"(?P<instrument>{instrument})\b",
         rf"^\s*(?:correctie\s*:\s*)?(?P<instrument>{instrument})\s+"
         rf"(?:in\s+plaats\s+van|instead\s+of|statt)\s+{instrument}\b",
         rf"\b(?:ik\s+bedoel(?:de)?|i\s+mean|ich\s+meine|actually|eigenlijk|"

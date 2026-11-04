@@ -1537,6 +1537,14 @@ class FinnV2OperationStateService:
 
     @staticmethod
     def _is_explicit_correction(text: str) -> bool:
+        # A negated instruction in a read-only question is not a request to
+        # supersede an actionable proposal.
+        if re.match(r"\s*(?:lees|toon|controleer|beschrijf|read|show|check)\b", str(text or ""), re.I) and re.search(
+            r"\b(?:verander|wijzig|bevestig|pas\s+aan|change|confirm)\b"
+            r"[^.!?\n]{0,90}\b(?:niet|niets|not|nothing)\b",
+            str(text or "").casefold(),
+        ):
+            return False
         return bool(re.search(
             r"\b(?:corrigeer|correct|correctie|wijzig|verander|pas\s+aan|update|change|"
             r"ändern|aendere|korrigiere|aktualisiere)\b|"

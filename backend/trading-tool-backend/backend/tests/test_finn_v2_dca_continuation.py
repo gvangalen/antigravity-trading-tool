@@ -170,6 +170,10 @@ def test_explicit_asset_switch_keeps_the_replacement_asset_out_of_old_eth_contex
         "Ik bedoel: maak een nieuwe setup voor Apple in plaats van ETH"
     ) == "AAPL"
     assert corrected_catalog_instrument("Wat als ik AAPL in plaats van ETH gebruik?") is None
+    assert corrected_catalog_instrument(
+        "Ik wissel nu expliciet naar ETH/EUR voor een nieuw apart plan. "
+        "Het open BTC/EUR-concept mag niet meer bevestigd worden."
+    ) == "ETH/EUR"
 
 
 def test_deferred_name_is_not_treated_as_a_literal_setup_name():
