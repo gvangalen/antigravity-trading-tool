@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Week-, maand- en kwartaalrapport klaar in de FINN-feed (4 november 2026)
 
-Phase: `LOCAL_VALIDATION`. Kandidaat: `codex/finn-periodic-report-feed`.
+Phase: `DEPLOYED_AWAITING_QA`. Kandidaat: `codex/finn-periodic-report-feed`,
+[PR #828](https://github.com/gvangalen/antigravity-trading-tool/pull/828).
 Na succesvolle opslag van een week-, maand- of kwartaalrapport publiceert de
 rapporttaak één eigenaargebonden feedmelding per type en rapportdatum.
 Web en mobiel openen via die melding precies het betrokken rapport. De melding
@@ -17,8 +18,15 @@ slaagde `4274 passed, 4 skipped`. Web typecheck, i18n-controles,
 commandtests en productiebuild slaagden. Mobiele typecheck, lint zonder
 fouten en Expo-bundels voor web, iOS en Android slaagden. De echte
 Responses-selectieproeven slaagden `20/20` development en `109/109`
-regression, beide met een echte provider; CI, deployment en onafhankelijke
-live QA staan nog open.
+regression, beide met een echte provider. De vijf [PR-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41904883940)
+en vijf [main-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41905507705)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41906035301)
+slaagde. Git-main, publieke backend-health en frontend-buildinfo meldden
+alle drie `be22eccaff946e5ac31f927f944f3524f52a25d8`, met HTTP 200
+voor beide routes. Deze statuswijziging maakt zelf een nieuwe commit;
+vóór QA moeten de laatste main-CI, Auto Deploy en publieke SHA opnieuw
+samenvallen. Onafhankelijke live QA van een nieuw periodiek feeditem staat
+nog open.
 FINN-actiecontracten zijn niet gewijzigd; de worker-actiematrix is voor
 deze rapportmelding niet van toepassing.
 
