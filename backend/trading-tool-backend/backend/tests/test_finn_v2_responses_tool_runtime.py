@@ -5096,6 +5096,40 @@ def test_complete_new_sma_plan_is_ready_for_one_confirmation():
     assert fields["targets"] == [80000]
 
 
+def test_live_complete_sma34_proposal_words_reach_combined_plan_card():
+    message = (
+        "Maak alleen een voorstelkaart, bevestig of sla niets op: nieuwe aparte "
+        "BTC/EUR Paper trade-setup met naam QA BTC EUR SMA34 Concept 0411, "
+        "analysetijdsframe 1D, totale benchmarkband 26–45, instapniveau €50.000, "
+        "stop €45.000, doel €60.000, gebalanceerd risico en €10 per aankoop. "
+        "Extra getypeerde instapregel: koop alleen bij opwaartse kruising van een "
+        "afgesloten 1D BTC/EUR-slotkoers door SMA34 berekend uit afgesloten candles. "
+        "Toon alle velden en vertel welke bevestiging nodig is."
+    )
+    assert _explicit_create_operation_request(message) == "create_setup"
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    selected = FinnResponsesProposalSelection().from_call(
+        call=FinnResponsesToolCall(
+            name="create_or_update_trade_plan_proposal", operation_id="create_setup",
+            inputs={}, read_tools=(), required_inputs=contract.required_inputs,
+            missing_inputs=(), draft_intent="new",
+        ),
+        message=message, conversation_context={}, verified_asset="BTC",
+    )
+    state = selected.request_plan.operation_state
+    assert state["missing_required_inputs"] == []
+    fields = state["collected_inputs"]
+    assert fields["quote_currency"] == "EUR"
+    assert fields["min_benchmark_score"] == 26
+    assert fields["max_benchmark_score"] == 45
+    assert fields["entry"] == 50000
+    assert fields["stop_loss"] == 45000
+    assert fields["targets"] == [60000]
+    assert fields["base_amount"] == 10
+    assert fields["entry_signal"]["reference"] == {"kind": "sma", "period": 34}
+    assert fields["entry_signal"]["direction"] == "above"
+
+
 def test_open_sma_plan_keeps_signal_when_followup_supplies_all_missing_trade_fields():
     contract = FinnV2OperationRegistry().require_supported("create_setup")
     call = FinnResponsesToolCall(

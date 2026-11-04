@@ -926,7 +926,7 @@ class FinnV2OperationStateService:
             "setup_id": "Welke bestaande setup bedoel je?",
             "strategy_id": "Welke bestaande strategie bedoel je?",
             "bot_id": "Welke bestaande paper-bot bedoel je?",
-            "execution_mode": "Wil je een fixed of custom uitvoeringsmodus gebruiken?",
+            "execution_mode": "Wil je bij elke aankoop een vast bedrag gebruiken, of een bedrag volgens een eigen curve?",
             "base_amount": "Welk bedrag wil je per uitvoering inzetten?",
             "entry": "Bij welke koers wil je instappen?",
             "stop_loss": "Waar wil je je stop-loss zetten?",
@@ -1123,6 +1123,19 @@ class FinnV2OperationStateService:
                 values.setdefault("changed_fields", changes)
         if contract.operation_id == "create_setup":
             dca_context = str(known_setup_type or "").casefold() == "dca"
+            trade_context = str(known_setup_type or values.get("setup_type") or "").casefold() == "trade"
+            if trade_context and "base_amount" in accepted_inputs and "base_amount" not in values:
+                # A continuation may supply the amount without repeating the
+                # crossing rule. Require an execution label so an SMA period
+                # or a price level cannot become the purchase amount.
+                trade_amount = re.search(
+                    r"\b(?:vast(?:e)?|fixed)\s+(?:uitvoering|aankoop|execution|trade)\s+"
+                    r"(?:van|of|voor|for)?\s*(?:€|eur)\s*(\d+(?:[.,]\d+)?)\b",
+                    lowered,
+                )
+                if trade_amount:
+                    values["base_amount"] = self._numeric_value(trade_amount.group(1))
+                    values.setdefault("execution_mode", "fixed")
             recurring_schedule = re.search(
                 r"\b(?:daily|dagelijks|iedere dag|elke dag|every day|jeden tag|taeglich|täglich|"
                 r"weekly|wekelijks|iedere week|elke week|every week|jede woche|wöchentlich|woechentlich|"
@@ -1177,6 +1190,8 @@ class FinnV2OperationStateService:
                         values["execution_mode"] = "fixed"
                     if "base_amount" not in values:
                         amount = re.search(r"\b(?:koop|buy|kauf\w*)\s*(?:voor\s*)?(?:€|eur)\s*(\d+(?:[.,]\d+)?)", lowered)
+                        if amount is None:
+                            amount = re.search(r"(?:€|eur)\s*(\d+(?:[.,]\d+)?)\s+per\s+(?:aankoop|uitvoering|trade)", lowered)
                         if amount:
                             values["base_amount"] = self._numeric_value(amount.group(1))
                             if not re.search(r"\b(?:variabel|variable|custom|afhankelijk van (?:de )?score)\b", lowered):
@@ -1672,6 +1687,15 @@ class FinnV2OperationStateService:
         if field == "category":
             return self._canonical_category(value)
         if field in {"base_amount", "low_score_percent", "mid_score_percent", "high_score_percent", "low_threshold", "high_threshold"}:
+            if field == "base_amount" and re.search(r"\b(?:SMA|EMA|MA)\s*\d+\b", value, re.I):
+                # An indicator period in a clarification is not a purchase
+                # amount. Accept only a separately identified amount here.
+                amount = re.search(
+                    r"(?:\b(?:bedrag|inleg|amount)\s*(?:van|of|is|:)?\s*(?:€|eur)?\s*(\d+(?:[.,]\d+)?)"
+                    r"|(?:€|eur)\s*(\d+(?:[.,]\d+)?)\s+per\s+(?:aankoop|uitvoering|trade))",
+                    value, re.I,
+                )
+                return self._numeric_value(amount.group(1) or amount.group(2)) if amount else None
             number = re.search(r"\d+(?:[.,]\d+)?", value)
             return self._numeric_value(number.group(0)) if number else None
         if field == "execution_mode":
@@ -1745,7 +1769,7 @@ class FinnV2OperationStateService:
         """Extract only explicitly stated strategy contract fields."""
         values: dict[str, object] = {}
         patterns = {
-            "entry": r"\b(?:entry|instap(?:prijs)?|einstieg(?:spreis)?)\s*(?:is|:|=|op|at|bei|rond|around|ongeveer|ungefähr|ca\.?)?\s*(?:€|eur|\$)?\s*(\d+(?:[.,]\d+)?)",
+            "entry": r"\b(?:entry|instap(?:prijs|niveau)?|einstieg(?:spreis)?)\s*(?:is|:|=|op|at|bei|rond|around|ongeveer|ungefähr|ca\.?)?\s*(?:€|eur|\$)?\s*(\d+(?:[.,]\d+)?)",
             "stop_loss": r"\b(?:stop[- ]?loss|stop|invalidatie|invalidation|invalidierung)\s*(?:is|:|=|op|at|bei)?\s*(?:€|eur|\$)?\s*(\d+(?:[.,]\d+)?)",
             "base_amount": r"\b(?:base\s*amount|basisinleg|basis\s*bedrag|basisbetrag|grundbetrag|bedrag)\s*(?:is|:|=|van|of|von|naar|to|auf)?\s*(?:€|eur)?\s*(\d+(?:[.,]\d+)?)",
         }

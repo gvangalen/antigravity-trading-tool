@@ -6,7 +6,7 @@ from backend.domain.finn_dca_plan_contract import dca_automation_capabilities, s
 from backend.services.finn_v2_plan_design_context import (
     advance_plan_design_focus, remember_unsaved_design,
     requests_execution_capability_question, is_new_separate_setup_request,
-    is_explicit_saved_plan_read,
+    is_explicit_saved_plan_read, asks_why_guided_signal_needs_entry,
 )
 
 
@@ -114,6 +114,26 @@ def test_generic_capability_questions_include_ma_and_trendline_designs():
     assert requests_execution_capability_question(
         "Kann der Kaufbetrag stufenlos mit dem Abstand unter einer Trendlinie steigen?"
     )
+    assert requests_execution_capability_question(
+        "Kan deze SMA-kruising zonder vaste instapprijs draaien?"
+    )
+
+
+def test_guided_signal_entry_objection_asks_for_contract_explanation():
+    context = {"active_guided_operation": {
+        "operation_id": "create_setup", "next_missing_input": "entry",
+        "collected_inputs": {"entry_signal": {
+            "version": 1, "event": "close_crosses_reference", "direction": "above",
+            "timeframe": "1D", "reference": {"kind": "sma", "period": 50},
+        }},
+    }}
+    question = ("Geen vaste instapkoers. De instapvoorwaarde is uitsluitend de "
+                "SMA50-kruising. Als een vaste instapkoers verplicht is, leg uit waarom.")
+    assert asks_why_guided_signal_needs_entry(question, context)
+    assert not asks_why_guided_signal_needs_entry("Entry €68000", context)
+    assert not asks_why_guided_signal_needs_entry(question, {})
+    context["active_guided_operation"]["next_missing_input"] = "stop_loss"
+    assert asks_why_guided_signal_needs_entry(question, context)
 
 
 def test_capability_answer_uses_responses_with_typed_contract(monkeypatch):

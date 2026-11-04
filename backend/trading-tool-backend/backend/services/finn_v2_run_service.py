@@ -60,7 +60,7 @@ from backend.services.finn_v2_operation_state_service import FinnV2OperationStat
 from backend.services.finn_v2_plan_design_context import (
     advance_plan_design_focus, remember_unsaved_design,
     requests_execution_capability_question, is_new_separate_setup_request,
-    is_explicit_saved_plan_read,
+    is_explicit_saved_plan_read, asks_why_guided_signal_needs_entry,
 )
 from backend.domain.finn_dca_plan_contract import dca_automation_capabilities
 from backend.domain.entry_signal import entry_signal_capabilities, explicit_entry_signal_from_text
@@ -1608,6 +1608,7 @@ def _simple_coach_structural_violations(
 
 async def _explain_execution_capability(
     *, message: str, locale: str, separate_setup: bool,
+    guided_entry_question: bool = False,
 ) -> tuple[str, str]:
     """Ask Luna to compare a proposed rule with the executable contracts."""
     client = openai_client.async_client
@@ -1634,7 +1635,15 @@ async def _explain_execution_capability(
                 "Answer the proposed rule directly; omit unrelated capabilities. "
                 "Do not invent missing endpoints, thresholds or percentages. "
                 "Do not request a screenshot or list trade-only entry, stop and "
-                "target fields. Do not present a confirmable action or promise an order. "
+                "target fields unless the user explicitly asks why a fixed entry is required "
+                "for their active signal draft. If guided_entry_contract_question is true, "
+                "the user has an active trade draft and directly asks about this requirement. "
+                "The platform currently requires a numeric absolute entry price for that "
+                "draft even when it also has a crossing signal. The crossing is only an "
+                "additional gate; it cannot replace the absolute entry or make a "
+                "signal-only proposal confirmable. Explain this platform limitation "
+                "plainly and preserve the draft. Do not claim that the crossing alone "
+                "can run. Do not present a confirmable action or promise an order. "
                 "The separate_new_setup field records whether the user already chose a "
                 "new plan. When it is true, do not ask again whether the plan is separate "
                 "or should use a saved setup. When it is false and the parent is needed, "
@@ -1644,6 +1653,7 @@ async def _explain_execution_capability(
             input=json.dumps({
                 "user_request": message,
                 "separate_new_setup": separate_setup,
+                "guided_entry_contract_question": guided_entry_question,
                 "dca_automation_contract": dca_automation_capabilities(),
                 "entry_signal_contract": entry_signal_capabilities(),
                 "setup_action_contract": {
@@ -4115,6 +4125,8 @@ class FinnV2RunService:
                     run_message = run.message
                     conversation_id = run.conversation_id
                     capability_locale = None
+                    guided_entry_question = False
+                    guided_capability_read = False
                     setup_rule_block = {}
                     strategy_rule_block = {}
                     pending_independent_choice = False
@@ -4140,7 +4152,31 @@ class FinnV2RunService:
                                 context=context,
                             )
                             await session.commit()
-                        if requests_execution_capability_question(run_message, context):
+                        previous_contract = await service.runtime_contracts.get_latest_for_conversation(
+                            conversation_id=conversation_id, user_id=user_id,
+                            exclude_run_id=run_id,
+                        )
+                        previous_guided = dict((getattr(previous_contract, "state_json", None) or {}).get("guided_state") or {})
+                        if (
+                            not context.get("active_guided_operation")
+                            and not is_new_separate_setup_request(run_message)
+                            and previous_guided.get("status") == "collecting"
+                            and previous_guided.get("missing_required_inputs")
+                        ):
+                            # The sealed run contract owns continuation state;
+                            # conversation JSON is only a compatibility view.
+                            context["active_guided_operation"] = previous_guided
+                        guided_entry_question = asks_why_guided_signal_needs_entry(run_message, context)
+                        capability_question = requests_execution_capability_question(run_message, context)
+                        guided_capability_read = bool(
+                            (guided_entry_question or capability_question)
+                            and previous_guided.get("status") == "collecting"
+                            and previous_guided.get("missing_required_inputs")
+                            and dict(previous_guided.get("collected_inputs") or {}).get("entry_signal")
+                            and not is_new_separate_setup_request(run_message)
+                            and not is_explicit_saved_plan_read(run_message)
+                        )
+                        if guided_entry_question or capability_question:
                             # A capability question must not inherit an unrelated
                             # pending action or strategy-rule waiver.
                             strategy_rule_block = {}
@@ -4153,10 +4189,6 @@ class FinnV2RunService:
                         # run contract. The conversation projection normally
                         # carries only its Responses cursor, so read that
                         # owner-scoped contract before classifying a waiver.
-                        previous_contract = await service.runtime_contracts.get_latest_for_conversation(
-                            conversation_id=conversation_id, user_id=user_id,
-                            exclude_run_id=run_id,
-                        )
                         prior_clarification = _previous_strategy_clarification(
                             previous_contract, conversation_id,
                         )
@@ -4553,16 +4585,19 @@ class FinnV2RunService:
                         await session.commit()
                     return
 
-                if visible and requests_execution_capability_question(run_message, context):
+                if visible and (guided_entry_question or requests_execution_capability_question(run_message, context)):
                     # Compare the proposed rule with the executable contracts
                     # before any action selection can produce a card.
-                    focus_changed = advance_plan_design_focus(context, run_message)
-                    focus_changed = remember_unsaved_design(context) or focus_changed
+                    focus_changed = False
+                    if not guided_capability_read:
+                        focus_changed = advance_plan_design_focus(context, run_message)
+                        focus_changed = remember_unsaved_design(context) or focus_changed
                     separate_setup = context.get("plan_design_focus", {}).get("kind") == "new_separate_setup"
                     locale = capability_locale or "nl"
                     answer_text, response_id = await _explain_execution_capability(
                         message=run_message, locale=locale,
                         separate_setup=separate_setup,
+                        guided_entry_question=guided_entry_question,
                     )
                     async with async_session_factory() as session:
                         conversation = await FinnV2ConversationRepository(session).get_by_id_for_user(
@@ -4582,6 +4617,11 @@ class FinnV2RunService:
                             await FinnV2ConversationRepository(session).update_context(
                                 conversation_id=conversation_id, user_id=user_id,
                                 context=saved_context,
+                            )
+                        if guided_capability_read:
+                            await cls(session).runtime_contracts.carry_guided_draft_through_read(
+                                run_id=run_id, user_id=user_id,
+                                guided_state=previous_guided,
                             )
                         await cls(session).complete_responses_read(
                             run_id=run_id, user_id=user_id,

@@ -90,17 +90,20 @@ def explicit_entry_signal_from_text(message: str) -> dict[str, Any] | None:
     remain unresolved instead of becoming an ordinary fixed-price strategy.
     """
     text = str(message or "")
-    if not (re.search(r"\b(?:afgesloten\s+(?:1D[- ]?)?(?:dag)?slotkoers|"
+    if not (re.search(r"\b(?:afgesloten\s+(?:1D\s+)?[A-Z0-9]{2,10}/[A-Z0-9]{2,10}[- ]slotkoers|"
+                      r"afgesloten\s+(?:1D[- ]?)?(?:dag)?slotkoers|"
                       r"afgesloten\s+dagkoers|afgesloten\s+(?:1D[- ]?)?(?:dagkaars|dagcandle)|"
                       r"dag(?:slot)?koers|daily\s+close|closed\s+daily\s+candle|"
                       r"tagesschlusskurs)\b", text, re.I)
             and re.search(r"\b(?:kruis\w*|cross\w*|kreuz\w*)\b", text, re.I)):
         return None
-    above = bool(re.search(r"\b(?:van\s+onder\s+naar\s+boven|from\s+below\s+to\s+above|"
+    above = bool(re.search(r"\b(?:opwaartse\s+kruising|upward\s+cross(?:ing)?|"
+                           r"van\s+onder\s+naar\s+boven|from\s+below\s+to\s+above|"
                            r"von\s+unten\s+nach\s+oben|kruis\w*\s+boven|"
                            r"boven\s+(?:de\s+|het\s+)?(?:sma|ma)\s*\d+\s+kruis\w*|"
                            r"cross\w*\s+above|kreuz\w*\s+(?:über|ueber))\b", text, re.I))
-    below = bool(re.search(r"\b(?:van\s+boven\s+naar\s+onder|from\s+above\s+to\s+below|"
+    below = bool(re.search(r"\b(?:neerwaartse\s+kruising|downward\s+cross(?:ing)?|"
+                           r"van\s+boven\s+naar\s+onder|from\s+above\s+to\s+below|"
                            r"von\s+oben\s+nach\s+unten|kruis\w*\s+onder|"
                            r"onder\s+(?:de\s+|het\s+)?(?:sma|ma)\s*\d+\s+kruis\w*|"
                            r"cross\w*\s+below|kreuz\w*\s+unter)\b", text, re.I))

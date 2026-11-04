@@ -613,6 +613,14 @@ class FinnV2OperationClassificationService:
         # missing slots and retains them across subsequent turns.
         if re.search(r"\b(?:trading|trade|handels|beleggings)[-\s]*plan\b", text):
             return "create_setup"
+        if re.search(
+            r"^\s*(?:maak|create|erstelle)\b[^.!?\n]{0,100}\b"
+            r"(?:voorstelkaart|conceptkaart|proposal\s+card)\b[^.!?\n]{0,120}\b"
+            r"(?:nieuw(?:e)?|new|neu(?:e|en|er|es)?)\b[^.!?\n]{0,75}\b"
+            r"(?:[\w]+-)?setup\b",
+            text,
+        ):
+            return "create_setup"
         # A newly requested setup is the parent of the strategy in one plan
         # draft. Route the whole request through create_setup, which owns both
         # objects; create_strategy only attaches to an already saved setup.

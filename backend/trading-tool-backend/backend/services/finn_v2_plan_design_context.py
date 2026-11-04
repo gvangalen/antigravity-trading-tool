@@ -42,7 +42,9 @@ _CAPABILITY_QUESTION = re.compile(
 )
 _DESIGN_SUBJECT = re.compile(
     r"\b(?:setup|plan|strategie|strategy|dca|regel\w*|rule\w*|"
-    r"indicator\w*|score\w*|benchmark\w*|koop\w*|kopen|aankoop\w*|"
+    r"indicator\w*|score\w*|benchmark\w*|sma\d*|ma\d+|"
+    r"kruising\w*|cross(?:over)?\w*|trendlijn\w*|trendline\w*|"
+    r"koop\w*|kopen|aankoop\w*|"
     r"buy|sell|verkoop\w*|trade\w*|bedrag\w*|amount\w*|"
     r"kauf\w*|verkauf\w*|betrag\w*|linie\w*)\b",
     re.I,
@@ -118,3 +120,22 @@ def requests_execution_capability_question(message: str, context: dict[str, Any]
     and not _DIRECT_ACTION_REQUEST.search(text) and not _IMPERATIVE_ACTION_REQUEST.search(text) and (
         _DESIGN_SUBJECT.search(text) or active_design
     ))
+
+
+def asks_why_guided_signal_needs_entry(message: str, context: dict[str, Any] | None = None) -> bool:
+    """Recognize a direct objection to the next required slot in a signal draft."""
+    guided = (context or {}).get("active_guided_operation") or {}
+    if not isinstance(guided, dict) or guided.get("operation_id") != "create_setup":
+        return False
+    inputs = guided.get("collected_inputs") or {}
+    if not isinstance(inputs, dict) or not inputs.get("entry_signal"):
+        return False
+    # The user can ask about the entry requirement before reaching that slot.
+    # Keep the active draft available instead of treating the question as a
+    # failed answer to whichever field FINN happened to request first.
+    text = str(message or "")
+    return bool(
+        re.search(r"\b(?:geen|zonder|no|without|kein\w*|ohne)\b", text, re.I)
+        and re.search(r"\b(?:vaste?\s+)?(?:instapkoers|instapprijs|entry\s*price|einstiegskurs)\b", text, re.I)
+        and re.search(r"\b(?:waarom|leg\s+uit|why|explain|warum|erkl[aä]r)\b", text, re.I)
+    )
