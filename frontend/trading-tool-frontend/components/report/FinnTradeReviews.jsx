@@ -39,7 +39,7 @@ function PlanFacts({ plan, copy }) {
     if (typeof item === 'object' && depth < 3) return <dl className="mt-1 space-y-1">{visible(Object.entries(item)).map(([key, part]) => <div key={key}><dt className="inline font-semibold">{label(key)}: </dt><dd className="inline">{value(part, depth + 1)}</dd></div>)}</dl>;
     return copy.planFields?.[String(item)] || String(item);
   };
-  return <dl className="mt-4 space-y-3 text-sm leading-relaxed text-slate-700 dark:text-slate-300">{visible(Object.entries(plan)).map(([key, item]) => <div key={key}><dt className="font-bold text-slate-900 dark:text-white">{label(key)}</dt><dd>{value(item)}</dd></div>)}</dl>;
+  return <details className="mt-3"><summary className="cursor-pointer text-sm font-semibold text-blue-700 dark:text-blue-300">{copy.planDetails}</summary><dl className="mt-4 space-y-3 text-sm leading-relaxed text-slate-700 dark:text-slate-300">{visible(Object.entries(plan)).map(([key, item]) => <div key={key}><dt className="font-bold text-slate-900 dark:text-white">{label(key)}</dt><dd>{value(item)}</dd></div>)}</dl></details>;
 }
 
 function TradeChart({ chart, copy, locale }) {
@@ -308,7 +308,17 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
       </div>
       <p className="mt-2 text-xs text-slate-500">{isDerivative ? copy.derivativeResultNote : isExchange ? copy.exchangeResultNote : isPaper ? copy.paperResultNote : copy.resultNote}</p>
 
-      <div className="mt-7 grid gap-5">
+      <div className="mt-5 rounded-2xl bg-[#111f3c] p-5 text-white">
+        <h4 className="flex items-center gap-2 text-lg font-black"><Brain size={19} /> {copy.aiTitle}</h4>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-blue-100">{analysis ? copy.aiReadyHint : analysisStatus === 'running' ? copy.aiRunning : copy.aiPending}</p>
+        {analysis ? <div className="mt-4 space-y-3 text-sm">{analysis.prior_lesson && <div className="rounded-xl border border-blue-300/30 bg-blue-300/10 p-3"><p className="text-xs font-bold uppercase tracking-wide text-blue-200">{copy.priorLessonLabel.replace('{id}', String(analysis.prior_lesson.review_id))}</p><p className="mt-1">{analysis.prior_lesson.lesson_text}</p><p className="mt-2 text-xs text-blue-200">{copy.priorLessonConfirmed.replace('{date}', formatDate(analysis.prior_lesson.confirmed_at, locale))}</p>{analysis.prior_lesson.comparison && <p className="mt-2 text-xs text-blue-100">{analysis.prior_lesson.comparison}</p>}</div>}<ul className="space-y-2">{analysis.observations?.map((item, index) => <li key={index} className="rounded-xl border border-white/20 p-3">{item.text}<details className="mt-2 text-xs text-blue-200"><summary className="cursor-pointer">{copy.aiEvidence}</summary><span className="mt-1 block">{item.evidence_ids?.join(', ')}</span></details></li>)}</ul><p>{analysis.question}</p>{analysis.uncertainty && <details className="text-xs text-blue-200"><summary className="cursor-pointer">{copy.aiUncertainty}</summary><p className="mt-2 leading-relaxed">{analysis.uncertainty}</p></details>}</div> : <p className="mt-4 text-sm text-blue-200">{copy.aiQueueHint}</p>}
+        {!analysis && <button type="button" onClick={analyze} disabled={aiBusy || analysisStatus === 'running'} className="mt-4 rounded-xl bg-white px-4 py-2 text-xs font-bold text-blue-950 disabled:opacity-50">{aiBusy ? copy.loading : copy.aiRefresh}</button>}
+        {aiError && <p role="alert" className="mt-2 text-xs text-rose-200">{aiError}</p>}
+        <details className="mt-5 border-t border-white/20 pt-4"><summary className="cursor-pointer text-sm font-bold">{copy.aiDialogue}</summary><p className="mt-1 text-xs text-blue-200">{copy.aiDialogueHint}</p>{hasOlderMessages && <button type="button" onClick={loadOlderMessages} disabled={loadingOlderMessages} className="mt-3 rounded-lg border border-white/30 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50">{loadingOlderMessages ? copy.loading : copy.aiLoadOlder}</button>}<div className="mt-3 max-h-60 space-y-2 overflow-auto">{messages.map((message) => { let structured; try { structured = message.role === 'finn' ? JSON.parse(message.content) : null; } catch { structured = null; } return <div key={message.id} className="rounded-xl border border-white/20 p-3 text-sm"><div className="flex flex-wrap items-center gap-2"><strong>{message.role === 'finn' ? 'FINN' : copy.aiUserQuestion}:</strong>{message.is_current_evidence === false && <span className="rounded-full bg-amber-400/20 px-2 py-0.5 text-xs font-bold text-amber-100">{message.evidence_status === 'source_removed' ? copy.aiSourceRemoved : copy.aiOlderEvidence}</span>}</div>{structured ? <div className="mt-1 space-y-2"><span className="block">{structured.summary}</span>{structured.prior_lesson && <span className="block rounded-lg border border-blue-200/30 bg-blue-300/10 p-2"><strong>{copy.priorLessonLabel.replace('{id}', String(structured.prior_lesson.review_id))}</strong><span className="mt-1 block">{structured.prior_lesson.lesson_text}</span><small className="mt-1 block text-blue-200">{copy.priorLessonConfirmed.replace('{date}', formatDate(structured.prior_lesson.confirmed_at, locale))}</small>{structured.prior_lesson.comparison && <small className="mt-1 block text-blue-100">{structured.prior_lesson.comparison}</small>}</span>}{Array.isArray(structured.observations) && structured.observations.map((item, index) => <span key={index} className="block rounded-lg border border-white/15 p-2">{item.text}<details className="mt-2 text-xs text-blue-200"><summary className="cursor-pointer">{copy.aiEvidence}</summary><span className="mt-1 block">{item.evidence_ids?.join(', ')}</span></details></span>)}<span className="block text-blue-200">{copy.aiUncertainty}: {structured.uncertainty}</span>{structured.question && <span className="block">{structured.question}</span>}</div> : message.content}</div>; })}</div><div className="mt-3 flex gap-2"><input value={question} onChange={(event) => setQuestion(event.target.value)} maxLength={1000} placeholder={copy.aiQuestion} className="min-w-0 flex-1 rounded-xl border border-white/30 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-blue-200" /><button type="button" onClick={ask} disabled={aiBusy || !question.trim()} className="rounded-xl bg-blue-500 px-4 py-2 text-xs font-bold disabled:opacity-50">{copy.aiAsk}</button></div></details>
+      </div>
+
+      <h4 className="mt-7 text-sm font-black text-slate-900 dark:text-white">{copy.recordedFacts}</h4>
+      <div className="mt-3 grid gap-5">
         <div className="min-w-0 break-words rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
           <h4 className="flex items-center gap-2 text-sm font-black text-slate-900 dark:text-white"><FileText size={17} /> {originalPlanVerified ? copy.plan : plan ? copy.planUnverified : copy.plan}</h4>
           {plan ? <><PlanFacts plan={plan} copy={copy} />{manualLinkedPlan && <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">{copy.manualLinkedPlanHint}</p>}{!originalPlanVerified && !manualLinkedPlan && <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">{copy.planUnverifiedHint}</p>}</> : <p className="mt-3 text-sm text-slate-500">{isExchange ? copy.externalNoPlan : copy.noPlan}</p>}
@@ -327,7 +337,9 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
         </div>
       </div>
 
-      <div className="mt-5 rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
+      <h4 className="mt-7 text-sm font-black text-slate-900 dark:text-white">{copy.yourInput}</h4>
+      <p className="mt-1 text-sm text-slate-500">{copy.yourInputHint}</p>
+      <div className="mt-3 rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
         <h4 className="text-sm font-black text-slate-900 dark:text-white">{copy.screenshotTitle}</h4>
         <p className="mt-2 text-xs text-slate-500">{copy.screenshotHint}</p>
         {imageUrl && <img src={imageUrl} alt={copy.screenshotAlt} className="mt-3 max-h-96 max-w-full rounded-xl border border-slate-200 object-contain dark:border-slate-700" />}
@@ -352,23 +364,16 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
         <div className="mt-3 flex flex-wrap items-center gap-3"><button type="button" onClick={() => saveLesson(lessonText)} disabled={lessonBusy || !lessonText.trim() || (lessonText.trim() === (review.lesson?.status === 'active' ? review.lesson.lesson_text : '') && review.lesson?.evidence_revision === review.input_revision)} className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{lessonBusy ? copy.loading : copy.lessonSave}</button>{review.lesson?.status === 'active' && <button type="button" onClick={() => saveLesson('')} disabled={lessonBusy} className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300">{copy.lessonWithdraw}</button>}{lessonSaved && <span className="text-xs text-emerald-600">{copy.saved}</span>}{lessonError && <span role="alert" className="text-xs text-red-600">{copy.lessonError}</span>}</div>
       </div>
 
-      <div className="mt-5 rounded-2xl bg-[#111f3c] p-5 text-white">
-        <h4 className="flex items-center gap-2 text-lg font-black"><Brain size={19} /> {copy.aiTitle}</h4>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-blue-100">{copy.aiIntro}</p>
-        {analysis ? <div className="mt-4 space-y-3 text-sm"><p className="font-semibold">{analysis.summary}</p>{analysis.prior_lesson && <div className="rounded-xl border border-blue-300/30 bg-blue-300/10 p-3"><p className="text-xs font-bold uppercase tracking-wide text-blue-200">{copy.priorLessonLabel.replace('{id}', String(analysis.prior_lesson.review_id))}</p><p className="mt-1">{analysis.prior_lesson.lesson_text}</p><p className="mt-2 text-xs text-blue-200">{copy.priorLessonConfirmed.replace('{date}', formatDate(analysis.prior_lesson.confirmed_at, locale))}</p>{analysis.prior_lesson.comparison && <p className="mt-2 text-xs text-blue-100">{analysis.prior_lesson.comparison}</p>}</div>}<ul className="space-y-2">{analysis.observations?.map((item, index) => <li key={index} className="rounded-xl border border-white/20 p-3">{item.text}<small className="mt-1 block text-blue-200">{copy.aiEvidence}: {item.evidence_ids?.join(', ')}</small></li>)}</ul><p className="text-blue-200">{copy.aiUncertainty}: {analysis.uncertainty}</p><p>{analysis.question}</p></div> : <p className="mt-4 text-sm text-blue-200">{analysisStatus === 'running' ? copy.aiRunning : copy.aiPending} {copy.aiQueueHint}</p>}
-        <button type="button" onClick={analyze} disabled={aiBusy || analysisStatus === 'running'} className="mt-4 rounded-xl bg-white px-4 py-2 text-xs font-bold text-blue-950 disabled:opacity-50">{aiBusy ? copy.loading : copy.aiRefresh}</button>
-        {aiError && <p role="alert" className="mt-2 text-xs text-rose-200">{aiError}</p>}
-        <div className="mt-5 border-t border-white/20 pt-4"><h5 className="text-sm font-bold">{copy.aiDialogue}</h5><p className="mt-1 text-xs text-blue-200">{copy.aiDialogueHint}</p>{hasOlderMessages && <button type="button" onClick={loadOlderMessages} disabled={loadingOlderMessages} className="mt-3 rounded-lg border border-white/30 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50">{loadingOlderMessages ? copy.loading : copy.aiLoadOlder}</button>}<div className="mt-3 max-h-60 space-y-2 overflow-auto">{messages.map((message) => { let structured; try { structured = message.role === 'finn' ? JSON.parse(message.content) : null; } catch { structured = null; } return <div key={message.id} className="rounded-xl border border-white/20 p-3 text-sm"><div className="flex flex-wrap items-center gap-2"><strong>{message.role === 'finn' ? 'FINN' : copy.aiUserQuestion}:</strong>{message.is_current_evidence === false && <span className="rounded-full bg-amber-400/20 px-2 py-0.5 text-xs font-bold text-amber-100">{message.evidence_status === 'source_removed' ? copy.aiSourceRemoved : copy.aiOlderEvidence}</span>}</div>{structured ? <div className="mt-1 space-y-2"><span className="block">{structured.summary}</span>{structured.prior_lesson && <span className="block rounded-lg border border-blue-200/30 bg-blue-300/10 p-2"><strong>{copy.priorLessonLabel.replace('{id}', String(structured.prior_lesson.review_id))}</strong><span className="mt-1 block">{structured.prior_lesson.lesson_text}</span><small className="mt-1 block text-blue-200">{copy.priorLessonConfirmed.replace('{date}', formatDate(structured.prior_lesson.confirmed_at, locale))}</small>{structured.prior_lesson.comparison && <small className="mt-1 block text-blue-100">{structured.prior_lesson.comparison}</small>}</span>}{Array.isArray(structured.observations) && structured.observations.map((item, index) => <span key={index} className="block rounded-lg border border-white/15 p-2">{item.text}<small className="mt-1 block text-blue-200">{copy.aiEvidence}: {item.evidence_ids?.join(', ')}</small></span>)}<span className="block text-blue-200">{copy.aiUncertainty}: {structured.uncertainty}</span>{structured.question && <span className="block">{structured.question}</span>}</div> : message.content}</div>; })}</div><div className="mt-3 flex gap-2"><input value={question} onChange={(event) => setQuestion(event.target.value)} maxLength={1000} placeholder={copy.aiQuestion} className="min-w-0 flex-1 rounded-xl border border-white/30 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-blue-200" /><button type="button" onClick={ask} disabled={aiBusy || !question.trim()} className="rounded-xl bg-blue-500 px-4 py-2 text-xs font-bold disabled:opacity-50">{copy.aiAsk}</button></div></div>
-      </div>
+
     </div>
   );
 }
 
-function ReflectionOverview({ weekly, weeks, selectedWeek, onWeekChange, locale, copy, weeklySummary, rolloutDisabled, loading, error, openReview }) {
+function ReflectionOverview({ weekly, weeks, selectedWeek, onWeekChange, locale, copy, rolloutDisabled, loading, error, openReview }) {
   const trades = number(weekly.trades);
   const analyzed = number(weekly.analyzed);
-  const patterns = Array.isArray(weekly.patterns) ? weekly.patterns : [];
-  const lessons = Array.isArray(weekly.confirmed_lesson_repetitions) ? weekly.confirmed_lesson_repetitions : [];
+  const patterns = (Array.isArray(weekly.patterns) ? weekly.patterns : []).filter((pattern) => number(pattern.count) > 1);
+  const lessons = (Array.isArray(weekly.confirmed_lesson_repetitions) ? weekly.confirmed_lesson_repetitions : []).filter((pattern) => number(pattern.count) > 1);
   const hasFindings = patterns.length > 0;
 
   return (
@@ -384,22 +389,14 @@ function ReflectionOverview({ weekly, weeks, selectedWeek, onWeekChange, locale,
           <select id="reflection-week" value={selectedWeek || weekly.week_start || ''} onChange={(event) => onWeekChange(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-white">
             {weeks.map((start) => <option key={start} value={start}>{copy.weekOf.replace('{date}', new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${start}T12:00:00Z`)))}</option>)}
           </select>
-          <span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 dark:bg-blue-950/40 dark:text-blue-200">{weeklySummary}</span>
         </div>}
       </div>
-      <div className="mt-6 grid gap-3 sm:grid-cols-3">
-        {[[copy.overviewClosed, trades], [copy.overviewAnalyzed, analyzed], [copy.overviewWithPlan, number(weekly.plans)]].map(([label, value]) => (
-          <div key={label} className="rounded-2xl bg-slate-50 px-4 py-4 dark:bg-slate-900">
-            <span className="block text-2xl font-black text-slate-950 dark:text-white">{loading || error || rolloutDisabled ? '—' : value}</span>
-            <span className="mt-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">{label}</span>
-          </div>
-        ))}
-      </div>
+      {!loading && !error && !rolloutDisabled && <p className="mt-5 rounded-xl bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 dark:bg-slate-900 dark:text-slate-200">{copy.overviewCount.replace('{trades}', String(trades)).replace('{analyzed}', String(analyzed)).replace('{plans}', String(number(weekly.plans)))}</p>}
       <div className="mt-6 border-t border-slate-100 pt-5 dark:border-slate-800">
         {weekly.generated_at && <p className="mb-3 text-xs text-slate-500">{copy.weekSaved.replace('{date}', formatDate(weekly.generated_at, locale))}</p>}
         <h4 className="text-sm font-black text-slate-900 dark:text-white">{copy.overviewFindings}</h4>
         <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-          {loading ? copy.loading : error ? copy.error : rolloutDisabled ? copy.rolloutDisabled : trades === 0 ? copy.weekNoTrades : !hasFindings ? copy.overviewNoFindings : copy.overviewEvidence}
+          {loading ? copy.loading : error ? copy.error : rolloutDisabled ? copy.rolloutDisabled : trades === 0 ? copy.weekNoTrades : trades === 1 ? copy.overviewSingleTrade : !hasFindings ? copy.overviewNoRepeat : copy.overviewEvidence}
         </p>
         {hasFindings && !rolloutDisabled && <div className="mt-4 grid gap-3 md:grid-cols-2">
           {patterns.map((pattern) => <div key={pattern.theme} className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
@@ -586,10 +583,6 @@ export default function FinnTradeReviews() {
     return () => { openRequest.current += 1; };
   }, [reviewIdParam]);
 
-  const weeklySummary = copy.weekSummary
-    .replace('{trades}', String(number(weekly.trades)))
-    .replace('{plans}', String(number(weekly.plans)))
-    .replace('{notes}', String(number(weekly.notes)));
   const selectedSourceIds = new Set(selectedImportFills.map((fill) => fill.source_id));
   const selectedExchanges = new Set(selectedImportFills.map((fill) => fill.exchange_name));
   const hasBuy = selectedImportFills.some((fill) => fill.side === 'buy');
@@ -632,7 +625,7 @@ export default function FinnTradeReviews() {
         <h2 id="finn-trades-title" className="mt-2 text-3xl font-black tracking-tight">{copy.title}</h2>
         <p className="mt-2 max-w-3xl text-sm leading-relaxed text-blue-100">{copy.description}</p>
       </div>
-      <ReflectionOverview weekly={weekly} weeks={weeks} selectedWeek={selectedWeek} onWeekChange={setSelectedWeek} locale={locale} copy={copy} weeklySummary={weeklySummary} rolloutDisabled={rolloutDisabled} loading={loading} error={error} openReview={openReview} />
+      <ReflectionOverview weekly={weekly} weeks={weeks} selectedWeek={selectedWeek} onWeekChange={setSelectedWeek} locale={locale} copy={copy} rolloutDisabled={rolloutDisabled} loading={loading} error={error} openReview={openReview} />
       <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(260px,320px)_minmax(0,1fr)]">
       <div className="min-w-0 overflow-hidden rounded-[28px] border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
         <div className="border-b border-slate-100 px-6 py-5 dark:border-slate-800 sm:px-8">
