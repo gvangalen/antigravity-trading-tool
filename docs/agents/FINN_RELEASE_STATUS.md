@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Herstel beschermde Paper-strategie-insert (4 november 2026)
 
-Phase: `LOCAL_VALIDATION`. Onafhankelijke QA op live SHA
+Phase: `LIVE_CANDIDATE_AWAITING_QA`. Onafhankelijke QA op vorige live SHA
 `f13cf2c9d608ed3721a656f0626acaffde410f36` gaf `NOT_ACCEPTED`.
 De korte natuurlijke SMA34-vraag leverde een volledig BTC/EUR-concept op en
 werd zonder opslag geannuleerd. De beschermde preflight slaagde, maar alle
@@ -17,14 +17,22 @@ uitvoeringen of Live-orders. [QA-Paper-run](https://github.com/gvangalen/antigra
 De strategy-seed kiest nu een expliciete doelarray-cast op basis van het
 bestaande `strategies.targets`-kolomtype (`text[]`, `varchar[]` of `numeric[]`). De
 databasekolom kan per installatie verschillen omdat de idempotente migratie
-een bestaande kolom niet van type verandert. Tests, CI, deployment en een
-nieuwe onafhankelijke Paper-proef volgen; Paper-uitvoering is nog niet bewezen.
+een bestaande kolom niet van type verandert. Paper-uitvoering is nog niet
+bewezen; een nieuwe onafhankelijke Paper-proef volgt op de definitieve live SHA.
 De gerichte casttests slaagden `6/6`; de volledige backend-suite slaagde
 `4256/4256` met 4 bestaande skips. Frontend typecheck, i18n-, command- en
 voorsteltests, productiebuild en high-severity audit slaagden. De lokale
 worker-actiematrix slaagde `16/16` en de adapters `22/22`. De echte
 Responses-development- en regressiesets slaagden `20/20` en `109/109`, met
 nul provider-, schema-, timeout-, parse- en validatiefouten.
+[PR #815](https://github.com/gvangalen/antigravity-trading-tool/pull/815),
+[PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41796310526)
+en [main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41796745614)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41797136884)
+slaagde. Publieke backend-health en frontend-buildinfo gaven beide HTTP 200
+en dezelfde SHA `60701f70963f0858c2131768762dcaeeb9049ad4`. Deze
+statusbijwerking maakt opnieuw een commit; de laatste main-CI, Auto Deploy
+en publieke SHA's worden vóór QA opnieuw vergeleken.
 
 ## Natuurlijke SMA-vraag en beschermde Paper-diagnose (4 november 2026)
 
