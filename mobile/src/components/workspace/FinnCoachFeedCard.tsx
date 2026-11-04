@@ -77,7 +77,10 @@ export function FinnCoachFeedCard() {
         onDiscuss={handleDiscuss}
         onViewReport={(item) => {
           void coachFeedApi.mark(item.id, 'read').then(refresh).catch(() => {});
-          navigation.navigate('Report', { reportDate: item.evidence?.report_date });
+          navigation.navigate('Report', {
+            reportDate: item.evidence?.report_date,
+            reportType: item.evidence?.report_type,
+          });
         }}
         onToggleHistory={() => setHistory((value) => !value)}
       />

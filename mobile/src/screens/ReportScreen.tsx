@@ -106,9 +106,10 @@ export function ReportScreen() {
   const navigation = useNavigation<NavigationProp<MainTabParamList>>();
   const route = useRoute<RouteProp<MainTabParamList, 'Report'>>();
   const { openFinn } = useFinnOverlay();
-  const [period, setPeriod] = useState<ReportPeriod>('daily');
+  const [period, setPeriod] = useState<ReportPeriod>(route.params?.reportType || 'daily');
   const activeSymbol = route.params?.symbol ?? '';
   const reportDate = route.params?.reportDate;
+  const reportType = route.params?.reportType;
   const notificationType = route.params?.notificationType;
   const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
@@ -120,8 +121,8 @@ export function ReportScreen() {
   ];
 
   useEffect(() => {
-    if (reportDate) setPeriod('daily');
-  }, [reportDate]);
+    if (reportDate) setPeriod(reportType || 'daily');
+  }, [reportDate, reportType]);
 
   useEffect(() => {
     trackAssistantEvent({
@@ -134,35 +135,36 @@ export function ReportScreen() {
   }, [period, activeSymbol]);
 
   const fetchReport = useCallback(async (): Promise<ReportPayload> => {
+    const datedReport = reportDate && (!reportType || reportType === period) ? reportDate : undefined;
     if (period === 'weekly') {
       return resolveReportPair(
-        () => intelligenceApi.latestWeeklyReport('mobile'),
-        () => intelligenceApi.latestWeeklyReportFull(),
+        () => datedReport ? intelligenceApi.weeklyReportByDate(datedReport, 'mobile') : intelligenceApi.latestWeeklyReport('mobile'),
+        () => datedReport ? intelligenceApi.weeklyReportByDateFull(datedReport) : intelligenceApi.latestWeeklyReportFull(),
       );
     }
     if (period === 'monthly') {
       return resolveReportPair(
-        () => intelligenceApi.latestMonthlyReport('mobile'),
-        () => intelligenceApi.latestMonthlyReportFull(),
+        () => datedReport ? intelligenceApi.monthlyReportByDate(datedReport, 'mobile') : intelligenceApi.latestMonthlyReport('mobile'),
+        () => datedReport ? intelligenceApi.monthlyReportByDateFull(datedReport) : intelligenceApi.latestMonthlyReportFull(),
       );
     }
     if (period === 'quarterly') {
       return resolveReportPair(
-        () => intelligenceApi.latestQuarterlyReport('mobile'),
-        () => intelligenceApi.latestQuarterlyReportFull(),
+        () => datedReport ? intelligenceApi.quarterlyReportByDate(datedReport, 'mobile') : intelligenceApi.latestQuarterlyReport('mobile'),
+        () => datedReport ? intelligenceApi.quarterlyReportByDateFull(datedReport) : intelligenceApi.latestQuarterlyReportFull(),
       );
     }
 
-    return reportDate
+    return datedReport
       ? resolveReportPair(
-          () => intelligenceApi.dailyReportByDate(reportDate, 'mobile'),
-          () => intelligenceApi.dailyReportByDateFull(reportDate),
+          () => intelligenceApi.dailyReportByDate(datedReport, 'mobile'),
+          () => intelligenceApi.dailyReportByDateFull(datedReport),
         )
       : resolveReportPair(
           () => intelligenceApi.latestDailyReport(activeSymbol, 'mobile'),
           () => intelligenceApi.latestDailyReportFull(activeSymbol),
         );
-  }, [activeSymbol, period, reportDate]);
+  }, [activeSymbol, period, reportDate, reportType]);
 
   const reportResource = useApiResource<ReportPayload>({
     fallbackData: {},
@@ -174,7 +176,7 @@ export function ReportScreen() {
   );
   async function changePeriod(nextPeriod: ReportPeriod) {
     await triggerHaptic('selection');
-    if (reportDate) navigation.setParams({ reportDate: undefined });
+    if (reportDate) navigation.setParams({ reportDate: undefined, reportType: undefined });
     setPeriod(nextPeriod);
   }
 

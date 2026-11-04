@@ -1887,8 +1887,19 @@ LOAD
     let date = loadedReportTypeRef.current === reportType ? selectedDate : 'latest';
     if (!initialReportLinkReadRef.current && typeof window !== 'undefined') {
       initialReportLinkReadRef.current = true;
-      const requested = new URLSearchParams(window.location.search).get('date');
-      if (reportType === 'daily' && /^\d{4}-\d{2}-\d{2}$/.test(requested || '')) date = requested;
+      const params = new URLSearchParams(window.location.search);
+      const requestedType = params.get('type');
+      if (REPORT_TYPE_KEYS.includes(requestedType) && requestedType !== reportType) {
+        setReportType(requestedType);
+        return;
+      }
+      const requested = params.get('date');
+      if (/^\d{4}-\d{2}-\d{2}$/.test(requested || '')) date = requested;
+    } else if (selectedDate === 'latest' && typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('type') === reportType && /^\d{4}-\d{2}-\d{2}$/.test(params.get('date') || '')) {
+        date = params.get('date');
+      }
     }
     loadedReportTypeRef.current = reportType;
     loadData(date);

@@ -40,13 +40,13 @@ export function MobileFINNFeed({ events, onArchive, onDiscuss, onViewReport, onT
             <View style={styles.actions}>
               <Pressable onPress={async () => {
                 await triggerHaptic('selection');
-                if (item.event_type === 'daily_report_ready') {
+                if (item.event_type.endsWith('_report_ready')) {
                   onViewReport(item);
                 } else {
                   onDiscuss(item);
                 }
               }} accessibilityRole="button">
-                <Text style={styles.link}>{translate(language, item.event_type === 'daily_report_ready' ? 'finn.feedViewReport' : 'finn.feedDiscuss')}</Text>
+                <Text style={styles.link}>{translate(language, item.event_type.endsWith('_report_ready') ? 'finn.feedViewReport' : 'finn.feedDiscuss')}</Text>
               </Pressable>
               <Pressable onPress={async () => { await triggerHaptic('selection'); onArchive(item.id); }} accessibilityRole="button">
                 <Text style={styles.secondary}>{translate(language, 'finn.feedHandled')}</Text>

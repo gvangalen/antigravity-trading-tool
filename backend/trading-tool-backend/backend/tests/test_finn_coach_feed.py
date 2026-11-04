@@ -32,6 +32,20 @@ def test_daily_report_notification_has_one_factual_translation_per_locale():
     assert "Paper" not in copy["nl"]["body"]
 
 
+@pytest.mark.parametrize("report_type,expected", [
+    ("weekly", "weekrapport"),
+    ("monthly", "maandrapport"),
+    ("quarterly", "kwartaalrapport"),
+])
+def test_periodic_report_notification_names_the_saved_period(report_type, expected):
+    copy = module._fallback("periodic_report_ready", report_type, {
+        "report_type": report_type, "report_date": "2026-11-04",
+    })
+    assert expected in copy["nl"]["title"]
+    assert set(copy) == {"nl", "en", "de"}
+    assert all(row["body"] for row in copy.values())
+
+
 def test_paper_bot_fallback_distinguishes_decision_from_execution():
     planned = module._fallback("bot_decision", "AAPL plan", {
         "symbol": "AAPL", "action": "buy", "status": "planned", "amount_eur": 400,
