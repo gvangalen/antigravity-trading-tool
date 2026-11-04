@@ -238,6 +238,19 @@ def _fallback(kind: str, subject: str, evidence: dict, *, focus: str = "brief") 
             "en": {"title": "Your daily report is ready", "body": "See what changed and what needs attention in your plan."},
             "de": {"title": "Dein Tagesbericht ist bereit", "body": "Lies, was sich geändert hat und was in deinem Plan Aufmerksamkeit braucht."},
         }
+    if kind == "periodic_report_ready":
+        report_type = evidence.get("report_type")
+        titles = {
+            "weekly": ("Je weekrapport staat klaar", "Your weekly report is ready", "Dein Wochenbericht ist bereit"),
+            "monthly": ("Je maandrapport staat klaar", "Your monthly report is ready", "Dein Monatsbericht ist bereit"),
+            "quarterly": ("Je kwartaalrapport staat klaar", "Your quarterly report is ready", "Dein Quartalsbericht ist bereit"),
+        }
+        title = titles.get(report_type, titles["weekly"])
+        return {
+            "nl": {"title": title[0], "body": "Bekijk de terugblik en waar je de komende periode op let."},
+            "en": {"title": title[1], "body": "Review what happened and what to watch in the coming period."},
+            "de": {"title": title[2], "body": "Sieh dir den Rückblick an und worauf du in der nächsten Zeit achten solltest."},
+        }
     if kind == "plan_match":
         body = {
             "nl": f"De opgeslagen scorevoorwaarden van {name} passen bij de gemeten benchmark. Dit is geen instapsignaal.",
@@ -373,7 +386,7 @@ class FinnCoachFeedService:
                       expires_at: datetime | None = None,
                       revision: str | None = None) -> str | None:
         """One row per owner/event. Unchanged evidence never reopens or regenerates."""
-        if not event_key or event_type not in {"plan_match", "data_blocked", "proposal_pending", "market_move", "bot_decision", "live_bot_paused", "daily_report_ready"}:
+        if not event_key or event_type not in {"plan_match", "data_blocked", "proposal_pending", "market_move", "bot_decision", "live_bot_paused", "daily_report_ready", "periodic_report_ready"}:
             raise ValueError("feed_event_invalid")
         facts = {**evidence, "subject": str(subject or "")[:120]}
         digest = hashlib.sha256(str(revision or _json(facts)).encode()).hexdigest()

@@ -127,7 +127,7 @@ export type MobileCoachFeedItem = {
   symbol?: string | null;
   title: string;
   description: string;
-  evidence?: { subject?: string; report_date?: string };
+  evidence?: { subject?: string; report_date?: string; report_type?: 'daily' | 'weekly' | 'monthly' | 'quarterly' };
   status: 'unread' | 'read' | 'handled' | 'archived' | 'resolved';
   priority: number;
   created_at: string;
@@ -650,6 +650,14 @@ export const intelligenceApi = {
     return apiClient.get<ReportResponse>('/api/report/weekly/latest');
   },
 
+  weeklyReportByDate(date: string, format?: 'mobile') {
+    return apiClient.get<MobileReportResponse>('/api/report/weekly/by-date', { date, format });
+  },
+
+  weeklyReportByDateFull(date: string) {
+    return apiClient.get<ReportResponse>('/api/report/weekly/by-date', { date });
+  },
+
   latestMonthlyReport(format?: 'mobile') {
     return apiClient.get<MobileReportResponse>('/api/report/monthly/latest', { format });
   },
@@ -658,12 +666,28 @@ export const intelligenceApi = {
     return apiClient.get<ReportResponse>('/api/report/monthly/latest');
   },
 
+  monthlyReportByDate(date: string, format?: 'mobile') {
+    return apiClient.get<MobileReportResponse>('/api/report/monthly/by-date', { date, format });
+  },
+
+  monthlyReportByDateFull(date: string) {
+    return apiClient.get<ReportResponse>('/api/report/monthly/by-date', { date });
+  },
+
   latestQuarterlyReport(format?: 'mobile') {
     return apiClient.get<MobileReportResponse>('/api/report/quarterly/latest', { format });
   },
 
   latestQuarterlyReportFull() {
     return apiClient.get<ReportResponse>('/api/report/quarterly/latest');
+  },
+
+  quarterlyReportByDate(date: string, format?: 'mobile') {
+    return apiClient.get<MobileReportResponse>('/api/report/quarterly/by-date', { date, format });
+  },
+
+  quarterlyReportByDateFull(date: string) {
+    return apiClient.get<ReportResponse>('/api/report/quarterly/by-date', { date });
   },
 };
 

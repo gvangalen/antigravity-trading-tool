@@ -7,6 +7,7 @@ from celery import shared_task
 from backend.utils.db import get_db_connection
 from backend.services.finn_unified_report_service import generate_quarterly_report_sections
 from backend.services.ai_usage_observability_service import ai_usage_context, get_user_email_snapshot
+from backend.celery_task.report_feed import publish_periodic_report_ready
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -132,6 +133,8 @@ def generate_quarterly_report(user_id: int):
 
     finally:
         conn.close()
+
+    publish_periodic_report_ready(user_id, "quarterly", today)
 
     return {
         "status": "ok",

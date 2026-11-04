@@ -4,6 +4,24 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Week-, maand- en kwartaalrapport klaar in de FINN-feed (4 november 2026)
+
+Phase: `LOCAL_VALIDATION`. Kandidaat: `codex/finn-periodic-report-feed`.
+Na succesvolle opslag van een week-, maand- of kwartaalrapport publiceert de
+rapporttaak één eigenaargebonden feedmelding per type en rapportdatum.
+Web en mobiel openen via die melding precies het betrokken rapport. De melding
+wordt niet gepubliceerd wanneer de rapportgeneratie of opslag mislukt.
+
+De gerichte backendproeven slaagden `38/38`; de volledige backend-suite
+slaagde `4274 passed, 4 skipped`. Web typecheck, i18n-controles,
+commandtests en productiebuild slaagden. Mobiele typecheck, lint zonder
+fouten en Expo-bundels voor web, iOS en Android slaagden. De echte
+Responses-selectieproeven slaagden `20/20` development en `109/109`
+regression, beide met een echte provider; CI, deployment en onafhankelijke
+live QA staan nog open.
+FINN-actiecontracten zijn niet gewijzigd; de worker-actiematrix is voor
+deze rapportmelding niet van toepassing.
+
 ## Dagrapport klaar in de FINN-feed (4 november 2026)
 
 Phase: `DEPLOYED_AWAITING_QA`. Kandidaat: `codex/finn-daily-report-feed`,
