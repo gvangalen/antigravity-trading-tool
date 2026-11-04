@@ -229,18 +229,22 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
         # A newly stamped daily_scores row must not launder an old component
         # into fresh trading evidence. Fail the whole component rather than
         # silently reweighting it around missing/stale configured indicators.
-        if set(rows) != configured or any(
+        missing_sources = set(rows) != configured or any(
             row[1] is None or not score_source_is_fresh(category, row[0], row[2], symbol=symbol)
             for row in rows.values()
-        ):
+        )
+        if missing_sources:
             logger.warning("Stale %s score inputs for user=%s symbol=%s", category, user_id, symbol)
-            return {"scores": {}, "total_score": None, "top_contributors": [],
-                    "source_status": "missing_or_stale_indicator"}
-        data = {name: (float(row[1]), row[2]) for name, row in rows.items()}
+        incomplete_status = "missing_or_stale_indicator" if missing_sources else None
+        data = {name: (float(row[1]), row[2]) for name, row in rows.items()
+                if row[1] is not None and score_source_is_fresh(
+                    category, row[0], row[2], symbol=symbol,
+                )}
 
         if not data:
             logger.warning(f"⚠️ Geen data voor {category} (user_id={user_id})")
-            return {"scores": {}, "total_score": None, "top_contributors": []}
+            return {"scores": {}, "total_score": None, "top_contributors": [],
+                    "source_status": incomplete_status or "missing_or_stale_indicator"}
 
         scores: Dict[str, Any] = {}
         weighted_total = 0.0
@@ -263,8 +267,8 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
                     conn, indicator, value, user_id, symbol, market_id=market_id,
                 )
             if normalized_value is None:
-                return {"scores": {}, "total_score": None, "top_contributors": [],
-                        "source_status": "insufficient_indicator_history"}
+                incomplete_status = incomplete_status or "insufficient_indicator_history"
+                continue
             scored = score_indicator(
                 conn=conn,
                 category=category,
@@ -275,8 +279,8 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
                 market_id=market_id,
             )
             if scored.get("rule_origin") in {"missing", "generated_fallback"}:
-                return {"scores": {}, "total_score": None, "top_contributors": [],
-                        "source_status": "missing_rule"}
+                incomplete_status = incomplete_status or "missing_rule"
+                continue
             weight = float(scored.get("weight", 1))
 
             scores[indicator] = {
@@ -295,7 +299,7 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
             weighted_total += scored["score"] * weight
             total_weight += weight
 
-        avg_score = round(weighted_total / total_weight) if total_weight else None
+        avg_score = round(weighted_total / total_weight) if total_weight and not incomplete_status else None
 
         top_contributors: List[str] = [
             name for name, _ in sorted(
@@ -309,7 +313,7 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
             "scores": scores,
             "total_score": avg_score,
             "top_contributors": top_contributors,
-            "source_status": "available" if total_weight > 0 else "missing_weight",
+            "source_status": incomplete_status or ("available" if total_weight > 0 else "missing_weight"),
         }
 
     except Exception:

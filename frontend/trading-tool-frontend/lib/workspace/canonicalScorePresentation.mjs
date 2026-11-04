@@ -12,9 +12,9 @@ export function evidenceKey(name) {
   return ALIASES[key] || key;
 }
 
-export function validatedDayEvidence(categoryScore, evidence, name) {
-  if (categoryScore === null || categoryScore === undefined || categoryScore === "") return null;
-  if (!Number.isFinite(Number(categoryScore))) return null;
+export function validatedDayEvidence(indicatorScore, evidence, name) {
+  if (indicatorScore === null || indicatorScore === undefined || indicatorScore === "") return null;
+  if (!Number.isFinite(Number(indicatorScore))) return null;
   const row = evidence?.[evidenceKey(name)] || null;
   return row && ["custom", "system_template"].includes(row.rule_origin) ? row : null;
 }
@@ -22,6 +22,21 @@ export function validatedDayEvidence(categoryScore, evidence, name) {
 export function indicatorSourceFreshness(freshness) {
   if (freshness?.status !== "available") return "unavailable";
   return freshness.stale ? "stale" : "current";
+}
+
+export function normalizedIndicatorPosition(evidence) {
+  const value = evidence?.normalized_value;
+  if (value === null || value === undefined || value === "") return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.round(numeric) : null;
+}
+
+export function currentIndicatorScore(item, evidence, hasValue, currentEvidenceAvailable) {
+  if (!hasValue || (currentEvidenceAvailable && !evidence)) return null;
+  const value = currentEvidenceAvailable ? evidence?.score : item?.score;
+  if (value === null || value === undefined || value === "") return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 && numeric <= 100 ? numeric : null;
 }
 
 export function hasCompleteDailyBenchmark(workspace, symbol) {

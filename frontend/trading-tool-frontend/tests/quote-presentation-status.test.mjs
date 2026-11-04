@@ -57,10 +57,11 @@ test("a stale stock quote during the open week remains stale", () => {
   }), "stale");
 });
 
-test("crypto, unknown exchanges, and current quotes do not get a closed-market label", () => {
+test("crypto and unknown exchanges do not get a closed-market label", () => {
   const sourceAt = "2026-10-23T19:59:00Z";
   const now = "2026-10-24T12:00:00Z";
   assert.equal(quotePresentationStatus({ ...stock, assetClass: "crypto", sourceAt, now }), "stale");
   assert.equal(quotePresentationStatus({ ...stock, marketRegion: "global", sourceAt, now }), "stale");
-  assert.equal(quotePresentationStatus({ ...stock, stale: false, sourceAt, now }), "current");
+  assert.equal(quotePresentationStatus({ ...stock, stale: false, sourceAt, now }), "closed_session");
+  assert.equal(quotePresentationStatus({ ...stock, stale: false, sourceAt, now: "2026-10-26T15:00:00Z" }), "current");
 });

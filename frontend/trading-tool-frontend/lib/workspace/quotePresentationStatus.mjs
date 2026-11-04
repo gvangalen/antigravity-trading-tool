@@ -21,8 +21,6 @@ function hourAndMinuteAt(date, timeZone) {
 }
 
 export function quotePresentationStatus({ stale, assetClass, marketRegion, timeZone, sourceAt, now = new Date() }) {
-  if (!stale) return "current";
-
   const source = new Date(sourceAt);
   const current = new Date(now);
   const ageMs = current.getTime() - source.getTime();
@@ -33,7 +31,7 @@ export function quotePresentationStatus({ stale, assetClass, marketRegion, timeZ
     || !Number.isFinite(ageMs)
     || ageMs < 0
     || ageMs > 72 * 60 * 60 * 1000
-  ) return "stale";
+  ) return stale ? "stale" : "current";
 
   const currentDay = weekdayAt(current, timeZone);
   const sourceDay = weekdayAt(source, timeZone);
@@ -45,5 +43,5 @@ export function quotePresentationStatus({ stale, assetClass, marketRegion, timeZ
     && sourceMinute >= 15 * 60 + 30;
   return ((currentDay === "Sat" || currentDay === "Sun") || beforeMondayOpen) && nearFridayClose
     ? "closed_session"
-    : "stale";
+    : stale ? "stale" : "current";
 }

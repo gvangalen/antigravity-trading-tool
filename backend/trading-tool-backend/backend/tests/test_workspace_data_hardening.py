@@ -45,6 +45,27 @@ def test_day_indicator_uses_verified_weighted_score_instead_of_legacy_row_score(
     assert category["rows"][0]["score_contribution"]["weight"] == 1.0
 
 
+def test_valid_individual_score_remains_visible_when_another_indicator_blocks_category():
+    now = datetime.now(timezone.utc)
+    observed = now.isoformat()
+    raw = [{"name": "dxy", "value": 102.3, "score": None,
+            "source_observed_at": observed,
+            "config_updated_at": (now - timedelta(minutes=5)).isoformat()}]
+    daily = {
+        "calculated_at": now.isoformat(),
+        "macro": {"score": None, "source_status": "missing_indicator_reading"},
+        "indicator_evidence": {"macro": {"dxy": {
+            "value": 102.3, "score": 65, "weight": 1,
+            "source_observed_at": observed, "rule_origin": "system_template",
+        }}},
+    }
+    assert _current_indicator_rows(raw, "macro", daily)[0]["score"] == 65
+    raw[0]["config_updated_at"] = (now + timedelta(minutes=1)).isoformat()
+    assert _current_indicator_rows(raw, "macro", daily)[0]["score"] is None
+    daily["macro"] = {"score": 65, "source_status": "fresh"}
+    assert _current_indicator_rows(raw, "macro", daily)[0]["score"] is None
+
+
 def test_day_indicator_hides_old_score_when_daily_evidence_is_not_fresh():
     observed = datetime.now(timezone.utc).isoformat()
     raw = [{"name": "price", "value": 100.0, "score": 30,
@@ -69,13 +90,14 @@ def test_day_indicator_rejects_evidence_for_a_different_observation():
 
 
 def test_day_indicator_matches_equivalent_utc_source_moments():
+    observed = datetime.now(timezone.utc).replace(microsecond=0)
     raw = [{"name": "RSI", "value": 31.91, "score": None,
-            "source_observed_at": "2026-10-07T23:55:00+00:00"}]
+            "source_observed_at": observed.isoformat()}]
     daily = {
         "technical": {"score": 40, "source_status": "fresh"},
         "indicator_evidence": {"technical": {"rsi": {
             "value": 31.91, "score": 40, "weight": 1,
-            "source_observed_at": "2026-10-07T23:55:00Z",
+            "source_observed_at": observed.isoformat().replace("+00:00", "Z"),
             "rule_origin": "system_template",
         }}},
     }
@@ -903,7 +925,7 @@ def test_frontend_workspace_reads_are_centralized_and_ai_is_explicit():
     assert "getDailyScores" not in workspace
     assert "useOverviewSnapshot" not in workspace
     assert "workspace?.quote" in workspace
-    assert "formatTimestamp(assetLive?.as_of || workspace?.generated_at, locale)" in workspace
+    assert "formatTimestamp(assetLive?.as_of, locale)" in workspace
     assert "fetchAssetWorkspace" in hook
     assert "watchlistSymbols" in hook
     assert "fetchWorkspaceWatchlist" not in hook

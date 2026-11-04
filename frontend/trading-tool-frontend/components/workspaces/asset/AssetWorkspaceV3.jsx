@@ -47,7 +47,7 @@ import {
 } from "../../../../../shared/tradingViewConfig";
 import { matchesWorkspaceAsset } from "@/lib/workspace/workspaceAssetScope.mjs";
 import { FINN_INDICATOR_MODAL_COMPLETED_EVENT } from "@/lib/finnCommandSearch";
-import { formatBenchmarkScore, indicatorSourceFreshness, validatedDayEvidence } from "@/lib/workspace/canonicalScorePresentation.mjs";
+import { currentIndicatorScore, formatBenchmarkScore, indicatorSourceFreshness, normalizedIndicatorPosition, validatedDayEvidence } from "@/lib/workspace/canonicalScorePresentation.mjs";
 import { quotePresentationStatus } from "@/lib/workspace/quotePresentationStatus.mjs";
 import { marketConditionForScore } from "@/lib/setup/scoreConditions.mjs";
 import { availableTradingQuotes, benchmarkScaleBands, benchmarkSetupSessionKey, benchmarkSetupView, resolveTradingQuote, selectedBenchmarkSetupMatch, tradingQuoteSessionKey, withSelectedBenchmarkSetup, withSelectedTradingQuote } from "@/lib/setup/benchmarkScale.mjs";
@@ -139,6 +139,7 @@ function getUiCopy(locale = "nl") {
     return {
       activeAnalysis: "Active analysis",
       updated: "Updated",
+      quoteAsOf: "Quote from",
       combinedScore: "Combined score",
       benchmarkTitle: "Market conditions",
       benchmarkScore: "Your benchmark score",
@@ -194,7 +195,7 @@ function getUiCopy(locale = "nl") {
       notConfigured: "No indicators added",
       pendingSource: "This indicator is configured but has no source reading yet. The next source refresh will try again; until then there is no score.",
       historyPending: (observed, required) => `This indicator has ${observed} of ${required} dated source days. We will retry the historical source; there is no score until enough real readings are available.`,
-      indicatorSourceStale: "The latest source reading is too old for a current score. The source will be refreshed again.",
+      indicatorSourceStale: "The last reading is from {time}. A new indicator score is not available yet.",
       scorePending: "A current source reading exists, but no indicator score is available. Check the score rule or wait for the next calculation.",
       scoreRebuilding: "Your indicator choices changed. The score is being recalculated; previous readings have not been erased.",
       scoreIncomplete: "One or more selected indicators do not have a usable score yet. The group score will return when their evidence is complete.",
@@ -206,7 +207,8 @@ function getUiCopy(locale = "nl") {
       scoreWeight: "Weight in group score",
       calculation: "Calculation",
       usedData: "Data used",
-      scaledReading: "Reading on a 0–100 scale",
+      scaledReading: "Reading mapped to 0–100",
+      scoredReading: "Indicator score after the scoring rule",
       groupContribution: "Contribution to group score",
       coverageValue: (observed, required, window) => `${observed} source days / at least ${required} in the last ${window} days`,
       systemScoringRule: "System rule",
@@ -265,9 +267,10 @@ function getUiCopy(locale = "nl") {
       freshness: "Freshness",
       currentData: "Current",
       fallbackData: "Fallback",
-      staleData: "Stale",
-      closedMarketQuote: "Market closed · last available quote",
-      closedSessionScore: "The quote comes from the last available market session. A new entry needs fresh market data.",
+      staleData: "Last available quote",
+      indicatorOlderReading: "Last available reading",
+      closedMarketQuote: "Market closed",
+      closedSessionScore: "This is the last quote from the previous market session. A new order checks the market price again.",
       fallbackReady: "Fallback data is available. Detailed context will return automatically once the full workspace feed responds again.",
       scoreContribution: "Score contribution",
       sampleSize: "Readings in period",
@@ -338,6 +341,7 @@ function getUiCopy(locale = "nl") {
     return {
       activeAnalysis: "Aktive analyse",
       updated: "Aktualisiert",
+      quoteAsOf: "Kurs vom",
       combinedScore: "Kombinierter score",
       benchmarkTitle: "Marktbedingungen",
       benchmarkScore: "Dein Benchmark-Score",
@@ -393,7 +397,7 @@ function getUiCopy(locale = "nl") {
       notConfigured: "Keine Indikatoren hinzugefügt",
       pendingSource: "Dieser Indikator ist eingerichtet, hat aber noch keinen Messwert. Bei der nächsten Datenaktualisierung wird die Quelle erneut abgefragt; bis dahin gibt es keinen Score.",
       historyPending: (observed, required) => `Für diesen Indikator liegen ${observed} von ${required} datierten Quelltagen vor. Wir fragen die historische Quelle erneut ab; bis genügend echte Messwerte vorliegen, gibt es keinen Score.`,
-      indicatorSourceStale: "Der letzte Quellwert ist für einen aktuellen Score zu alt. Die Quelle wird erneut abgefragt.",
+      indicatorSourceStale: "Die letzte Messung stammt vom {time}. Ein neuer Indikator-Score liegt noch nicht vor.",
       scorePending: "Ein aktueller Quellwert liegt vor, aber kein Indikator-Score. Prüfe die Scoreregel oder warte auf die nächste Berechnung.",
       scoreRebuilding: "Deine Indikatorauswahl hat sich geändert. Der Score wird neu berechnet; frühere Messwerte wurden nicht gelöscht.",
       scoreIncomplete: "Mindestens ein gewählter Indikator hat noch keinen nutzbaren Score. Der Gruppenscore erscheint wieder, sobald die Daten vollständig sind.",
@@ -405,7 +409,8 @@ function getUiCopy(locale = "nl") {
       scoreWeight: "Gewicht im Gruppenscore",
       calculation: "Berechnung",
       usedData: "Verwendete Daten",
-      scaledReading: "Messwert auf einer Skala von 0–100",
+      scaledReading: "Messwert auf 0–100 abgebildet",
+      scoredReading: "Indikator-Score nach der Scoreregel",
       groupContribution: "Beitrag zum Gruppenscore",
       coverageValue: (observed, required, window) => `${observed} Quelltage / mindestens ${required} in den letzten ${window} Tagen`,
       systemScoringRule: "Systemregel",
@@ -464,9 +469,10 @@ function getUiCopy(locale = "nl") {
       freshness: "Aktualität",
       currentData: "Aktuell",
       fallbackData: "Fallback",
-      staleData: "Veraltet",
-      closedMarketQuote: "Börse geschlossen · letzter verfügbarer Kurs",
-      closedSessionScore: "Der Kurs stammt aus der letzten verfügbaren Börsensitzung. Für einen neuen Einstieg sind frische Marktdaten nötig.",
+      staleData: "Letzter verfügbarer Kurs",
+      indicatorOlderReading: "Letzte verfügbare Messung",
+      closedMarketQuote: "Börse geschlossen",
+      closedSessionScore: "Das ist der letzte Kurs der vorigen Börsensitzung. Eine neue Order prüft den Marktkurs erneut.",
       fallbackReady: "Fallback-Daten sind verfügbar. Die Detailkontexte erscheinen automatisch wieder, sobald der vollständige Workspace-Feed erneut antwortet.",
       scoreContribution: "Score-Beitrag",
       sampleSize: "Messungen im Zeitraum",
@@ -536,6 +542,7 @@ function getUiCopy(locale = "nl") {
   return {
     activeAnalysis: "Actieve analyse",
     updated: "Bijgewerkt",
+    quoteAsOf: "Koers van",
     combinedScore: "Gecombineerde score",
     benchmarkTitle: "Marktomstandigheden",
     benchmarkScore: "Jouw benchmarkscore",
@@ -591,7 +598,7 @@ function getUiCopy(locale = "nl") {
     notConfigured: "Geen indicatoren toegevoegd",
     pendingSource: "Deze indicator is ingesteld, maar heeft nog geen bronmeting. Bij de volgende gegevensverversing wordt de bron opnieuw gelezen; tot die tijd is er geen score.",
     historyPending: (observed, required) => `Deze indicator heeft ${observed} van de ${required} gedateerde brondagen. We proberen de historische bron opnieuw; tot er genoeg echte metingen zijn, is er geen score.`,
-    indicatorSourceStale: "De laatste bronmeting is te oud voor een actuele score. De bron wordt opnieuw ververst.",
+    indicatorSourceStale: "De laatste meting is van {time}. Een nieuwe indicatorscore is nog niet beschikbaar.",
     scorePending: "Er is een actuele bronmeting, maar nog geen indicatorscore. Controleer de scoreregel of wacht op de volgende berekening.",
     scoreRebuilding: "Je indicatoren zijn gewijzigd. De score wordt opnieuw berekend; eerdere metingen zijn niet gewist.",
     scoreIncomplete: "Een of meer gekozen indicatoren hebben nog geen bruikbare score. De groepsscore komt terug zodra hun gegevens compleet zijn.",
@@ -603,7 +610,8 @@ function getUiCopy(locale = "nl") {
     scoreWeight: "Gewicht in groepsscore",
     calculation: "Berekening",
     usedData: "Gebruikte gegevens",
-    scaledReading: "Meting op schaal 0–100",
+    scaledReading: "Meting omgerekend naar 0–100",
+    scoredReading: "Indicatorscore na de scoreregel",
     groupContribution: "Bijdrage aan groepsscore",
     coverageValue: (observed, required, window) => `${observed} brondagen / minimaal ${required} in de laatste ${window} dagen`,
     systemScoringRule: "Systeemregel",
@@ -662,9 +670,10 @@ function getUiCopy(locale = "nl") {
     freshness: "Actualiteit",
     currentData: "Actueel",
     fallbackData: "Fallback",
-    staleData: "Verouderd",
-    closedMarketQuote: "Beurs gesloten · laatst beschikbare koers",
-    closedSessionScore: "De koers komt uit de laatst beschikbare beurssessie. Een nieuwe instap vraagt verse marktdata.",
+    staleData: "Laatst beschikbare koers",
+    indicatorOlderReading: "Laatst beschikbare meting",
+    closedMarketQuote: "Beurs gesloten",
+    closedSessionScore: "Dit is de laatste koers van de vorige beurssessie. Bij een nieuwe order wordt de marktkoers opnieuw gecontroleerd.",
     fallbackReady: "Fallback-data is beschikbaar. De detailcontext komt automatisch terug zodra de volledige workspace-feed weer antwoord geeft.",
     scoreContribution: "Scorebijdrage",
     sampleSize: "Metingen in periode",
@@ -1188,16 +1197,13 @@ function formatIndicatorValue(name, value, locale, ui = getUiCopy(locale), quote
 }
 
 function toDirectionLabel(item, score, ui = getUiCopy("nl")) {
-  const trendSource = String(item?.trend || item?.action || item?.interpretation || "").trim().toLowerCase();
+  const trendSource = String(item?.trend || "").trim().toLowerCase();
   if (trendSource.includes("improv") || trendSource.includes("stijg") || trendSource.includes("herstel")) return ui.improving;
   if (trendSource.includes("verslecht") || trendSource.includes("dal") || trendSource.includes("tegenwind")) return ui.worsening;
   if (trendSource.includes("stable") || trendSource.includes("stab")) return ui.stable;
   if (trendSource.includes("buy")) return ui.active;
   if (trendSource.includes("sell")) return ui.weakened;
-  if (score === null) return ui.unavailable;
-  if (score >= 70) return ui.improving;
-  if (score <= 35) return ui.worsening;
-  return ui.stable;
+  return ui.unavailable;
 }
 
 function scoreTone(value, ui = getUiCopy("nl")) {
@@ -1392,12 +1398,10 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
     const label = prettifyName(name, ui);
     const rawValue = item?.value ?? item?.waarde;
     const hasValue = hasUsableIndicatorValue(name, rawValue);
-    const evidence = currentEvidence === null ? item : validatedDayEvidence(categoryScore, currentEvidence, name);
+    const evidence = currentEvidence === null ? item : validatedDayEvidence(item?.score, currentEvidence, name);
     // The server verifies that the daily evidence still matches this exact
     // reading. Do not resurrect a saved score when that check rejected it.
-    const score = hasValue && (currentEvidence === null || evidence)
-      ? normalizeScore(item?.score)
-      : null;
+    const score = currentIndicatorScore(item, evidence, hasValue, currentEvidence !== null);
     const verifiedContribution = score !== null && evidenceWeight > 0 && evidence
       ? {
           status: "available",
@@ -1441,7 +1445,7 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
       : unavailableReason === "insufficient_dated_history" && historyCoverage
         ? ui.historyPending(historyCoverage.observed_days, historyCoverage.required_days)
         : unavailableReason === "stale_source"
-          ? ui.indicatorSourceStale
+          ? ui.indicatorSourceStale.replace("{time}", formatTimestamp(item?.source_observed_at, locale))
           : unavailableReason === "missing_rule"
             ? ui.missingScoreRule
           : unavailableReason === "score_pending"
@@ -1449,8 +1453,8 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
       : !hasValue && item?.data_status === "pending_refresh"
         ? ui.pendingSource
         : ui.unavailable;
-    const normalizedPosition = Number(evidence?.normalized_value);
-    const methodDetail = ruleOrigin === "system_template" && Number.isFinite(normalizedPosition)
+    const normalizedPosition = normalizedIndicatorPosition(evidence);
+    const methodDetail = ruleOrigin === "system_template" && normalizedPosition !== null
       ? String(name).toLowerCase() === "price"
         ? ui.priceRangeMethod(Math.round(normalizedPosition))
         : String(name).toLowerCase() === "dxy"
@@ -1487,7 +1491,7 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
       detail,
       timestamp: evidence?.source_observed_at || item?.source_observed_at || null,
       ruleOrigin,
-      normalizedPosition: score === null || !Number.isFinite(normalizedPosition) ? null : Math.round(normalizedPosition),
+      normalizedPosition: score === null ? null : normalizedPosition,
       raw: verifiedContribution ? { ...item, score_contribution: verifiedContribution } : item,
     };
   });
@@ -1842,7 +1846,7 @@ function ActiveAssetCard({
             {ui.activeAnalysis}
         </div>
         <div className="shrink-0 text-right text-[11px] font-semibold text-slate-400">
-          {ui.updated} <span className="text-slate-600">{updatedAt}</span>
+          {ui.quoteAsOf} <span className="text-slate-600">{updatedAt}</span>
           {statusLabel ? (
             <div className="mt-0.5 text-[10px] font-black uppercase tracking-[0.14em] text-amber-600">
               {statusLabel}
@@ -2062,7 +2066,7 @@ function EvidenceRow({
   const freshness = row.raw?.freshness;
   const freshnessText = {
     unavailable: ui.unavailable,
-    stale: ui.staleData,
+    stale: ui.indicatorOlderReading,
     current: ui.currentData,
   }[indicatorSourceFreshness(freshness)];
 
@@ -2139,6 +2143,7 @@ function EvidenceRow({
                 <dl className="mt-2 text-[12px]">
                   {[
                     [ui.scaledReading, row.normalizedPosition !== null ? `${row.normalizedPosition}/100` : ui.unavailable],
+                    [ui.scoredReading, row.score !== null ? `${Math.round(row.score)}/100` : ui.unavailable],
                     [ui.scoringRule, row.ruleOrigin === "custom" ? ui.personalScoringRule : row.ruleOrigin ? ui.systemScoringRule : ui.unavailable],
                     [ui.groupContribution, contributionText],
                   ].map(([label, value]) => (
@@ -3006,10 +3011,10 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
 
   const sections = useMemo(() => {
     const evidence = workspace?.daily?.indicator_evidence || {};
-    const dayEvidence = (category, period, score) => period === "day" ? (normalizeScore(score) === null ? {} : evidence[category] || {}) : null;
-    const marketRows = buildRows(marketDayData, locale, ui, dayEvidence("market", marketTimeframe, market?.score), market?.score, workspace?.quote_currency);
-    const macroRows = buildRows(macroData, locale, ui, dayEvidence("macro", macroTimeframe, macro?.score), macro?.score);
-    const technicalRows = buildRows(technicalData, locale, ui, dayEvidence("technical", technicalTimeframe, technical?.score), technical?.score);
+    const dayEvidence = (category, period) => period === "day" ? evidence[category] || {} : null;
+    const marketRows = buildRows(marketDayData, locale, ui, dayEvidence("market", marketTimeframe), market?.score, workspace?.quote_currency);
+    const macroRows = buildRows(macroData, locale, ui, dayEvidence("macro", macroTimeframe), macro?.score);
+    const technicalRows = buildRows(technicalData, locale, ui, dayEvidence("technical", technicalTimeframe), technical?.score);
     const notConfigured = (rows, loadingState, score) =>
       workspace?.symbol === activeSymbol && !loadingState && !isFallbackWorkspace && rows.length === 0 && normalizeScore(score) === null;
     const marketNotConfigured = notConfigured(marketRows, marketLoading, market?.score);
@@ -3129,7 +3134,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         assetLogoUrl={activeAssetLogo}
         price={formatQuotePrice(assetLive?.price, locale, assetLive?.quote_currency)}
         change24h={assetLive?.change_24h}
-        updatedAt={formatTimestamp(assetLive?.as_of || workspace?.generated_at, locale)}
+        updatedAt={formatTimestamp(assetLive?.as_of, locale)}
         statusLabel={isFallbackWorkspace ? ui.fallbackData : quoteStatus === "closed_session" ? ui.closedMarketQuote : quoteStatus === "stale" ? ui.staleData : null}
         quoteStatus={quoteStatus}
         combinedSummary={combinedSummary}
