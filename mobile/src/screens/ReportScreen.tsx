@@ -108,6 +108,7 @@ export function ReportScreen() {
   const { openFinn } = useFinnOverlay();
   const [period, setPeriod] = useState<ReportPeriod>('daily');
   const activeSymbol = route.params?.symbol ?? '';
+  const reportDate = route.params?.reportDate;
   const notificationType = route.params?.notificationType;
   const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
@@ -117,6 +118,10 @@ export function ReportScreen() {
     { id: 'monthly', label: translate(language, 'report.periodTab.monthly'), short: 'M' },
     { id: 'quarterly', label: translate(language, 'report.periodTab.quarterly'), short: 'Q' },
   ];
+
+  useEffect(() => {
+    if (reportDate) setPeriod('daily');
+  }, [reportDate]);
 
   useEffect(() => {
     trackAssistantEvent({
@@ -148,11 +153,16 @@ export function ReportScreen() {
       );
     }
 
-    return resolveReportPair(
-      () => intelligenceApi.latestDailyReport(activeSymbol, 'mobile'),
-      () => intelligenceApi.latestDailyReportFull(activeSymbol),
-    );
-  }, [activeSymbol, period]);
+    return reportDate
+      ? resolveReportPair(
+          () => intelligenceApi.dailyReportByDate(reportDate, 'mobile'),
+          () => intelligenceApi.dailyReportByDateFull(reportDate),
+        )
+      : resolveReportPair(
+          () => intelligenceApi.latestDailyReport(activeSymbol, 'mobile'),
+          () => intelligenceApi.latestDailyReportFull(activeSymbol),
+        );
+  }, [activeSymbol, period, reportDate]);
 
   const reportResource = useApiResource<ReportPayload>({
     fallbackData: {},
@@ -164,6 +174,7 @@ export function ReportScreen() {
   );
   async function changePeriod(nextPeriod: ReportPeriod) {
     await triggerHaptic('selection');
+    if (reportDate) navigation.setParams({ reportDate: undefined });
     setPeriod(nextPeriod);
   }
 

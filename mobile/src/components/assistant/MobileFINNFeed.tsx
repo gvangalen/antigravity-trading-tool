@@ -11,12 +11,13 @@ type Props = {
   events: MobileCoachFeedItem[];
   onArchive: (eventId: string) => void;
   onDiscuss: (event: MobileCoachFeedItem) => void;
+  onViewReport: (event: MobileCoachFeedItem) => void;
   onToggleHistory: () => void;
   history: boolean;
   language: AppLanguage;
 };
 
-export function MobileFINNFeed({ events, onArchive, onDiscuss, onToggleHistory, history, language }: Props) {
+export function MobileFINNFeed({ events, onArchive, onDiscuss, onViewReport, onToggleHistory, history, language }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -37,8 +38,15 @@ export function MobileFINNFeed({ events, onArchive, onDiscuss, onToggleHistory, 
           <Text style={styles.time}>{new Date(item.created_at).toLocaleString(language)}</Text>
           {item.status === 'unread' || item.status === 'read' ? (
             <View style={styles.actions}>
-              <Pressable onPress={async () => { await triggerHaptic('selection'); onDiscuss(item); }} accessibilityRole="button">
-                <Text style={styles.link}>{translate(language, 'finn.feedDiscuss')}</Text>
+              <Pressable onPress={async () => {
+                await triggerHaptic('selection');
+                if (item.event_type === 'daily_report_ready') {
+                  onViewReport(item);
+                } else {
+                  onDiscuss(item);
+                }
+              }} accessibilityRole="button">
+                <Text style={styles.link}>{translate(language, item.event_type === 'daily_report_ready' ? 'finn.feedViewReport' : 'finn.feedDiscuss')}</Text>
               </Pressable>
               <Pressable onPress={async () => { await triggerHaptic('selection'); onArchive(item.id); }} accessibilityRole="button">
                 <Text style={styles.secondary}>{translate(language, 'finn.feedHandled')}</Text>

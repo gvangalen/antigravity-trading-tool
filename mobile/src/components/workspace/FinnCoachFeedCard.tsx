@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigation, type NavigationProp } from '@react-navigation/native';
 import { View } from 'react-native';
 
 import { MobileFINNFeed } from '../assistant/MobileFINNFeed';
@@ -7,8 +8,10 @@ import { useAppPreferences } from '../../preferences/AppPreferencesProvider';
 import { translate } from '../../i18n';
 import { coachFeedApi, type MobileCoachFeedItem } from '../../services/tradamindApi';
 import { useAuth } from '../../auth/AuthProvider';
+import type { MainTabParamList } from '../../navigation/MainTabNavigator';
 
 export function FinnCoachFeedCard() {
+  const navigation = useNavigation<NavigationProp<MainTabParamList>>();
   const { language } = useAppPreferences();
   const { user } = useAuth();
   const { openFinn } = useFinnOverlay();
@@ -72,6 +75,10 @@ export function FinnCoachFeedCard() {
         language={language}
         onArchive={handleArchive}
         onDiscuss={handleDiscuss}
+        onViewReport={(item) => {
+          void coachFeedApi.mark(item.id, 'read').then(refresh).catch(() => {});
+          navigation.navigate('Report', { reportDate: item.evidence?.report_date });
+        }}
         onToggleHistory={() => setHistory((value) => !value)}
       />
     </View>

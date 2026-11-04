@@ -127,7 +127,7 @@ export type MobileCoachFeedItem = {
   symbol?: string | null;
   title: string;
   description: string;
-  evidence?: { subject?: string };
+  evidence?: { subject?: string; report_date?: string };
   status: 'unread' | 'read' | 'handled' | 'archived' | 'resolved';
   priority: number;
   created_at: string;
@@ -632,6 +632,14 @@ export const intelligenceApi = {
 
   latestDailyReportFull(symbol?: string) {
     return apiClient.get<ReportResponse>('/api/report/daily/latest', { symbol });
+  },
+
+  dailyReportByDate(date: string, format?: 'mobile') {
+    return apiClient.get<MobileReportResponse>('/api/report/daily/by-date', { date, format });
+  },
+
+  dailyReportByDateFull(date: string) {
+    return apiClient.get<ReportResponse>('/api/report/daily/by-date', { date });
   },
 
   latestWeeklyReport(format?: 'mobile') {

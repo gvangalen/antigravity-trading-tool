@@ -127,16 +127,20 @@ export default function FinnCoachFeed({ onDiscuss }) {
             </div>
             {item.status === "unread" || item.status === "read" ? (
               <div className="flex shrink-0 flex-wrap items-center gap-3">
-                <button type="button" onClick={() => discuss(item)} className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 hover:underline">
-                  {copy.discuss}<ArrowRight size={15} />
-                </button>
+                {item.event_type !== "daily_report_ready" ? (
+                  <button type="button" onClick={() => discuss(item)} className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 hover:underline">
+                    {copy.discuss}<ArrowRight size={15} />
+                  </button>
+                ) : null}
                 {item.event_type !== "proposal_pending" ? (
-                  <a href={item.subject_type === "setup"
+                  <a href={item.subject_type === "report"
+                    ? `/report?date=${encodeURIComponent(item.evidence?.report_date || "")}`
+                    : item.subject_type === "setup"
                     ? `/setup?symbol=${encodeURIComponent(item.symbol || "")}&setup_id=${encodeURIComponent(item.subject_id || "")}`
                     : item.subject_type === "bot"
                       ? `/bot?symbol=${encodeURIComponent(item.symbol || "")}&bot_id=${encodeURIComponent(item.subject_id || "")}`
                       : `/asset?symbol=${encodeURIComponent(item.symbol || "")}`}
-                    className="text-sm text-slate-600 hover:underline dark:text-slate-300">{copy.details}</a>
+                    className="text-sm text-slate-600 hover:underline dark:text-slate-300">{item.event_type === "daily_report_ready" ? copy.viewReport : copy.details}</a>
                 ) : null}
                 <button type="button" onClick={() => void setStatus(item.id, "handled")}
                   className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-900"><Check size={14} />{copy.handled}</button>

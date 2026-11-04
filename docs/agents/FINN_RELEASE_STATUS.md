@@ -4,6 +4,26 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Dagrapport klaar in de FINN-feed (4 november 2026)
+
+Phase: `LOCAL_VALIDATION`. Kandidaat: `codex/finn-daily-report-feed`.
+Na succesvolle opslag van het dagrapport én zijn snapshot publiceert de
+nachtelijke rapporttaak één eigenaargebonden feedmelding per rapportdatum.
+Een mislukte rapportpoging publiceert niets; een herhaalde geslaagde run
+maakt geen tweede item. De melding opent op web en mobiel het dagrapport
+van die datum. De losse bestaande push verwijst nu naar de geldige
+webroute `/report`.
+
+De gerichte backendproeven slaagden `73/73`; de volledige backend-suite
+slaagde `4268 passed, 4 skipped`. Web typecheck, i18n-controles,
+commandtests en productiebuild slaagden. Mobiele typecheck, lint zonder
+fouten en Expo-bundels voor web, iOS en Android slaagden. De echte
+Responses-selecties slaagden `20/20` development en `109/109` regression,
+zonder provider-, schema-, timeout-, parse- of validatiefout.
+FINN-actiecontracten zijn niet gewijzigd; de worker-actiematrix
+is daarom niet van toepassing. Er is nog geen deployment of onafhankelijke
+ingelogde QA voor deze wijziging uitgevoerd.
+
 ## Leesbare Paper-beslissingen in de FINN-feed (4 november 2026)
 
 Phase: `NOT_ACCEPTED` voor de volledige live feedmatrix. Kandidaat: `codex/finn-readable-coach-feed`,
