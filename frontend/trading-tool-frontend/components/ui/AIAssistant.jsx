@@ -1097,15 +1097,20 @@ function AIAssistantContent({
       let verifiedBotStrategyName = null;
       let resolvedBotName = activeBot?.name || null;
       let immutableProposalState = null;
+      if (verified?.proposal_id) {
+        try {
+          immutableProposalState = await fetchFinnV2Proposal(verified.proposal_id);
+        } catch (error) {
+          console.warn("FINN kon het opgeslagen voorstel niet ophalen:", error);
+        }
+      }
       try {
         if (operationId?.includes("setup") || operationId?.includes("strategy") || operationId?.includes("bot")) {
-          const [ownerSetups, ownerStrategies, ownerBots, proposalSummary] = await Promise.all([
+          const [ownerSetups, ownerStrategies, ownerBots] = await Promise.all([
             fetchSetups(),
             fetchStrategies(),
             fetchBotConfigs(),
-            verified?.proposal_id ? fetchFinnV2Proposal(verified.proposal_id) : Promise.resolve(null),
           ]);
-          immutableProposalState = proposalSummary;
           const setupId = actionDraft?.supplied_inputs?.setup_id || projection?.supplied_inputs?.setup_id;
           const strategyId = actionDraft?.supplied_inputs?.strategy_id || projection?.supplied_inputs?.strategy_id;
           const botId = actionDraft?.supplied_inputs?.bot_id || projection?.supplied_inputs?.bot_id;
@@ -1137,6 +1142,8 @@ function AIAssistantContent({
       const reviewedSetupDraft = verified?.proposal_id && immutableProposalState?.operation_type === "create_setup"
         ? setupDraftFromProposal(setupDraft, immutableProposalState.requested_state)
         : setupDraft;
+      const setupProposalReviewMissing = Boolean(verified?.proposal_id && operationId === "create_setup"
+        && immutableProposalState?.operation_type !== "create_setup");
       const visibleActionDraft = actionDraft
         ? {
             ...actionDraft,
@@ -1179,9 +1186,12 @@ function AIAssistantContent({
               actionDraft: visibleActionDraft,
               reasoning: null,
               canConfirm: Boolean(verified?.confirmation_required && verified?.proposal_id
+                && !setupProposalReviewMissing
                 && (operationId !== "create_bot" || verifiedBotStrategyName)
                 && (!requiresNamedTargetReview || reviewedTargetName)),
               confirmationSuspended: Boolean(verified?.proposal_id && (
+                setupProposalReviewMissing
+                ||
                 (operationId === "create_bot" && !verifiedBotStrategyName)
                 || (requiresNamedTargetReview && !reviewedTargetName)
               )),

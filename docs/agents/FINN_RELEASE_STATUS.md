@@ -19,7 +19,9 @@ benchmarkband 26–45. De fout zat in de kaartprojectie: deze gebruikte de
 gespreksprojectie die na een model-/toolronde achter het opgeslagen voorstel
 kan lopen. De webkaart leest de te bevestigen velden nu uit de eigenaargebonden
 voorsteldetailroute, ook bij heropenen van het gesprek, en toont alle
-strategievelden vóór bevestiging.
+strategievelden vóór bevestiging. Als de detaillezing faalt, wordt de
+bevestiging uitgeschakeld. Een falende lijstlezing van plannen of bots wist
+het afzonderlijk opgehaalde voorstel niet.
 
 Gericht lokaal bewezen: de complete éénbeurtige aanvraag maakt een voorstel
 met alle genoemde velden; de vijfbeurtige aanvraag blijft intact; bevestiging
