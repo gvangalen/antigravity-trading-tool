@@ -6,7 +6,13 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Reflectie: providerfout en eigenaarsscheiding (5 november 2026)
 
-Phase: `LOCAL_VALIDATION`. Kandidaat: `codex/finn-reflection-provider-owner-qa`.
+Phase: `NOT_ACCEPTED` voor volledige live-acceptatie; geen aangetoonde
+productfout. [PR #837](https://github.com/gvangalen/antigravity-trading-tool/pull/837)
+is op `main` gedeployed als `71f19a9f35f999295fe7bf35dda8d947f9a78cf8`.
+De publieke backend-health en frontend-buildinfo gaven beide HTTP 200 en
+dezelfde SHA; [main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42085634009)
+en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42086102504)
+slaagden.
 De Reflectiepagina toont een opgeslagen mislukte of niet-beschikbare FINN-analyse
 nu als zodanig en zegt niet meer dat die analyse nog volgt. Een herpoging blijft
 beschikbaar; er wordt geen vaste coachanalyse als providerantwoord getoond.
@@ -19,9 +25,17 @@ wegwerp-PostgreSQL-database met twee gebruikers (`1 passed`). Web typecheck,
 i18n-lint, i18n-tests (37), commandtests (34) en productiebuild slaagden. Een
 echte Luna/Responses-proef op synthetische Paper-feiten leverde twee geldige
 observaties op. FINN-actiecontracten zijn niet gewijzigd; de worker-actiematrix
-is voor deze reviewstatus en toegangscontrole niet van toepassing. CI, deploy
-en onafhankelijke ingelogde QA moeten nog volgen; een live providerstoring is
-niet kunstmatig veroorzaakt.
+is voor deze reviewstatus en toegangscontrole niet van toepassing.
+
+Onafhankelijke ingelogde QA op deze SHA bevestigde read-only dat reviews #23
+en #26 afzonderlijke opgeslagen `ai_generated`-analyses van `gpt-6-luna`
+houden, met correct kostenlabel en leesbaar weekoverzicht. De QA-fixture bevat
+geen `failed`/`unavailable`-analyse en geen tweede eigenaar. De beschermde
+runner is aan een ander, geblokkeerd SHA-specifiek doel gekoppeld. Daardoor
+zijn de providerfoutweergave en negatieve eigenaarstoegang live niet bewezen;
+een providerstoring, fixturewrite of order is niet veroorzaakt. De lokale
+providerfout- en PostgreSQL-eigenaarstests blijven aanvullend bewijs. Deze
+statuswijziging bevat geen productcode en creëert zelf een nieuwe release-SHA.
 
 ## Reflectie: weekpatronen, Paper-kosten en leesbaar bewijs (5 november 2026)
 
