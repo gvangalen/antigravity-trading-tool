@@ -56,6 +56,8 @@ class PlatformAiOverview(BaseModel):
     background_cost_month_eur: float = 0.0
     live_user_cost_month_eur: float = 0.0
     staging_cost_month_eur: float = 0.0
+    unclassified_cost_month_eur: float = 0.0
+    admin_tool_cost_month_eur: float = 0.0
     blocked_requests_month: int = 0
     blocked_estimated_cost_month_eur: float = 0.0
     reuse_hits: int = 0
@@ -125,6 +127,30 @@ class AdminUserOverview(BaseModel):
     last_login_at: Optional[str] = None
     last_ai_activity_at: Optional[str] = None
     created_at: Optional[str] = None
+
+class AdminUserPage(BaseModel):
+    items: List[AdminUserOverview]
+    total: int
+    offset: int
+    limit: int
+
+class FinnV2AdminIssue(BaseModel):
+    trace_id: str
+    status: str
+    error_code: Optional[str] = None
+    created_at: datetime
+
+class FinnV2AdminOverview(BaseModel):
+    runtime_mode: str
+    runs_24h: int
+    visible_runs_24h: int
+    completed_24h: int
+    clarifications_24h: int
+    unavailable_24h: int
+    in_progress_24h: int
+    avg_completed_latency_ms_24h: Optional[float] = None
+    latest_run_at: Optional[datetime] = None
+    recent_issues: List[FinnV2AdminIssue] = []
 
 class AdminUserUpdate(BaseModel):
     ai_plan: Optional[str] = None

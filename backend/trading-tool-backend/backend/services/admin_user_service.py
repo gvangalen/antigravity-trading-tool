@@ -10,6 +10,92 @@ class AdminUserService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    async def get_users_page(
+        self,
+        *,
+        offset: int = 0,
+        limit: int = 50,
+        search: str = "",
+        plan: str = "all",
+        user_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Return a bounded user page with usage aggregated only for those users."""
+        filters = ["(:search = '' OR u.email ILIKE :search OR u.first_name ILIKE :search)"]
+        if plan != "all":
+            filters.append("u.ai_plan = :plan")
+        if user_id is not None:
+            filters.append("u.id = :user_id")
+        where_clause = " AND ".join(filters)
+        params = {
+            "search": f"%{search.strip()}%" if search.strip() else "",
+            "plan": plan,
+            "user_id": user_id,
+            "offset": offset,
+            "limit": limit,
+        }
+        total = (await self.db.execute(
+            text(f"SELECT COUNT(*) FROM users u WHERE {where_clause}"), params
+        )).scalar() or 0
+        rows = (await self.db.execute(text(f"""
+            SELECT
+                u.id, u.email, u.first_name, u.last_name, u.role, u.is_active,
+                u.ai_plan, u.ai_requests_used_day, u.ai_requests_limit_day,
+                u.ai_usage_current, u.subscription_status, u.last_login_at,
+                u.created_at,
+                COALESCE(usage.usage_month_eur, 0) AS usage_month_eur,
+                COALESCE(usage.usage_today_eur, 0) AS usage_today_eur,
+                COALESCE(usage.background_usage_month_eur, 0) AS background_usage_month_eur,
+                COALESCE(usage.interactive_usage_month_eur, 0) AS interactive_usage_month_eur,
+                COALESCE(usage.blocked_requests_month, 0) AS blocked_requests_month,
+                COALESCE(usage.blocked_estimated_cost_month_eur, 0) AS blocked_estimated_cost_month_eur,
+                usage.last_ai_activity_at
+            FROM (
+                SELECT * FROM users u
+                WHERE {where_clause}
+                ORDER BY u.created_at DESC NULLS LAST, u.id DESC
+                LIMIT :limit OFFSET :offset
+            ) u
+            LEFT JOIN LATERAL (
+                SELECT
+                    COALESCE(SUM(l.cost) FILTER (WHERE l.timestamp >= date_trunc('month', current_date)), 0) AS usage_month_eur,
+                    COALESCE(SUM(l.cost) FILTER (WHERE l.timestamp >= current_date), 0) AS usage_today_eur,
+                    COALESCE(SUM(l.cost) FILTER (WHERE l.timestamp >= date_trunc('month', current_date) AND l.request_source = 'background_job'), 0) AS background_usage_month_eur,
+                    COALESCE(SUM(l.cost) FILTER (WHERE l.timestamp >= date_trunc('month', current_date) AND l.request_source IN ('live_user', 'staging_user', 'qa_user', 'admin_tool')), 0) AS interactive_usage_month_eur,
+                    COUNT(*) FILTER (WHERE l.timestamp >= date_trunc('month', current_date) AND l.status = 'quota_blocked') AS blocked_requests_month,
+                    COALESCE(SUM(l.estimated_cost_if_full) FILTER (WHERE l.timestamp >= date_trunc('month', current_date) AND l.status = 'quota_blocked'), 0) AS blocked_estimated_cost_month_eur,
+                    MAX(l.timestamp) AS last_ai_activity_at
+                FROM ai_usage_logs l
+                WHERE l.user_id = u.id
+            ) usage ON TRUE
+            ORDER BY u.created_at DESC NULLS LAST, u.id DESC
+        """), params)).mappings().all()
+
+        items = []
+        for row in rows:
+            items.append({
+                "id": row["id"],
+                "email": row["email"],
+                "first_name": row["first_name"],
+                "last_name": row["last_name"],
+                "role": row["role"],
+                "is_active": row["is_active"],
+                "ai_plan": row["ai_plan"],
+                "ai_requests_used_day": row["ai_requests_used_day"] or 0,
+                "ai_requests_limit_day": row["ai_requests_limit_day"] or 0,
+                "ai_usage_current": float(row["ai_usage_current"] or 0),
+                "usage_month_eur": float(row["usage_month_eur"] or 0),
+                "usage_today_eur": float(row["usage_today_eur"] or 0),
+                "background_usage_month_eur": float(row["background_usage_month_eur"] or 0),
+                "interactive_usage_month_eur": float(row["interactive_usage_month_eur"] or 0),
+                "blocked_requests_month": int(row["blocked_requests_month"] or 0),
+                "blocked_estimated_cost_month_eur": float(row["blocked_estimated_cost_month_eur"] or 0),
+                "subscription_status": row["subscription_status"] or "active",
+                "last_login_at": row["last_login_at"].isoformat() if row["last_login_at"] else None,
+                "last_ai_activity_at": row["last_ai_activity_at"].isoformat() if row["last_ai_activity_at"] else None,
+                "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+            })
+        return {"items": items, "total": int(total), "offset": offset, "limit": limit}
+
     async def get_all_users_overview(self) -> List[Dict[str, Any]]:
         """
         Haalt een lijst op van alle gebruikers met hun AI-statistieken en status.

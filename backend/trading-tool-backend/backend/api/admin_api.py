@@ -1,5 +1,5 @@
 import logging
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional, Any
 
@@ -7,10 +7,13 @@ from backend.infrastructure.database import get_db
 from backend.utils.auth_utils import get_current_user
 from backend.services.admin_ai_service import AdminAiService
 from backend.services.admin_user_service import AdminUserService
+from backend.services.admin_finn_v2_service import AdminFinnV2Service
 from backend.schemas.admin_schema import (
     AdminAiStatsResponse,
     AdminUserOverview,
+    AdminUserPage,
     AdminUserUpdate,
+    FinnV2AdminOverview,
     AdminSystemLog,
     AdminLogAnalysisResponse
 )
@@ -27,6 +30,14 @@ def check_admin(current_user: dict = Depends(get_current_user)):
         logger.warning(f"🚫 Unauthorized Admin Access Attempt by user {current_user.get('id')}")
         raise HTTPException(status_code=403, detail="Admin access required.")
     return current_user
+
+
+@router.get("/admin/finn-v2/overview", response_model=FinnV2AdminOverview)
+async def get_admin_finn_v2_overview(
+    current_user: dict = Depends(check_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    return await AdminFinnV2Service(db).overview()
 
 @router.get("/admin/ai/stats", response_model=AdminAiStatsResponse)
 async def get_admin_ai_stats(
@@ -62,6 +73,22 @@ async def get_admin_users(
         logger.error(f"❌ Error fetching Admin Users: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Fout bij het ophalen van gebruikers.")
 
+
+@router.get("/admin/users/page", response_model=AdminUserPage)
+async def get_admin_users_page(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    search: str = Query("", max_length=120),
+    plan: str = Query("all", max_length=20),
+    current_user: dict = Depends(check_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    if plan not in {"all", "free", "basis", "pro", "premium"}:
+        raise HTTPException(status_code=422, detail="Invalid plan filter")
+    return await AdminUserService(db).get_users_page(
+        offset=offset, limit=limit, search=search, plan=plan
+    )
+
 @router.patch("/admin/users/{user_id}", response_model=AdminUserOverview)
 async def update_admin_user(
     user_id: int,
@@ -78,10 +105,10 @@ async def update_admin_user(
         if not updated:
             raise HTTPException(status_code=404, detail="Gebruiker niet gevonden.")
         
-        # We halen het volledige overview op om aan het response model te voldoen
-        all_users = await service.get_all_users_overview()
-        user_data = next((u for u in all_users if u["id"] == user_id), None)
-        return user_data
+        user_page = await service.get_users_page(user_id=user_id, limit=1)
+        if not user_page["items"]:
+            raise HTTPException(status_code=404, detail="Gebruiker niet gevonden.")
+        return user_page["items"][0]
     except HTTPException:
         raise
     except Exception as e:

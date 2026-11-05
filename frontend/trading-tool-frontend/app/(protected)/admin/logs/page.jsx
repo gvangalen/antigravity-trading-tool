@@ -2,7 +2,7 @@
 
 import React, { useCallback, useRef, useState } from "react";
 import { useTranslation } from "@/app/providers/I18nProvider";
-import { fetchAdminLogs, analyzeAdminLogs } from "@/lib/api/admin";
+import { fetchAdminLogs, fetchAdminFinnV2Overview, analyzeAdminLogs } from "@/lib/api/admin";
 import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { formatDate, formatDateTime } from "@/lib/i18n";
 import { 
@@ -50,6 +50,7 @@ export default function AdminLogsPage() {
   const { t, locale } = useTranslation();
   const copy = t.adminLogsPage;
   const [logs, setLogs] = useState([]);
+  const [finnIssues, setFinnIssues] = useState([]);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState(null);
@@ -64,8 +65,13 @@ export default function AdminLogsPage() {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     try {
-      const data = await fetchAdminLogs(filters, { forceFresh: true });
-      setLogs(data);
+      const [logsResult, finnResult] = await Promise.allSettled([
+        fetchAdminLogs(filters, { forceFresh: true }),
+        fetchAdminFinnV2Overview(),
+      ]);
+      if (logsResult.status === "fulfilled") setLogs(logsResult.value);
+      if (finnResult.status === "fulfilled") setFinnIssues(finnResult.value.recent_issues || []);
+      if (logsResult.status === "rejected" && finnResult.status === "rejected") throw logsResult.reason;
     } catch (err) {
       console.error("Logs laden mislukt", err);
     } finally {
@@ -184,6 +190,33 @@ export default function AdminLogsPage() {
           </div>
         </div>
       )}
+
+      <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-6">
+        <h2 className="text-lg font-bold text-slate-900 mb-2">{copy.finnV2IssuesTitle}</h2>
+        <p className="text-sm text-slate-500 mb-4">{copy.finnV2IssuesDescription}</p>
+        {finnIssues.length === 0 ? (
+          <p className="text-sm text-slate-500">{copy.finnV2NoIssues}</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead><tr className="border-b border-slate-100 text-slate-500">
+                <th className="py-2 pr-4">{copy.table.timestamp}</th>
+                <th className="py-2 pr-4">{copy.finnV2Status}</th>
+                <th className="py-2 pr-4">{copy.finnV2ErrorCode}</th>
+                <th className="py-2">{copy.finnV2TraceId}</th>
+              </tr></thead>
+              <tbody>{finnIssues.map((issue) => (
+                <tr key={issue.trace_id} className="border-b border-slate-50">
+                  <td className="py-2 pr-4 whitespace-nowrap">{formatDateTime(issue.created_at, locale)}</td>
+                  <td className="py-2 pr-4">{issue.status}</td>
+                  <td className="py-2 pr-4 font-mono">{issue.error_code || "—"}</td>
+                  <td className="py-2 font-mono break-all">{issue.trace_id}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       {/* 🔍 FILTERS */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">

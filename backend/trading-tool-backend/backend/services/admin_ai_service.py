@@ -38,6 +38,8 @@ class AdminAiService:
                 COALESCE(SUM(cost) FILTER (WHERE COALESCE(request_source, 'unclassified') = 'background_job'), 0) as background_cost_month,
                 COALESCE(SUM(cost) FILTER (WHERE COALESCE(request_source, 'unclassified') = 'live_user'), 0) as live_user_cost_month,
                 COALESCE(SUM(cost) FILTER (WHERE COALESCE(request_source, 'unclassified') = 'staging_user'), 0) as staging_cost_month,
+                COALESCE(SUM(cost) FILTER (WHERE COALESCE(request_source, 'unclassified') = 'unclassified'), 0) as unclassified_cost_month,
+                COALESCE(SUM(cost) FILTER (WHERE request_source = 'admin_tool'), 0) as admin_tool_cost_month,
                 COALESCE(SUM(CASE WHEN status = 'quota_blocked' THEN 1 ELSE 0 END), 0) as blocked_requests_month,
                 COALESCE(SUM(CASE WHEN status = 'quota_blocked' THEN COALESCE(estimated_cost_if_full, 0) ELSE 0 END), 0) as blocked_estimated_cost_month
             FROM ai_usage_logs
@@ -382,6 +384,8 @@ class AdminAiService:
                 "background_cost_month_eur": float(logs_stats['background_cost_month'] or 0),
                 "live_user_cost_month_eur": float(logs_stats['live_user_cost_month'] or 0),
                 "staging_cost_month_eur": float(logs_stats['staging_cost_month'] or 0),
+                "unclassified_cost_month_eur": float(logs_stats['unclassified_cost_month'] or 0),
+                "admin_tool_cost_month_eur": float(logs_stats['admin_tool_cost_month'] or 0),
                 "blocked_requests_month": int(logs_stats['blocked_requests_month'] or 0),
                 "blocked_estimated_cost_month_eur": float(logs_stats['blocked_estimated_cost_month'] or 0),
                 "exact_hits": int(logs_stats['exact_hits'] or 0),

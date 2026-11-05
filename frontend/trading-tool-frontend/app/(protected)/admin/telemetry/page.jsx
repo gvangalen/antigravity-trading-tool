@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 
 import { useTranslation } from "@/app/providers/I18nProvider";
-import { fetchAdminTelemetry } from "@/lib/api/admin";
+import { fetchAdminTelemetry, fetchSystemHealth } from "@/lib/api/admin";
 import { actionButtonStyles } from "@/components/ui/actionButtonStyles";
 import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { formatDateTime } from "@/lib/i18n";
@@ -198,13 +198,14 @@ export default function AdminTelemetryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const isFetchingRef = useRef(false);
+  const isFetchingHealthRef = useRef(false);
 
   const loadTelemetry = useCallback(async () => {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     try {
       const payload = await fetchAdminTelemetry();
-      setTelemetry(payload);
+      setTelemetry((current) => ({ ...current, ...payload }));
       setError(null);
     } catch (err) {
       console.error("Failed to load telemetry", err);
@@ -215,16 +216,34 @@ export default function AdminTelemetryPage() {
     }
   }, [copy.loadError]);
 
+  const loadHealth = useCallback(async () => {
+    if (isFetchingHealthRef.current) return;
+    isFetchingHealthRef.current = true;
+    try {
+      const health = await fetchSystemHealth();
+      setTelemetry((current) => ({ ...current, health }));
+    } catch (err) {
+      console.error("Failed to load system health", err);
+    } finally {
+      isFetchingHealthRef.current = false;
+    }
+  }, []);
+
   useVisibilityPolling(loadTelemetry, {
-    intervalMs: 15000,
+    intervalMs: 30000,
     backgroundIntervalMs: 60000,
+    runImmediately: true,
+  });
+  useVisibilityPolling(loadHealth, {
+    intervalMs: 60000,
+    backgroundIntervalMs: 120000,
     runImmediately: true,
   });
 
   const derived = useMemo(() => {
     if (!telemetry) return null;
 
-    const { health, analytics, openaiRuntime } = telemetry;
+    const { health, analytics, openaiRuntime, finnV2 } = telemetry;
     const queueDepths = Object.entries(health?.components?.broker?.queue_depths || {});
     const runtimeIdentity = health?.runtime_identity || {};
     const onboardingFunnel = analytics?.onboarding_funnel || {};
@@ -251,7 +270,13 @@ export default function AdminTelemetryPage() {
     const topBehavioralSurface = analytics?.top_behavioral_surfaces?.[0] || null;
 
     const summaryNotes = [
-      queueTotal > 0
+      !health
+        ? {
+            tone: "slate",
+            icon: Activity,
+            text: copy.loading,
+          }
+        : queueTotal > 0
         ? {
             tone: "amber",
             icon: AlertTriangle,
@@ -322,6 +347,7 @@ export default function AdminTelemetryPage() {
     return {
       health,
       analytics,
+      finnV2,
       queueDepths,
       runtimeIdentity,
       onboardingFunnel,
@@ -365,6 +391,7 @@ export default function AdminTelemetryPage() {
   const {
     health,
     analytics,
+    finnV2,
     queueDepths,
     runtimeIdentity,
     onboardingFunnel,
@@ -407,7 +434,7 @@ export default function AdminTelemetryPage() {
             </p>
           </div>
           <button
-            onClick={loadTelemetry}
+            onClick={() => { void loadTelemetry(); void loadHealth(); }}
             className={actionButtonStyles({ variant: "primary", className: "rounded-2xl" })}
           >
             <RefreshCcw size={14} />
@@ -415,6 +442,27 @@ export default function AdminTelemetryPage() {
           </button>
         </div>
       </div>
+
+      <SectionCard title={copy.finnV2?.title || "FINN 2.0"} subtitle={copy.finnV2?.subtitle || "Runtime activity in the last 24 hours"}>
+        {finnV2 ? (
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+            {[
+              [copy.finnV2?.runs || "Runs", finnV2.runs_24h],
+              [copy.finnV2?.visible || "Visible", finnV2.visible_runs_24h],
+              [copy.finnV2?.completed || "Completed", finnV2.completed_24h],
+              [copy.finnV2?.clarifications || "Clarifications", finnV2.clarifications_24h],
+              [copy.finnV2?.unavailable || "Unavailable", finnV2.unavailable_24h],
+              [copy.finnV2?.latency || "Average time", finnV2.avg_completed_latency_ms_24h == null ? "—" : `${(finnV2.avg_completed_latency_ms_24h / 1000).toFixed(1)} s`],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-2xl border border-slate-100 bg-white p-4">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{label}</p>
+                <p className="mt-2 text-xl font-black text-slate-900">{value}</p>
+              </div>
+            ))}
+            <p className="col-span-full text-xs text-slate-500">{copy.finnV2?.runtimeMode || "Runtime mode"}: {finnV2.runtime_mode}</p>
+          </div>
+        ) : <p className="text-sm text-slate-500">{copy.finnV2?.unavailableMessage || "FINN 2.0 metrics are temporarily unavailable."}</p>}
+      </SectionCard>
 
       <SectionCard
         title={copy.operatorSummary.title}

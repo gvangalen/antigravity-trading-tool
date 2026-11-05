@@ -14,10 +14,15 @@ export const fetchAdminAiStats = () => {
  * Haalt alle gebruikers op voor het admin dashboard.
  * Vereist rol: 'admin'
  */
-export const fetchAdminUsers = () => {
-  return fetchAuth(`/api/admin/users`, {
+export const fetchAdminUsers = ({ offset = 0, limit = 50, search = '', plan = 'all' } = {}) => {
+  const query = new URLSearchParams({ offset, limit, search, plan });
+  return fetchAuth(`/api/admin/users/page?${query}`, {
     method: 'GET',
   });
+};
+
+export const fetchAdminFinnV2Overview = () => {
+  return fetchAuth('/api/admin/finn-v2/overview', { method: 'GET' });
 };
 
 /**
@@ -69,11 +74,15 @@ export const fetchOpenAiRuntime = () => {
 };
 
 export const fetchAdminTelemetry = async () => {
-  const [health, analytics, openaiRuntime] = await Promise.all([
-    fetchSystemHealth(),
+  const [analytics, openaiRuntime, finnV2] = await Promise.allSettled([
     fetchFinnAnalytics(),
     fetchOpenAiRuntime(),
+    fetchAdminFinnV2Overview(),
   ]);
-
-  return { health, analytics, openaiRuntime };
+  if (analytics.status === 'rejected') throw analytics.reason;
+  return {
+    analytics: analytics.value,
+    openaiRuntime: openaiRuntime.status === 'fulfilled' ? openaiRuntime.value : null,
+    finnV2: finnV2.status === 'fulfilled' ? finnV2.value : null,
+  };
 };

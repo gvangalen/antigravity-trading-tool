@@ -23,8 +23,10 @@ def test_response_trace_lookup_is_user_scoped_and_uses_memory_fallback(monkeypat
     assert service.get_response_trace(user_id=7, trace_id="missing") is None
 
 
-def test_finn_product_analytics_snapshot_counts_prompts_screens_and_funnel():
+def test_finn_product_analytics_snapshot_counts_prompts_screens_and_funnel(monkeypatch):
     service = FinnProductAnalyticsService(max_events=20, screen_dedupe_seconds=30)
+    monkeypatch.setattr(service, "_persist_event", lambda event: None)
+    monkeypatch.setattr(service, "_persistent_snapshot", lambda: None)
 
     service.record_event(
         user_id=7,

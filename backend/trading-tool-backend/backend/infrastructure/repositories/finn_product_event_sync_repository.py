@@ -221,8 +221,8 @@ def fetch_finn_product_analytics_snapshot(*, table_name: str) -> Optional[Dict[s
                 SELECT COALESCE(surface, page, 'unknown') AS surface, COUNT(*)::int AS count
                 FROM {table_name}
                 WHERE event_name IN ('behavioral_intervention_seen', 'behavioral_intervention_acknowledged')
-                GROUP BY surface
-                ORDER BY count DESC, surface ASC
+                GROUP BY COALESCE(surface, page, 'unknown')
+                ORDER BY count DESC, 1 ASC
                 LIMIT 8
                 """
             )
