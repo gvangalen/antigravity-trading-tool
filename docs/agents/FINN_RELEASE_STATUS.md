@@ -6,8 +6,9 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Reflectie: weekpatronen, Paper-kosten en leesbaar bewijs (5 november 2026)
 
-Phase: `DEPLOYED_AWAITING_QA`. Kandidaat: `codex/finn-reflection-qa-fixes`,
-[PR #832](https://github.com/gvangalen/antigravity-trading-tool/pull/832).
+Phase: `DEPLOYED_AWAITING_QA`. Kandidaat: `codex/finn-reflection-plan-id-cleanup`,
+[PR #834](https://github.com/gvangalen/antigravity-trading-tool/pull/834),
+voortbouwend op [PR #832](https://github.com/gvangalen/antigravity-trading-tool/pull/832).
 Onafhankelijke live QA op `b07baa0b6e00b93ac2730137719f5b54a54fabb9`
 vond drie fouten: een trade-specifieke tijdsduur in het weekoverzicht,
 een Paper-resultaat dat FINN ten onrechte als vóór kosten beschreef, en
@@ -23,16 +24,30 @@ slaagden. Een echte Luna/Responses-analyse op synthetische Paper-feiten gaf
 HTTP 200, formaatversie 3, twee observaties, geen kostenclaim vóór fees en
 geen ruwe bron-ID's in de proza-uitvoer. FINN-actiecontracten zijn niet
 gewijzigd; de worker-actiematrix is voor deze reviewpresentatie niet van
-toepassing. Onafhankelijke live hertest van de twee bestaande Paper-dossiers,
-eigenaarsscheiding en providerfoutweergave staat nog open.
-Alle vijf [PR-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42017245494)
-en vijf [main-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42017800001)
+toepassing. De twee bestaande Paper-dossiers zijn opnieuw getest;
+eigenaarsscheiding en providerfoutweergave zijn in deze ronde niet live getest.
+Onafhankelijke ingelogde QA op `150e96ce847e804accecfbab754497be7deec16c`
+bevestigde het herstel voor beide trades: het weekoverzicht herhaalde geen
+32-secondenobservatie, #26 toonde €−0,03 inclusief gesimuleerde kosten,
+#23 behield zijn eigen duur en resultaat, en beide analyses waren opgeslagen
+als `ai_generated`, formaatversie 3, model `gpt-6-luna`. QA gaf toch
+`NOT_ACCEPTED`: in de uitklapbare plandetails stond nog `Markt-ID: 1`.
+PR #834 verbergt dit interne veld. De nieuwe gerichte regressiecontrole,
+web typecheck, i18n-lint, i18n-tests, commandtests en productiebuild slaagden;
+alle vijf [PR-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42025730984)
+slaagden. De nieuwe ingelogde hertest van de plandetails staat open.
+Providerfoutweergave en scheiding tegen een tweede eigenaar waren buiten
+de huidige beschermde QA-scope en zijn niet live bewezen.
+
+De eerste batch had vijf groene
+[PR-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42017245494)
+en vijf groene [main-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42017800001)
 slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42018255874)
 slaagde. Git-main, publieke backend-health en frontend-buildinfo meldden
-alle drie `b975c60f853bd166dfb840af05880e68846e2a17`; beide publieke
-routes gaven HTTP 200. Deze statuswijziging maakt een nieuwe commit;
-vóór QA moeten de laatste main-CI, Auto Deploy en publieke SHA's opnieuw
-samenvallen.
+destijds alle drie `b975c60f853bd166dfb840af05880e68846e2a17`; beide publieke
+routes gaven HTTP 200. Voor de huidige kandidaat moet na deze statuscommit
+opnieuw worden vastgesteld dat laatste main-CI, Auto Deploy en publieke
+SHA's samenvallen.
 
 ## FINN-analyse van afgesloten trades in Reflectie (5 november 2026)
 
