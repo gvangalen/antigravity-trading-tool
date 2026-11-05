@@ -443,12 +443,13 @@ export const intelligenceApi = {
     return apiClient.get<WatchlistResponse>('/api/watchlist');
   },
 
-  addToWatchlist(symbol: string) {
-    return apiClient.post<WatchlistMutationResponse>('/api/watchlist', { symbol });
+  addToWatchlist(symbol: string, marketId?: number) {
+    return apiClient.post<WatchlistMutationResponse>('/api/watchlist', { symbol, market_id: marketId });
   },
 
-  removeFromWatchlist(symbol: string) {
-    return apiClient.delete<WatchlistMutationResponse>(`/api/watchlist/${encodeURIComponent(symbol)}`);
+  removeFromWatchlist(symbol: string, marketId?: number | null) {
+    return apiClient.delete<WatchlistMutationResponse>(`/api/watchlist/${encodeURIComponent(symbol)}`,
+      marketId == null ? undefined : { market_id: marketId });
   },
 
   marketLatest(symbol: string) {

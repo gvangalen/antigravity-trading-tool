@@ -389,12 +389,16 @@ class Watchlist(Base):
     """
     __tablename__ = 'watchlists'
     __table_args__ = (
-        UniqueConstraint("user_id", "symbol", name="ux_watchlists_user_symbol"),
+        Index('ux_watchlists_user_market', 'user_id', 'market_id', unique=True,
+              postgresql_where=text('market_id IS NOT NULL')),
+        Index('ux_watchlists_user_legacy_symbol', 'user_id', 'symbol', unique=True,
+              postgresql_where=text('market_id IS NULL')),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     symbol = Column(String, nullable=False) # e.g. 'BTC', 'ETH'
+    market_id = Column(BigInteger, ForeignKey('trading_markets.id'), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

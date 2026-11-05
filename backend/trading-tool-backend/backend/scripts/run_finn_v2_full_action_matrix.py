@@ -207,7 +207,7 @@ def _seed_fixtures(user_id: int) -> dict[str, int]:
         })
         connection.execute(text("""
             INSERT INTO watchlists (user_id, symbol, created_at) VALUES (:user_id, 'XRP', NOW())
-            ON CONFLICT (user_id, symbol) DO NOTHING
+            ON CONFLICT (user_id, symbol) WHERE market_id IS NULL DO NOTHING
         """), {"user_id": user_id})
         for symbol in ("BTC", "SOL"):
             connection.execute(text("""

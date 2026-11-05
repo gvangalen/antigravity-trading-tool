@@ -35,8 +35,8 @@ import { macroDataAdd } from "@/lib/api/macro";
 import { fetchSetupMarketMatches } from "@/lib/api/setups";
 import { technicalDataAdd } from "@/lib/api/technical";
 import { mapTechnicalToStudies } from "@/config/indicator_mapping";
-import { removeFromWatchlist } from "@/lib/api/watchlist";
-import { fetchTradingMarkets } from "@/lib/api/assets";
+import { addToWatchlist, removeFromWatchlist } from "@/lib/api/watchlist";
+import { fetchTradingMarkets, selectTradingMarket } from "@/lib/api/assets";
 import { updateIntelligenceWeights } from "@/lib/api/scores";
 import { getAssistantPreferences, updateAssistantPreferences } from "@/lib/api/ai";
 import TradingViewSmartChart from "@/components/charts/TradingViewSmartChart";
@@ -53,6 +53,7 @@ import { marketConditionForScore } from "@/lib/setup/scoreConditions.mjs";
 import { availableTradingQuotes, benchmarkScaleBands, benchmarkSetupSessionKey, benchmarkSetupView, resolveTradingQuote, selectedBenchmarkSetupMatch, tradingQuoteSessionKey, withSelectedBenchmarkSetup, withSelectedTradingQuote } from "@/lib/setup/benchmarkScale.mjs";
 
 const SEARCH_OPEN_EVENT = "finn-command-search:open";
+const watchlistRowKey = (row) => row?.marketId ? `market:${row.marketId}` : `symbol:${row?.symbol}`;
 
 const SECTION_META = {
   market: {
@@ -1903,11 +1904,14 @@ function ActiveAssetCard({
 function AssetList({
   rows,
   activeSymbol,
+  activeQuoteCurrency,
   activeGroup,
   onSelect,
   onRemove,
   onGroupChange,
   onAddAsset,
+  availablePairs,
+  onAddPair,
   conditionOptions,
   ui,
 }) {
@@ -1936,6 +1940,13 @@ function AssetList({
           </div>
         </div>
 
+        <div className="flex flex-wrap items-center gap-2">
+        {activeGroup === "crypto" && availablePairs.map((market) => (
+          <button key={market.quote_currency} type="button" onClick={() => onAddPair(market)}
+            className="rounded-full border border-blue-200 px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50">
+            <Plus size={12} className="mr-1 inline" />{`${activeSymbol}/${market.quote_currency}`}
+          </button>
+        ))}
         <button
           type="button"
           onClick={onAddAsset}
@@ -1944,6 +1955,7 @@ function AssetList({
           <Plus size={12} />
           {ui.addAsset}
         </button>
+        </div>
       </div>
 
       <div className="mt-3 overflow-hidden rounded-[18px] border border-slate-200 bg-white">
@@ -1956,19 +1968,19 @@ function AssetList({
         </div>
         <div>
           {rows.length ? rows.map((row) => {
-            const active = row.symbol === activeSymbol;
+            const active = row.symbol === activeSymbol && (!row.quoteCurrency || row.quoteCurrency === activeQuoteCurrency);
             const condition = marketConditionForScore(row.rawScore);
             const situation = condition ? conditionOptions?.[condition.id]?.title : ui.unavailable;
             return (
               <div
-                key={row.symbol}
+                key={row.marketId ? `market:${row.marketId}` : `symbol:${row.symbol}`}
                 role="button"
                 tabIndex={0}
-                onClick={() => onSelect(row.symbol)}
+                onClick={() => onSelect(row)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
-                    onSelect(row.symbol);
+                    onSelect(row);
                   }
                 }}
                 className={`grid w-full cursor-pointer grid-cols-[minmax(0,1.5fr)_120px_100px_minmax(150px,1fr)_48px] items-center gap-3 border-b border-slate-100 px-4 py-2.5 text-left transition last:border-b-0 ${
@@ -2008,7 +2020,7 @@ function AssetList({
                 <div className="flex justify-end">
                   <button
                     type="button"
-                    aria-label={`${ui.watchlistRemoveLabel}: ${row.symbol}`}
+                    aria-label={`${ui.watchlistRemoveLabel}: ${row.quoteCurrency ? `${row.symbol}/${row.quoteCurrency}` : row.symbol}`}
                     title={ui.watchlistRemoveLabel}
                     onClick={(event) => {
                       event.stopPropagation();
@@ -2850,6 +2862,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
             tradingviewSymbol: row?.tradingview_symbol || row?.tradingviewSymbol || null,
             assetClass,
             assetGroup: normalizeAssetGroup(assetClass),
+            marketId: row?.market_id || null,
             quoteCurrency: String(row?.quote_currency || "").toUpperCase(),
             lastPrice: formatQuotePrice(row?.price, locale, row?.quote_currency),
             change24h: formatPercent(changeValue, 2),
@@ -2864,7 +2877,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       if (!cancelled) {
         setWatchlistRows(nextRows);
         setRemovedWatchlistSymbols((current) => {
-          const remaining = current.filter((symbol) => nextRows.some((row) => row.symbol === symbol));
+          const remaining = current.filter((key) => nextRows.some((row) => watchlistRowKey(row) === key));
           return remaining.length === current.length ? current : remaining;
         });
       }
@@ -2877,17 +2890,16 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   }, [locale, ui, watchlistData, watchlistLoading]);
 
   const currentWatchlistRows = useMemo(
-    () => watchlistRows.filter((row) => !removedWatchlistSymbols.includes(row.symbol)
-      && (row.symbol !== activeSymbol || !activeQuoteCurrency || row.quoteCurrency === activeQuoteCurrency)),
-    [activeQuoteCurrency, activeSymbol, removedWatchlistSymbols, watchlistRows]
+    () => watchlistRows.filter((row) => !removedWatchlistSymbols.includes(watchlistRowKey(row))),
+    [removedWatchlistSymbols, watchlistRows]
   );
   const visibleWatchlistRows = useMemo(
     () => currentWatchlistRows.filter((row) => row.assetGroup === activeAssetGroup),
     [activeAssetGroup, currentWatchlistRows]
   );
   const activeWatchlistRow = useMemo(
-    () => currentWatchlistRows.find((row) => row.symbol === activeSymbol) || null,
-    [activeSymbol, currentWatchlistRows]
+    () => currentWatchlistRows.find((row) => row.symbol === activeSymbol && (!row.quoteCurrency || row.quoteCurrency === activeQuoteCurrency)) || null,
+    [activeQuoteCurrency, activeSymbol, currentWatchlistRows]
   );
   const handleAssetGroupChange = (nextGroup) => {
     const normalizedGroup = normalizeAssetGroup(nextGroup);
@@ -2898,7 +2910,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
 
     const fallbackRow = currentWatchlistRows.find((row) => row.assetGroup === normalizedGroup);
     if (fallbackRow?.symbol) {
-      handleAssetSelect(fallbackRow.symbol);
+      handleAssetSelect(fallbackRow);
     }
   };
   const handleRemoveWatchlistAsset = useCallback((row) => {
@@ -2906,7 +2918,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
 
     openConfirm({
       title: ui.watchlistRemoveTitle,
-      context: ui.watchlistRemoveContext(row.symbol),
+      context: ui.watchlistRemoveContext(row.quoteCurrency ? `${row.symbol}/${row.quoteCurrency}` : row.symbol),
       impact: ui.watchlistRemoveImpact,
       safety: ui.watchlistRemoveSafety,
       contextLabel: ui.modalContextLabel,
@@ -2921,29 +2933,30 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       busyText: ui.watchlistRemoveBusy,
       onConfirm: async () => {
         const normalizedSymbol = String(row.symbol || "").toUpperCase();
-        await removeFromWatchlist(normalizedSymbol);
-        setRemovedWatchlistSymbols((current) => current.includes(normalizedSymbol)
-          ? current : [...current, normalizedSymbol]);
+        await removeFromWatchlist(normalizedSymbol, row.marketId);
+        const removedKey = watchlistRowKey(row);
+        setRemovedWatchlistSymbols((current) => current.includes(removedKey)
+          ? current : [...current, removedKey]);
         const remainingRows = currentWatchlistRows.filter(
-          (item) => String(item?.symbol || "").toUpperCase() !== normalizedSymbol
+          (item) => watchlistRowKey(item) !== removedKey
         );
         setWatchlistRows(remainingRows);
 
-        const removedActiveAsset = normalizedSymbol === activeSymbol;
+        const removedActiveAsset = normalizedSymbol === activeSymbol && (!row.quoteCurrency || row.quoteCurrency === activeQuoteCurrency);
         if (removedActiveAsset) {
           const sameGroupFallback = remainingRows.find((item) => item.assetGroup === row.assetGroup);
           const nextFallback = sameGroupFallback || remainingRows[0] || null;
           if (nextFallback?.symbol) {
             setSelectedAsset(nextFallback.symbol);
-            router.push(
-              buildContextHref({
+            const fallbackHref = buildContextHref({
                 pathname,
                 symbol: nextFallback.symbol,
                 context: initialTab,
                 variant,
-              }),
-              { scroll: false }
-            );
+              });
+            router.push(nextFallback.quoteCurrency
+              ? `${fallbackHref.split("?")[0]}?${withSelectedTradingQuote(fallbackHref.split("?")[1], nextFallback.quoteCurrency)}`
+              : fallbackHref, { scroll: false });
           }
         }
 
@@ -2952,6 +2965,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       },
     });
   }, [
+    activeQuoteCurrency,
     activeSymbol,
     initialTab,
     openConfirm,
@@ -3094,17 +3108,36 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     return summary;
   }, [master, periods, sections, ui, workspace?.daily?.benchmark_score]);
 
-  const handleAssetSelect = (symbol) => {
-    const nextSymbol = String(symbol || activeSymbol).toUpperCase();
+  const handleAssetSelect = (selection) => {
+    const nextSymbol = String((typeof selection === "object" ? selection?.symbol : selection) || activeSymbol).toUpperCase();
+    const selectedQuote = typeof selection === "object" ? selection?.quoteCurrency : null;
     setSelectedAsset(nextSymbol);
     const nextQuoteKey = tradingQuoteSessionKey(user?.id, nextSymbol);
     const rememberedNextQuote = nextQuoteKey && window.sessionStorage.getItem(nextQuoteKey);
     const href = buildContextHref({ pathname, symbol: nextSymbol, context: initialTab, variant });
-    const nextHref = ["EUR", "USD", "USDT"].includes(rememberedNextQuote)
-      ? `/asset?${withSelectedTradingQuote(href.split("?")[1], rememberedNextQuote)}` : href;
+    const nextQuote = selectedQuote || rememberedNextQuote;
+    if (selectedQuote && nextQuoteKey) window.sessionStorage.setItem(nextQuoteKey, selectedQuote);
+    const nextHref = ["EUR", "USD", "USDT"].includes(nextQuote)
+      ? `/asset?${withSelectedTradingQuote(href.split("?")[1], nextQuote)}` : href;
     router.push(nextHref, {
       scroll: false,
     });
+  };
+
+  const availableWatchlistPairs = tradingMarkets.symbol === activeSymbol
+    ? tradingMarkets.markets.filter((market) => market.status === "available"
+      && !currentWatchlistRows.some((row) => row.symbol === activeSymbol && row.marketId
+        && row.quoteCurrency === market.quote_currency))
+    : [];
+  const handleAddWatchlistPair = async (market) => {
+    try {
+      const selected = await selectTradingMarket(activeSymbol, market.quote_currency);
+      await addToWatchlist({ symbol: activeSymbol, marketId: selected.market_id });
+      await reloadWatchlist();
+      await refreshPersistedWatchlist(true);
+    } catch (error) {
+      showSnackbar(error?.message || ui.unavailable, "error");
+    }
   };
 
   const openSearch = (detail = undefined) => {
@@ -3140,36 +3173,17 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         ui={ui}
       />
 
-      {availableQuotes.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
-          <span className="font-semibold text-slate-700">
-            {locale?.startsWith("de") ? "Handelspaar" : locale?.startsWith("en") ? "Trading pair" : "Handelspaar"}
-          </span>
-          {availableQuotes.map((quote) => (
-            <button key={quote} type="button"
-              className={`rounded-lg border px-3 py-1.5 font-semibold ${activeQuoteCurrency === quote ? "border-blue-600 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-700"}`}
-              onClick={() => {
-                if (setupSelectionKey) window.sessionStorage.removeItem(setupSelectionKey);
-                setRememberedSetup({ key: setupSelectionKey, id: null });
-                if (quoteSelectionKey) window.sessionStorage.setItem(quoteSelectionKey, quote);
-                setRememberedQuote({ key: quoteSelectionKey, quote });
-                const query = withSelectedTradingQuote(searchParams.toString(), quote);
-                router.replace(`${pathname || "/asset"}?${query}`, { scroll: false });
-              }}>
-              {activeSymbol}/{quote}
-            </button>
-          ))}
-        </div>
-      )}
-
       <AssetList
         rows={visibleWatchlistRows}
         activeSymbol={activeSymbol}
+        activeQuoteCurrency={activeQuoteCurrency}
         onSelect={handleAssetSelect}
         onRemove={handleRemoveWatchlistAsset}
         activeGroup={activeAssetGroup}
         onGroupChange={handleAssetGroupChange}
         onAddAsset={() => openSearch({ mode: "asset" })}
+        availablePairs={availableWatchlistPairs}
+        onAddPair={handleAddWatchlistPair}
         conditionOptions={t?.setups?.marketConditions?.options}
         ui={ui}
       />

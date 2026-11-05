@@ -209,12 +209,14 @@ export function WatchlistScreen() {
   );
   const workspaceAssets = useMemo(
     () => (assets.length > 0 ? assets.map((asset) =>
-      selectedQuote && asset.symbol === selectedSymbol ? derivedAsset || asset : asset
+      selectedQuote && asset.symbol === selectedSymbol && asset.quote_currency === selectedQuote
+        ? derivedAsset || asset : asset
     ) : derivedAsset ? [derivedAsset] : []),
     [assets, derivedAsset, selectedQuote, selectedSymbol],
   );
   const selectedAsset = selectedQuote && !exactWorkspace ? undefined :
-    workspaceAssets.find((asset) => asset.symbol === selectedSymbol) ?? workspaceAssets[0];
+    workspaceAssets.find((asset) => asset.symbol === selectedSymbol &&
+      (!selectedQuote || asset.quote_currency === selectedQuote)) ?? workspaceAssets[0];
   const hasAnalysisBootstrap =
     workspaceAssets.length > 0 ||
     Boolean(overviewResource.data?.watchlist?.length) ||
@@ -271,9 +273,9 @@ export function WatchlistScreen() {
     workspaceAssetResource.error?.message ||
     chartResource.error?.message;
 
-  async function selectAsset(symbol: string) {
+  async function selectAsset(asset: MobileOverviewAsset) {
     await triggerHaptic('selection');
-    updateContext({ asset: symbol, quoteCurrency: null, screen: 'Analysis' });
+    updateContext({ asset: asset.symbol, quoteCurrency: asset.quote_currency || null, screen: 'Analysis' });
   }
 
   async function openAssetActions(asset: MobileOverviewAsset) {
@@ -283,7 +285,7 @@ export function WatchlistScreen() {
 
   async function openAnalysisAsset(asset: MobileOverviewAsset) {
     setWatchlistActionAsset(null);
-    await selectAsset(asset.symbol);
+    await selectAsset(asset);
   }
 
   async function promptRemoveAsset(asset: MobileOverviewAsset) {
@@ -295,13 +297,14 @@ export function WatchlistScreen() {
     if (!watchlistRemoveAsset) return;
 
     const symbol = watchlistRemoveAsset.symbol;
-    const nextSymbol = workspaceAssets.find((asset) => asset.symbol !== symbol)?.symbol ?? selectedSymbol;
+    const removedMarketId = watchlistRemoveAsset.market_id;
+    const nextAsset = workspaceAssets.find((asset) => asset.market_id !== removedMarketId || asset.symbol !== symbol);
 
-    await intelligenceApi.removeFromWatchlist(symbol);
+    await intelligenceApi.removeFromWatchlist(symbol, removedMarketId);
     setWatchlistRemoveAsset(null);
 
-    if (symbol === selectedSymbol && nextSymbol && nextSymbol !== selectedSymbol) {
-      updateContext({ asset: nextSymbol, screen: 'Analysis' });
+    if (symbol === selectedSymbol && watchlistRemoveAsset.quote_currency === selectedQuote && nextAsset) {
+      updateContext({ asset: nextAsset.symbol, quoteCurrency: nextAsset.quote_currency || null, screen: 'Analysis' });
     }
 
     overviewResource.refresh();
@@ -488,21 +491,8 @@ export function WatchlistScreen() {
               onRemoveAsset={promptRemoveAsset}
               onSelect={selectAsset}
               selectedSymbol={selectedSymbol}
+              selectedQuote={selectedQuote}
             />
-            {availableQuotes.length > 0 ? (
-              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
-                {availableQuotes.map((quote) => (
-                  <Pressable
-                    key={quote}
-                    accessibilityRole="button"
-                    onPress={() => updateContext({ quoteCurrency: quote })}
-                    style={{ borderColor: selectedQuote === quote ? '#2563EB' : '#CBD5E1', borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 }}
-                  >
-                    <Text>{selectedSymbol}/{quote}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            ) : null}
             <CompactLiveChart
               errorMessage={chartResource.error?.message}
               interval={chartInterval}
@@ -875,17 +865,19 @@ function AnalysisWatchlistCard({
   onRemoveAsset,
   onSelect,
   selectedSymbol,
+  selectedQuote,
 }: {
   assets: MobileOverviewAsset[];
   onOpenActions: (asset: MobileOverviewAsset) => void | Promise<void>;
   onOpenAsset: (asset: MobileOverviewAsset) => void | Promise<void>;
   onRemoveAsset: (asset: MobileOverviewAsset) => void | Promise<void>;
-  onSelect: (symbol: string) => void;
+  onSelect: (asset: MobileOverviewAsset) => void;
   selectedSymbol: string;
+  selectedQuote: string | null;
 }) {
   const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
-  const visibleAssets = assets.slice(0, 1);
+  const visibleAssets = assets;
 
   return (
     <CardShell emphasis="standard" flat style={styles.workspaceBlendSurface}>
@@ -898,7 +890,7 @@ function AnalysisWatchlistCard({
 
       <View style={[styles.watchlistTable, { borderColor: colors.borderSubtle }]}>
         {visibleAssets.map((asset, index) => {
-          const selected = asset.symbol === selectedSymbol;
+          const selected = asset.symbol === selectedSymbol && asset.quote_currency === selectedQuote;
           const score = compositeScore(asset);
           const price = typeof asset.price === 'number' ? formatPrice(asset.price) : '—';
           const change = typeof asset.change_24h === 'number' ? asset.change_24h : 0;
@@ -906,7 +898,7 @@ function AnalysisWatchlistCard({
 
           return (
             <SwipeActionRow
-              key={asset.symbol}
+              key={asset.market_id ?? asset.symbol}
               actions={[
                 {
                   key: 'open',
@@ -924,7 +916,7 @@ function AnalysisWatchlistCard({
               ]}
             >
               <Pressable
-                onPress={() => onSelect(asset.symbol)}
+                onPress={() => onSelect(asset)}
                 style={({ pressed }) => [
                   styles.watchlistRow,
                   {
@@ -939,7 +931,7 @@ function AnalysisWatchlistCard({
                   <View style={[styles.watchlistSelectionDot, { backgroundColor: selected ? colors.accent : colors.borderSubtle }]} />
                   <AssetIcon compact logoUrl={asset.logo_url} size={24} symbol={asset.symbol} />
                   <View style={styles.watchlistAssetText}>
-                    <Text style={[styles.watchlistSymbol, { color: colors.text }]}>{asset.symbol}</Text>
+                    <Text style={[styles.watchlistSymbol, { color: colors.text }]}>{asset.quote_currency ? `${asset.symbol}/${asset.quote_currency}` : asset.symbol}</Text>
                     <Text style={[styles.watchlistName, { color: colors.textDim }]}>{asset.display_name || assetNameForSymbol(asset.symbol)}</Text>
                   </View>
                 </View>

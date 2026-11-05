@@ -10,7 +10,7 @@ from backend.services.exact_market_workspace_service import ExactMarketWorkspace
 from backend.services.exact_market_indicator_service import ExactMarketIndicatorService
 from backend.services.pair_indicator_config_service import PairIndicatorConfigService
 from backend.services.indicator_impact_preview_service import IndicatorImpactPreviewService
-from backend.services.indicator_score_refresh_service import queue_indicator_score_refresh
+from backend.services.indicator_score_refresh_service import queue_indicator_score_refresh, queue_exact_market_refresh
 from backend.utils.scoring_utils import normalize_indicator_name, score_source_is_fresh
 from backend.domain.market_indicator_catalog import get_market_indicator_definition
 from backend.domain.macro_indicator_catalog import get_macro_indicator_definition
@@ -158,6 +158,7 @@ async def post_pair_benchmark_copy(
         status = "pending_source"
     queue_indicator_score_refresh(int(current_user["id"]), market.asset_symbol,
                                   market_id=int(market.id))
+    queue_exact_market_refresh(int(market.id))
     return {**result, "status": status}
 
 
@@ -253,6 +254,7 @@ async def put_pair_indicator_config(
             status = "pending_source"
     queue_indicator_score_refresh(int(current_user["id"]), market.asset_symbol,
                                   market_id=int(market.id))
+    queue_exact_market_refresh(int(market.id))
     return {"ok": True, "market_id": market.id,
             "pair": f"{market.asset_symbol}/{market.quote_currency}", "status": status}
 

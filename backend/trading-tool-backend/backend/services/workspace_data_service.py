@@ -648,6 +648,43 @@ class WorkspaceDataService:
                 "quote": _freshness(quote.get("timestamp") if quote else None, STALE_AFTER_SECONDS["quote"], "market_data"),
                 "score_freshness": score_freshness,
             })
+        # A saved exact pair is its own watchlist item. Never reuse a BTC base
+        # score or quote for BTC/EUR or BTC/USDT.
+        from backend.infrastructure.models import TradingMarket
+        from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
+        pair_rows = []
+        if callable(getattr(self.session, "execute", None)):
+            pair_result = await self.session.execute(
+                select(Watchlist, TradingMarket)
+                .join(TradingMarket, Watchlist.market_id == TradingMarket.id)
+                .where(Watchlist.user_id == user_id, Watchlist.symbol.in_(normalized))
+                .order_by(Watchlist.created_at, Watchlist.id)
+            )
+            pair_rows = pair_result.all()
+        for item, market in pair_rows:
+            assessment = await SetupMarketMatchService(self.session).for_asset(
+                user_id, item.symbol, setups=[], market_id=market.id)
+            latest = await MarketDataRepository(self.session).get_latest_exact_market_snapshot(market.id)
+            if latest is not None and latest.quote_currency != market.quote_currency:
+                latest = None
+            rows.append({
+                "symbol": item.symbol,
+                "market_id": market.id,
+                "display_name": asset_catalog.get(item.symbol, {}).get("display_name") or item.symbol,
+                "asset_class": "crypto",
+                "logo_url": asset_catalog.get(item.symbol, {}).get("logo_url"),
+                "tradingview_symbol": market.tradingview_symbol,
+                "price": float(latest.price) if latest and latest.price is not None else None,
+                "quote_currency": market.quote_currency,
+                "change_24h": float(latest.change_24h) if latest and latest.change_24h is not None else None,
+                "score": assessment["benchmark_score"],
+                "score_period": "day",
+                "score_status": assessment["source_status"],
+                "quote": _freshness(latest.source_observed_at if latest else None, STALE_AFTER_SECONDS["quote"], "exact_market_data"),
+                "score_freshness": _freshness(assessment["as_of"], STALE_AFTER_SECONDS["day"], "daily_scores"),
+            })
+        pair_symbols = {item.symbol for item, _ in pair_rows}
+        rows = [row for row in rows if row.get("market_id") is not None or row["symbol"] not in pair_symbols]
         return {
             "period": "day",
             "weights": _normalized_weights(weights),

@@ -38,22 +38,30 @@ ALTER TABLE finn_v2_evidence_artifacts
         'scores', 'portfolio', 'latest_report', 'review_history'
     ));
 
-DELETE FROM watchlists duplicate
-USING watchlists canonical
-WHERE duplicate.user_id = canonical.user_id
-  AND duplicate.symbol = canonical.symbol
-  AND duplicate.id > canonical.id;
-
 DO $$
 BEGIN
+    -- Pair-aware watchlists deliberately contain more than one row per base
+    -- symbol. Deploy replays this migration, so never deduplicate those rows
+    -- or recreate the legacy base-symbol constraint after the pair cutover.
     IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'watchlists' AND column_name = 'market_id'
+    ) THEN
+        DELETE FROM watchlists duplicate
+        USING watchlists canonical
+        WHERE duplicate.user_id = canonical.user_id
+          AND duplicate.symbol = canonical.symbol
+          AND duplicate.id > canonical.id;
+
+        IF NOT EXISTS (
         SELECT 1
         FROM pg_constraint
         WHERE conname = 'ux_watchlists_user_symbol'
           AND conrelid = 'watchlists'::regclass
-    ) THEN
-        ALTER TABLE watchlists
-            ADD CONSTRAINT ux_watchlists_user_symbol UNIQUE (user_id, symbol);
+        ) THEN
+            ALTER TABLE watchlists
+                ADD CONSTRAINT ux_watchlists_user_symbol UNIQUE (user_id, symbol);
+        END IF;
     END IF;
 END $$;
 """
