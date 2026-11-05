@@ -4,6 +4,24 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Admin: FINN 2.0 gegevens en schaalbaarheid (5 november 2026)
+
+Phase: `LOCAL_VALIDATION`. Kandidaat: `codex/admin-finn-v2`.
+De adminpagina's gebruiken de bestaande productieverbinding. Gebruikers laadt
+50 accounts per pagina met zoek- en planfilter; AI-beheer en Telemetrie tonen
+aparte FINN 2.0 runstatistieken; Systeemlogs toont de tien recentste FINN 2.0
+foutcodes en trace-ID's zonder berichtinhoud. De PostgreSQL-fout in de
+persistente productanalytics-groepering is hersteld. Diepe health-controles
+houden Telemetrie niet langer op bij het eerste laden.
+
+Gemeten lokaal: volledige backend-suite `4258 passed, 4 skipped`; web
+typecheck, i18n-lint, i18n-tests (37), commandtests (34) en productiebuild
+slaagden. Een read-only PostgreSQL-proef valideerde de nieuwe paginering en
+FINN 2.0 response-schema's. FINN-actiecontracten, workeruitvoering en
+providerselectie zijn niet gewijzigd; de worker-actiematrix en echte
+providerproeven zijn voor deze adminpresentatie niet van toepassing. CI,
+deploymentidentiteit en onafhankelijke ingelogde QA zijn nog niet gemeten.
+
 ## Reflectie: providerfout en eigenaarsscheiding (5 november 2026)
 
 Phase: `NOT_ACCEPTED` voor volledige live-acceptatie; geen aangetoonde
