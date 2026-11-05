@@ -527,6 +527,58 @@ def test_stale_analysis_is_not_returned_after_input_revision_change(monkeypatch)
     asyncio.run(exercise())
 
 
+def test_provider_failure_is_persisted_without_fake_trade_analysis(monkeypatch):
+    from backend.services import finn_trade_analysis_service as module
+
+    async def exercise():
+        now = datetime.now(timezone.utc)
+        review = {
+            "id": 4, "symbol": "BTC", "execution_environment": "paper",
+            "entry_at": now, "exit_at": now, "entry_value_eur": Decimal(100),
+            "exit_value_eur": Decimal(99), "pnl_eur_before_fees": Decimal(-1),
+            "fills": [{"ledger_id": 1, "side": "buy", "at": now.isoformat(),
+                       "qty": "1", "cash_eur": "100", "price_eur": "100"}],
+            "plan_snapshot": None, "note": "", "candles_status": "unavailable",
+            "candles_reason": "missing", "has_screenshot": False,
+            "analysis_status": "pending", "analysis_updated_at": None,
+            "analysis_json": None, "analysis_reason": None, "input_revision": 0,
+        }
+
+        class Session:
+            def __init__(self): self.saved = None
+            async def execute(self, query, params=None):
+                sql = str(query)
+                if "pg_advisory_xact_lock" in sql or "INSERT INTO finn_trade_ai_call_attempts" in sql:
+                    return _Result()
+                if "FROM finn_trade_ai_call_attempts" in sql:
+                    return _Result(0)
+                if "SELECT input_revision" in sql:
+                    return _Result(0)
+                if "RETURNING analysis_updated_at" in sql:
+                    return _Result((now,))
+                if "UPDATE finn_trade_reviews SET analysis_status=:status" in sql:
+                    self.saved = params
+                    return _Result(rowcount=1)
+                raise AssertionError(sql)
+            async def commit(self): pass
+
+        session = Session()
+        service = FinnTradeAnalysisService(session)
+        service.reviews.get_review = lambda *_: asyncio.sleep(0, result=review)
+        service._prior_confirmed_lessons = lambda *_: asyncio.sleep(0, result=[])
+        service._trader_profile_context = lambda *_: asyncio.sleep(0, result={})
+        monkeypatch.setattr(module.openai_client, "ask_gpt_json_async",
+                            lambda **_: asyncio.sleep(0, result={"error": "provider_unavailable"}))
+        result = await service.analyze(77, 4)
+        assert result["status"] == "unavailable"
+        assert result["analysis"] is None
+        assert session.saved["status"] == "unavailable"
+        assert session.saved["analysis"] is None
+        assert session.saved["model"] is None
+        assert session.saved["user_id"] == 77
+    asyncio.run(exercise())
+
+
 def test_question_does_not_persist_after_screenshot_revision_change(monkeypatch):
     from backend.services import finn_trade_analysis_service as module
 

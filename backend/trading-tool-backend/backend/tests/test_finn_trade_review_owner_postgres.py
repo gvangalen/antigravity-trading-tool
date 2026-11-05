@@ -127,6 +127,21 @@ async def _exercise_owner_isolation():
                 )
                 assert foreign.status_code == 404
                 assert marker not in foreign.text
+                foreign_path = f"/api/bot/trade-reviews/{reviews[1 - index][0]}"
+                foreign_requests = (
+                    ("GET", "/chart", {}),
+                    ("GET", "/screenshot", {}),
+                    ("GET", "/messages", {}),
+                    ("PUT", "/note", {"json": {"note": "foreign edit"}}),
+                    ("PUT", "/lesson", {"json": {"lesson_text": "foreign lesson text"}}),
+                    ("DELETE", "/screenshot", {}),
+                    ("POST", "/analyze", {}),
+                    ("POST", "/messages", {"json": {"question": "What happened?"}}),
+                )
+                for method, suffix, kwargs in foreign_requests:
+                    foreign_response = await client.request(method, f"{foreign_path}{suffix}", headers=headers, **kwargs)
+                    assert foreign_response.status_code == 404, foreign_response.text
+                    assert marker not in foreign_response.text
     finally:
         try:
             if owners:

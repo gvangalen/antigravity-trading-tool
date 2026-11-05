@@ -1935,6 +1935,8 @@
           "aiUncertainty": "Uncertainty",
           "aiRunning": "FINN is analyzing this trade...",
           "aiPending": "Analysis will follow automatically when FINN is available.",
+          "aiUnavailable": "FINN is temporarily unavailable. Your trade data is saved; retry the analysis later.",
+          "aiFailed": "FINN could not finish this analysis. Your trade data is saved; try again.",
           "aiQueueHint": "Automatic analysis has a daily limit; after many trades or questions, it may happen later.",
           "aiRefresh": "Retry analysis",
           "aiError": "FINN could not provide a grounded analysis. Try again later.",
