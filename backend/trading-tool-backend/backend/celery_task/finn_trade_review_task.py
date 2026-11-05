@@ -196,7 +196,7 @@ async def _analyze_pending_trade_reviews(session_factory=None) -> int:
                      ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY exit_at, id) AS rank
               FROM finn_trade_reviews
               WHERE (analysis_status='pending' OR
-                (analysis_status='ready' AND analysis_json->>'format_version' IS DISTINCT FROM '2') OR
+                (analysis_status='ready' AND analysis_json->>'format_version' IS DISTINCT FROM '3') OR
                 (analysis_status='running' AND analysis_updated_at < NOW() - INTERVAL '10 minutes') OR
                 (analysis_status IN ('failed','unavailable')
                  AND analysis_updated_at < NOW() - INTERVAL '1 hour'

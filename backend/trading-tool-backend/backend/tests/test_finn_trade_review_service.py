@@ -229,11 +229,11 @@ def test_weekly_reflection_keeps_plan_facts_separate_from_finn_observations():
 
     assert result["plan_not_recorded"] == {
         "theme": "plan_not_recorded", "review_ids": [8], "count": 1,
-        "basis": "plan_record", "example": None,
+        "basis": "plan_record",
     }
     assert result["timing"] == {
         "theme": "timing", "review_ids": [9, 10], "count": 2,
-        "basis": "finn_analysis", "example": "De instap kwam later dan gepland.",
+        "basis": "finn_analysis",
     }
 
 
