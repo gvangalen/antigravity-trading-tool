@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Reflectie: weekpatronen, Paper-kosten en leesbaar bewijs (5 november 2026)
 
-Phase: `LOCAL_VALIDATION`. Kandidaat: `codex/finn-reflection-qa-fixes`.
+Phase: `DEPLOYED_AWAITING_QA`. Kandidaat: `codex/finn-reflection-qa-fixes`,
+[PR #832](https://github.com/gvangalen/antigravity-trading-tool/pull/832).
 Onafhankelijke live QA op `b07baa0b6e00b93ac2730137719f5b54a54fabb9`
 vond drie fouten: een trade-specifieke tijdsduur in het weekoverzicht,
 een Paper-resultaat dat FINN ten onrechte als vóór kosten beschreef, en
@@ -24,6 +25,14 @@ geen ruwe bron-ID's in de proza-uitvoer. FINN-actiecontracten zijn niet
 gewijzigd; de worker-actiematrix is voor deze reviewpresentatie niet van
 toepassing. Onafhankelijke live hertest van de twee bestaande Paper-dossiers,
 eigenaarsscheiding en providerfoutweergave staat nog open.
+Alle vijf [PR-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42017245494)
+en vijf [main-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42017800001)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42018255874)
+slaagde. Git-main, publieke backend-health en frontend-buildinfo meldden
+alle drie `b975c60f853bd166dfb840af05880e68846e2a17`; beide publieke
+routes gaven HTTP 200. Deze statuswijziging maakt een nieuwe commit;
+vóór QA moeten de laatste main-CI, Auto Deploy en publieke SHA's opnieuw
+samenvallen.
 
 ## FINN-analyse van afgesloten trades in Reflectie (5 november 2026)
 
