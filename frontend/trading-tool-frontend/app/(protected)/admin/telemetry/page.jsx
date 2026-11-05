@@ -179,13 +179,7 @@ function LatestEventCard({ event, copy, locale }) {
             {event.action_type}
           </span>
         ) : null}
-        {event.prompt_text ? (
-          <span className="rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-blue-600">
-            {copy.promptBadge}
-          </span>
-        ) : null}
       </div>
-      {event.prompt_text ? <p className="mt-3 text-sm font-medium text-slate-700">{event.prompt_text}</p> : null}
     </div>
   );
 }
@@ -263,7 +257,6 @@ export default function AdminTelemetryPage() {
     const reportRate = formatPercent(firstSessionSummary?.sessions_reaching_report ?? 0, totalSessions);
     const dashboardRate = formatPercent(firstSessionSummary?.sessions_reaching_dashboard ?? 0, totalSessions);
     const queueTotal = health?.cluster_observability?.total_queue_depth ?? 0;
-    const topPrompt = analytics?.top_prompts?.[0]?.prompt || null;
     const topFirstScreen = analytics?.top_first_screens?.[0]?.page || null;
     const topScreen = analytics?.top_screens?.[0]?.page || null;
     const topBehavioralFlag = analytics?.top_behavioral_flags?.[0] || null;
@@ -302,17 +295,6 @@ export default function AdminTelemetryPage() {
             icon: Users,
             text: copy.summary.noSessions,
           },
-      topPrompt
-        ? {
-            tone: "slate",
-            icon: Sparkles,
-            text: replaceTemplate(copy.summary.topPrompt, { topPrompt }),
-          }
-        : {
-            tone: "slate",
-            icon: BrainCircuit,
-            text: copy.summary.noPrompts,
-          },
       topFirstScreen
         ? {
             tone: "blue",
@@ -326,21 +308,6 @@ export default function AdminTelemetryPage() {
             tone: "slate",
             icon: Activity,
             text: copy.summary.noScreenTelemetry,
-          },
-      topBehavioralFlag
-        ? {
-            tone: "amber",
-            icon: ShieldCheck,
-            text: replaceTemplate(copy.summary.topBehavioralFlag, {
-              flag: toSentenceCase(topBehavioralFlag.flag, copy.unknown),
-              count: topBehavioralFlag.count,
-              surface: topBehavioralSurface?.surface || copy.knownSurfaces,
-            }),
-          }
-        : {
-            tone: "slate",
-            icon: ShieldCheck,
-            text: copy.summary.noBehavioralEvents,
           },
     ];
 
@@ -543,7 +510,7 @@ export default function AdminTelemetryPage() {
         />
       </div>
 
-      <div className="mb-10 grid grid-cols-1 gap-6 xl:grid-cols-2">
+      {analytics?.privacy_sanitized === false && <div className="mb-10 grid grid-cols-1 gap-6 xl:grid-cols-2">
         <SectionCard title={copy.behavioralFlags.title} subtitle={copy.behavioralFlags.subtitle}>
           <div className="space-y-3">
             {(analytics?.top_behavioral_flags || []).length ? (
@@ -603,7 +570,7 @@ export default function AdminTelemetryPage() {
             )}
           </div>
         </SectionCard>
-      </div>
+      </div>}
 
       <div className="mb-10 grid grid-cols-1 gap-6 xl:grid-cols-[1.15fr_1fr]">
         <SectionCard title={copy.queueOverview.title} subtitle={copy.queueOverview.subtitle}>
@@ -690,7 +657,7 @@ export default function AdminTelemetryPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <SimpleList
+        {analytics?.privacy_sanitized === false && <SimpleList
           title={copy.topPrompts.title}
           subtitle={copy.topPrompts.subtitle}
           items={analytics?.top_prompts || []}
@@ -703,7 +670,7 @@ export default function AdminTelemetryPage() {
               </div>
             </div>
           )}
-        />
+        />}
 
         <SimpleList
           title={copy.topScreens.title}
@@ -804,7 +771,7 @@ export default function AdminTelemetryPage() {
         </SectionCard>
       </div>
 
-      <div className="mt-6">
+      {analytics?.privacy_sanitized === false && <div className="mt-6">
         <SimpleList
           title={latestEventCopy.title}
           subtitle={latestEventCopy.subtitle}
@@ -819,7 +786,7 @@ export default function AdminTelemetryPage() {
             />
           )}
         />
-      </div>
+      </div>}
     </div>
   );
 }

@@ -4983,6 +4983,7 @@
     "activeOrchestrationModel": "Actief orchestration-model"
   },
   "adminLogsPage": {
+    "privacyHidden": "Logdetails afgeschermd voor privacy",
     "finnV2IssuesTitle": "FINN 2.0 fouten",
     "finnV2IssuesDescription": "De tien recentste mislukte of niet beschikbare FINN 2.0 runs, zonder berichtinhoud.",
     "finnV2NoIssues": "Geen FINN 2.0 fouten gevonden.",
@@ -5003,7 +5004,7 @@
     "suggestedFix": "Voorgestelde fix",
     "category": "Categorie",
     "action": "Actie",
-    "searchPlaceholder": "Zoek op logregel of inhoud...",
+    "searchPlaceholder": "Zoek op bron...",
     "allLevels": "Alle niveaus",
     "levels": {
       "info": "Info",

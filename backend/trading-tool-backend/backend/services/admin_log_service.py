@@ -4,11 +4,23 @@ import os
 from typing import List, Optional, Dict, Any
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 from backend.infrastructure.models import SystemLog
 from backend.services.ai_usage_observability_service import ai_usage_context
 from backend.utils.openai_client import ask_gpt_json_async
 
 logger = logging.getLogger(__name__)
+SAFE_LEVELS = {"info", "warning", "error", "critical"}
+SAFE_SOURCES = {"backend", "api", "auth", "market_data", "ai", "db"}
+
+
+def _safe_log_category(log: SystemLog) -> dict:
+    level = getattr(log, "level", None)
+    source = getattr(log, "source", None)
+    return {
+        "level": level if level in SAFE_LEVELS else "warning",
+        "source": source if source in SAFE_SOURCES else "backend",
+    }
 
 class AdminLogService:
     def __init__(self, db: AsyncSession):
@@ -24,14 +36,16 @@ class AdminLogService:
         """
         Haalt de nieuwste logs op met optionele filters.
         """
-        stmt = select(SystemLog).order_by(desc(SystemLog.created_at)).limit(limit)
+        stmt = (select(SystemLog)
+                .options(load_only(SystemLog.id, SystemLog.level, SystemLog.source, SystemLog.created_at))
+                .order_by(desc(SystemLog.created_at)).limit(limit))
         
         if level:
             stmt = stmt.where(SystemLog.level == level)
         if source:
             stmt = stmt.where(SystemLog.source == source)
         if search:
-            stmt = stmt.where(SystemLog.message.ilike(f"%{search}%"))
+            stmt = stmt.where(SystemLog.source.ilike(f"%{search}%"))
             
         result = await self.db.execute(stmt)
         logs = result.scalars().all()
@@ -39,12 +53,11 @@ class AdminLogService:
         return [
             {
                 "id": log.id,
-                "level": log.level,
-                "message": log.message,
-                "source": log.source,
-                "endpoint": log.endpoint,
-                "user_id": log.user_id,
-                "metadata": log.metadata_json,
+                **_safe_log_category(log),
+                "message": "",
+                "endpoint": None,
+                "user_id": None,
+                "metadata": None,
                 "created_at": log.created_at
             }
             for log in logs
@@ -54,7 +67,10 @@ class AdminLogService:
         """
         Haalt de laatste 30 errors op en analyseert ze met AI.
         """
-        stmt = select(SystemLog).where(SystemLog.level.in_(['error', 'critical'])).order_by(desc(SystemLog.created_at)).limit(30)
+        stmt = (select(SystemLog)
+                .options(load_only(SystemLog.id, SystemLog.level, SystemLog.source, SystemLog.created_at))
+                .where(SystemLog.level.in_(['error', 'critical']))
+                .order_by(desc(SystemLog.created_at)).limit(30))
         result = await self.db.execute(stmt)
         error_logs = result.scalars().all()
         
@@ -70,16 +86,16 @@ class AdminLogService:
                 "explanation": "Er zijn momenteel geen fouten in de logs aanwezig."
             }
 
-        # Format logs for AI context
-        log_context = []
+        # Only send aggregate categories to the provider; never raw log text.
+        category_counts = {}
         for log in error_logs:
-            log_context.append({
-                "ts": log.created_at.isoformat(),
-                "src": log.source,
-                "msg": log.message,
-                "end": log.endpoint,
-                "meta": log.metadata_json
-            })
+            category = _safe_log_category(log)
+            key = (category["level"], category["source"])
+            category_counts[key] = category_counts.get(key, 0) + 1
+        log_context = [
+            {"level": level, "source": source, "count": count}
+            for (level, source), count in category_counts.items()
+        ]
 
         system_role = (
             "You are an expert system reliability engineer. Analyze the following application logs for Tradamind. "
@@ -87,7 +103,7 @@ class AdminLogService:
             "Return a structured JSON report."
         )
         
-        prompt = f"""Analyze the following application logs and provide a structured debug report:
+        prompt = f"""Analyze the following aggregate application error categories. No log text or user content is available; do not infer a specific root cause:
         
 {json.dumps(log_context, indent=2)}
 

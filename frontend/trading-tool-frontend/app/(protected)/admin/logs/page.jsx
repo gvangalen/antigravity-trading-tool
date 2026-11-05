@@ -301,7 +301,7 @@ export default function AdminLogsPage() {
                   </td>
                   <td className="px-6 py-5">
                     <p className="text-xs font-bold text-slate-900 max-w-xl truncate group-hover:whitespace-normal group-hover:overflow-visible transition-all">
-                      {log.message}
+                      {copy.privacyHidden}
                     </p>
                   </td>
                   <td className="px-8 py-5">

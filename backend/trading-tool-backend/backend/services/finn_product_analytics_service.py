@@ -630,7 +630,8 @@ class FinnProductAnalyticsService:
             "setup_id": event.get("setup_id"),
             "strategy_id": event.get("strategy_id"),
             "trace_id": event.get("trace_id"),
-            "prompt_text": self._normalize_prompt(event.get("prompt_text")),
+            # Conversation text belongs to the user's FINN history, not product telemetry.
+            "prompt_text": None,
             "next_best_action": event.get("next_best_action"),
             "metadata": deepcopy(event.get("metadata") or {}),
             "timestamp": timestamp,
