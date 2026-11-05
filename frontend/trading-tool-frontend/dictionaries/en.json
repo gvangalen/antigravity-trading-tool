@@ -4732,7 +4732,22 @@
     "plan": "Plan",
     "access": "Access",
     "toggleAccess": "Turn the account on or off",
-    "close": "Close"
+    "close": "Close",
+    "usageDetails": "Usage",
+    "usageTitle": "AI usage per user",
+    "usagePeriod": "This calendar month",
+    "usageLoading": "Loading usage...",
+    "usageError": "Could not load usage.",
+    "usageRequests": "Requests this month",
+    "usageRequestsToday": "Requests today",
+    "inputTokens": "Input tokens",
+    "outputTokens": "Output tokens",
+    "usageByFeature": "By feature",
+    "usageBySource": "By source",
+    "usageCategory": "Category",
+    "usagePrivacyNote": "Registered requests, tokens and estimated AI cost only; no conversation content. Costs without a user association appear only in the platform overview.",
+    "usageFeatureLabels": {"finn_chat": "FINN conversations", "trade_review": "Trade reviews", "reports": "Reports", "translation": "Translations", "strategy_setup": "Strategy and setup", "admin_tools": "Admin tools", "other": "Other"},
+    "usageSourceLabels": {"live_user": "Live user", "background_job": "Background jobs", "qa_user": "QA", "staging_user": "Staging", "admin_tool": "Admin tool", "other": "Other"}
   },
   "adminAiPage": {
     "loadErrorTitle": "AI data unavailable",

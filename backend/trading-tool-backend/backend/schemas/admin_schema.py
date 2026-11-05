@@ -134,6 +134,24 @@ class AdminUserPage(BaseModel):
     offset: int
     limit: int
 
+class AdminUserUsageBucket(BaseModel):
+    category: str
+    requests: int
+    input_tokens: int
+    output_tokens: int
+    cost_eur: float
+
+class AdminUserUsageDetail(BaseModel):
+    user_id: int
+    requests_month: int
+    requests_today: int
+    input_tokens_month: int
+    output_tokens_month: int
+    cost_month_eur: float
+    cost_today_eur: float
+    by_feature: List[AdminUserUsageBucket]
+    by_source: List[AdminUserUsageBucket]
+
 class FinnV2AdminIssue(BaseModel):
     trace_id: str
     status: str

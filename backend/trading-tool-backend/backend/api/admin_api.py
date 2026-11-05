@@ -12,6 +12,7 @@ from backend.schemas.admin_schema import (
     AdminAiStatsResponse,
     AdminUserOverview,
     AdminUserPage,
+    AdminUserUsageDetail,
     AdminUserUpdate,
     FinnV2AdminOverview,
     AdminSystemLog,
@@ -88,6 +89,18 @@ async def get_admin_users_page(
     return await AdminUserService(db).get_users_page(
         offset=offset, limit=limit, search=search, plan=plan
     )
+
+@router.get("/admin/users/{user_id}/usage", response_model=AdminUserUsageDetail)
+async def get_admin_user_usage(
+    user_id: int,
+    current_user: dict = Depends(check_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    usage = await AdminUserService(db).get_user_usage(user_id)
+    if usage is None:
+        raise HTTPException(status_code=404, detail="Gebruiker niet gevonden.")
+    return usage
+
 
 @router.patch("/admin/users/{user_id}", response_model=AdminUserOverview)
 async def update_admin_user(

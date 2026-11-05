@@ -21,6 +21,10 @@ export const fetchAdminUsers = ({ offset = 0, limit = 50, search = '', plan = 'a
   });
 };
 
+export const fetchAdminUserUsage = (userId) => {
+  return fetchAuth(`/api/admin/users/${encodeURIComponent(userId)}/usage`, { method: 'GET' });
+};
+
 export const fetchAdminFinnV2Overview = () => {
   return fetchAuth('/api/admin/finn-v2/overview', { method: 'GET' });
 };
