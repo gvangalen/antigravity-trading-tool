@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Admin: AI-verbruik per gebruiker zonder gespreksinhoud (5 november 2026)
 
-Phase: `LOCAL_VALIDATION`. Kandidaat: `codex/admin-usage`. Dit is een
+Phase: `DEPLOYED_AWAITING_QA`. Kandidaat: `codex/admin-usage`,
+[PR #843](https://github.com/gvangalen/antigravity-trading-tool/pull/843). Dit is een
 vervolg op de adminprivacywijziging. De gebruikerslijst toont al kosten voor
 vandaag en deze maand; een nieuw admin-only detailoverzicht toont nu per
 gebruiker geregistreerde aanvragen, input- en outputtokens en geschatte
@@ -18,11 +19,19 @@ gebruiker gekoppelde platformkosten vallen buiten dit individuele overzicht.
 
 Gemeten lokaal: gerichte privacytests `6 passed`; volledige backend-suite
 `4264 passed, 4 skipped`; web typecheck, i18n-lint, i18n-tests (37),
-commandtests (34) en productiebuild geslaagd. PR-CI, main-CI, Auto Deploy,
-publieke SHA-verificatie en onafhankelijke ingelogde QA staan bij deze status
-nog open. FINN-actiecontracten,
+commandtests (34) en productiebuild geslaagd. FINN-actiecontracten,
 workeruitvoering en providerselectie zijn niet gewijzigd; de worker-actiematrix
 en echte providerproeven zijn voor deze adminaggregatie niet van toepassing.
+Alle vijf PR-CI-controles en de vijf controles in
+[main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42104919109)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42105437486)
+slaagde. Git-main, publieke backend-health en frontend-buildinfo meldden
+alle drie `5115eea78a9be4f7515339dc432cdc3065389039`; beide publieke
+routes gaven HTTP 200. Deze statuswijziging creëert zelf een nieuwe SHA,
+waardoor de laatste main-CI, Auto Deploy en publieke SHA's opnieuw moeten
+samenvallen vóór onafhankelijke ingelogde QA. De bestaande QA-sessie heeft
+geen adminrechten; de adminweergave is daarom nog niet onafhankelijk live
+geaccepteerd.
 
 ## Admin: privacy van FINN-telemetrie en systeemlogs (5 november 2026)
 
