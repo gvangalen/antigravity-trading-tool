@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Reflectie: weekpatronen, Paper-kosten en leesbaar bewijs (5 november 2026)
 
-Phase: `DEPLOYED_AWAITING_QA`. Kandidaat: `codex/finn-reflection-plan-id-cleanup`,
+Phase: `ACCEPTED` voor de gerichte Reflectie-scope. Kandidaat: `codex/finn-reflection-plan-id-cleanup`,
 [PR #834](https://github.com/gvangalen/antigravity-trading-tool/pull/834),
 voortbouwend op [PR #832](https://github.com/gvangalen/antigravity-trading-tool/pull/832).
 Onafhankelijke live QA op `b07baa0b6e00b93ac2730137719f5b54a54fabb9`
@@ -35,7 +35,17 @@ als `ai_generated`, formaatversie 3, model `gpt-6-luna`. QA gaf toch
 PR #834 verbergt dit interne veld. De nieuwe gerichte regressiecontrole,
 web typecheck, i18n-lint, i18n-tests, commandtests en productiebuild slaagden;
 alle vijf [PR-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42025730984)
-slaagden. De nieuwe ingelogde hertest van de plandetails staat open.
+slaagden. De onafhankelijke ingelogde hertest op
+`08109ac6827d506ab91baddd73f5459eda6a32fe` gaf `ACCEPTED` voor deze
+scope: `Markt-ID: 1` is uit de uitgeklapte plandetails van review #26
+verdwenen, terwijl setupnaam, timeframe, benchmarkgrenzen, gekoppelde
+strategie, bedrag, uitvoeringswijze en koersvaluta leesbaar blijven.
+Het weekoverzicht toont alleen gedeelde thema's en dossierlinks. Review #26
+houdt zijn eigen duur van circa 32 seconden en €−0,03 inclusief gesimuleerde
+kosten; review #23 houdt circa 50 seconden en €−0,02. Beide analyses blijven
+afzonderlijk. Git-main, backend-health en frontend-buildinfo meldden bij de
+herkeuring exact dezelfde SHA; beide publieke routes gaven HTTP 200. Deze
+statuswijziging bevat geen productcode en creëert een nieuwe release-SHA.
 Providerfoutweergave en scheiding tegen een tweede eigenaar waren buiten
 de huidige beschermde QA-scope en zijn niet live bewezen.
 
@@ -45,9 +55,8 @@ en vijf groene [main-CI-controles](https://github.com/gvangalen/antigravity-trad
 slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42018255874)
 slaagde. Git-main, publieke backend-health en frontend-buildinfo meldden
 destijds alle drie `b975c60f853bd166dfb840af05880e68846e2a17`; beide publieke
-routes gaven HTTP 200. Voor de huidige kandidaat moet na deze statuscommit
-opnieuw worden vastgesteld dat laatste main-CI, Auto Deploy en publieke
-SHA's samenvallen.
+routes gaven HTTP 200. Na deze statuscommit moeten laatste main-CI, Auto
+Deploy en publieke SHA's opnieuw overeenkomen.
 
 ## FINN-analyse van afgesloten trades in Reflectie (5 november 2026)
 
