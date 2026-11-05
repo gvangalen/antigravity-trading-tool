@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Handelspaargebonden watchlist en Score 2.0 (5 november 2026)
 
-Phase: `LOCAL_VALIDATION`. Kandidaat: `codex/pair-watchlist-scores`,
+Phase: `DEPLOYED_AWAITING_QA`. Kandidaat: `codex/pair-watchlist-scores`,
 [PR #845](https://github.com/gvangalen/antigravity-trading-tool/pull/845).
 De watchlist bewaart BTC/EUR en BTC/USDT afzonderlijk, zonder brede
 paarwissel boven de lijst. Toevoegen, selecteren en verwijderen gebruiken de
@@ -21,10 +21,14 @@ lint geslaagd met bestaande waarschuwingen. Een volledig gemigreerde lokale
 PostgreSQL/Redis-runtime draaide de worker-actiematrix `16/16` groen.
 De echte Luna/Responses-proeven slaagden voor development `20/20` en
 regressie `109/109`; beide hadden operation accuracy `1.0`.
-Alle vijf controles van [PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42120273440)
-slaagden. Er is voor deze kandidaat nog geen deployment of onafhankelijke
-ingelogde QA gemeten. De uiteindelijke commit na deze statuswijziging krijgt
-opnieuw PR- en main-CI-controle vóór live-acceptatie.
+Alle vijf controles van [definitieve PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42123104155)
+en [main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42123790813)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42124262682)
+slaagde. Git-main, publieke backend-health en frontend-buildinfo meldden
+alle drie `b9680af71313223207f7ff8cf6df84e54fefab02`; beide publieke
+routes gaven HTTP 200. Deze statuswijziging creëert zelf een nieuwe SHA.
+Daarom moeten de laatste main-CI, Auto Deploy en publieke SHA's opnieuw
+samenvallen vóór de onafhankelijke ingelogde QA. Die QA is nog niet uitgevoerd.
 
 De vorige admin-usage-kandidaat blijft inhoudelijk zonder onafhankelijk
 live-QA-verdict. Zijn acceptatie is uitgesteld terwijl deze door de gebruiker
