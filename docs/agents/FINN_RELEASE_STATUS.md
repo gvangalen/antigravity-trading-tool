@@ -4,6 +4,31 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Admin: privacy van FINN-telemetrie en systeemlogs (5 november 2026)
+
+Phase: `LOCAL_VALIDATION`. Kandidaat: `codex/admin-privacy`. Deze kandidaat
+volgt de eerdere Admin FINN 2.0-uitrol op; onafhankelijke ingelogde QA van de
+gecombineerde adminscope is nog niet uitgevoerd.
+
+De beheer-API voor producttelemetrie retourneert alleen geaggregeerde
+tellingen, funnels en toegestane pagina- en actieklassen. Zij haalt geen
+prompttekst of individuele eventrijen uit de persistente telemetrie op.
+Nieuwe producttelemetrie slaat geen prompttekst meer op. Gebruikersgesprekken
+blijven beschikbaar voor de eigenaar in de gewone FINN-gespreksgeschiedenis.
+De beheer-API voor systeemlogs leest en retourneert geen vrije berichttekst,
+metadata, endpoint of gebruikers-ID. De loganalyse ontvangt alleen aantallen
+per toegestane bron- en ernstcategorie. Historische prompttekst in de
+telemetriedatabase en ruwe systeemlogs zijn niet gewist.
+
+Gemeten lokaal: gerichte privacy- en regressietests `9 passed`; volledige
+backend-suite `4262 passed, 4 skipped`; web typecheck, i18n-lint,
+i18n-tests (37), commandtests (34) en productiebuild geslaagd. Een read-only
+PostgreSQL-proef valideerde de gereduceerde logprojectie. FINN-actiecontracten,
+workeruitvoering en providerselectie zijn niet gewijzigd; de worker-actiematrix
+en echte providerproeven zijn voor deze adminprojectie niet van toepassing.
+PR-CI, main-CI, Auto Deploy, publieke SHA-verificatie en onafhankelijke
+ingelogde QA staan nog open.
+
 ## Admin: FINN 2.0 gegevens en schaalbaarheid (5 november 2026)
 
 Phase: `DEPLOYED_AWAITING_QA`. Kandidaat: `codex/admin-finn-v2`,

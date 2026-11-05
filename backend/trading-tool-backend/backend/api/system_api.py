@@ -203,7 +203,8 @@ async def system_health(current_user: dict = Depends(require_operator)):
 @router.get("/system/finn-analytics")
 async def system_finn_analytics(current_user: dict = Depends(require_operator)):
     """Lean FINN product analytics for early operator review."""
-    return finn_product_analytics.snapshot()
+    from backend.services.admin_telemetry_privacy import admin_analytics_snapshot
+    return admin_analytics_snapshot(finn_product_analytics.snapshot())
 
 
 @router.get("/system/openai-runtime")

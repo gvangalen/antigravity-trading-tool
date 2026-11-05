@@ -4882,6 +4882,7 @@
     "activeOrchestrationModel": "Active orchestration model"
   },
   "adminLogsPage": {
+    "privacyHidden": "Log details hidden for privacy",
     "finnV2IssuesTitle": "FINN 2.0 issues",
     "finnV2IssuesDescription": "The ten most recent failed or unavailable FINN 2.0 runs, without message content.",
     "finnV2NoIssues": "No FINN 2.0 issues found.",
@@ -4902,7 +4903,7 @@
     "suggestedFix": "Suggested fix",
     "category": "Category",
     "action": "Action",
-    "searchPlaceholder": "Search by log line or content...",
+    "searchPlaceholder": "Search by source...",
     "allLevels": "All levels",
     "levels": {
       "info": "Info",

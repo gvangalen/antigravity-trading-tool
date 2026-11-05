@@ -85,17 +85,8 @@ def fetch_finn_product_analytics_snapshot(*, table_name: str) -> Optional[Dict[s
             )
             event_counts = {event_name: count for event_name, count in cur.fetchall()}
 
-            cur.execute(
-                f"""
-                SELECT prompt_text, COUNT(*)::int AS count
-                FROM {table_name}
-                WHERE event_name = 'finn_prompt_submitted' AND prompt_text IS NOT NULL
-                GROUP BY prompt_text
-                ORDER BY count DESC, prompt_text ASC
-                LIMIT 10
-                """
-            )
-            top_prompts = [{"prompt": prompt, "count": count} for prompt, count in cur.fetchall()]
+            # Free-text prompts are intentionally excluded from operator analytics.
+            top_prompts = []
 
             cur.execute(
                 f"""
@@ -251,56 +242,7 @@ def fetch_finn_product_analytics_snapshot(*, table_name: str) -> Optional[Dict[s
             )
             users_seen = int(cur.fetchone()[0] or 0)
 
-            cur.execute(
-                f"""
-                SELECT
-                    user_id,
-                    session_id,
-                    event_name,
-                    surface,
-                    page,
-                    asset,
-                    flow_type,
-                    action_type,
-                    report_type,
-                    decision_id,
-                    bot_id,
-                    setup_id,
-                    strategy_id,
-                    trace_id,
-                    prompt_text,
-                    next_best_action,
-                    metadata,
-                    created_at
-                FROM {table_name}
-                ORDER BY created_at DESC, id DESC
-                LIMIT 20
-                """
-            )
             latest_events = []
-            for row in cur.fetchall():
-                latest_events.append(
-                    {
-                        "user_id": row[0],
-                        "session_id": row[1],
-                        "event_name": row[2],
-                        "surface": row[3],
-                        "page": row[4],
-                        "asset": row[5],
-                        "flow_type": row[6],
-                        "action_type": row[7],
-                        "report_type": row[8],
-                        "decision_id": row[9],
-                        "bot_id": row[10],
-                        "setup_id": row[11],
-                        "strategy_id": row[12],
-                        "trace_id": row[13],
-                        "prompt_text": row[14],
-                        "next_best_action": row[15],
-                        "metadata": row[16] or {},
-                        "timestamp": row[17].isoformat() + "Z" if row[17] else None,
-                    }
-                )
 
             return {
                 "metrics_scope": "persistent_store",

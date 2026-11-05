@@ -175,7 +175,7 @@ def test_finn_product_analytics_snapshot_counts_prompts_screens_and_funnel(monke
     snapshot = service.snapshot()
 
     assert snapshot["event_counts"]["screen_view"] == 2
-    assert snapshot["top_prompts"][0]["prompt"] == "Beoordeel deze setup voor BTC"
+    assert snapshot["top_prompts"] == []
     assert snapshot["top_screens"][0]["page"] == "/setup"
     assert snapshot["top_first_screens"][0]["page"] == "/setup"
     assert snapshot["confirm_funnel"] == {"opened": 1, "confirmed": 1, "canceled": 0}
@@ -218,7 +218,7 @@ def test_finn_product_analytics_persists_normalized_events(monkeypatch):
     )
 
     assert len(captured) == 1
-    assert captured[0]["prompt_text"] == "Beoordeel deze setup voor BTC"
+    assert captured[0]["prompt_text"] is None
     assert captured[0]["user_id"] == 11
     assert captured[0]["page"] == "/setup"
     assert captured[0]["timestamp"] is not None
