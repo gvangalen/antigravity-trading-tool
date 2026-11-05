@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { fetchAdminUsers, updateAdminUser } from "@/lib/api/admin";
 import { formatCurrency as formatIntlCurrency, formatDate } from "@/lib/i18n";
@@ -23,6 +23,7 @@ const PLAN_BADGES = {
   premium: "bg-purple-50 text-purple-600 border-purple-100",
   free: "bg-slate-50 text-slate-600 border-slate-100"
 };
+const PAGE_SIZE = 50;
 
 function formatCurrency(value, locale) {
   return formatIntlCurrency(Number(value || 0), locale, "EUR", {
@@ -35,46 +36,63 @@ export default function AdminUsersDashboard() {
   const { t, locale } = useTranslation();
   const copy = t.adminUsersPage;
   const [users, setUsers] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filterPlan, setFilterPlan] = useState("all");
   const [editingUser, setEditingUser] = useState(null);
+  const requestIdRef = useRef(0);
 
   useEffect(() => {
-    loadUsers();
-  }, []);
+    const timer = setTimeout(() => {
+      setPage(0);
+      setDebouncedSearch(searchTerm.trim());
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     try {
-      const data = await fetchAdminUsers();
-      setUsers(data);
+      const data = await fetchAdminUsers({
+        offset: page * PAGE_SIZE,
+        limit: PAGE_SIZE,
+        search: debouncedSearch,
+        plan: filterPlan,
+      });
+      if (requestId === requestIdRef.current) {
+        setUsers(data.items);
+        setTotal(data.total);
+        setError(null);
+      }
     } catch (err) {
       console.error("Admingebruikers laden mislukt", err);
-      setError(copy.loadError);
+      if (requestId === requestIdRef.current) setError(copy.loadError);
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
-  };
+  }, [page, debouncedSearch, filterPlan, copy.loadError]);
+
+  useEffect(() => {
+    void loadUsers();
+  }, [loadUsers]);
 
   const handleUpdateUser = async (userId, updates) => {
     try {
       await updateAdminUser(userId, updates);
       // Reload users to get fresh data
-      loadUsers();
+      await loadUsers();
       setEditingUser(null);
     } catch (err) {
       alert(copy.updateError);
     }
   };
 
-  const filteredUsers = users.filter(user => {
-    const matchesSearch = user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (user.first_name && user.first_name.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesPlan = filterPlan === "all" || user.ai_plan === filterPlan;
-    return matchesSearch && matchesPlan;
-  });
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   if (loading) return (
       <div className="p-10 flex flex-col items-center justify-center min-h-[60vh]">
@@ -103,7 +121,7 @@ export default function AdminUsersDashboard() {
         
         <div className="flex items-center gap-4">
           <button 
-            onClick={loadUsers}
+            onClick={() => void loadUsers()}
             className="px-6 py-3 bg-white border border-slate-200 rounded-2xl font-black text-[10px] uppercase tracking-widest text-slate-600 hover:border-slate-900 hover:text-slate-900 transition-all shadow-sm flex items-center gap-2 active:scale-95"
           >
             <RefreshCcw size={14} />
@@ -129,9 +147,10 @@ export default function AdminUsersDashboard() {
           <select 
             className="w-full pl-12 pr-4 py-4 bg-white border border-slate-100 rounded-2xl text-sm font-black uppercase tracking-widest appearance-none focus:outline-none transition-all shadow-sm italic cursor-pointer"
             value={filterPlan}
-            onChange={(e) => setFilterPlan(e.target.value)}
+            onChange={(e) => { setPage(0); setFilterPlan(e.target.value); }}
           >
             <option value="all">{copy.allPlans}</option>
+            <option value="free">{copy.planLabels.free}</option>
             <option value="basis">{copy.planLabels.basis}</option>
             <option value="pro">{copy.planLabels.pro}</option>
             <option value="premium">{copy.planLabels.premium}</option>
@@ -140,6 +159,7 @@ export default function AdminUsersDashboard() {
       </div>
 
       {/* 📋 USER TABLE */}
+      {error && <p role="alert" className="mb-4 rounded-xl bg-rose-50 p-4 text-sm text-rose-700">{error}</p>}
       <div className="bg-white border border-slate-100 rounded-[32px] shadow-sm overflow-hidden">
         <div className="px-8 py-5 border-b border-slate-100 bg-slate-50/60">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-[11px] text-slate-500 font-medium">
@@ -159,7 +179,7 @@ export default function AdminUsersDashboard() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
-            {filteredUsers.map((user) => (
+            {users.map((user) => (
               <tr key={user.id} className="group hover:bg-slate-50/50 transition-colors">
                 <td className="px-8 py-6">
                   <div className="flex items-center gap-4">
@@ -235,7 +255,7 @@ export default function AdminUsersDashboard() {
             ))}
           </tbody>
         </table>
-        {filteredUsers.length === 0 && (
+        {users.length === 0 && (
           <div className="p-20 text-center">
              <div className="inline-flex p-4 bg-slate-50 rounded-full text-slate-300 mb-4">
                 <Search size={32} />
@@ -244,6 +264,17 @@ export default function AdminUsersDashboard() {
           </div>
         )}
       </div>
+
+      {total > 0 && (
+        <div className="mt-5 flex items-center justify-between gap-4 text-sm text-slate-600">
+          <span>{copy.pagination?.showing || "Showing"} {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} {copy.pagination?.of || "of"} {total}</span>
+          <div className="flex items-center gap-3">
+            <button type="button" disabled={page === 0} onClick={() => setPage((value) => value - 1)} className="rounded-xl border border-slate-200 px-4 py-2 disabled:opacity-40">{copy.pagination?.previous || "Previous"}</button>
+            <span>{page + 1} / {totalPages}</span>
+            <button type="button" disabled={page + 1 >= totalPages} onClick={() => setPage((value) => value + 1)} className="rounded-xl border border-slate-200 px-4 py-2 disabled:opacity-40">{copy.pagination?.next || "Next"}</button>
+          </div>
+        </div>
+      )}
 
       {/* 🛠️ EDIT MODAL */}
       {editingUser && (

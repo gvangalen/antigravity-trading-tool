@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useTranslation } from "@/app/providers/I18nProvider";
-import { fetchAdminAiStats } from "@/lib/api/admin";
+import { fetchAdminAiStats, fetchAdminFinnV2Overview } from "@/lib/api/admin";
 import { 
   Zap, 
   TrendingUp, 
@@ -99,18 +99,29 @@ export default function AdminAiDashboard() {
   const { t } = useTranslation();
   const copy = t.adminAiPage;
   const [stats, setStats] = useState(null);
+  const [finnV2, setFinnV2] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    loadStats();
+    void loadStats();
+    void loadFinnV2();
   }, []);
+
+  const loadFinnV2 = async () => {
+    try {
+      setFinnV2(await fetchAdminFinnV2Overview());
+    } catch (err) {
+      console.error("FINN 2.0 overzicht laden mislukt", err);
+      setFinnV2(null);
+    }
+  };
 
   const loadStats = async () => {
     setLoading(true);
     try {
-      const data = await fetchAdminAiStats();
-      setStats(data);
+      setStats(await fetchAdminAiStats());
+      setError(null);
     } catch (err) {
       console.error("Admin AI-statistieken laden mislukt", err);
       setError(copy.loadError);
@@ -123,6 +134,7 @@ export default function AdminAiDashboard() {
     <div className="p-10 flex flex-col items-center justify-center min-h-[60vh]">
       <div className="w-12 h-12 border-4 border-blue-600/20 border-t-blue-600 rounded-full animate-spin mb-4" />
       <p className="text-slate-400 font-bold uppercase tracking-widest text-xs italic">{copy.loading}</p>
+      {finnV2 && <p className="mt-4 text-sm text-slate-600">{copy.finnV2?.title}: {finnV2.runs_24h} {copy.finnV2?.runs}</p>}
     </div>
   );
 
@@ -131,8 +143,9 @@ export default function AdminAiDashboard() {
       <div className="inline-flex p-4 bg-rose-50 rounded-full text-rose-500 mb-4">
         <ShieldCheck size={32} />
       </div>
-      <h1 className="text-2xl font-black text-slate-900 mb-2 italic">{copy.noAccess}</h1>
+      <h1 className="text-2xl font-black text-slate-900 mb-2 italic">{copy.loadErrorTitle || copy.noAccess}</h1>
       <p className="text-slate-500 max-w-md mx-auto">{error}</p>
+      {finnV2 && <p className="mt-4 text-sm text-slate-600">{copy.finnV2?.title}: {finnV2.runs_24h} {copy.finnV2?.runs}</p>}
     </div>
   );
 
@@ -177,7 +190,7 @@ export default function AdminAiDashboard() {
              <span className="text-[11px] font-black uppercase tracking-widest italic">{copy.monitoringActive}</span>
           </div>
           <button 
-            onClick={loadStats}
+            onClick={() => { void loadStats(); void loadFinnV2(); }}
             className="px-6 py-3 bg-white border border-slate-200 rounded-2xl font-black text-[10px] uppercase tracking-widest text-slate-600 hover:border-blue-600 hover:text-blue-600 transition-all shadow-sm active:scale-95"
           >
             {copy.refresh}
@@ -186,6 +199,31 @@ export default function AdminAiDashboard() {
       </div>
 
       {/* 📊 SUMMARY RIBBON */}
+      <div className="mb-8 rounded-[28px] border border-blue-100 bg-blue-50/60 p-6">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-black text-slate-900">{copy.finnV2?.title || "FINN 2.0"}</h2>
+            <p className="text-sm text-slate-600">{copy.finnV2?.subtitle || "Runtime activity in the last 24 hours"}</p>
+          </div>
+          {finnV2 && <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-blue-700">{finnV2.runtime_mode}</span>}
+        </div>
+        {finnV2 ? (
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            {[
+              [copy.finnV2?.runs || "Runs", finnV2.runs_24h],
+              [copy.finnV2?.completed || "Completed", finnV2.completed_24h],
+              [copy.finnV2?.clarifications || "Clarifications", finnV2.clarifications_24h],
+              [copy.finnV2?.unavailable || "Unavailable", finnV2.unavailable_24h],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-2xl bg-white p-4">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{label}</p>
+                <p className="mt-2 text-2xl font-black text-slate-900">{value}</p>
+              </div>
+            ))}
+          </div>
+        ) : <p className="text-sm text-slate-600">{copy.finnV2?.unavailableMessage || "FINN 2.0 metrics are temporarily unavailable."}</p>}
+      </div>
+
       {/* 📊 SUMMARY RIBBON */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-7 gap-6 mb-10">
         <MetricCard 
@@ -240,11 +278,13 @@ export default function AdminAiDashboard() {
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-10">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-10">
         <MiniSourceCard label={copy.sourceCards.liveUsers} value={`€${overview.live_user_cost_month_eur.toFixed(2)}`} tone="emerald" />
         <MiniSourceCard label={copy.sourceCards.qaSmoke} value={`€${overview.qa_cost_month_eur.toFixed(2)}`} tone="amber" />
         <MiniSourceCard label={copy.sourceCards.backgroundJobs} value={`€${overview.background_cost_month_eur.toFixed(2)}`} tone="violet" />
         <MiniSourceCard label={copy.sourceCards.stagingUsers} value={`€${overview.staging_cost_month_eur.toFixed(2)}`} tone="blue" />
+        <MiniSourceCard label={copy.sourceCards.adminTools} value={`€${overview.admin_tool_cost_month_eur.toFixed(2)}`} tone="blue" />
+        <MiniSourceCard label={copy.sourceCards.unclassified} value={`€${overview.unclassified_cost_month_eur.toFixed(2)}`} tone="amber" />
       </div>
 
       <div className="mb-10 p-5 bg-slate-50 border border-slate-100 rounded-[28px]">

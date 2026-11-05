@@ -4681,6 +4681,7 @@
     }
   },
   "adminUsersPage": {
+    "pagination": { "showing": "Showing", "of": "of", "previous": "Previous", "next": "Next" },
     "loading": "Loading users...",
     "loadError": "You do not have admin rights or the API is offline.",
     "updateError": "Failed to update the user.",
@@ -4734,6 +4735,8 @@
     "close": "Close"
   },
   "adminAiPage": {
+    "loadErrorTitle": "AI data unavailable",
+    "finnV2": { "title": "FINN 2.0 runtime", "subtitle": "Runs in the last 24 hours, separate from AI costs", "runs": "Runs", "completed": "Completed", "clarifications": "Clarifications", "unavailable": "Unavailable", "unavailableMessage": "FINN 2.0 metrics are temporarily unavailable." },
     "loading": "Loading AI statistics...",
     "loadError": "You do not have admin rights or the API is offline.",
     "noAccess": "No access",
@@ -4762,7 +4765,9 @@
       "liveUsers": "Live users",
       "qaSmoke": "QA / smoke",
       "backgroundJobs": "Background jobs",
-      "stagingUsers": "Staging users"
+      "stagingUsers": "Staging users",
+      "adminTools": "Admin tools",
+      "unclassified": "Unclassified"
     },
     "anomalies": {
       "title": "AI anomalies",
@@ -4877,6 +4882,12 @@
     "activeOrchestrationModel": "Active orchestration model"
   },
   "adminLogsPage": {
+    "finnV2IssuesTitle": "FINN 2.0 issues",
+    "finnV2IssuesDescription": "The ten most recent failed or unavailable FINN 2.0 runs, without message content.",
+    "finnV2NoIssues": "No FINN 2.0 issues found.",
+    "finnV2Status": "Status",
+    "finnV2ErrorCode": "Error code",
+    "finnV2TraceId": "Trace ID",
     "analysisError": "Failed to run analysis. Check the logs.",
     "title": "System logs",
     "titlePrefix": "System",
@@ -4919,6 +4930,7 @@
     "logsSyncing": "Syncing logs..."
   },
   "adminTelemetryPage": {
+    "finnV2": { "title": "FINN 2.0 runtime", "subtitle": "Current run status over the last 24 hours", "runs": "Runs", "visible": "Visible", "completed": "Completed", "clarifications": "Clarifications", "unavailable": "Unavailable", "latency": "Average time", "runtimeMode": "Runtime mode", "unavailableMessage": "FINN 2.0 metrics are temporarily unavailable." },
     "loading": "Telemetry is loading...",
     "loadError": "Telemetry could not be loaded. Check admin access or runtime health.",
     "unavailableTitle": "Telemetry unavailable",
