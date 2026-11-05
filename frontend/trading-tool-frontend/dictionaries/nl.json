@@ -1936,6 +1936,8 @@
           "aiUncertainty": "Onzekerheid",
           "aiRunning": "FINN analyseert deze trade...",
           "aiPending": "Analyse volgt automatisch zodra FINN beschikbaar is.",
+          "aiUnavailable": "FINN is tijdelijk niet beschikbaar. Je tradegegevens blijven bewaard; probeer de analyse later opnieuw.",
+          "aiFailed": "FINN kon deze analyse niet afronden. Je tradegegevens blijven bewaard; probeer het opnieuw.",
           "aiQueueHint": "Automatische analyse heeft een daglimiet; bij veel trades of vragen kan dit later gebeuren.",
           "aiRefresh": "Analyse opnieuw proberen",
           "aiError": "FINN kon geen controleerbare analyse geven. Probeer later opnieuw.",

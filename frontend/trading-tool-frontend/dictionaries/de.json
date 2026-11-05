@@ -1953,6 +1953,8 @@
           "aiUncertainty": "Unsicherheit",
           "aiRunning": "FINN analysiert diesen Trade...",
           "aiPending": "Die Analyse folgt automatisch, sobald FINN verfügbar ist.",
+          "aiUnavailable": "FINN ist vorübergehend nicht verfügbar. Deine Tradedaten bleiben gespeichert; versuche die Analyse später erneut.",
+          "aiFailed": "FINN konnte diese Analyse nicht abschließen. Deine Tradedaten bleiben gespeichert; versuche es erneut.",
           "aiQueueHint": "Automatische Analysen haben ein Tageslimit; nach vielen Trades oder Fragen können sie später erfolgen.",
           "aiRefresh": "Analyse erneut versuchen",
           "aiError": "FINN konnte keine belegte Analyse liefern. Versuche es später erneut.",

@@ -4,6 +4,25 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Reflectie: providerfout en eigenaarsscheiding (5 november 2026)
+
+Phase: `LOCAL_VALIDATION`. Kandidaat: `codex/finn-reflection-provider-owner-qa`.
+De Reflectiepagina toont een opgeslagen mislukte of niet-beschikbare FINN-analyse
+nu als zodanig en zegt niet meer dat die analyse nog volgt. Een herpoging blijft
+beschikbaar; er wordt geen vaste coachanalyse als providerantwoord getoond.
+De eigenaarstest dekt naast lijst en detail ook grafiek, screenshot, berichten,
+notitie, les en analyseaanvraag voor een tweede account.
+
+Gemeten lokaal: volledige backend-suite `4258 passed, 4 skipped`; de
+eigenaarstest slaagde afzonderlijk op een gemarkeerde, volledig gemigreerde
+wegwerp-PostgreSQL-database met twee gebruikers (`1 passed`). Web typecheck,
+i18n-lint, i18n-tests (37), commandtests (34) en productiebuild slaagden. Een
+echte Luna/Responses-proef op synthetische Paper-feiten leverde twee geldige
+observaties op. FINN-actiecontracten zijn niet gewijzigd; de worker-actiematrix
+is voor deze reviewstatus en toegangscontrole niet van toepassing. CI, deploy
+en onafhankelijke ingelogde QA moeten nog volgen; een live providerstoring is
+niet kunstmatig veroorzaakt.
+
 ## Reflectie: weekpatronen, Paper-kosten en leesbaar bewijs (5 november 2026)
 
 Phase: `ACCEPTED` voor de gerichte Reflectie-scope. Kandidaat: `codex/finn-reflection-plan-id-cleanup`,
