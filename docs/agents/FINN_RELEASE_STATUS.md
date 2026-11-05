@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Admin: FINN 2.0 gegevens en schaalbaarheid (5 november 2026)
 
-Phase: `LOCAL_VALIDATION`. Kandidaat: `codex/admin-finn-v2`.
+Phase: `DEPLOYED_AWAITING_QA`. Kandidaat: `codex/admin-finn-v2`,
+[PR #839](https://github.com/gvangalen/antigravity-trading-tool/pull/839).
 De adminpagina's gebruiken de bestaande productieverbinding. Gebruikers laadt
 50 accounts per pagina met zoek- en planfilter; AI-beheer en Telemetrie tonen
 aparte FINN 2.0 runstatistieken; Systeemlogs toont de tien recentste FINN 2.0
@@ -19,8 +20,15 @@ typecheck, i18n-lint, i18n-tests (37), commandtests (34) en productiebuild
 slaagden. Een read-only PostgreSQL-proef valideerde de nieuwe paginering en
 FINN 2.0 response-schema's. FINN-actiecontracten, workeruitvoering en
 providerselectie zijn niet gewijzigd; de worker-actiematrix en echte
-providerproeven zijn voor deze adminpresentatie niet van toepassing. CI,
-deploymentidentiteit en onafhankelijke ingelogde QA zijn nog niet gemeten.
+providerproeven zijn voor deze adminpresentatie niet van toepassing. Alle vijf
+PR-CI-controles en de vijf controles in
+[main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42091599792)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42092124847)
+slaagde. Git-main, publieke backend-health en frontend-buildinfo meldden
+alle drie `3a41ca9177c3b0c29337ad766b126bc695f22131`; beide publieke
+routes gaven HTTP 200. Deze statuswijziging creëert zelf een nieuwe SHA,
+waardoor de laatste main-CI, Auto Deploy en publieke SHA's opnieuw moeten
+samenvallen vóór onafhankelijke ingelogde QA. Die QA is nog niet uitgevoerd.
 
 ## Reflectie: providerfout en eigenaarsscheiding (5 november 2026)
 
