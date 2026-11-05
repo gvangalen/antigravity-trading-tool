@@ -4,6 +4,32 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN-analyse van afgesloten trades in Reflectie (5 november 2026)
+
+Phase: `DEPLOYED_AWAITING_QA`. Kandidaat: `codex/finn-reflection-clarity`,
+[PR #830](https://github.com/gvangalen/antigravity-trading-tool/pull/830).
+De Reflectiepagina scheidt de eigen observatie, vastgelegde uitvoeringen en
+FINN's analyse duidelijker. Dubbele weekoverzichten zijn vereenvoudigd.
+FINN schrijft de analyse via Luna/Responses uit eigenaargebonden trade-, plan-
+en profielgegevens; de applicatie gebruikt geen vaste coachanalyse als
+providerantwoord ontbreekt.
+
+De volledige backend-suite slaagde met `4256 passed, 4 skipped`. Web typecheck,
+`lint:i18n`, `test:i18n`, `test:commands` en productiebuild slaagden. De lokale
+worker-actiematrix slaagde `16/16`, plus `22` adaptertests. De echte
+Responses-selectieproeven slaagden `20/20` development en bij de volledige
+herhaling `109/109` regression zonder provider-, schema-, timeout-, parse- of
+validatiefout. De eerste regressiepoging had twee provider-timeouts en was
+daarom geen groene releasepoort. Alle vijf PR-CI- en
+[main-CI-controles](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41996091056)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/41996514910)
+slaagde. Publieke backend-health en frontend-buildinfo gaven HTTP 200 en
+dezelfde merge-SHA `2779f9f4a93433012c4c049da10b2a18a89b3c0c`.
+Deze statuswijziging maakt een nieuwe commit; vóór QA moeten de laatste
+main-CI, Auto Deploy en beide publieke SHA's opnieuw overeenkomen.
+Onafhankelijke ingelogde QA van een gesloten Paper-trade en zijn FINN-analyse
+staat nog open. Er is geen live order uitgevoerd.
+
 ## Week-, maand- en kwartaalrapport klaar in de FINN-feed (4 november 2026)
 
 Phase: `DEPLOYED_AWAITING_QA`. Kandidaat: `codex/finn-periodic-report-feed`,
