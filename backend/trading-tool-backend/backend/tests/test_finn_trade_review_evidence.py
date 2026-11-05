@@ -175,6 +175,20 @@ def test_paper_review_status_describes_cash_flow_including_simulated_costs():
     assert FinnTradeReviewService._presented_review({**row, "execution_environment": "live"})["pnl_status"] == "before_fees_eur"
 
 
+def test_paper_ai_facts_label_result_including_simulated_costs():
+    review = {
+        "id": 26, "symbol": "BTC", "execution_environment": "Paper",
+        "entry_at": datetime(2026, 11, 2, tzinfo=timezone.utc),
+        "exit_at": datetime(2026, 11, 3, tzinfo=timezone.utc),
+        "pnl_eur_before_fees": Decimal("-0.03"), "fills": [],
+    }
+    facts, _ = evidence_context(review)
+    assert facts["pnl_eur_including_simulated_costs"] == "-0.03"
+    assert "pnl_eur_before_fees" not in facts
+    assert facts["pnl_status"] == "paper_cash_flow_including_simulated_costs"
+    assert facts["fees_unknown"] is False
+
+
 def test_only_server_supplied_confirmed_lesson_can_be_rendered():
     context = {"prior_user_confirmed_lessons_untrusted": [{
         "review_id": 12, "symbol": "BTC", "lesson_text_untrusted": "Mijn bevestigde les",
@@ -295,7 +309,7 @@ def test_luna_writes_review_and_evidence_remains_bound():
     raw = _analysis("De automatische exit beperkte het verlies; de reden voor de instap is onbekend.")
     raw["observations"][0]["text"] = "De geregistreerde verkoop sloot de positie."
     result = validate_analysis(raw, {"fill:1"})
-    assert result["format_version"] == 2
+    assert result["format_version"] == 3
     assert result["analysis_source"] == "ai_generated"
     assert result["summary"] == raw["summary"]
     assert result["observations"][0]["text"] == raw["observations"][0]["text"]

@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 ANALYSIS_VERSION = 1
+ANALYSIS_FORMAT_VERSION = 3
 MAX_AI_FILLS = 50
 MAX_AI_CASH_LEGS = 16
 SYSTEM_ROLE = (
@@ -35,7 +36,9 @@ SYSTEM_ROLE = (
     "claim over pixels die je niet goed kunt lezen. Noem onzekerheid bij ontbrekend "
     "plan of chart. Het traderprofiel en de persoonlijke toelichting zijn context, "
     "geen bewijs voor motieven of een vooraf bestaand plan. Schrijf zelf een concrete, "
-    "persoonlijke terugblik in de gevraagde taal, standaard Nederlands. Begin met het belangrijkste "
+    "persoonlijke terugblik in de gevraagde taal, standaard Nederlands. Een Paper-resultaat "
+    "is berekend uit virtuele kassastromen inclusief gesimuleerde kosten; noem het nooit vóór kosten. "
+    "Begin met het belangrijkste "
     "inzicht uit deze trade; herhaal de getoonde cijfers niet zonder duiding. "
     "Antwoord uitsluitend als JSON met summary, observations (array van "
     "{theme,evidence_ids,text}), uncertainty, question, suggested_lesson en "
@@ -116,7 +119,8 @@ def evidence_context(review: dict) -> tuple[dict, set[str]]:
         "fills_truncated": len(all_fills) > len(fills),
         "entry_value_eur": str(review["entry_value_eur"]) if review.get("entry_value_eur") is not None else None,
         "exit_value_eur": str(review["exit_value_eur"]) if review.get("exit_value_eur") is not None else None,
-        "pnl_eur_before_fees": str(review["pnl_eur_before_fees"]) if review.get("pnl_eur_before_fees") is not None else None,
+        ("pnl_eur_including_simulated_costs" if str(review.get("execution_environment")).lower() == "paper"
+         else "pnl_eur_before_fees"): str(review["pnl_eur_before_fees"]) if review.get("pnl_eur_before_fees") is not None else None,
         "fees_unknown": not (str(review.get("execution_environment")).lower() == "paper"), "fills": evidence,
         "plan": {"id": "plan:snapshot", "data": review["plan_snapshot"],
                  "provenance": review["plan_provenance"]}
@@ -181,7 +185,7 @@ def validate_analysis(raw: dict, allowed: set[str], context: dict | None = None,
     prior = next((item for item in prior_candidates
                   if type(selected_prior_id) is int and item["review_id"] == selected_prior_id), None)
     rendered = {
-        "format_version": 2,
+        "format_version": ANALYSIS_FORMAT_VERSION,
         "analysis_source": "ai_generated",
         "summary": _model_text(raw, "summary", maximum=900),
         "observations": checked,
@@ -321,7 +325,7 @@ class FinnTradeAnalysisService:
                         "reason": "Historische chart wordt opgehaald"}
             review = await self.reviews.get_review(user_id, review_id)
         legacy = review["analysis_status"] == "ready" and (
-            (review.get("analysis_json") or {}).get("format_version") != 2
+            (review.get("analysis_json") or {}).get("format_version") != ANALYSIS_FORMAT_VERSION
         )
         if review["analysis_status"] == "ready" and not legacy:
             return {"status": "ready", "analysis": review["analysis_json"]}
@@ -344,10 +348,11 @@ class FinnTradeAnalysisService:
             WHERE id=:id AND user_id=:user_id AND analysis_version=:version
               AND input_revision=:input_revision
               AND (analysis_status IN ('pending', 'unavailable', 'failed') OR
-                   (analysis_status='ready' AND analysis_json->>'format_version' IS DISTINCT FROM '2') OR
+                   (analysis_status='ready' AND analysis_json->>'format_version' IS DISTINCT FROM :format_version) OR
                    (analysis_status='running' AND analysis_updated_at < NOW() - INTERVAL '10 minutes'))
             RETURNING analysis_updated_at
         """), {"id": review_id, "user_id": user_id, "version": ANALYSIS_VERSION,
+               "format_version": str(ANALYSIS_FORMAT_VERSION),
                "input_revision": review["input_revision"]})
         claimed_row = claimed.fetchone()
         if claimed_row is None:

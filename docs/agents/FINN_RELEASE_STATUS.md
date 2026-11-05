@@ -4,6 +4,27 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Reflectie: weekpatronen, Paper-kosten en leesbaar bewijs (5 november 2026)
+
+Phase: `LOCAL_VALIDATION`. Kandidaat: `codex/finn-reflection-qa-fixes`.
+Onafhankelijke live QA op `b07baa0b6e00b93ac2730137719f5b54a54fabb9`
+vond drie fouten: een trade-specifieke tijdsduur in het weekoverzicht,
+een Paper-resultaat dat FINN ten onrechte als vóór kosten beschreef, en
+ruwe bewijs-ID's en planvelden in de review. De nieuwe projectie beperkt
+weekpatronen tot thema en betrokken dossiers, labelt Paper-kassastromen
+inclusief gesimuleerde kosten, en toont gebruikersnamen voor bewijs en
+planvelden. Bestaande analyses worden via formaatversie 3 opnieuw door
+Luna/Responses geschreven; er is geen vaste coachtekst voor nieuwe analyses.
+
+Gemeten lokaal: volledige backend-suite `4257 passed, 4 skipped`, web
+typecheck, i18n-lint, i18n-tests (37), commandtests (34) en productiebuild
+slaagden. Een echte Luna/Responses-analyse op synthetische Paper-feiten gaf
+HTTP 200, formaatversie 3, twee observaties, geen kostenclaim vóór fees en
+geen ruwe bron-ID's in de proza-uitvoer. FINN-actiecontracten zijn niet
+gewijzigd; de worker-actiematrix is voor deze reviewpresentatie niet van
+toepassing. Onafhankelijke live hertest van de twee bestaande Paper-dossiers,
+eigenaarsscheiding en providerfoutweergave staat nog open.
+
 ## FINN-analyse van afgesloten trades in Reflectie (5 november 2026)
 
 Phase: `DEPLOYED_AWAITING_QA`. Kandidaat: `codex/finn-reflection-clarity`,

@@ -67,7 +67,6 @@ def completed_reflection_week(now: datetime | None = None, selected: date | None
 def build_weekly_review_patterns(rows: list[Any]) -> list[dict]:
     """Summarize owner-scoped review evidence without inferring repeated behavior."""
     patterns: dict[str, set[int]] = defaultdict(set)
-    pattern_examples: dict[str, str] = {}
     for row in rows:
         if not row.has_plan:
             patterns[unrecorded_plan_theme(row.origin)].add(int(row.id))
@@ -79,12 +78,8 @@ def build_weekly_review_patterns(rows: list[Any]) -> list[dict]:
                 theme = observation.get("theme")
                 if theme in {"plan_followed", "risk", "timing", "exit_process", "evidence_gap"}:
                     patterns[theme].add(int(row.id))
-                    example = observation.get("text")
-                    if theme not in pattern_examples and isinstance(example, str) and example.strip():
-                        pattern_examples[theme] = example.strip()[:280]
     return [{"theme": theme, "review_ids": sorted(ids), "count": len(ids),
-             "basis": "plan_record" if theme in {"missing_plan", "plan_not_recorded"} else "finn_analysis",
-             "example": pattern_examples.get(theme)}
+             "basis": "plan_record" if theme in {"missing_plan", "plan_not_recorded"} else "finn_analysis"}
             for theme, ids in sorted(patterns.items(), key=lambda item: -len(item[1]))]
 
 
@@ -256,7 +251,7 @@ class FinnTradeReviewService:
                 # as a user-facing fee claim. Correct that presentation without
                 # rewriting immutable stored evidence or user-authored notes.
                 summary = analysis.get("summary")
-                if isinstance(summary, str) and analysis.get("format_version") != 2:
+                if isinstance(summary, str) and analysis.get("format_version") not in {2, 3}:
                     analysis = {**analysis, "summary": summary.replace(
                         "Het geregistreerde resultaat vóór kosten",
                         "Het geregistreerde Paper-resultaat op basis van virtuele kassastromen",
