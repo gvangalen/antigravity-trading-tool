@@ -4833,7 +4833,22 @@
     "plan": "Plan",
     "access": "Toegang",
     "toggleAccess": "Zet account aan of uit",
-    "close": "Sluiten"
+    "close": "Sluiten",
+    "usageDetails": "Verbruik",
+    "usageTitle": "AI-verbruik per gebruiker",
+    "usagePeriod": "Deze kalendermaand",
+    "usageLoading": "Verbruik laden...",
+    "usageError": "Verbruik kon niet worden geladen.",
+    "usageRequests": "Aanvragen deze maand",
+    "usageRequestsToday": "Aanvragen vandaag",
+    "inputTokens": "Inputtokens",
+    "outputTokens": "Outputtokens",
+    "usageByFeature": "Per functie",
+    "usageBySource": "Per bron",
+    "usageCategory": "Categorie",
+    "usagePrivacyNote": "Alleen geregistreerde aanvragen, tokens en geschatte AI-kosten; geen gespreksinhoud. Niet aan een gebruiker gekoppelde kosten staan alleen in het platformoverzicht.",
+    "usageFeatureLabels": {"finn_chat": "FINN-gesprekken", "trade_review": "Trade-reflectie", "reports": "Rapporten", "translation": "Vertalingen", "strategy_setup": "Strategie en setup", "admin_tools": "Adminhulpmiddelen", "other": "Overig"},
+    "usageSourceLabels": {"live_user": "Live gebruiker", "background_job": "Achtergrondtaken", "qa_user": "QA", "staging_user": "Staging", "admin_tool": "Admingereedschap", "other": "Overig"}
   },
   "adminAiPage": {
     "loadErrorTitle": "AI-gegevens niet beschikbaar",

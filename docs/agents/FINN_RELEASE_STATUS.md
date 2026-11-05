@@ -4,6 +4,26 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Admin: AI-verbruik per gebruiker zonder gespreksinhoud (5 november 2026)
+
+Phase: `LOCAL_VALIDATION`. Kandidaat: `codex/admin-usage`. Dit is een
+vervolg op de adminprivacywijziging. De gebruikerslijst toont al kosten voor
+vandaag en deze maand; een nieuw admin-only detailoverzicht toont nu per
+gebruiker geregistreerde aanvragen, input- en outputtokens en geschatte
+AI-kosten voor de huidige kalendermaand, uitgesplitst naar toegestane
+functie- en broncategorieën. De databasequery leest uitsluitend aggregaten
+uit `ai_usage_logs`; zij leest geen FINN-gesprekken of prompttekst. De
+eigenaargebonden FINN-gespreksgeschiedenis blijft ongewijzigd. Niet aan een
+gebruiker gekoppelde platformkosten vallen buiten dit individuele overzicht.
+
+Gemeten lokaal: gerichte privacytests `6 passed`; volledige backend-suite
+`4264 passed, 4 skipped`; web typecheck, i18n-lint, i18n-tests (37),
+commandtests (34) en productiebuild geslaagd. PR-CI, main-CI, Auto Deploy,
+publieke SHA-verificatie en onafhankelijke ingelogde QA staan bij deze status
+nog open. FINN-actiecontracten,
+workeruitvoering en providerselectie zijn niet gewijzigd; de worker-actiematrix
+en echte providerproeven zijn voor deze adminaggregatie niet van toepassing.
+
 ## Admin: privacy van FINN-telemetrie en systeemlogs (5 november 2026)
 
 Phase: `DEPLOYED_AWAITING_QA`. Kandidaat: `codex/admin-privacy`,

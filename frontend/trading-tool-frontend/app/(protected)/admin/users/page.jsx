@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "@/app/providers/I18nProvider";
-import { fetchAdminUsers, updateAdminUser } from "@/lib/api/admin";
+import { fetchAdminUsers, fetchAdminUserUsage, updateAdminUser } from "@/lib/api/admin";
 import { formatCurrency as formatIntlCurrency, formatDate } from "@/lib/i18n";
 import { 
   Users, 
@@ -44,7 +44,12 @@ export default function AdminUsersDashboard() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filterPlan, setFilterPlan] = useState("all");
   const [editingUser, setEditingUser] = useState(null);
+  const [usageUser, setUsageUser] = useState(null);
+  const [usageDetail, setUsageDetail] = useState(null);
+  const [usageLoading, setUsageLoading] = useState(false);
+  const [usageError, setUsageError] = useState(false);
   const requestIdRef = useRef(0);
+  const usageRequestIdRef = useRef(0);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -90,6 +95,27 @@ export default function AdminUsersDashboard() {
     } catch (err) {
       alert(copy.updateError);
     }
+  };
+
+  const openUsage = async (user) => {
+    const requestId = ++usageRequestIdRef.current;
+    setUsageUser(user);
+    setUsageDetail(null);
+    setUsageError(false);
+    setUsageLoading(true);
+    try {
+      const detail = await fetchAdminUserUsage(user.id);
+      if (usageRequestIdRef.current === requestId) setUsageDetail(detail);
+    } catch {
+      if (usageRequestIdRef.current === requestId) setUsageError(true);
+    } finally {
+      if (usageRequestIdRef.current === requestId) setUsageLoading(false);
+    }
+  };
+
+  const closeUsage = () => {
+    usageRequestIdRef.current += 1;
+    setUsageUser(null);
   };
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -244,6 +270,13 @@ export default function AdminUsersDashboard() {
                    </div>
                 </td>
                 <td className="px-8 py-6 text-right">
+                   <button
+                    type="button"
+                    onClick={() => void openUsage(user)}
+                    className="mr-2 rounded-xl border border-blue-100 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50"
+                   >
+                     {copy.usageDetails}
+                   </button>
                    <button 
                     onClick={() => setEditingUser(user)}
                     className="p-2.5 hover:bg-slate-100 rounded-xl transition-all text-slate-400 hover:text-slate-900 active:scale-90 border border-transparent hover:border-slate-200"
@@ -272,6 +305,48 @@ export default function AdminUsersDashboard() {
             <button type="button" disabled={page === 0} onClick={() => setPage((value) => value - 1)} className="rounded-xl border border-slate-200 px-4 py-2 disabled:opacity-40">{copy.pagination?.previous || "Previous"}</button>
             <span>{page + 1} / {totalPages}</span>
             <button type="button" disabled={page + 1 >= totalPages} onClick={() => setPage((value) => value + 1)} className="rounded-xl border border-slate-200 px-4 py-2 disabled:opacity-40">{copy.pagination?.next || "Next"}</button>
+          </div>
+        </div>
+      )}
+
+      {usageUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" role="dialog" aria-modal="true" aria-label={copy.usageTitle}>
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-black text-slate-900">{copy.usageTitle}</h2>
+                <p className="text-sm text-slate-500">{usageUser.email} · {copy.usagePeriod}</p>
+              </div>
+              <button type="button" onClick={closeUsage} aria-label={copy.close} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><XCircle size={20} /></button>
+            </div>
+            {usageLoading && <p className="text-sm text-slate-500">{copy.usageLoading}</p>}
+            {usageError && <p role="alert" className="text-sm text-rose-700">{copy.usageError}</p>}
+            {usageDetail && (
+              <>
+                <div className="mb-6 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-4 text-sm md:grid-cols-3">
+                  <p><span className="block text-slate-500">{copy.costMtd}</span><strong>{formatCurrency(usageDetail.cost_month_eur, locale)}</strong></p>
+                  <p><span className="block text-slate-500">{copy.today}</span><strong>{formatCurrency(usageDetail.cost_today_eur, locale)}</strong></p>
+                  <p><span className="block text-slate-500">{copy.usageRequests}</span><strong>{usageDetail.requests_month}</strong></p>
+                  <p><span className="block text-slate-500">{copy.usageRequestsToday}</span><strong>{usageDetail.requests_today}</strong></p>
+                  <p><span className="block text-slate-500">{copy.inputTokens}</span><strong>{usageDetail.input_tokens_month.toLocaleString(locale)}</strong></p>
+                  <p><span className="block text-slate-500">{copy.outputTokens}</span><strong>{usageDetail.output_tokens_month.toLocaleString(locale)}</strong></p>
+                </div>
+                {[[copy.usageByFeature, usageDetail.by_feature, copy.usageFeatureLabels], [copy.usageBySource, usageDetail.by_source, copy.usageSourceLabels]].map(([title, rows, labels]) => (
+                  <section key={title} className="mb-6">
+                    <h3 className="mb-2 font-bold text-slate-900">{title}</h3>
+                    {rows.length === 0 ? <p className="text-sm text-slate-500">{copy.noUsage}</p> : (
+                      <div className="overflow-x-auto rounded-xl border border-slate-100">
+                        <table className="w-full text-left text-sm">
+                          <thead className="bg-slate-50 text-slate-500"><tr><th className="p-3">{copy.usageCategory}</th><th className="p-3">{copy.usageRequests}</th><th className="p-3">{copy.inputTokens}</th><th className="p-3">{copy.outputTokens}</th><th className="p-3">{copy.costMtd}</th></tr></thead>
+                          <tbody>{rows.map((row) => <tr key={row.category} className="border-t border-slate-100"><td className="p-3">{labels[row.category] || labels.other}</td><td className="p-3">{row.requests}</td><td className="p-3">{row.input_tokens.toLocaleString(locale)}</td><td className="p-3">{row.output_tokens.toLocaleString(locale)}</td><td className="p-3">{formatCurrency(row.cost_eur, locale)}</td></tr>)}</tbody>
+                        </table>
+                      </div>
+                    )}
+                  </section>
+                ))}
+                <p className="text-xs text-slate-500">{copy.usagePrivacyNote}</p>
+              </>
+            )}
           </div>
         </div>
       )}

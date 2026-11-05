@@ -4875,7 +4875,22 @@
     "plan": "Plan",
     "access": "Zugriff",
     "toggleAccess": "Konto aktivieren oder deaktivieren",
-    "close": "Schließen"
+    "close": "Schließen",
+    "usageDetails": "Verbrauch",
+    "usageTitle": "KI-Verbrauch pro Nutzer",
+    "usagePeriod": "Dieser Kalendermonat",
+    "usageLoading": "Verbrauch wird geladen...",
+    "usageError": "Verbrauch konnte nicht geladen werden.",
+    "usageRequests": "Anfragen diesen Monat",
+    "usageRequestsToday": "Anfragen heute",
+    "inputTokens": "Eingabetokens",
+    "outputTokens": "Ausgabetokens",
+    "usageByFeature": "Nach Funktion",
+    "usageBySource": "Nach Quelle",
+    "usageCategory": "Kategorie",
+    "usagePrivacyNote": "Nur erfasste Anfragen, Tokens und geschätzte KI-Kosten; keine Gesprächsinhalte. Kosten ohne Nutzerzuordnung erscheinen nur in der Plattformübersicht.",
+    "usageFeatureLabels": {"finn_chat": "FINN-Gespräche", "trade_review": "Trade-Reviews", "reports": "Berichte", "translation": "Übersetzungen", "strategy_setup": "Strategie und Setup", "admin_tools": "Adminwerkzeuge", "other": "Sonstiges"},
+    "usageSourceLabels": {"live_user": "Live-Nutzer", "background_job": "Hintergrundaufgaben", "qa_user": "QA", "staging_user": "Staging", "admin_tool": "Adminwerkzeug", "other": "Sonstiges"}
   },
   "adminAiPage": {
     "loadErrorTitle": "KI-Daten nicht verfügbar",

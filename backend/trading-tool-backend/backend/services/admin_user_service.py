@@ -10,6 +10,72 @@ class AdminUserService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    async def get_user_usage(self, user_id: int) -> Optional[Dict[str, Any]]:
+        """Aggregate a user's current-month AI usage without reading conversation content."""
+        exists = (await self.db.execute(
+            text("SELECT id FROM users WHERE id = :user_id"), {"user_id": user_id}
+        )).scalar()
+        if exists is None:
+            return None
+
+        rows = (await self.db.execute(text("""
+            SELECT
+                CASE
+                    WHEN purpose IN ('finn_trade_review', 'finn_trade_review_question') THEN 'trade_review'
+                    WHEN purpose LIKE '%report%' THEN 'reports'
+                    WHEN purpose LIKE 'locale_%' THEN 'translation'
+                    WHEN purpose LIKE '%strategy%' OR purpose LIKE '%setup%' THEN 'strategy_setup'
+                    WHEN purpose LIKE 'finn_%' OR purpose LIKE 'chat_%' OR purpose LIKE 'assistant_%' THEN 'finn_chat'
+                    WHEN purpose LIKE 'admin_%' THEN 'admin_tools'
+                    ELSE 'other'
+                END AS feature,
+                CASE
+                    WHEN request_source IN ('live_user', 'background_job', 'qa_user', 'staging_user', 'admin_tool')
+                    THEN request_source ELSE 'other'
+                END AS source,
+                timestamp >= current_date AS today,
+                COUNT(*)::int AS requests,
+                COALESCE(SUM(prompt_tokens), 0)::bigint AS input_tokens,
+                COALESCE(SUM(completion_tokens), 0)::bigint AS output_tokens,
+                COALESCE(SUM(cost), 0) AS cost_eur
+            FROM ai_usage_logs
+            WHERE user_id = :user_id
+              AND timestamp >= date_trunc('month', current_date)
+              AND timestamp < current_date + interval '1 day'
+            GROUP BY 1, 2, 3
+        """), {"user_id": user_id})).mappings().all()
+
+        def add_bucket(target: Dict[str, Dict[str, Any]], category: str, row: Any) -> None:
+            bucket = target.setdefault(category, {
+                "category": category, "requests": 0, "input_tokens": 0,
+                "output_tokens": 0, "cost_eur": 0.0,
+            })
+            bucket["requests"] += int(row["requests"] or 0)
+            bucket["input_tokens"] += int(row["input_tokens"] or 0)
+            bucket["output_tokens"] += int(row["output_tokens"] or 0)
+            bucket["cost_eur"] += float(row["cost_eur"] or 0)
+
+        by_feature: Dict[str, Dict[str, Any]] = {}
+        by_source: Dict[str, Dict[str, Any]] = {}
+        total = {"requests_month": 0, "requests_today": 0,
+                 "input_tokens_month": 0, "output_tokens_month": 0,
+                 "cost_month_eur": 0.0, "cost_today_eur": 0.0}
+        for row in rows:
+            add_bucket(by_feature, row["feature"], row)
+            add_bucket(by_source, row["source"], row)
+            total["requests_month"] += int(row["requests"] or 0)
+            total["input_tokens_month"] += int(row["input_tokens"] or 0)
+            total["output_tokens_month"] += int(row["output_tokens"] or 0)
+            total["cost_month_eur"] += float(row["cost_eur"] or 0)
+            if row["today"]:
+                total["requests_today"] += int(row["requests"] or 0)
+                total["cost_today_eur"] += float(row["cost_eur"] or 0)
+        return {
+            "user_id": user_id, **total,
+            "by_feature": sorted(by_feature.values(), key=lambda item: item["cost_eur"], reverse=True),
+            "by_source": sorted(by_source.values(), key=lambda item: item["cost_eur"], reverse=True),
+        }
+
     async def get_users_page(
         self,
         *,
