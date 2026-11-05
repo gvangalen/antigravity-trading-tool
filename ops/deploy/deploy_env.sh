@@ -381,6 +381,7 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
   run_migration backend/scripts/migrations/2026_05_24_runtime_ddl_to_migrations.py
   run_migration backend/scripts/migrations/2026_05_26_auth_refresh_sessions.py
   run_migration backend/scripts/migrations/2026_06_10_finn_product_events.py
+  run_migration backend/scripts/migrations/2026_06_10_ai_usage_observability.py
   run_migration backend/scripts/migrations/2026_06_24_mobile_push_tokens.py
   run_migration backend/scripts/migrations/2026_06_28_auth_password_reset_tokens.py
   run_migration backend/scripts/migrations/2026_07_20_finn_response_trace_index.py
