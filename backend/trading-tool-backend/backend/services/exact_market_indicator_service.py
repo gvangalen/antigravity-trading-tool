@@ -22,11 +22,13 @@ class ExactMarketIndicatorService:
         self.session = session
 
     async def _configured_owners(self, market: TradingMarket, owner_ids: set[int] | None = None) -> dict[int, dict[str, set[str]]]:
-        # Only owners of a plan for this exact pair are refreshed. Their base
-        # asset indicator choices carry over; pair-specific choices override
-        # the same name without borrowing another pair's measurements.
+        # A watched pair needs its own readings even before the owner creates a
+        # plan or pair-specific indicator configuration. Base indicator choices
+        # carry over unless this pair has been isolated.
         owners_result = await self.session.execute(text("""
-            SELECT DISTINCT user_id FROM setups WHERE market_id = :market_id
+            SELECT user_id FROM setups WHERE market_id = :market_id
+            UNION
+            SELECT user_id FROM watchlists WHERE market_id = :market_id
         """), {"market_id": market.id})
         owner_ids = set(owner_ids or ()) | {int(row[0]) for row in owners_result.fetchall()}
         configured_result = await self.session.execute(select(UserIndicatorConfig.user_id).where(

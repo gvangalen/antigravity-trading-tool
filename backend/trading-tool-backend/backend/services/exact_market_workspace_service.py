@@ -120,6 +120,8 @@ class ExactMarketWorkspaceService:
         for row in watchlist.get("rows", []):
             if str(row.get("symbol") or "").upper() != symbol:
                 continue
+            if row.get("market_id") is not None and int(row["market_id"]) != int(market.id):
+                continue
             row.update({
                 "market_id": int(market.id),
                 "tradingview_symbol": market.tradingview_symbol,

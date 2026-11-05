@@ -82,7 +82,7 @@ function mergeQuoteBackfill(workspace, quoteMap, assetSymbol) {
   let changed = false;
   const nextWorkspace = { ...workspace };
   const activeQuote = quoteMap.get(assetSymbol);
-  if (activeQuote && (!nextWorkspace.quote || nextWorkspace.quote.price === null || nextWorkspace.quote.price === undefined)) {
+  if (!nextWorkspace.market_id && activeQuote && (!nextWorkspace.quote || nextWorkspace.quote.price === null || nextWorkspace.quote.price === undefined)) {
     nextWorkspace.quote = {
       ...(nextWorkspace.quote || {}),
       ...activeQuote,
@@ -93,6 +93,7 @@ function mergeQuoteBackfill(workspace, quoteMap, assetSymbol) {
   if (Array.isArray(nextWorkspace?.watchlist?.rows)) {
     const nextRows = nextWorkspace.watchlist.rows.map((row) => {
       const rowSymbol = String(row?.symbol || "").toUpperCase();
+      if (row?.market_id || row?.quote_currency) return row;
       const backfilledQuote = quoteMap.get(rowSymbol);
       if (!backfilledQuote || (row?.price !== null && row?.price !== undefined)) {
         return row;

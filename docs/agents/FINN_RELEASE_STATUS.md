@@ -4,9 +4,36 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Handelspaargebonden watchlist en Score 2.0 (5 november 2026)
+
+Phase: `LOCAL_VALIDATION`. Kandidaat: `codex/pair-watchlist-scores`,
+[PR #845](https://github.com/gvangalen/antigravity-trading-tool/pull/845).
+De watchlist bewaart BTC/EUR en BTC/USDT afzonderlijk, zonder brede
+paarwissel boven de lijst. Toevoegen, selecteren en verwijderen gebruiken de
+exacte marktidentiteit. De indicatorverversing verwerkt ook geconfigureerde
+paren afzonderlijk; scores van het ene paar vervangen die van het andere niet.
+De mobiele watchlist gebruikt hetzelfde paarcontract.
+
+Gemeten lokaal op productcommit `c3f6d0e1b7fefc8d3d760744e7d88dbfa01341e2`:
+volledige backend-suite `4267 passed, 4 skipped`; web typecheck, i18n-lint,
+i18n-tests, commandtests en productiebuild geslaagd; mobiele typecheck en
+lint geslaagd met bestaande waarschuwingen. Een volledig gemigreerde lokale
+PostgreSQL/Redis-runtime draaide de worker-actiematrix `16/16` groen.
+De echte Luna/Responses-proeven slaagden voor development `20/20` en
+regressie `109/109`; beide hadden operation accuracy `1.0`.
+Alle vijf controles van [PR-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42120273440)
+slaagden. Er is voor deze kandidaat nog geen deployment of onafhankelijke
+ingelogde QA gemeten. De uiteindelijke commit na deze statuswijziging krijgt
+opnieuw PR- en main-CI-controle vóór live-acceptatie.
+
+De vorige admin-usage-kandidaat blijft inhoudelijk zonder onafhankelijk
+live-QA-verdict. Zijn acceptatie is uitgesteld terwijl deze door de gebruiker
+geprioriteerde pair-reparatie de enige actieve releasekandidaat is; dit is
+geen `ACCEPTED`-oordeel over de adminwijziging.
+
 ## Admin: AI-verbruik per gebruiker zonder gespreksinhoud (5 november 2026)
 
-Phase: `DEPLOYED_AWAITING_QA`. Kandidaat: `codex/admin-usage`,
+Phase: `DEPLOYED_QA_DEFERRED`. Kandidaat: `codex/admin-usage`,
 [PR #843](https://github.com/gvangalen/antigravity-trading-tool/pull/843). Dit is een
 vervolg op de adminprivacywijziging. De gebruikerslijst toont al kosten voor
 vandaag en deze maand; een nieuw admin-only detailoverzicht toont nu per
@@ -35,7 +62,7 @@ geaccepteerd.
 
 ## Admin: privacy van FINN-telemetrie en systeemlogs (5 november 2026)
 
-Phase: `DEPLOYED_AWAITING_QA`. Kandidaat: `codex/admin-privacy`,
+Phase: `DEPLOYED_QA_DEFERRED`. Kandidaat: `codex/admin-privacy`,
 [PR #841](https://github.com/gvangalen/antigravity-trading-tool/pull/841). Deze kandidaat
 volgt de eerdere Admin FINN 2.0-uitrol op; onafhankelijke ingelogde QA van de
 gecombineerde adminscope is nog niet uitgevoerd.

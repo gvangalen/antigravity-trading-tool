@@ -5,6 +5,23 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def queue_exact_market_refresh(market_id: int) -> bool:
+    """Fetch source candles and materialize scores for one verified pair."""
+    if type(market_id) is not int or market_id <= 0:
+        return False
+    try:
+        from backend.celery_task.celery_app import celery_app
+        celery_app.send_task(
+            "backend.celery_task.market_task.sync_exact_market_snapshots",
+            kwargs={"market_id": market_id},
+        )
+        return True
+    except Exception:
+        logger.warning("Exact market refresh will wait for the periodic sweep: market_id=%s",
+                       market_id, exc_info=True)
+        return False
+
+
 def queue_indicator_score_refresh(user_id: int, symbol: str,
                                   *, market_id: int | None = None) -> bool:
     """Refresh only the affected asset; the periodic sweep remains a fallback."""

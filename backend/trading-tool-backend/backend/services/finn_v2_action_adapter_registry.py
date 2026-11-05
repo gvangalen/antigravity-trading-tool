@@ -546,7 +546,7 @@ class FinnV2ActionAdapterRegistry:
                 """
                 INSERT INTO watchlists (user_id, symbol, created_at)
                 VALUES (CAST(:user_id AS INTEGER), CAST(:symbol AS VARCHAR), NOW())
-                ON CONFLICT (user_id, symbol) DO NOTHING
+                ON CONFLICT (user_id, symbol) WHERE market_id IS NULL DO NOTHING
                 """
             ),
             {
@@ -584,7 +584,7 @@ class FinnV2ActionAdapterRegistry:
         if not asset:
             raise ValueError("asset_required")
         await self.session.execute(
-            text("DELETE FROM watchlists WHERE user_id = :user_id AND symbol = :symbol"),
+            text("DELETE FROM watchlists WHERE user_id = :user_id AND symbol = :symbol AND market_id IS NULL"),
             {"user_id": user_id, "symbol": asset},
         )
         return {"ok": True, "asset": asset, "operation": "watchlist_remove"}

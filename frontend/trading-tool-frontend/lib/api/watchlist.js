@@ -12,6 +12,7 @@ export async function addToWatchlist(asset) {
         asset_class: asset?.assetClass || asset?.asset_class || null,
         display_name: asset?.displayName || asset?.display_name || null,
         tradingview_symbol: asset?.tradingviewSymbol || asset?.tradingview_symbol || null,
+        market_id: asset?.marketId || asset?.market_id || null,
       };
   return await fetchAuth("/api/watchlist", {
     method: "POST",
@@ -19,8 +20,9 @@ export async function addToWatchlist(asset) {
   });
 }
 
-export async function removeFromWatchlist(symbol) {
-  return await fetchAuth(`/api/watchlist/${symbol}`, {
+export async function removeFromWatchlist(symbol, marketId = null) {
+  const query = marketId == null ? "" : `?market_id=${encodeURIComponent(marketId)}`;
+  return await fetchAuth(`/api/watchlist/${encodeURIComponent(symbol)}${query}`, {
     method: "DELETE",
   });
 }

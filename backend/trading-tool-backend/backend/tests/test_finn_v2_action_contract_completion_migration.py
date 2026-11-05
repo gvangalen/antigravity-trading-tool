@@ -1,7 +1,5 @@
 from pathlib import Path
 
-from sqlalchemy import UniqueConstraint
-
 from backend.infrastructure.models import Watchlist
 
 
@@ -19,6 +17,8 @@ def test_action_contract_completion_migration_repairs_scope_values_and_watchlist
     assert "WHEN 'read_review_history' THEN 'review_history'" in source
     assert "'latest_report', 'review_history'" in source
     assert "DELETE FROM watchlists duplicate" in source
+    assert "column_name = 'market_id'" in source
+    assert source.index("column_name = 'market_id'") < source.index("DELETE FROM watchlists duplicate")
     assert "ADD CONSTRAINT ux_watchlists_user_symbol UNIQUE (user_id, symbol)" in source
     assert "DROP CONSTRAINT IF EXISTS ux_watchlists_user_symbol" in source
 
@@ -55,11 +55,9 @@ def test_legacy_scope_migration_accepts_canonical_values_from_a_previous_partial
         assert f"'{scope}'" in source
 
 
-def test_watchlist_model_declares_the_same_database_idempotency_constraint():
-    constraints = [constraint for constraint in Watchlist.__table__.constraints if isinstance(constraint, UniqueConstraint)]
-
-    assert any(
-        constraint.name == "ux_watchlists_user_symbol"
-        and tuple(column.name for column in constraint.columns) == ("user_id", "symbol")
-        for constraint in constraints
-    )
+def test_watchlist_model_declares_pair_and_legacy_uniqueness():
+    indexes = {index.name: index for index in Watchlist.__table__.indexes}
+    assert tuple(column.name for column in indexes['ux_watchlists_user_market'].columns) == ('user_id', 'market_id')
+    assert tuple(column.name for column in indexes['ux_watchlists_user_legacy_symbol'].columns) == ('user_id', 'symbol')
+    assert indexes['ux_watchlists_user_market'].unique
+    assert indexes['ux_watchlists_user_legacy_symbol'].unique

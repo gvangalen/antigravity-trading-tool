@@ -78,7 +78,8 @@ def test_selected_pair_watchlist_row_uses_the_workspace_quote_and_score(monkeypa
         "component_source_observed_at": {}, "as_of": observed,
     }))
     watchlist = {"rows": [
-        {"symbol": "ETH", "price": 2600, "quote_currency": "USDT", "score": 30},
+        {"symbol": "ETH", "market_id": 43, "price": 2300, "quote_currency": "EUR", "score": 20},
+        {"symbol": "ETH", "market_id": 44, "price": 2600, "quote_currency": "USDT", "score": 30},
         {"symbol": "BTC", "price": 81000, "quote_currency": "USDT", "score": 40},
     ]}
     workspace = SimpleNamespace(
@@ -98,8 +99,10 @@ def test_selected_pair_watchlist_row_uses_the_workspace_quote_and_score(monkeypa
     assert result["watchlist"]["rows"][0]["market_id"] == 43
     assert result["watchlist"]["rows"][0]["quote_currency"] == "EUR"
     assert result["watchlist"]["rows"][0]["tradingview_symbol"] == "BINANCE:ETHEUR"
-    assert result["watchlist"]["rows"][1]["price"] == 81000
+    assert result["watchlist"]["rows"][1]["price"] == 2600
     assert result["watchlist"]["rows"][1]["quote_currency"] == "USDT"
+    assert result["watchlist"]["rows"][1]["score"] == 30
+    assert result["watchlist"]["rows"][2]["price"] == 81000
 
 
 def test_non_daily_period_does_not_show_daily_combined_score(monkeypatch):

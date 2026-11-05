@@ -37,7 +37,7 @@ def test_watchlist_add_uses_database_unique_constraint_for_idempotency():
     assert len(session.calls) == 1
     sql, params = session.calls[0]
     assert "INSERT INTO watchlists" in sql
-    assert "ON CONFLICT (user_id, symbol) DO NOTHING" in sql
+    assert "ON CONFLICT (user_id, symbol) WHERE market_id IS NULL DO NOTHING" in sql
     assert "CAST(:user_id AS INTEGER)" in sql
     assert "CAST(:symbol AS VARCHAR)" in sql
     assert params == {

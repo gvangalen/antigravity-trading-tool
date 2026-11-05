@@ -97,7 +97,7 @@ def test_exact_market_refresh_uses_persisted_pair_identity(monkeypatch):
             return [row]
 
     class Session:
-        async def execute(self, _statement):
+        async def execute(self, _statement, _params=None):
             return Result()
 
         async def rollback(self):

@@ -146,7 +146,7 @@ async def _sync_configured_market_snapshots() -> dict:
         return result
 
 
-async def _sync_exact_market_snapshots() -> dict:
+async def _sync_exact_market_snapshots(market_id: int | None = None) -> dict:
     """Refresh verified spot pairs selected in Analyse or referenced by plans.
 
     The legacy symbol-wide job cannot supply a pair quote. Each provider read
@@ -167,18 +167,25 @@ async def _sync_exact_market_snapshots() -> dict:
                    tm.source_verified_at
             FROM trading_markets tm
             WHERE tm.is_active = TRUE
+              AND (:market_id IS NULL OR tm.id = :market_id)
+              AND (EXISTS (SELECT 1 FROM user_indicator_configs c WHERE c.market_id = tm.id)
+                   OR EXISTS (SELECT 1 FROM watchlists w WHERE w.market_id = tm.id)
+                   OR EXISTS (SELECT 1 FROM setups s WHERE s.market_id = tm.id))
             ORDER BY tm.id, tm.asset_symbol, tm.quote_currency, tm.venue,
                      tm.provider, tm.provider_symbol, tm.tradingview_symbol,
                      tm.source_verified_at
-        """))
+        """), {"market_id": market_id})
         markets = [TradingMarket(**row) for row in result.mappings().all()]
         if not markets:
             return {"scopes": [], "deferred_scope_count": 0}
-        window = _configured_scope_window(
-            [(market.id, market.asset_symbol, market.quote_currency) for market in markets],
-            window_index=int(time.time() // 300),
-        )
-        selected_ids = {scope[0] for scope in window}
+        if market_id is None:
+            window = _configured_scope_window(
+                [(market.id, market.asset_symbol, market.quote_currency) for market in markets],
+                window_index=int(time.time() // 300),
+            )
+            selected_ids = {scope[0] for scope in window}
+        else:
+            selected_ids = {market_id}
         await session.rollback()
         outcomes = []
         refreshed_macro = set()
@@ -187,8 +194,14 @@ async def _sync_exact_market_snapshots() -> dict:
                 continue
             try:
                 snapshot = await MarketDataIngestionService(session).ingest_exact_market_snapshot(market)
-                history = await IndicatorHistoryBootstrap(session).bootstrap_exact_market(
-                    market, required_days=220)
+                try:
+                    history = await IndicatorHistoryBootstrap(session).bootstrap_exact_market(
+                        market, required_days=220)
+                except Exception as history_exc:
+                    await session.rollback()
+                    logger.warning("Exact market history pending: market_id=%s code=%s",
+                                   market.id, type(history_exc).__name__)
+                    history = {"status": "source_unavailable", "observed_days": 0}
                 indicators = await ExactMarketIndicatorService(session).materialize(market)
                 score_outcomes = []
                 for user_id in indicators["owners"]:
@@ -230,8 +243,8 @@ async def _sync_exact_market_snapshots() -> dict:
 
 
 @shared_task(name="backend.celery_task.market_task.sync_exact_market_snapshots")
-def sync_exact_market_snapshots():
-    return run_celery_coroutine(_sync_exact_market_snapshots())
+def sync_exact_market_snapshots(market_id: int | None = None):
+    return run_celery_coroutine(_sync_exact_market_snapshots(market_id=market_id))
 
 # =====================================================
 # 🔁 Safe HTTP-get met retry

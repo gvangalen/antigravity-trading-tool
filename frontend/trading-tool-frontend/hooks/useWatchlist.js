@@ -29,6 +29,8 @@ function normalizeWatchlistItem(item) {
       asset_class: "crypto",
       logo_url: null,
       tradingview_symbol: null,
+      market_id: null,
+      quote_currency: null,
     };
   }
 
@@ -39,6 +41,8 @@ function normalizeWatchlistItem(item) {
     asset_class: item?.asset_class || item?.assetClass || "crypto",
     logo_url: item?.logo_url || item?.logoUrl || null,
     tradingview_symbol: item?.tradingview_symbol || item?.tradingviewSymbol || null,
+    market_id: item?.market_id || item?.marketId || null,
+    quote_currency: item?.quote_currency || item?.quoteCurrency || null,
   };
 }
 
@@ -107,17 +111,19 @@ export function useWatchlist(options = {}) {
       invalidateWatchlist();
     } catch (err) {
       console.error("❌ Watchlist add error:", err);
+      throw err;
     }
   }
 
-  async function remove(symbol) {
+  async function remove(symbol, marketId = null) {
     try {
-      await removeFromWatchlist(symbol);
+      await removeFromWatchlist(symbol, marketId);
       const data = await loadWatchlist(true);
       setCachedResourceData(WATCHLIST_CACHE_KEY, data || []);
       invalidateWatchlist();
     } catch (err) {
       console.error("❌ Watchlist remove error:", err);
+      throw err;
     }
   }
 
@@ -128,7 +134,7 @@ export function useWatchlist(options = {}) {
 
   return {
     watchlist,
-    symbols: (watchlist || []).map((item) => item.symbol).filter(Boolean),
+    symbols: Array.from(new Set((watchlist || []).map((item) => item.symbol).filter(Boolean))),
     loading,
     add,
     remove,
