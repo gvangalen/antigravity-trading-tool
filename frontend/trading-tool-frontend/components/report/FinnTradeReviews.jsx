@@ -92,6 +92,8 @@ function ExecutionTimeline({ fills, copy, locale }) {
   </div>;
 }
 
+const currentAnalysis = (value) => value?.format_version === 2 ? value : null;
+
 function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
   const [note, setNote] = useState(review.note || '');
   const [saving, setSaving] = useState(false);
@@ -106,8 +108,8 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
   const [imageUrl, setImageUrl] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
-  const [analysis, setAnalysis] = useState(review.analysis_json || null);
-  const [analysisStatus, setAnalysisStatus] = useState(review.analysis_status);
+  const [analysis, setAnalysis] = useState(currentAnalysis(review.analysis_json));
+  const [analysisStatus, setAnalysisStatus] = useState(review.analysis_status === 'ready' && !currentAnalysis(review.analysis_json) ? 'pending' : review.analysis_status);
   const [aiBusy, setAiBusy] = useState(false);
   const [aiError, setAiError] = useState('');
   const [messages, setMessages] = useState([]);
@@ -158,9 +160,21 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
   }, [review.id, chartState]);
 
   useEffect(() => {
-    setAnalysis(review.analysis_json || null);
-    setAnalysisStatus(review.analysis_status);
+    setAnalysis(currentAnalysis(review.analysis_json));
+    setAnalysisStatus(review.analysis_status === 'ready' && !currentAnalysis(review.analysis_json) ? 'pending' : review.analysis_status);
   }, [review.analysis_json, review.analysis_status]);
+
+  useEffect(() => {
+    if (review.analysis_status !== 'ready' || currentAnalysis(review.analysis_json)) return undefined;
+    let active = true;
+    analyzeFinnTradeReview(review.id).then((result) => {
+      if (!active) return;
+      setAnalysis(currentAnalysis(result.analysis));
+      setAnalysisStatus(result.status);
+      if (result.status === 'unavailable' || result.status === 'failed') setAiError(result.reason || copy.aiError);
+    }).catch(() => { if (active) setAiError(copy.aiError); });
+    return () => { active = false; };
+  }, [review.id]);
 
   useEffect(() => {
     setLessonText(review.lesson?.status === 'active' ? review.lesson.lesson_text : '');
@@ -178,8 +192,9 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
             setHasOlderMessages(rows.length === 100);
           }).catch(() => setAiError(copy.aiHistoryError));
         }
-        setAnalysis(fresh.analysis_json || null);
-        setAnalysisStatus(fresh.analysis_status);
+        const freshAnalysis = currentAnalysis(fresh.analysis_json);
+        setAnalysis(freshAnalysis);
+        setAnalysisStatus(fresh.analysis_status === 'ready' && !freshAnalysis ? 'pending' : fresh.analysis_status);
       }).catch(() => {});
     }, 15000);
     return () => window.clearInterval(timer);
@@ -310,8 +325,8 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
 
       <div className="mt-5 rounded-2xl bg-[#111f3c] p-5 text-white">
         <h4 className="flex items-center gap-2 text-lg font-black"><Brain size={19} /> {copy.aiTitle}</h4>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-blue-100">{analysis ? copy.aiReadyHint : analysisStatus === 'running' ? copy.aiRunning : copy.aiPending}</p>
-        {analysis ? <div className="mt-4 space-y-3 text-sm">{analysis.prior_lesson && <div className="rounded-xl border border-blue-300/30 bg-blue-300/10 p-3"><p className="text-xs font-bold uppercase tracking-wide text-blue-200">{copy.priorLessonLabel.replace('{id}', String(analysis.prior_lesson.review_id))}</p><p className="mt-1">{analysis.prior_lesson.lesson_text}</p><p className="mt-2 text-xs text-blue-200">{copy.priorLessonConfirmed.replace('{date}', formatDate(analysis.prior_lesson.confirmed_at, locale))}</p>{analysis.prior_lesson.comparison && <p className="mt-2 text-xs text-blue-100">{analysis.prior_lesson.comparison}</p>}</div>}<ul className="space-y-2">{analysis.observations?.map((item, index) => <li key={index} className="rounded-xl border border-white/20 p-3">{item.text}<details className="mt-2 text-xs text-blue-200"><summary className="cursor-pointer">{copy.aiEvidence}</summary><span className="mt-1 block">{item.evidence_ids?.join(', ')}</span></details></li>)}</ul><p>{analysis.question}</p>{analysis.uncertainty && <details className="text-xs text-blue-200"><summary className="cursor-pointer">{copy.aiUncertainty}</summary><p className="mt-2 leading-relaxed">{analysis.uncertainty}</p></details>}</div> : <p className="mt-4 text-sm text-blue-200">{copy.aiQueueHint}</p>}
+        {!analysis && <p className="mt-2 max-w-2xl text-sm leading-relaxed text-blue-100">{analysisStatus === 'running' ? copy.aiRunning : copy.aiPending}</p>}
+        {analysis ? <div className="mt-4 space-y-3 text-sm"><p className="text-base leading-relaxed">{analysis.summary}</p>{analysis.prior_lesson && <div className="rounded-xl border border-blue-300/30 bg-blue-300/10 p-3"><p className="text-xs font-bold uppercase tracking-wide text-blue-200">{copy.priorLessonLabel.replace('{id}', String(analysis.prior_lesson.review_id))}</p><p className="mt-1">{analysis.prior_lesson.lesson_text}</p><p className="mt-2 text-xs text-blue-200">{copy.priorLessonConfirmed.replace('{date}', formatDate(analysis.prior_lesson.confirmed_at, locale))}</p>{analysis.prior_lesson.comparison && <p className="mt-2 text-xs text-blue-100">{analysis.prior_lesson.comparison}</p>}</div>}<ul className="space-y-2">{analysis.observations?.map((item, index) => <li key={index} className="rounded-xl border border-white/20 p-3">{item.text}<details className="mt-2 text-xs text-blue-200"><summary className="cursor-pointer">{copy.aiEvidence}</summary><span className="mt-1 block">{item.evidence_ids?.join(', ')}</span></details></li>)}</ul><p>{analysis.question}</p>{analysis.uncertainty && <details className="text-xs text-blue-200"><summary className="cursor-pointer">{copy.aiUncertainty}</summary><p className="mt-2 leading-relaxed">{analysis.uncertainty}</p></details>}</div> : <p className="mt-4 text-sm text-blue-200">{copy.aiQueueHint}</p>}
         {!analysis && <button type="button" onClick={analyze} disabled={aiBusy || analysisStatus === 'running'} className="mt-4 rounded-xl bg-white px-4 py-2 text-xs font-bold text-blue-950 disabled:opacity-50">{aiBusy ? copy.loading : copy.aiRefresh}</button>}
         {aiError && <p role="alert" className="mt-2 text-xs text-rose-200">{aiError}</p>}
         <details className="mt-5 border-t border-white/20 pt-4"><summary className="cursor-pointer text-sm font-bold">{copy.aiDialogue}</summary><p className="mt-1 text-xs text-blue-200">{copy.aiDialogueHint}</p>{hasOlderMessages && <button type="button" onClick={loadOlderMessages} disabled={loadingOlderMessages} className="mt-3 rounded-lg border border-white/30 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50">{loadingOlderMessages ? copy.loading : copy.aiLoadOlder}</button>}<div className="mt-3 max-h-60 space-y-2 overflow-auto">{messages.map((message) => { let structured; try { structured = message.role === 'finn' ? JSON.parse(message.content) : null; } catch { structured = null; } return <div key={message.id} className="rounded-xl border border-white/20 p-3 text-sm"><div className="flex flex-wrap items-center gap-2"><strong>{message.role === 'finn' ? 'FINN' : copy.aiUserQuestion}:</strong>{message.is_current_evidence === false && <span className="rounded-full bg-amber-400/20 px-2 py-0.5 text-xs font-bold text-amber-100">{message.evidence_status === 'source_removed' ? copy.aiSourceRemoved : copy.aiOlderEvidence}</span>}</div>{structured ? <div className="mt-1 space-y-2"><span className="block">{structured.summary}</span>{structured.prior_lesson && <span className="block rounded-lg border border-blue-200/30 bg-blue-300/10 p-2"><strong>{copy.priorLessonLabel.replace('{id}', String(structured.prior_lesson.review_id))}</strong><span className="mt-1 block">{structured.prior_lesson.lesson_text}</span><small className="mt-1 block text-blue-200">{copy.priorLessonConfirmed.replace('{date}', formatDate(structured.prior_lesson.confirmed_at, locale))}</small>{structured.prior_lesson.comparison && <small className="mt-1 block text-blue-100">{structured.prior_lesson.comparison}</small>}</span>}{Array.isArray(structured.observations) && structured.observations.map((item, index) => <span key={index} className="block rounded-lg border border-white/15 p-2">{item.text}<details className="mt-2 text-xs text-blue-200"><summary className="cursor-pointer">{copy.aiEvidence}</summary><span className="mt-1 block">{item.evidence_ids?.join(', ')}</span></details></span>)}<span className="block text-blue-200">{copy.aiUncertainty}: {structured.uncertainty}</span>{structured.question && <span className="block">{structured.question}</span>}</div> : message.content}</div>; })}</div><div className="mt-3 flex gap-2"><input value={question} onChange={(event) => setQuestion(event.target.value)} maxLength={1000} placeholder={copy.aiQuestion} className="min-w-0 flex-1 rounded-xl border border-white/30 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-blue-200" /><button type="button" onClick={ask} disabled={aiBusy || !question.trim()} className="rounded-xl bg-blue-500 px-4 py-2 text-xs font-bold disabled:opacity-50">{copy.aiAsk}</button></div></details>

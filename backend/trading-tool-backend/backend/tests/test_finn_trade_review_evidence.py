@@ -57,8 +57,37 @@ def test_png_metadata_is_stripped_before_private_storage():
 def _analysis(text):
     return {"summary": text, "uncertainty": "Het plan ontbreekt.",
             "question": "Welke afweging maakte je bij de exit?",
+            "suggested_lesson": "Leg je afweging vooraf vast.",
             "observations": [{"text": "De exit is geregistreerd.",
                               "evidence_ids": ["fill:1"], "theme": "exit_process"}]}
+
+
+def test_trade_analysis_receives_bounded_owner_profile(monkeypatch):
+    from backend.services import finn_trade_analysis_service as module
+
+    class User:
+        ai_preferences = {
+            "trader_type": "swing_trader",
+            "risk_profile": "conservative",
+            "behavior_flags": ["fomo"],
+            "trader_context": "Ik wil mijn exits rustig evalueren.",
+        }
+
+    class Repository:
+        def __init__(self, session):
+            pass
+
+        async def get_by_id(self, user_id):
+            assert user_id == 7
+            return User()
+
+    monkeypatch.setattr(module, "UserRepository", Repository)
+    profile = asyncio.run(FinnTradeAnalysisService(object())._trader_profile_context(7))
+    assert profile["source"] == "owner_profile"
+    assert profile["preferences"]["trader_types"] == ["swing_trader"]
+    assert profile["preferences"]["risk_profiles"] == ["conservative"]
+    assert profile["preferences"]["behavior_flags"] == ["fomo"]
+    assert profile["personal_context_untrusted"] == "Ik wil mijn exits rustig evalueren."
 
 
 def test_ai_rejects_unbound_evidence_ids():
@@ -116,14 +145,14 @@ def test_provider_error_does_not_trigger_an_unbounded_repair_loop(monkeypatch):
     assert len(calls) == 1
 
 
-def test_question_accepts_grounded_theme_without_discarded_model_prose():
+def test_question_preserves_grounded_model_answer():
     context = {"origin": "bot_position", "environment": "paper", "entry_at": "2026-10-18T10:00:00Z",
                "exit_at": "2026-10-18T12:00:00Z", "entry_value_eur": "100.00",
                "exit_value_eur": "99.75", "pnl_eur_before_fees": "-0.25", "plan": None}
-    result = validate_analysis({"observations": [{"theme": "evidence_gap", "evidence_ids": ["fill:1"]}]},
+    result = validate_analysis(_analysis("De verkoop staat vast; je reden ontbreekt."),
                                {"fill:1"}, context, question_mode=True)
-    assert result["summary"]
-    assert "vóór kosten" not in str(result)
+    assert result["summary"] == "De verkoop staat vast; je reden ontbreekt."
+    assert result["analysis_source"] == "ai_generated"
 
 
 def test_question_still_rejects_unbound_evidence_without_model_prose():
@@ -157,7 +186,7 @@ def test_only_server_supplied_confirmed_lesson_can_be_rendered():
     result = validate_analysis(raw, {"fill:1"}, context)
     assert result["prior_lesson"]["lesson_text"] == "Mijn bevestigde les"
     assert result["prior_lesson"]["source"] == "user_confirmed_prior_reflection"
-    assert "Modeltekst" not in str(result)
+    assert result["summary"] == "Modeltekst is geen gebruikersles"
     raw["prior_lesson_review_id"] = 999
     assert "prior_lesson" not in validate_analysis(raw, {"fill:1"}, context)
 
@@ -262,150 +291,43 @@ def test_prior_lesson_change_invalidates_transitive_cached_analyses():
     asyncio.run(FinnTradeReviewService(Session())._invalidate_lesson_dependents(77, 1))
 
 
-@pytest.mark.parametrize("text", [
-    "Koop morgen BTC met maximale leverage.",
-    "Buy BTC now.",
-    "Kaufe morgen BTC.",
-    "Place an order today.",
-    "Gebruik maximale leverage.",
-    "Ik raad je aan op dit moment je positie sterk te vergroten.",
-    "Je kunt de volgende keer gerust je inzet verdubbelen.",
-    "Zet morgen twee keer zoveel kapitaal in.",
-])
-def test_ai_discards_forward_trade_directives_from_unused_model_prose(text):
-    result = validate_analysis(_analysis(text), {"fill:1"})
-    assert text not in str(result)
+def test_luna_writes_review_and_evidence_remains_bound():
+    raw = _analysis("De automatische exit beperkte het verlies; de reden voor de instap is onbekend.")
+    raw["observations"][0]["text"] = "De geregistreerde verkoop sloot de positie."
+    result = validate_analysis(raw, {"fill:1"})
+    assert result["format_version"] == 2
+    assert result["analysis_source"] == "ai_generated"
+    assert result["summary"] == raw["summary"]
+    assert result["observations"][0]["text"] == raw["observations"][0]["text"]
     assert result["observations"][0]["evidence_ids"] == ["fill:1"]
+    assert result["suggested_lesson"] == raw["suggested_lesson"]
 
 
-def test_closed_review_accepts_selection_only_and_rejects_fabricated_evidence():
-    selection = {"observations": [{"theme": "evidence_gap", "evidence_ids": ["fill:1"]}],
-                 "visual_signal": None, "prior_lesson_review_id": None}
-    result = validate_analysis(selection, {"fill:1"})
-    assert result["observations"][0]["theme"] == "evidence_gap"
-    selection["observations"][0]["evidence_ids"] = ["fill:999"]
-    with pytest.raises(ValueError, match="Ungrounded analysis observation"):
-        validate_analysis(selection, {"fill:1"})
-
-
-def test_ai_accepts_evidence_linked_retrospective_observation():
-    result = validate_analysis(_analysis("De trade is gesloten."), {"fill:1"})
-    assert "afgesloten trade" in result["summary"]
-    assert result["observations"][0]["evidence_ids"] == ["fill:1"]
-
-
-def test_exchange_review_uses_attested_closure_and_quote_specific_evidence():
-    now = datetime.now(timezone.utc)
-    review = {
-        "id": 9, "origin": "exchange_user_attested", "closure_basis": "user_confirmed",
-        "symbol": "BTC", "base_currency": "BTC", "execution_environment": "live",
-        "entry_at": now, "exit_at": now, "attested_at": now,
-        "entry_value_eur": None, "exit_value_eur": None, "pnl_eur_before_fees": None,
-        "pnl_status": "not_comparable", "cash_legs_by_currency": [
-            {"currency": "EUR", "buy_cost": "100", "sell_proceeds": "0"},
-            {"currency": "USDT", "buy_cost": "0", "sell_proceeds": "120"}],
-        "fills": [{"exchange_fill_id": 11, "side": "buy", "at": now.isoformat(),
-                   "qty": "1", "price_quote": "100", "cost_quote": "100",
-                   "quote_currency": "EUR", "fee_amount": "0", "fee_currency": "EUR"},
-                  {"exchange_fill_id": 12, "side": "sell", "at": now.isoformat(),
-                   "qty": "1", "price_quote": "120", "cost_quote": "120",
-                   "quote_currency": "USDT", "fee_amount": "0", "fee_currency": "USDT"}],
-        "plan_snapshot": None, "note": "", "candles_status": "unavailable",
-        "candles_reason": "mixed quote", "has_screenshot": False,
-    }
-    context, allowed = evidence_context(review)
-    assert allowed == {"exchange_fill:11", "exchange_fill:12", "closure:user-confirmed"}
-    assert context["pnl_eur_before_fees"] is None
-    assert context["cash_legs_by_currency"][1]["sell_proceeds"] == "120"
+def test_incomplete_model_prose_is_rejected():
     raw = _analysis("De trade is gesloten.")
+    del raw["question"]
+    with pytest.raises(ValueError, match="Invalid analysis question"):
+        validate_analysis(raw, {"fill:1"})
+
+
+def test_exchange_review_retains_user_attested_closure_boundary():
+    raw = _analysis("De uitvoering is geregistreerd; de volledige sluiting is door jou bevestigd.")
     raw["observations"][0]["evidence_ids"] = ["exchange_fill:12", "closure:user-confirmed"]
-    result = validate_analysis(raw, allowed, context, question_mode=True)
-    assert "Afsluiting bevestigd door gebruiker" in result["summary"]
-    assert "Afsluiting bevestigd door gebruiker" in result["uncertainty"]
-    assert "niet in Tradamind vastgelegd" in result["uncertainty"]
-    assert "Een oorspronkelijk plan ontbreekt" not in result["uncertainty"]
-    assert "€" not in result["summary"]
+    result = validate_analysis(raw, {"exchange_fill:12", "closure:user-confirmed"})
+    assert result["summary"] == raw["summary"]
+    assert result["observations"][0]["evidence_ids"] == ["exchange_fill:12", "closure:user-confirmed"]
 
 
-def test_large_exchange_review_has_bounded_ai_evidence_and_explicit_truncation():
-    now = datetime.now(timezone.utc)
-    review = {
-        "id": 10, "origin": "exchange_user_attested", "closure_basis": "user_confirmed",
-        "symbol": "BTC", "base_currency": "BTC", "execution_environment": "live",
-        "entry_at": now, "exit_at": now, "attested_at": now,
-        "entry_value_eur": None, "exit_value_eur": None, "pnl_eur_before_fees": None,
-        "pnl_status": "not_comparable", "cash_legs_by_currency": [],
-        "fills": [{"exchange_fill_id": index, "side": "buy" if index < 250 else "sell",
-                   "at": now.isoformat(), "qty": "0.01", "price_quote": "100",
-                   "cost_quote": "1", "quote_currency": "USDT", "fee_amount": "0",
-                   "fee_currency": "USDT"} for index in range(500)],
-        "plan_snapshot": None, "note": "", "candles_status": "unavailable",
-        "candles_reason": "external", "has_screenshot": False,
-    }
-    context, allowed = evidence_context(review)
-    assert context["fills_total"] == 500 and context["fills_sampled"] == 50
-    assert context["fills_truncated"] is True
-    assert len(allowed) == 51
-    assert "exchange_fill:249" not in allowed
-    raw = _analysis("Afgesloten.")
-    raw["observations"][0]["evidence_ids"] = ["exchange_fill:499"]
-    result = validate_analysis(raw, allowed, context)
-    assert "50 van 500" in result["uncertainty"]
-
-
-def test_screenshot_signal_is_rendered_as_bounded_visual_context():
+def test_screenshot_claim_must_cite_uploaded_screenshot():
     raw = _analysis("De trade is gesloten.")
-    raw["visual_signal"] = "risk_level_marked"
-    result = validate_analysis(raw, {"fill:1", "screenshot:user-upload"})
-    visual = result["observations"][-1]
-    assert visual["evidence_ids"] == ["screenshot:user-upload"]
-    assert "lijkt een risico- of stopniveau" in visual["text"]
-    assert "vervangt geen orderfeiten" in result["uncertainty"]
-    assert len(validate_analysis(raw, {"fill:1"})["observations"]) == 1
+    raw["observations"][0]["evidence_ids"] = ["screenshot:user-upload"]
+    with pytest.raises(ValueError, match="Ungrounded"):
+        validate_analysis(raw, {"fill:1"})
+    result = validate_analysis(raw, {"screenshot:user-upload"})
+    assert result["observations"][0]["text"] == raw["observations"][0]["text"]
 
 
-@pytest.mark.parametrize("signal", ["koop morgen BTC", ["upward_move"], None])
-def test_untrusted_visual_signal_cannot_become_visible_model_text(signal):
-    raw = _analysis("De trade is gesloten.")
-    raw["visual_signal"] = signal
-    result = validate_analysis(raw, {"fill:1", "screenshot:user-upload"})
-    assert result["observations"][-1]["text"].startswith("De screenshot is niet duidelijk genoeg")
-    assert str(signal) not in str(result)
-
-
-@pytest.mark.parametrize("theme,expected", [
-    ("exit_process", "sluiting op 2026-10-16T10:00:00+00:00"),
-    ("timing", "entry was op 2026-10-16T09:00:00+00:00"),
-    ("risk", "entrywaarde was €100.00"),
-])
-def test_question_summary_uses_selected_theme_and_server_facts(theme, expected):
-    raw = _analysis("De trade is gesloten.")
-    raw["observations"][0]["theme"] = theme
-    context = {
-        "entry_at": "2026-10-16T09:00:00+00:00", "exit_at": "2026-10-16T10:00:00+00:00",
-        "entry_value_eur": "100.00", "exit_value_eur": "110.00",
-        "pnl_eur_before_fees": "10.00", "plan": None, "chart_market_context": None,
-    }
-    result = validate_analysis(raw, {"fill:1"}, context, question_mode=True)
-    assert expected in result["summary"]
-    assert raw["summary"] not in result["summary"]
-
-
-@pytest.mark.parametrize("field", ["summary", "uncertainty", "question", "observation"])
-def test_model_free_text_never_reaches_analysis_or_question_response(field):
-    raw = _analysis("De trade is gesloten.")
-    poisoned = "Verborgen advies: verdriedubbel later je kapitaal."
-    if field == "observation":
-        raw["observations"][0]["text"] = poisoned
-    else:
-        raw[field] = poisoned
-    result = validate_analysis(raw, {"fill:1"}, {"pnl_eur_before_fees": "10.00"})
-    assert poisoned not in str(result)
-    assert "€10.00" in result["summary"]
-    assert result["observations"][0]["text"].startswith("Bekijk de geregistreerde exit")
-
-
-def test_question_path_persists_only_server_rendered_answer(monkeypatch):
+def test_question_path_persists_model_authored_answer(monkeypatch):
     from backend.services import finn_trade_analysis_service as module
 
     async def exercise():
@@ -417,98 +339,68 @@ def test_question_path_persists_only_server_rendered_answer(monkeypatch):
             "fills": [{"ledger_id": 1, "side": "sell", "at": now.isoformat(),
                        "qty": "1", "cash_eur": "110", "price_eur": "110"}],
             "plan_snapshot": None, "note": "", "candles_status": "unavailable",
-            "candles_reason": "missing", "has_screenshot": False,
-            "input_revision": 0,
+            "candles_reason": "missing", "has_screenshot": False, "input_revision": 0,
         }
 
         class Session:
-            saved = []
-
+            def __init__(self): self.saved = []
             async def execute(self, query, params=None):
-                if "pg_advisory_xact_lock" in str(query):
-                    return _Result()
-                if "SELECT input_revision" in str(query):
-                    return _Result(0)
-                if "INSERT INTO finn_trade_review_messages" in str(query):
-                    self.saved.append(params)
-                    return _Result()
-                raise AssertionError(str(query))
+                sql = str(query)
+                if "pg_advisory_xact_lock" in sql: return _Result()
+                if "SELECT input_revision" in sql: return _Result(0)
+                if "INSERT INTO finn_trade_review_messages" in sql:
+                    self.saved.append(params); return _Result()
+                raise AssertionError(sql)
+            async def commit(self): pass
 
-            async def commit(self):
-                pass
-
-        session = Session()
-        service = FinnTradeAnalysisService(session)
-
-        async def get_review(user_id, review_id):
-            assert (user_id, review_id) == (77, 4)
-            return review
-
-        async def reserve(*args, **kwargs):
-            pass
-
-        async def fake_ai(**kwargs):
-            raw = _analysis("De trade is gesloten.")
-            raw["observations"][0]["text"] = "Verborgen advies: verdriedubbel later je kapitaal."
-            return raw
-
-        service.reviews.get_review = get_review
-        service._reserve_user_ai_call = reserve
+        session = Session(); service = FinnTradeAnalysisService(session)
+        service.reviews.get_review = lambda *_: asyncio.sleep(0, result=review)
+        service._reserve_user_ai_call = lambda *_args, **_kw: asyncio.sleep(0)
         service._prior_confirmed_lessons = lambda *_: asyncio.sleep(0, result=[])
+        service._trader_profile_context = lambda *_: asyncio.sleep(0, result={"preferences": {"risk_profile": "conservative"}})
+        async def fake_ai(**kwargs):
+            assert "conservative" in kwargs["prompt"]
+            return _analysis("De exit sloot de positie; waarom koos je destijds voor de instap?")
         monkeypatch.setattr(module.openai_client, "ask_gpt_json_async", fake_ai)
         result = await service.ask(77, 4, "Wat gebeurde er bij de exit?")
-        assert "verdriedubbel" not in str(result)
-        assert "sluiting op" in result["summary"]
-        assert "verdriedubbel" not in session.saved[-1]["content"]
-        assert "Bekijk de geregistreerde exit" in session.saved[-1]["content"]
-
+        assert result["summary"].startswith("De exit sloot")
+        assert result["analysis_source"] == "ai_generated"
+        assert "De exit sloot" in session.saved[-1]["content"]
+        assert session.saved[-1]["model"] == "gpt-6-luna"
     asyncio.run(exercise())
 
 
-def test_review_question_uses_bounded_ledger_fallback_when_provider_fails(monkeypatch):
+def test_question_provider_failure_does_not_persist_fake_coach_analysis(monkeypatch):
     from backend.services import finn_trade_analysis_service as module
-
     async def exercise():
         now = datetime.now(timezone.utc)
-        review = {
-            "id": 4, "symbol": "BTC", "execution_environment": "paper",
-            "entry_at": now, "exit_at": now, "entry_value_eur": Decimal("100"),
-            "exit_value_eur": Decimal("99.75"), "pnl_eur_before_fees": Decimal("-0.25"),
-            "fills": [{"ledger_id": 1, "side": "sell", "at": now.isoformat(),
-                       "qty": "1", "cash_eur": "99.75", "price_eur": "100"}],
-            "plan_snapshot": None, "note": "", "candles_status": "unavailable",
-            "has_screenshot": False, "input_revision": 0,
-        }
-
+        review = {"id": 4, "symbol": "BTC", "execution_environment": "paper",
+                  "entry_at": now, "exit_at": now, "entry_value_eur": Decimal("100"),
+                  "exit_value_eur": Decimal("99.75"), "pnl_eur_before_fees": Decimal("-0.25"),
+                  "fills": [{"ledger_id": 1, "side": "sell", "at": now.isoformat(),
+                             "qty": "1", "cash_eur": "99.75", "price_eur": "100"}],
+                  "plan_snapshot": None, "note": "", "candles_status": "unavailable",
+                  "has_screenshot": False, "input_revision": 0}
         class Session:
-            saved = []
-
+            def __init__(self): self.saved = []
             async def execute(self, query, params=None):
                 sql = str(query)
-                if "SELECT input_revision" in sql:
-                    return _Result(0)
-                if "INSERT INTO finn_trade_review_messages" in sql:
-                    self.saved.append(params)
-                elif "pg_advisory_xact_lock" not in sql:
-                    raise AssertionError(sql)
+                if "SELECT input_revision" in sql: return _Result(0)
+                if "INSERT INTO finn_trade_review_messages" in sql: self.saved.append(params)
+                elif "pg_advisory_xact_lock" not in sql: raise AssertionError(sql)
                 return _Result()
-
-            async def commit(self):
-                pass
-
+            async def commit(self): pass
         service = FinnTradeAnalysisService(Session())
         service.reviews.get_review = lambda *_: asyncio.sleep(0, result=review)
-        service._reserve_user_ai_call = lambda *_: asyncio.sleep(0)
+        service._reserve_user_ai_call = lambda *_args, **_kw: asyncio.sleep(0)
         service._prior_confirmed_lessons = lambda *_: asyncio.sleep(0, result=[])
+        service._trader_profile_context = lambda *_: asyncio.sleep(0, result={})
         monkeypatch.setattr(module.openai_client, "ask_gpt_json_async",
                             lambda **_: asyncio.sleep(0, result={"error": "provider_unavailable"}))
-
-        result = await service.ask(77, 4, "Wat kan ik van deze gesloten Paper-trade leren?")
-        assert result["analysis_source"] == "factual_fallback"
-        assert result["observations"][0]["evidence_ids"] == ["fill:1"]
-        assert service.session.saved[-1]["model"] is None
-        assert "factual_fallback" in service.session.saved[-1]["content"]
-
+        with pytest.raises(HTTPException) as raised:
+            await service.ask(77, 4, "Wat kan ik van deze trade leren?")
+        assert raised.value.status_code == 503
+        assert service.session.saved == []
     asyncio.run(exercise())
 
 
@@ -610,6 +502,7 @@ def test_stale_analysis_is_not_returned_after_input_revision_change(monkeypatch)
 
         service.reviews.get_review = get_review
         service._prior_confirmed_lessons = lambda *_: asyncio.sleep(0, result=[])
+        service._trader_profile_context = lambda *_: asyncio.sleep(0, result={})
         monkeypatch.setattr(module.openai_client, "ask_gpt_json_async", fake_ai)
         result = await service.analyze(77, 4)
         assert result["status"] == "pending"
@@ -664,6 +557,7 @@ def test_question_does_not_persist_after_screenshot_revision_change(monkeypatch)
 
         service.reviews.get_review = get_review
         service._prior_confirmed_lessons = lambda *_: asyncio.sleep(0, result=[])
+        service._trader_profile_context = lambda *_: asyncio.sleep(0, result={})
         monkeypatch.setattr(module.openai_client, "ask_gpt_json_async", fake_ai)
         with pytest.raises(HTTPException) as raised:
             await service.ask(77, 4, "Wat gebeurde er bij de exit?")

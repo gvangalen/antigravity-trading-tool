@@ -221,5 +221,5 @@ def test_derivative_finn_context_has_native_units_and_no_fabricated_eur_result()
                {"text": "Uitvoering", "evidence_ids": ["derivative_exec:17:open"],
                 "theme": "exit_process"}]}
     validated = validate_analysis(raw, allowed, context)
-    assert "native PnL" in validated["uncertainty"]
+    assert validated["uncertainty"] == "Onzeker"
     assert "€" not in validated["summary"]

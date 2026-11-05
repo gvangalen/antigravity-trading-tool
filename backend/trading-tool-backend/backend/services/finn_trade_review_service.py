@@ -256,7 +256,7 @@ class FinnTradeReviewService:
                 # as a user-facing fee claim. Correct that presentation without
                 # rewriting immutable stored evidence or user-authored notes.
                 summary = analysis.get("summary")
-                if isinstance(summary, str):
+                if isinstance(summary, str) and analysis.get("format_version") != 2:
                     analysis = {**analysis, "summary": summary.replace(
                         "Het geregistreerde resultaat vóór kosten",
                         "Het geregistreerde Paper-resultaat op basis van virtuele kassastromen",

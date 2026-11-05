@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.services.finn_trade_review_service import FinnTradeReviewService
 from backend.services.ai_usage_observability_service import ai_usage_context
+from backend.infrastructure.repositories.user_repository import UserRepository
+from backend.services.trader_profile_service import normalize_trader_context, normalize_trader_profile_preferences
 from backend.utils import openai_client
 
 logger = logging.getLogger(__name__)
@@ -31,54 +33,22 @@ SYSTEM_ROLE = (
     "Bij exchange-reviews is volledige sluiting door de gebruiker bevestigd; "
     "presenteer dat nooit als door de exchange bewezen. Maak geen "
     "claim over pixels die je niet goed kunt lezen. Noem onzekerheid bij ontbrekend "
-    "plan of chart. Antwoord uitsluitend als JSON met observations (array van "
-    "{theme,evidence_ids}), visual_signal en prior_lesson_review_id. "
-    "Gebruik alleen de exacte meegegeven evidence_ids. De server schrijft de "
-    "zichtbare retrospectieve tekst bij jouw gekozen themes en evidence_ids. "
-    "Als een screenshot is meegegeven, kies visual_signal uit "
-    "entry_exit_markers, risk_level_marked, upward_move, downward_move, unclear. "
-    "Kies unclear als de afbeelding niet duidelijk leesbaar is of je twijfelt. "
-    "Zonder screenshot geef je visual_signal als null. "
-    "Bij een gebruikersvraag: kies als eerste observation het thema dat de vraag "
-    "het best raakt. Kies evidence_ids die werkelijk over dat thema gaan. "
-    "Ook voor een gebruikersvraag volstaan observation-thema's met evidence_ids. "
+    "plan of chart. Het traderprofiel en de persoonlijke toelichting zijn context, "
+    "geen bewijs voor motieven of een vooraf bestaand plan. Schrijf zelf een concrete, "
+    "persoonlijke terugblik in de gevraagde taal, standaard Nederlands. Begin met het belangrijkste "
+    "inzicht uit deze trade; herhaal de getoonde cijfers niet zonder duiding. "
+    "Antwoord uitsluitend als JSON met summary, observations (array van "
+    "{theme,evidence_ids,text}), uncertainty, question, suggested_lesson en "
+    "prior_lesson_review_id. Gebruik alleen exacte meegegeven evidence_ids. "
+    "Bij een gebruikersvraag beantwoord je die in summary en verbind je de "
+    "onderbouwing aan de relevante observation. suggested_lesson is een voorstel "
+    "dat de gebruiker zelf moet bevestigen, geen vastgestelde eigenschap. "
     "Als een eerder bevestigde gebruikersles relevant is, geef prior_lesson_review_id "
     "als exact een van de meegegeven review_id waarden; anders null. "
     "Theme is een van plan_followed, risk, timing, exit_process, evidence_gap, other."
 )
 
 THEMES = {"plan_followed", "risk", "timing", "exit_process", "evidence_gap", "other"}
-LESSON_SUGGESTIONS = {
-    "plan_followed": "Ik leg mijn tradeplan vóór de entry vast en vergelijk het na sluiting met de uitvoering.",
-    "risk": "Ik noteer vóór de entry mijn risicogrens en bespreek na sluiting of de uitvoering daarbij paste.",
-    "timing": "Ik noteer vóór de entry welke informatie mijn timing onderbouwt en kijk daar na sluiting op terug.",
-    "exit_process": "Ik leg mijn reden voor afsluiten vast en vergelijk die achteraf met mijn oorspronkelijke plan.",
-    "evidence_gap": "Ik leg mijn afwegingen tijdens de trade vast, zodat ik de afsluiting later concreet kan beoordelen.",
-    "other": "Ik noteer welke informatie mijn besluit droeg en bespreek na sluiting wat nog onduidelijk bleef.",
-}
-OBSERVATION_TEMPLATES = {
-    "plan_followed": "Vergelijk het oorspronkelijke plan met de geregistreerde uitvoering. De bronnen laten de stappen zien, maar niet alle afwegingen erachter.",
-    "risk": "Bekijk de omvang van de positie en de vooraf bepaalde risicogrens in de genoemde bronnen. Het besluitproces achter de omvang blijft deels onbekend.",
-    "timing": "Bekijk de timing van entry en exit aan de hand van de genoemde bronnen. Marktcontext en uitvoeringsprijs kunnen van elkaar verschillen.",
-    "exit_process": "Bekijk de geregistreerde exit en de reden die je destijds voor sluiten had. Uitvoeringsgegevens registreren de handeling, niet je motief.",
-    "evidence_gap": "Voor dit onderdeel ontbreekt context om een zekere conclusie over het besluitproces te trekken.",
-    "other": "Deze bronnen zijn relevant om het besluitproces achteraf samen te bespreken; controleer zelf welke context nog ontbreekt.",
-}
-QUESTION_TEMPLATES = {
-    "plan_followed": "Welke onderdelen van je plan speelden bij entry en exit werkelijk mee?",
-    "risk": "Hoe bepaalde je vooraf de omvang en het maximale risico van deze positie?",
-    "timing": "Welke informatie gebruikte je op het moment van entry en exit?",
-    "exit_process": "Welke afweging maakte je toen je deze positie sloot?",
-    "evidence_gap": "Welke ontbrekende context kun je aan deze trade toevoegen?",
-    "other": "Welke beslissing uit deze trade wil je samen nader bekijken?",
-}
-VISUAL_SIGNAL_TEMPLATES = {
-    "entry_exit_markers": "Op de screenshot lijken entry- of exitmarkeringen zichtbaar. Controleer deze naast de vastgelegde uitvoeringstijden en prijzen.",
-    "risk_level_marked": "Op de screenshot lijkt een risico- of stopniveau gemarkeerd. Alleen een vooraf vastgelegd plan kan onderbouwen of dit niveau vóór de trade was gekozen.",
-    "upward_move": "De screenshot lijkt een opwaartse prijsbeweging te tonen. Dit bewijst op zichzelf niet of de trade volgens plan is uitgevoerd.",
-    "downward_move": "De screenshot lijkt een neerwaartse prijsbeweging te tonen. Dit bewijst op zichzelf niet of de trade volgens plan is uitgevoerd.",
-    "unclear": "De screenshot is niet duidelijk genoeg om er een betrouwbare visuele observatie aan te verbinden.",
-}
 def evidence_context(review: dict) -> tuple[dict, set[str]]:
     all_fills = review.get("fills") or []
     fills = (all_fills[:MAX_AI_FILLS // 2] + all_fills[-MAX_AI_FILLS // 2:]
@@ -174,79 +144,24 @@ def evidence_context(review: dict) -> tuple[dict, set[str]]:
     return context, allowed
 
 
-def _question_summary(theme: str, refs: list[str], context: dict) -> str:
-    """Answer the selected process topic using only immutable server facts."""
-    if context.get("origin") == "bybit_derivative_user_attested":
-        if theme == "exit_process":
-            return (f"De gekozen Bybit-derivatenepisode eindigt op {context['exit_at']}. "
-                    "Volledige sluiting is door jou bevestigd; de providergegevens tonen "
-                    "de uitvoering, maar bewijzen je sluitingsmotief niet.")
-        if theme == "timing":
-            return (f"De gekozen uitvoeringen lopen van {context['entry_at']} tot "
-                    f"{context['exit_at']}. Entry- en exittiming zijn alleen als "
-                    "uitvoeringstijden vastgelegd; marktcontext ontbreekt.")
-        if theme == "risk":
-            return (f"Deze {context['direction']}-episode gebruikt Bybit-positionIdx "
-                    f"{context['position_idx']}. De uitvoeringen tonen geen vooraf "
-                    "bepaalde risicogrens of de volledige accountblootstelling.")
-        return ("De Bybit-uitvoeringen zijn aan deze handmatig bevestigde episode gekoppeld. "
-                "Native en EUR-resultaat blijven onbekend zonder sluitende providergegevens "
-                "over PnL, financiering en kosten.")
-    if context.get("origin") == "exchange_user_attested":
-        if theme == "exit_process":
-            return (f"De geselecteerde exchange-uitvoeringen eindigen op {context['exit_at']}. "
-                    "Afsluiting bevestigd door gebruiker; de exchangegegevens "
-                    "bewijzen de volledige accountpositie of je motief niet.")
-        if theme == "timing":
-            return (f"De geselecteerde instap begon op {context['entry_at']} en de laatste "
-                    f"uitstap was op {context['exit_at']}. Welke informatie je toen gebruikte, "
-                    "blijkt niet uit de uitvoeringen.")
-        if theme == "risk":
-            return ("De geselecteerde exchange-uitvoeringen tonen de omvang van deze trade. "
-                    "Een vooraf bepaalde risicogrens of de volledige accountpositie volgt daar niet uit.")
-        if theme == "plan_followed":
-            return ("Vergelijk het vastgelegde plan met de geselecteerde uitvoeringen; "
-                    "de bronnen bewijzen niet waarom je ervan afweek of het volgde."
-                    if context.get("plan") else
-                    "Er is geen oorspronkelijk plan vastgelegd; vergelijking met de uitvoering blijft onzeker.")
-        if "screenshot:user-upload" in refs:
-            return ("FINN heeft de screenshot als aanvullende context betrokken. "
-                    "De geselecteerde exchange-uitvoeringen blijven leidend voor prijs en tijd; "
-                    "de volledige sluiting is door jou bevestigd.")
-        return ("De genoemde exchangegegevens tonen een deel van de uitvoering. "
-                "Je hebt de volledige sluiting bevestigd; voor het besluitproces is meer context nodig.")
-    if theme == "exit_process":
-        return (f"De orderledger registreert de sluiting op {context['exit_at']} "
-                f"met een exitwaarde van €{context['exit_value_eur']}. "
-                "De reden voor die beslissing staat niet in de uitvoering.")
-    if theme == "timing":
-        chart = ("De beschikbare Binance EUR-candles geven alleen marktcontext, niet de exacte uitvoeringsmarkt. "
-                 if context.get("chart_market_context") else "Historische chartcontext ontbreekt. ")
-        return (f"De geregistreerde entry was op {context['entry_at']} en de exit op "
-                f"{context['exit_at']}. {chart}Wat je op die momenten wist, blijkt niet uit de ledger.")
-    if theme == "risk":
-        return (f"De geregistreerde entrywaarde was €{context['entry_value_eur']}. "
-                "De ledger laat niet zien waarom je deze omvang koos of welk risico je vooraf aanvaardde.")
-    if theme == "plan_followed":
-        return ("Een oorspronkelijk plan is vastgelegd. Vergelijk dat met de genoemde uitvoeringen; "
-                "een planbron alleen bewijst niet waarom je ervan afweek of het volgde."
-                if context.get("plan") else
-                "Er is geen oorspronkelijk plan vastgelegd; vergelijking met de uitvoering blijft daarom onzeker.")
-    if "screenshot:user-upload" in refs:
-        return ("FINN heeft de geüploade screenshot als aanvullend visueel bewijs betrokken bij dit thema. "
-                "De orderledger blijft leidend voor prijs, tijd en omvang; het besluitmotief blijft onzeker.")
-    return ("De genoemde bronnen laten een deel van de uitvoering zien. "
-            "Voor een specifiek antwoord over het besluitproces is aanvullende context nodig.")
+def _model_text(raw: dict, key: str, *, maximum: int, optional: bool = False) -> str | None:
+    value = raw.get(key)
+    if optional and value is None:
+        return None
+    if not isinstance(value, str) or not value.strip() or len(value) > maximum or any(
+        ord(char) < 32 and char not in "\n\t" for char in value
+    ):
+        raise ValueError(f"Invalid analysis {key}")
+    return value.strip()
 
 
 def validate_analysis(raw: dict, allowed: set[str], context: dict | None = None,
                       question_mode: bool = False) -> dict:
+    """Validate structure and cited source identity; FINN authors the visible prose."""
     if not isinstance(raw, dict) or raw.get("error"):
         raise ValueError("AI unavailable")
     observations = raw.get("observations")
-    # Only selections are used. Model prose is never shown or stored, so its
-    # wording cannot invalidate an otherwise grounded closed-trade analysis.
-    if not isinstance(observations, list) or not observations or len(observations) > 6:
+    if not isinstance(observations, list) or not 1 <= len(observations) <= 3:
         raise ValueError("Invalid analysis observations")
     checked = []
     for observation in observations:
@@ -254,75 +169,25 @@ def validate_analysis(raw: dict, allowed: set[str], context: dict | None = None,
             raise ValueError("Invalid analysis observation")
         refs = observation.get("evidence_ids")
         theme = observation.get("theme")
-        if theme not in THEMES or not isinstance(refs, list) or not refs or any(ref not in allowed for ref in refs):
+        if (theme not in THEMES or not isinstance(refs, list) or not refs
+                or any(not isinstance(ref, str) or ref not in allowed for ref in refs)):
             raise ValueError("Ungrounded analysis observation")
-        if theme == "plan_followed" and ("plan:snapshot" not in allowed or "plan:snapshot" not in refs):
+        if theme == "plan_followed" and "plan:snapshot" not in refs:
             raise ValueError("Original plan was not grounded")
-        checked.append({"text": OBSERVATION_TEMPLATES[theme], "evidence_ids": refs,
-                        "theme": theme})
-    if "screenshot:user-upload" in allowed:
-        visual_signal = raw.get("visual_signal")
-        if not isinstance(visual_signal, str) or visual_signal not in VISUAL_SIGNAL_TEMPLATES:
-            visual_signal = "unclear"
-        checked.append({
-            "text": VISUAL_SIGNAL_TEMPLATES[visual_signal],
-            "evidence_ids": ["screenshot:user-upload"],
-            "theme": "evidence_gap" if visual_signal == "unclear" else "timing",
-        })
-    # Model prose, user notes and screenshot text are never rendered or stored as
-    # FINN advice. The model only chooses bounded themes and existing evidence IDs.
-    pnl = (context or {}).get("pnl_eur_before_fees")
-    paper = (context or {}).get("environment", "").lower() == "paper"
-    outcome_label = "op basis van virtuele kassastromen" if paper else "vóór kosten"
-    outcome = f" Het geregistreerde resultaat {outcome_label} is €{pnl}." if pnl is not None else ""
-    derivative = (context or {}).get("origin") == "bybit_derivative_user_attested"
-    exchange = (context or {}).get("origin") == "exchange_user_attested"
-    uncertainty_parts = (["Afsluiting bevestigd door gebruiker; volledige accountpositie en historische dekking zijn niet door de exchange bewezen.",
-                          "De geselecteerde uitvoeringen tonen niet alle motieven achter de keuzes."]
-                         if exchange or derivative else ["De orderledger toont uitvoeringen, niet alle motieven achter de keuzes."])
-    if derivative:
-        uncertainty_parts.append("Bybit-derivaten: native PnL, financiering, nettokosten en EUR-resultaat zijn niet vastgesteld.")
-    if exchange and (context or {}).get("pnl_status") == "not_comparable":
-        uncertainty_parts.append("Een vergelijkbaar EUR-resultaat ontbreekt voor deze valutastromen.")
-    if (context or {}).get("fills_truncated"):
-        uncertainty_parts.append(
-            f"FINN kreeg {context['fills_sampled']} van {context['fills_total']} geselecteerde uitvoeringen als detailbewijs; "
-            "de volledige selectie is wel bij de review opgeslagen."
-        )
-    if (context or {}).get("cash_legs_truncated"):
-        uncertainty_parts.append("Niet alle valutastromen zijn in de FINN-context opgenomen.")
-    if (context or {}).get("prior_user_confirmed_lessons_untrusted"):
-        uncertainty_parts.append(
-            "Eerdere door jou bevestigde lessen zijn als reflectiecontext gebruikt, niet als oorspronkelijk tradeplan of uitvoeringbewijs."
-        )
-    if "plan:snapshot" not in allowed:
-        uncertainty_parts.append(
-            "Er bestaat een ouder plansnapshot zonder verifieerbare vastlegtijd; FINN gebruikt dit niet als vooraf bekend plan."
-            if (context or {}).get("plan_status") == "legacy_plan_provenance_unknown" else
-            "Een oorspronkelijk plan is niet in Tradamind vastgelegd."
-            if exchange or derivative else "Een oorspronkelijk plan ontbreekt."
-        )
-    if "chart:binance-eur" not in allowed:
-        uncertainty_parts.append("Historische chartcontext is niet beschikbaar.")
-    if "screenshot:user-upload" in allowed:
-        uncertainty_parts.append("De geüploade screenshot is aanvullend bewijs; de visuele context vervangt geen uitvoeringsfeiten."
-                                 if exchange else
-                                 "De geüploade screenshot is aanvullend bewijs; de visuele context vervangt geen orderfeiten.")
-    selected_summary = (
-        _question_summary(checked[0]["theme"], checked[0]["evidence_ids"], context)
-        if question_mode and context else
-        f"FINN selecteerde {len(checked)} procespunt(en) voor deze afgesloten trade op basis van de genoemde bronnen.{outcome}"
-    )
+        checked.append({"text": _model_text(observation, "text", maximum=550),
+                        "evidence_ids": list(dict.fromkeys(refs)), "theme": theme})
     prior_candidates = (context or {}).get("prior_user_confirmed_lessons_untrusted") or []
     selected_prior_id = raw.get("prior_lesson_review_id")
     prior = next((item for item in prior_candidates
                   if type(selected_prior_id) is int and item["review_id"] == selected_prior_id), None)
     rendered = {
-        "summary": selected_summary,
+        "format_version": 2,
+        "analysis_source": "ai_generated",
+        "summary": _model_text(raw, "summary", maximum=900),
         "observations": checked,
-        "uncertainty": " ".join(uncertainty_parts),
-        "question": QUESTION_TEMPLATES[checked[0]["theme"]],
-        "suggested_lesson": LESSON_SUGGESTIONS[checked[0]["theme"]],
+        "uncertainty": _model_text(raw, "uncertainty", maximum=650),
+        "question": _model_text(raw, "question", maximum=350),
+        "suggested_lesson": _model_text(raw, "suggested_lesson", maximum=350, optional=True),
         "prior_lesson_candidate_ids": [item["review_id"] for item in prior_candidates],
     }
     if prior:
@@ -332,7 +197,6 @@ def validate_analysis(raw: dict, allowed: set[str], context: dict | None = None,
             "confirmed_at": prior["confirmed_at"],
             "relation_to_entry": prior["relation_to_entry"],
             "source": "user_confirmed_prior_reflection",
-            "comparison": "Deze eerdere gebruikersles is reflectiecontext, geen bewijs dat het huidige plan is gevolgd.",
         }
     return rendered
 
@@ -351,24 +215,24 @@ async def _validated_model_analysis(context: dict, allowed: set[str], *,
         "facts": context,
         "user_question_untrusted": question,
         "output_contract": {
-            "required_fields": ["observations", "visual_signal", "prior_lesson_review_id"],
-            "observations": "Kies 1 tot 3 thema's. Elke observatie heeft theme en een niet-lege evidence_ids-array. Geef geen vrije tekst.",
+            "required_fields": ["summary", "observations", "uncertainty", "question", "suggested_lesson", "prior_lesson_review_id"],
+            "observations": "Schrijf 1 tot 3 concrete observaties met theme, text en bewijs uit evidence_ids.",
             "allowed_themes": permitted_themes,
             "allowed_evidence_ids": sorted(allowed),
             "evidence_rule": "Gebruik uitsluitend exacte IDs uit allowed_evidence_ids. Verzin geen IDs of thema's.",
-            "visual_signal_rule": "Gebruik unclear wanneer screenshotpixels geen betrouwbare observatie toelaten; zonder screenshot null.",
+            "writing_rule": "Gebruik de profielcontext om aan te sluiten bij deze trader, maar leid er geen tradefeiten of motieven uit af. Benoem ontbrekend bewijs concreet. Schrijf in de taal van de gebruikersvraag als die aanwezig is; anders Nederlands.",
         },
     }
     for attempt in range(2):
         if attempt:
             task["repair_instruction"] = (
-                "Je vorige selectie voldeed niet aan het bewijscontract. "
-                "Lever een nieuwe JSON-selectie met ten minste een geldige evidence_id "
-                "per observatie. Gebruik geen tekst of IDs uit je vorige antwoord."
+                "Je vorige antwoord voldeed niet aan het JSON- en bewijscontract. "
+                "Schrijf een nieuwe analyse met alle verplichte velden en ten minste "
+                "één geldige evidence_id per observatie."
             )
         raw = await openai_client.ask_gpt_json_async(
             prompt=json.dumps(task, default=str), system_role=SYSTEM_ROLE,
-            max_tokens=900 if question is None else 650, retries=1, image_png=image,
+            max_tokens=1800 if question is None else 1200, retries=1, image_png=image,
             model_override=model_name,
             reasoning_effort="none" if model_name == "gpt-6-luna" else None,
         )
@@ -384,6 +248,17 @@ class FinnTradeAnalysisService:
     def __init__(self, session: AsyncSession):
         self.session = session
         self.reviews = FinnTradeReviewService(session)
+
+    async def _trader_profile_context(self, user_id: int) -> dict:
+        user = await UserRepository(self.session).get_by_id(user_id)
+        preferences = getattr(user, "ai_preferences", {}) or {}
+        if not isinstance(preferences, dict):
+            preferences = {}
+        return {
+            "preferences": normalize_trader_profile_preferences(preferences),
+            "personal_context_untrusted": normalize_trader_context(preferences.get("trader_context")) or None,
+            "source": "owner_profile",
+        }
 
     async def _prior_confirmed_lessons(self, user_id: int, review: dict) -> list[dict]:
         """Only lessons confirmed before this trade's entry were available then."""
@@ -445,7 +320,10 @@ class FinnTradeAnalysisService:
                 return {"status": "pending", "analysis": None,
                         "reason": "Historische chart wordt opgehaald"}
             review = await self.reviews.get_review(user_id, review_id)
-        if review["analysis_status"] == "ready":
+        legacy = review["analysis_status"] == "ready" and (
+            (review.get("analysis_json") or {}).get("format_version") != 2
+        )
+        if review["analysis_status"] == "ready" and not legacy:
             return {"status": "ready", "analysis": review["analysis_json"]}
         if review["analysis_status"] == "running" and review["analysis_updated_at"] and (
             datetime.now(timezone.utc)
@@ -454,6 +332,9 @@ class FinnTradeAnalysisService:
             return {"status": "running", "analysis": None}
         if review["analysis_status"] in {"unavailable", "failed"} and not retry:
             return {"status": review["analysis_status"], "reason": review["analysis_reason"]}
+        context, allowed = evidence_context(review)
+        context["trader_profile"] = await self._trader_profile_context(user_id)
+        context["prior_user_confirmed_lessons_untrusted"] = await self._prior_confirmed_lessons(user_id, review)
         # Keep the same lock order as questions: user budget lock, then review row.
         await self.session.execute(text("SELECT pg_advisory_xact_lock(:user_id, 741068)"),
                                    {"user_id": user_id})
@@ -463,6 +344,7 @@ class FinnTradeAnalysisService:
             WHERE id=:id AND user_id=:user_id AND analysis_version=:version
               AND input_revision=:input_revision
               AND (analysis_status IN ('pending', 'unavailable', 'failed') OR
+                   (analysis_status='ready' AND analysis_json->>'format_version' IS DISTINCT FROM '2') OR
                    (analysis_status='running' AND analysis_updated_at < NOW() - INTERVAL '10 minutes'))
             RETURNING analysis_updated_at
         """), {"id": review_id, "user_id": user_id, "version": ANALYSIS_VERSION,
@@ -478,8 +360,6 @@ class FinnTradeAnalysisService:
                                          review["input_revision"], commit=False,
                                          lock_user=False)
         await self.session.commit()
-        context, allowed = evidence_context(review)
-        context["prior_user_confirmed_lessons_untrusted"] = await self._prior_confirmed_lessons(user_id, review)
         input_revision = review["input_revision"]
         model_name = _review_model()
         try:
@@ -520,6 +400,7 @@ class FinnTradeAnalysisService:
         if not question.strip() or len(question) > 1000:
             raise HTTPException(422, "Vraag moet tussen 1 en 1000 tekens bevatten")
         context, allowed = evidence_context(review)
+        context["trader_profile"] = await self._trader_profile_context(user_id)
         context["prior_user_confirmed_lessons_untrusted"] = await self._prior_confirmed_lessons(user_id, review)
         image = await self.reviews.get_screenshot(user_id, review_id) if review.get("has_screenshot") else None
         await self._reserve_user_ai_call(user_id, review_id, "question",
@@ -532,17 +413,8 @@ class FinnTradeAnalysisService:
                 result = await _validated_model_analysis(context, allowed, image=image,
                                                          question=question, model_name=model_name)
         except Exception as exc:
-            # A closed trade already has immutable ledger evidence. If the
-            # model is unavailable or cannot select a valid ID, answer only
-            # with the bounded evidence-gap template and mark its source.
             logger.warning("trade_review_question_model_failed review_id=%s error=%s", review_id, type(exc).__name__)
-            if not allowed:
-                raise HTTPException(503, "FINN kon geen controleerbaar antwoord geven") from None
-            evidence_id = next((ref for ref in sorted(allowed) if ref.startswith(("fill:", "exchange_fill:", "derivative_exec:"))), sorted(allowed)[0])
-            result = validate_analysis({
-                "observations": [{"theme": "evidence_gap", "evidence_ids": [evidence_id]}],
-            }, allowed, context, question_mode=True)
-            result["analysis_source"] = "factual_fallback"
+            raise HTTPException(503, "FINN kon deze trade nu niet analyseren. Probeer het opnieuw.") from None
         await self.session.execute(text("SELECT pg_advisory_xact_lock(:user_id,741068)"),
                                    {"user_id": user_id})
         if await self._prior_confirmed_lessons(user_id, review) != context["prior_user_confirmed_lessons_untrusted"]:
@@ -573,7 +445,7 @@ class FinnTradeAnalysisService:
                         CAST(:evidence_snapshot AS JSONB))
             """), {"user_id": user_id, "review_id": review_id, "role": role,
                    "content": content, "evidence_ids": json.dumps(evidence_ids),
-                   "model": model_name if role == "finn" and result.get("analysis_source") != "factual_fallback" else None,
+                   "model": model_name if role == "finn" else None,
                    "input_revision": review["input_revision"],
                    "evidence_snapshot": json.dumps(snapshot)})
         await self.session.commit()
