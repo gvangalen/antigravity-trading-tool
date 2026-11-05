@@ -8,6 +8,7 @@ import { fetchFinnTradeReview, fetchFinnTradeReviews, fetchFinnExchangeTradeImpo
 import BybitDerivativeReviews from './BybitDerivativeReviews';
 import PaperExitEvidence from '../bot/PaperExitEvidence';
 import { formatTradeReviewDate } from '@/lib/report/tradeReviewDate.mjs';
+import { visiblePlanFields } from '@/lib/report/tradeReviewPlanFields.mjs';
 
 const number = (value) => Number(value) || 0;
 
@@ -32,7 +33,7 @@ const isExchangeReview = (origin) => origin === 'exchange_user_attested' || orig
 
 function PlanFacts({ plan, copy }) {
   const label = (key) => copy.planFields?.[key];
-  const visible = (entries) => entries.filter(([key, item]) => copy.planFields?.[key] && item != null && item !== '');
+  const visible = (entries) => visiblePlanFields(entries, copy.planFields);
   const value = (item, depth = 0) => {
     if (item == null || item === '') return null;
     if (Array.isArray(item)) return <ul className="mt-1 list-disc space-y-1 pl-5">{item.map((part, index) => <li key={index}>{value(part, depth + 1)}</li>)}</ul>;
