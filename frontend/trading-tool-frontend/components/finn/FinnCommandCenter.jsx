@@ -28,6 +28,7 @@ import {
   FINN_INDICATOR_MODAL_COMPLETED_EVENT,
   FINN_INDICATOR_MODAL_OPEN_EVENT,
   getDefaultIndicatorCategory,
+  isExactMarketInWatchlist,
   isDirectCommandSearchMode,
   matchesCommandQuery,
 } from "@/lib/finnCommandSearch";
@@ -348,7 +349,7 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
       try {
         const selected = await selectTradingMarket(symbol, result.market.quote_currency);
         if (!selected?.market_id) throw new Error("Market identity missing");
-        const alreadyListed = watchlist.watchlist.some((item) => String(item.market_id) === String(selected.market_id));
+        const alreadyListed = isExactMarketInWatchlist(watchlist.watchlist, selected.market_id);
         if (!alreadyListed) await watchlist.add({ symbol, assetClass: "crypto", marketId: selected.market_id });
         setActiveSetup(null);
         setFocusedBotId(null);
