@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Handelspaar-scoreverversing na dagwisseling (6 november 2026)
 
-Phase: `LOCAL_VALIDATION`. Kandidaat: `codex/score-pair-refresh-regression`.
+Phase: `DEPLOYED_AWAITING_QA`. Kandidaat: `codex/score-pair-refresh-regression`,
+[PR #849](https://github.com/gvangalen/antigravity-trading-tool/pull/849).
 De geplande verversing van exact gekozen handelsparen faalde op PostgreSQL
 wanneer de taak zonder `market_id` draait: een ongetypeerde null in de
 marktselectie gaf `AmbiguousParameterError`. Hierdoor werden na de
@@ -14,8 +15,16 @@ dagwisseling geen nieuwe BTC/EUR-scores geschreven terwijl bronmetingen
 zichtbaar bleven. De marktselectie geeft de parameter nu expliciet het
 integer-type. Een regressietest dekt de geplande taak met en zonder
 market-ID. De vijfminutentaak kan daarna weer scores voor ieder geconfigureerd
-paar opbouwen. Productieherstel wordt pas na deployment en onafhankelijke
-ingelogde QA vastgesteld.
+paar opbouwen. Gerichte taaktests slaagden met en zonder market-ID (`11/11`),
+de volledige backend-suite met `4269 passed, 4 skipped`, en de webproductiebuild
+slaagde. Alle vijf PR-controles en
+[main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42217331683)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42217741654)
+slaagde. Publieke backend-health en frontend-buildinfo gaven HTTP 200 en beide
+`2295436c622ceb888bcd31aa3091b99e2877525c`. Deze statuswijziging maakt
+een nieuwe main-SHA; de formele ingelogde QA gebruikt de definitieve live SHA
+nadat CI, Auto Deploy en beide publieke identiteiten opnieuw samenvallen.
+Het oorspronkelijke vijf-indicatorgeval is nog niet live afgetekend.
 
 Deze reparatie heeft voorrang op de nog open mobiele herkeuring van PR #847;
 dat eerdere mobiele verdict blijft onafgerond en wordt niet als geslaagd
