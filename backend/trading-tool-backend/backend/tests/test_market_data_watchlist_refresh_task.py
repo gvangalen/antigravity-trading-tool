@@ -2,6 +2,8 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
+
 from backend.celery_task import market_task
 from backend.celery_task.store_daily_scores_task import store_daily_scores_task
 
@@ -80,7 +82,8 @@ def test_configured_snapshot_refresh_does_not_call_provider_without_watchlist_as
     assert result["success_count"] == 0
 
 
-def test_exact_market_refresh_uses_persisted_pair_identity(monkeypatch):
+@pytest.mark.parametrize("market_id", [None, 73])
+def test_exact_market_refresh_uses_persisted_pair_identity(monkeypatch, market_id):
     from backend.services import exact_market_indicator_service, indicator_history_bootstrap, pair_indicator_config_service
 
     calls = []
@@ -97,7 +100,11 @@ def test_exact_market_refresh_uses_persisted_pair_identity(monkeypatch):
             return [row]
 
     class Session:
-        async def execute(self, _statement, _params=None):
+        async def execute(self, statement, params=None):
+            # The scheduled job supplies None. PostgreSQL cannot infer the
+            # type of an uncast bind in `:market_id IS NULL`.
+            assert params == {"market_id": market_id}
+            assert str(statement).count("CAST(:market_id AS INTEGER)") == 2
             return Result()
 
         async def rollback(self):
@@ -147,7 +154,7 @@ def test_exact_market_refresh_uses_persisted_pair_identity(monkeypatch):
                         lambda _session: type("Preferences", (), {"rows": AsyncMock(return_value=[])})())
     monkeypatch.setattr("backend.celery_task.store_daily_scores_task.build_daily_scores_for_market", build_score)
 
-    result = asyncio.run(market_task._sync_exact_market_snapshots())
+    result = asyncio.run(market_task._sync_exact_market_snapshots(market_id=market_id))
 
     assert calls == [(73, "BTCEUR", "EUR"), (73, "history"),
                      (73, "indicators"), (7, 73, "score")]

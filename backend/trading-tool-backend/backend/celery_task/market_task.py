@@ -167,7 +167,7 @@ async def _sync_exact_market_snapshots(market_id: int | None = None) -> dict:
                    tm.source_verified_at
             FROM trading_markets tm
             WHERE tm.is_active = TRUE
-              AND (:market_id IS NULL OR tm.id = :market_id)
+              AND (CAST(:market_id AS INTEGER) IS NULL OR tm.id = CAST(:market_id AS INTEGER))
               AND (EXISTS (SELECT 1 FROM user_indicator_configs c WHERE c.market_id = tm.id)
                    OR EXISTS (SELECT 1 FROM watchlists w WHERE w.market_id = tm.id)
                    OR EXISTS (SELECT 1 FROM setups s WHERE s.market_id = tm.id))
