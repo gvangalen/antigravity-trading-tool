@@ -303,7 +303,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols, quoteCu
     });
   }
 
-  const reloadWorkspace = useCallback(async ({ forceNetwork = false } = {}) => {
+  const reloadWorkspace = useCallback(async ({ forceNetwork = false, bypassCooldown = false } = {}) => {
     if (currentScopeRef.current !== snapshotScope) return null;
     const cached = getFreshCache(workspaceCache, workspaceKey, WORKSPACE_CACHE_TTL_MS);
     if (cached && !forceNetwork) {
@@ -319,7 +319,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols, quoteCu
     }
 
     if (
-      forceNetwork &&
+      forceNetwork && !bypassCooldown &&
       cached &&
       Date.now() - lastSuccessfulRefreshAtRef.current < WORKSPACE_FORCE_REFRESH_COOLDOWN_MS
     ) {
@@ -610,6 +610,16 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols, quoteCu
       void reloadWorkspace({ forceNetwork: true });
     });
   }, [assetSymbol, reloadWorkspace]);
+
+  useEffect(() => {
+    const handleWatchlistUpdated = () => {
+      // A second pair can share the same base symbol, so the symbol-only
+      // workspace key does not change when that pair is added or removed.
+      void reloadWorkspace({ forceNetwork: true, bypassCooldown: true });
+    };
+    window.addEventListener("watchlist-updated", handleWatchlistUpdated);
+    return () => window.removeEventListener("watchlist-updated", handleWatchlistUpdated);
+  }, [reloadWorkspace]);
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
