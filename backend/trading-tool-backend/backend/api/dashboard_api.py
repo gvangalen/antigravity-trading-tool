@@ -100,6 +100,7 @@ async def get_setup_summary(
 async def get_mobile_overview(
     symbol: str | None = None,
     quote_currency: str | None = None,
+    include_all_watchlist: bool = False,
     bypass_cache: bool = False,
     x_locale: str | None = Header(default=None, alias="X-Locale"),
     current_user: dict = Depends(get_current_user),
@@ -115,6 +116,7 @@ async def get_mobile_overview(
         user_id,
         symbol=symbol,
         quote_currency=quote_currency,
+        include_all_watchlist=include_all_watchlist,
         bypass_cache=bypass_cache,
         locale=locale,
     )

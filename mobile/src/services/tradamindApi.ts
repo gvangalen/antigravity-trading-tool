@@ -423,9 +423,12 @@ export const analyticsApi = {
 };
 
 export const mobileApi = {
-  overview(symbol?: string, quoteCurrency?: string | null) {
+  overview(symbol?: string, quoteCurrency?: string | null, includeAllWatchlist = false) {
     return apiClient.request<MobileOverviewResponse>('/api/dashboard/mobile-overview', {
-      query: symbol ? { symbol, ...(quoteCurrency ? { quote_currency: quoteCurrency } : {}) } : undefined,
+      query: {
+        ...(symbol ? { symbol, ...(quoteCurrency ? { quote_currency: quoteCurrency } : {}) } : {}),
+        ...(includeAllWatchlist ? { include_all_watchlist: true } : {}),
+      },
       timeoutMs: 20000,
     });
   },

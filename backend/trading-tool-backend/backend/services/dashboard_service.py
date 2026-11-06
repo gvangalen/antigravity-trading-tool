@@ -174,6 +174,7 @@ class DashboardService:
         user_id: int,
         symbol: str | None = None,
         quote_currency: str | None = None,
+        include_all_watchlist: bool = False,
         bypass_cache: bool = False,
         locale: str = "nl",
     ) -> MobileOverviewResponse:
@@ -184,7 +185,19 @@ class DashboardService:
         chosen_quote = str(quote_currency or "").strip().upper() or None
         if chosen_quote and not normalized_symbol:
             raise HTTPException(status_code=422, detail="Kies een asset bij het handelspaar.")
-        if normalized_symbol:
+        watchlist_markets: list[tuple[str, str | None]] = []
+        if include_all_watchlist:
+            from sqlalchemy import select
+            from backend.infrastructure.models import Watchlist, TradingMarket
+            rows = (await self.session.execute(
+                select(Watchlist.symbol, TradingMarket.quote_currency)
+                .outerjoin(TradingMarket, Watchlist.market_id == TradingMarket.id)
+                .where(Watchlist.user_id == user_id)
+                .order_by(Watchlist.created_at, Watchlist.id)
+            )).all()
+            watchlist_markets = [(str(row.symbol).upper(), row.quote_currency) for row in rows]
+            symbols = list(dict.fromkeys(item[0] for item in watchlist_markets))
+        elif normalized_symbol:
             symbols = [normalized_symbol]
         else:
             # Fetch real watchlist for user from database
@@ -229,16 +242,21 @@ class DashboardService:
         watchlist_items = []
         match_service = SetupMarketMatchService(self.session)
         owned_setups = await SetupRepository(self.session).get_all_setups(user_id)
-        for sym in symbols:
+        score_markets = watchlist_markets if include_all_watchlist else [
+            (sym, chosen_quote) for sym in symbols
+        ]
+        for sym, market_quote in score_markets:
             price_info = prices_data.get(sym, {}) if isinstance(prices_data, dict) else {}
             exact_market = None
-            if chosen_quote:
+            if market_quote:
                 from backend.services.exact_market_workspace_service import ExactMarketWorkspaceService
                 exact_market = await ExactMarketWorkspaceService(self.session).get(
-                    user_id, sym, chosen_quote, watchlist_symbols=symbols,
+                    user_id, sym, market_quote, watchlist_symbols=symbols,
                 )
                 if exact_market is None:
-                    raise HTTPException(status_code=404, detail="Handelspaar niet beschikbaar.")
+                    if not include_all_watchlist:
+                        raise HTTPException(status_code=404, detail="Handelspaar niet beschikbaar.")
+                    continue
                 daily = exact_market.get("daily") or {}
                 assessment = {
                     "reported_scores": {
@@ -275,7 +293,7 @@ class DashboardService:
                 symbol=sym,
                 market_id=exact_market.get("market_id") if exact_market else None,
                 pair=exact_market.get("pair") if exact_market else None,
-                quote_currency=chosen_quote if exact_market else None,
+                quote_currency=market_quote if exact_market else None,
                 display_name=asset_meta.get("display_name") or sym,
                 asset_class=asset_meta.get("asset_class"),
                 logo_url=asset_meta.get("logo_url") or _asset_logo_url(sym),
