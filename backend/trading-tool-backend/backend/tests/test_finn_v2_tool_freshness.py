@@ -6,8 +6,18 @@ from backend.services.finn_v2_freshness_service import FinnV2FreshnessService
 from backend.services.finn_v2_tool_adapters.technical_tool_adapter import TechnicalToolAdapter
 from backend.services.finn_v2_tool_adapters.macro_tool_adapter import MacroToolAdapter, _display_value
 from backend.services.finn_v2_tool_adapters.market_tool_adapter import MarketToolAdapter
+from backend.services.finn_v2_tool_adapters.display_source_moment import display_source_moment
 from backend.services.finn_v2_responses_read_executor import FinnResponsesReadExecutor
 from backend.utils.scoring_utils import score_source_is_fresh
+
+
+def test_display_source_moment_uses_utc_for_database_and_offset_times():
+    naive_database_time = datetime(2026, 11, 6, 8, 59, 25, 987654)
+    offset_time = datetime.fromisoformat("2026-11-06T09:59:25.987654+01:00")
+
+    assert display_source_moment(naive_database_time) == datetime(2026, 11, 6, 8, 59, 25, tzinfo=timezone.utc)
+    assert display_source_moment(offset_time) == datetime(2026, 11, 6, 8, 59, 25, tzinfo=timezone.utc)
+    assert display_source_moment(offset_time.isoformat()) == "2026-11-06T08:59:25+00:00"
 
 
 def test_freshness_service_marks_market_data_stale_after_threshold():
@@ -32,8 +42,8 @@ def test_market_snapshot_uses_provider_source_moment_not_receipt_time():
 
     adapter.repository.get_latest_quoted_snapshot = latest
     result = asyncio.run(adapter.execute(asset="ETH", user_id=1))
-    assert result["as_of"] == observed
-    assert result["data"].source_observed_at == observed
+    assert result["as_of"] == observed.replace(microsecond=0)
+    assert result["data"].source_observed_at == observed.replace(microsecond=0)
     assert result["data"].quote_currency == "USDT"
     assert FinnV2FreshnessService().freshness_for("read_market_snapshot", result["as_of"]) == "fresh"
 

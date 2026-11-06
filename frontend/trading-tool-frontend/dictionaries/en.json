@@ -2538,7 +2538,7 @@
         "below_min_order_size": "Remaining amount is below the minimum order",
         "no_allocatable_size": "No valid purchase amount remains",
         "unsupported_live_currency": "Live bot orders use EUR only; change the bot currency before trading.",
-        "market_price_stale": "No recent EUR market price is available for live execution.",
+        "market_price_stale": "No recent market price is available for this assessment.",
         "strategy_price_currency_unconfirmed": "The currency of entry, stop-loss and targets has not been confirmed.",
         "strategy_price_conversion_unavailable": "A recent USD/EUR conversion for the saved price levels is unavailable.",
         "insufficient_funds": "Insufficient available cash",
@@ -2553,7 +2553,7 @@
       "nextSteps": {
         "unsupported_live_currency": "Set the bot currency to EUR and check again.",
         "execution_pending": "Wait for execution status; do not submit another order.",
-        "market_price_stale": "Refresh the EUR market price and check again.",
+        "market_price_stale": "Check the market price source time and try again later.",
         "strategy_price_currency_unconfirmed": "Open the strategy, choose the correct price currency and save it again.",
         "strategy_price_conversion_unavailable": "Wait for a verified USD/EUR rate and reassess the bot.",
         "executed": "Review the trade history and wait for the next bot cycle.",

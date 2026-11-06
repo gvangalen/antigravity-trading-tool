@@ -2556,7 +2556,7 @@
         "below_min_order_size": "Der Restbetrag liegt unter der Mindestorder",
         "no_allocatable_size": "Es bleibt kein gültiger Kaufbetrag übrig",
         "unsupported_live_currency": "Live-Bot-Orders verwenden nur EUR; ändere vor dem Handel die Bot-Währung.",
-        "market_price_stale": "Für die Live-Ausführung ist kein aktueller EUR-Marktpreis verfügbar.",
+        "market_price_stale": "Für diese Bewertung ist kein aktueller Marktpreis verfügbar.",
         "strategy_price_currency_unconfirmed": "Die Währung von Einstieg, Stop-Loss und Zielen wurde noch nicht bestätigt.",
         "strategy_price_conversion_unavailable": "Eine aktuelle USD/EUR-Umrechnung für die gespeicherten Kursniveaus fehlt.",
         "insufficient_funds": "Nicht genügend verfügbares Guthaben",
@@ -2571,7 +2571,7 @@
       "nextSteps": {
         "unsupported_live_currency": "Stelle die Bot-Währung auf EUR und prüfe erneut.",
         "execution_pending": "Warte auf den Ausführungsstatus; sende keine zweite Order.",
-        "market_price_stale": "Aktualisiere den EUR-Marktpreis und prüfe erneut.",
+        "market_price_stale": "Prüfe den Quellzeitpunkt des Marktpreises und versuche es später erneut.",
         "strategy_price_currency_unconfirmed": "Öffne die Strategie, wähle die richtige Kurswährung und speichere erneut.",
         "strategy_price_conversion_unavailable": "Warte auf einen geprüften USD/EUR-Kurs und bewerte den Bot erneut.",
         "executed": "Prüfe die Trades und warte auf den nächsten Bot-Zyklus.",

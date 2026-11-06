@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
 from backend.schemas.finn_v2_evidence_schema import MarketSnapshotData
+from backend.services.finn_v2_tool_adapters.display_source_moment import display_source_moment
 
 
 class MarketToolAdapter:
@@ -22,7 +23,7 @@ class MarketToolAdapter:
             raise LookupError("exact_market_source_mismatch")
         # Receipt/update time does not establish the age of the provider's
         # price. Missing source provenance must stay unknown to the coach.
-        observed_at = getattr(snapshot, "source_observed_at", None)
+        observed_at = display_source_moment(getattr(snapshot, "source_observed_at", None))
         payload = {
             "symbol": snapshot.symbol,
             "market_id": market_id,

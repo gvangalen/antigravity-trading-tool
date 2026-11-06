@@ -65,7 +65,8 @@ export default function BotFocusView({
   });
   const riskReason = paperPriceKey ? copy[paperPriceKey]
     : orderState ? copy.reasons?.[orderState]
-    : risk.execution_failure || (state === "no_proposal" ? copy.reasons?.no_proposal : null)
+    : (activeBot?.is_live === false && risk.reason_code === "market_price_stale" ? copy.riskCodes?.market_price_stale : null)
+      || risk.execution_failure || (state === "no_proposal" ? copy.reasons?.no_proposal : null)
       || copy.riskCodes?.[risk.reason_code] || copy.riskCodes?.[explanations[0]?.code]
       || ((state === "allowed" || state === "executed") && explanations.length === 0 ? copy.states?.allowed : null)
       || risk.reason || copy.reasons?.[state] || copy.reasonUnavailable;

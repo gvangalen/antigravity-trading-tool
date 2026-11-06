@@ -365,7 +365,7 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
               <span className="font-bold">{isExchange ? formatQuote(fill.price_quote, fill.quote_currency, locale) : fill.price_eur ? formatMoney(fill.price_eur, locale, 4) : formatMoney(number(fill.cash_eur) / number(fill.qty), locale, 4)}</span>
             </li>)}
           </ol>
-          {isPaper && <PaperExitEvidence evidence={review.paper_exit_evidence} />}
+          {isPaper && <PaperExitEvidence evidence={review.paper_exit_evidence} showMissing />}
         </div>
       </div>
 

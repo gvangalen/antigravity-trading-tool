@@ -1,4 +1,4 @@
-"""Owner-scoped, read-only setup matching over today's measured score sources."""
+"""Owner-scoped setup matching over the latest verified score sources."""
 
 from __future__ import annotations
 
@@ -24,7 +24,6 @@ _SCORE_STATUS_EXPLANATIONS = {
     "configuration_unverified": "The indicator configuration cannot be verified against the saved score.",
     "missing_indicator_reading": "A configured indicator has no valid reading.",
     "rule_unverified": "The saved score lacks a verified scoring rule.",
-    "stale_report": "The saved score report is from a previous day.",
     "unverified": "The saved score has not been checked against current sources.",
 }
 
@@ -169,8 +168,8 @@ class SetupMarketMatchService:
                 SELECT report_date, macro_score, technical_score, market_score,
                        calculated_at, indicator_evidence
                 FROM daily_scores
-                WHERE user_id = :user_id AND symbol = :symbol AND report_date = CURRENT_DATE
-                  AND {market_scope}
+                WHERE user_id = :user_id AND symbol = :symbol AND {market_scope}
+                ORDER BY report_date DESC, calculated_at DESC NULLS LAST
                 LIMIT 1
             """), params)
             row = result.mappings().first()
@@ -191,16 +190,7 @@ class SetupMarketMatchService:
         score_diagnostics: dict[str, object] = {}
         if weights is None:
             source_status = "invalid_weights"
-        elif row and self.daily_rows is not None:
-            from datetime import date
-            if row.get("report_date") != date.today():
-                source_status = "stale_scores"
-        if source_status == "stale_scores":
-            component_source_status = {
-                score_key: "stale_report" if value is not None else "missing_score"
-                for score_key, value in stored_scores.items()
-            }
-        elif row:
+        if row:
             for category in ("macro", "technical", "market"):
                 score_key = f"{category}_score"
                 value = stored_scores[score_key]
@@ -227,8 +217,8 @@ class SetupMarketMatchService:
                     "stale_sources" if "stale_source" in component_source_status.values()
                     else "unverified_scores"
                 )
-        # The match response describes what Analyse can use now. Historical or
-        # stale database values belong in the explicitly dated saved-report read.
+        # The report date alone cannot invalidate a score: underlying evidence
+        # determines whether the latest saved score is still usable today.
         reported_scores = {
             key: value if component_source_status[key] == "fresh" else None
             for key, value in stored_scores.items()
@@ -272,10 +262,12 @@ class SetupMarketMatchService:
                         key=lambda item: (item[0], item[1] or 0))
         if self.daily_rows is None and symbols:
             result = await self.session.execute(text("""
-                SELECT symbol, market_id, report_date, macro_score, technical_score, market_score,
+                SELECT DISTINCT ON (symbol, market_id)
+                       symbol, market_id, report_date, macro_score, technical_score, market_score,
                        calculated_at, indicator_evidence
-                FROM daily_scores WHERE user_id = :user_id AND report_date = CURRENT_DATE
+                FROM daily_scores WHERE user_id = :user_id
                   AND symbol = ANY(:symbols)
+                ORDER BY symbol, market_id, report_date DESC, calculated_at DESC NULLS LAST
             """), {"user_id": user_id, "symbols": symbols})
             self.daily_rows = {
                 ((str(row["symbol"]).upper(), row.get("market_id"))
