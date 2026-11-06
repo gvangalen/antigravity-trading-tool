@@ -4,6 +4,25 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Handelspaar-scoreverversing na dagwisseling (6 november 2026)
+
+Phase: `LOCAL_VALIDATION`. Kandidaat: `codex/score-pair-refresh-regression`.
+De geplande verversing van exact gekozen handelsparen faalde op PostgreSQL
+wanneer de taak zonder `market_id` draait: een ongetypeerde null in de
+marktselectie gaf `AmbiguousParameterError`. Hierdoor werden na de
+dagwisseling geen nieuwe BTC/EUR-scores geschreven terwijl bronmetingen
+zichtbaar bleven. De marktselectie geeft de parameter nu expliciet het
+integer-type. Een regressietest dekt de geplande taak met en zonder
+market-ID. De vijfminutentaak kan daarna weer scores voor ieder geconfigureerd
+paar opbouwen. Productieherstel wordt pas na deployment en onafhankelijke
+ingelogde QA vastgesteld.
+
+Deze reparatie heeft voorrang op de nog open mobiele herkeuring van PR #847;
+dat eerdere mobiele verdict blijft onafgerond en wordt niet als geslaagd
+overgenomen. FINN-actiecontracten en providerselectie zijn niet gewijzigd;
+de worker-actiematrix en echte providerproeven zijn voor deze SQL-reparatie
+niet van toepassing.
+
 ## Mobiele watchlist met afzonderlijke handelsparen (6 november 2026)
 
 Phase: `DEPLOYED_AWAITING_QA`. Kandidaat: `codex/mobile-pair-watchlist`,
