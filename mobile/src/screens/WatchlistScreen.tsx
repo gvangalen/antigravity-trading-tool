@@ -165,7 +165,7 @@ export function WatchlistScreen() {
     };
   }, [chartInterval, chartPreferenceLoaded]);
 
-  const fetchOverview = useCallback(() => mobileApi.overview(selectedSymbol, selectedQuote), [selectedSymbol, selectedQuote]);
+  const fetchOverview = useCallback(() => mobileApi.overview(undefined, undefined, true), []);
   const overviewResource = useApiResource<MobileOverviewResponse | undefined>({
     fallbackData: undefined,
     fetcher: fetchOverview,
@@ -210,13 +210,13 @@ export function WatchlistScreen() {
   const workspaceAssets = useMemo(
     () => (assets.length > 0 ? assets.map((asset) =>
       selectedQuote && asset.symbol === selectedSymbol && asset.quote_currency === selectedQuote
-        ? derivedAsset || asset : asset
+        ? { ...asset, ...derivedAsset } : asset
     ) : derivedAsset ? [derivedAsset] : []),
     [assets, derivedAsset, selectedQuote, selectedSymbol],
   );
   const selectedAsset = selectedQuote && !exactWorkspace ? undefined :
     workspaceAssets.find((asset) => asset.symbol === selectedSymbol &&
-      (!selectedQuote || asset.quote_currency === selectedQuote)) ?? workspaceAssets[0];
+      (!selectedQuote || asset.quote_currency === selectedQuote)) ?? derivedAsset ?? workspaceAssets[0];
   const hasAnalysisBootstrap =
     workspaceAssets.length > 0 ||
     Boolean(overviewResource.data?.watchlist?.length) ||

@@ -117,3 +117,77 @@ def test_web_and_mobile_dashboard_use_the_same_current_score_projection(monkeypa
     assert pair_mobile.macro_score == 30
     assert pair_mobile.technical_score is None
     assert pair_mobile.benchmark_score is None
+
+
+def test_mobile_watchlist_keeps_scores_separate_for_two_quotes(monkeypatch):
+    from types import SimpleNamespace
+
+    class Session:
+        async def execute(self, _query):
+            return SimpleNamespace(all=lambda: [
+                SimpleNamespace(symbol="BTC", quote_currency="EUR"),
+                SimpleNamespace(symbol="BTC", quote_currency="USDT"),
+            ])
+
+    class Repository:
+        async def get_latest_prices_and_changes(self, *_args):
+            return {}
+
+    class Catalog:
+        def __init__(self, _session):
+            pass
+
+        async def get_assets(self, _symbols):
+            return {"BTC": {"display_name": "Bitcoin"}}
+
+    class Setups:
+        def __init__(self, _session):
+            pass
+
+        async def get_all_setups(self, _user_id):
+            return []
+
+    class Bots:
+        def __init__(self, _session):
+            pass
+
+        async def get_bot_portfolios(self, _user_id):
+            return []
+
+    class ExactWorkspace:
+        def __init__(self, _session):
+            pass
+
+        async def get(self, _user_id, symbol, quote, **_kwargs):
+            assert symbol == "BTC"
+            score = {"EUR": 35, "USDT": 70}[quote]
+            return {
+                "market_id": {"EUR": 1, "USDT": 2}[quote],
+                "pair": f"BTC/{quote}",
+                "quote": {"price": {"EUR": 70000, "USDT": 76000}[quote]},
+                "daily": {
+                    "market": {"score": score},
+                    "macro": {"score": 50},
+                    "technical": {"score": 60},
+                    "benchmark_score": score,
+                },
+                "combined": {"source_status": "fresh"},
+                "setup_matches": [],
+            }
+
+    monkeypatch.setattr("backend.services.dashboard_service.AssetCatalogService", Catalog)
+    monkeypatch.setattr("backend.infrastructure.repositories.setup_repository.SetupRepository", Setups)
+    monkeypatch.setattr("backend.services.bot_service.BotService", Bots)
+    monkeypatch.setattr(
+        "backend.services.exact_market_workspace_service.ExactMarketWorkspaceService", ExactWorkspace,
+    )
+    service = DashboardService(Session())
+    service.repository = Repository()
+    items = asyncio.run(service.get_mobile_overview(
+        7, include_all_watchlist=True,
+    )).watchlist
+
+    assert [(item.pair, item.price, item.market_score, item.benchmark_score) for item in items] == [
+        ("BTC/EUR", 70000, 35, 35),
+        ("BTC/USDT", 76000, 70, 70),
+    ]

@@ -4,6 +4,26 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Mobiele watchlist met afzonderlijke handelsparen (6 november 2026)
+
+Phase: `LOCAL_VALIDATION`. Kandidaat: `codex/mobile-pair-watchlist`.
+Vervolg op de paargebonden watchlist: de mobiele Analyse-lijst vraagt nu alle
+opgeslagen paren op en toont de Score 2.0-beoordeling per exacte markt. De
+detailanalyse blijft op het gekozen paar gericht. De backend geeft deze
+volledige lijst alleen na de expliciete `include_all_watchlist`-vraag terug;
+de bestaande selectie-API blijft ongewijzigd. De eerdere onafhankelijke web-QA
+voor beide BTC-paren is geslaagd. Een ingelogde iPhone-herkeuring is nog niet
+uitvoerbaar zolang de Mac vergrendeld is.
+
+Gemeten lokaal: gerichte paar-, dashboard- en exactemarkt-tests `13 passed`;
+volledige backend-suite `4268 passed, 4 skipped`; web typecheck, i18n-lint,
+i18n-tests, commandtests en productiebuild geslaagd; mobiele typecheck,
+lint (0 fouten, bestaande waarschuwingen), chattests (`16/16`) en Expo-bundels
+voor iOS, Android en web geslaagd. FINN-actiecontracten en providerselectie
+zijn niet gewijzigd; worker-actiematrix en providerproeven zijn voor deze
+read-only dashboardprojectie niet van toepassing. CI, deploymentidentiteit en
+onafhankelijke mobiele QA zijn nog open.
+
 ## Handelspaargebonden watchlist en Score 2.0 (5 november 2026)
 
 Phase: `DEPLOYED_AWAITING_QA`. Kandidaat: `codex/pair-watchlist-scores`,
