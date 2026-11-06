@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Mobiele watchlist met afzonderlijke handelsparen (6 november 2026)
 
-Phase: `LOCAL_VALIDATION`. Kandidaat: `codex/mobile-pair-watchlist`.
+Phase: `DEPLOYED_AWAITING_QA`. Kandidaat: `codex/mobile-pair-watchlist`,
+[PR #847](https://github.com/gvangalen/antigravity-trading-tool/pull/847).
 Vervolg op de paargebonden watchlist: de mobiele Analyse-lijst vraagt nu alle
 opgeslagen paren op en toont de Score 2.0-beoordeling per exacte markt. De
 detailanalyse blijft op het gekozen paar gericht. De backend geeft deze
@@ -21,8 +22,13 @@ i18n-tests, commandtests en productiebuild geslaagd; mobiele typecheck,
 lint (0 fouten, bestaande waarschuwingen), chattests (`16/16`) en Expo-bundels
 voor iOS, Android en web geslaagd. FINN-actiecontracten en providerselectie
 zijn niet gewijzigd; worker-actiematrix en providerproeven zijn voor deze
-read-only dashboardprojectie niet van toepassing. CI, deploymentidentiteit en
-onafhankelijke mobiele QA zijn nog open.
+read-only dashboardprojectie niet van toepassing. Alle vijf PR-controles en
+[main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42171034846)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42171325123)
+slaagde; publieke `/api/health` en `/build-info.json` gaven HTTP 200 en
+beide `9b8976bafd5975d91a51a23c1a1fa31dd83d49bc`. Deze statuswijziging
+maakt een latere main-SHA; onafhankelijke QA gebruikt pas de laatste
+gedeployde SHA. De ingelogde mobiele runtimeproef is nog open.
 
 ## Handelspaargebonden watchlist en Score 2.0 (5 november 2026)
 
