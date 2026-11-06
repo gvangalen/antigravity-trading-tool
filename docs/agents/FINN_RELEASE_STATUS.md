@@ -4,6 +4,25 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## BTC/EUR toevoegen vanuit de watchlist (6 november 2026)
+
+Phase: `LOCAL_VALIDATION`. Kandidaat: `codex/watchlist-pair-add`.
+De assetkiezer biedt nu de beschikbare exacte cryptoparen aan. BTC/EUR kan
+worden toegevoegd terwijl BTC/USDT al op de watchlist staat. Dezelfde markt
+kan niet dubbel worden toegevoegd. Na toevoegen ververst de Analyse-werkruimte
+de watchlist onmiddellijk, ook wanneer het basissymbool BTC gelijk blijft.
+Het gekozen paar blijft de identiteit voor navigatie en Score 2.0; indicatoren
+en scores van BTC/EUR en BTC/USDT worden niet samengevoegd.
+
+De wijziging raakt de webkiezer en de watchlistverversing. Lokaal zijn
+commandtests `35/35`, i18n-tests `37/37`, i18n-lint, typecheck en de
+webproductiebuild geslaagd. De FINN-acties en providerselectie zijn niet
+gewijzigd. Onafhankelijke QA moet na deployment in de ingelogde browser beide
+paren toevoegen, direct terugzien, afzonderlijk openen en hun Score 2.0-data
+vergelijken. Een eerdere gerichte QA op de scoreverversing zag BTC/EUR met
+vier indicatoren compleet; het oorspronkelijke vijf-indicatorgeval is nog
+niet bewezen.
+
 ## Handelspaar-scoreverversing na dagwisseling (6 november 2026)
 
 Phase: `DEPLOYED_AWAITING_QA`. Kandidaat: `codex/score-pair-refresh-regression`,

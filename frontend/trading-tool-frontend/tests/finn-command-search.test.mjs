@@ -6,6 +6,7 @@ import {
   getCommandTokens,
   getDefaultIndicatorCategory,
   isDirectCommandSearchMode,
+  isExactMarketInWatchlist,
   matchesCommandQuery,
   normalizeCommandText,
   openFinnContext,
@@ -28,6 +29,13 @@ test("matches asset commands without requiring an exact phrase", () => {
   assert.equal(matchesCommandQuery("ETH Ethereum", "Wissel naar ETH"), true);
   assert.equal(matchesCommandQuery("BTC Bitcoin", "Zoek BTC"), true);
   assert.equal(matchesCommandQuery("BTC Bitcoin", "Open Ethereum"), false);
+});
+
+test("the same asset may be added for a second exact trading pair", () => {
+  const watchlist = [{ symbol: "BTC", market_id: 12, pair: "BTC/USDT" }];
+  assert.equal(isExactMarketInWatchlist(watchlist, 12), true);
+  assert.equal(isExactMarketInWatchlist(watchlist, 13), false);
+  assert.equal(isExactMarketInWatchlist([...watchlist, { symbol: "BTC", market_id: 13 }], 13), true);
 });
 
 test("matches workspace navigation commands", () => {

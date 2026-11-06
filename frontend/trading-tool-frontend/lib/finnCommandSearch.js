@@ -141,3 +141,9 @@ export function getDefaultIndicatorCategory(pathname) {
   if (pathname === "/market") return "market";
   return "technical";
 }
+
+export function isExactMarketInWatchlist(items, marketId) {
+  return (items || []).some((item) =>
+    item?.market_id != null && String(item.market_id) === String(marketId)
+  );
+}
