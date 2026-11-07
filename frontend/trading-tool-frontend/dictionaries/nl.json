@@ -2539,7 +2539,7 @@
         "below_min_order_size": "Resterend bedrag is kleiner dan de minimumorder",
         "no_allocatable_size": "Er blijft geen geldig koopbedrag over",
         "unsupported_live_currency": "Live botorders gebruiken alleen EUR; wijzig de botvaluta voordat je handelt.",
-        "market_price_stale": "Geen recente EUR-marktprijs beschikbaar voor live uitvoering.",
+        "market_price_stale": "Geen recente marktprijs beschikbaar voor deze beoordeling.",
         "strategy_price_currency_unconfirmed": "De valuta van instap, stop-loss en doelen is nog niet bevestigd.",
         "strategy_price_conversion_unavailable": "Een recente USD/EUR-omrekening voor de opgeslagen koersniveaus ontbreekt.",
         "insufficient_funds": "Onvoldoende beschikbaar kassaldo",
@@ -2554,7 +2554,7 @@
       "nextSteps": {
         "unsupported_live_currency": "Stel de botvaluta in op EUR en controleer opnieuw.",
         "execution_pending": "Wacht op de uitvoeringsstatus; verstuur geen tweede order.",
-        "market_price_stale": "Ververs de EUR-marktprijs en controleer opnieuw.",
+        "market_price_stale": "Controleer het bronmoment van de marktprijs en probeer later opnieuw.",
         "strategy_price_currency_unconfirmed": "Open de strategie, kies de juiste koersvaluta en sla opnieuw op.",
         "strategy_price_conversion_unavailable": "Wacht op een gecontroleerde USD/EUR-koers en laat de bot opnieuw beoordelen.",
         "executed": "Bekijk de tradegeschiedenis en wacht op de volgende botcyclus.",

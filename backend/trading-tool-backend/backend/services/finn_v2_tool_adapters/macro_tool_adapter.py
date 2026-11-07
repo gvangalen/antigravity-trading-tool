@@ -5,11 +5,12 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from backend.infrastructure.repositories.macro_data_repository import MacroDataRepository
 from backend.schemas.finn_v2_evidence_schema import MacroSnapshotData, MacroSnapshotItem
+from backend.services.finn_v2_tool_adapters.display_source_moment import display_source_moment
 from backend.utils.scoring_utils import score_source_is_fresh
 
 
 def _display_moment(value: datetime | None) -> datetime | None:
-    return value.replace(microsecond=0) if value is not None else None
+    return display_source_moment(value)
 
 
 def _display_value(name: str, value: float | None) -> float | None:

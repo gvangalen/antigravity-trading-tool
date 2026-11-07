@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from backend.schemas.finn_v2_evidence_schema import TechnicalSnapshotData, TechnicalSnapshotItem
+from backend.services.finn_v2_tool_adapters.display_source_moment import display_source_moment
 from backend.services.technical_data_service import TechnicalDataService
 from backend.utils.scoring_utils import score_source_is_fresh
 from sqlalchemy import select
@@ -44,8 +45,8 @@ class TechnicalToolAdapter:
                 ) else "stale" if getattr(row, "source_observed_at", None) else "unknown"),
                 advice=row.advies,
                 explanation=row.uitleg,
-                timestamp=row.timestamp,
-                source_observed_at=getattr(row, "source_observed_at", None),
+                timestamp=display_source_moment(row.timestamp),
+                source_observed_at=display_source_moment(getattr(row, "source_observed_at", None)),
             )
             for row in rows
         ]
@@ -66,7 +67,7 @@ class TechnicalToolAdapter:
                 pair=f"{asset}/{quote_currency}" if market_id is not None else None,
                 items=payload),
             "summary": {"title": "technical_snapshot", "symbol": asset, "count": len(payload)},
-            "as_of": latest,
+            "as_of": display_source_moment(latest),
             "freshness_status": freshness_status,
             "source": "technical_indicators",
             "schema_name": "TechnicalSnapshotData",

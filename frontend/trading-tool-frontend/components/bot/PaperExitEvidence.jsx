@@ -3,10 +3,12 @@
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { formatDateTime, formatNumber } from "@/lib/i18n";
 
-export default function PaperExitEvidence({ evidence }) {
+export default function PaperExitEvidence({ evidence, showMissing = false }) {
   const { t, locale } = useTranslation();
-  if (!evidence || !Object.keys(evidence).length) return null;
   const copy = t?.botPage?.history?.exitEvidence || {};
+  if (!evidence || !Object.keys(evidence).length) {
+    return showMissing ? <p className="mt-2 text-sm text-[var(--text-muted)]">{copy.title}: {copy.notRecorded}</p> : null;
+  }
   const number = (value) => value == null ? "—" : formatNumber(Number(value), locale, { maximumFractionDigits: 6 });
   const time = (value) => value ? formatDateTime(value, locale, {
     day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short",

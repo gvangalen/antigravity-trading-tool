@@ -238,7 +238,7 @@ def test_total_benchmark_is_distinct_from_setup_fit():
     asyncio.run(run())
 
 
-def test_batch_reader_does_not_relabel_yesterdays_score_as_current():
+def test_batch_reader_accepts_previous_day_score_with_fresh_sources():
     async def run():
         session = SimpleNamespace(execute=AsyncMock(return_value=SimpleNamespace(
             mappings=lambda: SimpleNamespace(first=lambda: {"ai_preferences": None}),
@@ -249,10 +249,27 @@ def test_batch_reader_does_not_relabel_yesterdays_score_as_current():
         })
         service._source_is_fresh = AsyncMock(return_value=True)
         result = await service.for_asset(7, "BTC", setups=[setup(1, min_benchmark_score=60)])
-        assert result["source_status"] == "stale_scores"
+        assert result["source_status"] == "available"
+        assert result["benchmark_score"] == 70
+        assert result["matches"][0]["status"] == "matches"
+        assert service._source_is_fresh.await_count == 3
+
+    asyncio.run(run())
+
+
+def test_batch_reader_rejects_previous_day_score_with_stale_sources():
+    async def run():
+        session = SimpleNamespace(execute=AsyncMock(return_value=SimpleNamespace(
+            mappings=lambda: SimpleNamespace(first=lambda: {"ai_preferences": None}),
+        )))
+        service = SetupMarketMatchService(session, daily_rows={
+            "BTC": {"report_date": date.today() - timedelta(days=1),
+                    "macro_score": 70, "technical_score": 70, "market_score": 70},
+        })
+        service._source_is_fresh = AsyncMock(return_value=False)
+        result = await service.for_asset(7, "BTC", setups=[setup(1, min_benchmark_score=60)])
         assert result["benchmark_score"] is None
         assert result["matches"][0]["status"] == "insufficient_data"
-        service._source_is_fresh.assert_not_awaited()
 
     asyncio.run(run())
 

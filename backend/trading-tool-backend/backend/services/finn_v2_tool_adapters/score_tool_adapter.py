@@ -36,7 +36,10 @@ class ScoreToolAdapter:
                           "weight", "rule_origin")
         payload["indicator_evidence"] = {
             category: {
-                name: {field: values[field] for field in factual_fields if field in values}
+                name: {
+                    field: (display_source_moment(values[field]) if field == "source_observed_at" else values[field])
+                    for field in factual_fields if field in values
+                }
                 for name, values in indicators.items() if isinstance(values, dict)
             }
             for category, indicators in verified.items()
