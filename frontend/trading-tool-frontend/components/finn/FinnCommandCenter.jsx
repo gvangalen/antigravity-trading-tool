@@ -31,6 +31,7 @@ import {
   getDefaultIndicatorCategory,
   isExactMarketInWatchlist,
   isDirectCommandSearchMode,
+  isWorkspaceIndicatorConfigured,
   matchesCommandQuery,
 } from "@/lib/finnCommandSearch";
 import { publishWorkspaceRefresh } from "@/lib/workspaceSync";
@@ -85,6 +86,7 @@ function commandCopy(locale) {
       askDescription: "Use AI for explanation and context",
       searchAsset: "Search asset",
       addIndicator: "Add indicator",
+      editIndicator: "Edit existing indicator",
       openAnalysis: "Open Analysis",
       openPlan: "Open My Plan",
       addTechnical: "Configure for Technical",
@@ -94,6 +96,7 @@ function commandCopy(locale) {
       noResults: "No direct actions found",
       noResultsHint: "Ask FINN or try another search term.",
       added: "added",
+      saved: "saved",
       failed: "Could not open this action.",
     };
   }
@@ -111,6 +114,7 @@ function commandCopy(locale) {
       askDescription: "KI für Erklärung und Kontext verwenden",
       searchAsset: "Asset suchen",
       addIndicator: "Indikator hinzufügen",
+      editIndicator: "Vorhandenen Indikator bearbeiten",
       openAnalysis: "Analyse öffnen",
       openPlan: "Mein Plan öffnen",
       addTechnical: "Für Technik konfigurieren",
@@ -120,6 +124,7 @@ function commandCopy(locale) {
       noResults: "Keine direkte Aktion gefunden",
       noResultsHint: "Frage FINN oder versuche einen anderen Suchbegriff.",
       added: "hinzugefügt",
+      saved: "gespeichert",
       failed: "Diese Aktion konnte nicht geöffnet werden.",
     };
   }
@@ -136,6 +141,7 @@ function commandCopy(locale) {
     askDescription: "Gebruik AI voor uitleg en context",
     searchAsset: "Asset zoeken",
     addIndicator: "Indicator toevoegen",
+    editIndicator: "Bestaande indicator bewerken",
     openAnalysis: "Open Analyse",
     openPlan: "Open Mijn Plan",
     addTechnical: "Configureren voor Technisch",
@@ -145,6 +151,7 @@ function commandCopy(locale) {
     noResults: "Geen directe actie gevonden",
     noResultsHint: "Vraag FINN of probeer een andere zoekterm.",
     added: "toegevoegd",
+    saved: "opgeslagen",
     failed: "Deze actie kon niet worden geopend.",
   };
 }
@@ -168,10 +175,28 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
   const [activeIndex, setActiveIndex] = useState(0);
   const [marketChoice, setMarketChoice] = useState({ asset: null, markets: [], loading: false, error: false });
   const [pairCatalog, setPairCatalog] = useState({ markets: {}, loading: false, error: false });
+  const [indicatorScope, setIndicatorScope] = useState({ key: null, workspace: null });
 
   const activeSymbol = searchParams.get("symbol")?.toUpperCase() || selectedAsset || "BTC";
   const activeVariant = searchParams.get("variant") === "legacy" ? "legacy" : "v3";
   const hasQuery = Boolean(String(query || "").trim());
+  const activeQuoteCurrency = request?.quoteCurrency || searchParams.get("quote")?.toUpperCase() || null;
+  const indicatorScopeKey = activeQuoteCurrency ? `${activeSymbol}:${activeQuoteCurrency}` : null;
+  const configuredWorkspace = indicatorScope.key === indicatorScopeKey ? indicatorScope.workspace : null;
+
+  useEffect(() => {
+    if (!isOpen || !indicatorScopeKey || mode.kind === "chat" || mode.kind === "asset") return;
+    let cancelled = false;
+    setIndicatorScope({ key: null, workspace: null });
+    fetchExactMarketWorkspace(activeSymbol, activeQuoteCurrency)
+      .then((workspace) => {
+        if (!cancelled) setIndicatorScope({ key: indicatorScopeKey, workspace });
+      })
+      .catch(() => {
+        if (!cancelled) setIndicatorScope({ key: indicatorScopeKey, workspace: null });
+      });
+    return () => { cancelled = true; };
+  }, [activeQuoteCurrency, activeSymbol, indicatorScopeKey, isOpen, mode.kind]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -210,6 +235,7 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
         source: detail.source || "finn",
         marketId: detail.marketId || null,
         quoteCurrency: detail.quoteCurrency || null,
+        mode: detail.mode || "add",
       });
     };
     window.addEventListener(FINN_INDICATOR_MODAL_OPEN_EVENT, openIndicator);
@@ -316,14 +342,15 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
             id: `indicator:${source.key}:${indicator.name}`,
             type: "indicator",
             title: indicator.display_name || indicator.label || indicator.name,
-            subtitle: source.label,
+            subtitle: isWorkspaceIndicatorConfigured(configuredWorkspace, source.key, indicator.name)
+              ? copy.editIndicator : source.label,
             category: source.key,
             indicatorName: indicator.name,
             icon: Sparkles,
           }))
       )
       .slice(0, 12);
-  }, [catalog, copy.addMacro, copy.addMarket, copy.addTechnical, hasQuery, mode.category, mode.kind, query]);
+  }, [catalog, configuredWorkspace, copy.addMacro, copy.addMarket, copy.addTechnical, copy.editIndicator, hasQuery, mode.category, mode.kind, query]);
 
   const directResults = useMemo(
     () => mode.kind === "asset"
@@ -397,12 +424,15 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
       return;
     }
     if (result.type === "indicator") {
-      const quoteCurrency = request?.quoteCurrency || searchParams.get("quote")?.toUpperCase() || null;
+      const quoteCurrency = activeQuoteCurrency;
       let marketId = request?.marketId || null;
-      if (quoteCurrency && !marketId && ["EUR", "USDT"].includes(quoteCurrency)) {
+      let indicatorMode = "add";
+      if (quoteCurrency) {
         try {
           const exact = await fetchExactMarketWorkspace(activeSymbol, quoteCurrency);
           marketId = exact?.market_id || null;
+          indicatorMode = isWorkspaceIndicatorConfigured(exact, result.category, result.indicatorName)
+            ? "edit" : "add";
         } catch {
           showSnackbar(copy.failed, "danger");
           return;
@@ -419,6 +449,7 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
         source: "finn",
         marketId,
         quoteCurrency,
+        mode: indicatorMode,
       });
     }
   };
@@ -534,7 +565,7 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
         assetSymbol={activeSymbol}
         marketId={pendingIndicator?.marketId || null}
         marketLabel={pendingIndicator?.quoteCurrency ? `${activeSymbol}/${pendingIndicator.quoteCurrency}` : null}
-        mode="add"
+        mode={pendingIndicator?.mode || "add"}
         showSuccessSnackbar={false}
         onClose={() => setPendingIndicator(null)}
         onSubmitAction={async ({ category, indicator, assetSymbol }) => {
@@ -556,7 +587,7 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
           publishWorkspaceRefresh({
             symbol: assetSymbol,
             category,
-            reason: "indicator_added",
+            reason: pendingIndicator?.mode === "edit" ? "indicator_updated" : "indicator_added",
           });
           router.push(withVariant(`/asset?${params.toString()}`, activeVariant), { scroll: false });
           setPendingIndicator(null);
@@ -565,7 +596,7 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
           showSnackbar(
             partial ? error : pendingSource
               ? `${String(indicator).toUpperCase()} is ingesteld. De meetwaarde wacht op de databron; er is nog geen score.`
-              : `${String(indicator).toUpperCase()} ${copy.added}.`,
+              : `${String(indicator).toUpperCase()} ${pendingIndicator?.mode === "edit" ? copy.saved : copy.added}.`,
             partial ? "danger" : pendingSource ? "info" : "success"
           );
         }}

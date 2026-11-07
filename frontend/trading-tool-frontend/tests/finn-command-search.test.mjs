@@ -9,6 +9,7 @@ import {
   getDefaultIndicatorCategory,
   isDirectCommandSearchMode,
   isExactMarketInWatchlist,
+  isWorkspaceIndicatorConfigured,
   matchesCommandQuery,
   normalizeCommandText,
   openFinnContext,
@@ -52,6 +53,14 @@ test("the same asset may be added for a second exact trading pair", () => {
   assert.equal(isExactMarketInWatchlist(watchlist, 12), true);
   assert.equal(isExactMarketInWatchlist(watchlist, 13), false);
   assert.equal(isExactMarketInWatchlist([...watchlist, { symbol: "BTC", market_id: 13 }], 13), true);
+});
+
+test("an inherited RSI row opens as edit only for the selected exact market", () => {
+  const usdt = { categories: { technical: { rows: [{ name: "rsi", configured: true }] } } };
+  const eur = { categories: { technical: { rows: [{ name: "ma_200" }] } } };
+  assert.equal(isWorkspaceIndicatorConfigured(usdt, "technical", "rsi"), true);
+  assert.equal(isWorkspaceIndicatorConfigured(eur, "technical", "rsi"), false);
+  assert.equal(isWorkspaceIndicatorConfigured(usdt, "technical", "ma_200"), false);
 });
 
 test("matches workspace navigation commands", () => {

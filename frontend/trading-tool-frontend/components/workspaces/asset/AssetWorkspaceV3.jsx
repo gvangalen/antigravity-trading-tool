@@ -2580,6 +2580,9 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     (!quoteSelectionKey || rememberedQuote.key === quoteSelectionKey) &&
     matchesWorkspaceAsset(loadedWorkspace, activeSymbol, periods, activeQuoteCurrency)) ? loadedWorkspace : null;
   useEffect(() => {
+    setExpandedRowKey(null);
+  }, [activeSymbol, workspace?.market_id, workspace?.quote_currency]);
+  useEffect(() => {
     setCopyOpen(false);
     setCopyPreview(null);
     setCopySourceId("");

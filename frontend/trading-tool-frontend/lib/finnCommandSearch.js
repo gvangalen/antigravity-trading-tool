@@ -12,6 +12,14 @@ export function updateFeedDiscussionDraftIfCurrent(current, nonce, draft) {
 
 export const isDirectCommandSearchMode = (mode) => mode !== "chat";
 
+export function isWorkspaceIndicatorConfigured(workspace, category, indicator) {
+  const rows = workspace?.categories?.[category]?.rows;
+  const expected = String(indicator || "").trim().toLowerCase();
+  return Boolean(expected && Array.isArray(rows) && rows.some((row) =>
+    String(row?.name || row?.indicator || "").trim().toLowerCase() === expected
+  ));
+}
+
 export function resolveFeedDraftQuery(request, query, edit, consumedNonce) {
   if (request?.mode !== "chat" || !request?.context?.feed_item_id ||
       consumedNonce === request.nonce) return query;
