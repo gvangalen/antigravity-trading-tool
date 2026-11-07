@@ -120,6 +120,29 @@ def _safe_review_read_diagnostic(private_read: Any) -> Dict[str, Any] | None:
     }
 
 
+def _safe_paper_buy_cause(error: Exception) -> str:
+    """Classify only the immediate stage error; never export its private text."""
+    cause = error.__context__
+    if not isinstance(cause, Exception):
+        return "other"
+    cause_type = type(cause)
+    if cause_type is RuntimeError and str(cause) == "auto_paper_execution_not_filled":
+        return "auto_paper_execution_not_filled"
+    if isinstance(cause, TimeoutError):
+        return "timeout"
+    module = cause_type.__module__
+    name = cause_type.__name__
+    if module == "backend.engine.trading_bot_execution" and name == "BotSafetyBlock":
+        return "paper_safety_block"
+    if module.startswith(("psycopg", "sqlalchemy")):
+        if name in {"IntegrityError", "UniqueViolation", "ForeignKeyViolation", "CheckViolation"}:
+            return "database_integrity"
+        if name in {"OperationalError", "InterfaceError", "ConnectionException", "ConnectionFailure"}:
+            return "database_connection"
+        return "database_error"
+    return "other"
+
+
 def safe_closed_paper_chat_diagnostic(error: Exception) -> Dict[str, Any] | None:
     """Expose terminal categories only, never a raw model/provider message."""
     if str(error) == "closed_paper_review_chat_phase_failed":
@@ -152,6 +175,8 @@ def safe_closed_paper_chat_diagnostic(error: Exception) -> Dict[str, Any] | None
             "phase": phase if phase in known_phases else "unknown",
             "cause_code": cause if cause in known_causes else "other",
         }
+        if phase == "paper_buy":
+            result["paper_buy_cause"] = _safe_paper_buy_cause(error)
         review_read = _safe_review_read_diagnostic(
             getattr(error, "review_read_diagnostic", None)
         )

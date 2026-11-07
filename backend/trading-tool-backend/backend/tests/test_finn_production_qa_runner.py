@@ -508,6 +508,29 @@ def test_closed_paper_review_chat_prechat_phase_diagnostic_is_bounded(monkeypatc
     }
 
 
+def test_paper_buy_failure_reports_only_bounded_immediate_cause():
+    module = _module()
+
+    def diagnostic(cause, phase="paper_buy"):
+        stage = RuntimeError("closed_paper_review_chat_phase_failed")
+        stage.phase = phase
+        stage.cause_code = "other"
+        stage.__context__ = cause
+        return module.safe_closed_paper_chat_diagnostic(stage)
+
+    assert diagnostic(RuntimeError("auto_paper_execution_not_filled")) == {
+        "phase": "paper_buy", "cause_code": "other",
+        "paper_buy_cause": "auto_paper_execution_not_filled",
+    }
+    assert diagnostic(TimeoutError("private fixture owner and token"))["paper_buy_cause"] == "timeout"
+    integrity_error = type("IntegrityError", (Exception,), {"__module__": "psycopg.errors"})
+    assert diagnostic(integrity_error("private SQL and account details"))["paper_buy_cause"] == "database_integrity"
+    private = diagnostic(RuntimeError("private fixture owner and token"))
+    assert private["paper_buy_cause"] == "other"
+    assert "private" not in json.dumps(private)
+    assert "paper_buy_cause" not in diagnostic(TimeoutError("private"), phase="seed")
+
+
 def test_closed_paper_review_chat_cleanup_failure_takes_priority(monkeypatch):
     from backend.scripts import probe_protected_closed_paper_review as probe
 

@@ -4,9 +4,37 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Beschermde Paper-QA: ontbrekende foutcategorie (7 november 2026)
+
+Phase: `LOCAL_VALIDATION`. Actieve diagnosekandidaat:
+`codex/qa-paper-diagnostic`. De productbatch hieronder blijft op productie,
+maar is door onafhankelijke QA nog niet geaccepteerd. De beschermde QA-run
+[42415142921](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42415142921)
+bevestigde SHA-pariteit en QA-authenticatie, maar stopte vóór de vier
+inhoudelijke trader-gates in `paper_buy` met
+`closed_paper_review_chat_phase_failed`, `cause_code=other`. Er was één
+Paper-executiepoging, geen Live-order of Live-botactivatie. Het gesaniteerde
+rapport heeft SHA-256
+`b811c9076a1be80ca219bb081011d7cb64a92622854a9b45bbbee6b81775553a`.
+De oorzaakklasse is met de bestaande QA-gegevens onbekend; product-, fixture-
+en infrastructuurfout zijn niet van elkaar te onderscheiden. Het onafhankelijke
+verdict is `NOT_ACCEPTED` wegens ontbrekend bewijs.
+
+De publieke QA-orchestrator krijgt daarom uitsluitend voor deze fase een
+begrensde oorzaakcode uit de directe uitzondering: niet-gevulde Paper-
+executie, Paper-veiligheidsblokkade, database-integriteit, databaseverbinding,
+timeout, database-overig of `other`. Ruwe fouttekst, SQL, driverinformatie en
+fixturegegevens blijven buiten het artifact. De runner verandert de QA-
+uitkomst niet. Security keurde de concrete patch read-only goed. De gerichte
+runner-tests slaagden (`104 passed`) en de volledige backend-suite slaagde met
+`4293 passed, 4 skipped`. FINN-actiecontracten, providerselectie, web en mobiel
+zijn niet gewijzigd; de lokale worker-actiematrix en providerproeven zijn voor
+deze QA-diagnose niet van toepassing. CI, Auto Deploy, publieke SHA-pariteit en
+een nieuwe onafhankelijke QA-run volgen.
+
 ## Vier trader-gates voor FINN en Paper (7 november 2026)
 
-Phase: `DEPLOYED_AWAITING_QA`. Actieve kandidaat:
+Phase: `QA_NOT_ACCEPTED`. Productkandidaat:
 `codex/live-readiness-four-gates`,
 [PR #857](https://github.com/gvangalen/antigravity-trading-tool/pull/857).
 De oudere kandidaatsecties hieronder zijn historisch; deze batch bevat de vier
