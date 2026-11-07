@@ -194,6 +194,7 @@ function getUiCopy(locale = "nl") {
       neutral: "Neutral",
       indicatorStates: { low: "Little support", mixed: "Mixed", high: "Strong support" },
       unavailable: "Insufficient data",
+      scorePendingShort: "Calculating score",
       notConfigured: "No indicators added",
       pendingSource: "This indicator is configured but has no source reading yet. The next source refresh will try again; until then there is no score.",
       historyPending: (observed, required) => `This indicator has ${observed} of ${required} dated source days. We will retry the historical source; there is no score until enough real readings are available.`,
@@ -400,6 +401,7 @@ function getUiCopy(locale = "nl") {
       neutral: "Neutral",
       indicatorStates: { low: "Wenig Unterstützung", mixed: "Gemischt", high: "Starke Unterstützung" },
       unavailable: "Unzureichende Daten",
+      scorePendingShort: "Score wird berechnet",
       notConfigured: "Keine Indikatoren hinzugefügt",
       pendingSource: "Dieser Indikator ist eingerichtet, hat aber noch keinen Messwert. Bei der nächsten Datenaktualisierung wird die Quelle erneut abgefragt; bis dahin gibt es keinen Score.",
       historyPending: (observed, required) => `Für diesen Indikator liegen ${observed} von ${required} datierten Quelltagen vor. Wir fragen die historische Quelle erneut ab; bis genügend echte Messwerte vorliegen, gibt es keinen Score.`,
@@ -605,6 +607,7 @@ function getUiCopy(locale = "nl") {
     neutral: "Neutraal",
     indicatorStates: { low: "Weinig steun", mixed: "Gemengd", high: "Veel steun" },
     unavailable: "Onvoldoende data",
+    scorePendingShort: "Score wordt berekend",
     notConfigured: "Geen indicatoren toegevoegd",
     pendingSource: "Deze indicator is ingesteld, maar heeft nog geen bronmeting. Bij de volgende gegevensverversing wordt de bron opnieuw gelezen; tot die tijd is er geen score.",
     historyPending: (observed, required) => `Deze indicator heeft ${observed} van de ${required} gedateerde brondagen. We proberen de historische bron opnieuw; tot er genoeg echte metingen zijn, is er geen score.`,
@@ -1439,7 +1442,10 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
       : null;
     const ruleOrigin = score === null ? null : evidence?.rule_origin || item?.rule_origin || null;
     const tone = scoreTone(score, ui);
-    const direction = score !== null ? toDirectionLabel(item, score, ui) : ui.unavailable;
+    const unavailableReason = item?.score_unavailable_reason;
+    const pendingScore = score === null && unavailableReason === "score_pending";
+    const direction = score !== null ? toDirectionLabel(item, score, ui)
+      : pendingScore ? ui.scorePendingShort : ui.unavailable;
     const value = formatIndicatorValue(name, rawValue, locale, ui, quoteCurrency);
     const numericValue = parseIndicatorNumber(rawValue);
     const scoreConflict =
@@ -1459,7 +1465,6 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
       (String(name || "").trim().toLowerCase() === "sp500" ||
         (locale?.startsWith("nl") && ruleOrigin === "system_template") ||
         !ui.indicatorLabels?.[String(name || "").trim().toLowerCase()]);
-    const unavailableReason = item?.score_unavailable_reason;
     const historyCoverage = item?.score_history_coverage;
     const generatedDetail = score !== null
       ? explainIndicatorAssessment({
@@ -1515,7 +1520,7 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
       direction,
       score,
       signalTone: tone,
-      scoreLabel: score === null ? ui.unavailable : `${Math.round(score)}/100`,
+      scoreLabel: score === null ? (pendingScore ? ui.scorePendingShort : ui.unavailable) : `${Math.round(score)}/100`,
       detail,
       timestamp: evidence?.source_observed_at || item?.source_observed_at || null,
       ruleOrigin,
