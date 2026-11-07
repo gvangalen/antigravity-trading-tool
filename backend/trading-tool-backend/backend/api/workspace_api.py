@@ -159,6 +159,17 @@ async def post_pair_benchmark_copy(
     queue_indicator_score_refresh(int(current_user["id"]), market.asset_symbol,
                                   market_id=int(market.id))
     queue_exact_market_refresh(int(market.id))
+    if category == "macro":
+        try:
+            from backend.celery_task.celery_app import celery_app
+            celery_app.send_task(
+                "backend.celery_task.indicator_history_task.bootstrap_indicator_histories",
+                kwargs={"user_id": int(current_user["id"]), "symbol": market.asset_symbol,
+                        "category": "macro", "indicator": indicator},
+            )
+        except Exception:
+            # The saved preference remains pending until the periodic sweep.
+            pass
     return {**result, "status": status}
 
 

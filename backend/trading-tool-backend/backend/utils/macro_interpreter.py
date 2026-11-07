@@ -346,7 +346,30 @@ def fetch_absolute_macro_history(name: str, *, days: int = 90) -> list[tuple[dat
                 if close is not None:
                     raw[datetime.fromtimestamp(int(stamp), timezone.utc).date().isoformat()] = float(close)
     elif indicator == "gold_price":
-        raw = TwelveDataMacroProvider().fetch_daily_history("XAU/USD", limit=100)
+        try:
+            raw = TwelveDataMacroProvider().fetch_daily_history("XAU/USD", limit=100)
+        except Exception:
+            raw = {}
+        if len(raw) < 5:
+            try:
+                payload = _fetch_json(f"{YAHOO_GOLD}?range=6mo&interval=1d", timeout=10)
+                chart = (payload.get("chart", {}).get("result") or [{}])[0]
+                timestamps = chart.get("timestamp") or []
+                closes = ((chart.get("indicators", {}).get("quote") or [{}])[0].get("close") or [])
+                raw = {
+                    datetime.fromtimestamp(int(stamp), timezone.utc).date().isoformat(): float(close)
+                    for stamp, close in zip(timestamps, closes)
+                    if stamp is not None and close is not None
+                }
+            except (TypeError, ValueError, OverflowError, requests.RequestException):
+                logger.warning("Gold dated history unavailable from both providers")
+    elif indicator == "oil_price":
+        try:
+            csv_text = _fetch_text(_fred_csv_url("DCOILWTICO"), timeout=20)
+            raw = {day: float(close) for day, close in _extract_csv_rows(csv_text)
+                   if close not in (None, "", ".")}
+        except (TypeError, ValueError, requests.RequestException):
+            logger.warning("WTI dated history unavailable")
 
     today = datetime.now(timezone.utc).date()
     cutoff = today - timedelta(days=days)
@@ -695,6 +718,13 @@ def normalize_macro_value(indicator: str, value: float) -> float:
             low, high = 0, 6
             normalized = ((value - low) / (high - low)) * 100
             return max(0, min(100, normalized))
+
+        if indicator in {"us02y", "interest_rate"}:
+            return max(0, min(100, value / 10 * 100))
+
+        if indicator == "inflation_rate":
+            # The FRED adapter returns annual CPI growth, not the index level.
+            return max(0, min(100, (value + 2) / 14 * 100))
 
         # Gold → schaal 1500–3000
         if indicator == "gold_price":

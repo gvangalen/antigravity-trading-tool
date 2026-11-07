@@ -27,6 +27,13 @@ test("validated zero score remains a score and aliases resolve to canonical evid
   assert.equal(validatedDayEvidence(0, { sp500: row }, "S&P 500"), row);
 });
 
+test("a server verified indicator remains visible while its group is incomplete", () => {
+  const dxy = { score: 20, rule_origin: "system_template", verified_current: true };
+  const unverified = { score: 80, rule_origin: "system_template" };
+  assert.equal(validatedDayEvidence(null, { dxy, gold_price: unverified }, "DXY"), dxy);
+  assert.equal(validatedDayEvidence(null, { dxy, gold_price: unverified }, "gold_price"), null);
+});
+
 test("source freshness remains current when scoring is unavailable", () => {
   assert.equal(indicatorSourceFreshness({ status: "available", stale: false }), "current");
   assert.equal(indicatorSourceFreshness({ status: "available", stale: true }), "stale");

@@ -38,7 +38,6 @@ async def _bootstrap_indicator_histories(
         query = select(UserIndicatorConfig).where(
             UserIndicatorConfig.enabled.is_(True),
             UserIndicatorConfig.symbol.is_not(None),
-            UserIndicatorConfig.market_id.is_(None),
             UserIndicatorConfig.category.in_(("market", "macro", "technical")),
         )
         if user_id is not None:
@@ -91,9 +90,9 @@ async def _bootstrap_indicator_histories(
                 else:
                     owner_id, name = target
                     outcome = await service.bootstrap_macro(owner_id, name, extra)
-                if outcome.get("status") == "ready" and (
+                if (scope_type == "macro" and outcome.get("status") == "not_required") or (outcome.get("status") == "ready" and (
                     outcome.get("inserted", 0) > 0 or user_id is not None
-                ):
+                )):
                     if scope_type == "market" and target in rsi_owners:
                         from backend.services.technical_data_service import TechnicalDataService
                         technical = TechnicalDataService(session)
@@ -133,7 +132,7 @@ async def _bootstrap_indicator_histories(
                 # A new owner can select an asset whose shared market history
                 # is already complete. Rebuild their score even when this run
                 # did not need to insert another candle.
-                if outcome.get("status") == "ready" and (
+                if outcome.get("status") in {"ready", "not_required"} and (
                     outcome.get("inserted", 0) > 0 or user_id is not None
                 ):
                     if scope_type == "market":
@@ -159,6 +158,16 @@ async def _bootstrap_indicator_histories(
                         "backend.celery_task.store_daily_scores_task.store_daily_scores_task",
                         kwargs={"user_id": owner_id},
                     )
+                    markets = (await session.execute(select(UserIndicatorConfig.market_id).where(
+                            UserIndicatorConfig.user_id == owner_id,
+                            UserIndicatorConfig.enabled.is_(True),
+                            UserIndicatorConfig.market_id.is_not(None),
+                            UserIndicatorConfig.category == "macro").distinct())).scalars().all()
+                    for market_id in markets:
+                        celery_app.send_task(
+                            "backend.celery_task.store_daily_scores_task.store_daily_scores_task",
+                            kwargs={"user_id": owner_id, "market_id": int(market_id)},
+                        )
                 except Exception:
                     logger.warning("Score refresh after history bootstrap could not be queued for owner %s",
                                    owner_id, exc_info=True)

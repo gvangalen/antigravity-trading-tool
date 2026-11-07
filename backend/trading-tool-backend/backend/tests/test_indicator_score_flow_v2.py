@@ -142,7 +142,9 @@ def test_absolute_macro_level_without_dated_history_is_not_scored(monkeypatch):
 
     monkeypatch.setattr(scoring_utils, "get_db_connection", ShortHistoryConnection)
     result = scoring_utils.generate_scores_db("macro", user_id=7, symbol="BTC")
-    assert result["scores"] == {}
+    assert "dxy" not in result["scores"]
+    assert result["scores"]["fear_greed_index"]["score"] == 25
+    assert result["total_score"] is None
     assert result["source_status"] == "insufficient_indicator_history"
 
 
@@ -160,7 +162,8 @@ def test_missing_selected_indicator_does_not_reweight_category(monkeypatch):
 
             def execute(sql, params):
                 original(sql, params)
-                if "FROM macro_data" in sql and "SELECT DISTINCT ON" in sql:
+                if ("FROM macro_data" in sql and "SELECT DISTINCT ON" in sql
+                        and "source_observed_at::date" not in sql):
                     cursor.rows = cursor.rows[:1]
 
             cursor.execute = execute
@@ -171,7 +174,8 @@ def test_missing_selected_indicator_does_not_reweight_category(monkeypatch):
     result = scoring_utils.generate_scores_db("macro", user_id=7, symbol="BTC")
 
     assert result["source_status"] == "missing_or_stale_indicator"
-    assert result["scores"] == {}
+    assert result["scores"]["dxy"]["score"] == 80
+    assert result["total_score"] is None
 
 
 def test_absolute_market_price_and_volume_need_asset_history():

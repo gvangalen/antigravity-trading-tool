@@ -425,6 +425,7 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
   run_migration backend/scripts/migrations/2026_11_07_vix_gold_score_templates.py
   run_migration backend/scripts/migrations/2026_10_21_ma200_score_template.py
   run_migration backend/scripts/migrations/2026_10_26_ma50_macd_score_templates.py
+  run_migration backend/scripts/migrations/2026_11_07_remaining_indicator_score_templates.py
   run_migration backend/scripts/migrations/2026_10_08_dxy_yahoo_source.py
   run_migration backend/scripts/migrations/2026_10_09_retire_ai_reflections.py
   run_migration backend/scripts/migrations/2026_10_09_retire_ai_category_insights.py

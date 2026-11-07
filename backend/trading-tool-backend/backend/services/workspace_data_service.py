@@ -180,7 +180,7 @@ def _current_indicator_rows(rows: list[dict[str, Any]], category: str,
     """Use the same verified daily indicator evidence as the category score."""
     component = (daily or {}).get(category) or {}
     evidence = ((daily or {}).get("indicator_evidence") or {}).get(category) or {}
-    if component.get("source_status") != "fresh" or not isinstance(evidence, dict):
+    if not isinstance(evidence, dict):
         evidence = {}
     projected = []
     for row in rows:
@@ -195,7 +195,8 @@ def _current_indicator_rows(rows: list[dict[str, Any]], category: str,
         )):
             item["score_issue"] = "missing_rule"
         saved = evidence.get(_indicator_key(row.get("name")))
-        if isinstance(saved, dict) and saved.get("rule_origin") in {"custom", "system_template"}:
+        if (isinstance(saved, dict) and saved.get("rule_origin") in {"custom", "system_template"}
+                and (component.get("source_status") == "fresh" or saved.get("verified_current") is True)):
             try:
                 same_value = math.isclose(float(row["value"]), float(saved["value"]), rel_tol=1e-12)
                 row_moment = _as_utc(row.get("source_observed_at"))

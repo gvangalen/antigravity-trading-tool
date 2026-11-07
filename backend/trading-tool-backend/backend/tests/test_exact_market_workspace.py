@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from backend.services import exact_market_workspace_service as module
+from backend.services.setup_market_match_service import verified_indicator_evidence
 
 
 class _Result:
@@ -18,6 +19,21 @@ class _Result:
 
     def all(self):
         return self.rows
+
+
+def test_valid_individual_macro_score_survives_pending_group_without_exposing_stale_rows():
+    source = {"indicator_evidence": {"macro": {
+        "dxy": {"value": 105, "score": 20, "rule_origin": "system_template"},
+        "gold_price": {"value": 4200, "score": 80, "rule_origin": "system_template"},
+    }}}
+    assessment = {
+        "component_source_status": {"macro_score": "missing_score"},
+        "verified_indicator_names": {"macro": ["dxy"]},
+    }
+    evidence = verified_indicator_evidence(assessment, source)
+    assert evidence["macro"]["dxy"]["score"] == 20
+    assert evidence["macro"]["dxy"]["verified_current"] is True
+    assert "gold_price" not in evidence["macro"]
 
 
 def test_exact_market_workspace_never_borrows_base_quote_or_score(monkeypatch):

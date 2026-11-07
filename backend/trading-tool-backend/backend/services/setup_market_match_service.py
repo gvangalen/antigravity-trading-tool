@@ -38,12 +38,22 @@ def verified_indicator_evidence(assessment: dict, source_row: dict | None) -> di
             return {}
     if not isinstance(raw, dict):
         return {}
-    return {
-        category: raw.get(category, {})
-        for category in ("market", "macro", "technical")
-        if assessment.get("component_source_status", {}).get(f"{category}_score") == "fresh"
-        and isinstance(raw.get(category), dict)
-    }
+    verified = {}
+    for category in ("market", "macro", "technical"):
+        entries = raw.get(category)
+        if not isinstance(entries, dict):
+            continue
+        complete = assessment.get("component_source_status", {}).get(f"{category}_score") == "fresh"
+        names = assessment.get("verified_indicator_names", {}).get(
+            category, entries.keys() if complete else ())
+        selected = {
+            name: entry if complete else {**entry, "verified_current": True}
+            for name, entry in entries.items()
+            if name in names and isinstance(entry, dict)
+        }
+        if complete or selected:
+            verified[category] = selected
+    return verified
 
 
 class SetupMarketMatchService:
@@ -143,6 +153,21 @@ class SetupMarketMatchService:
         )
         if diagnostics is not None:
             diagnostics[f"{category}_score"] = diagnosis
+            category_evidence = evidence.get(category) if isinstance(evidence, dict) else None
+            evidence_rows = category_evidence if isinstance(category_evidence, dict) else {}
+            observations_by_name = {
+                normalize_indicator_name(str(item[0])): item for item in observations
+            }
+            diagnostics[f"{category}_verified_indicators"] = [
+                key for name, updated_at in configured
+                if (key := normalize_indicator_name(str(name))) in evidence_rows
+                and key in observations_by_name
+                and score_snapshot_diagnosis(
+                    category, symbol, [(name, updated_at)],
+                    [observations_by_name[key]], {key: evidence_rows[key]},
+                    row.get("calculated_at"),
+                ) == "fresh"
+            ]
         return diagnosis == "fresh"
 
     async def for_asset(self, user_id: int, symbol: str, *, setups=None,
@@ -191,20 +216,27 @@ class SetupMarketMatchService:
         if weights is None:
             source_status = "invalid_weights"
         if row:
+            saved_evidence = row.get("indicator_evidence") or {}
+            if isinstance(saved_evidence, str):
+                try:
+                    saved_evidence = json.loads(saved_evidence)
+                except json.JSONDecodeError:
+                    saved_evidence = {}
             for category in ("macro", "technical", "market"):
                 score_key = f"{category}_score"
                 value = stored_scores[score_key]
+                if value is None and not (isinstance(saved_evidence, dict)
+                                          and saved_evidence.get(category)):
+                    continue
+                fresh = await self._source_is_fresh(
+                    user_id, symbol, category, row, component_source_observed_at,
+                    score_diagnostics, market_id=market_id,
+                )
                 if value is not None:
                     component_source_status[score_key] = (
-                        "fresh" if await self._source_is_fresh(
-                            user_id, symbol, category, row, component_source_observed_at,
-                            score_diagnostics, market_id=market_id,
-                        )
-                        else str(score_diagnostics.get(score_key) or "stale_source")
-                    )
-                    component_indicator_source_status[category] = score_diagnostics.get(
-                        f"{category}_indicator_sources", {}
-                    )
+                        "fresh" if fresh else str(score_diagnostics.get(score_key) or "stale_source"))
+                component_indicator_source_status[category] = score_diagnostics.get(
+                    f"{category}_indicator_sources", {})
             if weights is not None and all(
                 component_source_status[f"{category}_score"] == "fresh"
                 for category in ("macro", "technical", "market")
@@ -251,6 +283,10 @@ class SetupMarketMatchService:
             "component_status_explanation": component_status_explanation,
             "component_source_observed_at": component_source_observed_at,
             "component_indicator_source_status": component_indicator_source_status,
+            "verified_indicator_names": {
+                category: score_diagnostics.get(f"{category}_verified_indicators", [])
+                for category in ("market", "macro", "technical")
+            },
             "matches": matches,
         }
 

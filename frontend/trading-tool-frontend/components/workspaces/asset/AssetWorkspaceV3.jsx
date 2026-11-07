@@ -217,7 +217,7 @@ function getUiCopy(locale = "nl") {
       priceRangeMethod: (position) => `Measured price position in its recent 30-day range: ${position}/100. This is not an entry signal.`,
       dxyRangeMethod: (position) => `Measured DXY position in its recent 90-day range: ${position}/100. Higher dollar strength lowers this broad risk-context score; this is not an asset signal.`,
       volumeMethod: (position) => `Trading volume relative to its recent median: ${position}/100 (50 is the median). Volume alone says nothing about price direction.`,
-      change24hMethod: (position) => `The 24-hour price change maps to ${position}/100 on a -20% to +20% scale. This is short-term direction, not an entry signal.`,
+      change24hMethod: (position, score) => `The 24-hour change normalizes to ${position}/100 (values outside -20% to +20% are capped). The indicator score is ${score}/100 under the selected rule. This is not an entry signal.`,
       normalizedInput: "Normalized reading",
       market: "Market",
       macro: "Macro",
@@ -423,7 +423,7 @@ function getUiCopy(locale = "nl") {
       priceRangeMethod: (position) => `Gemessene Preisposition im jüngsten 30-Tage-Bereich: ${position}/100. Das ist kein Einstiegssignal.`,
       dxyRangeMethod: (position) => `Gemessene DXY-Position im jüngsten 90-Tage-Bereich: ${position}/100. Ein stärkerer Dollar senkt diesen allgemeinen Risikokontext-Score; das ist kein Assetsignal.`,
       volumeMethod: (position) => `Handelsvolumen relativ zum jüngsten Median: ${position}/100 (50 entspricht dem Median). Volumen allein zeigt keine Preisrichtung.`,
-      change24hMethod: (position) => `Die 24-Stunden-Preisänderung ergibt ${position}/100 auf einer Skala von -20 % bis +20 %. Das ist eine kurzfristige Richtung, kein Einstiegssignal.`,
+      change24hMethod: (position, score) => `Die 24-Stunden-Änderung wird auf ${position}/100 normiert (Werte außerhalb von -20 % bis +20 % werden begrenzt). Der Indikatorwert ist ${score}/100 gemäß der gewählten Regel. Das ist kein Einstiegssignal.`,
       normalizedInput: "Normierter Messwert",
       market: "Markt",
       macro: "Makro",
@@ -628,7 +628,7 @@ function getUiCopy(locale = "nl") {
     priceRangeMethod: (position) => `Gemeten prijspositie in het recente 30-daagse bereik: ${position}/100. Dit is geen instapsignaal.`,
     dxyRangeMethod: (position) => `Gemeten DXY-positie in het recente 90-daagse bereik: ${position}/100. Een sterkere dollar verlaagt deze algemene risicocontextscore; dit is geen assetsignaal.`,
     volumeMethod: (position) => `Handelsvolume ten opzichte van de recente mediaan: ${position}/100 (50 is de mediaan). Volume alleen zegt niets over de koersrichting.`,
-    change24hMethod: (position) => `De koersverandering in 24 uur komt uit op ${position}/100 op een schaal van -20% tot +20%. Dit is kortetermijnrichting, geen instapsignaal.`,
+    change24hMethod: (position, score) => `De koersverandering in 24 uur is genormaliseerd naar ${position}/100 (waarden buiten -20% tot +20% worden begrensd). De indicatorscore is ${score}/100 volgens de scoreregel. Dit is geen instapsignaal.`,
     normalizedInput: "Genormaliseerde meting",
     market: "Markt",
     macro: "Macro",
@@ -1484,7 +1484,7 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
           : String(name).toLowerCase() === "volume"
             ? ui.volumeMethod(Math.round(normalizedPosition))
             : String(name).toLowerCase() === "change_24h"
-              ? ui.change24hMethod(Math.round(normalizedPosition))
+              ? ui.change24hMethod(Math.round(normalizedPosition), Math.round(score))
           : null
       : null;
     const detail = scoreConflict
@@ -3038,7 +3038,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
 
   const sections = useMemo(() => {
     const evidence = workspace?.daily?.indicator_evidence || {};
-    const dayEvidence = (category, period, score) => period === "day" ? (normalizeScore(score) === null ? {} : evidence[category] || {}) : null;
+    const dayEvidence = (category, period) => period === "day" ? evidence[category] || {} : null;
     const marketRows = buildRows(marketDayData, locale, ui, dayEvidence("market", marketTimeframe, market?.score), market?.score, workspace?.quote_currency);
     const macroRows = buildRows(macroData, locale, ui, dayEvidence("macro", macroTimeframe, macro?.score), macro?.score);
     const technicalRows = buildRows(technicalData, locale, ui, dayEvidence("technical", technicalTimeframe, technical?.score), technical?.score);

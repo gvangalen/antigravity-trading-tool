@@ -13,9 +13,9 @@ export function evidenceKey(name) {
 }
 
 export function validatedDayEvidence(categoryScore, evidence, name) {
-  if (categoryScore === null || categoryScore === undefined || categoryScore === "") return null;
-  if (!Number.isFinite(Number(categoryScore))) return null;
   const row = evidence?.[evidenceKey(name)] || null;
+  if ((categoryScore === null || categoryScore === undefined || categoryScore === ""
+      || !Number.isFinite(Number(categoryScore))) && row?.verified_current !== true) return null;
   return row && ["custom", "system_template"].includes(row.rule_origin) ? row : null;
 }
 
