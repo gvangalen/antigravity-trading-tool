@@ -6,8 +6,10 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Beschermde Paper-QA: ontbrekende foutcategorie (7 november 2026)
 
-Phase: `LOCAL_VALIDATION`. Actieve diagnosekandidaat:
-`codex/qa-paper-diagnostic`. De productbatch hieronder blijft op productie,
+Phase: `DEPLOYED_AWAITING_QA`. Actieve diagnosekandidaat:
+`codex/qa-paper-diagnostic`,
+[PR #859](https://github.com/gvangalen/antigravity-trading-tool/pull/859).
+De productbatch hieronder blijft op productie,
 maar is door onafhankelijke QA nog niet geaccepteerd. De beschermde QA-run
 [42415142921](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42415142921)
 bevestigde SHA-pariteit en QA-authenticatie, maar stopte vóór de vier
@@ -29,8 +31,15 @@ uitkomst niet. Security keurde de concrete patch read-only goed. De gerichte
 runner-tests slaagden (`104 passed`) en de volledige backend-suite slaagde met
 `4293 passed, 4 skipped`. FINN-actiecontracten, providerselectie, web en mobiel
 zijn niet gewijzigd; de lokale worker-actiematrix en providerproeven zijn voor
-deze QA-diagnose niet van toepassing. CI, Auto Deploy, publieke SHA-pariteit en
-een nieuwe onafhankelijke QA-run volgen.
+deze QA-diagnose niet van toepassing. Alle vijf PR-controles en alle vijf
+controles in [main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42416516763)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42416729432)
+slaagde. Git-main, publieke backend-health en frontend-buildinfo meldden alle
+drie `7242d8f2a783cdcdf1bd42a92516dd548c27d069`; beide publieke routes
+gaven HTTP 200. Deze statuswijziging creëert zelf een nieuwe SHA. Pas nadat de
+laatste main-CI, Auto Deploy en beide publieke SHA's opnieuw samenvallen, start
+dezelfde onafhankelijke QA-agent een beschermde Paper-only hertest. Een groene
+diagnoseuitrol is geen acceptatie van de vier trader-gates.
 
 ## Vier trader-gates voor FINN en Paper (7 november 2026)
 
