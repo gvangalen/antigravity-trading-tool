@@ -69,6 +69,14 @@ export const FINN_ASSETS = [
   { symbol: "GLD", name: "SPDR Gold Shares", icon: "G", assetClass: "etf" },
 ];
 
+export function buildExactPairOptions(assets, marketsBySymbol, query = "") {
+  return assets.filter((asset) => asset.assetClass === "crypto").flatMap((asset) =>
+    (marketsBySymbol[asset.symbol] || [])
+      .filter((market) => matchesCommandQuery(`${market.pair} ${asset.symbol} ${asset.name}`, query))
+      .map((market) => ({ asset, market }))
+  );
+}
+
 const COMMAND_WORDS = new Set([
   "add",
   "aan",

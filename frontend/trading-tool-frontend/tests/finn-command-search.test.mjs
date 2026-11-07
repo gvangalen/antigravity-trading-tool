@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  FINN_ASSETS,
+  buildExactPairOptions,
   closeFeedDiscussionIfCurrent,
   getCommandTokens,
   getDefaultIndicatorCategory,
@@ -14,6 +16,20 @@ import {
   shouldAttachFeedContext,
   updateFeedDiscussionDraftIfCurrent,
 } from "../lib/finnCommandSearch.js";
+
+test("asset picker lists exact EUR and USDT markets as separate results", () => {
+  const markets = {
+    BTC: [
+      { pair: "BTC/EUR", quote_currency: "EUR", status: "available" },
+      { pair: "BTC/USDT", quote_currency: "USDT", status: "available" },
+    ],
+    ETH: [{ pair: "ETH/USDT", quote_currency: "USDT", status: "available" }],
+  };
+  assert.deepEqual(buildExactPairOptions(FINN_ASSETS, markets).map(({ market }) => market.pair),
+    ["BTC/EUR", "BTC/USDT", "ETH/USDT"]);
+  assert.deepEqual(buildExactPairOptions(FINN_ASSETS, markets, "btc/eur").map(({ market }) => market.pair),
+    ["BTC/EUR"]);
+});
 
 test("normalizes accents and punctuation in natural commands", () => {
   assert.equal(normalizeCommandText("Öffne: Ethereum!"), "offne ethereum");

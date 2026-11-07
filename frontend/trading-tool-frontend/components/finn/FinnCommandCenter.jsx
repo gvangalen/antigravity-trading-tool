@@ -27,6 +27,7 @@ import {
   FINN_ASSETS,
   FINN_INDICATOR_MODAL_COMPLETED_EVENT,
   FINN_INDICATOR_MODAL_OPEN_EVENT,
+  buildExactPairOptions,
   getDefaultIndicatorCategory,
   isExactMarketInWatchlist,
   isDirectCommandSearchMode,
@@ -166,6 +167,7 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
   const [pendingIndicator, setPendingIndicator] = useState(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [marketChoice, setMarketChoice] = useState({ asset: null, markets: [], loading: false, error: false });
+  const [pairCatalog, setPairCatalog] = useState({ markets: {}, loading: false, error: false });
 
   const activeSymbol = searchParams.get("symbol")?.toUpperCase() || selectedAsset || "BTC";
   const activeVariant = searchParams.get("variant") === "legacy" ? "legacy" : "v3";
@@ -231,6 +233,23 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
     return () => { cancelled = true; };
   }, [mode.kind, marketChoice.asset]);
 
+  useEffect(() => {
+    if (!isOpen || mode.kind !== "asset") return;
+    let cancelled = false;
+    setPairCatalog((current) => ({ ...current, loading: true, error: false }));
+    const assets = FINN_ASSETS.filter((asset) => asset.assetClass === "crypto");
+    Promise.allSettled(assets.map((asset) => fetchTradingMarkets(asset.symbol)))
+      .then((results) => {
+        if (cancelled) return;
+        const markets = {};
+        results.forEach((result, index) => {
+          if (result.status === "fulfilled") markets[assets[index].symbol] = result.value?.markets || [];
+        });
+        setPairCatalog({ markets, loading: false, error: results.every((result) => result.status === "rejected") });
+      });
+    return () => { cancelled = true; };
+  }, [isOpen, mode.kind]);
+
   const workflows = useMemo(
     () => [
       { id: "analysis", title: locale?.startsWith("nl") ? "Analyse" : "Analysis", subtitle: copy.pages, href: `/asset?symbol=${activeSymbol}`, icon: BarChart3 },
@@ -245,7 +264,7 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
   const assetResults = useMemo(() => {
     if (mode.kind === "indicator" || mode.kind === "asset_market" || !isDirectCommandSearchMode(mode.kind)) return [];
     if (!hasQuery && mode.kind !== "asset") return [];
-    return FINN_ASSETS.filter((asset) => matchesCommandQuery(`${asset.symbol} ${asset.name} ${asset.assetClass === "crypto" ? `${asset.symbol}/EUR ${asset.symbol}/USDT` : ""}`, query)).map((asset) => ({
+    return FINN_ASSETS.filter((asset) => (mode.kind !== "asset" || asset.assetClass !== "crypto") && matchesCommandQuery(`${asset.symbol} ${asset.name} ${asset.assetClass === "crypto" ? `${asset.symbol}/EUR ${asset.symbol}/USDT` : ""}`, query)).map((asset) => ({
       id: `asset:${asset.symbol}`,
       type: "asset",
       title: asset.symbol,
@@ -255,17 +274,23 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
     }));
   }, [hasQuery, mode.kind, query]);
 
-  const marketResults = useMemo(() => mode.kind === "asset_market"
-    ? marketChoice.markets.map((market) => ({
+  const marketResults = useMemo(() => {
+    const options = mode.kind === "asset_market"
+      ? marketChoice.markets.map((market) => ({ market, asset: marketChoice.asset }))
+      : mode.kind === "asset"
+        ? buildExactPairOptions(FINN_ASSETS, pairCatalog.markets, query)
+        : [];
+    return options.map(({ market, asset }) => ({
       id: `market:${market.pair}`,
       type: "market",
       title: market.pair,
       subtitle: market.status === "available" ? [market.venue, market.asset_class].filter(Boolean).join(" · ") : copy.marketUnavailable,
       market,
+      assetSymbol: asset?.symbol,
       icon: Search,
       disabled: market.status !== "available",
-    }))
-    : [], [copy.marketUnavailable, marketChoice.markets, mode.kind]);
+    }));
+  }, [copy.marketUnavailable, marketChoice, mode.kind, pairCatalog.markets, query]);
 
   const workflowResults = useMemo(() => {
     if (mode.kind !== "all" || !hasQuery) return [];
@@ -301,14 +326,16 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
   }, [catalog, copy.addMacro, copy.addMarket, copy.addTechnical, hasQuery, mode.category, mode.kind, query]);
 
   const directResults = useMemo(
-    () => [...assetResults, ...marketResults, ...workflowResults, ...indicatorResults],
-    [assetResults, marketResults, indicatorResults, workflowResults]
+    () => mode.kind === "asset"
+      ? [...marketResults, ...assetResults]
+      : [...assetResults, ...marketResults, ...workflowResults, ...indicatorResults],
+    [assetResults, marketResults, indicatorResults, workflowResults, mode.kind]
   );
   const selectableResults = useMemo(
-    () => (hasQuery && mode.kind !== "asset_market" ? [...directResults, { id: "ask-finn", type: "ask", title: `${copy.askFinn}: “${query.trim()}”`, subtitle: copy.askDescription, icon: MessageSquare }] : directResults).filter((result) => !result.disabled),
+    () => (hasQuery && !["asset", "asset_market"].includes(mode.kind) ? [...directResults, { id: "ask-finn", type: "ask", title: `${copy.askFinn}: “${query.trim()}”`, subtitle: copy.askDescription, icon: MessageSquare }] : directResults).filter((result) => !result.disabled),
     [copy.askDescription, copy.askFinn, directResults, hasQuery, mode.kind, query]
   );
-  const displayResults = mode.kind === "asset_market" ? directResults : selectableResults;
+  const displayResults = ["asset", "asset_market"].includes(mode.kind) ? directResults : selectableResults;
 
   const closeCommand = () => {
     onQueryChange("");
@@ -344,8 +371,9 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
       return;
     }
     if (result.type === "market") {
-      if (result.disabled || !marketChoice.asset) return;
-      const { symbol } = marketChoice.asset;
+      if (result.disabled) return;
+      const symbol = result.assetSymbol || marketChoice.asset?.symbol;
+      if (!symbol) return;
       try {
         const selected = await selectTradingMarket(symbol, result.market.quote_currency);
         if (!selected?.market_id) throw new Error("Market identity missing");
@@ -454,6 +482,10 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
             ) : mode.kind === "asset_market" && marketChoice.loading ? (
               <div className="px-4 py-6 text-center text-xs font-semibold text-slate-400">{copy.loadingMarkets}</div>
             ) : mode.kind === "asset_market" && marketChoice.error ? (
+              <div className="px-4 py-6 text-center text-xs font-semibold text-slate-400">{copy.failed}</div>
+            ) : mode.kind === "asset" && pairCatalog.loading && marketResults.length === 0 ? (
+              <div className="px-4 py-6 text-center text-xs font-semibold text-slate-400">{copy.loadingMarkets}</div>
+            ) : mode.kind === "asset" && pairCatalog.error ? (
               <div className="px-4 py-6 text-center text-xs font-semibold text-slate-400">{copy.failed}</div>
             ) : displayResults.length > 0 ? displayResults.map((result) => {
               const Icon = result.icon || ArrowRight;

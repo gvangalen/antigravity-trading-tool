@@ -35,8 +35,8 @@ import { macroDataAdd } from "@/lib/api/macro";
 import { fetchSetupMarketMatches } from "@/lib/api/setups";
 import { technicalDataAdd } from "@/lib/api/technical";
 import { mapTechnicalToStudies } from "@/config/indicator_mapping";
-import { addToWatchlist, removeFromWatchlist } from "@/lib/api/watchlist";
-import { fetchTradingMarkets, selectTradingMarket } from "@/lib/api/assets";
+import { removeFromWatchlist } from "@/lib/api/watchlist";
+import { fetchTradingMarkets } from "@/lib/api/assets";
 import { updateIntelligenceWeights } from "@/lib/api/scores";
 import { getAssistantPreferences, updateAssistantPreferences } from "@/lib/api/ai";
 import TradingViewSmartChart from "@/components/charts/TradingViewSmartChart";
@@ -1916,8 +1916,6 @@ function AssetList({
   onRemove,
   onGroupChange,
   onAddAsset,
-  availablePairs,
-  onAddPair,
   conditionOptions,
   ui,
 }) {
@@ -1946,13 +1944,6 @@ function AssetList({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-        {activeGroup === "crypto" && availablePairs.map((market) => (
-          <button key={market.quote_currency} type="button" onClick={() => onAddPair(market)}
-            className="rounded-full border border-blue-200 px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50">
-            <Plus size={12} className="mr-1 inline" />{`${activeSymbol}/${market.quote_currency}`}
-          </button>
-        ))}
         <button
           type="button"
           onClick={onAddAsset}
@@ -1961,7 +1952,6 @@ function AssetList({
           <Plus size={12} />
           {ui.addAsset}
         </button>
-        </div>
       </div>
 
       <div className="mt-3 overflow-hidden rounded-[18px] border border-slate-200 bg-white">
@@ -3130,22 +3120,6 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     });
   };
 
-  const availableWatchlistPairs = tradingMarkets.symbol === activeSymbol
-    ? tradingMarkets.markets.filter((market) => market.status === "available"
-      && !currentWatchlistRows.some((row) => row.symbol === activeSymbol && row.marketId
-        && row.quoteCurrency === market.quote_currency))
-    : [];
-  const handleAddWatchlistPair = async (market) => {
-    try {
-      const selected = await selectTradingMarket(activeSymbol, market.quote_currency);
-      await addToWatchlist({ symbol: activeSymbol, marketId: selected.market_id });
-      await reloadWatchlist();
-      await refreshPersistedWatchlist(true);
-    } catch (error) {
-      showSnackbar(error?.message || ui.unavailable, "error");
-    }
-  };
-
   const openSearch = (detail = undefined) => {
     if (typeof window === "undefined") return;
     if (detail?.mode === "indicator" && activeQuoteCurrency && !workspace?.market_id) {
@@ -3188,8 +3162,6 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         activeGroup={activeAssetGroup}
         onGroupChange={handleAssetGroupChange}
         onAddAsset={() => openSearch({ mode: "asset" })}
-        availablePairs={availableWatchlistPairs}
-        onAddPair={handleAddWatchlistPair}
         conditionOptions={t?.setups?.marketConditions?.options}
         ui={ui}
       />
