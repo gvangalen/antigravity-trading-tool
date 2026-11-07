@@ -325,6 +325,7 @@ function getUiCopy(locale = "nl") {
       belowMa50: "Below MA50",
       indicatorLabels: {
         sp500: "S&P 500",
+        oil_price: "WTI oil price",
         change_24h: "24-hour price change",
         volume: "Volume",
         market_volume: "Volume",
@@ -535,6 +536,7 @@ function getUiCopy(locale = "nl") {
       belowMa50: "Unter MA50",
       indicatorLabels: {
         sp500: "S&P 500",
+        oil_price: "WTI-Ölpreis",
         change_24h: "24-Stunden-Preisänderung",
         volume: "Volumen",
         market_volume: "Volumen",
@@ -744,6 +746,7 @@ function getUiCopy(locale = "nl") {
     belowMa50: "Onder MA50",
     indicatorLabels: {
       sp500: "S&P 500",
+      oil_price: "WTI-olieprijs",
       change_24h: "Prijsverandering 24 uur",
       volume: "Volume",
       market_volume: "Volume",
