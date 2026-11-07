@@ -1452,6 +1452,7 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
       !isGenericIndicatorExplanation(rawDetail) &&
       !isGenericIndicatorExplanation(localizedDetail) &&
       (String(name || "").trim().toLowerCase() === "sp500" ||
+        (locale?.startsWith("nl") && ruleOrigin === "system_template") ||
         !ui.indicatorLabels?.[String(name || "").trim().toLowerCase()]);
     const unavailableReason = item?.score_unavailable_reason;
     const historyCoverage = item?.score_history_coverage;

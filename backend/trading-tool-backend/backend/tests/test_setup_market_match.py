@@ -201,6 +201,37 @@ def test_recent_price_reading_can_need_score_rebuild_without_being_stale():
     asyncio.run(run())
 
 
+def test_exact_pair_24_hour_score_waits_for_latest_quote():
+    async def run():
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        observed = now - timedelta(minutes=8)
+        current = now - timedelta(minutes=1)
+        class Result:
+            def __init__(self, rows):
+                self.rows = rows
+            def fetchall(self):
+                return self.rows
+            def first(self):
+                return self.rows[0] if self.rows else None
+        session = SimpleNamespace(execute=AsyncMock(side_effect=[
+            Result([("change_24h", now - timedelta(hours=1))]),
+            Result([("change_24h", 14.5, observed)]),
+            Result([(0.02, current)]),
+        ]))
+        source = {"calculated_at": now - timedelta(minutes=2),
+                  "indicator_evidence": {"market": {"change_24h": {
+                      "value": 14.5, "source_observed_at": observed.isoformat(),
+                      "rule_origin": "system_template", "score": 50,
+                  }}}}
+        diagnostics = {}
+        fresh = await SetupMarketMatchService(session)._source_is_fresh(
+            7, "BTC", "market", source, diagnostics=diagnostics, market_id=43)
+        assert fresh is False
+        assert diagnostics["market_score"] == "score_rebuild_pending"
+        assert diagnostics["market_verified_indicators"] == []
+    asyncio.run(run())
+
+
 def test_setup_fit_uses_current_benchmark_weights_but_preserves_hard_conditions():
     conditions = setup(1, min_benchmark_score=55, max_benchmark_score=60)
     scores = {"macro": 50, "technical": 50, "market": 80}

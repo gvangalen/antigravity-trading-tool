@@ -36,6 +36,18 @@ def test_valid_individual_macro_score_survives_pending_group_without_exposing_st
     assert "gold_price" not in evidence["macro"]
 
 
+def test_24_hour_row_uses_selected_pairs_latest_quote_while_recalculation_is_pending():
+    observed = datetime.now(timezone.utc).replace(microsecond=0)
+    row = {"name": "change_24h", "value": 14.5, "score": 50,
+           "source_observed_at": observed.isoformat()}
+    latest = SimpleNamespace(change_24h=0.02,
+                             source_observed_at=observed.replace(tzinfo=None))
+    module._align_change_24h_row([row], latest)
+    assert row["value"] == 0.02
+    assert row["score"] is None
+    assert row["data_status"] == "pending_refresh"
+
+
 def test_exact_market_workspace_never_borrows_base_quote_or_score(monkeypatch):
     observed = datetime.now(timezone.utc).replace(tzinfo=None)
     market = SimpleNamespace(id=43, asset_symbol="ETH", quote_currency="EUR",

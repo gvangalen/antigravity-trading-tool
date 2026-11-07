@@ -232,16 +232,41 @@ async def put_pair_indicator_config(
         raise HTTPException(status_code=409, detail="indicator_already_configured_for_pair") from exc
     status = "ready"
     if category == "macro":
-        source = await db.execute(select(MacroData.value, MacroData.source_observed_at).where(
+        from backend.services.indicator_history_bootstrap import (
+            ABSOLUTE_MACRO_INDICATORS, IndicatorHistoryBootstrap,
+        )
+        from backend.services.macro_data_service import MacroDataService
+        if indicator in ABSOLUTE_MACRO_INDICATORS:
+            try:
+                await IndicatorHistoryBootstrap(db).bootstrap_macro(
+                    int(current_user["id"]), indicator, market.asset_symbol)
+            except Exception:
+                await db.rollback()
+                status = "pending_source"
+        try:
+            await MacroDataService(db).add_macro_indicator(
+                int(current_user["id"]), indicator, None,
+                symbol=market.asset_symbol, persist_preference=False,
+                refresh_existing=True,
+            )
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            status = "pending_source"
+        source = await db.execute(select(MacroData.value, MacroData.score,
+                                         MacroData.source_observed_at).where(
             MacroData.user_id == int(current_user["id"]),
             MacroData.symbol == market.asset_symbol,
             MacroData.name == indicator,
-        ).order_by(MacroData.source_observed_at.desc().nulls_last()).limit(1))
+        ).order_by(MacroData.source_observed_at.desc().nulls_last(),
+                   MacroData.timestamp.desc(), MacroData.id.desc()).limit(1))
         reading = source.first()
         if not reading or reading[0] is None or not score_source_is_fresh(
-            category, indicator, reading[1], symbol=market.asset_symbol,
+            category, indicator, reading[2], symbol=market.asset_symbol,
         ):
             status = "pending_source"
+        else:
+            status = "ready" if reading[1] is not None else "pending_score"
     if category in {"market", "technical"}:
         try:
             await ExactMarketIndicatorService(db).materialize(

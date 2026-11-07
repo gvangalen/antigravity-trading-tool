@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 
 from sqlalchemy import text
 
@@ -151,6 +152,28 @@ class SetupMarketMatchService:
             evidence.get(category) if isinstance(evidence, dict) else None,
             row.get("calculated_at"),
         )
+        quote_mismatch = False
+        if category == "market" and market_id is not None and "change_24h" in configured_names:
+            quote_result = await self.session.execute(text("""
+                SELECT change_24h, source_observed_at
+                FROM market_data
+                WHERE market_id = :market_id AND quote_currency IS NOT NULL
+                  AND source_observed_at IS NOT NULL
+                ORDER BY source_observed_at DESC, timestamp DESC
+                LIMIT 1
+            """), {"market_id": market_id})
+            quote = quote_result.first()
+            change_row = next((item for item in observations
+                               if normalize_indicator_name(str(item[0])) == "change_24h"), None)
+            try:
+                quote_mismatch = (quote is None or change_row is None
+                                  or quote[1] != change_row[2]
+                                  or not math.isclose(float(quote[0]), float(change_row[1]),
+                                                      rel_tol=1e-12))
+            except (TypeError, ValueError):
+                quote_mismatch = True
+            if quote_mismatch:
+                diagnosis = "score_rebuild_pending"
         if diagnostics is not None:
             diagnostics[f"{category}_score"] = diagnosis
             category_evidence = evidence.get(category) if isinstance(evidence, dict) else None
@@ -161,6 +184,7 @@ class SetupMarketMatchService:
             diagnostics[f"{category}_verified_indicators"] = [
                 key for name, updated_at in configured
                 if (key := normalize_indicator_name(str(name))) in evidence_rows
+                and (key != "change_24h" or not quote_mismatch)
                 and key in observations_by_name
                 and score_snapshot_diagnosis(
                     category, symbol, [(name, updated_at)],

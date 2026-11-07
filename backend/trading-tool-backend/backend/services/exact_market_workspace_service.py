@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from math import isclose
 
 from sqlalchemy import select
 
@@ -14,9 +15,26 @@ from backend.services.setup_market_match_service import SetupMarketMatchService,
 from backend.services.pair_indicator_config_service import PairIndicatorConfigService, effective_pair_configs
 from backend.utils.scoring_utils import normalize_indicator_name
 from backend.services.workspace_data_service import (
-    STALE_AFTER_SECONDS, WorkspaceDataService, _current_indicator_rows, _freshness, _include_configured_rows, _market_row,
+    STALE_AFTER_SECONDS, WorkspaceDataService, _current_indicator_rows, _freshness, _include_configured_rows, _iso, _market_row,
     _technical_row,
 )
+
+
+def _align_change_24h_row(market_rows: list[dict], latest) -> None:
+    """Show the selected pair's current quote while its score catches up."""
+    if not latest or latest.change_24h is None or not latest.source_observed_at:
+        return
+    for row in market_rows:
+        if normalize_indicator_name(row.get("name") or "") != "change_24h":
+            continue
+        try:
+            same_value = isclose(float(row["value"]), float(latest.change_24h), rel_tol=1e-12)
+        except (TypeError, ValueError):
+            same_value = False
+        if row.get("source_observed_at") != _iso(latest.source_observed_at) or not same_value:
+            row.update({"value": float(latest.change_24h),
+                        "source_observed_at": _iso(latest.source_observed_at),
+                        "score": None, "data_status": "pending_refresh"})
 
 
 class ExactMarketWorkspaceService:
@@ -73,6 +91,8 @@ class ExactMarketWorkspaceService:
         market_rows = [row for row in market_rows if configured("market", row)]
         macro_rows = [row for row in macro_rows if configured("macro", row)]
         technical_rows = [row for row in technical_rows if configured("technical", row)]
+        if macro_rows and callable(getattr(workspace, "_add_score_history_coverage", None)):
+            await workspace._add_score_history_coverage(user_id, symbol, [], macro_rows)
         market_rows = _include_configured_rows(
             market_rows,
             [row for (owner, category, _), row in selected.items()
@@ -83,6 +103,7 @@ class ExactMarketWorkspaceService:
             [row for (owner, category, _), row in selected.items()
              if owner == user_id and category == "technical"],
         )
+        _align_change_24h_row(market_rows, latest)
         score_values = assessment["reported_scores"]
         verified_daily = {
             "indicator_evidence": indicator_evidence,
