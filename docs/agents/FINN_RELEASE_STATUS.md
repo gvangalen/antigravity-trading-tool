@@ -4,6 +4,27 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Gepauzeerde Paper-bot correct lezen (7 november 2026)
+
+Phase: `LOCAL_VALIDATION`. Kandidaat: `codex/finn-paused-bot-status`.
+De vorige traderbatch is live gezet op `d5ff809c57ed0f15b500dcc39d58afccd76df0d7`.
+Onafhankelijke QA bevestigde de scorecontinuïteit van BTC/EUR, de
+beurskoersvermelding van AAPL en de historische Paper-exit; de botstatus bleef
+afwijkend: Automatisering toonde een gepauzeerde AAPL-Paper-bot terwijl FINN
+hem inactief noemde. FINN krijgt nu in de gekoppelde bot, botstatus en
+portefeuilleprojectie expliciet `operational_status=paused` naast de bestaande
+`is_active=false` en `is_live=false`. De read-only Responses-tool legt die
+betekenis uit zonder bot- of orderstatus te wijzigen.
+
+Gerichte bot- en portfoliotests slaagden (`14 passed`). De volledige
+backend-suite slaagde met `4272 passed, 4 skipped`. Web typecheck,
+i18n-lint, i18n-tests (`37 passed`), commandtests (`35 passed`) en de
+productiebuild slaagden. CI, Auto Deploy en publieke SHA-pariteit volgen.
+De actiecontracten, selectie en workeruitvoering veranderen niet; de lokale
+worker-actiematrix en selectie-providerproeven zijn voor deze read-only
+botstatusprojectie niet van toepassing. De ingelogde herkeuring volgt op de
+definitieve live SHA door dezelfde onafhankelijke QA-agent.
+
 ## Scorecontinuïteit en traderbewijs (7 november 2026)
 
 Phase: `LOCAL_VALIDATION`. Kandidaat: `codex/trader-four-fixes`.
