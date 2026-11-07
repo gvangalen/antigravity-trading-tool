@@ -673,6 +673,11 @@ def normalize_macro_value(indicator: str, value: float) -> float:
         if indicator in ("btc_dominance", "bitcoin_dominance"):
             return max(0, min(100, value))
 
+        # VIX is an index level, not already a 0–100 percentage. Map the
+        # common 10–40 range onto the score buckets; higher means more stress.
+        if indicator == "vix":
+            return max(0, min(100, (value - 10) / 30 * 100))
+
         # DXY → schaal rond 80–120
         if indicator == "dxy":
             low, high = 80, 120

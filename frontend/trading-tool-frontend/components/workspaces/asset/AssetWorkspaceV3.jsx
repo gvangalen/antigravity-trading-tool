@@ -309,6 +309,11 @@ function getUiCopy(locale = "nl") {
         mid: "RSI is neutral; momentum is currently balanced.",
         low: "RSI points to weak momentum and does not yet confirm follow-through.",
       },
+      ma50Assessment: {
+        high: (label, position) => `${label} is ${position.toLowerCase()} and supports the active trend.`,
+        mid: (label) => `${label} is near balance and does not yet confirm a strong active trend.`,
+        low: (label, position) => `${label} is ${position.toLowerCase()} and offers limited support to the active trend.`,
+      },
       positiveMoveWeakScore: (value, score) => `Price is up ${value}, but the configured scoring thresholds still place this move in the weak zone (${score}/100).`,
       aboveMa200: "Above MA200",
       belowMa200: "Below MA200",
@@ -510,6 +515,11 @@ function getUiCopy(locale = "nl") {
         mid: "RSI ist neutral; das Momentum ist derzeit ausgeglichen.",
         low: "RSI weist auf schwaches Momentum hin und bestätigt noch keine Fortsetzung.",
       },
+      ma50Assessment: {
+        high: (label, position) => `${label} liegt ${position.toLowerCase()} und unterstützt den aktuellen Trend.`,
+        mid: (label) => `${label} liegt nahe am Gleichgewicht und bestätigt noch keinen starken Trend.`,
+        low: (label, position) => `${label} liegt ${position.toLowerCase()} und bietet dem aktuellen Trend wenig Unterstützung.`,
+      },
       positiveMoveWeakScore: (value, score) => `Der Kurs steigt um ${value}, aber die konfigurierten Score-Grenzen ordnen diese Bewegung noch der schwachen Zone zu (${score}/100).`,
       aboveMa200: "Über MA200",
       belowMa200: "Unter MA200",
@@ -709,6 +719,11 @@ function getUiCopy(locale = "nl") {
       high: "RSI ondersteunt het momentum en bevestigt een sterkere richting.",
       mid: "RSI is neutraal; het momentum is momenteel in balans.",
       low: "RSI wijst op zwak momentum en bevestigt nog geen vervolgbeweging.",
+    },
+    ma50Assessment: {
+      high: (label, position) => `${label} ligt ${position.toLowerCase()} en ondersteunt de huidige trend.`,
+      mid: (label) => `${label} ligt rond het evenwicht en bevestigt nog geen sterke trend.`,
+      low: (label, position) => `${label} ligt ${position.toLowerCase()} en geeft de huidige trend weinig steun.`,
     },
     positiveMoveWeakScore: (value, score) => `De koers stijgt ${value}, maar de ingestelde scoregrenzen plaatsen deze beweging nog in de zwakke zone (${score}/100).`,
     aboveMa200: "Boven MA200",
@@ -1274,6 +1289,10 @@ function explainIndicatorAssessment({
           ? ui.aboveMa50
           : ui.belowMa50
         : null;
+
+  if (normalizedName === "ma_50" && ui.ma50Assessment?.[tone]) {
+    return ui.ma50Assessment[tone](safeLabel, movingAverageLabel || direction);
+  }
 
   const explanations = {
     change_24h: {

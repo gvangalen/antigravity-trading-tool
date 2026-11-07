@@ -80,3 +80,13 @@ test("validation error shows server detail; failed settings after add are descri
     error: validation, indicatorLabel: "Volume", assetSymbol: "BTC", actionFailed: "Mislukt",
   }), /toegevoegd, maar.*niet opgeslagen/);
 });
+
+test("missing system rules show a readable localized message", () => {
+  const error = Object.assign(new Error("invalid"), {
+    status: 422, body: JSON.stringify({ detail: "indicator_score_rules_unavailable" }),
+  });
+  assert.equal(indicatorConfigFailureMessage({
+    error, indicatorLabel: "VIX", assetSymbol: "BTC/USDT", actionFailed: "Mislukt",
+    scoreRulesUnavailable: "Voor VIX ontbreekt een standaard-scoreregel.",
+  }), "Voor VIX ontbreekt een standaard-scoreregel.");
+});

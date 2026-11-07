@@ -5273,6 +5273,7 @@
       "saved": "{indicator} is opgeslagen voor {asset} {category}.",
       "added": "{indicator} is toegevoegd aan {asset} {category}.",
       "actionFailed": "De actie voor {indicator} is mislukt.",
+      "scoreRulesUnavailable": "Voor deze indicator ontbreekt een standaard-scoreregel. Probeer het later opnieuw of stel een eigen scoreregel in.",
       "thisWorkflow": "deze workflow",
       "onTimeframes": "op",
       "and": "en",

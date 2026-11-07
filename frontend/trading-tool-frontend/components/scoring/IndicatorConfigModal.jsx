@@ -472,6 +472,7 @@ export default function IndicatorConfigModal({
       const message = indicatorConfigFailureMessage({
         error, indicatorLabel, assetSymbol: marketLabel || assetSymbol,
         actionFailed: copy.actionFailed.replace("{indicator}", indicatorLabel),
+        scoreRulesUnavailable: copy.scoreRulesUnavailable,
       });
       if (error?.indicatorCreated || error?.configurationSaved) {
         onCompleted?.({ indicator, category, assetSymbol, draft, partial: true, error: message });

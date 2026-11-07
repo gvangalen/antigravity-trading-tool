@@ -5152,6 +5152,7 @@
       "saved": "{indicator} was saved for {asset} {category}.",
       "added": "{indicator} was added to {asset} {category}.",
       "actionFailed": "The action for {indicator} failed.",
+      "scoreRulesUnavailable": "This indicator has no standard scoring rule yet. Try again later or set your own scoring rule.",
       "thisWorkflow": "this workflow",
       "onTimeframes": "on",
       "and": "and",

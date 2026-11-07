@@ -5295,6 +5295,7 @@
       "saved": "{indicator} wurde für {asset} {category} gespeichert.",
       "added": "{indicator} wurde zu {asset} {category} hinzugefügt.",
       "actionFailed": "Die Aktion für {indicator} ist fehlgeschlagen.",
+      "scoreRulesUnavailable": "Für diesen Indikator fehlt noch eine Standard-Scoreregel. Versuche es später erneut oder lege eine eigene Scoreregel fest.",
       "thisWorkflow": "diesen Workflow",
       "onTimeframes": "auf",
       "and": "und",

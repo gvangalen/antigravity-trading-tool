@@ -44,7 +44,7 @@ export async function persistIndicatorConfiguration({
   }
 }
 
-export function indicatorConfigFailureMessage({ error, indicatorLabel, assetSymbol, actionFailed }) {
+export function indicatorConfigFailureMessage({ error, indicatorLabel, assetSymbol, actionFailed, scoreRulesUnavailable }) {
   if (error?.configurationSaved && !error?.indicatorCreated) {
     return `${indicatorLabel}: je scoreregels zijn opgeslagen, maar de bronmeting kon niet worden opgehaald. De indicator heeft nog geen score.`;
   }
@@ -57,6 +57,9 @@ export function indicatorConfigFailureMessage({ error, indicatorLabel, assetSymb
   if (error?.status === 400 || error?.status === 422) {
     try {
       const detail = JSON.parse(error?.body || "{}").detail;
+      if (detail === "indicator_score_rules_unavailable") {
+        return scoreRulesUnavailable || "Voor deze indicator ontbreekt een standaard-scoreregel. Probeer het later opnieuw of stel een eigen scoreregel in.";
+      }
       if (typeof detail === "string" && detail.trim()) return detail;
     } catch {}
   }
