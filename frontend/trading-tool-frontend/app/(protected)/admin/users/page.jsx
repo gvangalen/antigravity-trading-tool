@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { fetchAdminUsers, fetchAdminUserUsage, updateAdminUser } from "@/lib/api/admin";
-import { formatCurrency as formatIntlCurrency, formatDate } from "@/lib/i18n";
+import { formatCurrency as formatIntlCurrency, formatDateTime } from "@/lib/i18n";
 import { 
   Users, 
   Search, 
@@ -26,10 +26,16 @@ const PLAN_BADGES = {
 const PAGE_SIZE = 50;
 
 function formatCurrency(value, locale) {
-  return formatIntlCurrency(Number(value || 0), locale, "EUR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+  const amount = Number(value || 0);
+  const decimals = amount > 0 && amount < 0.01 ? 6 : 2;
+  return formatIntlCurrency(amount, locale, "EUR", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
   });
+}
+
+function formatActivityDate(value, locale, fallback) {
+  return value ? formatDateTime(value, locale, { dateStyle: "medium", timeStyle: "short" }) : fallback;
 }
 
 export default function AdminUsersDashboard() {
@@ -193,6 +199,7 @@ export default function AdminUsersDashboard() {
             <p><span className="font-black text-rose-500 uppercase tracking-widest">{copy.infoBadges.blocked}</span> {copy.infoBlocked}</p>
             <p><span className="font-black text-blue-500 uppercase tracking-widest">{copy.infoBadges.mtd}</span> {copy.infoMtd}</p>
           </div>
+          <p className="mt-3 text-xs text-slate-500">{copy.activityExplanation}</p>
         </div>
         <table className="w-full text-left border-collapse">
           <thead>
@@ -248,6 +255,7 @@ export default function AdminUsersDashboard() {
                       />
                     </div>
                     <p className="text-[9px] font-black uppercase text-blue-400 mt-2 italic">{copy.costMtd}: {formatCurrency(user.usage_month_eur, locale)}</p>
+                    {user.unpriced_requests_month > 0 && <p className="mt-1 text-[9px] font-bold text-amber-700">{copy.unpricedRequests.replace("{count}", user.unpriced_requests_month)}</p>}
                     <p className="text-[9px] font-black uppercase text-emerald-500 mt-1 italic">{copy.today}: {formatCurrency(user.usage_today_eur, locale)}</p>
                     <p className="text-[9px] font-black uppercase text-violet-400 mt-1 italic">{copy.background}: {formatCurrency(user.background_usage_month_eur, locale)}</p>
                     <p className="text-[9px] font-black uppercase text-rose-500 mt-1 italic">{copy.blocked}: {user.blocked_requests_month} / {formatCurrency(user.blocked_estimated_cost_month_eur, locale)} {copy.estimate}</p>
@@ -257,16 +265,19 @@ export default function AdminUsersDashboard() {
                    <div className="space-y-1.5">
                       <div className="flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase tracking-widest italic">
                         <Clock size={12} className="text-slate-300" />
-                        {copy.lastSeen}: <span className="text-slate-900">{user.last_login_at ? formatDate(user.last_login_at, locale) : copy.never}</span>
+                        {copy.lastLogin}: <span className="text-slate-900">{formatActivityDate(user.last_login_at, locale, copy.never)}</span>
                       </div>
                       <div className="flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase tracking-widest italic">
                         <Calendar size={12} className="text-slate-300" />
-                        {copy.createdAt}: <span className="text-slate-900">{user.created_at ? formatDate(user.created_at, locale) : copy.unknown}</span>
+                        {copy.appActivity}: <span className="text-slate-900">{formatActivityDate(user.last_app_activity_at, locale, copy.notYetMeasured)}</span>
                       </div>
                       <div className="flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase tracking-widest italic">
                         <Zap size={12} className="text-slate-300" />
-                        {copy.aiActivity}: <span className="text-slate-900">{user.last_ai_activity_at ? formatDate(user.last_ai_activity_at, locale) : copy.noUsage}</span>
+                        {copy.activeDays}: <span className="text-slate-900">{user.active_days_30d ?? 0}</span>
                       </div>
+                      <div className="text-[10px] font-bold text-slate-500">{copy.interactiveAi}: <span className="text-slate-900">{formatActivityDate(user.last_interactive_ai_at, locale, copy.noUsage)}</span></div>
+                      <div className="text-[10px] font-bold text-slate-500">{copy.automaticAi}: <span className="text-slate-900">{formatActivityDate(user.last_background_ai_at, locale, copy.noUsage)}</span></div>
+                      <div className="text-[10px] font-bold text-slate-500">{copy.otherAi}: <span className="text-slate-900">{formatActivityDate(user.last_other_ai_at, locale, copy.noUsage)}</span></div>
                    </div>
                 </td>
                 <td className="px-8 py-6 text-right">
@@ -331,6 +342,7 @@ export default function AdminUsersDashboard() {
                   <p><span className="block text-slate-500">{copy.inputTokens}</span><strong>{usageDetail.input_tokens_month.toLocaleString(locale)}</strong></p>
                   <p><span className="block text-slate-500">{copy.outputTokens}</span><strong>{usageDetail.output_tokens_month.toLocaleString(locale)}</strong></p>
                 </div>
+                {usageDetail.unpriced_requests_month > 0 && <p className="mb-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{copy.unpricedRequests.replace("{count}", usageDetail.unpriced_requests_month)} {copy.unpricedExplanation}</p>}
                 {[[copy.usageByFeature, usageDetail.by_feature, copy.usageFeatureLabels], [copy.usageBySource, usageDetail.by_source, copy.usageSourceLabels]].map(([title, rows, labels]) => (
                   <section key={title} className="mb-6">
                     <h3 className="mb-2 font-bold text-slate-900">{title}</h3>

@@ -4,6 +4,32 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Admin: kostenprecisie en echte webappactiviteit (7 november 2026)
+
+Phase: `LOCAL_VALIDATION`. Kandidaat: `codex/admin-activity-costs`. Dit is
+een gerichte vervolguitrol van de adminweergave. Kosten onder één cent worden
+met maximaal zes decimalen getoond. Wanneer aanvragen wel tokens maar geen
+geboekte kosten hebben, meldt de gebruikerslijst en het verbruiksdetail dat
+expliciet; er wordt geen historische kostprijs verzonnen.
+
+De gebruikerslijst scheidt laatste geslaagde login, laatste zichtbare
+webappactiviteit, actieve dagen in de afgelopen 30 dagen en AI-gebruik door
+gebruiker, achtergrondtaak of onbekende bron. De nieuwe webappactiviteit is
+een beperkt, eigenaargebonden tijdstip zonder pagina, sessie of gesprekstekst.
+Automatische rapporttaken schrijven geen webappactiviteit. Historische
+webappactiviteit van vóór deze versie kan niet worden afgeleid; ontbrekende
+waarden worden als nog niet gemeten getoond. De bestaande eigenaargebonden
+FINN-gespreksgeschiedenis blijft ongewijzigd.
+
+Gemeten lokaal: gerichte privacy- en gebruikersprojectietests `7 passed`;
+volledige backend-suite `4273 passed, 4 skipped`; web typecheck, i18n-lint,
+i18n-tests, commandtests en productiebuild geslaagd. De nieuwe
+gebruikersquery valideerde op lege, tijdelijke PostgreSQL-tabellen.
+FINN-actiecontracten, workeruitvoering en providerselectie zijn niet gewijzigd;
+de worker-actiematrix en echte providerproeven zijn voor deze adminregistratie
+en -projectie niet van toepassing. PR-CI, main-CI, Auto Deploy, publieke
+SHA-pariteit en onafhankelijke ingelogde QA staan nog open.
+
 ## Gepauzeerde Paper-bot correct lezen (7 november 2026)
 
 Phase: `DEPLOYED_AWAITING_QA`. Kandidaat: `codex/finn-paused-bot-status`,

@@ -1,3 +1,4 @@
+from datetime import timezone
 from typing import List, Dict, Any, Optional
 from sqlalchemy import select, update, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -5,6 +6,12 @@ from backend.infrastructure.models import User
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _utc_iso(value):
+    if value is None:
+        return None
+    return value.replace(tzinfo=timezone.utc).isoformat() if value.tzinfo is None else value.isoformat()
 
 class AdminUserService:
     def __init__(self, db: AsyncSession):
@@ -37,6 +44,8 @@ class AdminUserService:
                 COUNT(*)::int AS requests,
                 COALESCE(SUM(prompt_tokens), 0)::bigint AS input_tokens,
                 COALESCE(SUM(completion_tokens), 0)::bigint AS output_tokens,
+                COUNT(*) FILTER (WHERE COALESCE(cost, 0) = 0 AND
+                    COALESCE(prompt_tokens, 0) + COALESCE(completion_tokens, 0) > 0)::int AS unpriced_requests,
                 COALESCE(SUM(cost), 0) AS cost_eur
             FROM ai_usage_logs
             WHERE user_id = :user_id
@@ -59,6 +68,7 @@ class AdminUserService:
         by_source: Dict[str, Dict[str, Any]] = {}
         total = {"requests_month": 0, "requests_today": 0,
                  "input_tokens_month": 0, "output_tokens_month": 0,
+                 "unpriced_requests_month": 0,
                  "cost_month_eur": 0.0, "cost_today_eur": 0.0}
         for row in rows:
             add_bucket(by_feature, row["feature"], row)
@@ -66,6 +76,7 @@ class AdminUserService:
             total["requests_month"] += int(row["requests"] or 0)
             total["input_tokens_month"] += int(row["input_tokens"] or 0)
             total["output_tokens_month"] += int(row["output_tokens"] or 0)
+            total["unpriced_requests_month"] += int(row["unpriced_requests"] or 0)
             total["cost_month_eur"] += float(row["cost_eur"] or 0)
             if row["today"]:
                 total["requests_today"] += int(row["requests"] or 0)
@@ -114,7 +125,13 @@ class AdminUserService:
                 COALESCE(usage.interactive_usage_month_eur, 0) AS interactive_usage_month_eur,
                 COALESCE(usage.blocked_requests_month, 0) AS blocked_requests_month,
                 COALESCE(usage.blocked_estimated_cost_month_eur, 0) AS blocked_estimated_cost_month_eur,
-                usage.last_ai_activity_at
+                COALESCE(usage.unpriced_requests_month, 0) AS unpriced_requests_month,
+                usage.last_ai_activity_at,
+                usage.last_interactive_ai_at,
+                usage.last_background_ai_at,
+                usage.last_other_ai_at,
+                activity.last_app_activity_at,
+                COALESCE(activity.active_days_30d, 0) AS active_days_30d
             FROM (
                 SELECT * FROM users u
                 WHERE {where_clause}
@@ -129,10 +146,24 @@ class AdminUserService:
                     COALESCE(SUM(l.cost) FILTER (WHERE l.timestamp >= date_trunc('month', current_date) AND l.request_source IN ('live_user', 'staging_user', 'qa_user', 'admin_tool')), 0) AS interactive_usage_month_eur,
                     COUNT(*) FILTER (WHERE l.timestamp >= date_trunc('month', current_date) AND l.status = 'quota_blocked') AS blocked_requests_month,
                     COALESCE(SUM(l.estimated_cost_if_full) FILTER (WHERE l.timestamp >= date_trunc('month', current_date) AND l.status = 'quota_blocked'), 0) AS blocked_estimated_cost_month_eur,
-                    MAX(l.timestamp) AS last_ai_activity_at
+                    COUNT(*) FILTER (WHERE l.timestamp >= date_trunc('month', current_date)
+                        AND COALESCE(l.cost, 0) = 0
+                        AND COALESCE(l.prompt_tokens, 0) + COALESCE(l.completion_tokens, 0) > 0) AS unpriced_requests_month,
+                    MAX(l.timestamp) AS last_ai_activity_at,
+                    MAX(l.timestamp) FILTER (WHERE l.request_source IN ('live_user', 'staging_user', 'qa_user')) AS last_interactive_ai_at,
+                    MAX(l.timestamp) FILTER (WHERE l.request_source = 'background_job') AS last_background_ai_at,
+                    MAX(l.timestamp) FILTER (WHERE l.request_source IS NULL OR l.request_source NOT IN
+                        ('live_user', 'staging_user', 'qa_user', 'background_job')) AS last_other_ai_at
                 FROM ai_usage_logs l
                 WHERE l.user_id = u.id
             ) usage ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT MAX(e.created_at) AS last_app_activity_at,
+                    COUNT(DISTINCT (e.created_at AT TIME ZONE 'UTC')::date)
+                        FILTER (WHERE e.created_at >= now() - interval '30 days') AS active_days_30d
+                FROM finn_product_events e
+                WHERE e.user_id = u.id AND e.event_name = 'app_activity' AND e.surface = 'web'
+            ) activity ON TRUE
             ORDER BY u.created_at DESC NULLS LAST, u.id DESC
         """), params)).mappings().all()
 
@@ -155,9 +186,15 @@ class AdminUserService:
                 "interactive_usage_month_eur": float(row["interactive_usage_month_eur"] or 0),
                 "blocked_requests_month": int(row["blocked_requests_month"] or 0),
                 "blocked_estimated_cost_month_eur": float(row["blocked_estimated_cost_month_eur"] or 0),
+                "unpriced_requests_month": int(row["unpriced_requests_month"] or 0),
                 "subscription_status": row["subscription_status"] or "active",
-                "last_login_at": row["last_login_at"].isoformat() if row["last_login_at"] else None,
-                "last_ai_activity_at": row["last_ai_activity_at"].isoformat() if row["last_ai_activity_at"] else None,
+                "last_login_at": _utc_iso(row["last_login_at"]),
+                "last_ai_activity_at": _utc_iso(row["last_ai_activity_at"]),
+                "last_interactive_ai_at": _utc_iso(row["last_interactive_ai_at"]),
+                "last_background_ai_at": _utc_iso(row["last_background_ai_at"]),
+                "last_other_ai_at": _utc_iso(row["last_other_ai_at"]),
+                "last_app_activity_at": _utc_iso(row["last_app_activity_at"]),
+                "active_days_30d": int(row["active_days_30d"] or 0),
                 "created_at": row["created_at"].isoformat() if row["created_at"] else None,
             })
         return {"items": items, "total": int(total), "offset": offset, "limit": limit}
