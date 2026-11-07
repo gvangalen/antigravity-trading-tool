@@ -167,10 +167,21 @@ def main() -> None:
             cur.execute("""SELECT cash_eur,position_qty,realized_pnl_eur FROM bot_portfolios
                            WHERE user_id=%s AND bot_id=%s""", (user_id, bot_id))
             portfolio = cur.fetchone()
+            cur.execute("""SELECT scores_json FROM bot_decisions
+                           WHERE user_id=%s AND bot_id=%s AND decision_kind='paper_exit'
+                           ORDER BY id DESC LIMIT 1""", (user_id, bot_id))
+            exit_row = cur.fetchone()
+            exit_evidence = exit_row[0] if exit_row else None
+            cur.execute("""SELECT executed_qty, executed_price_eur, quote_amount_eur
+                           FROM bot_orders WHERE user_id=%s AND bot_id=%s
+                             AND side='sell' AND status='filled'
+                           ORDER BY id DESC LIMIT 1""", (user_id, bot_id))
+            exit_order = cur.fetchone()
     finally:
         conn.close()
     result = {"scenario": scenario, "first": first, "second": second, "decisions": decisions,
-              "orders": orders, "portfolio": portfolio}
+              "orders": orders, "portfolio": portfolio,
+              "exit_evidence": exit_evidence, "exit_order": exit_order}
     print(json.dumps(result, default=str))
     assert first["ok"] and second["ok"], result
     if scenario in {"target", "stop", "same_plan_add", "same_timestamp_quote"}:
@@ -182,6 +193,11 @@ def main() -> None:
             "first_target" if scenario in {"target", "same_plan_add", "same_timestamp_quote"}
             else "stop_loss"), result
         assert float(portfolio[1]) == 0, result
+        assert exit_evidence is not None and exit_order is not None, result
+        assert float(exit_evidence["execution_qty"]) == float(exit_order[0]), result
+        assert abs(float(exit_evidence["execution_proceeds_eur"]) - float(exit_order[2])) < 0.01, result
+        assert exit_evidence["execution_source_price_at"], result
+        assert exit_evidence["execution_fx_observed_at"], result
         async def project_closed_trade():
             from backend.infrastructure.database import async_session_factory
             from backend.services.finn_trade_review_service import FinnTradeReviewService

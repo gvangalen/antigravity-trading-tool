@@ -6,7 +6,9 @@ from backend.services.finn_v2_freshness_service import FinnV2FreshnessService
 from backend.services.finn_v2_tool_adapters.technical_tool_adapter import TechnicalToolAdapter
 from backend.services.finn_v2_tool_adapters.macro_tool_adapter import MacroToolAdapter, _display_value
 from backend.services.finn_v2_tool_adapters.market_tool_adapter import MarketToolAdapter
-from backend.services.finn_v2_tool_adapters.display_source_moment import display_source_moment
+from backend.services.finn_v2_tool_adapters.display_source_moment import (
+    amsterdam_source_moment, display_source_moment,
+)
 from backend.services.finn_v2_responses_read_executor import FinnResponsesReadExecutor
 from backend.utils.scoring_utils import score_source_is_fresh
 
@@ -18,6 +20,8 @@ def test_display_source_moment_uses_utc_for_database_and_offset_times():
     assert display_source_moment(naive_database_time) == datetime(2026, 11, 6, 8, 59, 25, tzinfo=timezone.utc)
     assert display_source_moment(offset_time) == datetime(2026, 11, 6, 8, 59, 25, tzinfo=timezone.utc)
     assert display_source_moment(offset_time.isoformat()) == "2026-11-06T08:59:25+00:00"
+    assert amsterdam_source_moment(naive_database_time) == "2026-11-06 09:59:25 CET"
+    assert amsterdam_source_moment(datetime(2026, 7, 6, 8, 59, 25)) == "2026-07-06 10:59:25 CEST"
 
 
 def test_freshness_service_marks_market_data_stale_after_threshold():

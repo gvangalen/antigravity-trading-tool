@@ -72,12 +72,16 @@ def test_portfolio_adapter_keeps_owner_scope_and_filters_only_the_existing_ledge
 
     assert adapter.repository.user_ids == [17]
     assert result["asset"] == "ETH"
-    assert result["summary"] == {
+    assert {key: result["summary"][key] for key in (
+        "title", "total_equity", "bot_count", "requested_asset",
+    )} == {
         "title": "portfolio",
         "total_equity": 350.0,
         "bot_count": 1,
         "requested_asset": "ETH",
     }
+    assert result["summary"]["read_at_amsterdam"].endswith((" CET", " CEST"))
+    assert result["summary"]["valuation_as_of_amsterdam"].endswith((" CET", " CEST"))
     assert result["data"].global_.dict() == {
         "currency": "EUR",
         "total_equity": 350.0,

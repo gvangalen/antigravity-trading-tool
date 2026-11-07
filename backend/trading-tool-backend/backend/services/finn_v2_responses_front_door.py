@@ -557,6 +557,13 @@ class FinnResponsesFrontDoor:
             "the answer needs saved account facts, a personal assessment, or current data. "
             "For a question combining a saved plan, market context and portfolio or bot budget, "
             "read each relevant source before saying that one of them is missing. "
+            "For the latest bot decision, use the persisted bot decision history. "
+            "A portfolio snapshot alone does not prove a bot decision. "
+            "Source timestamps carry an explicit UTC offset. Preserve that offset, "
+            "or convert it to Europe/Amsterdam before calling it CET or CEST. "
+            "Never label a UTC clock time as CET or CEST without conversion. "
+            "When a read supplies an Amsterdam-local timestamp, use that exact "
+            "local clock label for the trader. "
             "For current indicator readings, use get_current_technical_snapshot. A saved "
             "indicator configuration or its evaluation does not provide current readings. "
             "For current market, macro and technical scores, use get_current_asset_scores: "
@@ -741,6 +748,31 @@ class FinnResponsesFrontDoor:
             re.search(r"\b(?:open|lopende|huidige|actuele|existing|current|offene|aktuelle)\b", message, re.I)
             and re.search(r"\b(?:positie|posities|position|positions|positionen)\b", message, re.I)
         )
+
+    @staticmethod
+    def _asks_about_bot_decision(message: str) -> bool:
+        """Bind explicit bot-decision questions to persisted owner evidence."""
+        return bool(
+            re.search(r"\b(?:bot(?:besluit|beslissing|beoordeling|check)?|automatisering|automation)\b", message, re.I)
+            and re.search(
+                r"\b(?:botbeslissing(?:en)?|botbesluit(?:en)?|beslissing(?:en)?|besluit(?:en)?|decision(?:s)?|"
+                r"beoordeling(?:en)?|check(?:s)?|entscheidung(?:en)?)\b",
+                message, re.I,
+            )
+        )
+
+    @staticmethod
+    def _bind_bot_decision_evidence(
+        call: FinnResponsesToolCall, *, message: str, read_only: bool,
+    ) -> FinnResponsesToolCall:
+        if (not read_only or not FinnResponsesFrontDoor._asks_about_bot_decision(message)
+                or not call.read_tools
+                or call.name not in {"get_saved_bots", "get_portfolio_and_exposure",
+                                     "get_active_plan_and_strategy", "get_decision_history"}):
+            return call
+        return replace(call, read_tools=tuple(dict.fromkeys((
+            *call.read_tools, "read_review_history", "read_portfolio",
+        ))))
 
     @staticmethod
     def _focus_portfolio_on_open_bot(read_result: dict[str, Any], bot_id: int | None) -> dict[str, Any]:
@@ -2745,6 +2777,11 @@ class FinnResponsesFrontDoor:
                         call = replace(call, inputs={
                             **call.inputs, "setup_id": chosen_setups[-1]["data"]["setup_id"],
                         })
+                # A model-selected portfolio read may omit the persisted
+                # decision visible in Automatisering.
+                call = self._bind_bot_decision_evidence(
+                    call, message=message, read_only=is_read_only_turn and not pending_operation,
+                )
                 # The collection adapter may clear global filters for a
                 # multi-setup comparison, but a later owner-scoped read of
                 # two named rows is a narrower request than the inventory.

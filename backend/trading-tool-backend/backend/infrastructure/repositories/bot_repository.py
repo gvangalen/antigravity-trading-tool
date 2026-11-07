@@ -209,9 +209,9 @@ class BotRepository:
               d.id, d.bot_id, b.name AS bot_name, b.is_live, d.symbol, d.decision_ts, d.decision_date,
               d.decision_kind, d.action, d.confidence, d.amount_eur, d.scores_json, d.reason_json, d.status
             FROM bot_decisions d
-            JOIN bot_configs b ON b.id = d.bot_id
+            JOIN bot_configs b ON b.id = d.bot_id AND b.user_id = d.user_id
             WHERE d.user_id=:user_id AND d.decision_date BETWEEN :start AND :end
-            ORDER BY d.decision_date DESC, d.bot_id ASC, d.id DESC
+            ORDER BY d.decision_ts DESC, d.id DESC
         """)
         result = await self.session.execute(query, {"user_id": user_id, "start": start_date, "end": end_date})
         return [dict(r._mapping) for r in result.fetchall()]

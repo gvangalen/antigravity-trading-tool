@@ -5,6 +5,9 @@ import json
 
 from backend.infrastructure.repositories.bot_repository import BotRepository
 from backend.services.bot_service import BotService
+from backend.services.finn_v2_tool_adapters.display_source_moment import (
+    amsterdam_source_moment, display_source_moment,
+)
 
 from backend.schemas.finn_v2_evidence_schema import BotStatusData, LinkedBotData
 
@@ -40,7 +43,7 @@ class BotToolAdapter:
         return {
             "data": payload,
             "summary": {"title": "linked_bot", "bot_id": payload.bot_id, "strategy_id": payload.strategy_id},
-            "as_of": bot.get("updated_at"),
+            "as_of": display_source_moment(bot.get("updated_at")),
             "resolution_source": resolution_source,
             "source": "bot_configs",
             "schema_name": "LinkedBotData",
@@ -50,7 +53,7 @@ class BotToolAdapter:
         }
 
     async def execute_status(self, *, bot: dict, user_id: int | None = None, **_kwargs):
-        last_run = bot.get("last_run")
+        last_run = display_source_moment(bot.get("last_run"))
         latest = None
         if self.repository is not None and user_id is not None and bot.get("id") is not None:
             decision = await self.repository.get_latest_bot_decision(user_id, int(bot["id"]))
@@ -77,14 +80,15 @@ class BotToolAdapter:
                     "decision_id": decision["id"], "action": decision["action"],
                     "decision_kind": decision.get("decision_kind") or "assessment",
                     "persistence_status": decision["status"],
-                    "decision_at": decision.get("decision_ts"),
+                    "decision_at": display_source_moment(decision.get("decision_ts")),
+                    "decision_at_amsterdam": amsterdam_source_moment(decision.get("decision_ts")),
                     "exit_trigger": scores.get("trigger") if is_exit else None,
                     "execution_failure": scores.get("execution_failure") if is_exit else None,
                     "safety_state": safety["state"] if safety else None,
                     "reason_code": safety["reason_code"] if safety else None,
                     "reason": safety["reason"] if safety else None,
                     "next_step": safety["next_step"] if safety else None,
-                    "safety_checked_at": safety["checked_at"] if safety else None,
+                    "safety_checked_at": display_source_moment(safety["checked_at"]) if safety else None,
                 }
         payload = BotStatusData(
             bot_id=bot.get("id"),
@@ -99,7 +103,7 @@ class BotToolAdapter:
         return {
             "data": payload,
             "summary": {"title": "bot_status", "bot_id": payload.bot_id, "is_active": payload.is_active},
-            "as_of": last_run if isinstance(last_run, datetime) else bot.get("updated_at"),
+            "as_of": last_run if isinstance(last_run, datetime) else display_source_moment(bot.get("updated_at")),
             "source": "bot_configs",
             "schema_name": "BotStatusData",
             "entity_type": "bot_status",

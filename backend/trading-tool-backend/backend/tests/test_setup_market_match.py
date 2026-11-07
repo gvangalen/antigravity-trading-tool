@@ -288,6 +288,67 @@ def test_batch_reader_accepts_previous_day_score_with_fresh_sources():
     asyncio.run(run())
 
 
+def test_empty_new_day_row_does_not_hide_fresh_prior_score():
+    async def run():
+        complete = {
+            "report_date": date(2026, 11, 6), "macro_score": 20,
+            "technical_score": 40, "market_score": 30,
+            "indicator_evidence": {},
+        }
+        queries = []
+
+        async def execute(query, params):
+            queries.append((str(query), params))
+            if "ai_preferences" in str(query):
+                return SimpleNamespace(mappings=lambda: SimpleNamespace(
+                    first=lambda: {"ai_preferences": None}))
+            # A new 7 November row exists with null components. PostgreSQL
+            # returns the older complete row first under this ordering.
+            assert "macro_score IS NOT NULL OR technical_score IS NOT NULL" in str(query)
+            return SimpleNamespace(mappings=lambda: SimpleNamespace(first=lambda: complete))
+
+        service = SetupMarketMatchService(SimpleNamespace(execute=execute))
+        service._source_is_fresh = AsyncMock(return_value=True)
+        result = await service.for_asset(
+            7, "BTC", setups=[setup(1, min_benchmark_score=20)], market_id=None,
+        )
+        assert result["as_of"] == date(2026, 11, 6)
+        assert result["reported_scores"] == {
+            "macro_score": 20, "technical_score": 40, "market_score": 30,
+        }
+        assert result["benchmark_score"] is not None
+        service._source_is_fresh = AsyncMock(return_value=False)
+        stale = await service.for_asset(7, "BTC", setups=[], market_id=None)
+        assert stale["benchmark_score"] is None
+        assert stale["source_status"] == "stale_sources"
+
+    asyncio.run(run())
+
+
+def test_new_partial_score_row_remains_newest_for_indicator_diagnostics():
+    async def run():
+        partial = {
+            "report_date": date(2026, 11, 7), "macro_score": None,
+            "technical_score": None, "market_score": 30,
+        }
+
+        async def execute(query, params):
+            if "ai_preferences" in str(query):
+                return SimpleNamespace(mappings=lambda: SimpleNamespace(
+                    first=lambda: {"ai_preferences": None}))
+            assert "macro_score IS NOT NULL OR technical_score IS NOT NULL" in str(query)
+            return SimpleNamespace(mappings=lambda: SimpleNamespace(first=lambda: partial))
+
+        service = SetupMarketMatchService(SimpleNamespace(execute=execute))
+        service._source_is_fresh = AsyncMock(return_value=True)
+        result = await service.for_asset(7, "BTC", setups=[])
+        assert result["as_of"] == date(2026, 11, 7)
+        assert result["reported_scores"]["market_score"] == 30
+        assert result["benchmark_score"] is None
+
+    asyncio.run(run())
+
+
 def test_batch_reader_rejects_previous_day_score_with_stale_sources():
     async def run():
         session = SimpleNamespace(execute=AsyncMock(return_value=SimpleNamespace(

@@ -3,6 +3,7 @@ from __future__ import annotations
 from backend.infrastructure.repositories.bot_repository import BotRepository
 from backend.services.portfolio_overview_service import project_portfolio
 from backend.services.live_portfolio_allocation_service import read_allocations, read_live_account
+from backend.services.finn_v2_tool_adapters.display_source_moment import amsterdam_source_moment
 
 
 class PortfolioToolAdapter:
@@ -26,6 +27,8 @@ class PortfolioToolAdapter:
             "total_equity": data.global_.total_equity,
             "bot_count": len(data.bots),
             "requested_asset": requested_asset,
+            "read_at_amsterdam": amsterdam_source_moment(data.read_at),
+            "valuation_as_of_amsterdam": amsterdam_source_moment(data.valuation_as_of),
         }
         return {
             "data": data,

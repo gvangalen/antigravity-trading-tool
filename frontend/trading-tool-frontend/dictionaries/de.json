@@ -2831,7 +2831,7 @@
       "lockedLabel": "Fixiert"
     },
     "history": {
-      "exitEvidence": {"title": "Beleg für Paper-Ausstieg", "trigger": "Grund", "savedStop": "Gespeicherter Stop", "decisionQuote": "Kurs bei Entscheidung", "executionQuote": "Kurs bei Ausführung", "fx": "EUR-Umrechnung bei Ausführung", "notRecorded": "Für diesen Ausstieg nicht erfasst", "triggers": {"stop_loss": "Stop-Loss", "first_target": "Erstes Kursziel"}},
+      "exitEvidence": {"title": "Beleg für Paper-Ausstieg", "trigger": "Grund", "savedStop": "Gespeicherter Stop", "decisionQuote": "Kurs bei Entscheidung", "executionQuote": "Kurs bei Ausführung", "eurPrice": "Ausführungskurs in EUR", "quantity": "Ausgeführte Menge", "fx": "EUR-Umrechnung bei Ausführung", "proceeds": "Gutgeschriebener Betrag", "notRecorded": "Für diesen Ausstieg nicht erfasst", "triggers": {"stop_loss": "Stop-Loss", "first_target": "Erstes Kursziel"}},
 
       "scoreBandBasis": "Setup-Score bestätigt; keine separate Konfidenz berechnet",
       "title": "Bot-Verlauf",

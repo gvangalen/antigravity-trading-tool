@@ -47,3 +47,38 @@ def test_review_history_separates_owner_bot_decisions_from_closed_trade_evidence
     assert "ETH Paper" not in repr(result["data"].items)
     assert result["data"].closed_trade_status == "no_data"
     assert result["data"].closed_trade_review_ids == []
+
+
+def test_review_history_keeps_newest_bot_decision_when_many_rows_exist():
+    class BotHistory:
+        async def get_bot_history(self, user_id, days):
+            assert user_id == 42 and days == 30
+            return [
+                {
+                    "decision_ts": datetime(2026, 11, 6, 8, minute, tzinfo=timezone.utc),
+                    "bot_name": "Older BTC", "symbol": "BTC",
+                    "action": "hold", "status": "planned",
+                } for minute in range(25)
+            ] + [{
+                "decision_ts": datetime(2026, 11, 7, 18, 45, tzinfo=timezone.utc),
+                "bot_name": "Latest AAPL", "symbol": "AAPL",
+                "action": "hold", "status": "planned",
+            }]
+
+    class ClosedTrades:
+        async def recent(self, user_id, *, days, limit, symbol=None):
+            return {
+                "status": "no_data",
+                "coverage": {"trades": 0, "analyzed": 0, "pending": 0, "unavailable": 0},
+                "reviews": [],
+            }
+
+    adapter = object.__new__(ReviewToolAdapter)
+    adapter.bot_service = BotHistory()
+    from backend.domain.finn_v2_source_registry import FinnV2InformationSourceRegistry
+    adapter.sources = FinnV2InformationSourceRegistry()
+    adapter.closed_trades = ClosedTrades()
+
+    result = asyncio.run(adapter.execute(user_id=42))
+    assert "Latest AAPL" in result["data"].items[0]
+    assert "2026-11-07 19:45:00 CET" in result["data"].items[0]

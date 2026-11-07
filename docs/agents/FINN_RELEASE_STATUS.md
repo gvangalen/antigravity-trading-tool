@@ -4,6 +4,42 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Vier trader-gates voor FINN en Paper (7 november 2026)
+
+Phase: `LOCAL_VALIDATION`. Actieve kandidaat: `codex/live-readiness-four-gates`.
+De oudere kandidaatsecties hieronder zijn historisch; deze batch bevat de vier
+open punten uit de Paper-test van 7 november.
+
+- FINN bindt vragen over een botbesluit aan de opgeslagen, eigenaargebonden
+  beslissingshistorie en de Paper-portefeuille. De nieuwste beslissing komt
+  eerst, met een expliciet moment in Amsterdam en UTC.
+- FINN-bronmomenten worden vanuit UTC naar `Europe/Amsterdam` omgerekend;
+  Paper-exitbewijs gebruikt dezelfde tijdzone.
+- Een nieuwe lege dagscore verbergt de laatst berekende score niet zolang de
+  onderliggende indicatorbronnen nog geldig zijn. Een nieuwere deels berekende
+  rij blijft beschikbaar voor diagnose. Bij een ongedateerde bronmeting noemt
+  Analyse de ontbrekende verificatie en de volgende verversing.
+- Nieuwe automatische Paper-exits bewaren de uitgevoerde hoeveelheid en het
+  EUR-kasbedrag bij de al opgeslagen koers-, valuta- en bronmomentgegevens.
+  Oude exits krijgen geen achteraf verzonnen uitvoeringsgegevens.
+
+Gemeten op de finale broncode: backend-suite `4292 passed, 4 skipped`;
+frontend typecheck, i18n-lint, i18n-tests (`38/38`), commandtests (`37/37`),
+voorsteltests (`9/9`), productiebuild en audit zonder hoge kwetsbaarheden
+geslaagd. De bijbehorende statische webexport is opgenomen. Echte
+providerselectie: development `20/20` en regressie `109/109`,
+zonder provider-, schema- of timeoutfouten. Lokale echte PostgreSQL/Redis
+Paper-proeven voor stop en target legden uitvoeringshoeveelheid, EUR-opbrengst,
+FX en bronmoment vast. De complete lokale worker-actiematrix slaagde `16/16`
+(SHA-256 artefact `3ab5ba25b2aad64b21b623c4f4ddd6c7d748959ce9b8cbe0d144f009691dc30b`),
+met nul Live-orders, nul productieverbindingen en nul Live-bots. Een aparte
+synthetische accountstaatproef slaagde `3/3`: elk antwoord gebruikte de
+opgeslagen AAPL-beslissing en Paper-kas, noemde `€393,01` en rekende
+`09:12 UTC` correct om naar `10:12 CET`. CI, Auto Deploy, publieke SHA-pariteit
+en onafhankelijke ingelogde QA volgen nog. Eerdere
+matrixpogingen braken af door lokale Docker-geheugendruk; ze tellen niet als
+productvalidatie.
+
 ## Admin: kostenprecisie en echte webappactiviteit (7 november 2026)
 
 Phase: `DEPLOYED_AWAITING_QA`. Kandidaat: `codex/admin-activity-costs`,

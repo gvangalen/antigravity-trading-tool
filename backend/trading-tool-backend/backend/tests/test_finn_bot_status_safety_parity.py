@@ -35,6 +35,30 @@ def test_finn_reads_saved_owner_bot_safety_state_instead_of_planned_label():
     assert latest["reason_code"] == "market_price_stale"
 
 
+def test_finn_bot_status_exposes_legacy_utc_decision_time_explicitly():
+    class Decisions:
+        async def get_latest_bot_decision(self, user_id, bot_id):
+            assert user_id == 17 and bot_id == 130
+            return {
+                "id": 903, "bot_id": bot_id, "action": "hold",
+                "status": "planned", "decision_ts": datetime(2026, 11, 7, 9, 12),
+                "scores_json": {},
+            }
+
+    adapter = BotToolAdapter()
+    adapter.repository = Decisions()
+    adapter.bot_service = BotService(object())
+    result = asyncio.run(adapter.execute_status(
+        user_id=17, bot={"id": 130, "is_active": True, "is_live": False,
+                         "last_run": datetime(2026, 11, 7, 9, 12)},
+    ))
+    assert result["data"].latest_decision["decision_at"] == datetime(
+        2026, 11, 7, 9, 12, tzinfo=timezone.utc)
+    assert result["data"].latest_decision["decision_at_amsterdam"] == "2026-11-07 10:12:00 CET"
+    assert result["data"].last_run == datetime(2026, 11, 7, 9, 12, tzinfo=timezone.utc)
+    assert result["as_of"] == datetime(2026, 11, 7, 9, 12, tzinfo=timezone.utc)
+
+
 def test_finn_keeps_paper_exit_separate_from_assessment_guardrails():
     checked_at = datetime.now(timezone.utc)
 
