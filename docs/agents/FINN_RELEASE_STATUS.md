@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Gepauzeerde Paper-bot correct lezen (7 november 2026)
 
-Phase: `LOCAL_VALIDATION`. Kandidaat: `codex/finn-paused-bot-status`.
+Phase: `DEPLOYED_AWAITING_QA`. Kandidaat: `codex/finn-paused-bot-status`,
+[PR #853](https://github.com/gvangalen/antigravity-trading-tool/pull/853).
 De vorige traderbatch is live gezet op `d5ff809c57ed0f15b500dcc39d58afccd76df0d7`.
 Onafhankelijke QA bevestigde de scorecontinuïteit van BTC/EUR, de
 beurskoersvermelding van AAPL en de historische Paper-exit; de botstatus bleef
@@ -19,7 +20,13 @@ betekenis uit zonder bot- of orderstatus te wijzigen.
 Gerichte bot- en portfoliotests slaagden (`14 passed`). De volledige
 backend-suite slaagde met `4272 passed, 4 skipped`. Web typecheck,
 i18n-lint, i18n-tests (`37 passed`), commandtests (`35 passed`) en de
-productiebuild slaagden. CI, Auto Deploy en publieke SHA-pariteit volgen.
+productiebuild slaagden. Alle vijf PR-controles en
+[main CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42351437899)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42351672297)
+slaagde. Publieke backend-health en frontend-buildinfo gaven HTTP 200 en beide
+`55a52f222b44e4715f7cce4d0bb4a1f3f427d34a`. Deze statuswijziging maakt
+een nieuwe main-SHA; onafhankelijke QA start pas nadat ook voor die laatste
+SHA main CI, Auto Deploy en publieke SHA-pariteit bevestigd zijn.
 De actiecontracten, selectie en workeruitvoering veranderen niet; de lokale
 worker-actiematrix en selectie-providerproeven zijn voor deze read-only
 botstatusprojectie niet van toepassing. De ingelogde herkeuring volgt op de
