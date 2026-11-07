@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from datetime import datetime, timezone
 from typing import Any, Callable
+from zoneinfo import ZoneInfo
 
 from backend.domain.macro_indicator_catalog import get_active_macro_indicator_definitions
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
@@ -19,6 +20,24 @@ from backend.services.finn_v2_tool_adapters.display_source_moment import display
 
 
 class FinnResponsesReadExecutor:
+    @staticmethod
+    def _portfolio_local_read_time(value: Any) -> dict[str, str] | None:
+        """Present a portfolio fetch instant in Dutch local time without changing its UTC source."""
+        if not value:
+            return None
+        try:
+            moment = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            return None
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=timezone.utc)
+        local = moment.astimezone(ZoneInfo("Europe/Amsterdam"))
+        return {
+            "time": local.isoformat(timespec="seconds"),
+            "zone": "Europe/Amsterdam",
+            "abbreviation": local.tzname() or "",
+        }
+
     @staticmethod
     def _facts_only_local_experiment() -> bool:
         return (
@@ -135,6 +154,10 @@ class FinnResponsesReadExecutor:
                     "source_observed_at": display_source_moment(data.get("source_observed_at")),
                 }
                 as_of = display_source_moment(as_of)
+            if read_tool == "read_portfolio" and isinstance(data, dict):
+                # The source read_at remains UTC. Supply the same instant in
+                # local civil time so FINN does not label UTC as CET or CEST.
+                data = {**data, "read_at_local": self._portfolio_local_read_time(data.get("read_at"))}
             if read_tool == "read_active_setup" and self._facts_only_local_experiment():
                 data = self._setup_facts_for_local_experiment(data)
             evidence = {
@@ -347,7 +370,10 @@ class FinnResponsesReadExecutor:
                 "without accounting for deposits and withdrawals. "
                 "For a named bot, use that bot row's strategy_name, setup_name and mode "
                 "when present; missing fields do not prove that no link exists. "
-                "data.read_at is when FINN fetched the records, not the date of a market price. "
+                "data.read_at is the UTC instant when FINN fetched the records, not the date of a market price. "
+                "data.read_at_local is the same instant converted to Europe/Amsterdam; "
+                "use its time and CET/CEST abbreviation when stating Dutch local time. "
+                "Never label the UTC clock time as CET or CEST. "
                 "A bot's price_as_of is its market-price date; the outer as_of is the oldest "
                 "required price date when a valuation is available. If valuation_available is "
                 "false, do not infer cash or equity from budgets. Translate technical field "

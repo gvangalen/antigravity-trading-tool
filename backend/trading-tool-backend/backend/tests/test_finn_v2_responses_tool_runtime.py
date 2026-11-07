@@ -10959,6 +10959,38 @@ def test_portfolio_readback_identifies_each_bot_budget_separately():
     assert "missing Paper cash is a separate reason" in result["evidence_boundary"]
 
 
+@pytest.mark.parametrize(
+    "read_at,local_time,abbreviation",
+    [
+        ("2026-11-07T09:12:00+00:00", "2026-11-07T10:12:00+01:00", "CET"),
+        ("2026-07-07T08:12:00Z", "2026-07-07T10:12:00+02:00", "CEST"),
+    ],
+)
+def test_portfolio_readback_distinguishes_utc_from_dutch_local_time(read_at, local_time, abbreviation):
+    class Reads:
+        async def execute_tool(self, **_kwargs):
+            return SimpleNamespace(
+                success=True, availability="available", freshness_status="unknown",
+                source="bot_portfolios", asset=None, as_of=None, error_codes=[],
+                result={"read_at": read_at, "global": {}, "bots": []},
+            )
+
+    executor = object.__new__(FinnResponsesReadExecutor)
+    executor.user_id = 44
+    executor.run_id = "run-portfolio-time"
+    executor.reads = Reads()
+    result = asyncio.run(executor(FinnResponsesToolCatalog().validate(
+        "get_portfolio_and_exposure", {},
+    )))
+
+    data = next(item["data"] for item in result["results"] if item["scope"] == "read_portfolio")
+    assert data["read_at"] == read_at
+    assert data["read_at_local"] == {
+        "time": local_time, "zone": "Europe/Amsterdam", "abbreviation": abbreviation,
+    }
+    assert "Never label the UTC clock time as CET or CEST" in result["evidence_boundary"]
+
+
 def test_plan_evidence_coverage_distinguishes_saved_facts_from_full_assessment():
     class Reads:
         async def execute_tool(self, **kwargs):
