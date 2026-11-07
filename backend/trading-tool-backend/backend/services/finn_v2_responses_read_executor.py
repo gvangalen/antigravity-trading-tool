@@ -319,6 +319,8 @@ class FinnResponsesReadExecutor:
             )
         if call.name in {"get_portfolio_and_exposure", "get_saved_bots"}:
             output["evidence_boundary"] = (
+                "For a saved bot, bots[].operational_status=paused means it is paused; "
+                "do not call that bot inactive, removed, or broken. "
                 "Each bots[].budget_total_eur is that saved bot's own budget limit. "
                 "For a manual Paper bot, budget_total_eur=0 disables only that optional cap; "
                 "it does not itself prevent orders and does not supply cash. A paused bot or "

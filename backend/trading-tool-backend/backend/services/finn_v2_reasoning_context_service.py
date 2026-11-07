@@ -605,6 +605,7 @@ class FinnV2ReasoningContextService:
                     "setup_id",
                     "setup_name",
                     "is_active",
+                    "operational_status",
                     "is_live",
                     "mode",
                     "budget_total_eur",
@@ -614,7 +615,7 @@ class FinnV2ReasoningContextService:
                 if payload.get(key) is not None
             }
         if tool_name == "read_bot_status":
-            return {key: payload.get(key) for key in ["bot_id", "is_active", "is_live", "last_run", "mode", "cadence"] if payload.get(key) is not None}
+            return {key: payload.get(key) for key in ["bot_id", "is_active", "operational_status", "is_live", "last_run", "mode", "cadence"] if payload.get(key) is not None}
         if tool_name == "read_watchlist":
             return {
                 "target_asset": payload.get("target_asset"),

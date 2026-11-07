@@ -30,6 +30,7 @@ class BotToolAdapter:
             setup_id=bot.get("setup_id"),
             setup_name=bot.get("setup_name"),
             is_active=bool(bot.get("is_active")),
+            operational_status="active" if bot.get("is_active") else "paused",
             is_live=bool(bot.get("is_live")),
             mode=bot.get("mode"),
             budget_total_eur=bot.get("budget_total_eur"),
@@ -88,6 +89,7 @@ class BotToolAdapter:
         payload = BotStatusData(
             bot_id=bot.get("id"),
             is_active=bool(bot.get("is_active")),
+            operational_status="active" if bot.get("is_active") else "paused",
             is_live=bool(bot.get("is_live")),
             last_run=last_run if isinstance(last_run, datetime) else None,
             mode=bot.get("mode"),

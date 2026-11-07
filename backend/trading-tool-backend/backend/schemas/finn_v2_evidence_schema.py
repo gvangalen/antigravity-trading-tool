@@ -247,6 +247,7 @@ class LinkedBotData(BaseModel):
     setup_id: Optional[int] = None
     setup_name: Optional[str] = None
     is_active: bool = False
+    operational_status: Optional[Literal["active", "paused"]] = None
     is_live: bool = False
     mode: Optional[str] = None
     budget_total_eur: Optional[float] = None
@@ -257,6 +258,7 @@ class LinkedBotData(BaseModel):
 class BotStatusData(BaseModel):
     bot_id: int
     is_active: bool = False
+    operational_status: Optional[Literal["active", "paused"]] = None
     is_live: bool = False
     last_run: Optional[datetime] = None
     mode: Optional[str] = None
@@ -311,6 +313,7 @@ class PortfolioBotData(BaseModel):
     budget_limit_enabled: Optional[bool] = None
     paper_cash_eur: Optional[float] = None
     is_active: Optional[bool] = None
+    operational_status: Optional[Literal["active", "paused"]] = None
     is_live: Optional[bool] = None
     price_as_of: Optional[datetime] = None
     price_quote_currency: Optional[str] = None

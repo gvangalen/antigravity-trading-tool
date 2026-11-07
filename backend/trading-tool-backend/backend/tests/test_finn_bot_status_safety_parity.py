@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from backend.services.finn_v2_tool_adapters.bot_tool_adapter import BotToolAdapter
 from backend.services.bot_service import BotService
+from backend.services.portfolio_overview_service import project_portfolio
 
 
 def test_finn_reads_saved_owner_bot_safety_state_instead_of_planned_label():
@@ -55,3 +56,19 @@ def test_finn_keeps_paper_exit_separate_from_assessment_guardrails():
     assert latest["exit_trigger"] == "first_target"
     assert latest["action"] == "sell" and latest["persistence_status"] == "executed"
     assert latest["safety_state"] is None and latest["reason_code"] is None
+
+
+def test_finn_reads_paused_bot_consistently_across_saved_bot_tools():
+    bot = {"id": 130, "name": "AAPL Paper", "symbol": "AAPL", "is_active": False,
+           "is_live": False, "mode": "auto"}
+    adapter = BotToolAdapter()
+    linked = asyncio.run(adapter.execute_linked_bot(bot=bot, resolution_source="id"))["data"]
+    status = asyncio.run(adapter.execute_status(bot=bot))["data"]
+    portfolio = project_portfolio({"bots": [{"bot_id": 130, "name": "AAPL Paper",
+                                            "symbol": "AAPL", "is_active": False,
+                                            "is_live": False, "mode": "auto",
+                                            "portfolio_initialized": False}]})
+    assert linked.operational_status == "paused"
+    assert status.operational_status == "paused"
+    assert portfolio.bots[0].operational_status == "paused"
+    assert linked.is_live is False and status.is_live is False
