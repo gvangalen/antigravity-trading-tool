@@ -120,6 +120,18 @@ def _materialize_quote_snapshot(row: Any) -> dict[str, Any]:
     }
 
 
+def _keep_watchlist_row(
+    row: dict[str, Any],
+    pair_symbols: set[str],
+    pair_quotes: set[tuple[str, str]],
+    legacy_symbols: set[str],
+) -> bool:
+    if row.get("market_id") is not None or row["symbol"] not in pair_symbols:
+        return True
+    return (row["symbol"] in legacy_symbols
+            and (row["symbol"], row.get("quote_currency")) not in pair_quotes)
+
+
 def _latest_by_name(rows: Iterable[Any], name_attr: str) -> list[Any]:
     latest: dict[str, Any] = {}
     for row in rows:
@@ -640,7 +652,8 @@ class WorkspaceDataService:
                 "logo_url": asset_meta.get("logo_url"),
                 "tradingview_symbol": asset_meta.get("tradingview_symbol"),
                 "price": quote.get("price") if quote else None,
-                "quote_currency": quote.get("quote_currency") if quote else None,
+                "quote_currency": (quote.get("quote_currency") if quote else None)
+                    or (asset_meta.get("quote_currency") if asset_meta.get("asset_class") == "crypto" else None),
                 "change_24h": quote.get("change_24h") if quote else None,
                 "score": combined,
                 "score_period": "day",
@@ -656,11 +669,15 @@ class WorkspaceDataService:
         if callable(getattr(self.session, "execute", None)):
             pair_result = await self.session.execute(
                 select(Watchlist, TradingMarket)
-                .join(TradingMarket, Watchlist.market_id == TradingMarket.id)
+                .outerjoin(TradingMarket, Watchlist.market_id == TradingMarket.id)
                 .where(Watchlist.user_id == user_id, Watchlist.symbol.in_(normalized))
                 .order_by(Watchlist.created_at, Watchlist.id)
             )
-            pair_rows = pair_result.all()
+            watchlist_entries = pair_result.all()
+            pair_rows = [(item, market) for item, market in watchlist_entries if market is not None]
+            legacy_symbols = {item.symbol for item, market in watchlist_entries if market is None}
+        else:
+            legacy_symbols = set()
         for item, market in pair_rows:
             assessment = await SetupMarketMatchService(self.session).for_asset(
                 user_id, item.symbol, setups=[], market_id=market.id)
@@ -683,8 +700,10 @@ class WorkspaceDataService:
                 "quote": _freshness(latest.source_observed_at if latest else None, STALE_AFTER_SECONDS["quote"], "exact_market_data"),
                 "score_freshness": _freshness(assessment["as_of"], STALE_AFTER_SECONDS["day"], "daily_scores"),
             })
+        pair_quotes = {(item.symbol, market.quote_currency) for item, market in pair_rows}
         pair_symbols = {item.symbol for item, _ in pair_rows}
-        rows = [row for row in rows if row.get("market_id") is not None or row["symbol"] not in pair_symbols]
+        rows = [row for row in rows if _keep_watchlist_row(
+            row, pair_symbols, pair_quotes, legacy_symbols)]
         return {
             "period": "day",
             "weights": _normalized_weights(weights),

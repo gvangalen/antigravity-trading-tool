@@ -107,7 +107,13 @@ async def add_to_watchlist(
             Watchlist.symbol == symbol,
             Watchlist.market_id.is_(None),
         ))).scalar_one_or_none()
+        # A legacy base-symbol row represents the catalog's default quote.
+        # Selecting another quote must create a second row, not replace it.
+        default_quote = None
         if legacy is not None:
+            asset = await AssetCatalogService(session).get_asset(symbol)
+            default_quote = str(asset.get("quote_currency") or "").upper()
+        if legacy is not None and market.quote_currency == default_quote:
             legacy.market_id = market.id
             await session.commit()
             queue_exact_market_refresh(int(market.id))
