@@ -1,7 +1,8 @@
 "use client";
 
 import FinnWorkspaceShell from "@/components/finn/FinnWorkspaceShell";
+import AppActivityTracker from "@/components/analytics/AppActivityTracker";
 
 export default function ProtectedLayout({ children }) {
-  return <FinnWorkspaceShell>{children}</FinnWorkspaceShell>;
+  return <FinnWorkspaceShell><AppActivityTracker />{children}</FinnWorkspaceShell>;
 }

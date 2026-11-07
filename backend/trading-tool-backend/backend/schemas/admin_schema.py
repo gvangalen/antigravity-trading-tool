@@ -123,9 +123,15 @@ class AdminUserOverview(BaseModel):
     background_usage_month_eur: float = 0.0
     blocked_requests_month: int = 0
     blocked_estimated_cost_month_eur: float = 0.0
+    unpriced_requests_month: int = 0
     subscription_status: str
     last_login_at: Optional[str] = None
     last_ai_activity_at: Optional[str] = None
+    last_interactive_ai_at: Optional[str] = None
+    last_background_ai_at: Optional[str] = None
+    last_other_ai_at: Optional[str] = None
+    last_app_activity_at: Optional[str] = None
+    active_days_30d: int = 0
     created_at: Optional[str] = None
 
 class AdminUserPage(BaseModel):
@@ -147,6 +153,7 @@ class AdminUserUsageDetail(BaseModel):
     requests_today: int
     input_tokens_month: int
     output_tokens_month: int
+    unpriced_requests_month: int = 0
     cost_month_eur: float
     cost_today_eur: float
     by_feature: List[AdminUserUsageBucket]
