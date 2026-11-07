@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Admin: kostenprecisie en echte webappactiviteit (7 november 2026)
 
-Phase: `LOCAL_VALIDATION`. Kandidaat: `codex/admin-activity-costs`. Dit is
+Phase: `DEPLOYED_AWAITING_QA`. Kandidaat: `codex/admin-activity-costs`,
+[PR #855](https://github.com/gvangalen/antigravity-trading-tool/pull/855). Dit is
 een gerichte vervolguitrol van de adminweergave. Kosten onder één cent worden
 met maximaal zes decimalen getoond. Wanneer aanvragen wel tokens maar geen
 geboekte kosten hebben, meldt de gebruikerslijst en het verbruiksdetail dat
@@ -27,8 +28,15 @@ i18n-tests, commandtests en productiebuild geslaagd. De nieuwe
 gebruikersquery valideerde op lege, tijdelijke PostgreSQL-tabellen.
 FINN-actiecontracten, workeruitvoering en providerselectie zijn niet gewijzigd;
 de worker-actiematrix en echte providerproeven zijn voor deze adminregistratie
-en -projectie niet van toepassing. PR-CI, main-CI, Auto Deploy, publieke
-SHA-pariteit en onafhankelijke ingelogde QA staan nog open.
+en -projectie niet van toepassing. Alle vijf PR-CI-controles en alle vijf
+controles in [main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42359185771)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42359427802)
+slaagde. Git-main, publieke backend-health en frontend-buildinfo meldden
+alle drie `faf60531e631c2716ef34c49367ab3f8d55e8209`; beide publieke
+routes gaven HTTP 200. Deze statuswijziging creëert zelf een nieuwe SHA,
+waardoor de laatste main-CI, Auto Deploy en publieke SHA's opnieuw moeten
+samenvallen vóór onafhankelijke ingelogde QA. De bestaande QA-sessie heeft
+geen adminrechten; ingelogde acceptatie van de adminweergave staat nog open.
 
 ## Gepauzeerde Paper-bot correct lezen (7 november 2026)
 
