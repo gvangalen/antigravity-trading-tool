@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Beschermde Paper-QA: ontbrekende foutcategorie (7 november 2026)
 
-Phase: `DEPLOYED_AWAITING_QA`. Actieve diagnosekandidaat:
+Phase: `QA_NOT_ACCEPTED`. Actieve diagnosekandidaat:
 `codex/qa-paper-diagnostic`,
 [PR #859](https://github.com/gvangalen/antigravity-trading-tool/pull/859).
 De productbatch hieronder blijft op productie,
@@ -36,10 +36,26 @@ controles in [main-CI](https://github.com/gvangalen/antigravity-trading-tool/act
 slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42416729432)
 slaagde. Git-main, publieke backend-health en frontend-buildinfo meldden alle
 drie `7242d8f2a783cdcdf1bd42a92516dd548c27d069`; beide publieke routes
-gaven HTTP 200. Deze statuswijziging creëert zelf een nieuwe SHA. Pas nadat de
-laatste main-CI, Auto Deploy en beide publieke SHA's opnieuw samenvallen, start
-dezelfde onafhankelijke QA-agent een beschermde Paper-only hertest. Een groene
-diagnoseuitrol is geen acceptatie van de vier trader-gates.
+gaven HTTP 200. De latere statuscommit ging eveneens door alle vijf controles
+van [main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42417163001)
+en een geslaagde [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42417405453).
+Git-main en beide publieke routes (HTTP 200) meldden daarna
+`bb8e557763a2385aeefe4e62b88691a56a543782`.
+
+Onafhankelijke QA herhaalde het beschermde Paper-profiel op die SHA in
+[workflow 42417611630](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42417611630).
+Checkout, release-marker, backend, frontend en QA-authenticatie slaagden.
+De eerste Paper-aankoop faalde opnieuw, nu met `phase=paper_buy`,
+`cause_code=other` en de nieuwe `paper_buy_cause=other`. Het gesaniteerde
+rapport heeft SHA-256
+`9720d440a8b0ad5af2a0967c73d657c87518db129de282e0979d64dbd67debe5`.
+Eén Paper-executiepoging is geregistreerd, nul Live-tradingcalls en nul Live-
+botactivaties. De vier inhoudelijke trader-gates en polling/SSE zijn niet
+uitgevoerd. Het onafhankelijke verdict blijft `NOT_ACCEPTED`; de onderliggende
+oorzaak is zonder extra toegestane observatie niet te classificeren. Nieuwe
+fixture-runs of een handelslogica-aanpassing mogen niet op een vermoeden worden
+gebaseerd. Deze statuswijziging maakt zelf een nieuwe SHA; de publieke
+release-identiteit moet daarom opnieuw worden geverifieerd.
 
 ## Vier trader-gates voor FINN en Paper (7 november 2026)
 
