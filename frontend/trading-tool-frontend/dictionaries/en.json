@@ -2813,7 +2813,7 @@
       "lockedLabel": "Locked"
     },
     "history": {
-      "exitEvidence": {"title": "Paper exit evidence", "trigger": "Reason", "savedStop": "Saved stop", "decisionQuote": "Quote at decision", "executionQuote": "Quote at execution", "fx": "EUR conversion at execution", "notRecorded": "Not recorded for this exit", "triggers": {"stop_loss": "Stop loss", "first_target": "First target"}},
+      "exitEvidence": {"title": "Paper exit evidence", "trigger": "Reason", "savedStop": "Saved stop", "decisionQuote": "Quote at decision", "executionQuote": "Quote at execution", "eurPrice": "Execution price in EUR", "quantity": "Executed quantity", "fx": "EUR conversion at execution", "proceeds": "Cash credited", "notRecorded": "Not recorded for this exit", "triggers": {"stop_loss": "Stop loss", "first_target": "First target"}},
 
       "scoreBandBasis": "Setup score confirmed; no separate confidence calculated",
       "title": "Bot history",

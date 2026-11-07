@@ -20,10 +20,13 @@ def test_paper_exit_evidence_preserves_known_quote_and_utc_moments():
         "execution_fx_eur_per_unit": 0.86,
         "execution_fx_observed_at": "2026-10-30T14:44:55",
         "position_qty": 1.2,
+        "execution_qty": 1.2,
+        "execution_proceeds_eur": 358.69,
     })
     assert evidence["source_price_at"] == "2026-10-30T14:45:00+00:00"
     assert evidence["execution_fx_observed_at"] == "2026-10-30T14:44:55+00:00"
-    assert "position_qty" not in evidence
+    assert evidence["position_qty"] == evidence["execution_qty"] == 1.2
+    assert evidence["execution_proceeds_eur"] == 358.69
     assert _paper_exit_evidence("assessment", {"trigger": "stop_loss"}) is None
     assert _utc_iso(datetime(2026, 10, 30, 14, 45)) == "2026-10-30T14:45:00+00:00"
 

@@ -52,6 +52,7 @@ _PAPER_EXIT_EVIDENCE_FIELDS = (
     "execution_source_price_currency", "execution_source_price",
     "execution_source_price_at", "execution_eur_price",
     "execution_fx_eur_per_unit", "execution_fx_observed_at",
+    "position_qty", "execution_qty", "execution_proceeds_eur",
 )
 
 

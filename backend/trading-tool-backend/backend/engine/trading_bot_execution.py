@@ -3414,6 +3414,20 @@ def _auto_execute_decision(
 
             bot_order_id = int(row[0])
 
+            if side == "sell" and not is_live:
+                # Record the filled quantity and EUR cash leg alongside the
+                # already dated execution quote and FX in the same transaction.
+                # Older Paper exits retain only the facts originally stored.
+                cur.execute("""
+                    UPDATE bot_decisions
+                    SET scores_json = COALESCE(scores_json, '{}'::jsonb) || %s::jsonb
+                    WHERE id=%s AND user_id=%s AND bot_id=%s
+                      AND decision_kind='paper_exit'
+                """, (json.dumps({
+                    "execution_qty": qty,
+                    "execution_proceeds_eur": notional,
+                }), decision_id, user_id, bot_id))
+
             # 2) Ledger entry
             record_bot_ledger_entry(
                 conn=conn,

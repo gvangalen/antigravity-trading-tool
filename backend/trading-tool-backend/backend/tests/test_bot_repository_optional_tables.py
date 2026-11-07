@@ -40,3 +40,21 @@ def test_daily_bot_assessment_does_not_select_same_day_paper_exit():
         assert "decision_kind='assessment'" in query
 
     asyncio.run(run())
+
+
+def test_bot_history_joins_decision_to_bot_with_same_owner():
+    async def run():
+        session = AsyncMock()
+        session.execute.return_value = MagicMock()
+        session.execute.return_value.fetchall.return_value = []
+        repository = BotRepository(session)
+        repository.check_table_exists = AsyncMock(return_value=True)
+
+        assert await repository.get_bot_history(
+            7, date(2026, 11, 1), date(2026, 11, 7),
+        ) == []
+        query = str(session.execute.await_args.args[0])
+        assert "d.user_id=:user_id" in query
+        assert "b.id = d.bot_id AND b.user_id = d.user_id" in query
+
+    asyncio.run(run())

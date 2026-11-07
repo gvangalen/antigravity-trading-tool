@@ -197,6 +197,7 @@ function getUiCopy(locale = "nl") {
       scorePendingShort: "Calculating score",
       notConfigured: "No indicators added",
       pendingSource: "This indicator is configured but has no source reading yet. The next source refresh will try again; until then there is no score.",
+      missingDatedSource: "No verifiable dated source reading is available yet. A visible undated value cannot be scored; the next source refresh will try again.",
       historyPending: (observed, required) => `This indicator has ${observed} of ${required} dated source days. We will retry the historical source; there is no score until enough real readings are available.`,
       indicatorSourceStale: "The latest source reading is too old for a current score. The source will be refreshed again.",
       sourceReadingFrom: (date) => `Reading from ${date}`,
@@ -408,6 +409,7 @@ function getUiCopy(locale = "nl") {
       scorePendingShort: "Score wird berechnet",
       notConfigured: "Keine Indikatoren hinzugefügt",
       pendingSource: "Dieser Indikator ist eingerichtet, hat aber noch keinen Messwert. Bei der nächsten Datenaktualisierung wird die Quelle erneut abgefragt; bis dahin gibt es keinen Score.",
+      missingDatedSource: "Es liegt noch kein überprüfbarer datierter Quellwert vor. Ein sichtbarer Wert ohne Datum kann nicht bewertet werden; die Quelle wird erneut abgefragt.",
       historyPending: (observed, required) => `Für diesen Indikator liegen ${observed} von ${required} datierten Quelltagen vor. Wir fragen die historische Quelle erneut ab; bis genügend echte Messwerte vorliegen, gibt es keinen Score.`,
       indicatorSourceStale: "Der letzte Quellwert ist für einen aktuellen Score zu alt. Die Quelle wird erneut abgefragt.",
       sourceReadingFrom: (date) => `Messung vom ${date}`,
@@ -618,6 +620,7 @@ function getUiCopy(locale = "nl") {
     scorePendingShort: "Score wordt berekend",
     notConfigured: "Geen indicatoren toegevoegd",
     pendingSource: "Deze indicator is ingesteld, maar heeft nog geen bronmeting. Bij de volgende gegevensverversing wordt de bron opnieuw gelezen; tot die tijd is er geen score.",
+    missingDatedSource: "Er is nog geen verifieerbare bronmeting met datum. Een zichtbare waarde zonder bronmoment kan geen score krijgen; bij de volgende verversing wordt de bron opnieuw gelezen.",
     historyPending: (observed, required) => `Deze indicator heeft ${observed} van de ${required} gedateerde brondagen. We proberen de historische bron opnieuw; tot er genoeg echte metingen zijn, is er geen score.`,
     indicatorSourceStale: "De laatste bronmeting is te oud voor een actuele score. De bron wordt opnieuw ververst.",
     sourceReadingFrom: (date) => `Meting van ${date}`,
@@ -1508,6 +1511,8 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
             ? ui.missingScoreRule
           : unavailableReason === "score_pending"
             ? ui.scorePending
+      : unavailableReason === "missing_source_reading"
+        ? ui.missingDatedSource
       : !hasValue && item?.data_status === "pending_refresh"
         ? ui.pendingSource
         : ui.unavailable;

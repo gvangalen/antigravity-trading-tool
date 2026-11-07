@@ -13509,6 +13509,67 @@ def test_open_position_question_requires_portfolio_read_before_model_answer(monk
     assert captured["required_read_tool_name"] == "get_portfolio_and_exposure"
 
 
+def test_bot_decision_question_binds_persisted_history_even_for_portfolio_tool():
+    catalog = FinnResponsesToolCatalog()
+    selected = catalog.validate("get_saved_bots", {"asset": "AAPL"})
+    bound = FinnResponsesFrontDoor._bind_bot_decision_evidence(
+        selected, message="Wat was het laatste botbesluit om 19:45?", read_only=True,
+    )
+    assert "read_review_history" in bound.read_tools
+    assert "read_portfolio" in bound.read_tools
+    assert bound.inputs == {"asset": "AAPL"}
+    assert FinnResponsesFrontDoor._bind_bot_decision_evidence(
+        selected, message="Welke Paper-bot heb ik?", read_only=True,
+    ) == selected
+    assert FinnResponsesFrontDoor._bind_bot_decision_evidence(
+        selected, message="Wijzig mijn botbesluit", read_only=False,
+    ) == selected
+
+
+def test_bot_decision_front_door_reads_history_before_answer(monkeypatch):
+    @asynccontextmanager
+    async def session_factory():
+        yield SimpleNamespace(commit=AsyncMock())
+
+    selected_calls = []
+
+    class FakeRead:
+        async def __call__(self, call):
+            selected_calls.append(call)
+            return {"status": "completed", "results": [
+                {"scope": "read_portfolio", "status": "completed",
+                 "data": {"bots": [{"bot_id": 130, "symbol": "AAPL"}]}},
+                {"scope": "read_review_history", "status": "completed",
+                 "data": {"items": ["Botbeslissing 2026-11-07 19:45 CET: geen order"]}},
+            ]}
+
+    FakeRead.session_factory = staticmethod(session_factory)
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnV2RuntimeContractRepository.record_responses_progress",
+        AsyncMock(),
+    )
+    fake = FakeResponses(
+        response("decision-read", calls=[
+            tool_call("call-bots", "get_saved_bots", {"asset": "AAPL"}),
+        ]),
+        response("decision-answer", text="Om 19:45 CET besliste de bot: geen order."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session_factory=session_factory,
+        user_id=7, run_id="bot-decision-history", model_led_coach=True,
+    )
+    front.reads = FakeRead()
+    result = asyncio.run(front.run(
+        message="Wat was de laatste botbeslissing voor AAPL?",
+        instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="AAPL",
+        workspace_hints={"page": "/asset", "symbol": "AAPL"},
+    ))
+    assert "read_review_history" in selected_calls[0].read_tools
+    assert "read_portfolio" in selected_calls[0].read_tools
+    assert result.response.tool_trace[0]["result"]["results"][1]["scope"] == "read_review_history"
+
+
 @pytest.mark.parametrize("question,selected_tool", [
     ("Welke bot heb ik op deze pagina open, aan welke strategie is hij gekoppeld, en kan hij nu een Paper-order plaatsen? Alleen uitleg.", "get_saved_bots"),
     ("Waarom kan de bot die ik hier bekijk vandaag geen Paper-aankoop uitvoeren? Noem zijn naam en gekoppelde strategie.", "get_saved_bots"),

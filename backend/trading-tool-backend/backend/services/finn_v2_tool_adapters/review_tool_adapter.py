@@ -10,6 +10,7 @@ from backend.domain.finn_v2_source_registry import FinnV2InformationSourceRegist
 from backend.services.bot_service import BotService
 from backend.schemas.finn_v2_evidence_schema import ReviewHistoryData
 from backend.services.finn_closed_trade_reflection_service import FinnClosedTradeReflectionService
+from backend.services.finn_v2_tool_adapters.display_source_moment import amsterdam_source_moment
 
 
 class ReviewToolAdapter:
@@ -37,8 +38,15 @@ class ReviewToolAdapter:
         rows = [] if review_id is not None else await self.bot_service.get_bot_history(user_id, 30)
         if asset:
             rows = [row for row in rows if str(row.get("symbol") or "").upper() == asset.upper()]
+        rows.sort(
+            key=lambda row: self._utc_instant(row["decision_ts"])
+            if row.get("decision_ts") is not None else datetime.min.replace(tzinfo=timezone.utc),
+            reverse=True,
+        )
         decision_items = [
-            f"Botbeslissing, geen bevestigde gesloten trade: {row['decision_ts']}: "
+            f"Botbeslissing, geen bevestigde gesloten trade: "
+            f"{amsterdam_source_moment(row['decision_ts'])} "
+            f"({self._utc_instant(row['decision_ts']).isoformat()} UTC): "
             f"bot {row['bot_name']} ({row['symbol']}) actie {row['action']}; "
             f"opslagstatus {row['status']}; veiligheidsstatus "
             f"{(row.get('safety_check') or {}).get('state') or 'onbekend'}; "

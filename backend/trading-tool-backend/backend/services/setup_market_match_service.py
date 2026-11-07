@@ -218,7 +218,9 @@ class SetupMarketMatchService:
                        calculated_at, indicator_evidence
                 FROM daily_scores
                 WHERE user_id = :user_id AND symbol = :symbol AND {market_scope}
-                ORDER BY report_date DESC, calculated_at DESC NULLS LAST
+                ORDER BY (macro_score IS NOT NULL OR technical_score IS NOT NULL
+                          OR market_score IS NOT NULL) DESC,
+                         report_date DESC, calculated_at DESC NULLS LAST
                 LIMIT 1
             """), params)
             row = result.mappings().first()
@@ -327,7 +329,10 @@ class SetupMarketMatchService:
                        calculated_at, indicator_evidence
                 FROM daily_scores WHERE user_id = :user_id
                   AND symbol = ANY(:symbols)
-                ORDER BY symbol, market_id, report_date DESC, calculated_at DESC NULLS LAST
+                ORDER BY symbol, market_id,
+                         (macro_score IS NOT NULL OR technical_score IS NOT NULL
+                          OR market_score IS NOT NULL) DESC,
+                         report_date DESC, calculated_at DESC NULLS LAST
             """), {"user_id": user_id, "symbols": symbols})
             self.daily_rows = {
                 ((str(row["symbol"]).upper(), row.get("market_id"))

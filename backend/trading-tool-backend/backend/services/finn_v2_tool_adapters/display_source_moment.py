@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 
 def display_source_moment(value: datetime | str | None) -> datetime | str | None:
@@ -14,3 +15,16 @@ def display_source_moment(value: datetime | str | None) -> datetime | str | None
             return value
         return parsed.replace(tzinfo=parsed.tzinfo or timezone.utc).astimezone(timezone.utc).isoformat(timespec="seconds")
     return value
+
+
+def amsterdam_source_moment(value: datetime | str | None) -> str | None:
+    """Give FINN an unambiguous local clock label derived from a UTC instant."""
+    instant = display_source_moment(value)
+    if isinstance(instant, str):
+        try:
+            instant = datetime.fromisoformat(instant)
+        except ValueError:
+            return None
+    if not isinstance(instant, datetime):
+        return None
+    return instant.astimezone(ZoneInfo("Europe/Amsterdam")).strftime("%Y-%m-%d %H:%M:%S %Z")
