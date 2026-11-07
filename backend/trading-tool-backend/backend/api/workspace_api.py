@@ -15,7 +15,7 @@ from backend.utils.scoring_utils import normalize_indicator_name, score_source_i
 from backend.domain.market_indicator_catalog import get_market_indicator_definition
 from backend.domain.macro_indicator_catalog import get_macro_indicator_definition
 from backend.domain.technical_indicator_catalog import get_technical_indicator_definition
-from backend.infrastructure.models import MacroData, MarketDataIndicator, TechnicalDataIndicator
+from backend.infrastructure.models import MarketDataIndicator, TechnicalDataIndicator
 from backend.services.pair_benchmark_service import (
     PairBenchmarkCopyService, benchmark_weights, save_benchmark_weights,
 )
@@ -159,17 +159,6 @@ async def post_pair_benchmark_copy(
     queue_indicator_score_refresh(int(current_user["id"]), market.asset_symbol,
                                   market_id=int(market.id))
     queue_exact_market_refresh(int(market.id))
-    if category == "macro":
-        try:
-            from backend.celery_task.celery_app import celery_app
-            celery_app.send_task(
-                "backend.celery_task.indicator_history_task.bootstrap_indicator_histories",
-                kwargs={"user_id": int(current_user["id"]), "symbol": market.asset_symbol,
-                        "category": "macro", "indicator": indicator},
-            )
-        except Exception:
-            # The saved preference remains pending until the periodic sweep.
-            pass
     return {**result, "status": status}
 
 
@@ -232,41 +221,19 @@ async def put_pair_indicator_config(
         raise HTTPException(status_code=409, detail="indicator_already_configured_for_pair") from exc
     status = "ready"
     if category == "macro":
-        from backend.services.indicator_history_bootstrap import (
-            ABSOLUTE_MACRO_INDICATORS, IndicatorHistoryBootstrap,
-        )
-        from backend.services.macro_data_service import MacroDataService
-        if indicator in ABSOLUTE_MACRO_INDICATORS:
-            try:
-                await IndicatorHistoryBootstrap(db).bootstrap_macro(
-                    int(current_user["id"]), indicator, market.asset_symbol)
-            except Exception:
-                await db.rollback()
-                status = "pending_source"
+        # The preference is committed. Provider history and live quotes can
+        # take longer than the HTTP timeout, so materialize them in the worker.
+        # That worker queues the exact-pair score after its source write.
+        status = "pending_score"
         try:
-            await MacroDataService(db).add_macro_indicator(
-                int(current_user["id"]), indicator, None,
-                symbol=market.asset_symbol, persist_preference=False,
-                refresh_existing=True,
+            from backend.celery_task.celery_app import celery_app
+            celery_app.send_task(
+                "backend.celery_task.indicator_history_task.bootstrap_indicator_histories",
+                kwargs={"user_id": int(current_user["id"]), "symbol": market.asset_symbol,
+                        "category": "macro", "indicator": indicator},
             )
-            await db.commit()
         except Exception:
-            await db.rollback()
             status = "pending_source"
-        source = await db.execute(select(MacroData.value, MacroData.score,
-                                         MacroData.source_observed_at).where(
-            MacroData.user_id == int(current_user["id"]),
-            MacroData.symbol == market.asset_symbol,
-            MacroData.name == indicator,
-        ).order_by(MacroData.source_observed_at.desc().nulls_last(),
-                   MacroData.timestamp.desc(), MacroData.id.desc()).limit(1))
-        reading = source.first()
-        if not reading or reading[0] is None or not score_source_is_fresh(
-            category, indicator, reading[2], symbol=market.asset_symbol,
-        ):
-            status = "pending_source"
-        else:
-            status = "ready" if reading[1] is not None else "pending_score"
     if category in {"market", "technical"}:
         try:
             await ExactMarketIndicatorService(db).materialize(

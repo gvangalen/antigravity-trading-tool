@@ -1162,6 +1162,11 @@ function formatIndicatorValue(name, value, locale, ui = getUiCopy(locale), quote
     return numericValue >= 1 ? ui.aboveMa50 : ui.belowMa50;
   }
 
+  if (label === "change_24h" && Number.isFinite(numericValue)) {
+    // Binance supplies priceChangePercent in percentage points already.
+    return formatPercent(numericValue, 2);
+  }
+
   if ((label.includes("change") || label.includes("dominance")) && Number.isFinite(numericValue)) {
     const percentValue = normalizePotentialRatio(numericValue, { percent: true });
     return formatPercent(percentValue, 2);
