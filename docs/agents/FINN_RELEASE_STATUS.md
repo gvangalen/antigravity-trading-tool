@@ -6,7 +6,9 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Vier trader-gates voor FINN en Paper (7 november 2026)
 
-Phase: `LOCAL_VALIDATION`. Actieve kandidaat: `codex/live-readiness-four-gates`.
+Phase: `DEPLOYED_AWAITING_QA`. Actieve kandidaat:
+`codex/live-readiness-four-gates`,
+[PR #857](https://github.com/gvangalen/antigravity-trading-tool/pull/857).
 De oudere kandidaatsecties hieronder zijn historisch; deze batch bevat de vier
 open punten uit de Paper-test van 7 november.
 
@@ -35,10 +37,19 @@ FX en bronmoment vast. De complete lokale worker-actiematrix slaagde `16/16`
 met nul Live-orders, nul productieverbindingen en nul Live-bots. Een aparte
 synthetische accountstaatproef slaagde `3/3`: elk antwoord gebruikte de
 opgeslagen AAPL-beslissing en Paper-kas, noemde `€393,01` en rekende
-`09:12 UTC` correct om naar `10:12 CET`. CI, Auto Deploy, publieke SHA-pariteit
-en onafhankelijke ingelogde QA volgen nog. Eerdere
-matrixpogingen braken af door lokale Docker-geheugendruk; ze tellen niet als
-productvalidatie.
+`09:12 UTC` correct om naar `10:12 CET`. Eerdere matrixpogingen braken af door
+lokale Docker-geheugendruk; ze tellen niet als productvalidatie.
+
+Alle vijf PR-controles en alle vijf controles in
+[main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42413569566)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42413820475)
+slaagde. Git-main, publieke backend-health en frontend-buildinfo meldden alle
+drie `ed460c2e470577b6d3e60627fd7173d8c3b6fb00`; beide publieke routes
+gaven HTTP 200. Deze statuswijziging creëert zelf een nieuwe main-SHA. De
+laatste main-CI, Auto Deploy en beide publieke SHA's moeten opnieuw samenvallen
+vóór de bestaande onafhankelijke QA-agent de ingelogde liveproef uitvoert.
+De QA-scope is FINN-accountstaat, bronmoment/tijdzone, scorecontinuïteit en
+bewijs bij automatische Paper-exits; Live-orders zijn uitgesloten.
 
 ## Admin: kostenprecisie en echte webappactiviteit (7 november 2026)
 
