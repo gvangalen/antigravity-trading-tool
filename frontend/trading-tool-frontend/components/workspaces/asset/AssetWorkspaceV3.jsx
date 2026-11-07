@@ -199,6 +199,9 @@ function getUiCopy(locale = "nl") {
       pendingSource: "This indicator is configured but has no source reading yet. The next source refresh will try again; until then there is no score.",
       historyPending: (observed, required) => `This indicator has ${observed} of ${required} dated source days. We will retry the historical source; there is no score until enough real readings are available.`,
       indicatorSourceStale: "The latest source reading is too old for a current score. The source will be refreshed again.",
+      sourceReadingFrom: (date) => `Reading from ${date}`,
+      scoreAwaitingUpdate: "after next reading",
+      datedSourceDetail: (date) => `The latest available source reading is from ${date}. The value remains visible. The score will update when the source provides a new reading.`,
       scorePending: "A current source reading exists, but no indicator score is available. Check the score rule or wait for the next calculation.",
       scoreRebuilding: "Your indicator choices changed. The score is being recalculated; previous readings have not been erased.",
       scoreIncomplete: "One or more selected indicators do not have a usable score yet. The group score will return when their evidence is complete.",
@@ -406,6 +409,9 @@ function getUiCopy(locale = "nl") {
       pendingSource: "Dieser Indikator ist eingerichtet, hat aber noch keinen Messwert. Bei der nächsten Datenaktualisierung wird die Quelle erneut abgefragt; bis dahin gibt es keinen Score.",
       historyPending: (observed, required) => `Für diesen Indikator liegen ${observed} von ${required} datierten Quelltagen vor. Wir fragen die historische Quelle erneut ab; bis genügend echte Messwerte vorliegen, gibt es keinen Score.`,
       indicatorSourceStale: "Der letzte Quellwert ist für einen aktuellen Score zu alt. Die Quelle wird erneut abgefragt.",
+      sourceReadingFrom: (date) => `Messung vom ${date}`,
+      scoreAwaitingUpdate: "nach neuer Messung",
+      datedSourceDetail: (date) => `Die letzte verfügbare Quellmessung stammt vom ${date}. Der Wert bleibt sichtbar. Der Score wird aktualisiert, sobald die Quelle eine neue Messung liefert.`,
       scorePending: "Ein aktueller Quellwert liegt vor, aber kein Indikator-Score. Prüfe die Scoreregel oder warte auf die nächste Berechnung.",
       scoreRebuilding: "Deine Indikatorauswahl hat sich geändert. Der Score wird neu berechnet; frühere Messwerte wurden nicht gelöscht.",
       scoreIncomplete: "Mindestens ein gewählter Indikator hat noch keinen nutzbaren Score. Der Gruppenscore erscheint wieder, sobald die Daten vollständig sind.",
@@ -612,6 +618,9 @@ function getUiCopy(locale = "nl") {
     pendingSource: "Deze indicator is ingesteld, maar heeft nog geen bronmeting. Bij de volgende gegevensverversing wordt de bron opnieuw gelezen; tot die tijd is er geen score.",
     historyPending: (observed, required) => `Deze indicator heeft ${observed} van de ${required} gedateerde brondagen. We proberen de historische bron opnieuw; tot er genoeg echte metingen zijn, is er geen score.`,
     indicatorSourceStale: "De laatste bronmeting is te oud voor een actuele score. De bron wordt opnieuw ververst.",
+    sourceReadingFrom: (date) => `Meting van ${date}`,
+    scoreAwaitingUpdate: "volgt na nieuwe meting",
+    datedSourceDetail: (date) => `De laatste beschikbare bronmeting is van ${date}. De waarde blijft zichtbaar. De score wordt bijgewerkt zodra de bron een nieuwe meting levert.`,
     scorePending: "Er is een actuele bronmeting, maar nog geen indicatorscore. Controleer de scoreregel of wacht op de volgende berekening.",
     scoreRebuilding: "Je indicatoren zijn gewijzigd. De score wordt opnieuw berekend; eerdere metingen zijn niet gewist.",
     scoreIncomplete: "Een of meer gekozen indicatoren hebben nog geen bruikbare score. De groepsscore komt terug zodra hun gegevens compleet zijn.",
@@ -959,6 +968,16 @@ function formatTimestamp(value, locale) {
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+  }).format(date);
+}
+
+function formatSourceDate(value, locale) {
+  const day = /^\d{4}-\d{2}-\d{2}/.exec(String(value || ""))?.[0];
+  if (!day) return null;
+  const date = new Date(`${day}T12:00:00Z`);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat(locale || "en-US", {
+    day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
   }).format(date);
 }
 
@@ -1444,8 +1463,11 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
     const tone = scoreTone(score, ui);
     const unavailableReason = item?.score_unavailable_reason;
     const pendingScore = score === null && unavailableReason === "score_pending";
+    const sourceDate = formatSourceDate(item?.source_observed_at, locale);
+    const datedSource = score === null && unavailableReason === "stale_source" && sourceDate;
     const direction = score !== null ? toDirectionLabel(item, score, ui)
-      : pendingScore ? ui.scorePendingShort : ui.unavailable;
+      : pendingScore ? ui.scorePendingShort
+      : datedSource ? ui.sourceReadingFrom(sourceDate) : ui.unavailable;
     const value = formatIndicatorValue(name, rawValue, locale, ui, quoteCurrency);
     const numericValue = parseIndicatorNumber(rawValue);
     const scoreConflict =
@@ -1478,7 +1500,7 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
       : unavailableReason === "insufficient_dated_history" && historyCoverage
         ? ui.historyPending(historyCoverage.observed_days, historyCoverage.required_days)
         : unavailableReason === "stale_source"
-          ? ui.indicatorSourceStale
+          ? datedSource ? ui.datedSourceDetail(sourceDate) : ui.indicatorSourceStale
           : unavailableReason === "missing_rule"
             ? ui.missingScoreRule
           : unavailableReason === "score_pending"
@@ -1520,7 +1542,10 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
       direction,
       score,
       signalTone: tone,
-      scoreLabel: score === null ? (pendingScore ? ui.scorePendingShort : ui.unavailable) : `${Math.round(score)}/100`,
+      scoreLabel: score === null
+        ? pendingScore ? ui.scorePendingShort
+          : datedSource ? ui.scoreAwaitingUpdate : ui.unavailable
+        : `${Math.round(score)}/100`,
       detail,
       timestamp: evidence?.source_observed_at || item?.source_observed_at || null,
       ruleOrigin,
@@ -2098,11 +2123,15 @@ function EvidenceRow({
     : ui.unavailable;
   const historyCoverage = row.raw?.score_history_coverage;
   const freshness = row.raw?.freshness;
-  const freshnessText = {
+  const sourceDate = formatSourceDate(row.timestamp, locale);
+  const freshnessState = indicatorSourceFreshness(freshness);
+  const freshnessText = freshnessState === "stale" && sourceDate
+    ? ui.sourceReadingFrom(sourceDate)
+    : ({
     unavailable: ui.unavailable,
     stale: ui.staleData,
     current: ui.currentData,
-  }[indicatorSourceFreshness(freshness)];
+  }[freshnessState]);
 
   return (
     <div className="border-t border-slate-100">
