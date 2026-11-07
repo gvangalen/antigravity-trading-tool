@@ -4,6 +4,24 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Scorecontinuïteit en traderbewijs (7 november 2026)
+
+Phase: `LOCAL_VALIDATION`. Kandidaat: `codex/trader-four-fixes`.
+Deze batch laat Score 2.0 de laatste exacte-marktscore gebruiken zolang de
+onderliggende indicatorbronnen nog vers zijn, ook na een UTC-dagwisseling.
+De AAPL-werkruimte toont de laatst beschikbare beurskoers met bronmoment.
+Oude Paper-exits zonder opgeslagen bronkoers- en FX-momenten worden als zodanig
+gelabeld; FINN-bronmomenten en bottermen zijn leesbaar gemaakt.
+
+De volledige backend-suite slaagde lokaal met `4271 passed, 4 skipped`.
+Web typecheck, i18n-lint, i18n-tests, commandtests en productiebuild slaagden.
+De bijbehorende statische webexport is in deze kandidaat opgenomen. De FINN-
+actiecontracten en providerselectie zijn niet gewijzigd; de worker-actiematrix
+en echte providerproeven zijn voor deze scorelees- en presentatiereparatie niet
+van toepassing. CI, Auto Deploy, publieke SHA-pariteit en ingelogde QA volgen
+na de release. De eerdere kandidaatrecords hieronder zijn historisch; de
+laatste live-identiteit komt van de publieke health- en build-info-routes.
+
 ## BTC/EUR toevoegen vanuit de watchlist (6 november 2026)
 
 Phase: `LOCAL_VALIDATION`. Kandidaat: `codex/watchlist-pair-add`.
