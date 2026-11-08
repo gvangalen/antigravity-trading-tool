@@ -13601,7 +13601,7 @@ def test_combined_account_question_requires_owner_reads_on_first_turn(monkeypatc
     bound = FinnResponsesFrontDoor._bind_bot_decision_evidence(
         selected, message=question, read_only=True,
     )
-    assert {"read_active_setup", "read_linked_strategy", "read_portfolio", "read_review_history"}.issubset(
+    assert {"read_active_setup", "read_linked_strategy", "read_portfolio", "read_review_history", "read_bot_status"}.issubset(
         set(bound.read_tools)
     )
 

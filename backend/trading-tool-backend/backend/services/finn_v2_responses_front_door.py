@@ -782,6 +782,7 @@ class FinnResponsesFrontDoor:
             return call
         return replace(call, read_tools=tuple(dict.fromkeys((
             *call.read_tools, "read_review_history", "read_portfolio",
+            *(('read_bot_status',) if FinnResponsesFrontDoor._asks_about_account_state_bundle(message) else ()),
         ))))
 
     @staticmethod
