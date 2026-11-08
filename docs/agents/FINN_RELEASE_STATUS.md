@@ -6,8 +6,10 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN-vervolgvraag over bevestigde les: dossierread (8 november 2026)
 
-Phase: `BUILD_VALIDATED_QA_PENDING`. Kandidaat:
-`codex/review-lesson-followup-read`. Onafhankelijke beschermde QA op
+Phase: `DEPLOYED_QA_PENDING`. Kandidaat:
+`codex/review-lesson-followup-read`,
+[PR #867](https://github.com/gvangalen/antigravity-trading-tool/pull/867).
+Onafhankelijke beschermde QA op
 `23b66c85517e34ce2b8792b7c3f5af3fc68a4cd1` in
 [workflow 42462662156](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42462662156)
 bereikte na de fixturefix Paper-buy, Paper-sell, analyse, dossier en chat.
@@ -31,8 +33,15 @@ te vragen. Gerichte tests: `13 passed`; volledige backend-suite:
 akkoord, met het voorbehoud dat QA het daadwerkelijke antwoord bij meerdere
 lessen nog moet controleren. De lokale worker-actiematrix en selectorproeven
 zijn voor deze leesroutering zonder gewijzigde actiecontracten of
-providerselectie niet van toepassing. CI, deployment en onafhankelijke QA
-voor deze kandidaat volgen nog.
+providerselectie niet van toepassing. Alle vijf PR-controles en alle vijf
+controles van [main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42463689352)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42463913797)
+slaagde. Git-main, publieke backend-health en frontend-buildinfo meldden alle
+drie `6cc7e0699023db0c5c3b3471bb30192808fe96d8`; beide publieke routes
+gaven HTTP 200. Deze statuswijziging maakt zelf een nieuwe SHA. De laatste
+main-CI, Auto Deploy en publieke SHA-pariteit moeten vóór de onafhankelijke
+QA-handoff opnieuw zijn gecontroleerd. QA herhaalt daarna de beschermde
+Paper-chat met de bevestigde les en toetst bij voortgang de vier trader-gates.
 
 ## Beschermde Paper-fixture hersteld, QA-hertest wacht (8 november 2026)
 
