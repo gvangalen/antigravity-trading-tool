@@ -1046,10 +1046,10 @@ def test_portfolio_paper_fx_profile_requires_explicit_authorization_and_real_sou
         probe._require_protected_run("../unsafe")
 
     class SourceCursor:
-        def __init__(self, fx_time, *, diverging_projection=False):
+        def __init__(self, fx_time, *, diverging_projection=False, market_time=None):
             self.fx_time = fx_time
             self.diverging_projection = diverging_projection
-            self.market_time = datetime.now(timezone.utc)
+            self.market_time = market_time or datetime.now(timezone.utc)
             self.market_queries = []
             self.rows = []
 
@@ -1106,6 +1106,25 @@ def test_portfolio_paper_fx_profile_requires_explicit_authorization_and_real_sou
     with pytest.raises(RuntimeError, match="portfolio_paper_fx_source_unavailable"):
         probe._verified_source_price_eur()
 
+    for connection, reason in (
+        (SourceConnection(now, market_time=now - timedelta(minutes=31)), "market_price_stale"),
+        (SourceConnection(now - timedelta(hours=3)), "market_quote_eur_fx_unavailable"),
+        (SourceConnection(now - timedelta(hours=1, minutes=45),
+                          market_time=now - timedelta(minutes=10)), "trade_quote_sources_out_of_sync"),
+    ):
+        monkeypatch.setattr(probe, "_connection", lambda connection=connection: connection)
+        with pytest.raises(RuntimeError, match=f"portfolio_paper_fx_trade_source_{reason}"):
+            probe._verified_source_price_eur()
+    monkeypatch.setattr(probe, "_connection", lambda: SourceConnection(now - timedelta(days=2)))
+
+    from backend.services import portfolio_fx_service
+    with monkeypatch.context() as bounded:
+        bounded.setattr(probe, "_connection", lambda: SourceConnection(now))
+        bounded.setattr(portfolio_fx_service, "trade_quote_context",
+                        lambda **_kwargs: {"reason": "private details", "market_price_eur": None})
+        with pytest.raises(RuntimeError, match="portfolio_paper_fx_trade_source_other"):
+            probe._verified_source_price_eur()
+
     called = False
 
     def seed(*_args):
@@ -1114,6 +1133,13 @@ def test_portfolio_paper_fx_profile_requires_explicit_authorization_and_real_sou
 
     monkeypatch.setattr(probe, "_seed", seed)
     with pytest.raises(RuntimeError, match="portfolio_paper_fx_source_unavailable"):
+        probe.run("qa-123456-1-abcd1234-5678abcd")
+    assert called is False
+    monkeypatch.setattr(
+        probe, "_connection",
+        lambda: SourceConnection(now, market_time=now - timedelta(minutes=31)),
+    )
+    with pytest.raises(RuntimeError, match="portfolio_paper_fx_trade_source_market_price_stale"):
         probe.run("qa-123456-1-abcd1234-5678abcd")
     assert called is False
 
