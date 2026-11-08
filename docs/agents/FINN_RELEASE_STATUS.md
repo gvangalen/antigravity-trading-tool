@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Vier trader-gates: eerste FINN-bronlezing en portfoliotijd (8 november 2026)
 
-Phase: `LOCAL_VALIDATED_CI_PENDING`. Onafhankelijke ingelogde QA stelde in
+Phase: `CI_VALIDATED_DEPLOY_PENDING`. Onafhankelijke ingelogde QA stelde in
 twee nieuwe gesprekken dezelfde read-only vraag over setup, strategie, Paper-bot,
 positie en laatste botbeslissing. FINN las het DCA-ritme en basisbedrag, maar
 controleerde de drie gevraagde bot- en portfoliogegevens niet in de eerste beurt.
@@ -44,8 +44,11 @@ Eerdere runs waren rood door een foutieve relevantieafwijzing en later
 geheugendruk in de gedeelde Docker-VM (circa 245 MB beschikbaar, swap vol)
 door twee oude testcontainers. Die zijn gestopt; de volledige schone 2 GB-run
 is opnieuw uitgevoerd, niet uit de rode runs afgeleid. Security en
-Architecture vonden geen resterende codeblocker. CI op de laatste
-statuscommit, Auto Deploy, publieke SHA-pariteit en onafhankelijke live
+Architecture vonden geen resterende codeblocker. Alle vijf controles van
+[PR-CI 42514657460](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42514657460)
+op kandidaat `e88e8f2a522e045af45f3d9630efae575f1098e2` zijn geslaagd.
+Deze statuswijziging maakt een nieuwe kandidaat-SHA, waarvoor CI opnieuw
+moet slagen. Auto Deploy, publieke SHA-pariteit en onafhankelijke live
 hertest zijn nog niet gemeten. Dit is geen live-acceptatie van de vier gates.
 
 ## FINN watchlistgesprek en exacte handelsparen (8 november 2026)
