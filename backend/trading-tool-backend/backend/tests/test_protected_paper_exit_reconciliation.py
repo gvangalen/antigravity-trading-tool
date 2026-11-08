@@ -103,9 +103,9 @@ def test_probe_error_category_sanitizes_unexpected_errors():
 
 
 @pytest.mark.parametrize("failed_statement,phase", [
-    (2, "setup_update"), (3, "strategy_update"), (4, "bot_update"),
-    (5, "portfolio_update"), (6, "decision_insert"),
-    (7, "order_insert"), (8, "ledger_insert"),
+    (2, "setup_update"), (3, "target_type"), (4, "strategy_update"),
+    (5, "bot_update"), (6, "portfolio_update"), (7, "decision_insert"),
+    (8, "order_insert"), (9, "ledger_insert"),
 ])
 def test_opening_fixture_reports_fixed_statement_phase(monkeypatch, failed_statement, phase):
     class Cursor:
@@ -120,6 +120,8 @@ def test_opening_fixture_reports_fixed_statement_phase(monkeypatch, failed_state
             if self.index == failed_statement:
                 raise TypeError("private SQL value")
         def fetchone(self):
+            if self.index == 3:
+                return ("_text",)
             return (5,)
     class Connection:
         def __init__(self):
@@ -139,6 +141,70 @@ def test_opening_fixture_reports_fixed_statement_phase(monkeypatch, failed_state
     assert profile_error_category(
         "trader_paper_exit_reconciliation", RuntimeError(f"paper_exit_open_{phase}_failed")
     ) == f"paper_exit_open_{phase}_failed"
+
+
+@pytest.mark.parametrize("udt_name,expected_cast", [
+    ("_text", "ARRAY[%s::text]"),
+    ("_numeric", "ARRAY[%s::numeric]"),
+])
+def test_opening_fixture_uses_allowlisted_target_array_cast(monkeypatch, udt_name, expected_cast):
+    class Cursor:
+        index = -1
+        def __enter__(self):
+            return self
+        def __exit__(self, *_args):
+            return None
+        def execute(self, sql, *_args):
+            self.index += 1
+            if self.index == 4:
+                assert expected_cast in sql
+                raise TypeError("stop after verified strategy statement")
+        def fetchone(self):
+            return (udt_name,) if self.index == 3 else (5,)
+    class Connection:
+        def __init__(self):
+            self.cursor_value = Cursor()
+            self.rolled_back = False
+        def cursor(self):
+            return self.cursor_value
+        def rollback(self):
+            self.rolled_back = True
+        def close(self):
+            return None
+    conn = Connection()
+    monkeypatch.setattr(probe.fixture, "_connection", lambda: conn)
+    with pytest.raises(RuntimeError, match="^paper_exit_open_strategy_update_failed$"):
+        probe._seed_trade(11, 22, 33, {"market_price": 100, "market_price_eur": 90})
+    assert conn.rolled_back
+
+
+def test_opening_fixture_rejects_unexpected_target_type(monkeypatch):
+    class Cursor:
+        index = -1
+        def __enter__(self):
+            return self
+        def __exit__(self, *_args):
+            return None
+        def execute(self, *_args):
+            self.index += 1
+            assert self.index <= 3
+        def fetchone(self):
+            return ("_jsonb",) if self.index == 3 else (5,)
+    class Connection:
+        def __init__(self):
+            self.cursor_value = Cursor()
+            self.rolled_back = False
+        def cursor(self):
+            return self.cursor_value
+        def rollback(self):
+            self.rolled_back = True
+        def close(self):
+            return None
+    conn = Connection()
+    monkeypatch.setattr(probe.fixture, "_connection", lambda: conn)
+    with pytest.raises(RuntimeError, match="^paper_exit_target_type_unavailable$"):
+        probe._seed_trade(11, 22, 33, {"market_price": 100, "market_price_eur": 90})
+    assert conn.rolled_back
 
 
 def test_live_exchange_guard_blocks_attempt_and_restores_entrypoint():

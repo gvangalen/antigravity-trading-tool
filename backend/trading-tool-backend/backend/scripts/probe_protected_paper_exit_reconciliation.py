@@ -97,11 +97,22 @@ def _seed_trade(user_id: int, bot_id: int,
                               dca_frequency=NULL,last_validated=%s
                               WHERE id=%s AND user_id=%s""",
                            (market_id, now, setup_id, user_id))
+            phase = "target_type"
+            cursor.execute("""SELECT udt_name FROM information_schema.columns
+                              WHERE table_schema='public' AND table_name='strategies'
+                                AND column_name='targets'""")
+            target_type = cursor.fetchone()
+            if target_type == ("_text",):
+                target_expression = "ARRAY[%s::text]"
+            elif target_type == ("_numeric",):
+                target_expression = "ARRAY[%s::numeric]"
+            else:
+                raise RuntimeError("paper_exit_target_type_unavailable")
             phase = "strategy_update"
-            cursor.execute("""UPDATE strategies SET symbol='BTC',market_id=%s,setup_type='trade',
-                              entry=%s,stop_loss=%s,targets=%s,data=%s::jsonb
+            cursor.execute(f"""UPDATE strategies SET symbol='BTC',market_id=%s,setup_type='trade',
+                              entry=%s,stop_loss=%s,targets={target_expression},data=%s::jsonb
                               WHERE id=%s AND user_id=%s""",
-                           (market_id, entry, stop, [str(target)],
+                           (market_id, entry, stop, str(target),
                             json.dumps({"price_currency": "USDT", "price_currency_confirmed": True}),
                             strategy_id, user_id))
             phase = "bot_update"
