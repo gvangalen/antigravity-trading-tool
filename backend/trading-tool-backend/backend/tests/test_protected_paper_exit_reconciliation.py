@@ -262,6 +262,64 @@ def test_rendered_exit_reports_only_sanitized_page_get_and_ui_state(
     assert "private" not in str(result)
 
 
+def test_rendered_exit_error_observation_exports_only_bounded_codes(monkeypatch):
+    import asyncio
+    import json
+
+    from backend.scripts import qa_protected_browser
+    from backend.utils import auth_utils
+
+    class Locator:
+        @property
+        def first(self):
+            return self
+
+        async def wait_for(self, **_kwargs):
+            raise TimeoutError("private bot name and owner ID")
+
+    class Page:
+        url = "https://tradamind.com/bot?bot_id=private"
+
+        def locator(self, _selector):
+            return Locator()
+
+        async def evaluate(self, _script):
+            return {"focus_nav_present": False, "bot_button_count": 0,
+                    "onboarding_guide_present": False}
+
+    class PageError(Exception):
+        stack = "at BotFocusView.jsx?token=private-token"
+
+    class ConsoleMessage:
+        type = "error"
+        text = "ChunkLoadError: Loading chunk private-token failed"
+        location = {"url": "https://tradamind.com/_next/static/chunks/main-private.js?token=private"}
+
+    async def observe_page(**kwargs):
+        _emit_page_bot_response(kwargs)
+        kwargs["observe_page_error"](PageError("TypeError: Cannot read properties of undefined"))
+        for _ in range(5):
+            kwargs["observe_console"](ConsoleMessage())
+        return await kwargs["inspect"](Page())
+
+    monkeypatch.setattr(qa_protected_browser, "observe_page", observe_page)
+    monkeypatch.setattr(auth_utils, "create_access_token", lambda *_args: "in-memory-token")
+    result = asyncio.run(probe._rendered_exit(11, 22, {}))
+    diagnostic = result["ui_diagnostic"]
+    assert diagnostic["page_error_count"] == 1
+    assert diagnostic["console_error_count"] == 5
+    assert diagnostic["page_error_signatures"] == [
+        {"kind": "js_undefined_property", "stack_area": "bot_focus_view"},
+    ]
+    assert diagnostic["console_error_signatures"] == [
+        {"kind": "next_chunk_load", "stack_area": "next_runtime"},
+    ]
+    serialized = json.dumps(result)
+    assert "private" not in serialized
+    assert "token" not in serialized
+    assert "owner ID" not in serialized
+
+
 @pytest.mark.parametrize("fail_in_inspect,expected", [
     (False, "paper_exit_rendered_bootstrap_failed"),
     (True, "paper_exit_rendered_login_redirect_failed"),
