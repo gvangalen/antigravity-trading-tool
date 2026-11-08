@@ -1934,6 +1934,7 @@ class FinnResponsesFrontDoor:
         # a named setup is projected from it below.
         setup_relationship_read = bool(
             is_read_request
+            and not self._asks_about_account_state_bundle(message)
             and request_facts.linked_graph_relationship
             and "setup" in request_facts.explicit_entities
             and {"strategy", "bot"}.intersection(request_facts.explicit_entities)

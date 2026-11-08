@@ -13606,6 +13606,44 @@ def test_combined_account_question_requires_owner_reads_on_first_turn(monkeypatc
     )
 
 
+def test_combined_account_question_does_not_become_setup_inventory_read():
+    question = (
+        "Lees alleen mijn opgeslagen setup 'Matrix Bot Update Parent', de gekoppelde "
+        "strategie en Paper-bot 'Matrix Update Bot'. Wat is het basisbedrag, "
+        "is de bot actief of live, heb ik nu een Paper-positie, en wat is de "
+        "laatst opgeslagen botbeslissing met datum? Wijzig niets."
+    )
+    fake = FakeResponses(
+        response("account-read", calls=[tool_call("call-account", "get_active_plan_and_strategy", {})]),
+        response("account-answer", text="Ik heb de setup, botstatus, positie en beslissing gelezen."),
+    )
+    selected_calls = []
+
+    class FakeRead:
+        session_factory = None
+
+        async def __call__(self, call):
+            selected_calls.append(call)
+            return {"status": "completed", "results": [
+                {"scope": scope, "status": "completed", "data": {}}
+                for scope in call.read_tools
+            ]}
+
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="account-first-read", model_led_coach=True,
+    )
+    front.reads = FakeRead()
+    asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="BTC",
+        workspace_hints={"page": "/asset", "symbol": "BTC"},
+    ))
+    assert selected_calls[0].name == "get_active_plan_and_strategy"
+    assert {"read_active_setup", "read_linked_strategy", "read_bot_status", "read_portfolio",
+            "read_review_history"}.issubset(set(selected_calls[0].read_tools))
+
+
 def test_bot_decision_front_door_reads_history_before_answer(monkeypatch):
     @asynccontextmanager
     async def session_factory():
