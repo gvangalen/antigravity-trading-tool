@@ -1164,6 +1164,21 @@ def test_portfolio_paper_fx_attempt_is_reported_even_if_probe_fails():
     assert report["outcome"] == "passed"
 
 
+def test_portfolio_paper_fx_diagnostic_exports_only_allowlisted_codes():
+    module = _module()
+    error = RuntimeError("portfolio_paper_fx_contract_failed")
+    error.failed_invariants = ["order_price", "private owner 123", "owner_safety", "order_price"]
+    assert module.safe_portfolio_paper_fx_diagnostic(error) == {
+        "failed_invariants": ["order_price", "owner_safety"],
+    }
+    assert module.safe_portfolio_paper_fx_diagnostic(RuntimeError("private owner 123")) is None
+    assert module.profile_error_category("portfolio_paper_fx", RuntimeError("private owner 123")) == (
+        "portfolio_paper_fx_runtime_error"
+    )
+    assert module.profile_error_category("portfolio_paper_fx", RuntimeError(
+        "portfolio_paper_fx_contract_failed")) == "portfolio_paper_fx_contract_failed"
+
+
 def test_portfolio_paper_fx_fill_replay_projection_and_quarantine(monkeypatch):
     """Exercise the protected probe's run sequence without touching a real DB."""
     probe_path = (REPO_ROOT / "backend" / "trading-tool-backend" / "backend" /
@@ -1230,6 +1245,12 @@ def test_portfolio_paper_fx_verifies_database_fill_and_shared_projection(monkeyp
     source = {"eur_price": 2000.0, "raw_price": 2500.0, "fx_factor": 0.8,
               "quote": "USDT", "source_at": "source-time", "fx_at": "fx-time"}
     monkeypatch.setattr(probe, "_verified_source_price_eur", lambda: source)
+    rows = {
+        "orders": [("filled", "paper", 2000.0, 0.025, "filled", "executed", "auto")],
+        "ledger": [("paper_initial_funding", 100.0, 0.0, None),
+                   ("execute", -50.0, 0.025, 2)],
+        "portfolio": (50.0, 0.025), "keys": 0, "active": False,
+    }
 
     class Cursor:
         def execute(self, sql, _params):
@@ -1237,19 +1258,18 @@ def test_portfolio_paper_fx_verifies_database_fill_and_shared_projection(monkeyp
 
         def fetchall(self):
             if "FROM bot_orders" in self.sql:
-                return [("filled", "paper", 2000.0, 0.025, "filled", "executed", "auto")]
+                return rows["orders"]
             if "FROM bot_ledger" in self.sql:
-                return [("paper_initial_funding", 100.0, 0.0, None),
-                        ("execute", -50.0, 0.025, 2)]
+                return rows["ledger"]
             raise AssertionError(self.sql)
 
         def fetchone(self):
             if "FROM bot_portfolios" in self.sql:
-                return (50.0, 0.025)
+                return rows["portfolio"]
             if "FROM exchange_keys" in self.sql:
-                return (0,)
+                return (rows["keys"],)
             if "FROM users" in self.sql:
-                return (False,)
+                return (rows["active"],)
             raise AssertionError(self.sql)
 
         def __enter__(self):
@@ -1286,8 +1306,30 @@ def test_portfolio_paper_fx_verifies_database_fill_and_shared_projection(monkeyp
     assert "live_trading_calls" not in result
 
     bot.fx_eur_per_unit = 0.9
-    with pytest.raises(RuntimeError, match="portfolio_paper_fx_contract_failed"):
+    with pytest.raises(probe.PortfolioPaperFxContractFailure) as failure:
         probe._verify(101, 202, 303, source)
+    assert failure.value.failed_invariants == ("source_time_currency",)
+    bot.fx_eur_per_unit = 0.8
+
+    mutations = [
+        ("order_price", "orders", [("filled", "paper", 1.0, 0.025, "filled", "executed", "auto")]),
+        ("ledger_cashflow", "ledger", [("paper_initial_funding", 100.0, 0.0, None),
+                                         ("execute", 50.0, 0.025, 2)]),
+        ("portfolio_quantity", "portfolio", (50.0, 0.026)),
+        ("owner_safety", "keys", 1),
+    ]
+    for expected, key, changed in mutations:
+        original = rows[key]
+        rows[key] = changed
+        with pytest.raises(probe.PortfolioPaperFxContractFailure) as failure:
+            probe._verify(101, 202, 303, source)
+        assert expected in failure.value.failed_invariants
+        rows[key] = original
+
+    bot.equity = 99.0
+    with pytest.raises(probe.PortfolioPaperFxContractFailure) as failure:
+        probe._verify(101, 202, 303, source)
+    assert failure.value.failed_invariants == ("valuation_equity",)
 
 
 def test_workflow_has_only_the_manual_dispatch_trigger():
