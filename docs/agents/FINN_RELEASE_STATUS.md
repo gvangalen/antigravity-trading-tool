@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN watchlistgesprek en exacte handelsparen (8 november 2026)
 
-Phase: `LOCAL_VALIDATED_CI_PENDING`. De kandidaat op
+Phase: `DEPLOYED_QA_PENDING`. De kandidaat op
 `codex/finn-watchlist-conversation` leidt expliciete watchlistverzoeken via
 catalogusnamen en beschikbare handelsparen naar klikbare keuzes. Een vage
 zin over een aandeel vraagt eerst naar watchlist of portfolio; de watchlistkeuze
@@ -34,8 +34,16 @@ beide hadden 100% operation- en ontbrekende-invoermatches en nul provider-,
 schema-, parse-, validatie- of timeoutfouten. Vijf gewone fixtureverwachtingen
 en de projectie van gepubliceerde regressies zijn aangescherpt voor het nu
 verplichte cryptopaar; de eerste run met oude verwachtingen bleef als rode
-diagnose bewaard. CI, Auto Deploy, publieke SHA-pariteit en onafhankelijke
-live QA zijn nog niet gemeten.
+diagnose bewaard. Alle vijf controles van
+[PR-CI 42509938097](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42509938097)
+en [main-CI 42510209487](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42510209487)
+slaagden. [PR #899](https://github.com/gvangalen/antigravity-trading-tool/pull/899)
+is gemerged; [Auto Deploy 42510479368](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42510479368)
+slaagde. Git-main, publieke `/api/health` en `/build-info.json` toonden
+HTTP 200 en exact SHA `5864b33891c0de1a6b25b621d8a75baa480d99d9`.
+Deze statuswijziging maakt een nieuwe SHA; Build verifieert ook de laatste
+main-CI, Auto Deploy en publieke pariteit voordat onafhankelijke live QA
+begint. Er is nog geen geauthenticeerd live QA-verdict voor deze flow.
 
 Tijdens een brede fixture-inventarisatie opende Build per ongeluk één regel
 van een QA-exclusief holdoutbestand. Die inhoud is niet gebruikt voor code,
