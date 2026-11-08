@@ -4,6 +4,28 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Beschermde Paper/FX-voorcontrole: geselecteerd bronmoment (8 november 2026)
+
+Phase: `DEPLOYED_QA_PENDING`. De gebruiker gaf expliciet toestemming voor
+uitsluitend de beschermde Paper/FX-QA-voorcontrole, haar regressietest en de
+Paper-only hertest. De bestaande QA-agent heeft in
+[PR #874](https://github.com/gvangalen/antigravity-trading-tool/pull/874)
+de twee voorcontrolelezingen op dezelfde geldige koersrijselectie gebracht:
+bronmoment, daarna ingestietijd, met stabiele tie-breaker. Een echte
+bronwijziging tussen lezingen blijft een fout. Productkoersselectie,
+Live-handelslogica en gewone gebruikersdata zijn niet gewijzigd. De
+QA-runner-suite slaagde (`104 passed`) en `git diff --check` was groen.
+Alle vijf PR-controles en alle vijf controles van
+[main-CI 42472398381](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42472398381)
+slaagden. [Auto Deploy 42472618473](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42472618473)
+slaagde. Git-main, publieke backend-health en frontend-buildinfo meldden
+`01f9e467c2d0a1da404b456e09fb270e9a5e0a10`; beide publieke routes
+gaven HTTP 200. Er is nog geen beschermde productierun gedaan voor deze
+wijziging. Deze statuscommit krijgt zelf een nieuwe SHA; vóór de QA-handoff
+worden laatste main-CI, Auto Deploy en publieke SHA-pariteit opnieuw
+gecontroleerd. QA herhaalt daarna uitsluitend de toegestane Paper/FX-proef.
+De vier bredere trader-gates en polling/SSE blijven open.
+
 ## Vier trader-gates: stale indicatorreden en Paper/FX-preflight (8 november 2026)
 
 Phase: `QA_NOT_ACCEPTED_FOR_FOUR_GATES`. Op de geverifieerde live SHA
