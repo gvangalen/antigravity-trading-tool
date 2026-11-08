@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Paper-aankoop: begrensde vervolgdiagnose (8 november 2026)
 
-Phase: `DEPLOYED_QA_PENDING`. Kandidaat: `codex/paper-buy-cause-family`,
+Phase: `QA_NOT_ACCEPTED`. Kandidaat: `codex/paper-buy-cause-family`,
 [PR #862](https://github.com/gvangalen/antigravity-trading-tool/pull/862).
 De beschermde QA-run 42417611630 bleef in `paper_buy` steken met
 `paper_buy_cause=other`; QA kon uit de bestaande gesaniteerde evidence geen
@@ -28,9 +28,27 @@ slaagde. Git-main, publieke backend-health en frontend-buildinfo meldden alle
 drie `487f952d54c332a3194254b94459e48d730710e1`; de twee publieke routes
 gaven HTTP 200. Deze statuswijziging maakt zelf een nieuwe SHA; vóór de
 onafhankelijke QA-handoff moeten de laatste main-CI, Auto Deploy en publieke
-SHA-pariteit opnieuw zijn gecontroleerd. Onafhankelijke QA moet de beschermde
-Paper-buy-route herhalen en de foutfamilie of voortgang naar de vier
-trader-gates melden.
+SHA-pariteit opnieuw zijn gecontroleerd. De statuscommit ging door alle vijf
+controles van [main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42460140715)
+en een geslaagde [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42460358460).
+Git-main, publieke backend-health en frontend-buildinfo meldden daarna alle
+drie `139ca32d1bc40860d2e8e88c894c80bb88a67222`; beide routes gaven HTTP 200.
+
+Onafhankelijke QA herhaalde het beschermde Paper-profiel op deze SHA in
+[workflow 42460615467](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42460615467).
+Release-identiteit en QA-authenticatie slaagden, maar de eerste Paper-aankoop
+stopte opnieuw vóór een bevestigde fill. De nieuwe gesaniteerde foutfamilie
+is `type_error`. QA herleidde dit tot een contractmismatch in de beschermde
+koersoverride: de Paper-executor geeft `paper_execution=True` door, maar de
+fixturefunctie accepteert die parameter niet. Het gesaniteerde artifact heeft
+SHA-256 `0a64d3c4db3980d525ba01556914ff89114d45d1251c15e6e70008f30d20f9cd`.
+Eén Paper-executiepoging is geregistreerd, nul Live-tradingcalls en nul
+Live-botactivaties. De vier trader-gates en polling/SSE zijn niet getest.
+De onafhankelijke uitkomst blijft `NOT_ACCEPTED`. QA heeft volgens zijn
+read-only taak geen fixture of tests gewijzigd; daarvoor is een expliciete
+gebruikersopdracht aan QA nodig. Build heeft geen toegang tot de beschermde
+fixture. Deze statuswijziging maakt opnieuw een SHA en is geen nieuwe
+product- of QA-acceptatie.
 
 ## Beschermde Paper-QA: ontbrekende foutcategorie (7 november 2026)
 
