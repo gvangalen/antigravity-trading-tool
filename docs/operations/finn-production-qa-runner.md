@@ -21,7 +21,7 @@ The manual workflow `.github/workflows/finn-production-qa.yml` requires:
 | Input | Meaning |
 | --- | --- |
 | `release_sha` | Full, already-live SHA. It must be an ancestor of `main`. |
-| `qa_profile` | `auth_preflight`, `trade_review_preflight`, `manifest_key`, `targeted_regression`, `runtime_acceptance`, `action_contract_acceptance`, `full_release_acceptance`, `safety`, `latency`, `score2_stale_paper`, `auto_paper_trade_history`, `portfolio_paper_fx`, or `typed_entry_paper`. The workflow dropdown is the authoritative full list. |
+| `qa_profile` | `auth_preflight`, `trade_review_preflight`, `manifest_key`, `targeted_regression`, `runtime_acceptance`, `action_contract_acceptance`, `full_release_acceptance`, `safety`, `latency`, `score2_stale_paper`, `auto_paper_trade_history`, `portfolio_paper_fx`, `portfolio_paper_fx_schema`, or `typed_entry_paper`. The workflow dropdown is the authoritative full list. |
 | `manifest_id` | Approved QA-owned manifest identifier. `auth_preflight` uses `none`. |
 | `run_label` | Safe trace label; no user, fixture, or credential data. |
 | `manifest_bundle` | Optional encrypted QA-owned manifest. It is decrypted only on the protected host. |
@@ -285,6 +285,22 @@ QA invocation after the candidate is live and authorized:
 FINN_QA_ALLOW_FIXTURE_ACTIONS=true FINN_QA_ALLOW_FIXTURE_EXECUTION=true \
   ./ops/qa/run_finn_production_qa.sh \
   <FULL_LIVE_SHA> portfolio_paper_fx none qa-portfolio-paper-fx
+```
+
+## Paper FX Schema Metadata
+
+`portfolio_paper_fx_schema` is a protected, read-only profile. It requires
+`manifest_id=none`, no encrypted bundle, and both fixture-action flags set to
+`false`. After release and QA-auth preflight, it reads only `data_type`,
+`numeric_precision`, and `numeric_scale` for
+`bot_orders.executed_price_eur` and `bot_ledger.price_eur` from
+`information_schema.columns`. It neither reads fixture rows nor creates a
+Paper order. The artifact contains only these two allowlisted column names
+and their bounded type metadata.
+
+```bash
+./ops/qa/run_finn_production_qa.sh \
+  <FULL_LIVE_SHA> portfolio_paper_fx_schema none qa-paper-fx-schema
 ```
 
 ## Typed Entry Paper Probe

@@ -1191,6 +1191,72 @@ def test_portfolio_paper_fx_diagnostic_exports_only_allowlisted_codes():
         "portfolio_paper_fx_contract_failed")) == "portfolio_paper_fx_contract_failed"
 
 
+def test_protected_paper_fx_schema_probe_reads_only_allowlisted_metadata(monkeypatch):
+    module = _module()
+    probe_path = (REPO_ROOT / "backend" / "trading-tool-backend" / "backend" /
+                  "scripts" / "probe_protected_portfolio_paper_fx_schema.py")
+    spec = importlib.util.spec_from_file_location("protected_paper_fx_schema", probe_path)
+    probe = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(probe)
+    from backend.utils import db as db_module
+
+    statements = []
+    rows = [
+        ("bot_orders", "executed_price_eur", "numeric", None, None),
+        ("bot_ledger", "price_eur", "numeric", 18, 2),
+    ]
+
+    class Cursor:
+        def execute(self, sql):
+            statements.append(sql)
+            assert sql.lstrip().startswith("SELECT ")
+            assert "information_schema.columns" in sql
+            assert "bot_orders" in sql and "bot_ledger" in sql
+
+        def fetchall(self):
+            return rows
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(db_module, "get_db_connection", Connection)
+    assert probe.run() == {
+        "result": "PASS",
+        "columns": {
+            "bot_orders.executed_price_eur": {
+                "data_type": "numeric", "numeric_precision": None, "numeric_scale": None,
+            },
+            "bot_ledger.price_eur": {
+                "data_type": "numeric", "numeric_precision": 18, "numeric_scale": 2,
+            },
+        },
+    }
+    assert len(statements) == 1
+    assert "portfolio_paper_fx_schema" in module.ALLOWED_PROFILES
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    dispatch_script = DISPATCH_SCRIPT_PATH.read_text(encoding="utf-8")
+    assert 'if [ "$QA_PROFILE" = "portfolio_paper_fx_schema" ]' in workflow
+    assert 'if [[ "$qa_profile" == "portfolio_paper_fx_schema"' in dispatch_script
+    assert module.profile_error_category(
+        "portfolio_paper_fx_schema", RuntimeError("private database details")
+    ) == "portfolio_paper_fx_schema_runtime_error"
+
+    rows.pop()
+    with pytest.raises(RuntimeError, match="portfolio_paper_fx_schema_missing_column"):
+        probe.run()
+
+
 def test_portfolio_paper_fx_fill_replay_projection_and_quarantine(monkeypatch):
     """Exercise the protected probe's run sequence without touching a real DB."""
     probe_path = (REPO_ROOT / "backend" / "trading-tool-backend" / "backend" /
