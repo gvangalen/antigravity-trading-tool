@@ -94,6 +94,31 @@ def test_auto_deploy_serializes_production_and_retries_once_after_a_failed_attem
     assert 'sleep 30' in source
 
 
+def test_deploy_uses_the_exact_successful_ci_commit_before_startup():
+    workflow = (REPO_ROOT / ".github" / "workflows" / "deploy.yml").read_text(encoding="utf-8")
+    deploy_script = (REPO_ROOT / "ops" / "deploy" / "deploy_env.sh").read_text(encoding="utf-8")
+
+    assert "ref: ${{ github.event.workflow_run.head_sha }}" in workflow
+    assert 'test "$(git rev-parse HEAD)" = "$EXPECTED_CI_SHA"' in workflow
+    assert "git rev-parse FETCH_HEAD" in deploy_script
+    assert "deploy_exit_code=$?" in deploy_script
+    assert 'if [ "$deploy_exit_code" -eq 42 ]; then' in deploy_script
+    assert "Deployment skipped: successful CI commit is no longer the current branch tip." in deploy_script
+    assert "if [ \\\"\\$exit_code\\\" -eq 42 ]; then" in deploy_script
+    assert "git reset --hard '$TARGET_COMMIT_FULL'" in deploy_script
+    assert "git rev-parse HEAD" in deploy_script
+    assert deploy_script.index("git rev-parse FETCH_HEAD") < deploy_script.index(
+        "DEPLOY_STEP_ID='remote_preflight'"
+    )
+    assert deploy_script.index("git rev-parse FETCH_HEAD") < deploy_script.index(
+        "git reset --hard '$TARGET_COMMIT_FULL'"
+    )
+    assert deploy_script.index("git reset --hard '$TARGET_COMMIT_FULL'") < deploy_script.index(
+        "advance_deploy_step 'migrations'"
+    )
+    assert "git reset --hard $DEPLOY_REF" not in deploy_script
+
+
 def test_sql_migration_runner_bounds_lock_and_statement_waits():
     source = (BACKEND_ROOT / "scripts" / "run_sql_migration.py").read_text(encoding="utf-8")
 
