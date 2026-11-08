@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Paper/FX-prijsopslag: tien decimalen voor uitvoeringsbewijs (8 november 2026)
 
-Phase: `BUILD_VALIDATED`. Onafhankelijke QA gaf op live SHA
+Phase: `DEPLOYED_QA_PENDING`. Onafhankelijke QA gaf op de vorige live SHA
 `6c9557949b8a7fb864a6e24a88f54769b464e399` in
 [run 42491002070](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42491002070)
 `NOT_ACCEPTED`: bronkoers × FX in het uitvoeringsbewijs was coherent,
@@ -33,10 +33,20 @@ tien decimalen opgeslagen; de proef is teruggerold. Het canonieke
 migratieplan, `git diff --check` en de volledige backend-suite
 (`4302 passed, 4 skipped`) slaagden. Security en Architecture gaven GO;
 de eerste schemawijziging kan writes kort blokkeren binnen de bestaande
-lock- en statementtimeouts. Er is nog geen CI, deploy of onafhankelijke
-Paper-hertest voor deze kandidaat uitgevoerd. Oude twee-decimale fills
-krijgen hun verloren precisie niet terug. De vier bredere trader-gates
-blijven open tot onafhankelijk bewijs ze sluit.
+lock- en statementtimeouts. Productwijziging
+[PR #888](https://github.com/gvangalen/antigravity-trading-tool/pull/888)
+en alle vijf PR-controles slaagden. Alle vijf controles van
+[main-CI 42493181441](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42493181441)
+en [Auto Deploy 42493452818](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42493452818)
+slaagden. Git-main, backend-health en frontend-build-info (beide HTTP 200)
+meldden `933862af5f75ab233506ca9a045674ed64f5562f`.
+Deze statuswijziging maakt een nieuwe SHA; Build controleert de laatste
+main-CI, Auto Deploy en publieke pariteit opnieuw vóór QA. Er is nog geen
+onafhankelijke Paper-hertest met de verruimde precisie uitgevoerd. QA
+controleert eerst de productieprecisie en herhaalt daarna de Paper-only
+prijs-, ledger-, bron/FX- en veiligheidscontrole op de definitieve live SHA.
+Oude twee-decimale fills krijgen hun verloren precisie niet terug. De
+vier bredere trader-gates blijven open tot onafhankelijk bewijs ze sluit.
 
 ## Paper/FX-uitvoeringsbewijs: dezelfde koers voor order en kasboek (8 november 2026)
 
