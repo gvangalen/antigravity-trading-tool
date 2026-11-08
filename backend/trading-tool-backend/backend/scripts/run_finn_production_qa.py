@@ -104,6 +104,10 @@ SAFE_PORTFOLIO_PAPER_FX_INVARIANTS = frozenset({
     "order_price", "ledger_cashflow", "portfolio_quantity",
     "valuation_equity", "source_time_currency", "owner_safety",
 })
+SAFE_PORTFOLIO_PAPER_FX_ORDER_CHECKS = frozenset({
+    "order_cardinality", "order_status", "order_price_eur",
+    "order_quantity", "execution_state",
+})
 
 
 def safe_portfolio_paper_fx_diagnostic(error: Exception) -> Dict[str, Any] | None:
@@ -115,7 +119,17 @@ def safe_portfolio_paper_fx_diagnostic(error: Exception) -> Dict[str, Any] | Non
         return None
     codes = [value for value in values
              if isinstance(value, str) and value in SAFE_PORTFOLIO_PAPER_FX_INVARIANTS]
-    return {"failed_invariants": list(dict.fromkeys(codes))[:6]} if codes else None
+    if not codes:
+        return None
+    diagnostic = {"failed_invariants": list(dict.fromkeys(codes))[:6]}
+    if "order_price" in codes:
+        values = getattr(error, "failed_order_checks", None)
+        if isinstance(values, (tuple, list)):
+            checks = [value for value in values
+                      if isinstance(value, str) and value in SAFE_PORTFOLIO_PAPER_FX_ORDER_CHECKS]
+            if checks:
+                diagnostic["failed_order_checks"] = list(dict.fromkeys(checks))[:5]
+    return diagnostic
 
 
 def profile_error_category(profile: str, error: Exception) -> str:
