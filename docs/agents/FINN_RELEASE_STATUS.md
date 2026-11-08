@@ -4,6 +4,35 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Vier trader-gates: stale indicatorreden en Paper/FX-preflight (8 november 2026)
+
+Phase: `BUILD_VALIDATED_QA_PENDING`. Op de geverifieerde live SHA
+`896cac8a75f23a383e9caeca47dad9c9e5165370` slaagde de beschermde
+Paper-review-chatflow in QA-workflow 42466366068: twee Paper-fills, één
+gesloten positie, beide FINN-beurten met eigenaargebonden dossierbewijs en
+geen Live-calls of botactivaties. Dit bewijst niet de vier bredere
+trader-gates. De aanvullende beschermde profielen 42466587903 en
+42466673852 faalden respectievelijk op `stale_control_score_unexpected`
+en `portfolio_paper_fx_price_source_mismatch`. De tweede fout ontstond in
+de QA-preflight vóór een Paper-order: de twee selecties vergelijken
+verschillende bronmomentcriteria. Dit bewijst geen productfout in de
+EUR-omrekening. De onafhankelijke QA-uitkomst voor de vier gates blijft
+`NOT_ACCEPTED`.
+
+De eerste fout legde een productgat bloot: als alle geconfigureerde
+indicatormetingen te oud of afwezig zijn, geeft `generate_scores_db` al
+`total_score=None` maar zonder `source_status`. De nieuwe regressietest
+reproduceerde eerst de ontbrekende sleutel. De scoremotor geeft in dit pad
+nu `missing_or_stale_indicator` terug. De score blijft `None`; dit maakt
+geen verouderde meting bruikbaar voor een besluit. Gerichte scoretests:
+`10 passed`; volledige backend-suite: `4297 passed, 4 skipped`. Deze
+productcorrectie is nog niet gedeployed of onafhankelijk live afgetekend.
+Een afzonderlijke, beperkte toestemming voor correctie van de beschermde
+Paper/FX-QA-preflight is aangevraagd; Build heeft die fixture niet gelezen
+of gewijzigd. Accountstaat, tijdzonepariteit, BTC-paarcontinuïteit en een
+volledig controleerbare automatische Paper-exit vragen nog hun eigen
+onafhankelijke runtimebewijs.
+
 ## FINN-lesvraag: capability-snelroute omzeilde dossierread (8 november 2026)
 
 Phase: `DEPLOYED_QA_PENDING`. Kandidaat:

@@ -241,7 +241,8 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
 
         if not data:
             logger.warning(f"⚠️ Geen data voor {category} (user_id={user_id})")
-            return {"scores": {}, "total_score": None, "top_contributors": []}
+            return {"scores": {}, "total_score": None, "top_contributors": [],
+                    "source_status": incomplete_reason or "missing_or_stale_indicator"}
 
         scores: Dict[str, Any] = {}
         weighted_total = 0.0
