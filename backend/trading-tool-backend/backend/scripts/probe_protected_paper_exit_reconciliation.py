@@ -40,6 +40,16 @@ def _guard_live_exchange():
         execution._execute_on_exchange_sync = original
 
 
+def _target_array_expression(udt_name: str | None) -> str:
+    if udt_name == "_text":
+        return "ARRAY[%s::text]"
+    if udt_name == "_varchar":
+        return "ARRAY[%s::varchar]"
+    if udt_name == "_numeric":
+        return "ARRAY[%s::numeric]"
+    raise RuntimeError("paper_exit_target_type_unavailable")
+
+
 def _preflight() -> tuple[int, dict]:
     from backend.engine.trading_bot_execution import (
         PAPER_AUTO_EXIT_CUTOVER, _get_trade_quote_fx_context,
@@ -97,11 +107,17 @@ def _seed_trade(user_id: int, bot_id: int,
                               dca_frequency=NULL,last_validated=%s
                               WHERE id=%s AND user_id=%s""",
                            (market_id, now, setup_id, user_id))
+            phase = "target_type"
+            cursor.execute("""SELECT udt_name FROM information_schema.columns
+                              WHERE table_schema='public' AND table_name='strategies'
+                                AND column_name='targets'""")
+            target_type = cursor.fetchone()
+            target_expression = _target_array_expression(target_type[0] if target_type else None)
             phase = "strategy_update"
-            cursor.execute("""UPDATE strategies SET symbol='BTC',market_id=%s,setup_type='trade',
-                              entry=%s,stop_loss=%s,targets=%s,data=%s::jsonb
+            cursor.execute(f"""UPDATE strategies SET symbol='BTC',market_id=%s,setup_type='trade',
+                              entry=%s,stop_loss=%s,targets={target_expression},data=%s::jsonb
                               WHERE id=%s AND user_id=%s""",
-                           (market_id, entry, stop, [str(target)],
+                           (market_id, entry, stop, str(target),
                             json.dumps({"price_currency": "USDT", "price_currency_confirmed": True}),
                             strategy_id, user_id))
             phase = "bot_update"
