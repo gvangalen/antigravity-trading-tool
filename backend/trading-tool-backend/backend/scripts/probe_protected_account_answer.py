@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 
@@ -17,6 +18,24 @@ BUSINESS_TABLES = (
     "bot_orders", "bot_executions", "bot_ledger", "finn_v2_proposals",
     "finn_v2_confirmations", "finn_v2_executions", "exchange_keys",
 )
+
+SAFE_ACCOUNT_ERRORS = {
+    "account_fixture_lineage_missing", "account_fixture_portfolio_missing",
+    "account_fixture_facts_missing", "account_safety_measurement_unavailable",
+    "fixture_has_exchange_keys", "fixture_cleanup_failed", "fixture_quarantine_failed",
+    "account_prepare_lookup_failed", "account_prepare_portfolio_failed",
+    "account_prepare_decisions_failed", "account_prepare_commit_failed",
+}
+
+
+@contextmanager
+def _stage(name: str):
+    try:
+        yield
+    except Exception as error:
+        if isinstance(error, RuntimeError) and str(error) in SAFE_ACCOUNT_ERRORS:
+            raise
+        raise RuntimeError(f"account_{name}_failed") from None
 
 
 def _value(item, key: str):
@@ -151,6 +170,7 @@ def _source_checks(evidence: list, tool_results: list, frozen: dict, user_id: in
 def _prepare(user_id: int, bot_id: int) -> None:
     now = datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)
     connection = fixture._connection()
+    step = "lookup"
     try:
         with connection.cursor() as cursor:
             cursor.execute("""SELECT s.id,st.id FROM bot_configs b
@@ -162,11 +182,13 @@ def _prepare(user_id: int, bot_id: int) -> None:
             if not row:
                 raise RuntimeError("account_fixture_lineage_missing")
             setup_id, strategy_id = row
+            step = "portfolio"
             cursor.execute("""UPDATE bot_portfolios SET cash_eur=90,position_qty=0.01,
                               invested_eur=10,avg_entry=1000 WHERE user_id=%s AND bot_id=%s""",
                            (user_id, bot_id))
             if cursor.rowcount != 1:
                 raise RuntimeError("account_fixture_portfolio_missing")
+            step = "decisions"
             for at, day, action in (
                 (now - timedelta(days=1), (now - timedelta(days=1)).date(), "skip"),
                 (now, now.date(), "hold"),
@@ -177,10 +199,13 @@ def _prepare(user_id: int, bot_id: int) -> None:
                     VALUES (%s,%s,%s,%s,'ETH',%s,%s,%s,'medium',0,'{}'::jsonb,
                             'planned','qa')""",
                     (user_id, bot_id, strategy_id, setup_id, day, at, action))
+        step = "commit"
         connection.commit()
-    except Exception:
+    except Exception as error:
         connection.rollback()
-        raise
+        if isinstance(error, RuntimeError) and str(error) in SAFE_ACCOUNT_ERRORS:
+            raise
+        raise RuntimeError(f"account_prepare_{step}_failed") from None
     finally:
         connection.close()
 
@@ -349,14 +374,19 @@ def run(namespace: str) -> dict:
     user_id = bot_id = None
     passed = False
     try:
-        user_id, bot_id, _ = fixture._seed(namespace, int(bound))
-        _prepare(user_id, bot_id)
+        with _stage("seed"):
+            user_id, bot_id, _ = fixture._seed(namespace, int(bound))
+        with _stage("prepare"):
+            _prepare(user_id, bot_id)
         from backend.scripts.probe_protected_paper_exit_reconciliation import _guard_live_exchange
 
-        before = _business_state(user_id)
-        with _guard_live_exchange() as live_attempts:
-            result = asyncio.run(_probe_turns(user_id, bot_id))
-        after = _business_state(user_id)
+        with _stage("baseline"):
+            before = _business_state(user_id)
+        with _stage("turns"):
+            with _guard_live_exchange() as live_attempts:
+                result = asyncio.run(_probe_turns(user_id, bot_id))
+        with _stage("after_read"):
+            after = _business_state(user_id)
         changed = [table for table in BUSINESS_TABLES
                    if (after["counts"][table] != before["counts"][table]
                        or after["fingerprints"][table] != before["fingerprints"][table])]
@@ -380,6 +410,8 @@ def run(namespace: str) -> dict:
     finally:
         if user_id is not None and bot_id is not None:
             if passed:
-                fixture._cleanup(namespace, user_id, bot_id)
+                with _stage("cleanup"):
+                    fixture._cleanup(namespace, user_id, bot_id)
             else:
-                fixture._quarantine(namespace, user_id, bot_id)
+                with _stage("quarantine"):
+                    fixture._quarantine(namespace, user_id, bot_id)

@@ -198,6 +198,12 @@ def profile_error_category(profile: str, error: Exception) -> str:
             "account_fixture_manifest_forbidden", "account_fixture_lineage_missing",
             "account_fixture_portfolio_missing", "account_fixture_facts_missing",
             "account_safety_measurement_unavailable",
+            "account_seed_failed", "account_prepare_failed",
+            "account_prepare_lookup_failed", "account_prepare_portfolio_failed",
+            "account_prepare_decisions_failed", "account_prepare_commit_failed",
+            "account_baseline_failed", "account_turns_failed",
+            "account_after_read_failed", "account_cleanup_failed",
+            "account_quarantine_failed",
             "fixture_binding_invalid", "fixture_has_exchange_keys",
             "fixture_cleanup_failed", "fixture_quarantine_failed",
         } else "account_probe_runtime_error")
@@ -222,6 +228,10 @@ def profile_error_category(profile: str, error: Exception) -> str:
             "paper_exit_open_decision_insert_failed", "paper_exit_open_order_insert_failed",
             "paper_exit_open_ledger_insert_failed", "paper_exit_open_commit_failed",
             "paper_exit_rendered_ui_failed",
+            "paper_exit_rendered_bootstrap_failed",
+            "paper_exit_rendered_trades_tab_failed",
+            "paper_exit_rendered_details_failed",
+            "paper_exit_rendered_projection_failed",
         } else "paper_exit_probe_runtime_error")
     if profile == "trader_paper_exit_fixture_audit":
         code = str(error)
