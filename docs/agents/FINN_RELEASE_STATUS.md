@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Paper/FX-uitvoeringsbewijs: dezelfde koers voor order en kasboek (8 november 2026)
 
-Phase: `BUILD_VALIDATED`. Onafhankelijke QA op live SHA
+Phase: `DEPLOYED_QA_PENDING`. Onafhankelijke QA op de vorige live SHA
 `7ed50ad7255ea5d934a51232537fd392c17a0832` meldde in
 [run 42486025783](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42486025783)
 `NOT_ACCEPTED`: alleen de subcode `order_price_eur` faalde. Orderstatus,
@@ -26,11 +26,18 @@ de uitvoeringsschrijfacties atomair terug. Live-uitvoering is niet gewijzigd.
 Gerichte regressies voor één koersread, prijs/FX-gelijkheid en rollback
 slaagden; de volledige backend-suite gaf `4301 passed, 4 skipped`.
 `git diff --check` was schoon. Security en Architecture vonden geen
-blokkerend risico. Er is nog geen CI, deploy of onafhankelijke QA-hertest
-voor deze kandidaat uitgevoerd. QA moet de beschermde verifier op het
-opgeslagen uitvoeringsbewijs laten vergelijken en daarna dezelfde
-Paper-only proef op de definitieve live SHA herhalen. De vier bredere
-trader-gates blijven open tot onafhankelijk bewijs ze sluit.
+blokkerend risico. Productwijziging [PR #883](https://github.com/gvangalen/antigravity-trading-tool/pull/883)
+en alle vijf PR-controles slaagden. Alle vijf controles van
+[main-CI 42487712091](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42487712091)
+en [Auto Deploy 42487988583](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42487988583)
+slaagden. Git-main, backend health en frontend build-info (beide HTTP 200)
+meldden `9ce5f0d1c267a237b3c26739111cd542d496c387`.
+Deze statuswijziging maakt een nieuwe SHA; Build controleert de laatste
+main-CI, Auto Deploy en publieke pariteit opnieuw vóór QA. Er is nog geen
+onafhankelijke QA-hertest met deze productwijziging uitgevoerd. QA moet de
+beschermde verifier op het opgeslagen uitvoeringsbewijs laten vergelijken
+en daarna dezelfde Paper-only proef op de definitieve live SHA herhalen.
+De vier bredere trader-gates blijven open tot onafhankelijk bewijs ze sluit.
 
 ## Beschermde Paper/FX-eindcontrole: order/prijs-subcodes (8 november 2026)
 
