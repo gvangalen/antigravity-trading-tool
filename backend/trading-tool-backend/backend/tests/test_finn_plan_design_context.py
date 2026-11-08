@@ -106,6 +106,13 @@ def test_generic_capability_questions_include_ma_and_trendline_designs():
     )
     assert not requests_execution_capability_question("Wat is de MA200-waarde vandaag?")
     assert not requests_execution_capability_question("Kan je mijn opgeslagen plan toelichten?")
+    assert not requests_execution_capability_question(
+        "Wat kan ik van deze bevestigde les leren? Herhaal de les en zeg "
+        "of mijn oorspronkelijke plan is vastgelegd. Alleen sparren."
+    )
+    assert requests_execution_capability_question(
+        "Kan mijn DCA-strategie deze aankoop iedere week herhalen?"
+    )
     assert requests_execution_capability_question(
         "Kan mijn opgeslagen BTC-plan automatisch verkopen boven een trendlijn?"
     )
