@@ -76,6 +76,7 @@ def _seed_trade(user_id: int, bot_id: int,
     invested = round(eur_price * qty, 2)
     now = datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)
     connection = fixture._connection()
+    phase = "lookup_bot"
     try:
         with connection.cursor() as cursor:
             cursor.execute("SELECT strategy_id FROM bot_configs WHERE id=%s AND user_id=%s AND is_live=FALSE",
@@ -84,22 +85,26 @@ def _seed_trade(user_id: int, bot_id: int,
             if not row:
                 raise RuntimeError("paper_exit_fixture_identity_invalid")
             strategy_id = int(row[0])
+            phase = "lookup_setup"
             cursor.execute("SELECT setup_id FROM strategies WHERE id=%s AND user_id=%s",
                            (strategy_id, user_id))
             row = cursor.fetchone()
             if not row:
                 raise RuntimeError("paper_exit_fixture_identity_invalid")
             setup_id = int(row[0])
+            phase = "setup_update"
             cursor.execute("""UPDATE setups SET symbol='BTC',market_id=%s,setup_type='trade',
                               dca_frequency=NULL,last_validated=%s
                               WHERE id=%s AND user_id=%s""",
                            (market_id, now, setup_id, user_id))
+            phase = "strategy_update"
             cursor.execute("""UPDATE strategies SET symbol='BTC',market_id=%s,setup_type='trade',
                               entry=%s,stop_loss=%s,targets=%s,data=%s::jsonb
                               WHERE id=%s AND user_id=%s""",
                            (market_id, entry, stop, [str(target)],
                             json.dumps({"price_currency": "USDT", "price_currency_confirmed": True}),
                             strategy_id, user_id))
+            phase = "bot_update"
             cursor.execute("""UPDATE bot_configs SET symbol='BTC',market_id=%s,mode='auto',
                               is_live=FALSE,is_active=TRUE,budget_total_eur=1000,
                               budget_daily_limit_eur=1000,budget_max_order_eur=1000,
@@ -108,6 +113,7 @@ def _seed_trade(user_id: int, bot_id: int,
                            (market_id, bot_id, user_id))
             if cursor.rowcount != 1:
                 raise RuntimeError("paper_exit_fixture_identity_invalid")
+            phase = "portfolio_update"
             cursor.execute("""UPDATE bot_portfolios SET symbol='BTC',cash_eur=%s,
                               position_qty=%s,invested_eur=%s,avg_entry=%s,realized_pnl_eur=0
                               WHERE bot_id=%s AND user_id=%s""",
@@ -118,6 +124,7 @@ def _seed_trade(user_id: int, bot_id: int,
                 "source_price_currency": "USDT",
                 "source_levels": {"entry": entry, "stop_loss": stop, "targets": [target]},
             }}
+            phase = "decision_insert"
             cursor.execute("""INSERT INTO bot_decisions
                               (user_id,bot_id,strategy_id,setup_id,symbol,market_id,
                                decision_date,decision_ts,action,confidence,amount_eur,
@@ -127,6 +134,7 @@ def _seed_trade(user_id: int, bot_id: int,
                            (user_id, bot_id, strategy_id, setup_id, market_id,
                             now, invested, json.dumps(opening)))
             decision_id = int(cursor.fetchone()[0])
+            phase = "order_insert"
             cursor.execute("""INSERT INTO bot_orders
                               (user_id,bot_id,decision_id,symbol,market_id,side,order_type,
                                quote_amount_eur,estimated_price_eur,estimated_qty,status,
@@ -135,6 +143,7 @@ def _seed_trade(user_id: int, bot_id: int,
                                       'filled','paper') RETURNING id""",
                            (user_id, bot_id, decision_id, market_id, invested, eur_price, qty))
             order_id = int(cursor.fetchone()[0])
+            phase = "ledger_insert"
             cursor.execute("""INSERT INTO bot_ledger
                               (user_id,bot_id,decision_id,order_id,entry_type,symbol,market_id,
                                cash_delta_eur,qty_delta,price_eur,note,meta,ts,valuation_version)
@@ -142,11 +151,14 @@ def _seed_trade(user_id: int, bot_id: int,
                                       'Protected QA Paper opening','{}'::jsonb,%s,2)""",
                            (user_id, bot_id, decision_id, order_id, market_id,
                             -invested, qty, eur_price, now))
+        phase = "commit"
         connection.commit()
         return setup_id, strategy_id
-    except Exception:
+    except Exception as error:
         connection.rollback()
-        raise
+        if isinstance(error, (RuntimeError, ValueError)):
+            raise
+        raise RuntimeError(f"paper_exit_open_{phase}_failed") from None
     finally:
         connection.close()
 
