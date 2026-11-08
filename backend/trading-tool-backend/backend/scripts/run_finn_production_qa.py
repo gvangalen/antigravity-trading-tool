@@ -108,6 +108,14 @@ SAFE_PORTFOLIO_PAPER_FX_ORDER_CHECKS = frozenset({
     "order_cardinality", "order_status", "order_price_eur",
     "order_quantity", "execution_state",
 })
+SAFE_PORTFOLIO_PAPER_FX_PRICE_CHECKS = frozenset({
+    "execution_eur_price", "execution_source_price", "execution_fx_factor",
+    "order_matches_execution", "source_conversion",
+})
+SAFE_PORTFOLIO_PAPER_FX_LEDGER_CHECKS = frozenset({
+    "funding_state", "execution_row_state", "ledger_price",
+    "ledger_matches_execution", "cashflow_amount",
+})
 
 
 def safe_portfolio_paper_fx_diagnostic(error: Exception) -> Dict[str, Any] | None:
@@ -129,6 +137,19 @@ def safe_portfolio_paper_fx_diagnostic(error: Exception) -> Dict[str, Any] | Non
                       if isinstance(value, str) and value in SAFE_PORTFOLIO_PAPER_FX_ORDER_CHECKS]
             if checks:
                 diagnostic["failed_order_checks"] = list(dict.fromkeys(checks))[:5]
+        values = getattr(error, "failed_price_checks", None)
+        if isinstance(values, (tuple, list)):
+            checks = [value for value in values
+                      if isinstance(value, str) and value in SAFE_PORTFOLIO_PAPER_FX_PRICE_CHECKS]
+            if checks:
+                diagnostic["failed_price_checks"] = list(dict.fromkeys(checks))[:5]
+    if "ledger_cashflow" in codes:
+        values = getattr(error, "failed_ledger_checks", None)
+        if isinstance(values, (tuple, list)):
+            checks = [value for value in values
+                      if isinstance(value, str) and value in SAFE_PORTFOLIO_PAPER_FX_LEDGER_CHECKS]
+            if checks:
+                diagnostic["failed_ledger_checks"] = list(dict.fromkeys(checks))[:5]
     return diagnostic
 
 

@@ -30,12 +30,24 @@ FAILED_ORDER_CHECK_CODES = (
     "order_cardinality", "order_status", "order_price_eur",
     "order_quantity", "execution_state",
 )
+FAILED_PRICE_CHECK_CODES = (
+    "execution_eur_price", "execution_source_price", "execution_fx_factor",
+    "order_matches_execution", "source_conversion",
+)
+FAILED_LEDGER_CHECK_CODES = (
+    "funding_state", "execution_row_state", "ledger_price",
+    "ledger_matches_execution", "cashflow_amount",
+)
 
 
 class PortfolioPaperFxContractFailure(RuntimeError):
-    def __init__(self, failed_invariants: list[str], *, failed_order_checks: list[str] | None = None):
+    def __init__(self, failed_invariants: list[str], *, failed_order_checks: list[str] | None = None,
+                 failed_price_checks: list[str] | None = None,
+                 failed_ledger_checks: list[str] | None = None):
         self.failed_invariants = tuple(failed_invariants)
         self.failed_order_checks = tuple(failed_order_checks or ())
+        self.failed_price_checks = tuple(failed_price_checks or ())
+        self.failed_ledger_checks = tuple(failed_ledger_checks or ())
         super().__init__("portfolio_paper_fx_contract_failed")
 
 
@@ -326,32 +338,50 @@ def _verify(user_id: int, bot_id: int, decision_id: int, source: dict) -> dict:
         execution_fx_at = _utc_datetime(evidence.get("execution_fx_observed_at"))
         order_at = _utc_datetime(order[8]) if order else None
         ledger_price = _finite_float(fill[4]) if fill else None
+        price_checks = {
+            "execution_eur_price": execution_eur is not None and execution_eur > FORGED_ESTIMATE_EUR,
+            "execution_source_price": execution_source_price is not None and execution_source_price > 0,
+            "execution_fx_factor": execution_fx is not None and execution_fx > 0,
+            "order_matches_execution": (
+                order_price is not None and execution_eur is not None
+                and abs(order_price - execution_eur) < 0.000001
+            ),
+            "source_conversion": (
+                execution_eur is not None and execution_source_price is not None
+                and execution_fx is not None
+                and abs(execution_eur - execution_source_price * execution_fx) < 0.000001
+            ),
+        }
+        ledger_checks = {
+            "funding_state": (
+                funding is not None and funding[0] == "paper_initial_funding"
+                and funding_cash == START_CASH_EUR
+            ),
+            "execution_row_state": (
+                fill is not None and fill[0] == "execute" and fill[3] == 2
+                and fill_cash is not None and fill_cash < 0
+                and fill_qty is not None and fill_qty > 0
+            ),
+            "ledger_price": ledger_price is not None and ledger_price > 0,
+            "ledger_matches_execution": (
+                ledger_price is not None and execution_eur is not None
+                and abs(ledger_price - execution_eur) < 0.000001
+            ),
+            "cashflow_amount": (
+                fill_cash is not None and fill_qty is not None and ledger_price is not None
+                and abs(fill_cash + round(fill_qty * ledger_price, 2)) < 0.01
+            ),
+        }
         order_checks = {
             "order_cardinality": order is not None,
             "order_status": order is None or order[0:2] == ("filled", "paper"),
-            "order_price_eur": (
-                order is None or (order_price is not None
-                and execution_eur is not None and execution_eur > FORGED_ESTIMATE_EUR
-                and execution_source_price is not None and execution_source_price > 0
-                and execution_fx is not None and execution_fx > 0
-                and abs(order_price - execution_eur) < 0.000001
-                and abs(order_price - execution_source_price * execution_fx) < 0.000001)
-            ),
+            "order_price_eur": order is None or all(price_checks.values()),
             "order_quantity": order is None or (order_qty is not None and order_qty > 0),
             "execution_state": order is None or order[4:7] == ("filled", "executed", "auto"),
         }
         checks = {
             "order_price": all(order_checks.values()),
-            "ledger_cashflow": (
-                funding is not None and funding[0] == "paper_initial_funding"
-                and funding_cash == START_CASH_EUR
-                and fill is not None and fill[0] == "execute" and fill[3] == 2
-                and fill_cash is not None and fill_cash < 0
-                and fill_qty is not None and fill_qty > 0
-                and ledger_price is not None and execution_eur is not None
-                and abs(ledger_price - execution_eur) < 0.000001
-                and abs(fill_cash + round(fill_qty * ledger_price, 2)) < 0.01
-            ),
+            "ledger_cashflow": all(ledger_checks.values()),
             "portfolio_quantity": (
                 portfolio_cash is not None and fill_cash is not None
                 and abs(portfolio_cash - (START_CASH_EUR + fill_cash)) < 0.01
@@ -381,8 +411,12 @@ def _verify(user_id: int, bot_id: int, decision_id: int, source: dict) -> dict:
         failed_invariants = [code for code in FAILED_INVARIANT_CODES if not checks[code]]
         if failed_invariants:
             failed_order_checks = [code for code in FAILED_ORDER_CHECK_CODES if not order_checks[code]]
+            failed_price_checks = [code for code in FAILED_PRICE_CHECK_CODES if not price_checks[code]]
+            failed_ledger_checks = [code for code in FAILED_LEDGER_CHECK_CODES if not ledger_checks[code]]
             raise PortfolioPaperFxContractFailure(
                 failed_invariants, failed_order_checks=failed_order_checks,
+                failed_price_checks=failed_price_checks if "order_price" in failed_invariants else None,
+                failed_ledger_checks=failed_ledger_checks if "ledger_cashflow" in failed_invariants else None,
             )
         return {
             "result": "PASS", "environment": "paper", "quote_currency": source["quote"],

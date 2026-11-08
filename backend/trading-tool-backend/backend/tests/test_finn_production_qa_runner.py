@@ -1168,12 +1168,16 @@ def test_portfolio_paper_fx_attempt_is_reported_even_if_probe_fails():
 def test_portfolio_paper_fx_diagnostic_exports_only_allowlisted_codes():
     module = _module()
     error = RuntimeError("portfolio_paper_fx_contract_failed")
-    error.failed_invariants = ["order_price", "private owner 123", "owner_safety", "order_price"]
+    error.failed_invariants = ["order_price", "ledger_cashflow", "private owner 123", "owner_safety", "order_price"]
     error.failed_order_checks = ["order_price_eur", "private quote 456", "execution_state",
                                  "order_price_eur"]
+    error.failed_price_checks = ["order_matches_execution", "private price 789", "source_conversion"]
+    error.failed_ledger_checks = ["ledger_matches_execution", "private ledger 321"]
     assert module.safe_portfolio_paper_fx_diagnostic(error) == {
-        "failed_invariants": ["order_price", "owner_safety"],
+        "failed_invariants": ["order_price", "ledger_cashflow", "owner_safety"],
         "failed_order_checks": ["order_price_eur", "execution_state"],
+        "failed_price_checks": ["order_matches_execution", "source_conversion"],
+        "failed_ledger_checks": ["ledger_matches_execution"],
     }
     error.failed_invariants = ["owner_safety"]
     assert module.safe_portfolio_paper_fx_diagnostic(error) == {
@@ -1349,6 +1353,7 @@ def test_portfolio_paper_fx_verifies_database_fill_and_shared_projection(monkeyp
         assert expected in failure.value.failed_invariants
         if expected == "order_price":
             assert failure.value.failed_order_checks == ("order_price_eur",)
+            assert failure.value.failed_price_checks == ("order_matches_execution",)
         rows[key] = original
 
     rows["orders"] = []
@@ -1371,11 +1376,13 @@ def test_portfolio_paper_fx_verifies_database_fill_and_shared_projection(monkeyp
         assert failure.value.failed_order_checks == (expected,)
     rows["orders"] = [order_row]
 
-    for expected, changed_evidence in (
-        ("order_price", {**evidence, "execution_eur_price": 1999.0}),
-        ("order_price", {**evidence, "execution_fx_eur_per_unit": 0.7}),
-        ("source_time_currency", {**evidence, "execution_source_price_at": "invalid"}),
-        ("source_time_currency", {**evidence, "execution_fx_observed_at": None}),
+    for expected, price_checks, changed_evidence in (
+        ("order_price", ("order_matches_execution", "source_conversion"),
+         {**evidence, "execution_eur_price": 1999.0}),
+        ("order_price", ("source_conversion",),
+         {**evidence, "execution_fx_eur_per_unit": 0.7}),
+        ("source_time_currency", (), {**evidence, "execution_source_price_at": "invalid"}),
+        ("source_time_currency", (), {**evidence, "execution_fx_observed_at": None}),
     ):
         rows["orders"] = [(*order_row[:7], changed_evidence, now)]
         with pytest.raises(probe.PortfolioPaperFxContractFailure) as failure:
@@ -1383,6 +1390,7 @@ def test_portfolio_paper_fx_verifies_database_fill_and_shared_projection(monkeyp
         assert expected in failure.value.failed_invariants
         if expected == "order_price":
             assert failure.value.failed_order_checks == ("order_price_eur",)
+            assert failure.value.failed_price_checks == price_checks
     rows["orders"] = [order_row]
 
     rows["ledger"] = [("paper_initial_funding", 100.0, 0.0, None, None),
@@ -1390,6 +1398,7 @@ def test_portfolio_paper_fx_verifies_database_fill_and_shared_projection(monkeyp
     with pytest.raises(probe.PortfolioPaperFxContractFailure) as failure:
         probe._verify(101, 202, 303, source)
     assert "ledger_cashflow" in failure.value.failed_invariants
+    assert failure.value.failed_ledger_checks == ("ledger_matches_execution", "cashflow_amount")
     rows["ledger"] = [("paper_initial_funding", 100.0, 0.0, None, None),
                       ("execute", -50.0, 0.025, 2, 2000.0)]
 
