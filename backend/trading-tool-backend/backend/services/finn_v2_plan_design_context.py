@@ -51,7 +51,8 @@ _DESIGN_SUBJECT = re.compile(
 )
 _READ_ONLY_QUESTION = re.compile(
     r"\b(?:toelichten|uitleggen|teruglezen|voorlezen|summarize|explain|read back|"
-    r"zusammenfassen|erklären|vorlesen)\b",
+    r"zusammenfassen|erklären|vorlesen|"
+    r"(?:herhaal|repeat|wiederhole)\b.{0,50}\b(?:les|lesson|lektion))\b",
     re.I,
 )
 _DIRECT_ACTION_REQUEST = re.compile(

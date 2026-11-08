@@ -4,6 +4,30 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN-lesvraag: capability-snelroute omzeilde dossierread (8 november 2026)
+
+Phase: `BUILD_VALIDATED_QA_PENDING`. Kandidaat:
+`codex/review-lesson-capability-bypass`. Onafhankelijke beschermde QA op
+`7b72e500f18a8dc0a5d42ac455133cf650361eee` in
+[workflow 42464652220](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42464652220)
+bevestigde opnieuw Paper-buy en -sell, maar dezelfde tweede chatvraag miste
+`review_history`-bewijs (`review_tool_seen=false`, `review_read_status=missing`).
+Het verdict bleef `NOT_ACCEPTED`; de vier trader-gates en polling/SSE zijn
+niet afgetekend. Het gesaniteerde artifact heeft SHA-256
+`8b8913ab9b93a4274ccfbb52118673df275b73a549c66047b6a833c3988c5c8d`.
+
+De publieke run-service bleek de exacte vraag vóór de Responses-toolroute
+als een algemene plan-uitvoerbaarheidsvraag te beantwoorden. Lokaal gaf
+`requests_execution_capability_question` voor die vraag ten onrechte `True`.
+Een expliciet verzoek om de les te herhalen wordt nu als leesvraag herkend;
+een echte vraag of DCA-aankopen wekelijks kunnen worden herhaald blijft een
+capabilityvraag. De gerichte tests slaagden (`11 passed`) en de volledige
+backend-suite slaagde (`4296 passed, 4 skipped`). Security beoordeelde de
+versmalde diff read-only als akkoord. Er zijn geen actiecontracten,
+providerselectie, orderlogica of Live-instellingen gewijzigd; de lokale
+worker-actiematrix en selectorproeven zijn voor deze routeringscorrectie niet
+van toepassing. CI, deployment en onafhankelijke QA volgen nog.
+
 ## FINN-vervolgvraag over bevestigde les: dossierread (8 november 2026)
 
 Phase: `DEPLOYED_QA_PENDING`. Kandidaat:
