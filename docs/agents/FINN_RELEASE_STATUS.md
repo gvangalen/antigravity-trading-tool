@@ -4,6 +4,31 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Beschermde Paper/FX-eindcontrole: gesaniteerde invariantcodes (8 november 2026)
+
+Phase: `DEPLOYED_QA_PENDING`. De gebruiker heeft de bestaande QA-agent
+uitdrukkelijk toestemming gegeven om de beschermde QA-fixture, verifier,
+runner en tests te verbeteren voor deze lopende testopdracht zonder
+herhaalde toestemmingsvragen. De Paper- en veiligheidsgrens blijft gelden;
+productlogica, gewone gebruikersdata en Live-uitvoering vallen buiten de
+QA-wijziging. QA heeft in
+[PR #879](https://github.com/gvangalen/antigravity-trading-tool/pull/879)
+de samengevoegde Paper/FX-eindcontrole opgesplitst in vaste
+`failed_invariants`-codes en de runner zo aangepast dat onbekende fouttekst
+niet in het gesaniteerde artifact komt. De 105 gerichte tests slaagden,
+inclusief zes invariantgroepen en afscherming van privétekst. Alle vijf
+PR-controles en alle vijf controles van
+[main-CI 42483201780](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42483201780)
+slaagden. [Auto Deploy 42483434205](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42483434205)
+slaagde. Git-main en de publieke backend- en frontendroutes (beide HTTP 200)
+meldden `dd297f3451564da2a63228325f75f0a5c2190c84`.
+Er is nog geen beschermde productierun met deze diagnose gestart. Deze
+statuscommit maakt een nieuwe SHA; vóór de QA-handoff worden de laatste
+main-CI, Auto Deploy en publieke SHA-pariteit opnieuw gecontroleerd. QA
+herhaalt daarna de Paper/FX-proef op die definitieve revisie en geeft de
+concrete falende invariant zonder beschermde waarden aan Build door. De
+vier bredere trader-gates en polling/SSE blijven open.
+
 ## Beschermde Paper/FX-voorcontrole: Paper-broncheck vóór fixture (8 november 2026)
 
 Phase: `QA_NOT_ACCEPTED`. Onafhankelijke QA op de vorige finale SHA
