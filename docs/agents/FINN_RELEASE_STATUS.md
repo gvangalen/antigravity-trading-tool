@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Vier trader-gates: stale indicatorreden en Paper/FX-preflight (8 november 2026)
 
-Phase: `DEPLOYED_QA_PENDING`. Op de geverifieerde live SHA
+Phase: `QA_NOT_ACCEPTED_FOR_FOUR_GATES`. Op de geverifieerde live SHA
 `896cac8a75f23a383e9caeca47dad9c9e5165370` slaagde de beschermde
 Paper-review-chatflow in QA-workflow 42466366068: twee Paper-fills, één
 gesloten positie, beide FINN-beurten met eigenaargebonden dossierbewijs en
@@ -42,6 +42,30 @@ Paper/FX-QA-preflight is aangevraagd; Build heeft die fixture niet gelezen
 of gewijzigd. Accountstaat, tijdzonepariteit, BTC-paarcontinuïteit en een
 volledig controleerbare automatische Paper-exit vragen nog hun eigen
 onafhankelijke runtimebewijs.
+
+De definitieve statuscommit doorliep alle vijf controles van
+[main-CI 42468193644](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42468193644)
+en [Auto Deploy 42468417733](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42468417733).
+Git-main en de publieke backend- en frontendroutes (beide HTTP 200) meldden
+`bc742504b52045d92ca0a071aaa2843e86ed2b29`. Onafhankelijke QA op die
+exacte SHA gaf in stale-score-run
+[42468562967](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42468562967)
+`PASS`: geen marktscore of koopbedrag voor de verouderde meting,
+`insufficient_data`-setupmatch en Paper `Hold` op €0 zonder order of
+kaswijziging. Artifact SHA-256:
+`4997b6f9cba016471013c559a5c6026a9fc16516645d860789827eadeb982467`.
+De gesloten-Paper-reviewproef
+[42468669329](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42468669329)
+gaf ook `PASS`: twee Paper-fills, één gesloten positie en twee FINN-beurten
+met eigenaargebonden dossierbewijs zonder actievoorstel. Artifact SHA-256:
+`1941a37bc4434d0e959e8ab695005f51892d5bfb6ab080b4db0513ee6fd1af83`.
+Beide runs meldden nul Live-calls en nul Live-botactivaties. De vier bredere
+gates en polling/SSE blijven `UNTESTED`; de reviewproef bewijst geen
+autonome exit. De Paper/FX-proef is niet herhaald omdat de QA-preflight
+inconsistent is en de beperkte fixturewijziging nog niet geautoriseerd is.
+Dit statusdocument verandert zelf weer de commit-SHA; de bovenstaande
+onafhankelijke uitkomst hoort expliciet bij `bc742504…`, niet automatisch
+bij een latere documentaire SHA.
 
 ## FINN-lesvraag: capability-snelroute omzeilde dossierread (8 november 2026)
 
