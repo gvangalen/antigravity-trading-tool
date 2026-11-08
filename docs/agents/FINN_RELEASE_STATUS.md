@@ -4,6 +4,35 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Beschermde Paper/FX-eindcontrole: order/prijs-subcodes (8 november 2026)
+
+Phase: `DEPLOYED_QA_PENDING`. Onafhankelijke QA-run
+[42484367213](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42484367213)
+op live SHA `6613cf5979ee753b59472445c97a94392470731f`
+bevestigde productie-identiteit en QA-authenticatie. Alleen de vaste
+invariantgroep `order_price` faalde; EUR-kasstroom,
+portefeuillehoeveelheid, waardering, bronmoment/valuta en owner-safety
+slaagden. De volledige Paper-fill is daardoor nog niet afgetekend.
+Eén Paper-uitvoeringspoging, nul Live-tradingcalls en nul
+Live-botactivaties. Artifact SHA-256:
+`617c53cd9993f9cc9776a9292dd97d25decb94c6bc94422df3093e820e76391a`.
+
+De bestaande QA-agent splitste `order_price` in vaste subcodes voor
+orderstatus, EUR-prijs, hoeveelheid en executiestatus in
+[PR #881](https://github.com/gvangalen/antigravity-trading-tool/pull/881).
+Dit wijzigt uitsluitend de beschermde QA-diagnostiek; productorder- en
+prijsregels zijn niet aangepast. De 105 gerichte tests slaagden. Alle vijf
+PR-controles en alle vijf controles van
+[main-CI 42484898648](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42484898648)
+slaagden. [Auto Deploy 42485123698](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42485123698)
+slaagde. Git-main en publieke backend- en frontendroutes (beide HTTP 200)
+meldden `074ea30b6551db8c7c0620e4ce8413207758f092`.
+Er is nog geen beschermde productierun met de fijnere subcodes gestart.
+Deze statuscommit maakt een nieuwe SHA; vóór QA-handoff worden de laatste
+main-CI, Auto Deploy en publieke SHA-pariteit opnieuw gecontroleerd. QA
+herhaalt daarna de Paper/FX-proef en geeft de concrete subcode door voor
+een gerichte Build-reparatie. De vier bredere trader-gates blijven open.
+
 ## Beschermde Paper/FX-eindcontrole: gesaniteerde invariantcodes (8 november 2026)
 
 Phase: `DEPLOYED_QA_PENDING`. De gebruiker heeft de bestaande QA-agent
