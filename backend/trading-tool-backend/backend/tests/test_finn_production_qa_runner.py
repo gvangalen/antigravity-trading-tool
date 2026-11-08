@@ -890,13 +890,26 @@ def test_closed_paper_fixture_quote_is_scoped_to_protected_paper_execution(monke
     from backend.scripts import probe_protected_closed_paper_review as probe
     from backend.engine import trading_bot_execution as execution
 
-    original = lambda conn, symbol, max_age_seconds=None: 17.0
+    forwarded = []
+
+    def original(conn, symbol, max_age_seconds=None, *, paper_execution=False, market_id=None):
+        forwarded.append((symbol, max_age_seconds, paper_execution, market_id))
+        return 17.0
+
     monkeypatch.setattr(execution, "_get_live_price", original)
     monkeypatch.setenv("FINN_QA_ALLOW_CLOSED_PAPER_REVIEW_FIXTURE", "1")
     with probe._controlled_fixture_paper_quote():
-        assert execution._get_live_price(None, "BTC") == float(probe.fixture.PRICE_EUR)
-        assert execution._get_live_price(None, "ETH") == 17.0
-        assert execution._get_live_price(None, "BTC", 60) == 17.0
+        assert execution._get_live_price(None, "BTC", paper_execution=True) == float(probe.fixture.PRICE_EUR)
+        assert execution._get_live_price(None, "BTC") == 17.0
+        assert execution._get_live_price(None, "ETH", paper_execution=True) == 17.0
+        assert execution._get_live_price(None, "BTC", 60, paper_execution=True) == 17.0
+        assert execution._get_live_price(None, "BTC", paper_execution=True, market_id=42) == 17.0
+    assert forwarded == [
+        ("BTC", None, False, None),
+        ("ETH", None, True, None),
+        ("BTC", 60, True, None),
+        ("BTC", None, True, 42),
+    ]
     assert execution._get_live_price is original
     with pytest.raises(RuntimeError, match="synthetic_execution_failure"):
         with probe._controlled_fixture_paper_quote():

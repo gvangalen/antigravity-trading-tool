@@ -197,10 +197,13 @@ def _controlled_fixture_paper_quote():
 
     original = execution._get_live_price
 
-    def paper_quote(conn, symbol: str, max_age_seconds=None):
-        if str(symbol).upper() == fixture.SYMBOL and max_age_seconds is None:
+    def paper_quote(conn, symbol: str, max_age_seconds=None, *,
+                    paper_execution: bool = False, market_id: int | None = None):
+        if (paper_execution and market_id is None
+                and str(symbol).upper() == fixture.SYMBOL and max_age_seconds is None):
             return float(fixture.PRICE_EUR)
-        return original(conn, symbol, max_age_seconds)
+        return original(conn, symbol, max_age_seconds,
+                        paper_execution=paper_execution, market_id=market_id)
 
     try:
         execution._get_live_price = paper_quote
