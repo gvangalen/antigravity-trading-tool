@@ -202,6 +202,11 @@ def profile_error_category(profile: str, error: Exception) -> str:
             "paper_exit_preflight_failed", "paper_exit_seed_failed",
             "paper_exit_paper_open_failed", "paper_exit_baseline_failed",
             "paper_exit_engine_failed", "paper_exit_evidence_failed",
+            "paper_exit_open_lookup_bot_failed", "paper_exit_open_lookup_setup_failed",
+            "paper_exit_open_setup_update_failed", "paper_exit_open_strategy_update_failed",
+            "paper_exit_open_bot_update_failed", "paper_exit_open_portfolio_update_failed",
+            "paper_exit_open_decision_insert_failed", "paper_exit_open_order_insert_failed",
+            "paper_exit_open_ledger_insert_failed", "paper_exit_open_commit_failed",
         } else "paper_exit_probe_runtime_error")
     if profile == "trader_paper_exit_fixture_audit":
         code = str(error)

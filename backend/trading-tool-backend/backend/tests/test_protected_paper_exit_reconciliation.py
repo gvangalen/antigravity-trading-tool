@@ -102,6 +102,45 @@ def test_probe_error_category_sanitizes_unexpected_errors():
     ) == "paper_exit_probe_runtime_error"
 
 
+@pytest.mark.parametrize("failed_statement,phase", [
+    (2, "setup_update"), (3, "strategy_update"), (4, "bot_update"),
+    (5, "portfolio_update"), (6, "decision_insert"),
+    (7, "order_insert"), (8, "ledger_insert"),
+])
+def test_opening_fixture_reports_fixed_statement_phase(monkeypatch, failed_statement, phase):
+    class Cursor:
+        index = -1
+        rowcount = 1
+        def __enter__(self):
+            return self
+        def __exit__(self, *_args):
+            return None
+        def execute(self, *_args):
+            self.index += 1
+            if self.index == failed_statement:
+                raise TypeError("private SQL value")
+        def fetchone(self):
+            return (5,)
+    class Connection:
+        def __init__(self):
+            self.cursor_value = Cursor()
+            self.rolled_back = False
+        def cursor(self):
+            return self.cursor_value
+        def rollback(self):
+            self.rolled_back = True
+        def close(self):
+            return None
+    conn = Connection()
+    monkeypatch.setattr(probe.fixture, "_connection", lambda: conn)
+    with pytest.raises(RuntimeError, match=f"^paper_exit_open_{phase}_failed$"):
+        probe._seed_trade(11, 22, 33, {"market_price": 100, "market_price_eur": 90})
+    assert conn.rolled_back
+    assert profile_error_category(
+        "trader_paper_exit_reconciliation", RuntimeError(f"paper_exit_open_{phase}_failed")
+    ) == f"paper_exit_open_{phase}_failed"
+
+
 def test_live_exchange_guard_blocks_attempt_and_restores_entrypoint():
     from backend.engine import trading_bot_execution
 

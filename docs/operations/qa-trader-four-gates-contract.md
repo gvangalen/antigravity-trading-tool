@@ -115,6 +115,11 @@ The Paper-exit collector now translates unexpected errors
 to fixed preflight/seed/open/baseline/engine/evidence stage codes before the
 runner sanitizes them. An old `runner_internal` result cannot retrospectively
 be assigned one of those stages without additional evidence.
+After the read-only audit of run 42502525173 found a retained, inactive child
+but no persisted Paper opening, the opening transaction gained fixed
+lookup/update/insert/commit substage codes. They do not execute extra SQL or
+publish error text. The earlier run remains `INCOMPLETE`; this diagnostic
+change is for at most one separately authorized Paper-only hertest.
 
 ## Gate 4: automatic Paper exit and reproducible cashflow
 
