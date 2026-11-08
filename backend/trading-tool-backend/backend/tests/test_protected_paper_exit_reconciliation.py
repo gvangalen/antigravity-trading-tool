@@ -67,12 +67,14 @@ def test_probe_replays_once_and_cleans_only_after_contract_pass(monkeypatch, ren
         assert result == {"result": "PASS", "failed_checks": [],
                           "exit_decisions": 1, "replay_duplicate_sells": 0,
                           "engine_calls": 2, "live_calls": 0,
-                          "rendered_ui_checked": True, "gate_status": "PASS"}
+                          "rendered_ui_checked": True, "gate_status": "PASS",
+                          "onboarding_navigation_override": True}
         assert steps == ["seed_trade", "run", "run", "render", "cleanup"]
     else:
         assert result == {"result": "FAIL", "failed_checks": ["rendered_exit_fields_present"],
                           "engine_calls": 2, "live_calls": 0,
-                          "rendered_ui_checked": True, "gate_status": "FAIL"}
+                          "rendered_ui_checked": True, "gate_status": "FAIL",
+                          "onboarding_navigation_override": True}
         assert steps == ["seed_trade", "run", "run", "render", "quarantine"]
 
 
@@ -157,6 +159,7 @@ def test_rendered_exit_opens_trades_before_reading_evidence(monkeypatch):
             )}
     async def observe_page(**kwargs):
         assert kwargs["path"] == "/bot?bot_id=22"
+        assert kwargs["bypass_fixture_onboarding"] is True
         return await kwargs["inspect"](Page())
     monkeypatch.setattr(qa_protected_browser, "observe_page", observe_page)
     monkeypatch.setattr(auth_utils, "create_access_token", lambda *_args: "in-memory-token")

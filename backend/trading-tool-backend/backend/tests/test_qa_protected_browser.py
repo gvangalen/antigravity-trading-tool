@@ -1,7 +1,9 @@
 import asyncio
 import pytest
 
-from backend.scripts.qa_protected_browser import block_websocket, request_policy
+from backend.scripts.qa_protected_browser import (
+    block_websocket, fixture_onboarding_response, observe_page, request_policy,
+)
 
 
 def test_browser_only_authenticates_same_origin_api():
@@ -36,3 +38,28 @@ def test_browser_rejects_websocket_egress():
     route = Route()
     asyncio.run(block_websocket(route))
     assert route.closed is True
+
+
+def test_fixture_onboarding_override_is_only_exact_same_origin_get():
+    base = "https://tradamind.com"
+    kwargs = {"base_url": base, "request_url": f"{base}/api/onboarding/status",
+              "method": "GET", "enabled": True}
+    result = fixture_onboarding_response(**kwargs)
+    assert all(result[key] is True for key in (
+        "onboarding_complete", "has_asset", "has_setup", "has_strategy", "has_bot",
+    ))
+    for change in (
+        {"enabled": False}, {"method": "POST"},
+        {"request_url": f"{base}/api/onboarding/status?user=private"},
+        {"request_url": f"{base}/api/onboarding/profile"},
+        {"request_url": "https://evil.example/api/onboarding/status"},
+    ):
+        assert fixture_onboarding_response(**(kwargs | change)) is None
+
+
+def test_fixture_navigation_override_cannot_be_used_on_other_pages():
+    with pytest.raises(ValueError, match="qa_browser_fixture_override_scope_invalid"):
+        asyncio.run(observe_page(
+            base_url="https://tradamind.com", path="/asset", token="in-memory-token",
+            inspect=lambda _page: None, bypass_fixture_onboarding=True,
+        ))

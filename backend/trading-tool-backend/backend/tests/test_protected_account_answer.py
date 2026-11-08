@@ -298,7 +298,7 @@ def test_account_prepare_reports_fixed_decision_stage_without_sql_values(monkeyp
             pass
     connection = Connection()
     monkeypatch.setattr(probe.fixture, "_connection", lambda: connection)
-    with pytest.raises(RuntimeError, match="^account_prepare_decisions_failed$"):
+    with pytest.raises(RuntimeError, match="^account_prepare_decisions_python_input$"):
         probe._prepare(11, 22)
     assert connection.rolled_back
     assert profile_error_category(
@@ -316,7 +316,9 @@ def test_account_stage_sanitizes_private_runtime_error():
     ("23505", "unique"), ("23514", "check"), ("23502", "not_null"),
     ("23503", "foreign_key"), ("22P02", "datatype"),
     ("42804", "datatype"), ("42703", "column"),
-    ("99999", "failed"),
+    ("22008", "data_exception"), ("23000", "integrity"),
+    ("P0001", "server_exception"), ("08006", "connection"),
+    ("99999", "database_other"), (None, "failed"),
 ])
 def test_account_decision_insert_reports_only_allowlisted_sqlstate(
     monkeypatch, sqlstate, expected,
