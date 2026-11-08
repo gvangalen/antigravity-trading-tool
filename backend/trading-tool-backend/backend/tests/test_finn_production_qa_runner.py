@@ -101,6 +101,18 @@ def test_trader_gate_profiles_are_protected_and_distinguish_execution_scope():
     assert "FINN_QA_ALLOW_PAPER_EXIT_FIXTURE=0" in workflow
     assert "The pair score probe requires only fixture-action authorization" in workflow
     assert "The automatic Paper-exit probe requires fixture and safe-execution authorization" in workflow
+    source = SCRIPT_PATH.read_text(encoding="utf-8")
+    pair_branch = source.split('elif args.profile == "trader_pair_score_continuity":', 1)[1].split(
+        'elif args.profile == "trader_paper_exit_reconciliation":', 1
+    )[0]
+    exit_branch = source.split('elif args.profile == "trader_paper_exit_reconciliation":', 1)[1].split(
+        'elif args.profile in {"closed_paper_trade_review"', 1
+    )[0]
+    for branch in (pair_branch, exit_branch):
+        assert branch.index('report["protected_profile_attempted"] = True') < branch.index('report[args.profile] =')
+        assert branch.index('report["qa_status"] = "INCOMPLETE"') < branch.index('report[args.profile] =')
+    assert 'report["safety"]["execution_calls"] = None' in exit_branch
+    assert 'report["safety"]["execution_calls"] = report[args.profile].get("engine_calls")' in exit_branch
 
 
 def test_typed_entry_paper_profile_requires_explicit_fixture_scope(monkeypatch):

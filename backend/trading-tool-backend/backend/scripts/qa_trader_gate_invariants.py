@@ -152,8 +152,17 @@ def check_pair_score_isolation(
     distinct = _decimal(eur[0].get("score")) != _decimal(usdt[0].get("score"))
     outage_safe = (
         eur[1].get("score") is None
-        and eur[1].get("source_status") in {"stale_source", "missing_indicator_reading", "score_rebuild_pending"}
-        and eur[1].get("source_reason") in {"stale_source", "source_unavailable", "insufficient_indicator_history"}
+        and (
+            eur[1].get("source_status") in {
+                "stale_source", "missing_indicator_reading", "score_rebuild_pending"
+            }
+            or (eur[1].get("source_status") == "missing_score"
+                and eur[1].get("stale_reading_proven") is True
+                and eur[1].get("source_reason") == "stale_source")
+        )
+        and eur[1].get("source_reason") in {
+            "stale_source", "source_unavailable", "insufficient_indicator_history"
+        }
         and usdt[1].get("score") == usdt[0].get("score")
         and usdt[1].get("source_status") == "fresh"
     )
@@ -179,15 +188,19 @@ def check_pair_score_isolation(
 
 
 def check_paper_exit(evidence: dict) -> dict[str, Any]:
-    """Reconcile one automatic Paper sell with its UI and persisted cash leg."""
-    source, factor = _decimal(evidence.get("source_price")), _decimal(evidence.get("fx_eur_per_unit"))
+    """Reconcile one automatic Paper sell with bot history and cash ledger."""
+    source = _decimal(evidence.get("execution_source_price"))
+    factor = _decimal(evidence.get("execution_fx_eur_per_unit"))
     eur_price, qty = _decimal(evidence.get("execution_eur_price")), _decimal(evidence.get("quantity"))
     proceeds = _decimal(evidence.get("proceeds_eur"))
     before_cash = _decimal(evidence.get("cash_before_eur"))
     after_cash = _decimal(evidence.get("cash_after_eur"))
     before_qty = _decimal(evidence.get("quantity_before"))
     after_qty = _decimal(evidence.get("quantity_after"))
-    ui = evidence.get("ui") if isinstance(evidence.get("ui"), dict) else {}
+    order_qty = _decimal(evidence.get("order_quantity"))
+    ledger_qty = _decimal(evidence.get("ledger_qty_delta"))
+    history = (evidence.get("history_projection")
+               if isinstance(evidence.get("history_projection"), dict) else {})
     checks = {
         "paper_only": evidence.get("environment") == "paper" and evidence.get("is_live") is False
                       and evidence.get("live_calls") == 0 and evidence.get("broker_orders") == 0,
@@ -195,22 +208,33 @@ def check_paper_exit(evidence: dict) -> dict[str, Any]:
                        and evidence.get("exchange_keys") == 0,
         "single_filled_sell": evidence.get("order_count") == 1 and evidence.get("execution_count") == 1
                               and evidence.get("side") == "sell" and evidence.get("status") == "filled",
-        "dated_sources": _utc(evidence.get("source_at")) is not None and _utc(evidence.get("fx_at")) is not None,
-        "currency_recorded": evidence.get("source_currency") in {"EUR", "USDT"}
+        "dated_sources": _utc(evidence.get("execution_source_at")) is not None
+                         and _utc(evidence.get("execution_fx_at")) is not None,
+        "currency_recorded": evidence.get("execution_source_currency") in {"EUR", "USDT"}
                              and evidence.get("settlement_currency") == "EUR",
         "source_conversion": source is not None and factor is not None and eur_price is not None
                              and _near(eur_price, source * factor, "0.000001"),
         "order_ledger_price": _near(evidence.get("order_price_eur"), eur_price, "0.000001")
                               and _near(evidence.get("ledger_price_eur"), eur_price, "0.000001"),
         "quantity_reconciles": qty is not None and qty > 0 and before_qty is not None and after_qty is not None
-                               and _near(before_qty - after_qty, qty, "0.00000001"),
+                               and order_qty is not None and ledger_qty is not None
+                               and _near(before_qty - after_qty, qty, "0.00000001")
+                               and _near(order_qty, qty, "0.00000001")
+                               and _near(ledger_qty, -qty, "0.00000001"),
         "cashflow_reconciles": qty is not None and eur_price is not None and proceeds is not None
                                and before_cash is not None and after_cash is not None
                                and _near(proceeds, (qty * eur_price).quantize(Decimal("0.01")), "0.01")
+                               and _near(evidence.get("order_amount_eur"), proceeds, "0.01")
                                and _near(after_cash - before_cash, proceeds, "0.01")
                                and _near(evidence.get("ledger_cash_delta_eur"), proceeds, "0.01"),
-        "ui_reconciles": all(key in ui and ui[key] is not None and ui[key] == evidence.get(key) for key in (
-            "source_currency", "source_at", "fx_at", "quantity", "execution_eur_price", "proceeds_eur"
-        )),
+        "order_ledger_link": evidence.get("order_id") is not None
+                             and evidence.get("order_id") == evidence.get("ledger_order_id"),
+        "bot_history_projection_reconciles": all(
+            key in history and history[key] is not None and history[key] == evidence.get(key)
+            for key in (
+                "execution_source_currency", "execution_source_at", "execution_fx_at",
+                "quantity", "execution_eur_price", "proceeds_eur"
+            )
+        ),
     }
     return _result(checks)

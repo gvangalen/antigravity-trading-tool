@@ -5,10 +5,29 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from contextlib import contextmanager
 from datetime import datetime, timezone
 
 from backend.scripts import probe_protected_score2_stale_paper as fixture
 from backend.scripts.qa_trader_gate_invariants import check_paper_exit
+
+
+@contextmanager
+def _guard_live_exchange():
+    from backend.engine import trading_bot_execution as execution
+
+    original = execution._execute_on_exchange_sync
+    attempts: list[bool] = []
+
+    def blocked(*_args, **_kwargs):
+        attempts.append(True)
+        raise RuntimeError("paper_exit_live_execution_attempt")
+
+    execution._execute_on_exchange_sync = blocked
+    try:
+        yield attempts
+    finally:
+        execution._execute_on_exchange_sync = original
 
 
 def _preflight() -> tuple[int, dict]:
@@ -134,13 +153,14 @@ async def _history(user_id: int) -> list[dict]:
 
 
 def _evidence(namespace: str, user_id: int, bot_id: int, market_id: int,
-              initial_cash: float, initial_qty: float) -> dict:
+              initial_cash: float, initial_qty: float,
+              live_calls: int) -> dict:
     connection = fixture._connection()
     try:
         with connection.cursor() as cursor:
             cursor.execute("""SELECT d.id,d.scores_json,d.status,o.side,o.status,
                                      o.execution_environment,o.executed_qty,
-                                     o.executed_price_eur,o.quote_amount_eur
+                                     o.executed_price_eur,o.quote_amount_eur,o.id
                               FROM bot_decisions d JOIN bot_orders o
                                 ON o.decision_id=d.id AND o.user_id=d.user_id
                               WHERE d.user_id=%s AND d.bot_id=%s
@@ -151,7 +171,7 @@ def _evidence(namespace: str, user_id: int, bot_id: int, market_id: int,
                               WHERE user_id=%s AND bot_id=%s AND symbol='BTC'""",
                            (user_id, bot_id))
             portfolio = cursor.fetchone()
-            cursor.execute("""SELECT l.cash_delta_eur,l.qty_delta,l.price_eur
+            cursor.execute("""SELECT l.cash_delta_eur,l.qty_delta,l.price_eur,l.order_id
                               FROM bot_ledger l JOIN bot_decisions d
                                 ON d.id=l.decision_id AND d.user_id=l.user_id
                               WHERE l.user_id=%s AND l.bot_id=%s
@@ -178,21 +198,21 @@ def _evidence(namespace: str, user_id: int, bot_id: int, market_id: int,
         history = asyncio.run(_history(user_id))
         if len(rows) != 1 or len(ledger) != 1 or portfolio is None or live is None:
             raise RuntimeError("paper_exit_persisted_effect_incomplete")
-        decision_id, raw, decision_status, side, order_status, environment, qty, price, proceeds = rows[0]
+        decision_id, raw, decision_status, side, order_status, environment, qty, price, proceeds, order_id = rows[0]
         data = raw if isinstance(raw, dict) else json.loads(raw)
         projection = next((item.get("exit_evidence") for item in history
                            if item.get("decision_id") == decision_id), None)
         projection = projection if isinstance(projection, dict) else {}
-        ui = {
-            "source_currency": projection.get("source_price_currency"),
-            "source_at": projection.get("source_price_at"),
-            "fx_at": projection.get("fx_observed_at"),
+        history_projection = {
+            "execution_source_currency": projection.get("execution_source_price_currency"),
+            "execution_source_at": projection.get("execution_source_price_at"),
+            "execution_fx_at": projection.get("execution_fx_observed_at"),
             "quantity": projection.get("execution_qty"),
             "execution_eur_price": projection.get("execution_eur_price"),
             "proceeds_eur": projection.get("execution_proceeds_eur"),
         }
         return {
-            "environment": environment, "is_live": live[0], "live_calls": 0,
+            "environment": environment, "is_live": live[0], "live_calls": live_calls,
             "broker_orders": live_orders,
             "owner_scoped": bool(owner and isinstance(owner[1], dict)
                                   and owner[1].get("qa_fixture") == fixture.FIXTURE_MARKER
@@ -200,17 +220,23 @@ def _evidence(namespace: str, user_id: int, bot_id: int, market_id: int,
             "owner_active": owner[0] if owner else None, "exchange_keys": exchange_keys,
             "order_count": len(rows), "execution_count": execution_count,
             "side": side, "status": order_status if decision_status == "executed" else decision_status,
-            "source_at": data.get("source_price_at"), "fx_at": data.get("fx_observed_at"),
-            "source_currency": data.get("source_price_currency"),
-            "settlement_currency": "EUR", "source_price": data.get("source_price"),
-            "fx_eur_per_unit": data.get("fx_eur_per_unit"),
+            "execution_source_at": data.get("execution_source_price_at"),
+            "execution_fx_at": data.get("execution_fx_observed_at"),
+            "execution_source_currency": data.get("execution_source_price_currency"),
+            "settlement_currency": "EUR",
+            "execution_source_price": data.get("execution_source_price"),
+            "execution_fx_eur_per_unit": data.get("execution_fx_eur_per_unit"),
             "execution_eur_price": data.get("execution_eur_price"),
             "quantity": data.get("execution_qty"),
+            "order_quantity": qty, "ledger_qty_delta": ledger[0][1],
             "proceeds_eur": data.get("execution_proceeds_eur"),
+            "order_amount_eur": proceeds,
             "cash_before_eur": initial_cash, "cash_after_eur": portfolio[0],
             "quantity_before": initial_qty, "quantity_after": portfolio[1],
             "order_price_eur": price, "ledger_price_eur": ledger[0][2],
-            "ledger_cash_delta_eur": ledger[0][0], "ui": ui,
+            "ledger_cash_delta_eur": ledger[0][0],
+            "order_id": order_id, "ledger_order_id": ledger[0][3],
+            "history_projection": history_projection,
         }
     finally:
         connection.close()
@@ -240,18 +266,24 @@ def run(namespace: str) -> dict:
             connection.close()
         from backend.engine.trading_bot_execution import run_trading_bot_execution
 
-        first = run_trading_bot_execution(user_id, bot_id=bot_id, paper_only=True)
-        second = run_trading_bot_execution(user_id, bot_id=bot_id, paper_only=True)
+        with _guard_live_exchange() as live_attempts:
+            first = run_trading_bot_execution(user_id, bot_id=bot_id, paper_only=True)
+            second = run_trading_bot_execution(user_id, bot_id=bot_id, paper_only=True)
+        live_calls = len(live_attempts)
         if not first.get("ok") or not second.get("ok"):
             raise RuntimeError("paper_exit_engine_unavailable")
         evidence = _evidence(namespace, user_id, bot_id, market_id,
-                             float(initial_cash), float(initial_qty))
+                             float(initial_cash), float(initial_qty), live_calls)
         result = check_paper_exit(evidence)
         if result["result"] != "PASS":
-            return result
+            return {**result, "rendered_ui_checked": False,
+                    "gate_status": "FAIL", "engine_calls": 2,
+                    "live_calls": live_calls}
         passed = True
         return {**result, "exit_decisions": 1, "replay_duplicate_sells": 0,
-                "live_calls": 0}
+                "engine_calls": 2, "live_calls": live_calls,
+                "rendered_ui_checked": False,
+                "gate_status": "PARTIAL"}
     finally:
         if user_id is not None and bot_id is not None:
             if passed:

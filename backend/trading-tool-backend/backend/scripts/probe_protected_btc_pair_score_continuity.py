@@ -126,13 +126,14 @@ async def _assessment(user_id: int, market_id: int) -> dict:
 
 def _snapshot(user_id: int, markets: dict[str, dict]) -> dict:
     from backend.celery_task.store_daily_scores_task import build_daily_scores_for_market
+    from backend.utils.scoring_utils import score_source_is_fresh
 
     connection = fixture._connection()
     try:
         pairs = {}
         for pair, source in markets.items():
             market_id = source["market_id"]
-            build_daily_scores_for_market(user_id, market_id)
+            built = build_daily_scores_for_market(user_id, market_id)
             assessment = asyncio.run(_assessment(user_id, market_id))
             with connection.cursor() as cursor:
                 cursor.execute("""SELECT source_observed_at FROM market_data_indicators
@@ -148,6 +149,13 @@ def _snapshot(user_id: int, markets: dict[str, dict]) -> dict:
             components = assessment.get("component_source_status") or {}
             market_reason = components.get("market_score")
             verified = assessment.get("source_status") == "available" and assessment.get("benchmark_score") is not None
+            stale_reading_proven = bool(
+                observed and observed[0] is not None
+                and not score_source_is_fresh(
+                    "market", "change_24h", observed[0], symbol="BTC",
+                )
+                and (built.get("scores") or {}).get("market") is None
+            )
             pairs[pair] = {
                 "owner_id": user_id, "market_id": market_id,
                 "indicator_config": config,
@@ -158,7 +166,8 @@ def _snapshot(user_id: int, markets: dict[str, dict]) -> dict:
                 ),
                 "score": assessment.get("benchmark_score") if verified else None,
                 "source_status": "fresh" if verified else market_reason,
-                "source_reason": market_reason,
+                "source_reason": "stale_source" if stale_reading_proven else market_reason,
+                "stale_reading_proven": stale_reading_proven,
             }
         return {"pairs": pairs}
     finally:
@@ -190,10 +199,15 @@ def run(namespace: str) -> dict:
             owner_id=user_id, initial=initial, outage=outage, recovered=recovered,
         )
         if result["result"] != "PASS":
-            return result
+            return {**result, "gate_status": "FAIL",
+                    "analysis_transport_checked": False,
+                    "finn_transport_checked": False}
         passed = True
         return {**result, "pairs": 2, "phases": 3,
-                "source_outage": "owner_scoped", "live_calls": 0}
+                "source_outage": "owner_scoped", "live_calls": 0,
+                "analysis_transport_checked": False,
+                "finn_transport_checked": False,
+                "gate_status": "PARTIAL"}
     finally:
         if user_id is not None and bot_id is not None:
             if passed:

@@ -72,21 +72,43 @@ def test_pair_scores_reject_owner_crossing_and_missing_reason():
     assert set(failed["failed_checks"]) == {"owner_scope", "outage_typed_and_isolated"}
 
 
+def test_pair_missing_score_requires_independently_proven_stale_reading():
+    initial = {"pairs": {"BTC/EUR": _pair(7, 1, 45), "BTC/USDT": _pair(7, 2, 70)}}
+    outage = deepcopy(initial)
+    outage["pairs"]["BTC/EUR"].update(
+        score=None, source_status="missing_score", source_reason="stale_source",
+        stale_reading_proven=True,
+    )
+    recovered = deepcopy(initial)
+    assert check_pair_score_isolation(
+        owner_id=7, initial=initial, outage=outage, recovered=recovered,
+    )["result"] == "PASS"
+    outage["pairs"]["BTC/EUR"]["stale_reading_proven"] = False
+    assert check_pair_score_isolation(
+        owner_id=7, initial=initial, outage=outage, recovered=recovered,
+    )["failed_checks"] == ["outage_typed_and_isolated"]
+
+
 def _exit():
     evidence = {
         "environment": "paper", "is_live": False, "live_calls": 0, "broker_orders": 0,
         "owner_scoped": True, "owner_active": False, "exchange_keys": 0,
         "order_count": 1, "execution_count": 1,
-        "side": "sell", "status": "filled", "source_currency": "USDT",
-        "settlement_currency": "EUR", "source_price": "100", "fx_eur_per_unit": "0.9",
-        "source_at": "2026-11-08T09:12:00Z", "fx_at": "2026-11-08T09:10:00Z",
+        "side": "sell", "status": "filled", "execution_source_currency": "USDT",
+        "settlement_currency": "EUR", "execution_source_price": "100",
+        "execution_fx_eur_per_unit": "0.9",
+        "execution_source_at": "2026-11-08T09:12:00Z",
+        "execution_fx_at": "2026-11-08T09:10:00Z",
         "execution_eur_price": "90", "order_price_eur": "90", "ledger_price_eur": "90",
         "quantity": "0.5", "quantity_before": "0.5", "quantity_after": "0",
+        "order_quantity": "0.5", "ledger_qty_delta": "-0.5",
         "proceeds_eur": "45", "ledger_cash_delta_eur": "45",
+        "order_amount_eur": "45", "order_id": 91, "ledger_order_id": 91,
         "cash_before_eur": "10", "cash_after_eur": "55",
     }
-    evidence["ui"] = {key: evidence[key] for key in (
-        "source_currency", "source_at", "fx_at", "quantity", "execution_eur_price", "proceeds_eur"
+    evidence["history_projection"] = {key: evidence[key] for key in (
+        "execution_source_currency", "execution_source_at", "execution_fx_at",
+        "quantity", "execution_eur_price", "proceeds_eur"
     )}
     return evidence
 
@@ -95,15 +117,38 @@ def test_paper_exit_reconciles_without_exporting_prices_or_fixture_identity():
     evidence = _exit()
     assert check_paper_exit(evidence) == {"result": "PASS", "failed_checks": []}
     evidence["ledger_cash_delta_eur"] = "44"
-    evidence["ui"]["quantity"] = "0.4"
+    evidence["history_projection"]["quantity"] = "0.4"
     failed = check_paper_exit(evidence)
-    assert set(failed["failed_checks"]) == {"cashflow_reconciles", "ui_reconciles"}
+    assert set(failed["failed_checks"]) == {
+        "cashflow_reconciles", "bot_history_projection_reconciles"
+    }
     assert "44" not in str(failed) and "0.4" not in str(failed)
 
 
 def test_paper_exit_rejects_live_execution_and_undated_source():
     evidence = _exit()
     evidence["is_live"] = True
-    evidence["source_at"] = "2026-11-08T09:12:00"
+    evidence["execution_source_at"] = "2026-11-08T09:12:00"
     failed = check_paper_exit(evidence)
-    assert set(failed["failed_checks"]) == {"paper_only", "dated_sources", "ui_reconciles"}
+    assert set(failed["failed_checks"]) == {
+        "paper_only", "dated_sources", "bot_history_projection_reconciles"
+    }
+
+
+def test_paper_exit_uses_execution_quote_when_decision_quote_has_moved():
+    evidence = _exit()
+    evidence["decision_source_price"] = "95"
+    evidence["decision_fx_eur_per_unit"] = "0.88"
+    evidence["decision_source_at"] = "2026-11-08T09:00:00Z"
+    assert check_paper_exit(evidence)["result"] == "PASS"
+    evidence["execution_source_price"] = "110"
+    assert check_paper_exit(evidence)["failed_checks"] == ["source_conversion"]
+
+
+def test_paper_exit_rejects_corrupt_order_and_ledger_reconciliation():
+    evidence = _exit()
+    evidence.update(order_quantity="0.4", ledger_qty_delta="-0.4",
+                    order_amount_eur="44", ledger_order_id=92)
+    assert set(check_paper_exit(evidence)["failed_checks"]) == {
+        "quantity_reconciles", "cashflow_reconciles", "order_ledger_link"
+    }

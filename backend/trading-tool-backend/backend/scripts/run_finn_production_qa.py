@@ -2343,10 +2343,13 @@ def main() -> int:
                     raise ValueError("trader_pair_fixture_manifest_forbidden")
                 if os.getenv("FINN_QA_ALLOW_TRADER_PAIR_FIXTURE") != "1":
                     raise ValueError("trader_pair_fixture_not_authorized")
-                from backend.scripts.probe_protected_btc_pair_score_continuity import run as run_pair_score_probe
-
+                report["protected_profile_attempted"] = True
+                report["qa_status"] = "INCOMPLETE"
+                report["outcome"] = "incomplete"
                 report["safety"]["read_only_profile"] = False
                 report["safety"]["execution_calls"] = 0
+                from backend.scripts.probe_protected_btc_pair_score_continuity import run as run_pair_score_probe
+
                 report[args.profile] = run_pair_score_probe(fixture_namespace or "")
                 report["outcome"] = (
                     "passed" if report[args.profile]["result"] == "PASS" else "failed"
@@ -2357,11 +2360,15 @@ def main() -> int:
                     raise ValueError("paper_exit_fixture_manifest_forbidden")
                 if os.getenv("FINN_QA_ALLOW_PAPER_EXIT_FIXTURE") != "1":
                     raise ValueError("paper_exit_fixture_not_authorized")
+                report["protected_profile_attempted"] = True
+                report["qa_status"] = "INCOMPLETE"
+                report["outcome"] = "incomplete"
+                report["safety"]["read_only_profile"] = False
+                report["safety"]["execution_calls"] = None
                 from backend.scripts.probe_protected_paper_exit_reconciliation import run as run_exit_probe
 
-                report["safety"]["read_only_profile"] = False
-                report["safety"]["execution_calls"] = 1
                 report[args.profile] = run_exit_probe(fixture_namespace or "")
+                report["safety"]["execution_calls"] = report[args.profile].get("engine_calls")
                 report["outcome"] = (
                     "passed" if report[args.profile]["result"] == "PASS" else "failed"
                 )

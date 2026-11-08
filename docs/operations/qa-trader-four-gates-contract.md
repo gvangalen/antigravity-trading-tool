@@ -87,6 +87,11 @@ after an owner-only BTC/EUR source outage. The profile is a partial gate:
 Analysis and FINN transport projections are not yet read back, so even a PASS
 from this profile is not a PASS for all of Gate 3. It requires a fresh quote for
 both pairs; otherwise the collector must fail without inventing a score.
+When the builder correctly persists a NULL market score, the match service may
+report `missing_score` rather than `stale_source`; the collector only accepts
+that state with an independently dated, owner-scoped stale reading and a NULL
+built market score. Its artifact says `gate_status=PARTIAL` and explicitly
+marks both transport projections unchecked.
 
 ## Gate 4: automatic Paper exit and reproducible cashflow
 
@@ -113,7 +118,10 @@ exit engine twice, and reconciles the persisted decision/order/execution,
 ledger, portfolio and owner-scoped `BotService.get_bot_history` projection. It
 does not run a browser renderer, so it cannot attest to the rendered
 `PaperExitEvidence` component. A server-side profile PASS remains partial Gate
-4 evidence; rendered UI acceptance needs a protected browser check.
+4 evidence; rendered UI acceptance needs a protected browser check. Decision
+source and execution source are checked separately: EUR fill arithmetic uses
+the recorded execution quote and FX even if they moved after the decision.
+The artifact says `rendered_ui_checked=false` and `gate_status=PARTIAL`.
 
 ## Local contract checks
 
