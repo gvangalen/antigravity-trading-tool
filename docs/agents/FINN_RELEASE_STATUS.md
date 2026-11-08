@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Paper-aankoop: begrensde vervolgdiagnose (8 november 2026)
 
-Phase: `BUILD_VALIDATED_QA_PENDING`. Kandidaat: `codex/paper-buy-cause-family`.
+Phase: `DEPLOYED_QA_PENDING`. Kandidaat: `codex/paper-buy-cause-family`,
+[PR #862](https://github.com/gvangalen/antigravity-trading-tool/pull/862).
 De beschermde QA-run 42417611630 bleef in `paper_buy` steken met
 `paper_buy_cause=other`; QA kon uit de bestaande gesaniteerde evidence geen
 onderliggende foutfamilie vaststellen. Er is geen nieuwe fixture-run of
@@ -20,8 +21,16 @@ rapport. Dit wijzigt geen Paper-uitvoering of QA-verdict. Gerichte tests:
 `104 passed`; volledige backend-suite: `4293 passed, 4 skipped`.
 Security beoordeelde de concrete patch read-only als akkoord. De lokale
 worker-actiematrix en providerproeven zijn voor deze uitsluitend
-diagnostische runnerwijziging niet van toepassing. CI, deployment en
-onafhankelijke QA voor deze kandidaat volgen nog.
+diagnostische runnerwijziging niet van toepassing. Alle vijf PR-controles en
+alle vijf controles van [main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42459497070)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42459691991)
+slaagde. Git-main, publieke backend-health en frontend-buildinfo meldden alle
+drie `487f952d54c332a3194254b94459e48d730710e1`; de twee publieke routes
+gaven HTTP 200. Deze statuswijziging maakt zelf een nieuwe SHA; vóór de
+onafhankelijke QA-handoff moeten de laatste main-CI, Auto Deploy en publieke
+SHA-pariteit opnieuw zijn gecontroleerd. Onafhankelijke QA moet de beschermde
+Paper-buy-route herhalen en de foutfamilie of voortgang naar de vier
+trader-gates melden.
 
 ## Beschermde Paper-QA: ontbrekende foutcategorie (7 november 2026)
 
