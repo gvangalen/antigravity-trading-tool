@@ -178,6 +178,31 @@ def test_missing_selected_indicator_does_not_reweight_category(monkeypatch):
     assert result["total_score"] is None
 
 
+def test_all_selected_indicator_readings_stale_report_source_status(monkeypatch):
+    class StaleConnection(_Connection):
+        def cursor(self):
+            cursor = super().cursor()
+            original = cursor.execute
+
+            def execute(sql, params):
+                original(sql, params)
+                if ("FROM macro_data" in sql and "SELECT DISTINCT ON" in sql
+                        and "source_observed_at::date" not in sql):
+                    old = datetime.now(timezone.utc) - timedelta(days=30)
+                    cursor.rows = [(name, value, old) for name, value, _ in cursor.rows]
+
+            cursor.execute = execute
+            return cursor
+
+    monkeypatch.setattr(scoring_utils, "get_db_connection", StaleConnection)
+
+    result = scoring_utils.generate_scores_db("macro", user_id=7, symbol="BTC")
+
+    assert result["scores"] == {}
+    assert result["total_score"] is None
+    assert result["source_status"] == "missing_or_stale_indicator"
+
+
 def test_absolute_market_price_and_volume_need_asset_history():
     class HistoryCursor:
         def __init__(self, rows):
