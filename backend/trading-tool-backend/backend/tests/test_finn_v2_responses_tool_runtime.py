@@ -13634,7 +13634,7 @@ def test_combined_account_question_does_not_become_setup_inventory_read():
         run_id="account-first-read", model_led_coach=True,
     )
     front.reads = FakeRead()
-    asyncio.run(front.run(
+    result = asyncio.run(front.run(
         message=question, instructions=front._model_led_instructions("nl"),
         conversation_context={}, verified_asset="BTC",
         workspace_hints={"page": "/asset", "symbol": "BTC"},
@@ -13642,6 +13642,87 @@ def test_combined_account_question_does_not_become_setup_inventory_read():
     assert selected_calls[0].name == "get_active_plan_and_strategy"
     assert {"read_active_setup", "read_linked_strategy", "read_bot_status", "read_portfolio",
             "read_review_history"}.issubset(set(selected_calls[0].read_tools))
+    assert result.response.tool_trace[0]["result"]["finalize_now"] is True
+
+
+def test_same_account_facts_followup_rechecks_all_owner_scopes(monkeypatch):
+    prior = {
+        "terminal_status": "completed", "owner_user_id": 7,
+        "tool_trace": [{"result": {"results": [
+            {"scope": scope, "status": "completed", "data": {"setup_id": 19} if scope == "read_active_setup" else {}}
+            for scope in ("read_active_setup", "read_linked_strategy", "read_bot_status", "read_portfolio")
+        ]}}],
+    }
+    followup = "Wat weet je daarvan zeker? Geef dezelfde vier feiten uit mijn opgeslagen gegevens."
+    assert FinnResponsesFrontDoor._follows_account_state_bundle(followup, prior)
+    assert not FinnResponsesFrontDoor._follows_account_state_bundle(
+        followup, {**prior, "terminal_status": "failed"},
+    )
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="account-followup")
+    front.model_led_coach = True
+    captured = {}
+
+    async def capture_loop(_self, **kwargs):
+        captured.update(kwargs)
+        return FinnResponsesResult("Ik controleer de opgeslagen gegevens opnieuw.", "answer", ())
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run", capture_loop,
+    )
+    asyncio.run(front.run(
+        message=followup, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="BTC", previous_response=prior,
+        workspace_hints={"page": "/asset", "symbol": "BTC"},
+    ))
+    assert captured["required_read_tool_name"] == "get_active_plan_and_strategy"
+    selected = FinnResponsesToolCatalog().validate("get_active_plan_and_strategy", {})
+    bound = FinnResponsesFrontDoor._bind_bot_decision_evidence(
+        selected, message=followup, read_only=True, account_bundle=True,
+    )
+    assert {"read_active_setup", "read_linked_strategy", "read_bot_status", "read_portfolio"} <= set(bound.read_tools)
+
+
+def test_same_account_facts_followup_reads_one_complete_bundle():
+    prior = {
+        "terminal_status": "completed", "owner_user_id": 7,
+        "tool_trace": [{"result": {"results": [
+            {"scope": scope, "status": "completed", "data": {"setup_id": 19} if scope == "read_active_setup" else {}}
+            for scope in ("read_active_setup", "read_linked_strategy", "read_bot_status", "read_portfolio")
+        ]}}],
+    }
+    fake = FakeResponses(
+        response("followup-read", calls=[tool_call("call-followup", "get_active_plan_and_strategy", {})]),
+        response("followup-answer", text="De vier feiten komen uit de opgeslagen gegevens."),
+    )
+    selected_calls = []
+
+    class FakeRead:
+        session_factory = None
+
+        async def __call__(self, call):
+            selected_calls.append(call)
+            return {"status": "completed", "results": [
+                {"scope": scope, "status": "completed", "data": {"setup_id": 19} if scope == "read_active_setup" else {}}
+                for scope in call.read_tools
+            ]}
+
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="account-followup-read", model_led_coach=True,
+    )
+    front.reads = FakeRead()
+    result = asyncio.run(front.run(
+        message="Wat weet je daarvan zeker? Geef dezelfde vier feiten uit mijn opgeslagen gegevens.",
+        instructions=front._model_led_instructions("nl"), conversation_context={},
+        verified_asset="BTC", previous_response=prior,
+        workspace_hints={"page": "/asset", "symbol": "BTC"},
+    ))
+    assert len(selected_calls) == 1
+    assert selected_calls[0].name == "get_active_plan_and_strategy"
+    assert {"read_active_setup", "read_linked_strategy", "read_bot_status", "read_portfolio"} <= set(
+        selected_calls[0].read_tools
+    )
+    assert result.response.tool_trace[0]["result"]["finalize_now"] is True
 
 
 def test_bot_decision_front_door_reads_history_before_answer(monkeypatch):

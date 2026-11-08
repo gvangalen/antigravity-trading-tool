@@ -773,17 +773,33 @@ class FinnResponsesFrontDoor:
         )
 
     @staticmethod
+    def _follows_account_state_bundle(message: str, previous_response: Mapping[str, Any] | None) -> bool:
+        """Recheck the same saved facts when the trader explicitly refers back to them."""
+        if not re.search(r"\b(?:dezelfde|hetzelfde|same)\b.{0,50}\b(?:feiten|gegevens|facts|details)\b", message, re.I):
+            return False
+        if (previous_response or {}).get("terminal_status") != "completed":
+            return False
+        completed = {
+            item.get("scope")
+            for call in (previous_response or {}).get("tool_trace") or []
+            for item in (call.get("result") or {}).get("results") or []
+            if isinstance(item, dict) and item.get("status") == "completed"
+        }
+        return {"read_active_setup", "read_linked_strategy", "read_bot_status", "read_portfolio"} <= completed
+
+    @staticmethod
     def _bind_bot_decision_evidence(
         call: FinnResponsesToolCall, *, message: str, read_only: bool,
+        account_bundle: bool = False,
     ) -> FinnResponsesToolCall:
-        if (not read_only or not FinnResponsesFrontDoor._asks_about_bot_decision(message)
+        if (not read_only or not (account_bundle or FinnResponsesFrontDoor._asks_about_bot_decision(message))
                 or not call.read_tools
                 or call.name not in {"get_saved_bots", "get_portfolio_and_exposure",
                                      "get_active_plan_and_strategy", "get_decision_history"}):
             return call
         return replace(call, read_tools=tuple(dict.fromkeys((
             *call.read_tools, "read_review_history", "read_portfolio",
-            *(('read_bot_status',) if FinnResponsesFrontDoor._asks_about_account_state_bundle(message) else ()),
+            *(('read_bot_status',) if account_bundle or FinnResponsesFrontDoor._asks_about_account_state_bundle(message) else ()),
         ))))
 
     @staticmethod
@@ -1776,6 +1792,8 @@ class FinnResponsesFrontDoor:
             value.upper() for value in re.findall(r"\b(?:15m|30m|1h|4h|1d|1w)\b", message, re.I)
         }
         multiple_targets = len(mentioned_assets) > 1 or len(mentioned_timeframes) > 1
+        account_bundle_followup = self._follows_account_state_bundle(message, previous_response)
+        account_state_bundle = self._asks_about_account_state_bundle(message) or account_bundle_followup
         previous_turn_contract = (previous_response or {}).get("turn_contract") or {}
         previous_focused_setup_id = previous_turn_contract.get("focused_setup_id")
         previous_focused_strategy_id = previous_turn_contract.get("focused_strategy_id")
@@ -1971,7 +1989,7 @@ class FinnResponsesFrontDoor:
         # a named setup is projected from it below.
         setup_relationship_read = bool(
             is_read_request
-            and not self._asks_about_account_state_bundle(message)
+            and not account_state_bundle
             and request_facts.linked_graph_relationship
             and "setup" in request_facts.explicit_entities
             and {"strategy", "bot"}.intersection(request_facts.explicit_entities)
@@ -2603,6 +2621,18 @@ class FinnResponsesFrontDoor:
                     {"entity_type": "setup", "entity_id": verified_subject[0]}
                     if subject_reference and verified_subject else {}
                 )
+                if account_bundle_followup and not previous_setup_target:
+                    previous_setup_ids = {
+                        item.get("data", {}).get("setup_id")
+                        for prior_call in (previous_response or {}).get("tool_trace") or []
+                        for item in (prior_call.get("result") or {}).get("results") or []
+                        if isinstance(item, dict) and item.get("scope") == "read_active_setup"
+                        and item.get("status") == "completed"
+                        and isinstance(item.get("data"), dict)
+                        and isinstance(item["data"].get("setup_id"), int)
+                    }
+                    if len(previous_setup_ids) == 1 and (previous_response or {}).get("owner_user_id") == self.user_id:
+                        previous_setup_target = {"entity_type": "setup", "entity_id": next(iter(previous_setup_ids))}
                 if singular_strategy_followup:
                     previous_setup_target = {
                         "entity_type": "setup", "entity_id": previous_focused_setup_id,
@@ -2839,6 +2869,7 @@ class FinnResponsesFrontDoor:
                 # decision visible in Automatisering.
                 call = self._bind_bot_decision_evidence(
                     call, message=message, read_only=is_read_only_turn and not pending_operation,
+                    account_bundle=account_state_bundle,
                 )
                 # The collection adapter may clear global filters for a
                 # multi-setup comparison, but a later owner-scoped read of
@@ -3457,6 +3488,15 @@ class FinnResponsesFrontDoor:
                         # level; the answer should explain the mechanism and
                         # acknowledge any missing personal evidence.
                         read_result["finalize_now"] = True
+                if account_state_bundle and call.name == "get_active_plan_and_strategy":
+                    completed_account_scopes = {
+                        item.get("scope") for item in read_result.get("results") or []
+                        if isinstance(item, dict) and item.get("status") == "completed"
+                    }
+                    if {"read_active_setup", "read_linked_strategy", "read_bot_status", "read_portfolio"} <= completed_account_scopes:
+                        # A second account read can have a different observation
+                        # moment or projection and obscure the first complete graph.
+                        read_result["finalize_now"] = True
                 read_context.append(read_result)
                 completed_read_calls.add(read_identity)
                 return read_result
@@ -3777,7 +3817,7 @@ class FinnResponsesFrontDoor:
                 "get_open_plan_draft"
                 if guided_draft_question
                 else "get_active_plan_and_strategy"
-                if is_read_only_turn and self._asks_about_account_state_bundle(message)
+                if is_read_only_turn and account_state_bundle
                 and pending_operation is None and not resuming_clarification
                 else "get_closed_trade_review"
                 if (explicit_closed_review_read or contextual_closed_review_read)
