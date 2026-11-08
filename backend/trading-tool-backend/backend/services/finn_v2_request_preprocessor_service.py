@@ -11,7 +11,8 @@ import re
 from dataclasses import dataclass
 from typing import Mapping, Optional
 
-from backend.services.asset_catalog_service import resolve_catalog_symbol, resolve_catalog_symbol_in_text
+from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG, resolve_catalog_symbol, resolve_catalog_symbol_in_text
+from backend.services.watchlist_conversation_service import replacement_mentions
 from backend.domain.finn_v2_setup_input_catalog import FinnV2SetupInputCatalog
 from backend.domain.technical_indicator_catalog import get_active_technical_indicator_definitions
 from backend.domain.macro_indicator_catalog import get_active_macro_indicator_definitions
@@ -392,6 +393,16 @@ class FinnV2RequestPreprocessorService:
         ambiguous_reference = self._has_unbound_deictic_reference(normalized, entities)
         if financial_execution_intent:
             action = "execute"
+        replacement = replacement_mentions(original, DEFAULT_ASSET_CATALOG)
+        if replacement and ("watchlist" in entities or re.search(r"\b(?:volg|volgen|follow|following)\b", normalized)):
+            # The first mentioned asset is often the one to stop following.
+            # Preserve the explicitly named destination as the action target;
+            # a workspace asset or the removal source must not replace it.
+            asset = replacement["target"]["symbol"]
+            action = "add"
+            if "watchlist" not in entities:
+                entities = (*entities, "watchlist")
+            primary_entity = "watchlist"
         if action == "add" and re.search(r"\bvolg(?:en)?\b", normalized) and "watchlist" not in entities:
             entities = (*entities, "watchlist")
         discourse = self._discourse_act(normalized, entities, references, action)

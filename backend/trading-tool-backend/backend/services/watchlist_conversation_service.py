@@ -42,3 +42,27 @@ def asset_mentions(text: str, catalog: Mapping[str, Mapping[str, Any]]) -> list[
             continue
         result.append(item)
     return result
+
+
+def replacement_mentions(text: str, catalog: Mapping[str, Mapping[str, Any]]) -> dict[str, dict[str, Any]] | None:
+    """Resolve only an explicitly directed two-asset replacement.
+
+    This extracts user-supplied facts; it does not choose an operation or
+    authorize a write. Unknown and ambiguous asset lists remain unresolved.
+    """
+    value = str(text or "")
+    mentions = asset_mentions(value, catalog)
+    if len(mentions) != 2 or mentions[0]["symbol"] == mentions[1]["symbol"]:
+        return None
+    marker = re.search(r"\b(?:in\s+plaats\s+van|instead\s+of|anstatt)\b", value, re.I)
+    if marker and mentions[0]["end"] <= marker.start() and mentions[1]["start"] >= marker.end():
+        target, source = mentions
+    elif marker and marker.end() <= mentions[0]["start"]:
+        source, target = mentions
+    elif re.search(r"\b(?:verwijder|haal|remove|stop)\b.*\b(?:voeg|add|volg|follow)\b", value, re.I | re.S) or re.search(
+        r"\bniet\s+meer\s+volgen\b.*\b(?:volg|follow)\b", value, re.I | re.S,
+    ):
+        source, target = mentions
+    else:
+        return None
+    return {"source": source, "target": target}

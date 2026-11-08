@@ -1438,7 +1438,7 @@ function AIAssistantContent({
 
     // Resolve explicit watchlist choices from catalog assets and market pairs.
     // A selected pair still goes through the FINN V2 proposal confirmation.
-    if (!isSilent && !skipWatchlistGuidance && /watchlist|wachtlist|wachtlijst|volglijst|marktenlijst|volgen|aandeel.*(?:aanpassen|wijzigen|veranderen)/i.test(nextQuery)) {
+    if (!isSilent && !skipWatchlistGuidance && /watchlist|wachtlist|wachtlijst|volglijst|marktenlijst|volgen|aandeel.*(?:aanpassen|wijzigen|veranderen)|(?:haal|verwijder|remove).*?(?:voeg|add)|(?:voeg|add).*?(?:haal|verwijder|remove)/i.test(nextQuery)) {
       setLoading(true);
       try {
         const resolved = await matchAssetsInText(nextQuery);

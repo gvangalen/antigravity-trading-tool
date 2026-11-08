@@ -33,14 +33,19 @@ const COPY = {
 export function watchlistIntent(text, mentions, ownedRows = []) {
   const value = String(text || '');
   const assets = Array.isArray(mentions) ? mentions : [];
+  const hasAdd = ADD.test(value);
+  const hasRemove = REMOVE.test(value);
   if (!WATCHLIST.test(value)) {
+    if (assets.length === 2 && hasAdd && hasRemove) {
+      const addAt = value.search(ADD);
+      const removeAt = value.search(REMOVE);
+      return { kind: 'clarify_scope', target: addAt < removeAt ? assets[0] : assets[1] };
+    }
     if (assets.length && /\b(?:aandeel|asset)\b.*\b(?:aanpassen|wijzigen|veranderen)\b.*\b(?:in|naar)\b/i.test(value)) {
       return { kind: 'clarify_scope', target: assets.at(-1) };
     }
     return null;
   }
-  const hasAdd = ADD.test(value);
-  const hasRemove = REMOVE.test(value);
   const replacing = REPLACE.test(value) || (hasAdd && hasRemove);
   if (!hasAdd && !hasRemove && !replacing) return null;
   if (replacing) {

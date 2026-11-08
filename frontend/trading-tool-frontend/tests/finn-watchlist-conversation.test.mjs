@@ -50,6 +50,16 @@ test('natural in plaats van phrasing resolves direction without a ticker special
   assert.equal(intent.target.symbol, 'BTC');
 });
 
+test('stop following one asset and follow another keeps replacement direction', () => {
+  const text = 'Apple niet meer volgen; volg Bitcoin';
+  const source = { ...apple, start: text.indexOf('Apple'), end: text.indexOf('Apple') + 5 };
+  const target = { ...btc, start: text.indexOf('Bitcoin'), end: text.indexOf('Bitcoin') + 7 };
+  const intent = watchlistIntent(text, [source, target], [{ symbol: 'AAPL', market_id: null }]);
+  assert.equal(intent.kind, 'replace');
+  assert.equal(intent.source.symbol, 'AAPL');
+  assert.equal(intent.target.symbol, 'BTC');
+});
+
 test('unclear asset change asks what surface the user meant', () => {
   const intent = watchlistIntent('Mijn aandeel aanpassen in bitcoin', [btc]);
   assert.equal(intent.kind, 'clarify_scope');
@@ -58,6 +68,16 @@ test('unclear asset change asks what surface the user meant', () => {
   const next = watchlistScopeChoices(btc, [{ symbol: 'AAPL', market_id: null }], markets);
   assert.deepEqual(next.choices.map((choice) => choice.action.kind), ['add', 'add', 'replace', 'replace']);
   assert.equal(next.choices[2].action.source_symbol, 'AAPL');
+});
+
+test('two asset actions without a watchlist scope ask before changing state', () => {
+  const text = 'Haal Apple weg en voeg BTC/EUR toe';
+  const source = { ...apple, start: text.indexOf('Apple'), end: text.indexOf('Apple') + 5 };
+  const target = { ...btc, start: text.indexOf('BTC/EUR'), end: text.indexOf('BTC/EUR') + 7, quote_currency: 'EUR' };
+  const intent = watchlistIntent(text, [source, target]);
+  assert.equal(intent.kind, 'clarify_scope');
+  assert.equal(intent.target.symbol, 'BTC');
+  assert.equal(watchlistChoices(intent, []).choices[0].action.kind, 'clarify_watchlist_scope');
 });
 
 test('ambiguous replacement does not select an asset', () => {

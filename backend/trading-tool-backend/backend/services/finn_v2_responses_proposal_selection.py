@@ -15,6 +15,8 @@ from backend.domain.finn_v2_setup_input_catalog import FinnV2SetupInputCatalog
 from backend.schemas.finn_v2_orchestrator_schema import RequestAnalysisResult, RequestPlan
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCall, FinnResponsesToolError
+from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
+from backend.services.watchlist_conversation_service import replacement_mentions
 
 
 class FinnResponsesProposalSelection:
@@ -235,6 +237,11 @@ class FinnResponsesProposalSelection:
         correction = dict(conversation_context.get("proposal_correction_result") or {})
         correction_target = str(correction.get("requested_instrument") or "").upper()
         mentioned_assets = mentioned_catalog_symbols(positive_message)
+        replacement = replacement_mentions(message, DEFAULT_ASSET_CATALOG)
+        if replacement and contract.operation_id == "watchlist_add":
+            # A directed replacement mentions both the removed source and the
+            # destination. Only the destination is a positive add target.
+            mentioned_assets = {str(replacement["target"]["symbol"])}
         awaiting_instrument = bool(
             correction.get("status") == "cancelled"
             and correction.get("awaiting_instrument")
