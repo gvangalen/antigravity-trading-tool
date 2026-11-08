@@ -4,6 +4,34 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Paper/FX-uitvoeringsbewijs: dezelfde koers voor order en kasboek (8 november 2026)
+
+Phase: `BUILD_VALIDATED`. Onafhankelijke QA op live SHA
+`7ed50ad7255ea5d934a51232537fd392c17a0832` meldde in
+[run 42486025783](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42486025783)
+`NOT_ACCEPTED`: alleen de subcode `order_price_eur` faalde. Orderstatus,
+hoeveelheid, uitvoeringsstatus, EUR-kasstroom, portefeuillehoeveelheid,
+waardering, bronmoment/valuta en owner-safety slaagden. Er was één
+Paper-uitvoeringspoging en geen Live-call of Live-botactivatie. Artifact
+SHA-256: `23b2b3e4662b7af6e5211fe9240394de8425416ccfea9b4131e55943aeaa393a`.
+De verifier vergeleek de uitvoeringsprijs met een vóór uitvoering apart
+gelezen koers en FX-factor. Een zelfstandig latere executor-read kan afwijken;
+zonder vastgelegd uitvoeringsmoment was de EUR-prijs niet sluitend te
+controleren.
+
+Build laat de automatische Paper-koop nu één gecontroleerde bronkoers en
+FX-momentopname gebruiken voor uitvoeringsprijs, order, kasboek en
+`bot_decisions.scores_json`-bewijs. Bij een mislukte Paper-koop draaien
+de uitvoeringsschrijfacties atomair terug. Live-uitvoering is niet gewijzigd.
+Gerichte regressies voor één koersread, prijs/FX-gelijkheid en rollback
+slaagden; de volledige backend-suite gaf `4301 passed, 4 skipped`.
+`git diff --check` was schoon. Security en Architecture vonden geen
+blokkerend risico. Er is nog geen CI, deploy of onafhankelijke QA-hertest
+voor deze kandidaat uitgevoerd. QA moet de beschermde verifier op het
+opgeslagen uitvoeringsbewijs laten vergelijken en daarna dezelfde
+Paper-only proef op de definitieve live SHA herhalen. De vier bredere
+trader-gates blijven open tot onafhankelijk bewijs ze sluit.
+
 ## Beschermde Paper/FX-eindcontrole: order/prijs-subcodes (8 november 2026)
 
 Phase: `DEPLOYED_QA_PENDING`. Onafhankelijke QA-run

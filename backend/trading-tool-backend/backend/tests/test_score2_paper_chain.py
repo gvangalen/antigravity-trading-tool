@@ -161,7 +161,9 @@ class _Cursor:
             row = self.store.daily
             self.rows = [(row["macro_score"], row["technical_score"], row["market_score"],
                           row["calculated_at"], row["indicator_evidence"])] if row else []
-        elif "pg_advisory_lock" in sql or "pg_advisory_xact_lock" in sql or "SELECT 1 FROM bot_decisions" in sql:
+        elif ("pg_advisory_lock" in sql or "pg_advisory_xact_lock" in sql
+              or "SELECT 1 FROM bot_decisions" in sql
+              or sql.startswith(("SAVEPOINT ", "ROLLBACK TO SAVEPOINT ", "RELEASE SAVEPOINT "))):
             self.rows = []
         else:
             raise AssertionError(f"Unexpected score-chain query: {sql}")

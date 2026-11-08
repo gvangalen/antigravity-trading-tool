@@ -219,6 +219,38 @@ def _get_trade_quote_fx_context(conn, symbol: str, *, require_usd: bool = True,
     }
 
 
+def _paper_execution_quote_evidence(context: dict) -> dict:
+    """Serialize the same dated quote context used to price a Paper fill."""
+    checked = context.get("market_price_eur")
+    source_at = context.get("market_price_at")
+    if checked is None or source_at is None:
+        raise BotSafetyBlock("De gecontroleerde Paper-koers is onvolledig.")
+    fx_at = context.get("market_fx_as_of")
+    return {
+        "execution_source_price": context["market_price"],
+        "execution_source_price_at": source_at.isoformat(),
+        "execution_source_price_currency": context["quote_currency"],
+        "execution_eur_price": float(checked),
+        "execution_fx_eur_per_unit": context["market_fx_eur_per_unit"],
+        "execution_fx_observed_at": fx_at.isoformat() if fx_at else None,
+    }
+
+
+def _run_paper_auto_buy_atomically(conn, execute):
+    """Discard claim, quote evidence and ledger writes after a failed buy."""
+    with conn.cursor() as cur:
+        cur.execute("SAVEPOINT paper_auto_buy_execution", ())
+    try:
+        return execute()
+    except Exception:
+        with conn.cursor() as cur:
+            cur.execute("ROLLBACK TO SAVEPOINT paper_auto_buy_execution", ())
+        raise
+    finally:
+        with conn.cursor() as cur:
+            cur.execute("RELEASE SAVEPOINT paper_auto_buy_execution", ())
+
+
 def _convert_trade_snapshot_to_eur(snapshot: dict, factor: float) -> dict:
     """Convert every saved USD level with the same verified FX factor."""
     if not math.isfinite(factor) or factor <= 0:
@@ -2820,16 +2852,22 @@ def run_trading_bot_execution(
                 # semi-automatic bots wait for the explicit execution route,
                 # including when an exchange connection is present.
                 if bot.get("mode") == "auto":
+                    paper_buy_savepoint = (not bot.get("is_live")
+                                           and str(order.get("side") or "").lower().strip() == "buy")
                     try:
-                        execution_status = _auto_execute_decision(
-                            conn=conn,
-                            user_id=user_id,
-                            bot_id=bot["bot_id"],
-                            decision_id=decision_id,
-                            order=order,
-                            is_live=bot.get("is_live", False),
-                            mode=bot.get("mode"),
-                        )
+                        def execute_order():
+                            return _auto_execute_decision(
+                                conn=conn,
+                                user_id=user_id,
+                                bot_id=bot["bot_id"],
+                                decision_id=decision_id,
+                                order=order,
+                                is_live=bot.get("is_live", False),
+                                mode=bot.get("mode"),
+                            )
+
+                        execution_status = (_run_paper_auto_buy_atomically(conn, execute_order)
+                                            if paper_buy_savepoint else execute_order())
                     except Exception as e:
                         logger.exception("❌ Auto execution failed")
                         _mark_bot_decision_execution_failed(
@@ -2995,8 +3033,9 @@ def _recheck_auto_buy_limits(
 
 
 def _recheck_paper_trade_entry(conn, *, user_id: int, decision_id: int, symbol: str,
-                               market_id: int | None = None) -> Optional[float]:
-    """Return a fresh EUR execution price for a trade or None for DCA."""
+                               market_id: int | None = None,
+                               include_context: bool = False) -> Optional[float | dict]:
+    """Return a fresh trade quote (or EUR price) for trade; None for DCA."""
     with conn.cursor() as cur:
         cur.execute(
             """SELECT s.setup_type, s.data, d.scores_json->'trade_plan',
@@ -3081,7 +3120,7 @@ def _recheck_paper_trade_entry(conn, *, user_id: int, decision_id: int, symbol: 
     entry_eur = entry * float(factor) if source in {"USD", "USDT"} else entry
     if not entry_eur <= price <= entry_eur * 1.01:
         raise BotSafetyBlock("De actuele prijs ligt buiten de opgeslagen instapzone. Maak een nieuwe Paper-beslissing.")
-    return price
+    return context if include_context else price
 
 
 def _paper_exit_price_in_strategy_currency(context: dict, currency: str) -> float:
@@ -3257,28 +3296,34 @@ def _auto_execute_decision(
     if qty <= 0 or price <= 0:
         raise RuntimeError("Invalid execution parameters")
 
+    paper_buy_evidence = None
     if not is_live:
-        checked_trade_price = _recheck_paper_trade_entry(
-            conn, user_id=user_id, decision_id=decision_id, symbol=symbol,
-            **({"market_id": market_id} if market_id is not None else {}),
-        ) if side == "buy" else None
-        if side == "sell":
-            checked_trade_price = _recheck_paper_position_exit(
-                conn, user_id=user_id, bot_id=bot_id,
-                decision_id=decision_id, symbol=symbol, order_qty=qty,
-                **({"market_id": market_id} if market_id is not None else {}),
-            )
-        price = checked_trade_price if checked_trade_price is not None else _get_live_price(
-            conn, symbol, paper_execution=True,
-            **({"market_id": market_id} if market_id is not None else {}),
-        )
-        if price is None:
-            raise BotSafetyBlock("Geen actuele, gecontroleerde EUR-prijs voor Paper-uitvoering.")
         if side == "buy":
+            paper_context = _recheck_paper_trade_entry(
+                conn, user_id=user_id, decision_id=decision_id, symbol=symbol,
+                market_id=market_id, include_context=True,
+            ) or _get_trade_quote_fx_context(
+                conn, symbol, require_usd=False, market_id=market_id,
+            )
+            price = paper_context.get("market_price_eur")
+            if price is None:
+                raise BotSafetyBlock("Geen actuele, gecontroleerde EUR-prijs voor Paper-uitvoering.")
+            paper_buy_evidence = _paper_execution_quote_evidence(paper_context)
             # Preserve the approved EUR amount when the Paper market price
             # changes between planning and execution. Quantity can shrink;
             # spend must never grow beyond the checked proposal.
             qty = _paper_buy_quantity(order.get("quote_amount_eur"), price)
+        else:
+            checked_trade_price = _recheck_paper_position_exit(
+                conn, user_id=user_id, bot_id=bot_id,
+                decision_id=decision_id, symbol=symbol, order_qty=qty,
+                **({"market_id": market_id} if market_id is not None else {}),
+            ) if side == "sell" else None
+            price = checked_trade_price if checked_trade_price is not None else _get_live_price(
+                conn, symbol, paper_execution=True, market_id=market_id,
+            )
+            if price is None:
+                raise BotSafetyBlock("Geen actuele, gecontroleerde EUR-prijs voor Paper-uitvoering.")
     cash_delta, qty_delta, notional = _ledger_deltas(side, qty, price)
     claimed = _claim_bot_decision_for_execution(
         conn=conn,
@@ -3392,6 +3437,15 @@ def _auto_execute_decision(
             return "awaiting_exchange" if exchange_id else "unknown_exchange_state"
 
         with conn.cursor() as cur:
+            if paper_buy_evidence is not None:
+                cur.execute("""
+                    UPDATE bot_decisions
+                    SET scores_json = COALESCE(scores_json, '{}'::jsonb) || %s::jsonb
+                    WHERE id=%s AND user_id=%s AND bot_id=%s
+                    RETURNING id
+                """, (json.dumps(paper_buy_evidence), decision_id, user_id, bot_id))
+                if not cur.fetchone():
+                    raise RuntimeError("Paper execution evidence could not be saved")
             # 1) Order -> filled (BELANGRIJK: filter ook op user/bot/decision)
             cur.execute(
                 """

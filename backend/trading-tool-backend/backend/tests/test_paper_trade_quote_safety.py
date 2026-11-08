@@ -61,6 +61,21 @@ def test_eur_trade_does_not_need_usd_rate():
     assert result["usd_fx_eur_per_unit"] is None
 
 
+def test_paper_fill_evidence_uses_matching_dated_execution_quote(monkeypatch):
+    context = _context(require_usd=False)
+    evidence = worker._paper_execution_quote_evidence(context)
+
+    assert evidence["execution_source_price"] == 347.14
+    assert evidence["execution_source_price_currency"] == "USDT"
+    assert evidence["execution_source_price_at"] == (NOW - timedelta(minutes=5)).isoformat()
+    assert evidence["execution_fx_eur_per_unit"] == 0.84
+    assert evidence["execution_fx_observed_at"] == (NOW - timedelta(minutes=10)).isoformat()
+    assert evidence["execution_eur_price"] == evidence["execution_source_price"] * evidence["execution_fx_eur_per_unit"]
+
+    with pytest.raises(worker.BotSafetyBlock, match="onvolledig"):
+        worker._paper_execution_quote_evidence({**context, "market_price_at": None})
+
+
 class _Cursor:
     def __init__(self, strategy, plan):
         self.strategy = strategy
