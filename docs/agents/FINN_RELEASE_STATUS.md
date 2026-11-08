@@ -4,6 +4,40 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Paper/FX-prijsopslag: tien decimalen voor uitvoeringsbewijs (8 november 2026)
+
+Phase: `BUILD_VALIDATED`. Onafhankelijke QA gaf op live SHA
+`6c9557949b8a7fb864a6e24a88f54769b464e399` in
+[run 42491002070](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42491002070)
+`NOT_ACCEPTED`: bronkoers × FX in het uitvoeringsbewijs was coherent,
+maar opgeslagen order- en ledgerprijs weken af van de JSONB-EUR-prijs.
+Kasstroom, hoeveelheid, waardering, bronmoment/valuta en owner-safety
+slaagden; één Paper-poging, nul Live-calls of Live-botactivaties.
+Artifact SHA-256:
+`3a669248bb7f0b5c833e8a6411446876db49bbed5fc0bafded004c23e7a67e4a`.
+De read-only QA-schemacontrole
+[42492325047](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42492325047)
+op live SHA `c1cc8900c1faf8769b3a20af72f2cff0c4029276`
+bevestigde voor `bot_orders.executed_price_eur` en `bot_ledger.price_eur`
+beide `NUMERIC(20,2)`. Die productieafronding verklaart waarom beide
+velden de ongeronde EUR-prijs niet binnen de QA-grens van €0,000001 volgen.
+De schemacontrole deed geen Paper- of Live-actie; artifact SHA-256:
+`3d217d15ce3f9a1f5e95b4637e99375ed1f65849c24e679bd8e860410c9dd2d6`.
+
+Build verruimt beide prijskolommen naar `NUMERIC(30,10)` en brengt de
+lokale bootstrap ermee in lijn. De migratie slaat `ALTER TABLE` op
+volgende deploys over wanneer de kolom al het doeltype heeft. In een eigen
+PostgreSQL-transactie slaagden eerste en tweede toepassing, bleef een
+historische twee-decimale waarde behouden en werd een nieuwe prijs met
+tien decimalen opgeslagen; de proef is teruggerold. Het canonieke
+migratieplan, `git diff --check` en de volledige backend-suite
+(`4302 passed, 4 skipped`) slaagden. Security en Architecture gaven GO;
+de eerste schemawijziging kan writes kort blokkeren binnen de bestaande
+lock- en statementtimeouts. Er is nog geen CI, deploy of onafhankelijke
+Paper-hertest voor deze kandidaat uitgevoerd. Oude twee-decimale fills
+krijgen hun verloren precisie niet terug. De vier bredere trader-gates
+blijven open tot onafhankelijk bewijs ze sluit.
+
 ## Paper/FX-uitvoeringsbewijs: dezelfde koers voor order en kasboek (8 november 2026)
 
 Phase: `DEPLOYED_QA_PENDING`. Onafhankelijke QA op de vorige live SHA
