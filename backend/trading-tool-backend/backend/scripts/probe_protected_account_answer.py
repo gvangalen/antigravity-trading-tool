@@ -208,7 +208,7 @@ def _prepare(user_id: int, bot_id: int) -> None:
                 raise RuntimeError("account_fixture_portfolio_missing")
             step = "decisions"
             for at, day, action in (
-                (now - timedelta(days=1), (now - timedelta(days=1)).date(), "skip"),
+                (now - timedelta(days=1), (now - timedelta(days=1)).date(), "hold"),
                 (now, now.date(), "hold"),
             ):
                 cursor.execute("""INSERT INTO bot_decisions

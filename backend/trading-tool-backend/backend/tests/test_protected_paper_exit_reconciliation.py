@@ -129,6 +129,7 @@ def test_rendered_exit_opens_trades_before_reading_evidence(monkeypatch):
     from backend.utils import auth_utils
 
     events = []
+    reads = []
     class Locator:
         @property
         def first(self):
@@ -156,7 +157,13 @@ def test_rendered_exit_opens_trades_before_reading_evidence(monkeypatch):
             else:
                 assert events[:3] == ["wait", "wait", "click"]
             return Locator()
-        async def evaluate(self, _script, _args):
+        async def evaluate(self, script, _args):
+            if '/api/bot/configs' in script:
+                reads.append('bots')
+                return {"status": 200, "present": True}
+            if '/api/bot/trades/all' in script:
+                reads.append('trades')
+                return {"status": 200, "present": True}
             return {key: True for key in (
                 "rendered_exit_fields_present", "rendered_exit_eur_price",
                 "rendered_exit_quantity", "rendered_exit_proceeds",
@@ -172,6 +179,31 @@ def test_rendered_exit_opens_trades_before_reading_evidence(monkeypatch):
     result = asyncio.run(probe._rendered_exit(11, 22, {}))
     assert all(result.values())
     assert events[:3] == ["wait", "wait", "click"]
+    assert reads == ["bots", "trades"]
+
+
+@pytest.mark.parametrize("status,present,expected", [
+    (401, False, "paper_exit_rendered_owner_bot_api_auth_failed"),
+    (503, False, "paper_exit_rendered_owner_bot_api_unavailable_failed"),
+    (200, False, "paper_exit_rendered_owner_bot_api_missing_failed"),
+])
+def test_rendered_exit_sanitizes_owner_bot_read(monkeypatch, status, present, expected):
+    from backend.scripts import qa_protected_browser
+    from backend.utils import auth_utils
+
+    class Page:
+        async def evaluate(self, _script, _args):
+            return {"status": status, "present": present}
+    async def observe_page(**kwargs):
+        return await kwargs["inspect"](Page())
+    monkeypatch.setattr(qa_protected_browser, "observe_page", observe_page)
+    monkeypatch.setattr(auth_utils, "create_access_token", lambda *_args: "in-memory-token")
+    import asyncio
+    with pytest.raises(RuntimeError, match=f"^{expected}$"):
+        asyncio.run(probe._rendered_exit(11, 22, {}))
+    assert profile_error_category(
+        "trader_paper_exit_reconciliation", RuntimeError(expected)
+    ) == expected
 
 
 @pytest.mark.parametrize("fail_in_inspect,expected", [
@@ -185,6 +217,8 @@ def test_rendered_exit_sanitizes_browser_failure_phase(monkeypatch, fail_in_insp
     async def observe_page(**kwargs):
         if fail_in_inspect:
             class Page:
+                async def evaluate(self, _script, _args):
+                    return {"status": 200, "present": True}
                 def locator(self, _selector):
                     raise ValueError("private DOM and fixture identity")
             return await kwargs["inspect"](Page())
@@ -224,6 +258,8 @@ def test_rendered_exit_classifies_missing_tab_without_url_leak(
             pass
     class Page:
         url = f"https://tradamind.com{path}?fixture=private"
+        async def evaluate(self, _script, _args):
+            return {"status": 200, "present": True}
         def locator(self, selector):
             return OwnerLocator() if 'button[aria-pressed="true"]' in selector else Locator()
     async def observe_page(**kwargs):
