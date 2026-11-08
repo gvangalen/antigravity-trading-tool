@@ -1,0 +1,108 @@
+# Protected QA contract: four trader gates
+
+Status: QA-owned design; **not** an executable production profile. Do not
+dispatch this branch against the `production` environment. Security found that
+the existing workflow can receive production secrets from an unreviewed branch.
+The trusted-ref and deploy-event guards must land on `main` first. Security and
+Architecture must review any subsequent protected collector before merge.
+
+## Shared boundary
+
+- Bind `FINN_QA_USER_ID` only inside the protected server process. Verify its
+  marker, role, active state and absence of exchange keys before any fixture
+  write. Never export the ID, token, prompt response, names or row contents.
+- Use one random workflow namespace. Child owners are inactive, have random
+  passwords, no login session and no exchange keys. Writes may touch only
+  rows whose owner and namespace are both verified. No shared market source,
+  provider quota, ordinary user, Live bot, broker route or release marker may
+  be modified.
+- Freeze expected source facts before invoking product code. A response cannot
+  define its own expected operation, fact, score or source timestamp.
+- On success, clean up only this namespace and verify zero retained rows. On
+  any failed postcondition, disable the bot and quarantine the owner for
+  bounded protected diagnosis; never delete unrelated rows.
+- A sanitized artifact may publish only gate name, PASS/FAIL/BLOCKED, fixed
+  invariant subcodes, counts, bounded error categories and workflow SHA. It
+  must not publish fixture identities, values, text answers or raw SQL errors.
+- If a required source or fixture contract is absent, report `BLOCKED` or
+  `UNTESTED`, never `PASS`. Every collector has a bounded deadline and a
+  `finally` cleanup/quarantine path. `live_trading_calls`, `broker_orders` and
+  `live_bot_activation_calls` must each equal zero.
+
+## Gate 1: FINN account state
+
+Fixture: one owner-scoped plan/setup, linked strategy, inactive Paper bot,
+Paper portfolio with a position, and two persisted bot decisions with distinct
+times. Their source IDs and values stay inside the process. Obtain two FINN
+read-only responses in one conversation and a third in a fresh conversation.
+Before each turn, independently read the authoritative owner-scoped rows.
+Require that FINN's answer names the plan, bot state, position and latest
+decision correctly, or says exactly which source is absent. Check tool/evidence
+owner and source ID, no proposal, no confirmation and no write. A response
+whose factual claims cannot be machine-checked is `UNTESTED`, not `PASS`.
+
+**Collector blocker:** current sanitized V2 envelope does not expose typed
+answer claims for all four sources. Merely checking for response words cannot
+prove factual consistency. An independently verifiable, owner-scoped answer
+projection or protected local answer examiner is required; it must not export
+the original response. This is not permission to make product changes in QA.
+
+## Gate 2: one instant across four surfaces
+
+Fixture: one dated source measurement and associated report, Analysis score,
+Paper bot evidence and FINN read. The collector records the same source ID and
+UTC instant internally, then reads each surface through its normal owner-scoped
+route. Normalize explicit UTC and Amsterdam displays to the same instant;
+verify visible zone labels and the short stale-indicator date over an offset
+midnight boundary. A frontend check must execute the deployed formatter in at
+least Amsterdam, New York and Tokyo browser zones; source-code inspection alone
+is not live UI acceptance. Do not replace the source timestamp with a synthetic
+string after the product read.
+
+**Collector blocker:** the protected runner currently has no authenticated
+browser renderer or safe way to pass its in-memory server token into one. API
+timestamp parity plus formatter unit tests are partial evidence only. An
+isolated, non-uploading protected browser process is required before PASS.
+
+## Gate 3: two exact BTC markets through outage and recovery
+
+Fixture: one owner with distinct exact market IDs for BTC/EUR and BTC/USDT,
+separate saved indicator configuration and intentionally distinct initial
+scores. Use only owner-specific indicator readings and daily score rows. Do
+not change shared candles, pair quotes, FX or provider state. Capture initial,
+outage and recovery snapshots. In the outage phase, make only the BTC/EUR
+fixture reading stale or unavailable, and require a null BTC/EUR score plus
+specific typed source reason; BTC/USDT must retain its own score. On recovery,
+restore a genuinely dated BTC/EUR reading, trigger the normal score rebuild,
+and require its owner- and market-scoped result without changing BTC/USDT.
+Check Analysis and FINN projections against the same canonical score rows.
+The local pure invariant is `check_pair_score_isolation`; a collector must
+supply independent database facts, not product-response-derived expectations.
+
+## Gate 4: automatic Paper exit and reproducible cashflow
+
+Fixture: one inactive, uncredentialed Paper bot with a real open Paper position
+and saved stop/target. Choose levels around a *read-only, dated* exact-pair
+quote so the normal auto-exit engine triggers one sell. Never alter the shared
+quote to force a trigger. Require one `paper_exit` decision, one filled Paper
+order, one execution, one ledger sell leg and no second fill on replay. Compare
+stored execution source price, currency, FX factor and both source times with
+the order/ledger EUR unit price, filled quantity, EUR proceeds, portfolio
+quantity and cash before/after. Read the owner-scoped bot-history projection
+and rendered `PaperExitEvidence` fields; absence of a rendered field is FAIL,
+not proof from the database alone. `check_paper_exit` returns only fixed
+subcodes. It does not create a position or run the exit engine by itself.
+
+The existing `portfolio_paper_fx` profile is a **buy** probe and the existing
+`closed_paper_trade_review_chat` profile closes a position through a direct
+Paper sell. Neither is an automatic-exit acceptance test. Historical PASSes
+must not be imported as a PASS for this gate.
+
+## Local contract checks
+
+`pytest -q backend/trading-tool-backend/backend/tests/test_qa_trader_gate_invariants.py`
+
+These tests use synthetic values only. They verify that a copied pair score,
+missing outage reason, cross-owner row, Live execution, undated source,
+incorrect cashflow or missing UI field yields a fixed failure subcode without
+leaking values. They do **not** constitute a production test.
