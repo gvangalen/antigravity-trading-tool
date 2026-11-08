@@ -29,6 +29,8 @@ name: FINN Production QA
           - score2_outside_paper
           - score2_exact_eur_paper
           - score2_exact_usdt_paper
+          - trader_pair_score_continuity
+          - trader_paper_exit_reconciliation
           - closed_paper_trade_review
           - closed_paper_trade_review_chat
           - auto_paper_trade_history
@@ -108,7 +110,7 @@ jobs:
         run: |
           set -uo pipefail
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$QA_PROFILE" =~ ^(auth_preflight|trade_review_preflight|manifest_key|targeted_regression|runtime_acceptance|action_contract_acceptance|full_release_acceptance|safety|latency|score2_stale_paper|score2_positive_paper|score2_outside_paper|score2_exact_eur_paper|score2_exact_usdt_paper|closed_paper_trade_review|closed_paper_trade_review_chat|auto_paper_trade_history|portfolio_paper_fx|portfolio_paper_fx_schema|typed_entry_paper)$ ]]
+          [[ "$QA_PROFILE" =~ ^(auth_preflight|trade_review_preflight|manifest_key|targeted_regression|runtime_acceptance|action_contract_acceptance|full_release_acceptance|safety|latency|score2_stale_paper|score2_positive_paper|score2_outside_paper|score2_exact_eur_paper|score2_exact_usdt_paper|trader_pair_score_continuity|trader_paper_exit_reconciliation|closed_paper_trade_review|closed_paper_trade_review_chat|auto_paper_trade_history|portfolio_paper_fx|portfolio_paper_fx_schema|typed_entry_paper)$ ]]
           [[ "$MANIFEST_ID" =~ ^[a-z0-9][a-z0-9._-]{0,80}$ ]]
           [[ "$RUN_LABEL" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$ ]]
           [ "${#MANIFEST_BUNDLE}" -le 65535 ]
@@ -140,6 +142,14 @@ jobs:
           fi
           if [[ "$QA_PROFILE" =~ ^(score2_exact_eur_paper|score2_exact_usdt_paper)$ ]] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ] || [ "$ALLOW_FIXTURE_ACTIONS" != "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" != "true" ]; }; then
             echo "The exact-pair Paper probes require no manifest and explicit fixture and execution authorization." >&2
+            exit 1
+          fi
+          if [ "$QA_PROFILE" = "trader_pair_score_continuity" ] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ] || [ "$ALLOW_FIXTURE_ACTIONS" != "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" != "false" ]; }; then
+            echo "The pair score probe requires only fixture-action authorization and no manifest or execution." >&2
+            exit 1
+          fi
+          if [ "$QA_PROFILE" = "trader_paper_exit_reconciliation" ] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ] || [ "$ALLOW_FIXTURE_ACTIONS" != "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" != "true" ]; }; then
+            echo "The automatic Paper-exit probe requires fixture and safe-execution authorization with no manifest." >&2
             exit 1
           fi
           if [[ "$QA_PROFILE" =~ ^(closed_paper_trade_review|closed_paper_trade_review_chat)$ ]] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ] || [ "$ALLOW_FIXTURE_ACTIONS" != "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" != "true" ]; }; then
@@ -301,6 +311,8 @@ jobs:
           export FINN_QA_ALLOW_STALE_SCORE_FIXTURE=0
           export FINN_QA_ALLOW_SCORE2_MATCH_FIXTURE=0
           export FINN_QA_ALLOW_EXACT_PAIR_FIXTURE=0
+          export FINN_QA_ALLOW_TRADER_PAIR_FIXTURE=0
+          export FINN_QA_ALLOW_PAPER_EXIT_FIXTURE=0
           export FINN_QA_ALLOW_CLOSED_PAPER_REVIEW_FIXTURE=0
           export FINN_QA_ALLOW_AUTO_PAPER_HISTORY_FIXTURE=0
           export FINN_QA_ALLOW_PORTFOLIO_PAPER_FX_FIXTURE=0
@@ -321,6 +333,12 @@ jobs:
           if [[ "$qa_profile" =~ ^(score2_exact_eur_paper|score2_exact_usdt_paper)$ ]] && [ "$allow_fixture_actions" = "true" ] && [ "$allow_safe_fixture_execution" = "true" ]; then
             export FINN_QA_ALLOW_STALE_SCORE_FIXTURE=1
             export FINN_QA_ALLOW_EXACT_PAIR_FIXTURE=1
+          fi
+          if [ "$qa_profile" = "trader_pair_score_continuity" ] && [ "$allow_fixture_actions" = "true" ] && [ "$allow_safe_fixture_execution" = "false" ]; then
+            export FINN_QA_ALLOW_TRADER_PAIR_FIXTURE=1
+          fi
+          if [ "$qa_profile" = "trader_paper_exit_reconciliation" ] && [ "$allow_fixture_actions" = "true" ] && [ "$allow_safe_fixture_execution" = "true" ]; then
+            export FINN_QA_ALLOW_PAPER_EXIT_FIXTURE=1
           fi
           if [ "$qa_profile" = "auto_paper_trade_history" ] && [ "$allow_fixture_actions" = "true" ] && [ "$allow_safe_fixture_execution" = "true" ]; then
             export FINN_QA_ALLOW_AUTO_PAPER_HISTORY_FIXTURE=1
@@ -363,6 +381,8 @@ jobs:
           export FINN_QA_ALLOW_FIXTURE_EXECUTION=$(printf '%q' "$FINN_QA_ALLOW_FIXTURE_EXECUTION")
           export FINN_QA_ALLOW_STALE_SCORE_FIXTURE=$(printf '%q' "$FINN_QA_ALLOW_STALE_SCORE_FIXTURE")
           export FINN_QA_ALLOW_EXACT_PAIR_FIXTURE=$(printf '%q' "$FINN_QA_ALLOW_EXACT_PAIR_FIXTURE")
+          export FINN_QA_ALLOW_TRADER_PAIR_FIXTURE=$(printf '%q' "$FINN_QA_ALLOW_TRADER_PAIR_FIXTURE")
+          export FINN_QA_ALLOW_PAPER_EXIT_FIXTURE=$(printf '%q' "$FINN_QA_ALLOW_PAPER_EXIT_FIXTURE")
           export FINN_QA_ALLOW_AUTO_PAPER_HISTORY_FIXTURE=$(printf '%q' "$FINN_QA_ALLOW_AUTO_PAPER_HISTORY_FIXTURE")
           export FINN_QA_ALLOW_PORTFOLIO_PAPER_FX_FIXTURE=$(printf '%q' "$FINN_QA_ALLOW_PORTFOLIO_PAPER_FX_FIXTURE")
           export FINN_QA_ALLOW_TYPED_ENTRY_PAPER_FIXTURE=$(printf '%q' "$FINN_QA_ALLOW_TYPED_ENTRY_PAPER_FIXTURE")
