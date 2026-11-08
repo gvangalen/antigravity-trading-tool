@@ -25,6 +25,15 @@ SAFE_ACCOUNT_ERRORS = {
     "fixture_has_exchange_keys", "fixture_cleanup_failed", "fixture_quarantine_failed",
     "account_prepare_lookup_failed", "account_prepare_portfolio_failed",
     "account_prepare_decisions_failed", "account_prepare_commit_failed",
+    "account_prepare_decisions_unique", "account_prepare_decisions_check",
+    "account_prepare_decisions_not_null", "account_prepare_decisions_foreign_key",
+    "account_prepare_decisions_datatype", "account_prepare_decisions_column",
+}
+
+SAFE_DECISION_SQLSTATES = {
+    "23505": "unique", "23514": "check", "23502": "not_null",
+    "23503": "foreign_key", "22P02": "datatype", "42804": "datatype",
+    "42703": "column",
 }
 
 
@@ -205,6 +214,10 @@ def _prepare(user_id: int, bot_id: int) -> None:
         connection.rollback()
         if isinstance(error, RuntimeError) and str(error) in SAFE_ACCOUNT_ERRORS:
             raise
+        if step == "decisions":
+            reason = SAFE_DECISION_SQLSTATES.get(getattr(error, "sqlstate", None))
+            if reason:
+                raise RuntimeError(f"account_prepare_decisions_{reason}") from None
         raise RuntimeError(f"account_prepare_{step}_failed") from None
     finally:
         connection.close()

@@ -310,3 +310,43 @@ def test_account_stage_sanitizes_private_runtime_error():
     with pytest.raises(RuntimeError, match="^account_turns_failed$"):
         with probe._stage("turns"):
             raise RuntimeError("private answer and fixture identity")
+
+
+@pytest.mark.parametrize("sqlstate,expected", [
+    ("23505", "unique"), ("23514", "check"), ("23502", "not_null"),
+    ("23503", "foreign_key"), ("22P02", "datatype"),
+    ("42804", "datatype"), ("42703", "column"),
+    ("99999", "failed"),
+])
+def test_account_decision_insert_reports_only_allowlisted_sqlstate(
+    monkeypatch, sqlstate, expected,
+):
+    class PrivateDbError(Exception):
+        def __init__(self):
+            super().__init__("private SQL values")
+            self.sqlstate = sqlstate
+    class Cursor:
+        rowcount = 1
+        step = 0
+        def __enter__(self):
+            return self
+        def __exit__(self, *_args):
+            return None
+        def execute(self, *_args):
+            self.step += 1
+            if self.step == 3:
+                raise PrivateDbError()
+        def fetchone(self):
+            return (1, 2)
+    class Connection:
+        def cursor(self):
+            return Cursor()
+        def rollback(self):
+            pass
+        def close(self):
+            pass
+    monkeypatch.setattr(probe.fixture, "_connection", Connection)
+    code = f"account_prepare_decisions_{expected}"
+    with pytest.raises(RuntimeError, match=f"^{code}$"):
+        probe._prepare(11, 22)
+    assert profile_error_category("trader_account_state_readback", RuntimeError(code)) == code

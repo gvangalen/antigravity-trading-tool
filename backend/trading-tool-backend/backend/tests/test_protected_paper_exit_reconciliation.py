@@ -168,7 +168,7 @@ def test_rendered_exit_opens_trades_before_reading_evidence(monkeypatch):
 
 @pytest.mark.parametrize("fail_in_inspect,expected", [
     (False, "paper_exit_rendered_bootstrap_failed"),
-    (True, "paper_exit_rendered_trades_tab_failed"),
+    (True, "paper_exit_rendered_trades_tab_wait_failed"),
 ])
 def test_rendered_exit_sanitizes_browser_failure_phase(monkeypatch, fail_in_inspect, expected):
     from backend.scripts import qa_protected_browser
@@ -181,6 +181,39 @@ def test_rendered_exit_sanitizes_browser_failure_phase(monkeypatch, fail_in_insp
                     raise ValueError("private DOM and fixture identity")
             return await kwargs["inspect"](Page())
         raise ValueError("private browser error and fixture identity")
+    monkeypatch.setattr(qa_protected_browser, "observe_page", observe_page)
+    monkeypatch.setattr(auth_utils, "create_access_token", lambda *_args: "in-memory-token")
+    import asyncio
+    with pytest.raises(RuntimeError, match=f"^{expected}$"):
+        asyncio.run(probe._rendered_exit(11, 22, {}))
+    assert profile_error_category(
+        "trader_paper_exit_reconciliation", RuntimeError(expected)
+    ) == expected
+
+
+@pytest.mark.parametrize("path,expected", [
+    ("/login", "paper_exit_rendered_login_redirect_failed"),
+    ("/onboarding/profile", "paper_exit_rendered_onboarding_redirect_failed"),
+    ("/bot", "paper_exit_rendered_tab_absent_failed"),
+])
+def test_rendered_exit_classifies_missing_tab_without_url_leak(
+    monkeypatch, path, expected,
+):
+    from backend.scripts import qa_protected_browser
+    from backend.utils import auth_utils
+
+    class Locator:
+        @property
+        def first(self):
+            return self
+        async def wait_for(self, **_kwargs):
+            raise ValueError("private browser response")
+    class Page:
+        url = f"https://tradamind.com{path}?fixture=private"
+        def locator(self, _selector):
+            return Locator()
+    async def observe_page(**kwargs):
+        return await kwargs["inspect"](Page())
     monkeypatch.setattr(qa_protected_browser, "observe_page", observe_page)
     monkeypatch.setattr(auth_utils, "create_access_token", lambda *_args: "in-memory-token")
     import asyncio
