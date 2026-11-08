@@ -6,8 +6,10 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN-lesvraag: capability-snelroute omzeilde dossierread (8 november 2026)
 
-Phase: `BUILD_VALIDATED_QA_PENDING`. Kandidaat:
-`codex/review-lesson-capability-bypass`. Onafhankelijke beschermde QA op
+Phase: `DEPLOYED_QA_PENDING`. Kandidaat:
+`codex/review-lesson-capability-bypass`,
+[PR #869](https://github.com/gvangalen/antigravity-trading-tool/pull/869).
+Onafhankelijke beschermde QA op
 `7b72e500f18a8dc0a5d42ac455133cf650361eee` in
 [workflow 42464652220](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42464652220)
 bevestigde opnieuw Paper-buy en -sell, maar dezelfde tweede chatvraag miste
@@ -26,7 +28,15 @@ backend-suite slaagde (`4296 passed, 4 skipped`). Security beoordeelde de
 versmalde diff read-only als akkoord. Er zijn geen actiecontracten,
 providerselectie, orderlogica of Live-instellingen gewijzigd; de lokale
 worker-actiematrix en selectorproeven zijn voor deze routeringscorrectie niet
-van toepassing. CI, deployment en onafhankelijke QA volgen nog.
+van toepassing. Alle vijf PR-controles en alle vijf controles van
+[main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42465398859)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42465610122)
+slaagde. Git-main, publieke backend-health en frontend-buildinfo meldden alle
+drie `15480caee5bc5077c0953fd7b2476e9ba6304633`; beide publieke routes
+gaven HTTP 200. Deze statuswijziging maakt zelf een nieuwe SHA; vóór de
+onafhankelijke QA-handoff worden de laatste main-CI, Auto Deploy en publieke
+SHA-pariteit opnieuw gecontroleerd. QA herhaalt daarna de beschermde
+Paper-chat en beoordeelt de vier trader-gates op de definitieve release.
 
 ## FINN-vervolgvraag over bevestigde les: dossierread (8 november 2026)
 
