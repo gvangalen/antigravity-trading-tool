@@ -46,8 +46,17 @@ ALLOWED_PROFILES = {
     "closed_paper_trade_review_chat",
     "auto_paper_trade_history",
     "portfolio_paper_fx",
+    "portfolio_paper_fx_schema",
     "typed_entry_paper",
 }
+SAFE_PORTFOLIO_PAPER_FX_SCHEMA_ERRORS = frozenset({
+    "portfolio_paper_fx_schema_database_unavailable",
+    "portfolio_paper_fx_schema_unexpected_column",
+    "portfolio_paper_fx_schema_unexpected_type",
+    "portfolio_paper_fx_schema_unexpected_dimension",
+    "portfolio_paper_fx_schema_missing_column",
+    "portfolio_paper_fx_schema_manifest_forbidden",
+})
 SAFE_CLOSED_PAPER_CHAT_ERRORS = frozenset({
     "closed_paper_review_fixture_not_authorized",
     "closed_paper_review_chat_first_turn_failed",
@@ -165,6 +174,10 @@ def profile_error_category(profile: str, error: Exception) -> str:
         code = str(error)
         return (code if code in SAFE_PORTFOLIO_PAPER_FX_ERRORS
                 else "portfolio_paper_fx_runtime_error")
+    if profile == "portfolio_paper_fx_schema":
+        code = str(error)
+        return (code if code in SAFE_PORTFOLIO_PAPER_FX_SCHEMA_ERRORS
+                else "portfolio_paper_fx_schema_runtime_error")
     return str(error)
 
 
@@ -2335,6 +2348,14 @@ def main() -> int:
                 from backend.scripts.probe_protected_portfolio_paper_fx import run as run_portfolio_probe
 
                 run_protected_portfolio_probe(report, run_portfolio_probe, fixture_namespace or "")
+            elif args.profile == "portfolio_paper_fx_schema":
+                if args.manifest_id != "none" or args.manifest_bundle_path:
+                    raise ValueError("portfolio_paper_fx_schema_manifest_forbidden")
+                from backend.scripts.probe_protected_portfolio_paper_fx_schema import run as read_schema
+
+                report["portfolio_paper_fx_schema"] = read_schema()
+                report["outcome"] = "passed"
+                report["qa_status"] = "COMPLETED"
             elif args.profile == "typed_entry_paper":
                 if args.manifest_id != "none" or args.manifest_bundle_path:
                     raise ValueError("typed_entry_paper_manifest_forbidden")
