@@ -190,9 +190,9 @@ def run(namespace: str) -> dict:
             owner_id=user_id, initial=initial, outage=outage, recovered=recovered,
         )
         if result["result"] != "PASS":
-            raise RuntimeError("trader_pair_contract_failed")
+            return result
         passed = True
-        return {"result": "PASS", "pairs": 2, "phases": 3,
+        return {**result, "pairs": 2, "phases": 3,
                 "source_outage": "owner_scoped", "live_calls": 0}
     finally:
         if user_id is not None and bot_id is not None:

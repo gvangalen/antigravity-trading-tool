@@ -41,6 +41,8 @@ ALLOWED_PROFILES = {
     "score2_positive_paper",
     "score2_outside_paper",
     "score2_exact_eur_paper",
+    "trader_pair_score_continuity",
+    "trader_paper_exit_reconciliation",
     "score2_exact_usdt_paper",
     "closed_paper_trade_review",
     "closed_paper_trade_review_chat",
@@ -178,6 +180,25 @@ def profile_error_category(profile: str, error: Exception) -> str:
         code = str(error)
         return (code if code in SAFE_PORTFOLIO_PAPER_FX_SCHEMA_ERRORS
                 else "portfolio_paper_fx_schema_runtime_error")
+    if profile == "trader_pair_score_continuity":
+        code = str(error)
+        return (code if code in {
+            "trader_pair_fixture_not_authorized", "trader_pair_namespace_invalid",
+            "fixture_binding_invalid", "btc_pair_markets_unavailable",
+            "btc_pair_source_unavailable", "btc_pair_fixture_source_missing",
+            "trader_pair_fixture_manifest_forbidden", "fixture_has_exchange_keys",
+        } else "trader_pair_probe_runtime_error")
+    if profile == "trader_paper_exit_reconciliation":
+        code = str(error)
+        return (code if code in {
+            "paper_exit_fixture_not_authorized", "paper_exit_namespace_invalid",
+            "fixture_binding_invalid", "fixture_has_exchange_keys",
+            "paper_exit_cutover_unavailable", "paper_exit_exact_market_unavailable",
+            "paper_exit_dated_quote_unavailable", "paper_exit_fixture_identity_invalid",
+            "paper_exit_engine_unavailable", "paper_exit_persisted_effect_incomplete",
+            "paper_exit_fixture_manifest_forbidden", "fixture_cleanup_failed",
+            "fixture_quarantine_failed",
+        } else "paper_exit_probe_runtime_error")
     return str(error)
 
 
@@ -2316,6 +2337,34 @@ def main() -> int:
                     quote="EUR" if args.profile == "score2_exact_eur_paper" else "USDT",
                 )
                 report["outcome"] = "passed"
+                report["qa_status"] = "COMPLETED"
+            elif args.profile == "trader_pair_score_continuity":
+                if args.manifest_id != "none" or args.manifest_bundle_path:
+                    raise ValueError("trader_pair_fixture_manifest_forbidden")
+                if os.getenv("FINN_QA_ALLOW_TRADER_PAIR_FIXTURE") != "1":
+                    raise ValueError("trader_pair_fixture_not_authorized")
+                from backend.scripts.probe_protected_btc_pair_score_continuity import run as run_pair_score_probe
+
+                report["safety"]["read_only_profile"] = False
+                report["safety"]["execution_calls"] = 0
+                report[args.profile] = run_pair_score_probe(fixture_namespace or "")
+                report["outcome"] = (
+                    "passed" if report[args.profile]["result"] == "PASS" else "failed"
+                )
+                report["qa_status"] = "COMPLETED"
+            elif args.profile == "trader_paper_exit_reconciliation":
+                if args.manifest_id != "none" or args.manifest_bundle_path:
+                    raise ValueError("paper_exit_fixture_manifest_forbidden")
+                if os.getenv("FINN_QA_ALLOW_PAPER_EXIT_FIXTURE") != "1":
+                    raise ValueError("paper_exit_fixture_not_authorized")
+                from backend.scripts.probe_protected_paper_exit_reconciliation import run as run_exit_probe
+
+                report["safety"]["read_only_profile"] = False
+                report["safety"]["execution_calls"] = 1
+                report[args.profile] = run_exit_probe(fixture_namespace or "")
+                report["outcome"] = (
+                    "passed" if report[args.profile]["result"] == "PASS" else "failed"
+                )
                 report["qa_status"] = "COMPLETED"
             elif args.profile in {"closed_paper_trade_review", "closed_paper_trade_review_chat"}:
                 if args.manifest_id != "none" or args.manifest_bundle_path:

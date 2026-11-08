@@ -87,6 +87,22 @@ def test_workflow_is_manual_protected_and_serialized():
     assert "timeout-minutes: 90" in workflow
 
 
+def test_trader_gate_profiles_are_protected_and_distinguish_execution_scope():
+    module = _module()
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    dispatch = DISPATCH_SCRIPT_PATH.read_text(encoding="utf-8")
+    for profile in ("trader_pair_score_continuity", "trader_paper_exit_reconciliation"):
+        assert profile in module.ALLOWED_PROFILES
+        assert profile in workflow and profile in dispatch
+        assert f'if [ "$QA_PROFILE" = "{profile}" ]' in workflow
+        assert f'if [[ "$qa_profile" == "{profile}"' in dispatch
+        assert f'if [ "$qa_profile" = "{profile}" ]' in workflow
+    assert "FINN_QA_ALLOW_TRADER_PAIR_FIXTURE=0" in workflow
+    assert "FINN_QA_ALLOW_PAPER_EXIT_FIXTURE=0" in workflow
+    assert "The pair score probe requires only fixture-action authorization" in workflow
+    assert "The automatic Paper-exit probe requires fixture and safe-execution authorization" in workflow
+
+
 def test_typed_entry_paper_profile_requires_explicit_fixture_scope(monkeypatch):
     module = _module()
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")

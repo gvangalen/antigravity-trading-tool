@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import pytest
 
 from backend.scripts import probe_protected_btc_pair_score_continuity as probe
+from backend.scripts.run_finn_production_qa import profile_error_category
 
 
 NAMESPACE = "qa-123-1-5ffd5b21-deadbeef"
@@ -44,7 +45,8 @@ def test_probe_runs_three_pair_snapshots_and_cleans_only_verified_fixture(monkey
     monkeypatch.setattr(probe, "_set_eur_source_time", lambda *args, stale: steps.append(f"stale:{stale}"))
     monkeypatch.setattr(probe.fixture, "_cleanup", lambda *args: steps.append("cleanup"))
     monkeypatch.setattr(probe.fixture, "_quarantine", lambda *args: steps.append("quarantine"))
-    assert probe.run(NAMESPACE) == {"result": "PASS", "pairs": 2, "phases": 3,
+    assert probe.run(NAMESPACE) == {"result": "PASS", "failed_checks": [],
+                                    "pairs": 2, "phases": 3,
                                     "source_outage": "owner_scoped", "live_calls": 0}
     assert steps == ["seed_readings", "stale:True", "stale:False", "cleanup"]
 
@@ -61,8 +63,8 @@ def test_probe_quarantines_on_score_cross_contamination(monkeypatch):
     monkeypatch.setattr(probe, "_set_eur_source_time", lambda *args, **kwargs: None)
     monkeypatch.setattr(probe.fixture, "_cleanup", lambda *args: steps.append("cleanup"))
     monkeypatch.setattr(probe.fixture, "_quarantine", lambda *args: steps.append("quarantine"))
-    with pytest.raises(RuntimeError, match="^trader_pair_contract_failed$"):
-        probe.run(NAMESPACE)
+    assert probe.run(NAMESPACE) == {"result": "FAIL",
+                                    "failed_checks": ["outage_typed_and_isolated"]}
     assert steps == ["quarantine"]
 
 
@@ -71,3 +73,12 @@ def test_probe_rejects_missing_authorization_before_source_or_fixture(monkeypatc
     monkeypatch.setattr(probe, "_markets", lambda: pytest.fail("unexpected source read"))
     with pytest.raises(RuntimeError, match="^trader_pair_fixture_not_authorized$"):
         probe.run(NAMESPACE)
+
+
+def test_probe_error_category_does_not_export_database_details():
+    assert profile_error_category(
+        "trader_pair_score_continuity", RuntimeError("private fixture user 123")
+    ) == "trader_pair_probe_runtime_error"
+    assert profile_error_category(
+        "trader_pair_score_continuity", RuntimeError("btc_pair_source_unavailable")
+    ) == "btc_pair_source_unavailable"

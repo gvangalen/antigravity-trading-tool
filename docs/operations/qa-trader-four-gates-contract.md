@@ -1,10 +1,10 @@
 # Protected QA contract: four trader gates
 
-Status: QA-owned design; **not** an executable production profile. Do not
-dispatch this branch against the `production` environment. Security found that
-the existing workflow can receive production secrets from an unreviewed branch.
-The trusted-ref and deploy-event guards must land on `main` first. Security and
-Architecture must review any subsequent protected collector before merge.
+Status: QA-owned partial collectors, not four-gate acceptance. The trusted-ref
+and deploy-event guards landed on `main` in PR #892. The two protected profiles
+below are not available on production until this QA control-plane change has
+been reviewed, merged and deployed. Security and Architecture review remains
+required before merge. Never dispatch the workflow from this branch.
 
 ## Shared boundary
 
@@ -79,6 +79,15 @@ Check Analysis and FINN projections against the same canonical score rows.
 The local pure invariant is `check_pair_score_isolation`; a collector must
 supply independent database facts, not product-response-derived expectations.
 
+`trader_pair_score_continuity` now uses a protected inactive child owner, the
+actual dated market quote for each pair, owner-only indicator configurations,
+the normal score builder, persisted `daily_scores` and the canonical
+`SetupMarketMatchService` assessment. It reads both pairs before, during and
+after an owner-only BTC/EUR source outage. The profile is a partial gate:
+Analysis and FINN transport projections are not yet read back, so even a PASS
+from this profile is not a PASS for all of Gate 3. It requires a fresh quote for
+both pairs; otherwise the collector must fail without inventing a score.
+
 ## Gate 4: automatic Paper exit and reproducible cashflow
 
 Fixture: one inactive, uncredentialed Paper bot with a real open Paper position
@@ -98,9 +107,19 @@ The existing `portfolio_paper_fx` profile is a **buy** probe and the existing
 Paper sell. Neither is an automatic-exit acceptance test. Historical PASSes
 must not be imported as a PASS for this gate.
 
+`trader_paper_exit_reconciliation` now seeds an owner-only Paper opening lot
+against the existing dated BTC/USDT quote and FX, invokes the normal automatic
+exit engine twice, and reconciles the persisted decision/order/execution,
+ledger, portfolio and owner-scoped `BotService.get_bot_history` projection. It
+does not run a browser renderer, so it cannot attest to the rendered
+`PaperExitEvidence` component. A server-side profile PASS remains partial Gate
+4 evidence; rendered UI acceptance needs a protected browser check.
+
 ## Local contract checks
 
 `pytest -q backend/trading-tool-backend/backend/tests/test_qa_trader_gate_invariants.py`
+
+`pytest -q backend/trading-tool-backend/backend/tests/test_protected_btc_pair_score_continuity.py backend/trading-tool-backend/backend/tests/test_protected_paper_exit_reconciliation.py`
 
 These tests use synthetic values only. They verify that a copied pair score,
 missing outage reason, cross-owner row, Live execution, undated source,
