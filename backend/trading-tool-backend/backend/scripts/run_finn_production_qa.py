@@ -44,6 +44,7 @@ ALLOWED_PROFILES = {
     "trader_pair_score_continuity",
     "trader_paper_exit_reconciliation",
     "trader_paper_exit_fixture_audit",
+    "trader_strategy_schema_audit",
     "score2_exact_usdt_paper",
     "closed_paper_trade_review",
     "closed_paper_trade_review_chat",
@@ -216,6 +217,14 @@ def profile_error_category(profile: str, error: Exception) -> str:
             "trader_fixture_audit_prior_report_unavailable",
             "trader_fixture_audit_prior_report_mismatch",
         } else "trader_fixture_audit_runtime_error")
+    if profile == "trader_strategy_schema_audit":
+        code = str(error)
+        return (code if code in {
+            "trader_strategy_schema_database_unavailable",
+            "trader_strategy_schema_unexpected_column",
+            "trader_strategy_schema_constraint_conflict",
+            "trader_strategy_schema_manifest_forbidden",
+        } else "trader_strategy_schema_runtime_error")
     return str(error)
 
 
@@ -2404,6 +2413,17 @@ def main() -> int:
                     else "incomplete"
                 )
                 report["qa_status"] = "COMPLETED_WITH_FAILURES" if report["outcome"] == "failed" else "INCOMPLETE"
+            elif args.profile == "trader_strategy_schema_audit":
+                if args.manifest_id != "none" or args.manifest_bundle_path:
+                    raise ValueError("trader_strategy_schema_manifest_forbidden")
+                report["protected_profile_attempted"] = True
+                report["qa_status"] = "INCOMPLETE"
+                report["outcome"] = "incomplete"
+                from backend.scripts.probe_protected_trader_strategy_schema import run as audit_strategy_schema
+
+                report[args.profile] = audit_strategy_schema()
+                report["outcome"] = "passed" if report[args.profile]["result"] == "PASS" else "failed"
+                report["qa_status"] = "COMPLETED"
             elif args.profile in {"closed_paper_trade_review", "closed_paper_trade_review_chat"}:
                 if args.manifest_id != "none" or args.manifest_bundle_path:
                     raise ValueError("closed_paper_review_fixture_manifest_forbidden")

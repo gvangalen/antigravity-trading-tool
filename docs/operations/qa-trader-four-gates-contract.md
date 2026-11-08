@@ -121,6 +121,17 @@ lookup/update/insert/commit substage codes. They do not execute extra SQL or
 publish error text. The earlier run remains `INCOMPLETE`; this diagnostic
 change is for at most one separately authorized Paper-only hertest.
 
+The one allowed hertest on live SHA `43b989b60ab08b55918deaefbccd4bd49e9a8a95`
+ended before a Paper opening with fixed code
+`paper_exit_open_strategy_update_failed`. The failed child remained inactive
+and non-Live with no persisted Paper exit. `trader_strategy_schema_audit` is
+a separate read-only protected diagnostic with no manifest or fixture-action
+flags. It reads only metadata for `strategies.targets`, `market_id`, `data`,
+`setup_type`, `entry`, and `stop_loss`, plus allowlisted constraint names and
+bounded presence counts for other constraints and user triggers. It emits no
+user rows, values, raw SQL errors, trigger definitions, or unknown names. A
+schema match alone does not prove the failed UPDATE's root cause.
+
 ## Gate 4: automatic Paper exit and reproducible cashflow
 
 Fixture: one inactive, uncredentialed Paper bot with a real open Paper position
