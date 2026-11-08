@@ -203,6 +203,18 @@ class BotService:
                 and item.strip() not in ("{}", "[]", "null")]
 
     @staticmethod
+    def _market_quote_source_ref(scores: dict) -> dict | None:
+        source = scores.get("market_quote_source_ref")
+        if not isinstance(source, dict):
+            return None
+        from backend.services.market_source_ref import market_source_ref
+        return market_source_ref(
+            market_id=source.get("market_id"),
+            measurement_id=source.get("measurement_id"),
+            source_observed_at=source.get("source_observed_at_utc"),
+        )
+
+    @staticmethod
     def _paper_preview_token(*, user_id: int, payload: BotManualOrderSchema,
                              quantity: float, price: float, gross_eur: float,
                              source_quote_currency: str | None = None) -> str:
@@ -1854,6 +1866,7 @@ class BotService:
                 "action": r["action"],
                 "confidence": r["confidence"],
                 "decision_basis": scores_payload.get("decision_basis"),
+                "market_quote_source_ref": self._market_quote_source_ref(scores_payload),
                 "scores_json": scores_payload or daily_scores,
                 "requested_amount_eur": scores_payload.get("requested_amount_eur"),
                 "amount_eur": scores_payload.get("amount_eur"),
@@ -1914,6 +1927,7 @@ class BotService:
                 "action": r["action"],
                 "confidence": r["confidence"],
                 "decision_basis": scores.get("decision_basis"),
+                "market_quote_source_ref": self._market_quote_source_ref(scores),
                 "exit_evidence": _paper_exit_evidence(r.get("decision_kind"), scores),
                 "amount_eur": r["amount_eur"],
                 "setup_match": setup_match,

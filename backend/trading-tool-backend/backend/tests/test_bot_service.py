@@ -80,7 +80,10 @@ def test_legacy_empty_reason_object_is_not_shown_as_literal_json():
                 "id": 11, "bot_id": 3, "bot_name": "Paper", "symbol": "ETH",
                 "decision_date": end, "decision_ts": None, "action": "buy",
                 "confidence": "medium", "amount_eur": 1.25,
-                "scores_json": "{}", "reason_json": "{}", "status": "executed",
+                "scores_json": json.dumps({"market_quote_source_ref": {
+                    "market_id": 43, "measurement_id": 987,
+                    "source_observed_at_utc": "2026-11-08T10:30:00+01:00",
+                }}), "reason_json": "{}", "status": "executed",
             }, {
                 "id": 12, "bot_id": 3, "bot_name": "Paper", "symbol": "ETH",
                 "decision_date": end, "decision_ts": None, "action": "hold",
@@ -94,6 +97,10 @@ def test_legacy_empty_reason_object_is_not_shown_as_literal_json():
     history = asyncio.run(service.get_bot_history(7, 30))
     assert history[0]["reasons"] == []
     assert history[1]["reasons"] == ["Daglimiet bereikt"]
+    assert history[0]["market_quote_source_ref"] == {
+        "market_id": 43, "measurement_id": 987,
+        "source_observed_at_utc": "2026-11-08T09:30:00+00:00",
+    }
 
 
 def test_history_keeps_saved_reduction_and_check_time_without_marking_it_stale():
@@ -209,6 +216,10 @@ def test_bot_today_does_not_relabel_an_old_decision_score_as_current(monkeypatch
                      "confidence": "low", "scores_json": json.dumps({
                          "macro": 10, "market": 10, "technical": 10,
                          "combined": 10, "setup_match": {"score": 10},
+                         "market_quote_source_ref": {
+                             "market_id": 43, "measurement_id": 987,
+                             "source_observed_at_utc": "2026-11-08T10:30:00+01:00",
+                         },
                      }), "reason_json": '{"reason":"Daglimiet bereikt"}', "setup_id": 9, "strategy_id": 10,
                      "status": "planned", "created_at": None, "updated_at": None}]
 
@@ -232,6 +243,10 @@ def test_bot_today_does_not_relabel_an_old_decision_score_as_current(monkeypatch
     assert old["scores_json"]["combined"] is None
     assert old["setup_match"] is None
     assert old["reasons"] == ["Daglimiet bereikt"]
+    assert old["market_quote_source_ref"] == {
+        "market_id": 43, "measurement_id": 987,
+        "source_observed_at_utc": "2026-11-08T09:30:00+00:00",
+    }
 
 
 def test_bot_today_does_not_show_decision_for_previous_setup_revision(monkeypatch):
