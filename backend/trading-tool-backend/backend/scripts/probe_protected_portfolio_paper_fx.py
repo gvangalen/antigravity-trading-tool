@@ -46,7 +46,7 @@ def _require_protected_run(namespace: str) -> int:
 
 def _verified_source_price_eur() -> dict:
     """Require an existing non-EUR price and conversion before any write."""
-    from backend.services.portfolio_fx_service import price_in_eur
+    from backend.services.portfolio_fx_service import price_in_eur, trade_quote_context
 
     connection = _connection()
     try:
@@ -84,12 +84,26 @@ def _verified_source_price_eur() -> dict:
                 (quote,),
             )
             rate = cursor.fetchone()
+        fx = {"eur_per_unit": rate[0], "observed_at": rate[1]} if rate else None
         price, _source_at, factor, _fx_at = price_in_eur(
             price=market[0], price_at=market[1], quote_currency=quote,
-            fx={"eur_per_unit": rate[0], "observed_at": rate[1]} if rate else None,
+            fx=fx,
         )
         if price is None or factor is None or price <= FORGED_ESTIMATE_EUR:
             raise RuntimeError("portfolio_paper_fx_source_unavailable")
+        trade_source = trade_quote_context(
+            price=market[0], price_at=market[1], row_quote=quote,
+            catalog_quote=quote, usd_fx=None, quote_fx=fx, require_usd=False,
+        )
+        if trade_source.get("market_price_eur") is None:
+            reason = trade_source.get("reason")
+            allowed = {
+                "market_quote_unverified", "market_price_stale",
+                "market_quote_eur_fx_unavailable", "trade_quote_sources_out_of_sync",
+                "market_conversion_invalid",
+            }
+            code = reason if isinstance(reason, str) and reason in allowed else "other"
+            raise RuntimeError(f"portfolio_paper_fx_trade_source_{code}")
         return {
             "eur_price": float(price), "quote": quote,
             "raw_price": float(market[0]), "source_at": market[1],
