@@ -306,6 +306,34 @@ def test_account_prepare_reports_fixed_decision_stage_without_sql_values(monkeyp
     ) == "account_prepare_decisions_failed"
 
 
+def test_account_prepare_uses_supported_hold_decisions(monkeypatch):
+    actions = []
+    class Cursor:
+        rowcount = 1
+        def __enter__(self):
+            return self
+        def __exit__(self, *_args):
+            return None
+        def execute(self, statement, params):
+            if "INSERT INTO bot_decisions" in statement:
+                actions.append(params[-1])
+        def fetchone(self):
+            return (1, 2)
+    class Connection:
+        committed = False
+        def cursor(self):
+            return Cursor()
+        def commit(self):
+            self.committed = True
+        def close(self):
+            pass
+    connection = Connection()
+    monkeypatch.setattr(probe.fixture, "_connection", lambda: connection)
+    probe._prepare(11, 22)
+    assert actions == ["hold", "hold"]
+    assert connection.committed
+
+
 def test_account_stage_sanitizes_private_runtime_error():
     with pytest.raises(RuntimeError, match="^account_turns_failed$"):
         with probe._stage("turns"):

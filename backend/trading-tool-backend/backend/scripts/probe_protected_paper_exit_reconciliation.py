@@ -19,6 +19,22 @@ async def _rendered_exit(user_id: int, bot_id: int, expected: dict) -> dict:
 
     async def inspect(page):
         nonlocal phase
+        phase = "owner_bot_api"
+        bot_read = await page.evaluate("""async botId => {
+            try {
+                const response = await fetch('/api/bot/configs', {cache: 'no-store'});
+                if (!response.ok) return {status: response.status, present: false};
+                const bots = await response.json();
+                return {status: response.status, present: Array.isArray(bots) &&
+                    bots.some(bot => Number(bot.id) === botId)};
+            } catch (_) { return {status: 0, present: false}; }
+        }""", bot_id)
+        if bot_read.get("status") != 200:
+            phase = "owner_bot_api_auth" if bot_read.get("status") in {401, 403} else "owner_bot_api_unavailable"
+            raise RuntimeError(phase)
+        if bot_read.get("present") is not True:
+            phase = "owner_bot_api_missing"
+            raise RuntimeError(phase)
         phase = "owner_bot_wait"
         try:
             await page.locator('div[aria-label] > button[aria-pressed="true"]').first.wait_for(timeout=20000)
@@ -44,6 +60,23 @@ async def _rendered_exit(user_id: int, bot_id: int, expected: dict) -> dict:
             raise
         phase = "trades_tab_click"
         await trades_tab.click()
+        phase = "trades_api"
+        trade_read = await page.evaluate("""async botId => {
+            try {
+                const response = await fetch('/api/bot/trades/all?limit=50&offset=0', {cache: 'no-store'});
+                if (!response.ok) return {status: response.status, present: false};
+                const data = await response.json();
+                return {status: response.status, present: Array.isArray(data?.items) &&
+                    data.items.some(trade => Number(trade.bot_id) === botId &&
+                        trade.side === 'sell' && !!trade.exit_evidence)};
+            } catch (_) { return {status: 0, present: false}; }
+        }""", bot_id)
+        if trade_read.get("status") != 200:
+            phase = "trades_api_auth" if trade_read.get("status") in {401, 403} else "trades_api_unavailable"
+            raise RuntimeError(phase)
+        if trade_read.get("present") is not True:
+            phase = "trades_api_missing"
+            raise RuntimeError(phase)
         phase = "details"
         details = page.locator("table tbody details:has(dl)")
         await details.first.locator("summary").wait_for(timeout=20000)
