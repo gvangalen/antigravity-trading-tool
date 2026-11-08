@@ -9,6 +9,7 @@ import socket
 import ssl
 import sys
 import types
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -1249,13 +1250,24 @@ def test_portfolio_paper_fx_verifies_database_fill_and_shared_projection(monkeyp
     probe = importlib.util.module_from_spec(spec)
     assert spec and spec.loader
     spec.loader.exec_module(probe)
-    source = {"eur_price": 2000.0, "raw_price": 2500.0, "fx_factor": 0.8,
-              "quote": "USDT", "source_at": "source-time", "fx_at": "fx-time"}
-    monkeypatch.setattr(probe, "_verified_source_price_eur", lambda: source)
+    source = {"eur_price": 1950.0, "raw_price": 2600.0, "fx_factor": 0.75,
+              "quote": "USDT", "source_at": "preflight-source", "fx_at": "preflight-fx"}
+    monkeypatch.setattr(probe, "_verified_source_price_eur",
+                        lambda: (_ for _ in ()).throw(AssertionError("no post-fill source read")))
+    now = datetime.now(timezone.utc)
+    evidence = {
+        "execution_source_price": 2500.0,
+        "execution_source_price_at": (now - timedelta(minutes=5)).isoformat(),
+        "execution_source_price_currency": "USDT",
+        "execution_eur_price": 2000.0,
+        "execution_fx_eur_per_unit": 0.8,
+        "execution_fx_observed_at": (now - timedelta(minutes=10)).isoformat(),
+    }
+    order_row = ("filled", "paper", 2000.0, 0.025, "filled", "executed", "auto", evidence, now)
     rows = {
-        "orders": [("filled", "paper", 2000.0, 0.025, "filled", "executed", "auto")],
-        "ledger": [("paper_initial_funding", 100.0, 0.0, None),
-                   ("execute", -50.0, 0.025, 2)],
+        "orders": [order_row],
+        "ledger": [("paper_initial_funding", 100.0, 0.0, None, None),
+                   ("execute", -50.0, 0.025, 2, 2000.0)],
         "portfolio": (50.0, 0.025), "keys": 0, "active": False,
     }
 
@@ -1313,15 +1325,19 @@ def test_portfolio_paper_fx_verifies_database_fill_and_shared_projection(monkeyp
     assert "live_trading_calls" not in result
 
     bot.fx_eur_per_unit = 0.9
+    assert probe._verify(101, 202, 303, source)["result"] == "PASS"
+    bot.fx_eur_per_unit = 0
     with pytest.raises(probe.PortfolioPaperFxContractFailure) as failure:
         probe._verify(101, 202, 303, source)
     assert failure.value.failed_invariants == ("source_time_currency",)
     bot.fx_eur_per_unit = 0.8
 
+    wrong_order_price = list(order_row)
+    wrong_order_price[2] = 1.0
     mutations = [
-        ("order_price", "orders", [("filled", "paper", 1.0, 0.025, "filled", "executed", "auto")]),
-        ("ledger_cashflow", "ledger", [("paper_initial_funding", 100.0, 0.0, None),
-                                         ("execute", 50.0, 0.025, 2)]),
+        ("order_price", "orders", [tuple(wrong_order_price)]),
+        ("ledger_cashflow", "ledger", [("paper_initial_funding", 100.0, 0.0, None, None),
+                                         ("execute", 50.0, 0.025, 2, 2000.0)]),
         ("portfolio_quantity", "portfolio", (50.0, 0.026)),
         ("owner_safety", "keys", 1),
     ]
@@ -1331,21 +1347,51 @@ def test_portfolio_paper_fx_verifies_database_fill_and_shared_projection(monkeyp
         with pytest.raises(probe.PortfolioPaperFxContractFailure) as failure:
             probe._verify(101, 202, 303, source)
         assert expected in failure.value.failed_invariants
+        if expected == "order_price":
+            assert failure.value.failed_order_checks == ("order_price_eur",)
         rows[key] = original
 
+    rows["orders"] = []
+    with pytest.raises(probe.PortfolioPaperFxContractFailure) as failure:
+        probe._verify(101, 202, 303, source)
+    assert failure.value.failed_order_checks == ("order_cardinality",)
+
     order_variants = [
-        ("order_cardinality", []),
-        ("order_status", [("open", "paper", 2000.0, 0.025, "filled", "executed", "auto")]),
-        ("order_price_eur", [("filled", "paper", 1.0, 0.025, "filled", "executed", "auto")]),
-        ("order_quantity", [("filled", "paper", 2000.0, 0, "filled", "executed", "auto")]),
-        ("execution_state", [("filled", "paper", 2000.0, 0.025, "open", "executed", "auto")]),
+        ("order_status", 0, "open"),
+        ("order_price_eur", 2, 1.0),
+        ("order_quantity", 3, 0),
+        ("execution_state", 4, "open"),
     ]
-    for expected, changed in order_variants:
-        rows["orders"] = changed
+    for expected, index, value in order_variants:
+        changed = list(order_row)
+        changed[index] = value
+        rows["orders"] = [tuple(changed)]
         with pytest.raises(probe.PortfolioPaperFxContractFailure) as failure:
             probe._verify(101, 202, 303, source)
         assert failure.value.failed_order_checks == (expected,)
-    rows["orders"] = [("filled", "paper", 2000.0, 0.025, "filled", "executed", "auto")]
+    rows["orders"] = [order_row]
+
+    for expected, changed_evidence in (
+        ("order_price", {**evidence, "execution_eur_price": 1999.0}),
+        ("order_price", {**evidence, "execution_fx_eur_per_unit": 0.7}),
+        ("source_time_currency", {**evidence, "execution_source_price_at": "invalid"}),
+        ("source_time_currency", {**evidence, "execution_fx_observed_at": None}),
+    ):
+        rows["orders"] = [(*order_row[:7], changed_evidence, now)]
+        with pytest.raises(probe.PortfolioPaperFxContractFailure) as failure:
+            probe._verify(101, 202, 303, source)
+        assert expected in failure.value.failed_invariants
+        if expected == "order_price":
+            assert failure.value.failed_order_checks == ("order_price_eur",)
+    rows["orders"] = [order_row]
+
+    rows["ledger"] = [("paper_initial_funding", 100.0, 0.0, None, None),
+                      ("execute", -50.0, 0.025, 2, 1999.0)]
+    with pytest.raises(probe.PortfolioPaperFxContractFailure) as failure:
+        probe._verify(101, 202, 303, source)
+    assert "ledger_cashflow" in failure.value.failed_invariants
+    rows["ledger"] = [("paper_initial_funding", 100.0, 0.0, None, None),
+                      ("execute", -50.0, 0.025, 2, 2000.0)]
 
     bot.equity = 99.0
     with pytest.raises(probe.PortfolioPaperFxContractFailure) as failure:
