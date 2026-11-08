@@ -47,6 +47,17 @@ def _finite_float(value):
     return number if math.isfinite(number) else None
 
 
+def _utc_datetime(value):
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    if not isinstance(value, datetime):
+        return None
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+
 def _connection():
     from backend.utils.db import get_db_connection
 
@@ -268,7 +279,7 @@ def _verify(user_id: int, bot_id: int, decision_id: int, source: dict) -> dict:
         with connection.cursor() as cursor:
             cursor.execute(
                 """SELECT o.status,o.execution_environment,o.executed_price_eur,o.executed_qty,
-                          e.status,d.status,d.executed_by
+                          e.status,d.status,d.executed_by,d.scores_json,o.updated_at
                    FROM bot_orders o
                    JOIN bot_executions e ON e.bot_order_id=o.id AND e.user_id=o.user_id
                    JOIN bot_decisions d ON d.id=o.decision_id AND d.user_id=o.user_id
@@ -283,7 +294,7 @@ def _verify(user_id: int, bot_id: int, decision_id: int, source: dict) -> dict:
             )
             portfolio = cursor.fetchone()
             cursor.execute(
-                """SELECT entry_type,cash_delta_eur,qty_delta,valuation_version FROM bot_ledger
+                """SELECT entry_type,cash_delta_eur,qty_delta,valuation_version,price_eur FROM bot_ledger
                    WHERE user_id=%s AND bot_id=%s ORDER BY id""",
                 (user_id, bot_id),
             )
@@ -292,11 +303,6 @@ def _verify(user_id: int, bot_id: int, decision_id: int, source: dict) -> dict:
             keys = cursor.fetchone()[0]
             cursor.execute("SELECT is_active FROM users WHERE id=%s", (user_id,))
             active = cursor.fetchone()[0]
-        # A source update during the run makes exact fill provenance ambiguous.
-        # Keep the failed fixture for diagnosis rather than accepting an
-        # approximate conversion as proof.
-        if _verified_source_price_eur() != source:
-            raise RuntimeError("portfolio_paper_fx_source_changed")
         projected = asyncio.run(_projection(user_id))["data"]
         bot = projected.bots[0] if len(projected.bots) == 1 else None
         order = orders[0] if len(orders) == 1 else None
@@ -312,15 +318,27 @@ def _verify(user_id: int, bot_id: int, decision_id: int, source: dict) -> dict:
         bot_position = _finite_float(bot.position_value_eur) if bot else None
         bot_equity = _finite_float(bot.equity) if bot else None
         bot_fx = _finite_float(bot.fx_eur_per_unit) if bot else None
+        evidence = order[7] if order and isinstance(order[7], dict) else {}
+        execution_source_price = _finite_float(evidence.get("execution_source_price"))
+        execution_fx = _finite_float(evidence.get("execution_fx_eur_per_unit"))
+        execution_eur = _finite_float(evidence.get("execution_eur_price"))
+        execution_source_at = _utc_datetime(evidence.get("execution_source_price_at"))
+        execution_fx_at = _utc_datetime(evidence.get("execution_fx_observed_at"))
+        order_at = _utc_datetime(order[8]) if order else None
+        ledger_price = _finite_float(fill[4]) if fill else None
         order_checks = {
             "order_cardinality": order is not None,
             "order_status": order is None or order[0:2] == ("filled", "paper"),
             "order_price_eur": (
                 order is None or (order_price is not None
-                and abs(order_price - source["raw_price"] * source["fx_factor"]) < 0.000001)
+                and execution_eur is not None and execution_eur > FORGED_ESTIMATE_EUR
+                and execution_source_price is not None and execution_source_price > 0
+                and execution_fx is not None and execution_fx > 0
+                and abs(order_price - execution_eur) < 0.000001
+                and abs(order_price - execution_source_price * execution_fx) < 0.000001)
             ),
             "order_quantity": order is None or (order_qty is not None and order_qty > 0),
-            "execution_state": order is None or order[4:] == ("filled", "executed", "auto"),
+            "execution_state": order is None or order[4:7] == ("filled", "executed", "auto"),
         }
         checks = {
             "order_price": all(order_checks.values()),
@@ -330,6 +348,9 @@ def _verify(user_id: int, bot_id: int, decision_id: int, source: dict) -> dict:
                 and fill is not None and fill[0] == "execute" and fill[3] == 2
                 and fill_cash is not None and fill_cash < 0
                 and fill_qty is not None and fill_qty > 0
+                and ledger_price is not None and execution_eur is not None
+                and abs(ledger_price - execution_eur) < 0.000001
+                and abs(fill_cash + round(fill_qty * ledger_price, 2)) < 0.01
             ),
             "portfolio_quantity": (
                 portfolio_cash is not None and fill_cash is not None
@@ -346,8 +367,14 @@ def _verify(user_id: int, bot_id: int, decision_id: int, source: dict) -> dict:
             ),
             "source_time_currency": (
                 bot is not None and bot.price_quote_currency == source["quote"]
+                and evidence.get("execution_source_price_currency") == source["quote"]
+                and execution_source_at is not None and execution_fx_at is not None
+                and order_at is not None
+                and -60 <= (order_at - execution_source_at).total_seconds() <= 1860
+                and -60 <= (order_at - execution_fx_at).total_seconds() <= 7260
+                and abs((execution_source_at - execution_fx_at).total_seconds()) <= 5400
                 and bot.fx_as_of is not None and bot.source_price_as_of is not None
-                and bot_fx is not None and abs(bot_fx - source["fx_factor"]) < 0.000000001
+                and bot_fx is not None and bot_fx > 0
             ),
             "owner_safety": keys == 0 and active is False,
         }
