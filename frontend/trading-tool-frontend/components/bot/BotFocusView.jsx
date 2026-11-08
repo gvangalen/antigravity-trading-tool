@@ -13,6 +13,7 @@ import { getBotApiErrorMessage } from "@/lib/bot/botApiErrorMessage.mjs";
 import { selectLastBotDecision } from "@/lib/bot/lastDecision.mjs";
 import { paperPriceMessageKey } from "@/lib/bot/paperPriceMessage.mjs";
 import { marketPairLabel } from "@/lib/marketPairLabel.mjs";
+import { firstDisplayReason } from "@/lib/bot/displayReason.mjs";
 
 export default function BotFocusView({
   bots, activeBot, onSelectBot, decision, pendingOrder, portfolio, trades, allTrades,
@@ -119,7 +120,7 @@ export default function BotFocusView({
     : null;
   const recordedSafety = lastRecordedDecision?.safety_check || {};
   const recordedReason = lastRecordedDecision?.strategy_reason
-    || lastRecordedDecision?.reasons?.find((item) => typeof item === "string" && item.trim())
+    || firstDisplayReason(lastRecordedDecision?.reasons)
     || recordedSafety.reason;
   const strategyReason = recordedReason === "Scheduled DCA amount selected from the confirmed plan"
     ? copy.scheduledDcaReason : recordedReason;

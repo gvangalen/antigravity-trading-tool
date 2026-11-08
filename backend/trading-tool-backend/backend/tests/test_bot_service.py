@@ -209,7 +209,7 @@ def test_bot_today_does_not_relabel_an_old_decision_score_as_current(monkeypatch
                      "confidence": "low", "scores_json": json.dumps({
                          "macro": 10, "market": 10, "technical": 10,
                          "combined": 10, "setup_match": {"score": 10},
-                     }), "reason_json": "[]", "setup_id": 9, "strategy_id": 10,
+                     }), "reason_json": '{"reason":"Daglimiet bereikt"}', "setup_id": 9, "strategy_id": 10,
                      "status": "planned", "created_at": None, "updated_at": None}]
 
     async def verified(self, user_id, symbol, *, setups=None):
@@ -231,6 +231,7 @@ def test_bot_today_does_not_relabel_an_old_decision_score_as_current(monkeypatch
     assert old["scores_json"]["market"] is None
     assert old["scores_json"]["combined"] is None
     assert old["setup_match"] is None
+    assert old["reasons"] == ["Daglimiet bereikt"]
 
 
 def test_bot_today_does_not_show_decision_for_previous_setup_revision(monkeypatch):

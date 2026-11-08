@@ -190,6 +190,19 @@ class BotService:
             return fallback
 
     @staticmethod
+    def _display_reasons(value) -> list[str]:
+        """Keep the today and history decision contracts as readable string lists."""
+        if isinstance(value, list):
+            candidates = value
+        elif isinstance(value, dict):
+            candidates = [value.get(key) for key in ("reason", "message", "detail")]
+        else:
+            candidates = []
+        return [item.strip() for item in candidates
+                if isinstance(item, str) and item.strip()
+                and item.strip() not in ("{}", "[]", "null")]
+
+    @staticmethod
     def _paper_preview_token(*, user_id: int, payload: BotManualOrderSchema,
                              quantity: float, price: float, gross_eur: float,
                              source_quote_currency: str | None = None) -> str:
@@ -1815,7 +1828,7 @@ class BotService:
                 scores_payload = {**scores_payload, **{
                     key: None for key in ("macro", "technical", "market", "setup", "combined", "setup_match")
                 }, "score_semantics": "legacy_unverified"}
-            reasons_payload = self._safe_json(r["reason_json"], [])
+            reasons_payload = self._display_reasons(self._safe_json(r["reason_json"], []))
             
             trade_plan = {"entry_plan": [], "stop_loss": {}, "targets": [], "risk": {}}
             if not lean:
@@ -1880,18 +1893,7 @@ class BotService:
         out = []
         for r in rows:
             scores = self._safe_json(r["scores_json"], {})
-            reasons = self._safe_json(r["reason_json"], [])
-            # Legacy rows may contain an empty JSON object. It is not a
-            # human-readable reason and must not appear as literal "{}".
-            if isinstance(reasons, list):
-                reasons = [reason.strip() for reason in reasons
-                           if isinstance(reason, str) and reason.strip()
-                           and reason.strip() not in ("{}", "[]", "null")]
-            elif isinstance(reasons, dict):
-                reasons = [reasons[key].strip() for key in ("reason", "message", "detail")
-                           if isinstance(reasons.get(key), str) and reasons[key].strip()]
-            else:
-                reasons = []
+            reasons = self._display_reasons(self._safe_json(r["reason_json"], []))
             
             setup_match = (
                 scores.get("setup_match")
