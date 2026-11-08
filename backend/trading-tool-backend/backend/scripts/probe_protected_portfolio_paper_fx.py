@@ -26,11 +26,16 @@ FAILED_INVARIANT_CODES = (
     "order_price", "ledger_cashflow", "portfolio_quantity",
     "valuation_equity", "source_time_currency", "owner_safety",
 )
+FAILED_ORDER_CHECK_CODES = (
+    "order_cardinality", "order_status", "order_price_eur",
+    "order_quantity", "execution_state",
+)
 
 
 class PortfolioPaperFxContractFailure(RuntimeError):
-    def __init__(self, failed_invariants: list[str]):
+    def __init__(self, failed_invariants: list[str], *, failed_order_checks: list[str] | None = None):
         self.failed_invariants = tuple(failed_invariants)
+        self.failed_order_checks = tuple(failed_order_checks or ())
         super().__init__("portfolio_paper_fx_contract_failed")
 
 
@@ -307,14 +312,18 @@ def _verify(user_id: int, bot_id: int, decision_id: int, source: dict) -> dict:
         bot_position = _finite_float(bot.position_value_eur) if bot else None
         bot_equity = _finite_float(bot.equity) if bot else None
         bot_fx = _finite_float(bot.fx_eur_per_unit) if bot else None
-        checks = {
-            "order_price": (
-                order is not None and order[0:2] == ("filled", "paper")
-                and order_price is not None
-                and abs(order_price - source["raw_price"] * source["fx_factor"]) < 0.000001
-                and order_qty is not None and order_qty > 0
-                and order[4:] == ("filled", "executed", "auto")
+        order_checks = {
+            "order_cardinality": order is not None,
+            "order_status": order is None or order[0:2] == ("filled", "paper"),
+            "order_price_eur": (
+                order is None or (order_price is not None
+                and abs(order_price - source["raw_price"] * source["fx_factor"]) < 0.000001)
             ),
+            "order_quantity": order is None or (order_qty is not None and order_qty > 0),
+            "execution_state": order is None or order[4:] == ("filled", "executed", "auto"),
+        }
+        checks = {
+            "order_price": all(order_checks.values()),
             "ledger_cashflow": (
                 funding is not None and funding[0] == "paper_initial_funding"
                 and funding_cash == START_CASH_EUR
@@ -344,7 +353,10 @@ def _verify(user_id: int, bot_id: int, decision_id: int, source: dict) -> dict:
         }
         failed_invariants = [code for code in FAILED_INVARIANT_CODES if not checks[code]]
         if failed_invariants:
-            raise PortfolioPaperFxContractFailure(failed_invariants)
+            failed_order_checks = [code for code in FAILED_ORDER_CHECK_CODES if not order_checks[code]]
+            raise PortfolioPaperFxContractFailure(
+                failed_invariants, failed_order_checks=failed_order_checks,
+            )
         return {
             "result": "PASS", "environment": "paper", "quote_currency": source["quote"],
             "valuation_status": "available", "fx_dated": True,

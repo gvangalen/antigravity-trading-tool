@@ -1168,8 +1168,15 @@ def test_portfolio_paper_fx_diagnostic_exports_only_allowlisted_codes():
     module = _module()
     error = RuntimeError("portfolio_paper_fx_contract_failed")
     error.failed_invariants = ["order_price", "private owner 123", "owner_safety", "order_price"]
+    error.failed_order_checks = ["order_price_eur", "private quote 456", "execution_state",
+                                 "order_price_eur"]
     assert module.safe_portfolio_paper_fx_diagnostic(error) == {
         "failed_invariants": ["order_price", "owner_safety"],
+        "failed_order_checks": ["order_price_eur", "execution_state"],
+    }
+    error.failed_invariants = ["owner_safety"]
+    assert module.safe_portfolio_paper_fx_diagnostic(error) == {
+        "failed_invariants": ["owner_safety"],
     }
     assert module.safe_portfolio_paper_fx_diagnostic(RuntimeError("private owner 123")) is None
     assert module.profile_error_category("portfolio_paper_fx", RuntimeError("private owner 123")) == (
@@ -1325,6 +1332,20 @@ def test_portfolio_paper_fx_verifies_database_fill_and_shared_projection(monkeyp
             probe._verify(101, 202, 303, source)
         assert expected in failure.value.failed_invariants
         rows[key] = original
+
+    order_variants = [
+        ("order_cardinality", []),
+        ("order_status", [("open", "paper", 2000.0, 0.025, "filled", "executed", "auto")]),
+        ("order_price_eur", [("filled", "paper", 1.0, 0.025, "filled", "executed", "auto")]),
+        ("order_quantity", [("filled", "paper", 2000.0, 0, "filled", "executed", "auto")]),
+        ("execution_state", [("filled", "paper", 2000.0, 0.025, "open", "executed", "auto")]),
+    ]
+    for expected, changed in order_variants:
+        rows["orders"] = changed
+        with pytest.raises(probe.PortfolioPaperFxContractFailure) as failure:
+            probe._verify(101, 202, 303, source)
+        assert failure.value.failed_order_checks == (expected,)
+    rows["orders"] = [("filled", "paper", 2000.0, 0.025, "filled", "executed", "auto")]
 
     bot.equity = 99.0
     with pytest.raises(probe.PortfolioPaperFxContractFailure) as failure:
