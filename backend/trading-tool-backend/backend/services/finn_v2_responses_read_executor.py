@@ -188,6 +188,14 @@ class FinnResponsesReadExecutor:
                 "is empty, ask naturally for the user's goal and risk style."
             )
         if call.name == "get_closed_trade_review":
+            review_rows = [
+                row for item in results if item.get("scope") == "read_review_history"
+                for row in ((item.get("data") or {}).get("closed_trades") or [])
+                if isinstance(row, dict)
+            ]
+            ambiguous_lesson = self.verified_review_id is None and sum(
+                bool(row.get("confirmed_lesson")) for row in review_rows
+            ) > 1
             output["evidence_boundary"] = (
                 "The closed_trades row is the typed, owner-scoped dossier. A confirmed_lesson "
                 "is the user's saved reflection text, not an order fact, an original trade plan, "
@@ -196,6 +204,11 @@ class FinnResponsesReadExecutor:
                 "a pre-entry plan was proven; do not infer a plan from the lesson. "
                 "The separate owner-scoped portfolio read gives current balances and exposure; "
                 "do not present them as balances at the historical exit time."
+                + (
+                    " Multiple confirmed lessons are present without a verified review ID. "
+                    "Do not treat one as 'this lesson': identify each by review ID or ask which review the user means."
+                    if ambiguous_lesson else ""
+                )
             )
         if any(item["scope"] == "read_active_setup" and item["status"] == "completed" for item in results):
             output["evidence_boundary"] = (

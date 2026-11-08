@@ -110,6 +110,8 @@ def test_model_only_coach_experiment_cannot_be_enabled_outside_local_fixture(mon
     "Kun je de uitgevoerde AAPL-trade en mijn huidige Paper-portefeuille controleren?",
     "Wat weet je over mijn laatst afgesloten Paper-trade en de les die ik "
     "daarbij heb bevestigd? Alleen teruglezen; geen voorstel of actie.",
+    "Wat kan ik van deze bevestigde les leren? Herhaal de les en zeg "
+    "of mijn oorspronkelijke plan is vastgelegd. Alleen sparren.",
 ])
 def test_explicit_closed_trade_review_forces_owner_scoped_dossier_read(message):
     catalog = FinnResponsesToolCatalog()
@@ -149,7 +151,11 @@ def test_explicit_closed_trade_review_forces_owner_scoped_dossier_read(message):
     assert result.response.tool_trace[0]["result"]["results"][0]["scope"] == "read_review_history"
 
 
-def test_closed_trade_review_read_does_not_override_a_removal_request():
+@pytest.mark.parametrize("message", [
+    "Lees mijn trade-review #123 en verwijder die daarna.",
+    "Verwijder mijn bevestigde les uit die review.",
+])
+def test_closed_trade_review_read_does_not_override_a_removal_request(message):
     fake = FakeResponses(response("no-read", text="Ik kan dit dossier niet verwijderen."))
     front = FinnResponsesFrontDoor(
         client=SimpleNamespace(responses=fake), session=object(), user_id=7,
@@ -157,7 +163,7 @@ def test_closed_trade_review_read_does_not_override_a_removal_request():
     )
     front.relevance_guard = SimpleNamespace(is_relevant=AsyncMock(return_value=True))
     asyncio.run(front.run(
-        message="Lees mijn trade-review #123 en verwijder die daarna.",
+        message=message,
         instructions=front._model_led_instructions("nl"), conversation_context={},
         verified_asset=None,
     ))
@@ -215,6 +221,20 @@ def test_confirmed_lesson_followup_rereads_the_verified_dossier():
     assert any(call.kwargs["selector"] == {"_verified_review_id": 123}
                for call in front.reads.reads.execute_tool.await_args_list)
     assert result.response.tool_trace[0]["result"]["results"][0]["scope"] == "read_review_history"
+
+
+def test_unbound_confirmed_lessons_require_review_ids_in_the_read_boundary():
+    reader = FinnResponsesReadExecutor(session=object(), user_id=7, run_id="review-lessons")
+    reader.reads.execute_tool = AsyncMock(return_value=ToolExecutionResult(
+        tool_name="read_review_history", status="completed", success=True,
+        result={"closed_trades": [
+            {"review_id": 123, "confirmed_lesson": {"lesson_text": "Check exit"}},
+            {"review_id": 456, "confirmed_lesson": {"lesson_text": "Check size"}},
+        ]},
+        entity_type="review_history",
+    ))
+    result = asyncio.run(reader(FinnResponsesToolCatalog().validate("get_closed_trade_review", {})))
+    assert "identify each by review ID or ask which review" in result["evidence_boundary"]
 
 
 @pytest.mark.parametrize("message, expected_id", [
