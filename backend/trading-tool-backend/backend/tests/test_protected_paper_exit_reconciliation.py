@@ -166,6 +166,31 @@ def test_rendered_exit_opens_trades_before_reading_evidence(monkeypatch):
     assert events[:2] == ["wait", "click"]
 
 
+@pytest.mark.parametrize("fail_in_inspect,expected", [
+    (False, "paper_exit_rendered_bootstrap_failed"),
+    (True, "paper_exit_rendered_trades_tab_failed"),
+])
+def test_rendered_exit_sanitizes_browser_failure_phase(monkeypatch, fail_in_inspect, expected):
+    from backend.scripts import qa_protected_browser
+    from backend.utils import auth_utils
+
+    async def observe_page(**kwargs):
+        if fail_in_inspect:
+            class Page:
+                def locator(self, _selector):
+                    raise ValueError("private DOM and fixture identity")
+            return await kwargs["inspect"](Page())
+        raise ValueError("private browser error and fixture identity")
+    monkeypatch.setattr(qa_protected_browser, "observe_page", observe_page)
+    monkeypatch.setattr(auth_utils, "create_access_token", lambda *_args: "in-memory-token")
+    import asyncio
+    with pytest.raises(RuntimeError, match=f"^{expected}$"):
+        asyncio.run(probe._rendered_exit(11, 22, {}))
+    assert profile_error_category(
+        "trader_paper_exit_reconciliation", RuntimeError(expected)
+    ) == expected
+
+
 @pytest.mark.parametrize("failed_statement,phase", [
     (2, "setup_update"), (3, "target_type"), (4, "strategy_update"),
     (5, "bot_update"), (6, "portfolio_update"), (7, "decision_insert"),

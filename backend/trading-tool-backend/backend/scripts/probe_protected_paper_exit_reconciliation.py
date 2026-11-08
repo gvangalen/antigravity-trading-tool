@@ -13,21 +13,23 @@ from backend.scripts.qa_trader_gate_invariants import check_paper_exit
 
 
 async def _rendered_exit(user_id: int, bot_id: int, expected: dict) -> dict:
-    from backend.scripts.qa_protected_browser import observe_page
-    from backend.utils.auth_utils import create_access_token
-
-    token = create_access_token({"sub": str(user_id), "role": "user"})
+    phase = "bootstrap"
+    token = None
 
     async def inspect(page):
+        nonlocal phase
+        phase = "trades_tab"
         trades_tab = page.locator('section[aria-label] [role="tablist"] [role="tab"]').first
         await trades_tab.wait_for(timeout=20000)
         await trades_tab.click()
+        phase = "details"
         details = page.locator("section[aria-label] details:has(dl)")
         await details.first.locator("summary").wait_for(timeout=20000)
         if await details.count() != 1:
             return {"rendered_exit_row_unique": False}
         await details.first.locator("summary").click()
         lines = await details.first.locator("dl > div").all_text_contents()
+        phase = "projection"
         return await page.evaluate("""({lines, evidence}) => {
             const format = (value, digits) => new Intl.NumberFormat('nl-NL', {
                 maximumFractionDigits: digits,
@@ -51,10 +53,16 @@ async def _rendered_exit(user_id: int, bot_id: int, expected: dict) -> dict:
         }""", {"lines": lines, "evidence": expected})
 
     try:
+        from backend.scripts.qa_protected_browser import observe_page
+        from backend.utils.auth_utils import create_access_token
+
+        token = create_access_token({"sub": str(user_id), "role": "user"})
         return await observe_page(
             base_url="https://tradamind.com", path=f"/bot?bot_id={bot_id}",
             token=token, inspect=inspect,
         )
+    except Exception:
+        raise RuntimeError(f"paper_exit_rendered_{phase}_failed") from None
     finally:
         token = None
 

@@ -9,6 +9,7 @@ from backend.scripts import probe_protected_paper_exit_reconciliation as exit_pr
 from backend.schemas.finn_v2_schema import EvidenceItem
 from backend.infrastructure import database
 from backend.infrastructure.repositories import finn_v2_runtime_contract_repository as contracts
+from backend.scripts.run_finn_production_qa import profile_error_category
 
 
 NAMESPACE = "qa-123-1-ad9fe0d3-deadbeef"
@@ -269,3 +270,43 @@ def test_account_runtime_private_runtime_error_is_not_exported(monkeypatch):
     with pytest.raises(RuntimeError, match="^account_tool_evidence_unavailable$"):
         asyncio.run(probe._read_tool_results(
             run_id="run-1", conversation_id="conversation-1", user_id=11))
+
+
+def test_account_prepare_reports_fixed_decision_stage_without_sql_values(monkeypatch):
+    class Cursor:
+        rowcount = 1
+        step = 0
+        def __enter__(self):
+            return self
+        def __exit__(self, *_args):
+            return None
+        def execute(self, *_args):
+            self.step += 1
+            if self.step == 3:
+                raise ValueError("private SQL and fixture identity")
+        def fetchone(self):
+            return (1, 2)
+    class Connection:
+        rolled_back = False
+        def cursor(self):
+            return Cursor()
+        def commit(self):
+            pytest.fail("commit after failed insert")
+        def rollback(self):
+            self.rolled_back = True
+        def close(self):
+            pass
+    connection = Connection()
+    monkeypatch.setattr(probe.fixture, "_connection", lambda: connection)
+    with pytest.raises(RuntimeError, match="^account_prepare_decisions_failed$"):
+        probe._prepare(11, 22)
+    assert connection.rolled_back
+    assert profile_error_category(
+        "trader_account_state_readback", RuntimeError("account_prepare_decisions_failed")
+    ) == "account_prepare_decisions_failed"
+
+
+def test_account_stage_sanitizes_private_runtime_error():
+    with pytest.raises(RuntimeError, match="^account_turns_failed$"):
+        with probe._stage("turns"):
+            raise RuntimeError("private answer and fixture identity")
