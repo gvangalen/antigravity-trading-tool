@@ -38,7 +38,10 @@ branchreview aan; Build voegde de regressie toe. Tests met één vast
 UTC-moment in browserzones Amsterdam, New York en Tokio en met een
 offset over de UTC-daggrens slaagden. Alle 41 i18n-tests, i18n-lint,
 frontend typecheck en production build slaagden na de daggrenscorrectie.
-`git diff --check` was schoon. Er is nog geen CI, deploy of
+Een statische backendtest verwachtte nog de oude formatternaam en is
+bijgewerkt; de gerichte test en volledige backend-suite
+(`4302 passed, 4 skipped`) slaagden daarna. `git diff --check` was schoon.
+Er is nog geen geslaagde CI, deploy of
 onafhankelijke live hertest voor deze tijdzonewijziging. De drie
 UNTESTED gates vragen gerichte QA-bewijsvoering op de definitieve SHA.
 
