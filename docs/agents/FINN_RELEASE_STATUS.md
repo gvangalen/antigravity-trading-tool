@@ -4,6 +4,25 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Beschermde Paper-fixture hersteld, QA-hertest wacht (8 november 2026)
+
+Phase: `DEPLOYED_QA_PENDING`. De bestaande QA-agent kreeg expliciete
+gebruikersautorisatie om uitsluitend de beschermde Paper-koersoverride en
+regressietest aan te passen. [PR #865](https://github.com/gvangalen/antigravity-trading-tool/pull/865)
+laat de override de actuele `paper_execution`- en `market_id`-parameters
+accepteren; niet-fixtureaanroepen blijven doorgestuurd. De gerichte
+runner-suite slaagde (`104 passed`), alle vijf PR-controles en alle vijf
+controles van [main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42461664394)
+slaagden. [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42461905879)
+slaagde. Git-main, publieke backend-health en frontend-buildinfo meldden alle
+drie `c0ed34b57e887def2fd978eea7fab46eda033623`; de publieke routes gaven
+HTTP 200. Er is geen product- of Live-handelslogica gewijzigd. De eerdere
+onafhankelijke QA-uitkomst blijft `NOT_ACCEPTED` totdat QA na de laatste
+gecontroleerde statusdeployment de beschermde Paper-route en de vier
+trader-gates herhaalt. Deze statuswijziging maakt zelf een nieuwe SHA;
+de laatste main-CI, Auto Deploy en publieke SHA-pariteit zijn vóór de
+QA-handoff opnieuw vereist.
+
 ## Paper-aankoop: begrensde vervolgdiagnose (8 november 2026)
 
 Phase: `QA_NOT_ACCEPTED`. Kandidaat: `codex/paper-buy-cause-family`,
