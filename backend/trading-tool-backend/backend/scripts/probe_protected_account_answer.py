@@ -312,8 +312,16 @@ def _frozen_facts(user_id: int, bot_id: int) -> dict:
 
 async def _probe_turns(user_id: int, bot_id: int) -> dict:
     from backend.scripts.probe_protected_closed_paper_review import _chat_turn
+    from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+    from backend.domain.finn_v2_tools import FINN_V2_TOOL_ORDER
 
     frozen = _frozen_facts(user_id, bot_id)
+    allowed_operations = {contract.operation_id for contract in FinnV2OperationRegistry().list()}
+    allowed_tools = set(FINN_V2_TOOL_ORDER)
+    required_scopes = {
+        "read_active_setup": "setups", "read_linked_strategy": "strategies",
+        "read_bot_status": "bot_configs", "read_portfolio": "bot_portfolios",
+    }
     question = (
         "Lees alleen mijn opgeslagen ETH DCA-setup, de gekoppelde strategie en "
         "Paper-bot. Wat zijn het ritme en basisbedrag, is de bot "
@@ -322,8 +330,9 @@ async def _probe_turns(user_id: int, bot_id: int) -> dict:
     )
     failures = []
     public_ref_counts = []
+    turn_diagnostics = []
 
-    async def checked_turn(message: str, *, conversation_id: str | None = None):
+    async def checked_turn(message: str, *, label: str, conversation_id: str | None = None):
         before = _frozen_facts(user_id, bot_id)
         if before != frozen:
             failures.append("account_source_changed_during_read")
@@ -331,15 +340,36 @@ async def _probe_turns(user_id: int, bot_id: int) -> dict:
             turn = await _chat_turn(user_id, message, conversation_id=conversation_id)
         except Exception:
             failures.append("account_turn_runtime_error")
+            turn_diagnostics.append({"turn": label, "status": "runtime_error"})
             return None
         response = turn.response
         if turn.status != "completed" or response is None:
             failures.append("account_turn_not_completed")
+            turn_diagnostics.append({"turn": label, "status": "not_completed"})
             return turn
+        trace_value = getattr(turn, "runtime_trace", None)
+        trace = trace_value if isinstance(trace_value, dict) else {}
+        contract = trace.get("contract") if isinstance(trace.get("contract"), dict) else {}
+        operation = contract.get("final_operation_id")
+        tool_calls = trace.get("tool_calls") if isinstance(trace.get("tool_calls"), list) else []
+        diagnostic = {
+            "turn": label, "status": "completed",
+            "operation": operation if isinstance(operation, str) and operation in allowed_operations
+                         else "unregistered_or_missing",
+            "tools": [call.get("tool_name") if isinstance(call.get("tool_name"), str)
+                      and call.get("tool_name") in allowed_tools else "other"
+                      for call in tool_calls if isinstance(call, dict)],
+            "public_ref_count": 0,
+            "answer_nonempty": bool(response.content),
+            "read_scopes": [], "source_checks": [], "answer_checks": [],
+            "bot_status_decision_matches_frozen": None,
+            "review_history_closed_trade_multi_bot": None,
+        }
         public_ref_counts.append(sum(
             item.entity_type in {"setup", "strategy", "bot_status", "portfolio"}
             for item in (response.evidence or [])
         ))
+        diagnostic["public_ref_count"] = public_ref_counts[-1]
         if response.proposal_id or response.confirmation_required or turn.policy and turn.policy.execute_allowed:
             failures.append("account_unexpected_action")
         try:
@@ -353,7 +383,38 @@ async def _probe_turns(user_id: int, bot_id: int) -> dict:
                 "account_runtime_owner_scope", "account_tool_evidence_unavailable",
             } else "account_tool_evidence_unavailable")
             tool_results = []
-        failures.extend(_source_checks(response.evidence or [], tool_results, frozen, user_id))
+        for item in tool_results:
+            if not isinstance(item, dict):
+                continue
+            scope = item.get("scope")
+            scope = scope if isinstance(scope, str) and scope in required_scopes else "other"
+            status = item.get("status")
+            diagnostic["read_scopes"].append({
+                "scope": scope,
+                "status": status if isinstance(status, str) and status in {
+                    "requested", "executing", "completed", "failed",
+                }
+                          else "other",
+                "source_matches_contract": (
+                    scope != "other" and item.get("source") == required_scopes[scope]
+                ),
+            })
+            if scope == "read_bot_status" and isinstance(item.get("data"), dict):
+                status_data = item["data"]
+                decision_data = status_data.get("latest_decision")
+                diagnostic["bot_status_decision_matches_frozen"] = (
+                    str(status_data.get("bot_id")) == str(frozen["bot"]["id"])
+                    and isinstance(decision_data, dict)
+                    and str(decision_data.get("decision_id")) == str(frozen["latest_decision"]["id"])
+                )
+            if item.get("scope") == "read_review_history" and isinstance(item.get("data"), dict):
+                trades = item["data"].get("closed_trades")
+                if isinstance(trades, list):
+                    trade_bot_ids = {str(trade.get("bot_id")) for trade in trades
+                                     if isinstance(trade, dict) and trade.get("bot_id") is not None}
+                    diagnostic["review_history_closed_trade_multi_bot"] = len(trade_bot_ids) > 1
+        diagnostic["source_checks"] = _source_checks(response.evidence or [], tool_results, frozen, user_id)
+        failures.extend(diagnostic["source_checks"])
         current = _frozen_facts(user_id, bot_id)
         if current != frozen:
             failures.append("account_source_changed_during_read")
@@ -365,25 +426,30 @@ async def _probe_turns(user_id: int, bot_id: int) -> dict:
                                 for key in ("action", "at_utc")},
         }
         checked = await examine_answer(answer=response.content, frozen_facts=answer_facts)
-        failures.extend(checked["failed_checks"])
+        diagnostic["answer_checks"] = list(checked["failed_checks"])
+        failures.extend(diagnostic["answer_checks"])
         if checked["result"] == "UNTESTED":
             failures.append("account_answer_unverifiable")
+            diagnostic["answer_checks"].append("account_answer_unverifiable")
+        turn_diagnostics.append(diagnostic)
         return turn
 
-    first = await checked_turn(question)
+    first = await checked_turn(question, label="initial")
     second = await checked_turn(
         "Wat weet je daarvan zeker? Geef dezelfde vier feiten uit mijn opgeslagen gegevens.",
+        label="followup",
         conversation_id=first.conversation_id if first is not None else None,
     ) if first is not None else None
     if second is None:
         failures.append("account_followup_unavailable")
-    third = await checked_turn(question)
+    third = await checked_turn(question, label="fresh_repeat")
     if (first is None or third is None or first.conversation_id == third.conversation_id
             or second is not None and second.conversation_id != first.conversation_id):
         failures.append("account_conversation_lineage")
     return {"result": "FAIL" if failures else "PASS",
             "failed_checks": sorted(set(failures)), "turns": 3,
             "fresh_conversations": 2,
+            "turn_diagnostics": turn_diagnostics,
             "public_account_references": (
                 "not_emitted" if public_ref_counts and all(count == 0 for count in public_ref_counts)
                 else "present" if public_ref_counts and all(count > 0 for count in public_ref_counts)

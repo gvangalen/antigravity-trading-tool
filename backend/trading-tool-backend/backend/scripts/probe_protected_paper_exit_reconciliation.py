@@ -16,30 +16,84 @@ from backend.scripts.qa_trader_gate_invariants import check_paper_exit
 async def _rendered_exit(user_id: int, bot_id: int, expected: dict) -> dict:
     phase = "bootstrap"
     token = None
+    bot_responses = []
+    onboarding_responses = []
+    page_error_count = 0
+    console_error_count = 0
+
+    def observe_response(response):
+        if (urlsplit(response.url).path == "/api/bot/configs"
+                and response.request.method == "GET"):
+            bot_responses.append(response)
+        if (urlsplit(response.url).path == "/api/onboarding/status"
+                and response.request.method == "GET"):
+            onboarding_responses.append(response)
+
+    def observe_page_error(_error):
+        nonlocal page_error_count
+        page_error_count += 1
+
+    def observe_console(message):
+        nonlocal console_error_count
+        if message.type == "error":
+            console_error_count += 1
 
     async def inspect(page):
         nonlocal phase
-        phase = "owner_bot_api"
-        bot_read = await page.evaluate("""async botId => {
-            try {
-                const response = await fetch('/api/bot/configs', {cache: 'no-store'});
-                if (!response.ok) return {status: response.status, present: false};
-                const bots = await response.json();
-                return {status: response.status, present: Array.isArray(bots) &&
-                    bots.some(bot => Number(bot.id) === botId)};
-            } catch (_) { return {status: 0, present: false}; }
-        }""", bot_id)
-        if bot_read.get("status") != 200:
-            phase = "owner_bot_api_auth" if bot_read.get("status") in {401, 403} else "owner_bot_api_unavailable"
-            raise RuntimeError(phase)
-        if bot_read.get("present") is not True:
-            phase = "owner_bot_api_missing"
-            raise RuntimeError(phase)
         phase = "owner_bot_wait"
+        selected_error = False
         try:
             await page.locator('div[aria-label] > button[aria-pressed="true"]').first.wait_for(timeout=20000)
         except Exception:
+            selected_error = True
+        phase = "owner_bot_page_get"
+        if not bot_responses:
+            phase = "owner_bot_page_get_unseen"
+            raise RuntimeError(phase)
+        found_owner_bot = False
+        bot_shape = "unavailable"
+        bot_count = None
+        for response in bot_responses:
+            if response.status in {401, 403}:
+                phase = "owner_bot_page_get_auth"
+                raise RuntimeError(phase)
+            if response.status != 200:
+                phase = "owner_bot_page_get_unavailable"
+                raise RuntimeError(phase)
+            try:
+                bots = await response.json()
+            except Exception:
+                phase = "owner_bot_page_get_unparseable"
+                raise RuntimeError(phase) from None
+            bot_shape = "array" if isinstance(bots, list) else "wrapper" if isinstance(bots, dict) else "other"
+            bot_count = len(bots) if isinstance(bots, list) else None
+            found_owner_bot |= isinstance(bots, list) and any(
+                isinstance(bot, dict) and bot.get("id") == bot_id for bot in bots
+            )
+        if not found_owner_bot or selected_error:
             path = urlsplit(page.url).path
+            if path == "/bot":
+                ui = await page.evaluate("""() => ({
+                    focus_nav_present: !!document.querySelector('section:has(> header h1) > nav[aria-label]'),
+                    bot_button_count: document.querySelectorAll('div[aria-label] > button[aria-pressed]').length,
+                    onboarding_guide_present: !!document.querySelector('div.mb-10.space-y-6 > section'),
+                })""")
+                return {
+                    "rendered_failure_reason": (
+                        "owner_bot_page_get_missing" if not found_owner_bot else "owner_bot_not_selected"
+                    ),
+                    "ui_diagnostic": {
+                        "route": "bot", "bot_get_status": 200,
+                        "bot_get_shape": bot_shape, "bot_get_count": bot_count,
+                        "owner_bot_present": found_owner_bot,
+                        "onboarding_get_seen": bool(onboarding_responses),
+                        "focus_nav_present": ui.get("focus_nav_present") is True,
+                        "bot_button_count": ui.get("bot_button_count"),
+                        "onboarding_guide_present": ui.get("onboarding_guide_present") is True,
+                        "page_error_count": page_error_count,
+                        "console_error_count": console_error_count,
+                    },
+                }
             phase = (
                 "login_redirect" if path == "/login" else
                 "onboarding_redirect" if path.startswith("/onboarding") else
@@ -115,6 +169,8 @@ async def _rendered_exit(user_id: int, bot_id: int, expected: dict) -> dict:
         return await observe_page(
             base_url="https://tradamind.com", path=f"/bot?bot_id={bot_id}",
             token=token, inspect=inspect, bypass_fixture_onboarding=True,
+            observe_response=observe_response,
+            observe_page_error=observe_page_error, observe_console=observe_console,
         )
     except Exception:
         raise RuntimeError(f"paper_exit_rendered_{phase}_failed") from None
@@ -441,12 +497,17 @@ def run(namespace: str) -> dict:
             "rendered_exit_quantity", "rendered_exit_proceeds",
             "rendered_exit_source_quote", "rendered_exit_fx",
         }
-        if set(rendered) != required_rendered or not all(
+        if not all(
             rendered.get(key) is True for key in required_rendered
         ):
-            return {"result": "FAIL", "failed_checks": sorted(
-                key for key in required_rendered if rendered.get(key) is not True
-            ), "rendered_ui_checked": True, "gate_status": "FAIL",
+            failed_checks = ([rendered["rendered_failure_reason"]]
+                             if rendered.get("rendered_failure_reason") else sorted(
+                                 key for key in required_rendered if rendered.get(key) is not True
+                             ))
+            return {"result": "FAIL", "failed_checks": failed_checks,
+                    **({"browser_diagnostic": rendered["ui_diagnostic"]}
+                       if rendered.get("ui_diagnostic") else {}),
+                    "rendered_ui_checked": True, "gate_status": "FAIL",
                 "engine_calls": 2, "live_calls": live_calls,
                 "onboarding_navigation_override": True}
         passed = True
