@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Beschermde Paper/FX-voorcontrole: Paper-broncheck vóór fixture (8 november 2026)
 
-Phase: `DEPLOYED_QA_PENDING`. Onafhankelijke QA op de vorige finale SHA
+Phase: `QA_NOT_ACCEPTED`. Onafhankelijke QA op de vorige finale SHA
 `f9ff42112d89bb651a8800efba7ca98cea47d5c0` in
 [run 42473333400](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42473333400)
 kwam voorbij de eerdere `price_source_mismatch`, maar de Paper-executor
@@ -35,6 +35,29 @@ Deze statuswijziging maakt opnieuw een commit-SHA; vóór de onafhankelijke
 Paper-only QA-hertest worden laatste main-CI, Auto Deploy en publieke
 SHA-pariteit gecontroleerd. De vier bredere trader-gates en polling/SSE
 blijven open.
+
+De laatste main-CI
+[42474538274](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42474538274)
+en [Auto Deploy 42474768912](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42474768912)
+slaagden. Git-main en beide publieke routes (HTTP 200) meldden
+`b2a38f9ea96165dec867e46f9878bb93d0608e46`. Onafhankelijke
+Paper-only QA-run
+[42474925701](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42474925701)
+kwam voorbij de bronchecks, bereikte een Paper-fill en wees replay af,
+maar faalde daarna met `portfolio_paper_fx_contract_failed` bij de
+gecombineerde controle van opgeslagen order, EUR-kasstroom en
+portfolioprojectie. De afzonderlijk falende invariant is uit het
+gesaniteerde artifact niet af te leiden; de EUR-kasstroom en projectie zijn
+daarom niet afgetekend. Artifact SHA-256:
+`4aca3f508abad440f2817cb39f855a0bd0e15232f7f072a73a64cf48bf121720`.
+De run registreerde één Paper-uitvoeringspoging, nul Live-tradingcalls en
+nul Live-botactivaties. QA stelde uitsluitend read-only vast dat het
+resultaatveld leeg is en dat zes controles in één assertie zijn samengevoegd.
+Een afzonderlijke gebruikersautorisatie is aangevraagd om bij falen alleen
+allowlisted namen van mislukte controles te rapporteren en hoogstens één
+Paper-only hertest te doen. Tot die toestemming komt er geen volgende
+beschermde run of fixturewijziging. Dit document krijgt door vastlegging
+een nieuwe commit-SHA; de QA-uitkomst hoort bij `b2a38f9e…`.
 
 ## Beschermde Paper/FX-voorcontrole: geselecteerd bronmoment (8 november 2026)
 
