@@ -32,24 +32,91 @@ def _utc(value):
     return value.astimezone(timezone.utc) if isinstance(value, datetime) and value.tzinfo else None
 
 
-def _source_checks(evidence: list, frozen: dict, user_id: int) -> list[str]:
-    if any(item.user_id != user_id or not item.user_scoped for item in evidence):
-        return ["account_evidence_owner_scope"]
-    required_types = {"setup", "strategy", "bot_status", "portfolio"}
-    relevant = [item for item in evidence if item.entity_type in required_types]
-    if len(relevant) != len(required_types) or {item.entity_type for item in relevant} != required_types:
-        return ["account_evidence_sources_ambiguous" if len(relevant) > len(required_types)
-                else "account_evidence_sources_missing"]
-    by_type = {item.entity_type: item for item in relevant}
+async def _read_tool_results(*, run_id: str, conversation_id: str, user_id: int) -> list[dict]:
+    from backend.infrastructure.database import async_session_factory
+    from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import (
+        FinnV2RuntimeContractRepository,
+    )
+
+    try:
+        async with async_session_factory() as session:
+            contract = await FinnV2RuntimeContractRepository(session).get_for_run(run_id=run_id)
+            if (contract is None or contract.user_id != user_id
+                    or contract.conversation_id != conversation_id):
+                raise RuntimeError("account_runtime_owner_scope")
+            exchange = (contract.state_json or {}).get("responses_exchange") or {}
+            if (exchange.get("run_id") != run_id
+                    or exchange.get("conversation_id") != conversation_id
+                    or not exchange.get("response_id")
+                    or not isinstance(exchange.get("tool_trace"), list)):
+                raise RuntimeError("account_tool_evidence_unavailable")
+            results = []
+            for call in exchange["tool_trace"]:
+                if not isinstance(call, dict) or not isinstance(call.get("result"), dict):
+                    raise RuntimeError("account_tool_evidence_unavailable")
+                rows = call["result"].get("results") or []
+                if not isinstance(rows, list):
+                    raise RuntimeError("account_tool_evidence_unavailable")
+                results.extend(rows)
+            return results
+    except RuntimeError as error:
+        code = str(error)
+        if code in {"account_runtime_owner_scope", "account_tool_evidence_unavailable"}:
+            raise
+        raise RuntimeError("account_tool_evidence_unavailable") from None
+    except Exception:
+        raise RuntimeError("account_tool_evidence_unavailable") from None
+
+
+def _source_checks(evidence: list, tool_results: list, frozen: dict, user_id: int) -> list[str]:
+    if any(not isinstance(item, dict) for item in tool_results):
+        return ["account_evidence_sources_unverified"]
+    required = {
+        "read_active_setup": ("setup", "setups"),
+        "read_linked_strategy": ("strategy", "strategies"),
+        "read_bot_status": ("bot_status", "bot_configs"),
+        "read_portfolio": ("portfolio", "bot_portfolios"),
+    }
     expected_ids = {"setup": frozen["plan"]["setup_id"],
                     "strategy": frozen["plan"]["strategy_id"],
-                    "bot_status": frozen["bot"]["id"]}
-    if any(str(by_type[kind].entity_id) != str(value)
-           for kind, value in expected_ids.items()):
-        return ["account_evidence_wrong_source"]
-    setup = by_type["setup"].payload
-    strategy = by_type["strategy"].payload
-    status = by_type["bot_status"].payload
+                    "bot_status": frozen["bot"]["id"],
+                    "portfolio": user_id}
+    expected_sources = {kind: source for _scope, (kind, source) in required.items()}
+    refs_by_type = {}
+    for item in evidence:
+        if item.owned_by_user is not True:
+            return ["account_evidence_owner_scope"]
+        if item.entity_type in expected_sources:
+            if item.source != expected_sources[item.entity_type]:
+                return ["account_evidence_wrong_source"]
+            if str(item.entity_id) != str(expected_ids[item.entity_type]):
+                return ["account_evidence_wrong_source"]
+            if item.entity_type in refs_by_type:
+                return ["account_evidence_references_ambiguous"]
+            refs_by_type[item.entity_type] = item
+    relevant = [item for item in tool_results
+                if isinstance(item, dict) and item.get("scope") in required]
+    if {item.get("scope") for item in relevant} != set(required):
+        return ["account_evidence_sources_missing"]
+    if any(item.get("status") != "completed"
+           or item.get("source") != required[item["scope"]][1]
+           or not isinstance(item.get("data"), dict) for item in relevant):
+        return ["account_evidence_sources_unverified"]
+    by_type = {}
+    for item in relevant:
+        kind = required[item["scope"]][0]
+        data = item["data"]
+        if kind != "portfolio":
+            id_field = {"setup": "setup_id", "strategy": "strategy_id",
+                        "bot_status": "bot_id"}[kind]
+            if str(_value(data, id_field)) != str(expected_ids[kind]):
+                return ["account_evidence_wrong_source"]
+        if kind in by_type and by_type[kind] != data:
+            return ["account_evidence_sources_ambiguous"]
+        by_type[kind] = data
+    setup = by_type["setup"]
+    strategy = by_type["strategy"]
+    status = by_type["bot_status"]
     if _value(setup, "dca_frequency") != frozen["plan"]["cadence"]:
         return ["account_evidence_plan_mismatch"]
     try:
@@ -67,7 +134,7 @@ def _source_checks(evidence: list, frozen: dict, user_id: int) -> list[str]:
             or _value(decision, "action") != frozen["latest_decision"]["action"]
             or _utc(_value(decision, "decision_at")) != _utc(frozen["latest_decision"]["at_utc"])):
         return ["account_evidence_latest_decision_mismatch"]
-    bots = _value(by_type["portfolio"].payload, "bots") or []
+    bots = _value(by_type["portfolio"], "bots") or []
     matches = [bot for bot in bots if str(_value(bot, "bot_id")) == str(frozen["bot"]["id"])]
     if len(matches) != 1:
         return ["account_evidence_portfolio_bot_missing"]
@@ -201,6 +268,7 @@ async def _probe_turns(user_id: int, bot_id: int) -> dict:
         "botbeslissing met datum en tijdzone? Wijzig niets."
     )
     failures = []
+    public_ref_counts = []
 
     async def checked_turn(message: str, *, conversation_id: str | None = None):
         before = _frozen_facts(user_id, bot_id)
@@ -215,9 +283,24 @@ async def _probe_turns(user_id: int, bot_id: int) -> dict:
         if turn.status != "completed" or response is None:
             failures.append("account_turn_not_completed")
             return turn
+        public_ref_counts.append(sum(
+            item.entity_type in {"setup", "strategy", "bot_status", "portfolio"}
+            for item in (response.evidence or [])
+        ))
         if response.proposal_id or response.confirmation_required or turn.policy and turn.policy.execute_allowed:
             failures.append("account_unexpected_action")
-        failures.extend(_source_checks(response.evidence or [], frozen, user_id))
+        try:
+            tool_results = await _read_tool_results(
+                run_id=turn.run_id, conversation_id=turn.conversation_id,
+                user_id=user_id,
+            )
+        except RuntimeError as error:
+            code = str(error)
+            failures.append(code if code in {
+                "account_runtime_owner_scope", "account_tool_evidence_unavailable",
+            } else "account_tool_evidence_unavailable")
+            tool_results = []
+        failures.extend(_source_checks(response.evidence or [], tool_results, frozen, user_id))
         current = _frozen_facts(user_id, bot_id)
         if current != frozen:
             failures.append("account_source_changed_during_read")
@@ -247,7 +330,12 @@ async def _probe_turns(user_id: int, bot_id: int) -> dict:
         failures.append("account_conversation_lineage")
     return {"result": "FAIL" if failures else "PASS",
             "failed_checks": sorted(set(failures)), "turns": 3,
-            "fresh_conversations": 2}
+            "fresh_conversations": 2,
+            "public_account_references": (
+                "not_emitted" if public_ref_counts and all(count == 0 for count in public_ref_counts)
+                else "present" if public_ref_counts and all(count > 0 for count in public_ref_counts)
+                else "mixed_or_unavailable"
+            )}
 
 
 def run(namespace: str) -> dict:

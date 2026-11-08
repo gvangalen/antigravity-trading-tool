@@ -6,9 +6,40 @@ from types import SimpleNamespace
 from backend.scripts import probe_protected_account_answer as probe
 from backend.scripts import probe_protected_closed_paper_review as review_probe
 from backend.scripts import probe_protected_paper_exit_reconciliation as exit_probe
+from backend.schemas.finn_v2_schema import EvidenceItem
+from backend.infrastructure import database
+from backend.infrastructure.repositories import finn_v2_runtime_contract_repository as contracts
 
 
 NAMESPACE = "qa-123-1-ad9fe0d3-deadbeef"
+
+
+def _tool_results(*, cadence="weekly"):
+    return [
+        {"scope": "read_active_setup", "status": "completed", "source": "setups",
+         "data": {"setup_id": 1, "dca_frequency": cadence}},
+        {"scope": "read_linked_strategy", "status": "completed", "source": "strategies",
+         "data": {"strategy_id": 2, "base_amount": 10}},
+        {"scope": "read_bot_status", "status": "completed", "source": "bot_configs",
+         "data": {"bot_id": 3, "is_active": True, "is_live": False,
+                  "latest_decision": {"decision_id": 4, "action": "hold",
+                                      "decision_at": "2026-11-08T12:00:00Z"}}},
+        {"scope": "read_portfolio", "status": "completed", "source": "bot_portfolios",
+         "data": {"bots": [{"bot_id": 3, "position_qty": "0.01"}]}},
+    ]
+
+
+def _public_refs():
+    return [
+        EvidenceItem(entity_type=kind, entity_id=str(source_id), source=source,
+                     owned_by_user=True)
+        for kind, source_id, source in (
+            ("setup", 1, "setups"),
+            ("strategy", 2, "strategies"),
+            ("bot_status", 3, "bot_configs"),
+            ("portfolio", 11, "bot_portfolios"),
+        )
+    ]
 
 
 def test_account_probe_requires_profile_authorization_before_any_fixture_write(monkeypatch):
@@ -119,30 +150,24 @@ def test_account_turns_use_two_fresh_conversations_and_sanitize_result(monkeypat
     async def chat(_user_id, message, *, conversation_id=None):
         calls.append(conversation_id)
         conv = conversation_id or f"conversation-{len(calls)}"
-        evidence = [
-            SimpleNamespace(entity_type="setup", entity_id="1", user_id=11,
-                            user_scoped=True, payload={"dca_frequency": "weekly"}),
-            SimpleNamespace(entity_type="strategy", entity_id="2", user_id=11,
-                            user_scoped=True, payload={"base_amount": 10}),
-            SimpleNamespace(entity_type="bot_status", entity_id="3", user_id=11,
-                            user_scoped=True, payload={"is_active": True, "is_live": False,
-                                "latest_decision": {"decision_id": 4, "action": "hold",
-                                    "decision_at": "2026-11-08T12:00:00Z"}}),
-            SimpleNamespace(entity_type="portfolio", entity_id=None, user_id=11,
-                            user_scoped=True, payload={"bots": [{"bot_id": 3, "position_qty": "0.01"}]}),
-        ]
+        evidence = []
         response = SimpleNamespace(content="private answer", proposal_id=None,
                                    confirmation_required=False, evidence=evidence)
         return SimpleNamespace(status="completed", response=response,
-                               conversation_id=conv, policy=SimpleNamespace(execute_allowed=False))
+                               run_id=f"run-{len(calls)}", conversation_id=conv,
+                               policy=SimpleNamespace(execute_allowed=False))
     async def examined(**_kwargs):
         return {"result": "PASS", "failed_checks": []}
     monkeypatch.setattr(review_probe, "_chat_turn", chat)
     monkeypatch.setattr(probe, "examine_answer", examined)
+    async def read_tool_results(**_kwargs):
+        return _tool_results()
+    monkeypatch.setattr(probe, "_read_tool_results", read_tool_results)
     result = asyncio.run(probe._probe_turns(11, 3))
     assert calls == [None, "conversation-1", None]
     assert result["result"] == "PASS"
     assert result["fresh_conversations"] == 2
+    assert result["public_account_references"] == "not_emitted"
     assert "private" not in str(result)
 
 
@@ -153,19 +178,94 @@ def test_account_source_check_rejects_missing_or_foreign_evidence():
         "position": {"quantity": "0.01"},
         "latest_decision": {"id": 4, "action": "hold", "at_utc": "2026-11-08T12:00:00Z"},
     }
-    assert probe._source_checks([], facts, 11) == ["account_evidence_sources_missing"]
-    evidence = [SimpleNamespace(entity_type=kind, entity_id=str(source_id),
-                                user_id=12, user_scoped=True, payload={})
-                for kind, source_id in (("setup", 1), ("strategy", 2),
-                                        ("bot_status", 3), ("portfolio", None))]
-    assert probe._source_checks(evidence, facts, 11) == ["account_evidence_owner_scope"]
-    evidence = [SimpleNamespace(**{**item.__dict__, "user_id": 11}) for item in evidence]
-    evidence.append(SimpleNamespace(entity_type="setup", entity_id="1", user_id=12,
-                                    user_scoped=True, payload={}))
-    assert probe._source_checks(evidence, facts, 11) == ["account_evidence_owner_scope"]
-    evidence[-1].user_id = 11
-    assert probe._source_checks(evidence, facts, 11) == ["account_evidence_sources_ambiguous"]
-    evidence.pop()
-    evidence.append(SimpleNamespace(entity_type="scores", entity_id=None, user_id=12,
-                                    user_scoped=True, payload={}))
-    assert probe._source_checks(evidence, facts, 11) == ["account_evidence_owner_scope"]
+    results = _tool_results(cadence="daily")
+    refs = _public_refs()
+    assert probe._source_checks([], [], facts, 11) == ["account_evidence_sources_missing"]
+    assert probe._source_checks(refs, results, facts, 11) == []
+    assert probe._source_checks([], results, facts, 11) == []
+    evidence = [EvidenceItem(entity_type="setup", entity_id="1", source="setups",
+                             owned_by_user=False)]
+    assert probe._source_checks(evidence, results, facts, 11) == ["account_evidence_owner_scope"]
+    evidence = [EvidenceItem(entity_type="setup", entity_id="1", source="setups")]
+    assert probe._source_checks(evidence, results, facts, 11) == ["account_evidence_owner_scope"]
+    evidence = [EvidenceItem(entity_type="setup", entity_id="999", source="setups",
+                             owned_by_user=True)]
+    assert probe._source_checks(evidence, results, facts, 11) == ["account_evidence_wrong_source"]
+    evidence = [EvidenceItem(entity_type="setup", entity_id="1", source="other",
+                             owned_by_user=True)]
+    assert probe._source_checks(evidence, results, facts, 11) == ["account_evidence_wrong_source"]
+    evidence = [EvidenceItem(entity_type="portfolio", entity_id="account", source="bot_portfolios")]
+    assert probe._source_checks(evidence, results, facts, 11) == ["account_evidence_owner_scope"]
+    assert probe._source_checks(refs[:-1], results, facts, 11) == []
+    assert probe._source_checks(refs, results[:-1], facts, 11) == ["account_evidence_sources_missing"]
+    duplicate = [*refs, refs[0]]
+    assert probe._source_checks(duplicate, results, facts, 11) == ["account_evidence_references_ambiguous"]
+    wrong_portfolio = [*refs[:-1], EvidenceItem(entity_type="portfolio", entity_id="12",
+                                                source="bot_portfolios", owned_by_user=True)]
+    assert probe._source_checks(wrong_portfolio, results, facts, 11) == ["account_evidence_wrong_source"]
+    foreign = [*results, {**results[0], "data": {"setup_id": 999, "dca_frequency": "daily"}}]
+    assert probe._source_checks(refs, foreign, facts, 11) == ["account_evidence_wrong_source"]
+    partial = [*results[:-1], {**results[-1], "status": "partial"}]
+    assert probe._source_checks(refs, partial, facts, 11) == ["account_evidence_sources_unverified"]
+    assert probe._source_checks(refs, [*results, "unexpected-row"], facts, 11) == [
+        "account_evidence_sources_unverified"]
+    unrelated = [*refs, EvidenceItem(entity_type="scores", entity_id="7", source="scores")]
+    assert probe._source_checks(unrelated, results, facts, 11) == ["account_evidence_owner_scope"]
+
+
+@pytest.mark.parametrize("owner,conversation,trace_present,expected", [
+    (11, "conversation-1", True, None),
+    (12, "conversation-1", True, "account_runtime_owner_scope"),
+    (11, "conversation-2", True, "account_runtime_owner_scope"),
+    (11, "conversation-1", False, "account_tool_evidence_unavailable"),
+])
+def test_account_runtime_tool_trace_requires_same_owner_and_run(
+    monkeypatch, owner, conversation, trace_present, expected,
+):
+    class Session:
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *_args):
+            return None
+    exchange = {"run_id": "run-1", "conversation_id": "conversation-1",
+                "response_id": "response-1", "tool_trace": [
+                    {"result": {"results": _tool_results()}}
+                ]} if trace_present else {}
+    contract = SimpleNamespace(user_id=owner, conversation_id=conversation,
+                               state_json={"responses_exchange": exchange})
+    monkeypatch.setattr(database, "async_session_factory", Session)
+    async def get_for_run(self, *, run_id):
+        assert run_id == "run-1"
+        return contract
+    monkeypatch.setattr(contracts.FinnV2RuntimeContractRepository, "get_for_run", get_for_run)
+    if expected:
+        with pytest.raises(RuntimeError, match=f"^{expected}$"):
+            asyncio.run(probe._read_tool_results(
+                run_id="run-1", conversation_id="conversation-1", user_id=11))
+    else:
+        assert asyncio.run(probe._read_tool_results(
+            run_id="run-1", conversation_id="conversation-1", user_id=11)) == _tool_results()
+
+
+def test_account_runtime_read_error_is_sanitized(monkeypatch):
+    class Session:
+        async def __aenter__(self):
+            raise ValueError("private database value")
+        async def __aexit__(self, *_args):
+            return None
+    monkeypatch.setattr(database, "async_session_factory", Session)
+    with pytest.raises(RuntimeError, match="^account_tool_evidence_unavailable$"):
+        asyncio.run(probe._read_tool_results(
+            run_id="run-1", conversation_id="conversation-1", user_id=11))
+
+
+def test_account_runtime_private_runtime_error_is_not_exported(monkeypatch):
+    class Session:
+        async def __aenter__(self):
+            raise RuntimeError("private fixture identity and SQL value")
+        async def __aexit__(self, *_args):
+            return None
+    monkeypatch.setattr(database, "async_session_factory", Session)
+    with pytest.raises(RuntimeError, match="^account_tool_evidence_unavailable$"):
+        asyncio.run(probe._read_tool_results(
+            run_id="run-1", conversation_id="conversation-1", user_id=11))
