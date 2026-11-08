@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Vier trader-gates: eerste FINN-bronlezing en portfoliotijd (8 november 2026)
 
-Phase: `CI_VALIDATED_DEPLOY_PENDING`. Onafhankelijke ingelogde QA stelde in
+Phase: `DEPLOYED_QA_PENDING`. Onafhankelijke ingelogde QA stelde in
 twee nieuwe gesprekken dezelfde read-only vraag over setup, strategie, Paper-bot,
 positie en laatste botbeslissing. FINN las het DCA-ritme en basisbedrag, maar
 controleerde de drie gevraagde bot- en portfoliogegevens niet in de eerste beurt.
@@ -47,9 +47,18 @@ is opnieuw uitgevoerd, niet uit de rode runs afgeleid. Security en
 Architecture vonden geen resterende codeblocker. Alle vijf controles van
 [PR-CI 42514657460](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42514657460)
 op kandidaat `e88e8f2a522e045af45f3d9630efae575f1098e2` zijn geslaagd.
-Deze statuswijziging maakt een nieuwe kandidaat-SHA, waarvoor CI opnieuw
-moet slagen. Auto Deploy, publieke SHA-pariteit en onafhankelijke live
-hertest zijn nog niet gemeten. Dit is geen live-acceptatie van de vier gates.
+Ook alle vijf controles van de laatste
+[PR-CI 42514984102](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42514984102)
+slaagden. [PR #901](https://github.com/gvangalen/antigravity-trading-tool/pull/901)
+is gemerged; alle vijf controles van
+[main-CI 42515320451](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42515320451)
+en [Auto Deploy 42515597990](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42515597990)
+slaagden. Git-main, publieke `/api/health` en `/build-info.json` gaven
+HTTP 200 en exact SHA `70699a24b2729b95c3409e0d0b2fa6e87d0c8793`.
+Deze statuswijziging maakt opnieuw een SHA; Build controleert de laatste
+main-CI, Auto Deploy en publieke pariteit voordat QA begint. Onafhankelijke
+live hertest is nog niet uitgevoerd. Dit is geen live-acceptatie van de
+vier gates.
 
 ## FINN watchlistgesprek en exacte handelsparen (8 november 2026)
 
