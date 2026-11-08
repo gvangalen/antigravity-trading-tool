@@ -43,6 +43,7 @@ ALLOWED_PROFILES = {
     "score2_exact_eur_paper",
     "trader_pair_score_continuity",
     "trader_paper_exit_reconciliation",
+    "trader_paper_exit_fixture_audit",
     "score2_exact_usdt_paper",
     "closed_paper_trade_review",
     "closed_paper_trade_review_chat",
@@ -198,7 +199,18 @@ def profile_error_category(profile: str, error: Exception) -> str:
             "paper_exit_engine_unavailable", "paper_exit_persisted_effect_incomplete",
             "paper_exit_fixture_manifest_forbidden", "fixture_cleanup_failed",
             "fixture_quarantine_failed",
+            "paper_exit_preflight_failed", "paper_exit_seed_failed",
+            "paper_exit_paper_open_failed", "paper_exit_baseline_failed",
+            "paper_exit_engine_failed", "paper_exit_evidence_failed",
         } else "paper_exit_probe_runtime_error")
+    if profile == "trader_paper_exit_fixture_audit":
+        code = str(error)
+        return (code if code in {
+            "trader_fixture_audit_label_invalid", "trader_fixture_audit_scope_invalid",
+            "trader_fixture_audit_manifest_forbidden",
+            "trader_fixture_audit_prior_report_unavailable",
+            "trader_fixture_audit_prior_report_mismatch",
+        } else "trader_fixture_audit_runtime_error")
     return str(error)
 
 
@@ -2373,6 +2385,20 @@ def main() -> int:
                     "passed" if report[args.profile]["result"] == "PASS" else "failed"
                 )
                 report["qa_status"] = "COMPLETED"
+            elif args.profile == "trader_paper_exit_fixture_audit":
+                if args.manifest_id != "none" or args.manifest_bundle_path:
+                    raise ValueError("trader_fixture_audit_manifest_forbidden")
+                report["protected_profile_attempted"] = True
+                report["qa_status"] = "INCOMPLETE"
+                report["outcome"] = "incomplete"
+                from backend.scripts.probe_protected_trader_fixture_audit import run as audit_fixture
+
+                report[args.profile] = audit_fixture(args.run_label)
+                report["outcome"] = (
+                    "failed" if report[args.profile]["fixture_state"] in {"UNSAFE_ACTIVE", "AMBIGUOUS"}
+                    else "incomplete"
+                )
+                report["qa_status"] = "COMPLETED_WITH_FAILURES" if report["outcome"] == "failed" else "INCOMPLETE"
             elif args.profile in {"closed_paper_trade_review", "closed_paper_trade_review_chat"}:
                 if args.manifest_id != "none" or args.manifest_bundle_path:
                     raise ValueError("closed_paper_review_fixture_manifest_forbidden")

@@ -115,6 +115,27 @@ def test_trader_gate_profiles_are_protected_and_distinguish_execution_scope():
     assert 'report["safety"]["execution_calls"] = report[args.profile].get("engine_calls")' in exit_branch
 
 
+def test_prior_paper_fixture_audit_is_read_only_and_bounded():
+    module = _module()
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    dispatch = DISPATCH_SCRIPT_PATH.read_text(encoding="utf-8")
+    profile = "trader_paper_exit_fixture_audit"
+    assert profile in module.ALLOWED_PROFILES
+    assert profile in workflow and profile in dispatch
+    assert '"$ALLOW_FIXTURE_ACTIONS" != "false"' in workflow
+    assert '"$ALLOW_SAFE_FIXTURE_EXECUTION" != "false"' in workflow
+    assert '"$allow_fixture_actions" != "false"' in dispatch
+    assert '"$allow_safe_fixture_execution" != "false"' in dispatch
+    source = SCRIPT_PATH.read_text(encoding="utf-8")
+    audit_branch = source.split(f'elif args.profile == "{profile}":', 1)[1].split(
+        'elif args.profile in {"closed_paper_trade_review"', 1
+    )[0]
+    assert 'audit_fixture(args.run_label)' in audit_branch
+    assert 'execution_calls' not in audit_branch
+    assert 'else "incomplete"' in audit_branch
+    assert '"INCOMPLETE"' in audit_branch
+
+
 def test_typed_entry_paper_profile_requires_explicit_fixture_scope(monkeypatch):
     module = _module()
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")

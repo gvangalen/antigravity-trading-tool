@@ -95,6 +95,27 @@ the dated, owner-scoped stale reading. This does not assert that the UI or FINN
 displayed `stale_source`. Its artifact says `gate_status=PARTIAL` and explicitly
 marks both transport projections unchecked.
 
+## Prior Paper-exit runner diagnosis
+
+`trader_paper_exit_fixture_audit` is a read-only protected profile. With both
+fixture-action flags false and `run_label=audit-<workflow-id>-<attempt>-<sha8>`,
+it searches only the child namespace of that earlier workflow and publishes
+fixed booleans for retained Paper rows and active/Live safety. It never emits
+the namespace, owner, bot, values, SQL or error text. `NO_RETAINED_FIXTURE`
+requires the prior sanitized report to identify the Paper-exit profile and
+source SHA and prove the protected profile was attempted but failed or remained
+incomplete; otherwise the audit stops before querying fixture rows.
+`NO_RETAINED_FIXTURE`
+does not prove cleanup: the earlier run may have failed before seeding, so the
+audit outcome stays `incomplete` even when it finds no retained child. An
+inactive retained fixture stays quarantined for bounded diagnosis; the audit
+never deletes it and also reports an incomplete diagnostic outcome, not a
+product PASS. Current inactivity does not prove a historical cleanup action.
+The Paper-exit collector now translates unexpected errors
+to fixed preflight/seed/open/baseline/engine/evidence stage codes before the
+runner sanitizes them. An old `runner_internal` result cannot retrospectively
+be assigned one of those stages without additional evidence.
+
 ## Gate 4: automatic Paper exit and reproducible cashflow
 
 Fixture: one inactive, uncredentialed Paper bot with a real open Paper position

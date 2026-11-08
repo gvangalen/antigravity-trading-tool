@@ -13,6 +13,16 @@ from backend.scripts.qa_trader_gate_invariants import check_paper_exit
 
 
 @contextmanager
+def _stage(name: str):
+    try:
+        yield
+    except (RuntimeError, ValueError):
+        raise
+    except Exception:
+        raise RuntimeError(f"paper_exit_{name}_failed") from None
+
+
+@contextmanager
 def _guard_live_exchange():
     from backend.engine import trading_bot_execution as execution
 
@@ -250,30 +260,36 @@ def run(namespace: str) -> dict:
     bound = os.getenv("FINN_QA_USER_ID", "")
     if not bound.isdecimal() or int(bound) <= 0:
         raise RuntimeError("fixture_binding_invalid")
-    market_id, context = _preflight()
+    with _stage("preflight"):
+        market_id, context = _preflight()
     user_id = bot_id = None
     passed = False
     try:
-        user_id, bot_id, _ = fixture._seed(namespace, int(bound))
-        _seed_trade(user_id, bot_id, market_id, context)
-        connection = fixture._connection()
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute("SELECT cash_eur,position_qty FROM bot_portfolios WHERE user_id=%s AND bot_id=%s",
-                               (user_id, bot_id))
-                initial_cash, initial_qty = cursor.fetchone()
-        finally:
-            connection.close()
+        with _stage("seed"):
+            user_id, bot_id, _ = fixture._seed(namespace, int(bound))
+        with _stage("paper_open"):
+            _seed_trade(user_id, bot_id, market_id, context)
+        with _stage("baseline"):
+            connection = fixture._connection()
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT cash_eur,position_qty FROM bot_portfolios WHERE user_id=%s AND bot_id=%s",
+                                   (user_id, bot_id))
+                    initial_cash, initial_qty = cursor.fetchone()
+            finally:
+                connection.close()
         from backend.engine.trading_bot_execution import run_trading_bot_execution
 
-        with _guard_live_exchange() as live_attempts:
-            first = run_trading_bot_execution(user_id, bot_id=bot_id, paper_only=True)
-            second = run_trading_bot_execution(user_id, bot_id=bot_id, paper_only=True)
+        with _stage("engine"):
+            with _guard_live_exchange() as live_attempts:
+                first = run_trading_bot_execution(user_id, bot_id=bot_id, paper_only=True)
+                second = run_trading_bot_execution(user_id, bot_id=bot_id, paper_only=True)
         live_calls = len(live_attempts)
         if not first.get("ok") or not second.get("ok"):
             raise RuntimeError("paper_exit_engine_unavailable")
-        evidence = _evidence(namespace, user_id, bot_id, market_id,
-                             float(initial_cash), float(initial_qty), live_calls)
+        with _stage("evidence"):
+            evidence = _evidence(namespace, user_id, bot_id, market_id,
+                                 float(initial_cash), float(initial_qty), live_calls)
         result = check_paper_exit(evidence)
         if result["result"] != "PASS":
             return {**result, "rendered_ui_checked": False,
