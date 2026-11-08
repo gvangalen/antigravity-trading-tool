@@ -4,6 +4,38 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Beschermde Paper/FX-voorcontrole: Paper-broncheck vóór fixture (8 november 2026)
+
+Phase: `DEPLOYED_QA_PENDING`. Onafhankelijke QA op de vorige finale SHA
+`f9ff42112d89bb651a8800efba7ca98cea47d5c0` in
+[run 42473333400](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42473333400)
+kwam voorbij de eerdere `price_source_mismatch`, maar de Paper-executor
+stopte veilig vóór een fill omdat geen voldoende actuele gecontroleerde
+EUR-prijs beschikbaar was. Eén Paper-uitvoeringspoging, nul Live-calls en
+nul Live-botactivaties; fill, EUR-kasstroom en projectie bleven ongetest.
+Artifact SHA-256:
+`913ff7e05a533484444f0a5295b69a91cabb1a25e2b11717e1f81ab28fea5e52`.
+Het gesaniteerde artifact onderscheidde niet of assetkoers, FX of
+bronmomentcoherentie de stop veroorzaakte.
+
+De gebruiker gaf daarop afzonderlijk expliciete toestemming voor een
+beperkte QA-voorcontrole die vóór fixture-seeding dezelfde strenge
+`trade_quote_context(..., require_usd=False)`-broncheck gebruikt en
+uitsluitend een vaste afwijscode toont. De bestaande QA-agent implementeerde
+dit in [PR #876](https://github.com/gvangalen/antigravity-trading-tool/pull/876).
+De 104 runner-tests slaagden, inclusief te oude koers, te oude FX,
+uiteenlopende bronmomenten en stop vóór fixture-aanmaak; `git diff --check`
+was groen. Productlogica, marktdata en Live-uitvoering bleven ongemoeid.
+Alle vijf PR-controles en alle vijf controles van
+[main-CI 42473951878](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42473951878)
+slaagden. [Auto Deploy 42474146763](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42474146763)
+slaagde. Git-main en publieke backend-health en frontend-buildinfo (beide
+HTTP 200) meldden `ec0ff624dc29a18816bb856430a068f0f7827a62`.
+Deze statuswijziging maakt opnieuw een commit-SHA; vóór de onafhankelijke
+Paper-only QA-hertest worden laatste main-CI, Auto Deploy en publieke
+SHA-pariteit gecontroleerd. De vier bredere trader-gates en polling/SSE
+blijven open.
+
 ## Beschermde Paper/FX-voorcontrole: geselecteerd bronmoment (8 november 2026)
 
 Phase: `DEPLOYED_QA_PENDING`. De gebruiker gaf expliciet toestemming voor
