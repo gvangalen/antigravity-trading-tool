@@ -19,8 +19,19 @@ async def _rendered_exit(user_id: int, bot_id: int, expected: dict) -> dict:
 
     async def inspect(page):
         nonlocal phase
+        phase = "owner_bot_wait"
+        try:
+            await page.locator('div[aria-label] > button[aria-pressed="true"]').first.wait_for(timeout=20000)
+        except Exception:
+            path = urlsplit(page.url).path
+            phase = (
+                "login_redirect" if path == "/login" else
+                "onboarding_redirect" if path.startswith("/onboarding") else
+                "owner_bot_absent" if path == "/bot" else "owner_bot_wait"
+            )
+            raise
         phase = "trades_tab_wait"
-        trades_tab = page.locator('section[aria-label] [role="tablist"] [role="tab"]').first
+        trades_tab = page.locator('section:has(> header h1) > nav[aria-label] > button').nth(1)
         try:
             await trades_tab.wait_for(timeout=20000)
         except Exception:
@@ -34,7 +45,7 @@ async def _rendered_exit(user_id: int, bot_id: int, expected: dict) -> dict:
         phase = "trades_tab_click"
         await trades_tab.click()
         phase = "details"
-        details = page.locator("section[aria-label] details:has(dl)")
+        details = page.locator("table tbody details:has(dl)")
         await details.first.locator("summary").wait_for(timeout=20000)
         if await details.count() != 1:
             return {"rendered_exit_row_unique": False}
