@@ -83,6 +83,40 @@ SAFE_CLOSED_PAPER_REVIEW_ERRORS = frozenset({
     "closed_paper_review_dossier_incomplete",
 })
 
+SAFE_PORTFOLIO_PAPER_FX_ERRORS = frozenset({
+    "qa_database_unavailable", "portfolio_paper_fx_fixture_not_authorized",
+    "portfolio_paper_fx_namespace_invalid", "fixture_binding_invalid",
+    "portfolio_paper_fx_market_unavailable", "portfolio_paper_fx_price_source_mismatch",
+    "portfolio_paper_fx_source_unavailable", "fixture_has_exchange_keys",
+    "portfolio_paper_fx_quantity_invalid", "portfolio_paper_fx_execution_not_filled",
+    "portfolio_paper_fx_replay_not_rejected", "portfolio_paper_fx_source_changed",
+    "portfolio_paper_fx_contract_failed", "fixture_cleanup_owner_mismatch",
+    "fixture_cleanup_bot_mismatch", "fixture_bot_became_live",
+    "fixture_cleanup_user_missing", "fixture_cleanup_failed",
+    "portfolio_paper_fx_trade_source_market_quote_unverified",
+    "portfolio_paper_fx_trade_source_market_price_stale",
+    "portfolio_paper_fx_trade_source_market_quote_eur_fx_unavailable",
+    "portfolio_paper_fx_trade_source_trade_quote_sources_out_of_sync",
+    "portfolio_paper_fx_trade_source_market_conversion_invalid",
+    "portfolio_paper_fx_trade_source_other",
+})
+SAFE_PORTFOLIO_PAPER_FX_INVARIANTS = frozenset({
+    "order_price", "ledger_cashflow", "portfolio_quantity",
+    "valuation_equity", "source_time_currency", "owner_safety",
+})
+
+
+def safe_portfolio_paper_fx_diagnostic(error: Exception) -> Dict[str, Any] | None:
+    """Publish only fixed invariant names, never fixture values or exception text."""
+    if str(error) != "portfolio_paper_fx_contract_failed":
+        return None
+    values = getattr(error, "failed_invariants", None)
+    if not isinstance(values, (tuple, list)):
+        return None
+    codes = [value for value in values
+             if isinstance(value, str) and value in SAFE_PORTFOLIO_PAPER_FX_INVARIANTS]
+    return {"failed_invariants": list(dict.fromkeys(codes))[:6]} if codes else None
+
 
 def profile_error_category(profile: str, error: Exception) -> str:
     """The published QA error category must not contain private fixture text."""
@@ -92,6 +126,10 @@ def profile_error_category(profile: str, error: Exception) -> str:
         code = str(error)
         return (code if code in SAFE_CLOSED_PAPER_REVIEW_ERRORS
                 else "closed_paper_review_runtime_error")
+    if profile == "portfolio_paper_fx":
+        code = str(error)
+        return (code if code in SAFE_PORTFOLIO_PAPER_FX_ERRORS
+                else "portfolio_paper_fx_runtime_error")
     return str(error)
 
 
@@ -2389,6 +2427,10 @@ def main() -> int:
                 )
     except (RuntimeError, ValueError) as error:
         report["error_category"] = profile_error_category(args.profile, error)
+        if args.profile == "portfolio_paper_fx":
+            diagnostic = safe_portfolio_paper_fx_diagnostic(error)
+            if diagnostic is not None:
+                report["portfolio_paper_fx_terminal_diagnostic"] = diagnostic
         if args.profile == "closed_paper_trade_review_chat":
             diagnostic = safe_closed_paper_chat_diagnostic(error)
             if diagnostic is not None:

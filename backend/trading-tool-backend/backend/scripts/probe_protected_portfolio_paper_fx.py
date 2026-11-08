@@ -22,6 +22,24 @@ SYMBOL = "BTC"
 START_CASH_EUR = 100.0
 TARGET_ORDER_EUR = 50.0
 FORGED_ESTIMATE_EUR = 1.0
+FAILED_INVARIANT_CODES = (
+    "order_price", "ledger_cashflow", "portfolio_quantity",
+    "valuation_equity", "source_time_currency", "owner_safety",
+)
+
+
+class PortfolioPaperFxContractFailure(RuntimeError):
+    def __init__(self, failed_invariants: list[str]):
+        self.failed_invariants = tuple(failed_invariants)
+        super().__init__("portfolio_paper_fx_contract_failed")
+
+
+def _finite_float(value):
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return number if math.isfinite(number) else None
 
 
 def _connection():
@@ -276,27 +294,57 @@ def _verify(user_id: int, bot_id: int, decision_id: int, source: dict) -> dict:
             raise RuntimeError("portfolio_paper_fx_source_changed")
         projected = asyncio.run(_projection(user_id))["data"]
         bot = projected.bots[0] if len(projected.bots) == 1 else None
-        expected_cash = START_CASH_EUR + float(ledger[1][1]) if len(ledger) == 2 else None
-        if not (len(orders) == 1 and orders[0][0:2] == ("filled", "paper")
-                and abs(float(orders[0][2]) - source["raw_price"] * source["fx_factor"]) < 0.000001
-                and float(orders[0][3]) > 0
-                and orders[0][4:] == ("filled", "executed", "auto")
-                and len(ledger) == 2 and ledger[0][0] == "paper_initial_funding"
-                and float(ledger[0][1]) == START_CASH_EUR
-                and ledger[1][0] == "execute" and ledger[1][3] == 2
-                and float(ledger[1][1]) < 0 and float(ledger[1][2]) > 0
-                and portfolio and abs(float(portfolio[0]) - expected_cash) < 0.01
-                and abs(float(portfolio[1]) - float(orders[0][3])) < 1e-8
-                and bot and bot.valuation_status == "available"
-                and bot.price_quote_currency == source["quote"]
-                and bot.fx_as_of is not None and bot.source_price_as_of is not None
-                and abs(float(bot.fx_eur_per_unit or 0) - source["fx_factor"]) < 0.000000001
-                and bot.cash_eur is not None and bot.position_value_eur is not None
-                and bot.equity is not None
-                and abs(bot.equity - bot.cash_eur - bot.position_value_eur) < 0.01
+        order = orders[0] if len(orders) == 1 else None
+        funding, fill = ledger if len(ledger) == 2 else (None, None)
+        order_price = _finite_float(order[2]) if order else None
+        order_qty = _finite_float(order[3]) if order else None
+        funding_cash = _finite_float(funding[1]) if funding else None
+        fill_cash = _finite_float(fill[1]) if fill else None
+        fill_qty = _finite_float(fill[2]) if fill else None
+        portfolio_cash = _finite_float(portfolio[0]) if portfolio else None
+        portfolio_qty = _finite_float(portfolio[1]) if portfolio else None
+        bot_cash = _finite_float(bot.cash_eur) if bot else None
+        bot_position = _finite_float(bot.position_value_eur) if bot else None
+        bot_equity = _finite_float(bot.equity) if bot else None
+        bot_fx = _finite_float(bot.fx_eur_per_unit) if bot else None
+        checks = {
+            "order_price": (
+                order is not None and order[0:2] == ("filled", "paper")
+                and order_price is not None
+                and abs(order_price - source["raw_price"] * source["fx_factor"]) < 0.000001
+                and order_qty is not None and order_qty > 0
+                and order[4:] == ("filled", "executed", "auto")
+            ),
+            "ledger_cashflow": (
+                funding is not None and funding[0] == "paper_initial_funding"
+                and funding_cash == START_CASH_EUR
+                and fill is not None and fill[0] == "execute" and fill[3] == 2
+                and fill_cash is not None and fill_cash < 0
+                and fill_qty is not None and fill_qty > 0
+            ),
+            "portfolio_quantity": (
+                portfolio_cash is not None and fill_cash is not None
+                and abs(portfolio_cash - (START_CASH_EUR + fill_cash)) < 0.01
+                and portfolio_qty is not None and order_qty is not None
+                and abs(portfolio_qty - order_qty) < 1e-8
+            ),
+            "valuation_equity": (
+                bot is not None and bot.valuation_status == "available"
+                and bot_cash is not None and bot_position is not None
+                and bot_equity is not None
+                and abs(bot_equity - bot_cash - bot_position) < 0.01
                 and projected.valuation_status == "available"
-                and keys == 0 and active is False):
-            raise RuntimeError("portfolio_paper_fx_contract_failed")
+            ),
+            "source_time_currency": (
+                bot is not None and bot.price_quote_currency == source["quote"]
+                and bot.fx_as_of is not None and bot.source_price_as_of is not None
+                and bot_fx is not None and abs(bot_fx - source["fx_factor"]) < 0.000000001
+            ),
+            "owner_safety": keys == 0 and active is False,
+        }
+        failed_invariants = [code for code in FAILED_INVARIANT_CODES if not checks[code]]
+        if failed_invariants:
+            raise PortfolioPaperFxContractFailure(failed_invariants)
         return {
             "result": "PASS", "environment": "paper", "quote_currency": source["quote"],
             "valuation_status": "available", "fx_dated": True,
