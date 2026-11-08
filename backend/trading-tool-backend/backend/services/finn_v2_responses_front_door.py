@@ -762,6 +762,16 @@ class FinnResponsesFrontDoor:
         )
 
     @staticmethod
+    def _asks_about_account_state_bundle(message: str) -> bool:
+        """Require one owner-scoped read for a combined plan/bot/position request."""
+        return bool(
+            re.search(r"\b(?:setup|plan|strategie|strategy)\b", message, re.I)
+            and re.search(r"\b(?:bot|automatisering|automation)\b", message, re.I)
+            and re.search(r"\b(?:positie|posities|position|positions)\b", message, re.I)
+            and FinnResponsesFrontDoor._asks_about_bot_decision(message)
+        )
+
+    @staticmethod
     def _bind_bot_decision_evidence(
         call: FinnResponsesToolCall, *, message: str, read_only: bool,
     ) -> FinnResponsesToolCall:
@@ -3723,6 +3733,9 @@ class FinnResponsesFrontDoor:
             required_read_tool_name=(
                 "get_open_plan_draft"
                 if guided_draft_question
+                else "get_active_plan_and_strategy"
+                if is_read_only_turn and self._asks_about_account_state_bundle(message)
+                and pending_operation is None and not resuming_clarification
                 else "get_closed_trade_review"
                 if (explicit_closed_review_read or contextual_closed_review_read)
                 and pending_operation is None and not resuming_clarification

@@ -13546,6 +13546,40 @@ def test_bot_decision_question_binds_persisted_history_even_for_portfolio_tool()
     ) == selected
 
 
+def test_combined_account_question_requires_owner_reads_on_first_turn(monkeypatch):
+    question = (
+        "Lees alleen mijn opgeslagen setup 'QA BTC Onder Druk 1810', de gekoppelde "
+        "strategie en Paper-bot 'QA BTC Base Inrange Paper 2810'. Wat zijn het "
+        "DCA-ritme en basisbedrag, is de bot actief of live, heb ik nu een "
+        "Paper-positie, en wat is de laatst opgeslagen botbeslissing met datum? "
+        "Zeg duidelijk als iets niet is gecontroleerd. Wijzig niets."
+    )
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="account-bundle")
+    front.model_led_coach = True
+    captured = {}
+
+    async def capture_loop(_self, **kwargs):
+        captured.update(kwargs)
+        return FinnResponsesResult("Ik controleer de accountbronnen.", "answer", ())
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run", capture_loop,
+    )
+    asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="BTC",
+        workspace_hints={"page": "/asset", "symbol": "BTC"},
+    ))
+    assert captured["required_read_tool_name"] == "get_active_plan_and_strategy"
+    selected = FinnResponsesToolCatalog().validate("get_active_plan_and_strategy", {})
+    bound = FinnResponsesFrontDoor._bind_bot_decision_evidence(
+        selected, message=question, read_only=True,
+    )
+    assert {"read_active_setup", "read_linked_strategy", "read_portfolio", "read_review_history"}.issubset(
+        set(bound.read_tools)
+    )
+
+
 def test_bot_decision_front_door_reads_history_before_answer(monkeypatch):
     @asynccontextmanager
     async def session_factory():

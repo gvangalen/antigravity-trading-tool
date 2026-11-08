@@ -4,6 +4,28 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Vier trader-gates: eerste FINN-bronlezing en portfoliotijd (8 november 2026)
+
+Phase: `LOCAL_VALIDATED_RUNTIME_PENDING`. Onafhankelijke ingelogde QA stelde in
+twee nieuwe gesprekken dezelfde read-only vraag over setup, strategie, Paper-bot,
+positie en laatste botbeslissing. FINN las het DCA-ritme en basisbedrag, maar
+controleerde de drie gevraagde bot- en portfoliogegevens niet in de eerste beurt.
+Een gerichte vervolgbeurt kon de bronnen wel lezen en de beslissing correct
+omrekenen van 6 november 23:49:44 UTC naar 7 november 00:49:44 CET.
+
+De kandidaat verplicht voor deze samengestelde vraag een eigenaargebonden
+plan/strategielezing en voegt binnen de bestaande account/bot-toolgrens de
+portefeuille- en beslissingshistorie toe. De Portfolio-weergave toont de
+bestaande bron- en ophaalmomenten nu expliciet in Europe/Amsterdam met
+tijdzone. Lokaal: gerichte backendtests **911 passed**, volledige backend-suite
+**4363 passed, 7 skipped**; frontend typecheck, productiebuild, i18n-lint
+en -tests (41), commandtests (44), proposaltests (9) en high-audit
+(0 kwetsbaarheden) geslaagd. Security en Architecture vonden geen resterende
+blocker na herbeoordeling. De vereiste geïsoleerde worker-actiematrix en
+echte-providerproeven zijn op deze kandidaat nog niet uitgevoerd; CI,
+Auto Deploy, publieke SHA-pariteit en onafhankelijke live hertest zijn nog
+niet gemeten. Dit is geen live-acceptatie van de vier gates.
+
 ## FINN watchlistgesprek en exacte handelsparen (8 november 2026)
 
 Phase: `DEPLOYED_QA_PENDING`. De kandidaat op
