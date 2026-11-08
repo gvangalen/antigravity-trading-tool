@@ -4,6 +4,44 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN watchlistgesprek en exacte handelsparen (8 november 2026)
+
+Phase: `LOCAL_VALIDATED_CI_PENDING`. De kandidaat op
+`codex/finn-watchlist-conversation` leidt expliciete watchlistverzoeken via
+catalogusnamen en beschikbare handelsparen naar klikbare keuzes. Een vage
+zin over een aandeel vraagt eerst naar watchlist of portfolio; de watchlistkeuze
+vraagt daarna of de gebruiker wil toevoegen of vervangen. Een vervanging
+bevestigt eerst de toevoeging van de nieuwe notering en daarna de verwijdering
+van de oude. Beide writes lopen via FINN V2-voorstellen en eigenaargebonden
+uitvoering. De backend bewaart bij crypto de exacte quote en weigert een
+ongekozen paar.
+
+Gemeten lokaal: volledige backend-suite **4357 passed, 4 skipped**; frontend
+typecheck, i18n-lint en -tests, commandtests **44/44**, proposaltests,
+productiebouw en high-audit (**0 kwetsbaarheden**) slaagden. De geïsoleerde
+PostgreSQL/Redis/API/prefork-Celery-actiematrix slaagde **16/16**, inclusief
+de gewijzigde watchlistcontracten, zonder productieverbindingen, brokerorders,
+Live-calls of Live-bots (artifact SHA-256
+`76172e42ddee7d01c07599280209f72dedf1e66fbfb8dd4422109f832df6d085`).
+Een afzonderlijke eigenaargebonden ketenproef bevestigde BTC/EUR, voegde het
+toe, verwijderde daarna AAPL en las als eindstaat BTC/EUR aanwezig en AAPL
+afwezig; beide uitvoeringen slaagden, met idempotente herhaling. De echte
+providerontwikkelingstest slaagde **20/20** (SHA-256
+`c964f524c2147b92c870558998c617d47e53030ead37ce99733eb503f70173cf`),
+de regressie **109/109** (SHA-256
+`7d9a24b7e313a4122f89e672af5a59e386e3aa6af0be86887c1d7a49efd282b8`);
+beide hadden 100% operation- en ontbrekende-invoermatches en nul provider-,
+schema-, parse-, validatie- of timeoutfouten. Vijf gewone fixtureverwachtingen
+en de projectie van gepubliceerde regressies zijn aangescherpt voor het nu
+verplichte cryptopaar; de eerste run met oude verwachtingen bleef als rode
+diagnose bewaard. CI, Auto Deploy, publieke SHA-pariteit en onafhankelijke
+live QA zijn nog niet gemeten.
+
+Tijdens een brede fixture-inventarisatie opende Build per ongeluk één regel
+van een QA-exclusief holdoutbestand. Die inhoud is niet gebruikt voor code,
+tests, tuning of een holdoutrun. QA moet de onafhankelijkheid van die case
+zelf beoordelen; Build claimt daarover geen holdoutresultaat.
+
 ## Productie-QA- en deploygrens voor vier trader-gates (8 november 2026)
 
 Phase: `BUILD_VALIDATED_QA_PENDING`. De vier brede trader-gates zijn op de

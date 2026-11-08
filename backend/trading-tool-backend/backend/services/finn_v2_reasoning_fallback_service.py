@@ -876,6 +876,7 @@ class FinnV2ReasoningFallbackService:
 
         if (operation_id == "watchlist_add" or not operation_id) and context.policy.operation_type == "watchlist_add":
             target_asset = str((operation_state.get("collected_inputs") or {}).get("asset") or "").upper()
+            quote_currency = str((operation_state.get("collected_inputs") or {}).get("quote_currency") or "").upper()
             if not target_asset and not operation_id:
                 # Historical planless reasoning records are read-only
                 # compatibility input; new runs always use operation_state.
@@ -899,20 +900,21 @@ class FinnV2ReasoningFallbackService:
                     model=model,
                     created_at=datetime.now(timezone.utc),
                 )
+            display_target = f"{target_asset}/{quote_currency}" if quote_currency else target_asset
             evidence_refs = [active_asset.evidence_id] if active_asset else []
             return ReasoningResult(
                 reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
                 run_id=run_id,
                 user_id=user_id,
                 mode="ACTION_PROPOSAL",
-                direct_answer=f"Ik kan {target_asset} aan je watchlist toevoegen na je bevestiging.",
-                main_observation=f"De wijziging is nog niet uitgevoerd; ik heb alleen een voorstel voor {target_asset} voorbereid.",
+                direct_answer=f"Ik kan {display_target} aan je watchlist toevoegen na je bevestiging.",
+                main_observation=f"De wijziging is nog niet uitgevoerd; ik heb alleen een voorstel voor {display_target} voorbereid.",
                 supporting_points=[],
                 claims=[
                     ReasoningClaim(
                         claim_id="watchlist-target",
                         claim_type="fact",
-                        text=f"De gevraagde doelasset voor deze watchlist-wijziging is {target_asset}.",
+                        text=f"De gevraagde doelasset voor deze watchlist-wijziging is {display_target}.",
                         evidence_refs=evidence_refs,
                         confidence="high",
                     )
@@ -921,7 +923,7 @@ class FinnV2ReasoningFallbackService:
                 uncertainty_codes=list(error_codes),
                 next_step=ReasoningNextStep(
                     title="Bevestig de watchlist-wijziging",
-                    instruction=f"Bevestig dat je {target_asset} wilt toevoegen aan je watchlist.",
+                    instruction=f"Bevestig dat je {display_target} wilt toevoegen aan je watchlist.",
                     operation_type="watchlist_add",
                     target_entity_type="watchlist",
                     target_entity_id=target_asset,
@@ -938,9 +940,10 @@ class FinnV2ReasoningFallbackService:
                         "generation_source": "deterministic_validated",
                         "asset": target_asset,
                         "operation": "add",
+                        **({"quote_currency": quote_currency} if quote_currency else {}),
                     },
                     evidence_refs=evidence_refs,
-                    impact_summary=f"{target_asset} wordt toegevoegd aan je persoonlijke watchlist na bevestiging.",
+                    impact_summary=f"{display_target} wordt toegevoegd aan je persoonlijke watchlist na bevestiging.",
                     risk_summary="Er wordt niets uitgevoerd zonder expliciete confirmation.",
                     confirmation_required=True,
                 ),
@@ -1288,6 +1291,8 @@ class FinnV2ReasoningFallbackService:
                 **base,
                 "asset": fields["asset"],
                 "operation": "add" if operation_id == "watchlist_add" else "remove",
+                **({"quote_currency": fields["quote_currency"]} if fields.get("quote_currency") else {}),
+                **({"legacy_market_only": True} if fields.get("legacy_market_only") is True else {}),
             }
         if operation_id == "activate_paper_bot":
             bot = evidence_by_tool.get("read_linked_bot")

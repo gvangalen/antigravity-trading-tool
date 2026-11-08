@@ -173,7 +173,7 @@
     "expected_target_asset": "ETH",
     "expected_action_polarity": "add",
     "provider_call_expected": true,
-    "expected_missing_inputs": []
+    "expected_missing_inputs": ["quote_currency"]
   },
   {
     "eval_id": "dev-watch-remove",

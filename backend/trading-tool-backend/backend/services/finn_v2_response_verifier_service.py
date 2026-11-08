@@ -20,6 +20,7 @@ from backend.infrastructure.repositories.finn_v2_verified_response_repository im
 from backend.domain.finn_v2_contract import normalize_information_scope, normalize_interaction_mode
 from backend.domain.finn_v2_contract_value_labels import contract_value_label
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG, requested_catalog_trading_pair
 from backend.schemas.finn_v2_delivery_schema import FinnV2DeliveryEnvelope
 from backend.schemas.finn_v2_orchestrator_schema import ORCHESTRATOR_VERSION, OrchestratorResult
 from backend.schemas.finn_v2_orchestrator_schema import normalize_information_scopes
@@ -1338,9 +1339,28 @@ class FinnV2ResponseVerifierService:
         elif operation == "delete_bot":
             change = BotDeleteChange(bot_id=int(candidate.target_id or changes.get("bot_id") or 0))
         elif operation in {"watchlist_add", "watchlist_remove"}:
+            target_asset = str(changes.get("asset") or candidate.asset or "").upper()
+            quote = str(changes.get("quote_currency") or "").upper()
+            explicit_pair = requested_catalog_trading_pair(run.message)
+            if explicit_pair and explicit_pair != (target_asset, quote):
+                return None
+            if quote and not explicit_pair and not re.fullmatch(
+                rf"\s*(?:{re.escape(target_asset)}\s*[/\-]\s*)?{re.escape(quote)}[.!?\s]*",
+                run.message, re.I,
+            ):
+                return None
+            if operation == "watchlist_add" and DEFAULT_ASSET_CATALOG.get(target_asset, {}).get("asset_class") == "crypto" and not quote:
+                return None
+            if changes.get("legacy_market_only") is True and not re.search(
+                r"\b(?:oude\s+basisnotering|zonder\s+handelspaar|legacy\s+base\s+listing)\b",
+                run.message, re.I,
+            ):
+                return None
             change = WatchlistChange(
-                asset=str(changes.get("asset") or candidate.asset or "").upper(),
+                asset=target_asset,
                 operation="remove" if operation == "watchlist_remove" else "add",
+                quote_currency=changes.get("quote_currency"),
+                legacy_market_only=changes.get("legacy_market_only") is True,
             )
         elif operation == "save_trade_plan":
             change = TradePlanChange(plan_id=str(candidate.target_id or changes.get("plan_id") or "") or None, changed_fields=dict(changes.get("changed_fields") or changes))

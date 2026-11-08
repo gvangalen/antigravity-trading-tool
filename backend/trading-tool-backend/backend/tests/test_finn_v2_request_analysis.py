@@ -740,12 +740,38 @@ def test_dutch_price_delete_resolves_the_complete_market_indicator_contract():
     assert analysis.request_plan.operation_state["missing_required_inputs"] == []
 
 
-def test_natural_eth_watchlist_request_is_a_complete_add_contract():
+def test_natural_eth_watchlist_request_collects_exact_pair_before_proposal():
     analysis = SERVICE.analyze(message="Voeg ETH toe aan mijn watchlist.")
 
     assert analysis.request_plan.operation_id == "watchlist_add"
     assert analysis.request_plan.operation_state["collected_inputs"] == {"asset": "ETH"}
-    assert analysis.request_plan.operation_state["missing_required_inputs"] == []
+    assert analysis.request_plan.operation_state["missing_required_inputs"] == ["quote_currency"]
+
+
+def test_explicit_crypto_pair_and_stock_watchlist_add_have_no_missing_pair():
+    pair = SERVICE.analyze(message="Voeg BTC/EUR toe aan mijn watchlist.")
+    stock = SERVICE.analyze(message="Voeg Apple toe aan mijn watchlist.")
+
+    assert pair.request_plan.operation_state["collected_inputs"]["asset"] == "BTC"
+    assert pair.request_plan.operation_state["collected_inputs"]["quote_currency"] == "EUR"
+    assert pair.request_plan.operation_state["missing_required_inputs"] == []
+    assert stock.request_plan.operation_state["collected_inputs"]["asset"] == "AAPL"
+    assert stock.request_plan.operation_state["missing_required_inputs"] == []
+
+
+def test_explicit_watchlist_remove_pair_keeps_quote_for_exact_row():
+    analysis = SERVICE.analyze(message="Verwijder ETH/USDT uit mijn watchlist.")
+    assert analysis.request_plan.operation_id == "watchlist_remove"
+    assert analysis.request_plan.operation_state["collected_inputs"]["asset"] == "ETH"
+    assert analysis.request_plan.operation_state["collected_inputs"]["quote_currency"] == "USDT"
+
+
+def test_legacy_watchlist_remove_requires_explicit_legacy_row_words():
+    analysis = SERVICE.analyze(
+        message="Verwijder de oude basisnotering BTC zonder handelspaar uit mijn watchlist."
+    )
+    assert analysis.request_plan.operation_id == "watchlist_remove"
+    assert analysis.request_plan.operation_state["collected_inputs"]["legacy_market_only"] is True
 
 
 def test_guided_watchlist_target_asset_is_typed_and_never_reuses_workspace_asset():
@@ -769,7 +795,7 @@ def test_guided_watchlist_target_asset_is_typed_and_never_reuses_workspace_asset
     assert analysis.request_plan.target_asset == "ADA"
     assert state["collected_inputs"]["asset"] == "ADA"
     assert state["target_entities"] == {"asset": "ADA"}
-    assert state["missing_required_inputs"] == []
+    assert state["missing_required_inputs"] == ["quote_currency"]
 
 
 def test_capability_question_with_plan_terms_keeps_its_own_contract_over_conversation_state():

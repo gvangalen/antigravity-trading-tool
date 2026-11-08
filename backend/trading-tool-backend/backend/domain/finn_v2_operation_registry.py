@@ -60,8 +60,8 @@ _RESPONSE_FIELDS = frozenset(
 # define an independent set of required fields or execution rules.
 _MODEL_TOOL_INPUT_TYPES: dict[str, tuple[tuple[str, str], ...]] = {
     "select_asset": (("asset", "string"),),
-    "watchlist_add": (("asset", "string"),),
-    "watchlist_remove": (("asset", "string"),),
+    "watchlist_add": (("asset", "string"), ("quote_currency", "string")),
+    "watchlist_remove": (("asset", "string"), ("quote_currency", "string"), ("legacy_market_only", "boolean")),
     "create_setup": (
         ("setup_type", "string"), ("timeframe", "string"), ("name", "string"),
         ("symbol", "string"), ("quote_currency", "string"),
@@ -351,7 +351,7 @@ class OperationContract:
 
         symbol = str(supplied_inputs.get("symbol") or supplied_inputs.get("asset") or "").strip().upper()
         crypto_pair_required = (
-            self.operation_id in {"create_setup", "update_indicator_configuration"}
+            self.operation_id in {"create_setup", "update_indicator_configuration", "watchlist_add"}
             and DEFAULT_ASSET_CATALOG.get(symbol, {}).get("asset_class") == "crypto"
         )
         if self.operation_id == "create_setup" and supplied_inputs.get("setup_type") == "dca" and supplied_inputs.get("plan_scope") == "setup_only":
@@ -1070,8 +1070,8 @@ _CONTRACTS: tuple[OperationContract, ...] = (
     _read("read_active_asset", "asset", ("active_asset",), ("actieve asset", "welke asset"), ("asset",)),
     OperationContract("select_asset", FinnV2OperationRegistry.VERSION, "asset", "ACTION_PROPOSAL", ("selecteer asset", "select asset", "wähle asset"), action_polarity=ActionPolarity.UPDATE, required_inputs=("asset",), required_scopes=("active_asset",), proposal_type="select_asset", confirmation_required=True, execution_adapter="select_asset", idempotency_rule="proposal_payload_hash", postcondition="selected_asset_updated", response_strategy="proposal_draft", policy_class="proposal"),
     _read("read_watchlist", "asset", ("active_asset", "watchlist"), ("watchlist", "volglijst")),
-    OperationContract("watchlist_add", FinnV2OperationRegistry.VERSION, "watchlist", "ACTION_PROPOSAL", ("voeg", "add", "watchlist"), action_polarity=ActionPolarity.ADD, required_inputs=("asset",), required_scopes=("active_asset", "watchlist"), proposal_type="watchlist_add", confirmation_required=True, execution_adapter="watchlist_add", idempotency_rule="user_asset_unique", postcondition="watchlist_contains_asset", response_strategy="proposal_draft", policy_class="proposal"),
-    OperationContract("watchlist_remove", FinnV2OperationRegistry.VERSION, "watchlist", "ACTION_PROPOSAL", ("verwijder", "remove", "watchlist"), action_polarity=ActionPolarity.REMOVE, required_inputs=("asset",), required_scopes=("active_asset", "watchlist"), proposal_type="watchlist_remove", confirmation_required=True, execution_adapter="watchlist_remove", idempotency_rule="user_asset_absent", postcondition="watchlist_excludes_asset", response_strategy="proposal_draft", policy_class="proposal"),
+    OperationContract("watchlist_add", FinnV2OperationRegistry.VERSION, "watchlist", "ACTION_PROPOSAL", ("voeg", "add", "watchlist"), action_polarity=ActionPolarity.ADD, required_inputs=("asset",), optional_inputs=("quote_currency",), input_allowed_values=(("quote_currency", ("EUR", "USDT")),), required_scopes=("active_asset", "watchlist"), proposal_type="watchlist_add", confirmation_required=True, execution_adapter="watchlist_add", idempotency_rule="user_asset_market_unique", postcondition="watchlist_contains_market", response_strategy="proposal_draft", policy_class="proposal"),
+    OperationContract("watchlist_remove", FinnV2OperationRegistry.VERSION, "watchlist", "ACTION_PROPOSAL", ("verwijder", "remove", "watchlist"), action_polarity=ActionPolarity.REMOVE, required_inputs=("asset",), optional_inputs=("quote_currency", "legacy_market_only"), input_allowed_values=(("quote_currency", ("EUR", "USDT")),), required_scopes=("active_asset", "watchlist"), proposal_type="watchlist_remove", confirmation_required=True, execution_adapter="watchlist_remove", idempotency_rule="user_asset_market_absent", postcondition="watchlist_excludes_market", response_strategy="proposal_draft", policy_class="proposal"),
     _read("read_indicator_configuration", "indicators", ("active_asset", "indicator_configuration"), ("indicator", "rsi", "vwap", "volume"), ("asset", "configured_count", "indicator_names")),
     OperationContract("create_indicator_configuration", FinnV2OperationRegistry.VERSION, "indicators", "CREATE_PROPOSAL", ("maak indicator", "create indicator", "erstelle indikator"), action_polarity=ActionPolarity.CREATE, required_inputs=("asset", "category", "indicator"), required_scopes=("active_asset", "indicator_configuration"), proposal_type="create_indicator_configuration", confirmation_required=True, execution_adapter="create_indicator_configuration", idempotency_rule="proposal_payload_hash", postcondition="indicator_configuration_created", response_strategy="proposal_draft", policy_class="proposal"),
     OperationContract("update_indicator_configuration", FinnV2OperationRegistry.VERSION, "indicators", "CREATE_PROPOSAL", ("wijzig indicator", "update indicator", "ändere indikator"), action_polarity=ActionPolarity.UPDATE, required_inputs=("asset", "category", "indicator", "changed_fields"), optional_inputs=("quote_currency",), required_scopes=("active_asset", "indicator_configuration"), proposal_type="update_indicator_configuration", confirmation_required=True, execution_adapter="update_indicator_configuration", idempotency_rule="proposal_payload_hash", postcondition="indicator_configuration_updated", response_strategy="proposal_draft", policy_class="proposal"),
