@@ -96,7 +96,7 @@ def test_selected_pair_watchlist_row_uses_the_workspace_quote_and_score(monkeypa
     session = SimpleNamespace(execute=AsyncMock(side_effect=[
         _Result([market]), _Result([]), _Result([]), _Result([]),
     ]))
-    quote = SimpleNamespace(price=2400, change_24h=2, volume=100,
+    quote = SimpleNamespace(id=987, market_id=43, price=2400, change_24h=2, volume=100,
                             quote_currency="EUR", price_provider="binance",
                             source_observed_at=observed)
     matcher = SimpleNamespace(for_asset=AsyncMock(return_value={
@@ -125,6 +125,10 @@ def test_selected_pair_watchlist_row_uses_the_workspace_quote_and_score(monkeypa
     result = asyncio.run(module.ExactMarketWorkspaceService(session).get(7, "ETH", "EUR"))
 
     assert result["quote"]["price"] == result["watchlist"]["rows"][0]["price"] == 2400
+    assert result["quote"]["source_ref"] == {
+        "market_id": 43, "measurement_id": 987,
+        "source_observed_at_utc": observed.replace(tzinfo=timezone.utc).isoformat(),
+    }
     assert result["combined"]["score"] == result["watchlist"]["rows"][0]["score"] == 65
     assert result["watchlist"]["rows"][0]["market_id"] == 43
     assert result["watchlist"]["rows"][0]["quote_currency"] == "EUR"

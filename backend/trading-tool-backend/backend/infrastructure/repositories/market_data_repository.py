@@ -6,7 +6,7 @@ import datetime
 
 from backend.infrastructure.models import (
     MarketData, MarketDataIndicator, Indicator, MarketIndicatorRule,
-    MarketData7D, MarketForwardReturn
+    MarketData7D, MarketForwardReturn, TradingMarket
 )
 
 class MarketDataRepository:
@@ -35,10 +35,18 @@ class MarketDataRepository:
             raise ValueError("exact_market_id_required")
         stmt = (
             select(MarketData)
+            .join(TradingMarket, TradingMarket.id == MarketData.market_id)
             .where(MarketData.market_id == market_id)
+            .where(TradingMarket.id == market_id)
+            .where(TradingMarket.is_active.is_(True))
+            .where(TradingMarket.venue == "BINANCE")
+            .where(MarketData.symbol == TradingMarket.asset_symbol)
+            .where(MarketData.quote_currency == TradingMarket.quote_currency)
+            .where(MarketData.price.is_not(None))
             .where(MarketData.source_observed_at.is_not(None))
             .where(MarketData.quote_currency.is_not(None))
-            .order_by(MarketData.source_observed_at.desc(), MarketData.timestamp.desc())
+            .order_by(MarketData.source_observed_at.desc(), MarketData.timestamp.desc(),
+                      MarketData.id.desc())
             .limit(1)
         )
         result = await self.session.execute(stmt)

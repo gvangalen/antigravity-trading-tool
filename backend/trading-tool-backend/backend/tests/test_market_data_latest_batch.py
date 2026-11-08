@@ -50,7 +50,11 @@ def test_exact_market_price_read_requires_selected_market_id():
     statement = session.execute.await_args.args[0]
     sql = str(statement.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
     assert "market_data.market_id = 23" in sql
-    assert "market_data.symbol =" not in sql
+    assert "market_data.symbol = trading_markets.asset_symbol" in sql
+    assert "market_data.quote_currency = trading_markets.quote_currency" in sql
+    assert "market_data.price IS NOT NULL" in sql
+    assert "ORDER BY market_data.source_observed_at DESC, market_data.timestamp DESC, market_data.id DESC" in sql
+    assert "market_data.symbol = 'BTC'" not in sql
 
 
 def test_legacy_portfolio_price_requires_the_source_quote():

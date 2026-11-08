@@ -86,6 +86,15 @@ def _safe_json(v, fallback):
     except Exception:
         return fallback
 
+
+class _SourcedPrice(float):
+    """Keep the selected quote row attached while the assessment caches its price."""
+
+    def __new__(cls, value: float, source_ref: dict | None):
+        instance = super().__new__(cls, value)
+        instance.source_ref = source_ref
+        return instance
+
 def _get_live_price(
     conn, symbol: str, max_age_seconds: Optional[int] = None,
     *, paper_execution: bool = False, market_id: int | None = None,
@@ -96,7 +105,7 @@ def _get_live_price(
         if market_id is not None:
             cur.execute("""
                 SELECT m.price, EXTRACT(EPOCH FROM (NOW() - m.source_observed_at)) AS age_seconds,
-                       tm.quote_currency, m.source_observed_at, m.quote_currency
+                       tm.quote_currency, m.source_observed_at, m.quote_currency, m.id
                 FROM market_data m
                 JOIN trading_markets tm ON tm.id=m.market_id
                 WHERE m.market_id=%s AND tm.id=%s AND tm.asset_symbol=%s
@@ -110,7 +119,7 @@ def _get_live_price(
             cur.execute(
             """
             SELECT m.price, EXTRACT(EPOCH FROM (NOW() - m.timestamp)) AS age_seconds,
-                   a.quote_currency, m.source_observed_at, m.quote_currency
+                   a.quote_currency, m.source_observed_at, m.quote_currency, m.id
             FROM market_data m
             LEFT JOIN asset_catalog a ON a.symbol = m.symbol
             WHERE m.symbol = %s
@@ -156,7 +165,15 @@ def _get_live_price(
             price=row[0], price_at=row[3], row_quote=row[4],
             catalog_quote=row[2], usd_fx=None, quote_fx=fx, require_usd=False,
         )
-        return checked.get("market_price_eur")
+        checked_price = checked.get("market_price_eur")
+        if checked_price is None:
+            return None
+        from backend.services.market_source_ref import market_source_ref
+        return _SourcedPrice(checked_price, market_source_ref(
+            market_id=market_id,
+            measurement_id=row[5] if len(row) > 5 else None,
+            source_observed_at=row[3],
+        ))
     eur_price, _source_at, _factor, _fx_at = price_in_eur(
         price=row[0], price_at=row[3], quote_currency=quote, fx=fx,
     )
@@ -186,14 +203,14 @@ def _get_trade_quote_fx_context(conn, symbol: str, *, require_usd: bool = True,
         }
         if market_id is not None:
             cur.execute("""
-                SELECT price, source_observed_at, quote_currency FROM market_data
+                SELECT price, source_observed_at, quote_currency, id FROM market_data
                 WHERE symbol=%s AND market_id=%s AND price IS NOT NULL
                   AND source_observed_at IS NOT NULL AND quote_currency=%s
                 ORDER BY source_observed_at DESC, timestamp DESC, id DESC LIMIT 1
             """, (symbol, market_id, catalog_quote))
         else:
             cur.execute("""
-            SELECT price, source_observed_at, quote_currency FROM market_data
+            SELECT price, source_observed_at, quote_currency, id FROM market_data
             WHERE symbol=%s AND price IS NOT NULL
               AND market_id IS NULL
               AND source_observed_at IS NOT NULL
@@ -202,6 +219,7 @@ def _get_trade_quote_fx_context(conn, symbol: str, *, require_usd: bool = True,
             """, (symbol,))
         market_row = cur.fetchone()
     from backend.services.portfolio_fx_service import trade_quote_context
+    from backend.services.market_source_ref import market_source_ref
     verified = trade_quote_context(
         price=market_row[0] if market_row else None,
         price_at=market_row[1] if market_row else None,
@@ -213,6 +231,11 @@ def _get_trade_quote_fx_context(conn, symbol: str, *, require_usd: bool = True,
     )
     return {
         **verified, "quote_currency": catalog_quote,
+        "source_ref": market_source_ref(
+            market_id=market_id,
+            measurement_id=market_row[3] if market_row and len(market_row) > 3 else None,
+            source_observed_at=market_row[1] if market_row else None,
+        ),
         "eur_per_unit": verified.get("usd_fx_eur_per_unit"),
         "fx_as_of": verified.get("usd_fx_as_of"),
         "live_price_eur": verified.get("market_price_eur"),
@@ -227,6 +250,7 @@ def _paper_execution_quote_evidence(context: dict) -> dict:
         raise BotSafetyBlock("De gecontroleerde Paper-koers is onvolledig.")
     fx_at = context.get("market_fx_as_of")
     return {
+        "execution_source_ref": context.get("source_ref"),
         "execution_source_price": context["market_price"],
         "execution_source_price_at": source_at.isoformat(),
         "execution_source_price_currency": context["quote_currency"],
@@ -1917,6 +1941,7 @@ def _persist_decision_and_order(
         "score_semantics": "verified_score_2",
         "setup_revision": setup_revision,
         "market_id": market_id,
+        "market_quote_source_ref": decision.get("market_quote_source_ref"),
         **verified_components,
         "setup": (scores.get("_setup_match") or {}).get("score"),
         "setup_match": decision.get("setup_match"),
@@ -2250,6 +2275,7 @@ def _maybe_execute_paper_position_exit(
     checked_at = context.get("market_price_at")
     evidence = {
         "decision_kind": "paper_exit", "trigger": trigger,
+        "source_ref": context.get("source_ref"),
         "source_price_currency": currency, "source_price": source_price,
         "market_id": bot.get("market_id"),
         "market_quote_currency": context.get("quote_currency"),
@@ -2594,6 +2620,12 @@ def run_trading_bot_execution(
                             "targets": snapshot["targets"], "trade_levels_converted": True,
                         })
 
+            assessment_quote_source_ref = (
+                (trade_fx_context.get("source_ref") if trade_fx_context
+                 else getattr(live_price, "source_ref", None))
+                if live_price is not None and not bot.get("is_live") else None
+            )
+
             # =========================
             # PORTFOLIO CONTEXT (ACCURATE)
             # =========================
@@ -2795,6 +2827,7 @@ def run_trading_bot_execution(
 
                 "setup_match": setup_match,
                 "live_price": live_price,
+                "market_quote_source_ref": assessment_quote_source_ref,
 
                 "metrics": metrics,
             }
@@ -3221,6 +3254,7 @@ def _recheck_paper_position_exit(
             SET scores_json = COALESCE(scores_json, '{}'::jsonb) || %s::jsonb
             WHERE id=%s AND user_id=%s AND bot_id=%s AND decision_kind='paper_exit'
         """, (json.dumps({
+            "execution_source_ref": context.get("source_ref"),
             "execution_source_price": source_price,
             "execution_source_price_at": context["market_price_at"].isoformat(),
             "execution_source_price_currency": source,

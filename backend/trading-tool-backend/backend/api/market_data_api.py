@@ -339,11 +339,17 @@ async def get_latest_exact_market_price(
     if snapshot is not None and str(snapshot.quote_currency or "").upper() != market.quote_currency:
         snapshot = None
     observed_at = snapshot.source_observed_at if snapshot is not None else None
+    from backend.services.market_source_ref import market_source_ref
     return {
         "market_id": market.id,
         "symbol": market.asset_symbol,
         "quote_currency": market.quote_currency,
         "price": float(snapshot.price) if snapshot is not None and snapshot.price is not None else None,
+        "source_ref": market_source_ref(
+            market_id=market.id,
+            measurement_id=getattr(snapshot, "id", None),
+            source_observed_at=observed_at,
+        ),
         **_freshness(observed_at, STALE_AFTER_SECONDS["quote"], "exact_market_data"),
     }
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import date
+from datetime import date, datetime, timezone
 from types import SimpleNamespace
 
 from backend.services.finn_v2_tool_adapters.score_tool_adapter import ScoreToolAdapter
@@ -97,6 +97,12 @@ def test_exact_pair_score_adapter_exposes_verified_indicator_scores_only():
 
     class SharedContext:
         matches = SimpleNamespace(last_source_row={"indicator_evidence": evidence})
+        market_data = SimpleNamespace(get_latest_exact_market_snapshot=None)
+
+        @staticmethod
+        async def _quote(_market_id):
+            return SimpleNamespace(id=987, market_id=43, symbol="BTC", quote_currency="EUR",
+                                   source_observed_at=datetime(2026, 11, 8, 9, 0, tzinfo=timezone.utc))
 
         async def benchmark_for_asset(self, user_id, asset, *, setups, market_id):
             assert (user_id, asset, setups, market_id) == (17, "BTC", [], 43)
@@ -110,11 +116,14 @@ def test_exact_pair_score_adapter_exposes_verified_indicator_scores_only():
                                             "technical_score": "fresh"},
             }
 
+    SharedContext.market_data.get_latest_exact_market_snapshot = SharedContext._quote
     adapter = object.__new__(ScoreToolAdapter)
     adapter.context = SharedContext()
     result = asyncio.run(adapter.execute(
         user_id=17, asset="BTC", market_id=43, quote_currency="EUR"))
     assert result["data"].pair == "BTC/EUR"
+    assert result["data"].market_quote_source_ref.measurement_id == 987
+    assert result["data"].market_quote_source_ref.market_id == 43
     assert result["data"].indicator_evidence == {
         **evidence,
         "market": {"price": {"score": 30, "value": 71854.09}},

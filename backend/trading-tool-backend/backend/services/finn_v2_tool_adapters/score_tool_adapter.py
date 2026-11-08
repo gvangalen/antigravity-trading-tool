@@ -4,6 +4,7 @@ from backend.schemas.finn_v2_evidence_schema import AssetScoresData
 from backend.services.finn_shared_context_service import FinnSharedContextService
 from backend.services.setup_market_match_service import verified_indicator_evidence
 from backend.services.finn_v2_tool_adapters.display_source_moment import display_source_moment
+from backend.services.market_source_ref import market_source_ref
 
 
 class ScoreToolAdapter:
@@ -47,6 +48,21 @@ class ScoreToolAdapter:
         payload["market_id"] = market_id
         payload["quote_currency"] = quote_currency
         payload["pair"] = f"{asset}/{quote_currency}" if market_id is not None else None
+        market_data = getattr(self.context, "market_data", None)
+        quote_row = ((await market_data.get_latest_exact_market_snapshot(market_id)
+                      if market_id is not None else
+                      await market_data.get_latest_quoted_snapshot(asset))
+                     if market_data is not None else None)
+        if market_id is not None and quote_row is not None and (
+            str(getattr(quote_row, "symbol", "")).upper() != asset or
+            str(getattr(quote_row, "quote_currency", "")).upper() != quote_currency
+        ):
+            quote_row = None
+        payload["market_quote_source_ref"] = market_source_ref(
+            market_id=getattr(quote_row, "market_id", None),
+            measurement_id=getattr(quote_row, "id", None),
+            source_observed_at=getattr(quote_row, "source_observed_at", None),
+        )
         return {
             "data": AssetScoresData(**payload),
             "summary": {"title": "asset_scores", "symbol": asset, "source_status": assessment["source_status"]},

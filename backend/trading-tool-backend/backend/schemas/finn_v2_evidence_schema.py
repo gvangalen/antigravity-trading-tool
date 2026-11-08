@@ -70,11 +70,18 @@ class IndicatorConfigurationData(BaseModel):
     provenance: str = "user_indicator_configs"
 
 
+class MarketSourceRefData(BaseModel):
+    market_id: Optional[int] = None
+    measurement_id: int
+    source_observed_at_utc: datetime
+
+
 class AssetScoresData(BaseModel):
     symbol: str
     market_id: Optional[int] = None
     quote_currency: Optional[str] = None
     pair: Optional[str] = None
+    market_quote_source_ref: Optional[MarketSourceRefData] = None
     as_of: Optional[date] = None
     source_status: str
     benchmark_score: Optional[float] = None
@@ -108,6 +115,7 @@ class MarketSnapshotData(BaseModel):
     symbol: str
     market_id: Optional[int] = None
     pair: Optional[str] = None
+    source_ref: Optional[MarketSourceRefData] = None
     price: Optional[float] = None
     quote_currency: Optional[str] = None
     price_provider: Optional[str] = None

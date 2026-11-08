@@ -59,8 +59,8 @@ postconditions, cleanup and model judgment are independently reviewed.
 
 ## Gate 2: one instant across four surfaces
 
-Fixture: one dated source measurement and associated report, Analysis score,
-Paper bot evidence and FINN read. The collector records the same source ID and
+Fixture: one dated exact-market price measurement and associated report, Analysis
+quote, Paper bot evidence and FINN market read. The collector records the same source ID and
 UTC instant internally, then reads each surface through its normal owner-scoped
 route. Normalize explicit UTC and Amsterdam displays to the same instant;
 verify visible zone labels and the short stale-indicator date over an offset
@@ -74,19 +74,16 @@ browser renderer or safe way to pass its in-memory server token into one. API
 timestamp parity plus formatter unit tests are partial evidence only. An
 isolated, non-uploading protected browser process is required before PASS.
 
-**Source-identity contract needed from Build:** the current Analysis and
-report projections carry `source_observed_at` but no shared immutable
-measurement identifier. The FINN score projection carries `market_id`, pair
-and source moments, but not a measurement-row ID shared with the report and
-Paper evidence. A QA-only browser renderer can verify the visible timezone
-and the displayed instant; it cannot prove that four surfaces read the same
-source row from timestamps alone. Expose an owner-scoped, non-secret typed
-`source_ref` on each relevant projection with exact market ID, immutable
-measurement ID and UTC source instant. The report must retain the same
-reference it snapshotted rather than substituting its generation time. QA
-should compare references internally and publish only equality booleans.
-Until that contract exists, Gate 2 remains `BLOCKED` even if browser
-formatting checks pass.
+**Source-identity contract:** exact-market quote projections carry an immutable
+`market_data.id`, exact `market_id`, and UTC `source_observed_at` as a typed
+source reference. FINN's `market_quote_source_ref` identifies only its
+separately selected market quote; it does not identify an indicator reading or
+prove the provenance of a calculated score. The report must retain the same
+reference it snapshotted rather than substituting its generation time. New
+market rows can arrive between reads, so QA must freeze or independently record
+the expected row for each surface read. QA compares references internally and
+publishes only equality booleans. Browser formatting and transport readback
+remain required before Gate 2 can pass.
 
 ## Gate 3: two exact BTC markets through outage and recovery
 

@@ -97,6 +97,10 @@ def test_paper_hold_persists_the_actual_guardrail_reason(monkeypatch):
             "strategy_reason": "Scheduled DCA blocked by guardrails: insufficient_funds",
             "guardrail_reason": "insufficient_funds",
             "guardrails_result": {"allowed": False, "blocked_by": "insufficient_funds"},
+            "market_quote_source_ref": {
+                "market_id": 43, "measurement_id": 987,
+                "source_observed_at_utc": "2026-11-08T09:30:00+00:00",
+            },
         },
         scores={}, setup_revision="2026-10-11T10:00:00",
     )
@@ -106,6 +110,7 @@ def test_paper_hold_persists_the_actual_guardrail_reason(monkeypatch):
     assert saved_scores["guardrail_reason"] == "insufficient_funds"
     assert saved_scores["guardrails_result"]["blocked_by"] == "insufficient_funds"
     assert saved_scores["strategy_reason"].startswith("Scheduled DCA blocked")
+    assert saved_scores["market_quote_source_ref"]["measurement_id"] == 987
 
 
 def test_reassessment_cannot_reopen_an_executed_daily_decision(monkeypatch):

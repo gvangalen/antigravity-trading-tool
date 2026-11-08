@@ -220,8 +220,8 @@ def _specifications(names: dict[str, str]) -> tuple[tuple[str, str, str], ...]:
     """Natural-language steps; object IDs never enter these user messages."""
     return (
         ("select_asset", "Selecteer SOL als mijn actieve asset.", "select_asset"),
-        ("watchlist_add", "Add SOL to my watchlist.", "watchlist_add"),
-        ("watchlist_remove", "Entferne SOL wieder aus meiner Watchlist.", "watchlist_remove"),
+        ("watchlist_add", "Add SOL/USDT to my watchlist.", "watchlist_add"),
+        ("watchlist_remove", "Entferne SOL/USDT wieder aus meiner Watchlist.", "watchlist_remove"),
         ("indicator_create", "Create a technical RSI indicator configuration for ADA.", "create_indicator_configuration"),
         ("indicator_update", "Aktualisiere nur das Gewicht meiner Volume-Indikatorkonfiguration fuer SOL/USDT auf niedrig.", "update_indicator_configuration"),
         ("indicator_delete", "Verwijder mijn technische RSI indicatorconfiguratie voor ADA.", "delete_indicator_configuration"),

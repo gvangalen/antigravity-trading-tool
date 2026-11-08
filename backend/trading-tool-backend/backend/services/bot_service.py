@@ -47,6 +47,7 @@ def _utc_iso(value: datetime | None) -> str | None:
 
 _PAPER_EXIT_EVIDENCE_FIELDS = (
     "trigger", "market_id", "market_quote_currency",
+    "source_ref", "execution_source_ref",
     "source_price_currency", "source_price", "source_price_at",
     "saved_stop_loss", "saved_first_target", "fx_eur_per_unit", "fx_observed_at",
     "execution_source_price_currency", "execution_source_price",
@@ -68,6 +69,17 @@ def _paper_exit_evidence(kind: str | None, raw: Any) -> dict | None:
     if not isinstance(data, dict):
         return None
     result = {key: data[key] for key in _PAPER_EXIT_EVIDENCE_FIELDS if data.get(key) is not None}
+    from backend.services.market_source_ref import market_source_ref
+    for key in ("source_ref", "execution_source_ref"):
+        source = result.get(key)
+        if isinstance(source, dict):
+            result[key] = market_source_ref(
+                market_id=source.get("market_id"),
+                measurement_id=source.get("measurement_id"),
+                source_observed_at=source.get("source_observed_at_utc"),
+            )
+        if not result.get(key):
+            result.pop(key, None)
     for key in ("source_price_at", "fx_observed_at", "execution_source_price_at", "execution_fx_observed_at"):
         raw_time = result.get(key)
         if isinstance(raw_time, str):
