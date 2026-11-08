@@ -238,6 +238,9 @@ jobs:
           control_plane_runner=".qa-control-plane/backend/trading-tool-backend/backend/scripts/run_finn_production_qa.py"
           remote_runner="${remote_state_dir}/runner.py"
           runner_sha256="$(sha256sum "$control_plane_runner" | awk '{print $1}')"
+          control_plane_schema_probe=".qa-control-plane/backend/trading-tool-backend/backend/scripts/probe_protected_trader_strategy_schema.py"
+          remote_schema_probe="${remote_state_dir}/strategy_schema_probe.py"
+          schema_probe_sha256="$(sha256sum "$control_plane_schema_probe" | awk '{print $1}')"
           ssh_opts=(
             -i "$RUNNER_TEMP/finn-production-qa-key"
             -o "UserKnownHostsFile=$RUNNER_TEMP/finn-production-qa-known-hosts"
@@ -272,6 +275,9 @@ jobs:
           ssh "${ssh_opts[@]}" "ubuntu@${QA_HOST}" "mkdir -p '$remote_state_dir' && chmod 700 '$remote_state_dir'"
           failure_stage="runner_transfer"
           scp -i "$RUNNER_TEMP/finn-production-qa-key" -o UserKnownHostsFile="$RUNNER_TEMP/finn-production-qa-known-hosts" -o BatchMode=yes -o StrictHostKeyChecking=yes "$control_plane_runner" "ubuntu@${QA_HOST}:${remote_runner}"
+          if [ "$QA_PROFILE" = "trader_strategy_schema_audit" ]; then
+            scp -i "$RUNNER_TEMP/finn-production-qa-key" -o UserKnownHostsFile="$RUNNER_TEMP/finn-production-qa-known-hosts" -o BatchMode=yes -o StrictHostKeyChecking=yes "$control_plane_schema_probe" "ubuntu@${QA_HOST}:${remote_schema_probe}"
+          fi
           if [ -n "${MANIFEST_BUNDLE:-}" ]; then
             failure_stage="manifest_transfer"
             printf '%s' "$MANIFEST_BUNDLE" > "$RUNNER_TEMP/finn-production-qa-manifest.bundle"
@@ -280,7 +286,7 @@ jobs:
           else
             remote_bundle=""
           fi
-          remote_command=$(printf 'bash -s -- %q %q %q %q %q %q %q %q %q %q %q %q %q %q %q' "$RELEASE_SHA" "$QA_PROFILE" "$MANIFEST_ID" "$RUN_LABEL" "$QA_REMOTE_DIR" "$remote_report" "$workflow_attempt_id" "$remote_bundle" "$ALLOW_FIXTURE_ACTIONS" "$ALLOW_SAFE_FIXTURE_EXECUTION" "$FINN_QA_FIXTURE_NAMESPACE" "$remote_runner" "$runner_sha256" "$QA_RUNNER_REVISION" "$remote_state_dir")
+          remote_command=$(printf 'bash -s -- %q %q %q %q %q %q %q %q %q %q %q %q %q %q %q %q %q' "$RELEASE_SHA" "$QA_PROFILE" "$MANIFEST_ID" "$RUN_LABEL" "$QA_REMOTE_DIR" "$remote_report" "$workflow_attempt_id" "$remote_bundle" "$ALLOW_FIXTURE_ACTIONS" "$ALLOW_SAFE_FIXTURE_EXECUTION" "$FINN_QA_FIXTURE_NAMESPACE" "$remote_runner" "$runner_sha256" "$QA_RUNNER_REVISION" "$remote_state_dir" "$remote_schema_probe" "$schema_probe_sha256")
           failure_stage="remote_bootstrap"
           # shellcheck disable=SC2029 # The SSH arguments are intentionally constructed by this protected runner.
           ssh "${ssh_opts[@]}" "ubuntu@${QA_HOST}" "$remote_command" <<'REMOTE'
@@ -301,6 +307,8 @@ jobs:
           runner_sha256="${13}"
           runner_revision="${14}"
           state_dir="${15}"
+          schema_probe_path="${16}"
+          schema_probe_sha256="${17}"
           fail_preflight() {
             printf '%s\n' "$1" > "$state_dir/preflight_status"
             printf '%s\n' "$1" >&2
@@ -309,6 +317,9 @@ jobs:
           cd "$remote_dir" || fail_preflight qa_checkout_unavailable
           test "$(git rev-parse HEAD 2>/dev/null)" = "$release_sha" || fail_preflight qa_checkout_mismatch
           test "$(sha256sum "$runner_path" | awk '{print $1}')" = "$runner_sha256" || fail_preflight qa_runner_checksum_mismatch
+          if [ "$qa_profile" = "trader_strategy_schema_audit" ]; then
+            test "$(sha256sum "$schema_probe_path" | awk '{print $1}')" = "$schema_probe_sha256" || fail_preflight qa_runner_checksum_mismatch
+          fi
           test ! -f "$state_dir/runner.pid" || ! kill -0 "$(cat "$state_dir/runner.pid")" 2>/dev/null || exit 0
           test ! -f "$state_dir/runner.child.pid" || ! kill -0 "$(cat "$state_dir/runner.child.pid")" 2>/dev/null || exit 0
           test -f "$HOME/.secrets/trading.env" || fail_preflight qa_secrets_unavailable
