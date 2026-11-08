@@ -7,6 +7,7 @@ import json
 import os
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from urllib.parse import urlsplit
 
 from backend.scripts import probe_protected_score2_stale_paper as fixture
 from backend.scripts.qa_trader_gate_invariants import check_paper_exit
@@ -18,9 +19,19 @@ async def _rendered_exit(user_id: int, bot_id: int, expected: dict) -> dict:
 
     async def inspect(page):
         nonlocal phase
-        phase = "trades_tab"
+        phase = "trades_tab_wait"
         trades_tab = page.locator('section[aria-label] [role="tablist"] [role="tab"]').first
-        await trades_tab.wait_for(timeout=20000)
+        try:
+            await trades_tab.wait_for(timeout=20000)
+        except Exception:
+            path = urlsplit(page.url).path
+            phase = (
+                "login_redirect" if path == "/login" else
+                "onboarding_redirect" if path.startswith("/onboarding") else
+                "tab_absent" if path == "/bot" else "trades_tab_wait"
+            )
+            raise
+        phase = "trades_tab_click"
         await trades_tab.click()
         phase = "details"
         details = page.locator("section[aria-label] details:has(dl)")
