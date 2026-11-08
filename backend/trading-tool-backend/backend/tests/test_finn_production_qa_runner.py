@@ -151,7 +151,11 @@ def test_strategy_schema_audit_has_no_fixture_action_permission():
     branch = source.split(f'elif args.profile == "{profile}":', 1)[1].split(
         'elif args.profile in {"closed_paper_trade_review"', 1
     )[0]
-    assert 'audit_strategy_schema()' in branch
+    assert 'runpy.run_path(str(probe_path))["run"]()' in branch
+    assert 'with_name("strategy_schema_probe.py")' in branch
+    assert 'control_plane_schema_probe' in workflow
+    assert 'remote_schema_probe' in workflow
+    assert 'sha256sum "$schema_probe_path"' in workflow
     assert 'execution_calls' not in branch
 
 
