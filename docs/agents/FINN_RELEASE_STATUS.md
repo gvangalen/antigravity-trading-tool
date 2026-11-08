@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Vier trader-gates: Analyse-bronmoment expliciet UTC (8 november 2026)
 
-Phase: `BUILD_VALIDATED`. Onafhankelijke QA gaf de afgebakende
+Phase: `DEPLOYED_QA_PENDING`. Onafhankelijke QA gaf de afgebakende
 Paper/FX-koopketen `ACCEPTED` op live SHA
 `01544068295bdf9a255dbb583b1351bf699ec527`: read-only
 [schema-run 42494526404](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42494526404)
@@ -41,8 +41,15 @@ frontend typecheck en production build slaagden na de daggrenscorrectie.
 Een statische backendtest verwachtte nog de oude formatternaam en is
 bijgewerkt; de gerichte test en volledige backend-suite
 (`4302 passed, 4 skipped`) slaagden daarna. `git diff --check` was schoon.
-Er is nog geen geslaagde CI, deploy of
-onafhankelijke live hertest voor deze tijdzonewijziging. De drie
+Productwijziging [PR #890](https://github.com/gvangalen/antigravity-trading-tool/pull/890)
+en alle vijf controles van de bijgewerkte PR-kandidaat slaagden. Alle
+vijf controles van [main-CI 42496395911](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42496395911)
+en [Auto Deploy 42496678972](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42496678972)
+slaagden. Git-main, backend-health en frontend-build-info (beide HTTP 200)
+meldden `33868ae2c0475fd6e910f07bd315519900cde4a7`. Deze
+statuswijziging maakt een nieuwe SHA; Build controleert de laatste
+main-CI, Auto Deploy en publieke pariteit opnieuw vóór QA. Er is nog
+geen onafhankelijke live hertest voor deze tijdzonewijziging. De drie
 UNTESTED gates vragen gerichte QA-bewijsvoering op de definitieve SHA.
 
 ## Paper/FX-prijsopslag: tien decimalen voor uitvoeringsbewijs (8 november 2026)
