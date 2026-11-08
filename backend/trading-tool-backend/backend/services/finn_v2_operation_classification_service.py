@@ -21,6 +21,8 @@ from backend.services.finn_v2_structured_operation_selector_service import (
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 from backend.services.finn_v2_operation_resolver_service import FinnV2OperationResolverService
 from backend.services.finn_v2_target_asset_resolver import FinnV2TargetAssetResolver
+from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
+from backend.services.watchlist_conversation_service import replacement_mentions
 from backend.utils import openai_client
 
 
@@ -171,6 +173,17 @@ class FinnV2OperationClassificationService:
                 "registry_mutation_constraint",
                 (contract,),
                 conversation_context=conversation_context,
+            )
+        replacement = replacement_mentions(message, DEFAULT_ASSET_CATALOG)
+        if replacement:
+            # A two-asset replacement is a mutation request. With an explicit
+            # watchlist/follow cue, collect the destination through the
+            # registered add contract. Without a scope, ask before acting.
+            operation_id = "watchlist_add" if "watchlist" in facts.explicit_entities else "clarify_request"
+            contract = self.registry.require_supported(operation_id)
+            return self._result(
+                operation_id, facts, "high", "registry_mutation_constraint" if operation_id == "watchlist_add"
+                else "registry_constraint", (contract,), conversation_context=conversation_context,
             )
         if (
             facts.discourse_act == "operation_request"

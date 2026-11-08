@@ -4,6 +4,64 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN samengestelde watchlistvervanging na live QA (8 november 2026)
+
+Phase: `REPAIR_CANDIDATE_FINAL_CI_PENDING`. De kandidaat staat op branch
+`codex/finn-watchlist-compound-repair`, gebaseerd op main
+`817b3e4c3`. Onafhankelijke QA op publieke SHA
+`4389a4b1f5a5f208cce0f3419b091396d8bdcba4` gaf voor de volledige
+watchlistscope `NOT_ACCEPTED`. De beschermde
+[read-only run 42511894445](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42511894445)
+voltooide **6/6** gevallen: losse BTC/ETH-toevoegingen vroegen correct naar
+`quote_currency` en Apple gaf een concept, maar “Apple niet meer volgen; volg
+Bitcoin” en “Haal Apple weg en voeg BTC/EUR toe” eindigden als `READ` zonder
+actie of voorstel. De vrijgegeven run-ID's zijn
+`finn-v2-run-bbf7b68ff9ac4956841eac6781b4420a` en
+`finn-v2-run-a0929cb021bb4c07849b881cde397fec`.
+In [schrijfrun 42512229736](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42512229736)
+werd BTC/USDT eenmaal eigenaargebonden voorgesteld, bevestigd en toegevoegd;
+replay gaf `already_executed`, zonder tweede effect of Live-actie. Die run
+stopte na **2/9** gevallen door een QA-manifestverwachting die BTC/USDT als
+canoniek target gebruikte, terwijl het contract BTC als target en USDT als
+afzonderlijke input bewaart. De overige writes en klikbare browserkeuzes zijn
+nog niet onafhankelijk getest. Build gebruikt alleen deze door QA vrijgegeven
+gevallen voor een algemene reparatie van bron/doelherkenning en scopevragen;
+er is nog geen nieuwe kandidaat gedeployed of door QA geaccepteerd.
+
+De reparatie op [PR #903](https://github.com/gvangalen/antigravity-trading-tool/pull/903)
+raakt zowel de modelgestuurde
+Responses-voorstelroute als de catalogusgestuurde clientkeuzes. Een gerichte
+persistente workerproef op de geïsoleerde lokale runtime gaf voor “Apple niet
+meer volgen; volg Bitcoin” `watchlist_add`, canoniek target `BTC`, ontbrekend
+`quote_currency` en de zichtbare vraag “BTC/EUR of BTC/USDT?”. “Haal Apple weg
+en voeg BTC/EUR toe” vroeg eerst of de gebruiker de watchlist of portfolio
+bedoelt. Met “aan mijn watchlist” in dezelfde zin ontstond een
+`ACTION_PROPOSAL` voor exact BTC/EUR, zonder voortijdige verwijdering.
+De volledige backend-suite op de gecombineerde code slaagde
+**4370 passed, 7 skipped**;
+frontendtypecheck, i18n-lint en -tests, command- en proposaltests,
+productiebouw en high-audit (nul kwetsbaarheden) slaagden; de gerichte
+klikbare-watchlistkeuzetests waren **9/9** groen.
+De echte provider-developmentset **20/20** (artifact SHA-256
+`17cd5065df1b7afdceac96623504fe95f95ecff8ea1df9477bf443527afc721b`)
+en providerregressie **109/109** (artifact SHA-256
+`fa560698d25adbf239b4aef8f42789eabf34e1b7d54873873a36deb36911b877`),
+beide met volledige operationele en ontbrekende-invoermatches en nul provider-,
+schema-, parse-, validatie- of timeoutfouten. De eerste volledige actiematrix mat **15/16**: add/remove van
+de watchlist slaagden; een strategievolgturn mislukte op een lokale
+PostgreSQL-timeout terwijl de providerregressie tegelijk liep. Die rode run
+geldt niet als releasebewijs. De volledige herhaling zonder parallelle
+providerbelasting op de vorige main-basis slaagde **16/16** (artifact SHA-256
+`17107b30f7e0df3be233ab315e338ab6cbe82a581427b733689784a392f4181e`),
+en de matrix op de gecombineerde code opnieuw **16/16** (artifact SHA-256
+`a546f06af6428cd02dfa1fe90fdf2996d501d6dfa73dcd3d9b14cf942cfc5d8c`),
+met nul productieverbindingen, brokerorders, Live-calls of Live-bots. De lokale
+backend-, frontend-, provider- en workercontroles zijn daarmee afgerond. Alle
+vijf PR-CI-jobs op de vorige, inhoudelijk gelijke codecommit `5953fdafc` zijn
+geslaagd in [run 42516042833](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42516042833).
+De laatste statuswijziging maakt een nieuwe SHA waarvoor CI opnieuw moet
+slagen. Deploymentidentiteit en onafhankelijke live QA zijn nog niet gemeten.
+
 ## Vier trader-gates: eerste FINN-bronlezing en portfoliotijd (8 november 2026)
 
 Phase: `DEPLOYED_QA_PENDING`. Onafhankelijke ingelogde QA stelde in

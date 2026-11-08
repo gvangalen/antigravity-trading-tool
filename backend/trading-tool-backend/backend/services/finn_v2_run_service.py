@@ -3606,7 +3606,11 @@ class FinnV2RunService:
         setup_draft = dict((getattr(runtime_contract, "state_json", {}) or {}).get("setup_draft") or {})
         guided_draft = setup_draft or {
             "operation_id": guided_operation,
-            "draft_status": guided_state.get("status"),
+            # The runtime contract stores the missing slot even when the
+            # transient guided status is omitted from its compact projection.
+            "draft_status": guided_state.get("status") or (
+                "collecting" if guided_state.get("missing_required_inputs") else None
+            ),
             "supplied_inputs": dict(guided_state.get("collected_inputs") or {}),
             "missing_inputs": list(guided_state.get("missing_required_inputs") or []),
             "requested_slot": guided_state.get("next_missing_input"),
@@ -3845,6 +3849,16 @@ class FinnV2RunService:
             collected_inputs=dict(guided_draft.get("supplied_inputs") or {}),
             locale=locale,
         )
+        if operation_id == "clarify_request" and requested_slot == "requested_change":
+            from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
+            from backend.services.watchlist_conversation_service import replacement_mentions
+
+            if replacement_mentions(user_message, DEFAULT_ASSET_CATALOG):
+                language = str(locale or "nl").split("-")[0].lower()
+                question = {
+                    "en": "Do you mean a change to your watchlist or your portfolio?",
+                    "de": "Meinst du eine Änderung an deiner Watchlist oder deinem Portfolio?",
+                }.get(language, "Bedoel je een wijziging in je watchlist of je portfolio?")
         from backend.services.asset_catalog_service import corrected_catalog_instrument
 
         corrected_asset = corrected_catalog_instrument(user_message)

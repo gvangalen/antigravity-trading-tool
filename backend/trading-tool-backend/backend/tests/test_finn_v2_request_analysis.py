@@ -759,6 +759,25 @@ def test_explicit_crypto_pair_and_stock_watchlist_add_have_no_missing_pair():
     assert stock.request_plan.operation_state["missing_required_inputs"] == []
 
 
+def test_follow_replacement_collects_destination_instead_of_removal_source():
+    for message in (
+        "Apple niet meer volgen; volg Bitcoin",
+        "Verwijder Apple en voeg BTC toe aan mijn watchlist",
+        "Nee, ik wil in plaats van Apple voortaan Bitcoin volgen op mijn watchlist",
+    ):
+        analysis = SERVICE.analyze(message=message)
+        assert analysis.request_plan.operation_id == "watchlist_add"
+        assert analysis.request_plan.target_asset == "BTC"
+        assert analysis.request_plan.operation_state["collected_inputs"] == {"asset": "BTC"}
+        assert analysis.request_plan.operation_state["missing_required_inputs"] == ["quote_currency"]
+
+
+def test_two_asset_change_without_scope_asks_before_selecting_an_action():
+    analysis = SERVICE.analyze(message="Haal Apple weg en voeg BTC/EUR toe")
+    assert analysis.request_plan.operation_id == "clarify_request"
+    assert analysis.request_plan.clarification_required is True
+
+
 def test_explicit_watchlist_remove_pair_keeps_quote_for_exact_row():
     analysis = SERVICE.analyze(message="Verwijder ETH/USDT uit mijn watchlist.")
     assert analysis.request_plan.operation_id == "watchlist_remove"

@@ -44,6 +44,7 @@ from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResol
 from backend.services import finn_v2_entity_resolution_service as entity_resolution_module
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
 from backend.services.finn_v2_operation_classification_service import FinnV2OperationClassificationService
+from backend.services.watchlist_conversation_service import replacement_mentions
 from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
 
 logger = logging.getLogger(__name__)
@@ -1056,6 +1057,42 @@ class FinnResponsesFrontDoor:
             and os.getenv("FINN_PER_OPERATION_TOOLS_EXPERIMENT") == "1"
         )
         catalog = FinnResponsesToolCatalog(individual_proposals=individual_proposals)
+        replacement = replacement_mentions(message, DEFAULT_ASSET_CATALOG)
+        if replacement:
+            follows_asset = bool(re.search(r"\b(?:volg|volgen|follow|following)\b", message, re.I))
+            watchlist_scope = bool(re.search(r"\b(?:watchlist|volglijst)\b", message, re.I)) or follows_asset
+            if not watchlist_scope:
+                question = {
+                    "en": "Do you mean a change to your watchlist or your portfolio?",
+                    "de": "Meinst du eine Änderung an deiner Watchlist oder deinem Portfolio?",
+                }.get(str(locale).split("-")[0].lower(), "Bedoel je een wijziging in je watchlist of je portfolio?")
+                return FinnResponsesFrontDoorResult(
+                    FinnResponsesResult(
+                        text=question, response_id=f"replacement-scope-{self.run_id}",
+                        tool_trace=(), response_id_reusable=False,
+                    ), None, previous_response, locale=locale,
+                )
+            destination = replacement["target"]
+            inputs: dict[str, object] = {"asset": destination["symbol"]}
+            if destination.get("quote_currency"):
+                inputs["quote_currency"] = destination["quote_currency"]
+            call = catalog.validate(
+                catalog.proposal_tool_for_operation("watchlist_add"),
+                {"operation_id": "watchlist_add", "inputs": inputs},
+            )
+            selected = self.proposals.from_call(
+                call=call, message=message, conversation_context=conversation_context,
+                verified_asset=str(destination["symbol"]),
+            )
+            return FinnResponsesFrontDoorResult(
+                FinnResponsesResult(
+                    text="Ik zet eerst het nieuwe asset klaar. Daarna kun je het oude asset verwijderen.",
+                    response_id=f"replacement-add-{self.run_id}",
+                    tool_trace=({"name": "watchlist_replacement", "status": "completed",
+                                 "result": {"operation_id": "watchlist_add"}},),
+                    response_id_reusable=False,
+                ), selected, previous_response, locale=locale,
+            )
         if _explicit_current_levels_strategy_concept(message) and not active_strategy_draft:
             contract = self.proposals.registry.require_supported("create_strategy")
             mentioned_assets = mentioned_catalog_symbols(message)

@@ -1535,6 +1535,20 @@ def test_asset_correction_is_visible_in_guided_clarification():
     assert "analysetijdsframe" in response["content"]
 
 
+def test_two_asset_change_without_scope_asks_which_product_surface():
+    response = FinnV2RunService._align_guided_clarification(
+        {"mode": "CLARIFICATION", "content": "Wat wil je verbeteren?"},
+        terminal_status="clarification_required",
+        guided_draft={
+            "operation_id": "clarify_request", "draft_status": "collecting",
+            "requested_slot": "requested_change", "supplied_inputs": {},
+        },
+        locale="nl",
+        user_message="Haal Apple weg en voeg BTC/EUR toe",
+    )
+    assert response["content"] == "Bedoel je een wijziging in je watchlist of je portfolio?"
+
+
 def test_cancelled_guided_draft_uses_natural_terminal_copy():
     run_service = FinnV2RunService(session=object())
 
