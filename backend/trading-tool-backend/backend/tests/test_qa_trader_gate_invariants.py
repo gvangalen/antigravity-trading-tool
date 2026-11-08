@@ -50,7 +50,10 @@ def _pair(owner, market, score):
 def test_pair_score_outage_and_recovery_do_not_cross_exact_markets():
     initial = {"pairs": {"BTC/EUR": _pair(7, 1, 45), "BTC/USDT": _pair(7, 2, 70)}}
     outage = deepcopy(initial)
-    outage["pairs"]["BTC/EUR"].update(score=None, source_status="stale_source", source_reason="stale_source")
+    outage["pairs"]["BTC/EUR"].update(
+        score=None, source_status="stale_source", fixture_source_diagnosis="stale_source",
+        stale_reading_proven=True,
+    )
     recovered = deepcopy(initial)
     assert check_pair_score_isolation(owner_id=7, initial=initial, outage=outage, recovered=recovered) == {
         "result": "PASS", "failed_checks": [],
@@ -58,7 +61,7 @@ def test_pair_score_outage_and_recovery_do_not_cross_exact_markets():
     outage["pairs"]["BTC/USDT"]["score"] = 45
     failed = check_pair_score_isolation(owner_id=7, initial=initial, outage=outage, recovered=recovered)
     assert failed["result"] == "FAIL"
-    assert failed["failed_checks"] == ["outage_typed_and_isolated"]
+    assert failed["failed_checks"] == ["outage_isolated"]
     assert "BTC/USDT" not in str(failed)
 
 
@@ -69,14 +72,14 @@ def test_pair_scores_reject_owner_crossing_and_missing_reason():
     recovered = deepcopy(initial)
     recovered["pairs"]["BTC/USDT"]["owner_id"] = 8
     failed = check_pair_score_isolation(owner_id=7, initial=initial, outage=outage, recovered=recovered)
-    assert set(failed["failed_checks"]) == {"owner_scope", "outage_typed_and_isolated"}
+    assert set(failed["failed_checks"]) == {"owner_scope", "fixture_stale_cause_proven"}
 
 
 def test_pair_missing_score_requires_independently_proven_stale_reading():
     initial = {"pairs": {"BTC/EUR": _pair(7, 1, 45), "BTC/USDT": _pair(7, 2, 70)}}
     outage = deepcopy(initial)
     outage["pairs"]["BTC/EUR"].update(
-        score=None, source_status="missing_score", source_reason="stale_source",
+        score=None, source_status="missing_score", fixture_source_diagnosis="stale_source",
         stale_reading_proven=True,
     )
     recovered = deepcopy(initial)
@@ -86,7 +89,7 @@ def test_pair_missing_score_requires_independently_proven_stale_reading():
     outage["pairs"]["BTC/EUR"]["stale_reading_proven"] = False
     assert check_pair_score_isolation(
         owner_id=7, initial=initial, outage=outage, recovered=recovered,
-    )["failed_checks"] == ["outage_typed_and_isolated"]
+    )["failed_checks"] == ["fixture_stale_cause_proven"]
 
 
 def _exit():

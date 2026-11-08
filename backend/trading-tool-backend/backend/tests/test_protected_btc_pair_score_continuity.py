@@ -24,7 +24,7 @@ def _snapshot(eur_score, usdt_score, *, stale=False):
                     "indicator_config": (("market", "change_24h"),),
                     "source_at": "2026-11-08T09:12:00Z",
                     "score": eur_score, "source_status": "missing_score" if stale else "fresh",
-                    "source_reason": "stale_source" if stale else "fresh",
+                    "fixture_source_diagnosis": "stale_source" if stale else "fresh",
                     "stale_reading_proven": stale},
         "BTC/USDT": {"owner_id": 11, "market_id": 2,
                      "indicator_config": (("market", "change_24h"),),
@@ -68,7 +68,7 @@ def test_probe_quarantines_on_score_cross_contamination(monkeypatch):
     monkeypatch.setattr(probe.fixture, "_cleanup", lambda *args: steps.append("cleanup"))
     monkeypatch.setattr(probe.fixture, "_quarantine", lambda *args: steps.append("quarantine"))
     assert probe.run(NAMESPACE) == {"result": "FAIL",
-                                    "failed_checks": ["outage_typed_and_isolated"],
+                                    "failed_checks": ["outage_isolated"],
                                     "analysis_transport_checked": False,
                                     "finn_transport_checked": False,
                                     "gate_status": "FAIL"}
@@ -128,6 +128,6 @@ def test_snapshot_keeps_missing_score_with_independent_stale_source_diagnosis(mo
     monkeypatch.setattr(probe, "_assessment", assessment)
     snapshot = probe._snapshot(11, MARKETS)["pairs"]
     assert snapshot["BTC/EUR"]["source_status"] == "missing_score"
-    assert snapshot["BTC/EUR"]["source_reason"] == "stale_source"
+    assert snapshot["BTC/EUR"]["fixture_source_diagnosis"] == "stale_source"
     assert snapshot["BTC/EUR"]["stale_reading_proven"] is True
-    assert snapshot["BTC/USDT"]["source_reason"] == "fresh"
+    assert snapshot["BTC/USDT"]["fixture_source_diagnosis"] == "fresh"

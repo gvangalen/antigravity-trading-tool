@@ -166,7 +166,10 @@ def _snapshot(user_id: int, markets: dict[str, dict]) -> dict:
                 ),
                 "score": assessment.get("benchmark_score") if verified else None,
                 "source_status": "fresh" if verified else market_reason,
-                "source_reason": "stale_source" if stale_reading_proven else market_reason,
+                "fixture_source_diagnosis": (
+                    "stale_source" if stale_reading_proven else "fresh" if verified
+                    else "unknown"
+                ),
                 "stale_reading_proven": stale_reading_proven,
             }
         return {"pairs": pairs}

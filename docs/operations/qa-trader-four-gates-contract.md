@@ -72,7 +72,8 @@ scores. Use only owner-specific indicator readings and daily score rows. Do
 not change shared candles, pair quotes, FX or provider state. Capture initial,
 outage and recovery snapshots. In the outage phase, make only the BTC/EUR
 fixture reading stale or unavailable, and require a null BTC/EUR score plus
-specific typed source reason; BTC/USDT must retain its own score. On recovery,
+an independently proven fixture stale cause; report the product's actual
+source status separately. BTC/USDT must retain its own score. On recovery,
 restore a genuinely dated BTC/EUR reading, trigger the normal score rebuild,
 and require its owner- and market-scoped result without changing BTC/USDT.
 Check Analysis and FINN projections against the same canonical score rows.
@@ -89,8 +90,9 @@ from this profile is not a PASS for all of Gate 3. It requires a fresh quote for
 both pairs; otherwise the collector must fail without inventing a score.
 When the builder correctly persists a NULL market score, the match service may
 report `missing_score` rather than `stale_source`; the collector only accepts
-that state with an independently dated, owner-scoped stale reading and a NULL
-built market score. Its artifact says `gate_status=PARTIAL` and explicitly
+that state when the pair remains isolated and a separate fixture check proves
+the dated, owner-scoped stale reading. This does not assert that the UI or FINN
+displayed `stale_source`. Its artifact says `gate_status=PARTIAL` and explicitly
 marks both transport projections unchecked.
 
 ## Gate 4: automatic Paper exit and reproducible cashflow

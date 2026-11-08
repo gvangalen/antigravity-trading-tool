@@ -150,21 +150,18 @@ def check_pair_score_isolation(
     baseline = all(pair[0].get("source_status") == "fresh" and _decimal(pair[0].get("score")) is not None
                    for pair in (eur, usdt))
     distinct = _decimal(eur[0].get("score")) != _decimal(usdt[0].get("score"))
-    outage_safe = (
+    outage_isolated = (
         eur[1].get("score") is None
-        and (
-            eur[1].get("source_status") in {
-                "stale_source", "missing_indicator_reading", "score_rebuild_pending"
-            }
-            or (eur[1].get("source_status") == "missing_score"
-                and eur[1].get("stale_reading_proven") is True
-                and eur[1].get("source_reason") == "stale_source")
-        )
-        and eur[1].get("source_reason") in {
-            "stale_source", "source_unavailable", "insufficient_indicator_history"
+        and eur[1].get("source_status") in {
+            "missing_score", "stale_source", "missing_indicator_reading",
+            "score_rebuild_pending",
         }
         and usdt[1].get("score") == usdt[0].get("score")
         and usdt[1].get("source_status") == "fresh"
+    )
+    fixture_stale_cause_proven = (
+        eur[1].get("stale_reading_proven") is True
+        and eur[1].get("fixture_source_diagnosis") == "stale_source"
     )
     recovery = (
         eur[2].get("source_status") == "fresh"
@@ -182,7 +179,8 @@ def check_pair_score_isolation(
         "dated_sources": bool(dated),
         "initial_scores_verified": baseline,
         "pair_scores_distinct": distinct,
-        "outage_typed_and_isolated": outage_safe,
+        "outage_isolated": outage_isolated,
+        "fixture_stale_cause_proven": fixture_stale_cause_proven,
         "recovery_isolated": recovery,
     })
 
