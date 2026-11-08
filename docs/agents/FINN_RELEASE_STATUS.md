@@ -4,6 +4,36 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN-vervolgvraag over bevestigde les: dossierread (8 november 2026)
+
+Phase: `BUILD_VALIDATED_QA_PENDING`. Kandidaat:
+`codex/review-lesson-followup-read`. Onafhankelijke beschermde QA op
+`23b66c85517e34ce2b8792b7c3f5af3fc68a4cd1` in
+[workflow 42462662156](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42462662156)
+bereikte na de fixturefix Paper-buy, Paper-sell, analyse, dossier en chat.
+De eerste eigenaargebonden read over de gesloten trade en bevestigde les
+slaagde. De vervolgvraag in hetzelfde gesprek miste echter de vereiste
+`review_history`-read (`review_tool_seen=false`, `review_read_status=missing`)
+en faalde met `closed_paper_review_chat_followup_evidence_missing`. Er waren
+twee gecontroleerde Paper-executiepogingen, nul Live-tradingcalls en nul
+Live-botactivaties. De vier trader-gates en polling/SSE zijn nog niet volledig
+bewezen; onafhankelijk verdict: `NOT_ACCEPTED`. Het gesaniteerde artifact heeft
+SHA-256 `878981703ffd43fb88ef0bdc27c2efe1f4e2b5cce20c381839b2b96763ff9e1f`.
+
+De exacte vervolgvraag faalde lokaal zonder vooraf meegegeven review-ID:
+FINN koos `tool_choice=auto` in plaats van de verplichte eigenaargebonden
+dossierread. De vraag naar een opgeslagen bevestigde les forceert nu die
+read ook zonder dat ID. De mutatiegrens blijft bestaan. Als de read meerdere
+bevestigde lessen oplevert zonder geverifieerd review-ID, krijgt FINN de
+bewijsgrens om elke les met reviewnummer te onderscheiden of verduidelijking
+te vragen. Gerichte tests: `13 passed`; volledige backend-suite:
+`4296 passed, 4 skipped`. Security beoordeelde de concrete diff read-only als
+akkoord, met het voorbehoud dat QA het daadwerkelijke antwoord bij meerdere
+lessen nog moet controleren. De lokale worker-actiematrix en selectorproeven
+zijn voor deze leesroutering zonder gewijzigde actiecontracten of
+providerselectie niet van toepassing. CI, deployment en onafhankelijke QA
+voor deze kandidaat volgen nog.
+
 ## Beschermde Paper-fixture hersteld, QA-hertest wacht (8 november 2026)
 
 Phase: `DEPLOYED_QA_PENDING`. De bestaande QA-agent kreeg expliciete

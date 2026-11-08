@@ -1355,6 +1355,11 @@ class FinnResponsesFrontDoor:
             (ReviewToolAdapter.requested_review_id(message) is not None
              or "review" in request_facts.explicit_entities
              or re.search(
+                 r"\b(?:bevestigde|confirmed|bestätigte[nr]?)\s+"
+                 r"(?:les|lesson|lektion)\b",
+                 message, re.I,
+             )
+             or re.search(
                  r"\b(?:gesloten|afgesloten|afgeronde?|closed|completed|geschlossenen?)\s+"
                  r"(?:(?:paper|live)\s*[- ]?)?(?:trade|positie|position)\b",
                  message, re.I,
