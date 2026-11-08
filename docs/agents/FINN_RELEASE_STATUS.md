@@ -6,9 +6,11 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN samengestelde watchlistvervanging na live QA (8 november 2026)
 
-Phase: `REPAIR_CANDIDATE_FINAL_CI_PENDING`. De kandidaat staat op branch
-`codex/finn-watchlist-compound-repair`, gebaseerd op main
-`817b3e4c3`. Onafhankelijke QA op publieke SHA
+Phase: `PRODUCT_DEPLOYED_STATUS_UPDATE_PENDING`. De kandidaat op branch
+`codex/finn-watchlist-compound-repair` is als
+[PR #903](https://github.com/gvangalen/antigravity-trading-tool/pull/903)
+gemerged naar main-SHA `915488d0b7a23d756a888a205e8806bf77c3292e`.
+Onafhankelijke QA op eerdere publieke SHA
 `4389a4b1f5a5f208cce0f3419b091396d8bdcba4` gaf voor de volledige
 watchlistscope `NOT_ACCEPTED`. De beschermde
 [read-only run 42511894445](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42511894445)
@@ -28,8 +30,7 @@ nog niet onafhankelijk getest. Build gebruikt alleen deze door QA vrijgegeven
 gevallen voor een algemene reparatie van bron/doelherkenning en scopevragen;
 er is nog geen nieuwe kandidaat gedeployed of door QA geaccepteerd.
 
-De reparatie op [PR #903](https://github.com/gvangalen/antigravity-trading-tool/pull/903)
-raakt zowel de modelgestuurde
+De reparatie raakt zowel de modelgestuurde
 Responses-voorstelroute als de catalogusgestuurde clientkeuzes. Een gerichte
 persistente workerproef op de geïsoleerde lokale runtime gaf voor “Apple niet
 meer volgen; volg Bitcoin” `watchlist_add`, canoniek target `BTC`, ontbrekend
@@ -57,10 +58,18 @@ en de matrix op de gecombineerde code opnieuw **16/16** (artifact SHA-256
 `a546f06af6428cd02dfa1fe90fdf2996d501d6dfa73dcd3d9b14cf942cfc5d8c`),
 met nul productieverbindingen, brokerorders, Live-calls of Live-bots. De lokale
 backend-, frontend-, provider- en workercontroles zijn daarmee afgerond. Alle
-vijf PR-CI-jobs op de vorige, inhoudelijk gelijke codecommit `5953fdafc` zijn
-geslaagd in [run 42516042833](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42516042833).
-De laatste statuswijziging maakt een nieuwe SHA waarvoor CI opnieuw moet
-slagen. Deploymentidentiteit en onafhankelijke live QA zijn nog niet gemeten.
+vijf PR-CI-jobs op kandidaat `992cfb0d0f2a7f19f729f978d4924cff650b33fa`
+zijn geslaagd in [run 42516875339](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42516875339),
+en alle vijf main-CI-jobs op merge-SHA `915488d0b7a23d756a888a205e8806bf77c3292e`
+in [run 42517218565](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42517218565).
+[Auto Deploy 42517457867](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42517457867)
+slaagde. Publieke `https://tradamind.com/api/health` en
+`https://tradamind.com/build-info.json` gaven HTTP 200 en beide exact
+`915488d0b7a23d756a888a205e8806bf77c3292e`; Git-main was dezelfde SHA.
+Deze statuswijziging maakt nog een nieuwe main-SHA, dus Build wacht de
+bijbehorende CI, Auto Deploy en publieke pariteit af voordat het onafhankelijke
+live QA aan dezelfde QA Agent overdraagt. Een QA-verdict voor deze reparatie
+ontbreekt nog.
 
 ## Vier trader-gates: eerste FINN-bronlezing en portfoliotijd (8 november 2026)
 
