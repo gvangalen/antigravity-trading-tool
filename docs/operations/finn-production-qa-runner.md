@@ -21,7 +21,7 @@ The manual workflow `.github/workflows/finn-production-qa.yml` requires:
 | Input | Meaning |
 | --- | --- |
 | `release_sha` | Full, already-live SHA. It must be an ancestor of `main`. |
-| `qa_profile` | The protected profile from the workflow dropdown; that dropdown is the authoritative full list. `trader_paper_exit_fixture_audit` is read-only and audits only a prior protected Paper-exit namespace. |
+| `qa_profile` | The protected profile from the workflow dropdown; that dropdown is the authoritative full list. `trader_paper_exit_fixture_audit` checks only a prior Paper-exit namespace. `trader_strategy_schema_audit` reads only bounded strategy schema metadata. Both are read-only. |
 | `manifest_id` | Approved QA-owned manifest identifier. `auth_preflight` uses `none`. |
 | `run_label` | Safe trace label; no user, fixture, or credential data. |
 | `manifest_bundle` | Optional encrypted QA-owned manifest. It is decrypted only on the protected host. |
