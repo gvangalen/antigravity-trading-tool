@@ -197,6 +197,11 @@ with an in-memory bearer token scoped to same-origin read-only API requests.
 It checks the rendered `PaperExitEvidence` values and timestamps against the
 saved exit projection without uploading DOM, screenshots or tokens. The
 published production artifact above predates this step and remains PARTIAL.
+The inactive QA child can be redirected by the unrelated onboarding guard.
+For this Paper-exit display check only, the protected browser may answer the
+exact GET `/api/onboarding/status` with a fixed completed-navigation response;
+all bot, trade and exit evidence still comes from real owner-scoped GETs. The
+artifact marks this override. This does not test onboarding or its API.
 
 ## Local contract checks
 

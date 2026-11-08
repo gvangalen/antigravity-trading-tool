@@ -28,12 +28,21 @@ SAFE_ACCOUNT_ERRORS = {
     "account_prepare_decisions_unique", "account_prepare_decisions_check",
     "account_prepare_decisions_not_null", "account_prepare_decisions_foreign_key",
     "account_prepare_decisions_datatype", "account_prepare_decisions_column",
+    "account_prepare_decisions_data_exception", "account_prepare_decisions_integrity",
+    "account_prepare_decisions_schema", "account_prepare_decisions_server_exception",
+    "account_prepare_decisions_connection", "account_prepare_decisions_database_other",
+    "account_prepare_decisions_python_input",
 }
 
 SAFE_DECISION_SQLSTATES = {
     "23505": "unique", "23514": "check", "23502": "not_null",
     "23503": "foreign_key", "22P02": "datatype", "42804": "datatype",
     "42703": "column",
+}
+
+SAFE_DECISION_SQLSTATE_CLASSES = {
+    "22": "data_exception", "23": "integrity", "42": "schema",
+    "P0": "server_exception", "08": "connection",
 }
 
 
@@ -215,9 +224,15 @@ def _prepare(user_id: int, bot_id: int) -> None:
         if isinstance(error, RuntimeError) and str(error) in SAFE_ACCOUNT_ERRORS:
             raise
         if step == "decisions":
-            reason = SAFE_DECISION_SQLSTATES.get(getattr(error, "sqlstate", None))
+            sqlstate = getattr(error, "sqlstate", None)
+            reason = SAFE_DECISION_SQLSTATES.get(sqlstate)
             if reason:
                 raise RuntimeError(f"account_prepare_decisions_{reason}") from None
+            if isinstance(sqlstate, str):
+                category = SAFE_DECISION_SQLSTATE_CLASSES.get(sqlstate[:2], "database_other")
+                raise RuntimeError(f"account_prepare_decisions_{category}") from None
+            if isinstance(error, (TypeError, ValueError, KeyError)):
+                raise RuntimeError("account_prepare_decisions_python_input") from None
         raise RuntimeError(f"account_prepare_{step}_failed") from None
     finally:
         connection.close()

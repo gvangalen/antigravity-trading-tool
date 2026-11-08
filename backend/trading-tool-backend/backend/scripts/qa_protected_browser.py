@@ -7,6 +7,7 @@ nor page contents may be returned in a workflow artifact or exception.
 from __future__ import annotations
 
 from collections.abc import Callable
+import json
 from urllib.parse import urlsplit
 
 
@@ -25,10 +26,29 @@ async def block_websocket(route) -> None:
     await route.close()
 
 
+def fixture_onboarding_response(*, base_url: str, request_url: str, method: str,
+                                enabled: bool) -> dict | None:
+    if (not enabled or method != "GET"
+            or request_policy(base_url=base_url, request_url=request_url) != "authenticated"):
+        return None
+    parsed = urlsplit(request_url)
+    if parsed.path != "/api/onboarding/status" or parsed.query:
+        return None
+    return {
+        "onboarding_complete": True,
+        "phases_completed": {"complete": True},
+        "has_asset": True,
+        "has_setup": True,
+        "has_strategy": True,
+        "has_bot": True,
+        "next_route": "/dashboard",
+    }
+
+
 async def observe_page(
     *, base_url: str, path: str, token: str,
     inspect: Callable, timezone_id: str = "Europe/Amsterdam",
-    timeout_ms: int = 30000,
+    timeout_ms: int = 30000, bypass_fixture_onboarding: bool = False,
 ):
     """Render one production page, inspect it in memory, and discard context.
 
@@ -38,6 +58,8 @@ async def observe_page(
     """
     if not path.startswith("/") or path.startswith("//") or not token:
         raise ValueError("qa_browser_input_invalid")
+    if bypass_fixture_onboarding and urlsplit(path).path != "/bot":
+        raise ValueError("qa_browser_fixture_override_scope_invalid")
     if request_policy(base_url=base_url, request_url=base_url) != "public":
         raise ValueError("qa_browser_origin_invalid")
 
@@ -66,6 +88,14 @@ async def observe_page(
                     )
                     if policy == "block" or route.request.method not in {"GET", "HEAD"}:
                         await route.abort()
+                    elif (override := fixture_onboarding_response(
+                        base_url=base_url, request_url=route.request.url,
+                        method=route.request.method, enabled=bypass_fixture_onboarding,
+                    )) is not None:
+                        await route.fulfill(
+                            status=200, content_type="application/json",
+                            body=json.dumps(override),
+                        )
                     elif policy == "authenticated":
                         await route.continue_(headers={
                             **route.request.headers,

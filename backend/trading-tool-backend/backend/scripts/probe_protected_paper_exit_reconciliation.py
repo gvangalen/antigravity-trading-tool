@@ -70,7 +70,7 @@ async def _rendered_exit(user_id: int, bot_id: int, expected: dict) -> dict:
         token = create_access_token({"sub": str(user_id), "role": "user"})
         return await observe_page(
             base_url="https://tradamind.com", path=f"/bot?bot_id={bot_id}",
-            token=token, inspect=inspect,
+            token=token, inspect=inspect, bypass_fixture_onboarding=True,
         )
     except Exception:
         raise RuntimeError(f"paper_exit_rendered_{phase}_failed") from None
@@ -403,11 +403,13 @@ def run(namespace: str) -> dict:
             return {"result": "FAIL", "failed_checks": sorted(
                 key for key in required_rendered if rendered.get(key) is not True
             ), "rendered_ui_checked": True, "gate_status": "FAIL",
-                "engine_calls": 2, "live_calls": live_calls}
+                "engine_calls": 2, "live_calls": live_calls,
+                "onboarding_navigation_override": True}
         passed = True
         return {**result, "exit_decisions": 1, "replay_duplicate_sells": 0,
                 "engine_calls": 2, "live_calls": live_calls,
                 "rendered_ui_checked": True,
+                "onboarding_navigation_override": True,
                 "gate_status": "PASS"}
     finally:
         if user_id is not None and bot_id is not None:
