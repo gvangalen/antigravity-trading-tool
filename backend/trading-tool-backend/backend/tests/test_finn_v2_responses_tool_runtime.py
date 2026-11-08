@@ -9823,6 +9823,32 @@ def test_explicit_setup_draft_is_not_vetoed_by_second_model_relevance_check(mess
     front.relevance_guard.is_relevant.assert_not_awaited()
 
 
+def test_explicit_indicator_deletion_keeps_its_confirmable_contract_when_relevance_model_disagrees():
+    fake = FakeResponses(
+        response("r1", calls=(tool_call("c1", "create_indicator_proposal", {
+            "operation_id": "delete_indicator_configuration",
+            "draft_intent": "new",
+            "inputs": {"asset": "SOL", "category": "technical", "indicator": "RSI"},
+        }),)),
+        response("r2", text="Dit is het voorstel om RSI uit SOL te verwijderen."),
+    )
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.client = SimpleNamespace(responses=fake)
+    front.user_id = 21
+    front.run_id = "run-explicit-indicator-delete"
+    front.proposals = FinnResponsesProposalSelection()
+    front.relevance_guard = SimpleNamespace(is_relevant=AsyncMock(return_value=False))
+    front.reads = SimpleNamespace(session_factory=None)
+    result = asyncio.run(front.run(
+        message="Verwijder mijn technische RSI indicatorconfiguratie voor SOL.",
+        instructions="Use FINN tools", conversation_context={}, verified_asset="SOL",
+    ))
+    assert result.proposal_analysis is not None
+    assert result.proposal_analysis.request_plan.operation_id == "delete_indicator_configuration"
+    assert result.response.tool_trace[0]["status"] != "retry"
+    front.relevance_guard.is_relevant.assert_not_awaited()
+
+
 @pytest.mark.parametrize("message", [
     "Maak een ETH trade-setup op 4H, maar geen voorstel.",
     "Maak hypothetisch een ETH trade-setup als denkoefening.",
@@ -13544,6 +13570,78 @@ def test_bot_decision_question_binds_persisted_history_even_for_portfolio_tool()
     assert FinnResponsesFrontDoor._bind_bot_decision_evidence(
         selected, message="Wijzig mijn botbesluit", read_only=False,
     ) == selected
+
+
+def test_combined_account_question_requires_owner_reads_on_first_turn(monkeypatch):
+    question = (
+        "Lees alleen mijn opgeslagen setup 'QA BTC Onder Druk 1810', de gekoppelde "
+        "strategie en Paper-bot 'QA BTC Base Inrange Paper 2810'. Wat zijn het "
+        "DCA-ritme en basisbedrag, is de bot actief of live, heb ik nu een "
+        "Paper-positie, en wat is de laatst opgeslagen botbeslissing met datum? "
+        "Zeg duidelijk als iets niet is gecontroleerd. Wijzig niets."
+    )
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="account-bundle")
+    front.model_led_coach = True
+    captured = {}
+
+    async def capture_loop(_self, **kwargs):
+        captured.update(kwargs)
+        return FinnResponsesResult("Ik controleer de accountbronnen.", "answer", ())
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run", capture_loop,
+    )
+    asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="BTC",
+        workspace_hints={"page": "/asset", "symbol": "BTC"},
+    ))
+    assert captured["required_read_tool_name"] == "get_active_plan_and_strategy"
+    selected = FinnResponsesToolCatalog().validate("get_active_plan_and_strategy", {})
+    bound = FinnResponsesFrontDoor._bind_bot_decision_evidence(
+        selected, message=question, read_only=True,
+    )
+    assert {"read_active_setup", "read_linked_strategy", "read_portfolio", "read_review_history", "read_bot_status"}.issubset(
+        set(bound.read_tools)
+    )
+
+
+def test_combined_account_question_does_not_become_setup_inventory_read():
+    question = (
+        "Lees alleen mijn opgeslagen setup 'Matrix Bot Update Parent', de gekoppelde "
+        "strategie en Paper-bot 'Matrix Update Bot'. Wat is het basisbedrag, "
+        "is de bot actief of live, heb ik nu een Paper-positie, en wat is de "
+        "laatst opgeslagen botbeslissing met datum? Wijzig niets."
+    )
+    fake = FakeResponses(
+        response("account-read", calls=[tool_call("call-account", "get_active_plan_and_strategy", {})]),
+        response("account-answer", text="Ik heb de setup, botstatus, positie en beslissing gelezen."),
+    )
+    selected_calls = []
+
+    class FakeRead:
+        session_factory = None
+
+        async def __call__(self, call):
+            selected_calls.append(call)
+            return {"status": "completed", "results": [
+                {"scope": scope, "status": "completed", "data": {}}
+                for scope in call.read_tools
+            ]}
+
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="account-first-read", model_led_coach=True,
+    )
+    front.reads = FakeRead()
+    asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="BTC",
+        workspace_hints={"page": "/asset", "symbol": "BTC"},
+    ))
+    assert selected_calls[0].name == "get_active_plan_and_strategy"
+    assert {"read_active_setup", "read_linked_strategy", "read_bot_status", "read_portfolio",
+            "read_review_history"}.issubset(set(selected_calls[0].read_tools))
 
 
 def test_bot_decision_front_door_reads_history_before_answer(monkeypatch):

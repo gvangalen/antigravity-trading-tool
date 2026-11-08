@@ -762,6 +762,16 @@ class FinnResponsesFrontDoor:
         )
 
     @staticmethod
+    def _asks_about_account_state_bundle(message: str) -> bool:
+        """Require one owner-scoped read for a combined plan/bot/position request."""
+        return bool(
+            re.search(r"\b(?:setup|plan|strategie|strategy)\b", message, re.I)
+            and re.search(r"\b(?:bot|automatisering|automation)\b", message, re.I)
+            and re.search(r"\b(?:positie|posities|position|positions)\b", message, re.I)
+            and FinnResponsesFrontDoor._asks_about_bot_decision(message)
+        )
+
+    @staticmethod
     def _bind_bot_decision_evidence(
         call: FinnResponsesToolCall, *, message: str, read_only: bool,
     ) -> FinnResponsesToolCall:
@@ -772,6 +782,7 @@ class FinnResponsesFrontDoor:
             return call
         return replace(call, read_tools=tuple(dict.fromkeys((
             *call.read_tools, "read_review_history", "read_portfolio",
+            *(('read_bot_status',) if FinnResponsesFrontDoor._asks_about_account_state_bundle(message) else ()),
         ))))
 
     @staticmethod
@@ -1923,6 +1934,7 @@ class FinnResponsesFrontDoor:
         # a named setup is projected from it below.
         setup_relationship_read = bool(
             is_read_request
+            and not self._asks_about_account_state_bundle(message)
             and request_facts.linked_graph_relationship
             and "setup" in request_facts.explicit_entities
             and {"strategy", "bot"}.intersection(request_facts.explicit_entities)
@@ -2375,7 +2387,11 @@ class FinnResponsesFrontDoor:
                 # otherwise veto the proposal on "show it, don't save it".
                 # Contract validation and a separate confirmation still gate
                 # every persisted change.
-                and not (call.operation_id and call.operation_id == explicit_create_request)
+                and not (call.operation_id and (
+                    call.operation_id == explicit_create_request
+                    or (call.operation_id == imperative_operation
+                        and imperative_operation == "delete_indicator_configuration")
+                ))
                 and (
                     call.operation_id is not None
                     or (not getattr(self, "model_led_coach", False)
@@ -3723,6 +3739,9 @@ class FinnResponsesFrontDoor:
             required_read_tool_name=(
                 "get_open_plan_draft"
                 if guided_draft_question
+                else "get_active_plan_and_strategy"
+                if is_read_only_turn and self._asks_about_account_state_bundle(message)
+                and pending_operation is None and not resuming_clarification
                 else "get_closed_trade_review"
                 if (explicit_closed_review_read or contextual_closed_review_read)
                 and pending_operation is None and not resuming_clarification

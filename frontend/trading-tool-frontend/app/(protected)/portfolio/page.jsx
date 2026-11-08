@@ -37,7 +37,9 @@ function PortfolioPageInner() {
     ? formatCurrency(Number(value), locale, "EUR", { maximumFractionDigits: 2 })
     : "—", [locale]);
   const time = useCallback((value) => value
-    ? formatDateTime(new Date(value), locale, { dateStyle: "medium", timeStyle: "short" })
+    ? formatDateTime(new Date(value), locale, {
+      dateStyle: "medium", timeStyle: "short", timeZone: "Europe/Amsterdam", timeZoneName: "short",
+    })
     : null, [locale]);
 
   const load = useCallback(async () => {
