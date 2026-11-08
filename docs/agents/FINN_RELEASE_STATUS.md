@@ -4,6 +4,25 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Paper-aankoop: begrensde vervolgdiagnose (8 november 2026)
+
+Phase: `BUILD_VALIDATED_QA_PENDING`. Kandidaat: `codex/paper-buy-cause-family`.
+De beschermde QA-run 42417611630 bleef in `paper_buy` steken met
+`paper_buy_cause=other`; QA kon uit de bestaande gesaniteerde evidence geen
+onderliggende foutfamilie vaststellen. Er is geen nieuwe fixture-run of
+productcall gedaan voor deze analyse. De vier inhoudelijke trader-gates zijn
+nog niet bewezen en de eerdere QA-uitkomst blijft `NOT_ACCEPTED`.
+
+De publieke QA-orchestrator rapporteert bij deze fase voortaan uitsluitend
+een vaste foutfamilie van de directe uitzondering (`paper_buy_cause_family`).
+De fouttekst, type- en modulenamen, SQL en fixturegegevens komen niet in het
+rapport. Dit wijzigt geen Paper-uitvoering of QA-verdict. Gerichte tests:
+`104 passed`; volledige backend-suite: `4293 passed, 4 skipped`.
+Security beoordeelde de concrete patch read-only als akkoord. De lokale
+worker-actiematrix en providerproeven zijn voor deze uitsluitend
+diagnostische runnerwijziging niet van toepassing. CI, deployment en
+onafhankelijke QA voor deze kandidaat volgen nog.
+
 ## Beschermde Paper-QA: ontbrekende foutcategorie (7 november 2026)
 
 Phase: `QA_NOT_ACCEPTED`. Actieve diagnosekandidaat:
