@@ -18,7 +18,8 @@ def test_probe_requires_authorization_before_source_read(monkeypatch):
         probe.run(NAMESPACE)
 
 
-def test_probe_replays_once_and_cleans_only_after_contract_pass(monkeypatch):
+@pytest.mark.parametrize("rendered_value", [True, False])
+def test_probe_replays_once_and_cleans_only_after_contract_pass(monkeypatch, rendered_value):
     from backend.engine import trading_bot_execution
 
     monkeypatch.setenv("FINN_QA_ALLOW_PAPER_EXIT_FIXTURE", "1")
@@ -45,17 +46,34 @@ def test_probe_replays_once_and_cleans_only_after_contract_pass(monkeypatch):
     monkeypatch.setattr(probe.fixture, "_connection", Connection)
     monkeypatch.setattr(trading_bot_execution, "run_trading_bot_execution",
                         lambda *args, **kwargs: (steps.append("run") or {"ok": True}))
-    monkeypatch.setattr(probe, "_evidence", lambda *args: {"fixture": "private"})
+    monkeypatch.setattr(probe, "_evidence", lambda *args: {"fixture": "private", "ui_projection": {}})
     monkeypatch.setattr(probe, "check_paper_exit",
                         lambda evidence: {"result": "PASS", "failed_checks": []})
+    async def rendered(*_args):
+        steps.append("render")
+        return {
+            "rendered_exit_fields_present": rendered_value,
+            "rendered_exit_eur_price": True,
+            "rendered_exit_quantity": True,
+            "rendered_exit_proceeds": True,
+            "rendered_exit_source_quote": True,
+            "rendered_exit_fx": True,
+        }
+    monkeypatch.setattr(probe, "_rendered_exit", rendered)
     monkeypatch.setattr(probe.fixture, "_cleanup", lambda *args: steps.append("cleanup"))
     monkeypatch.setattr(probe.fixture, "_quarantine", lambda *args: steps.append("quarantine"))
-    assert probe.run(NAMESPACE) == {"result": "PASS", "failed_checks": [],
-                                    "exit_decisions": 1, "replay_duplicate_sells": 0,
-                                    "engine_calls": 2, "live_calls": 0,
-                                    "rendered_ui_checked": False,
-                                    "gate_status": "PARTIAL"}
-    assert steps == ["seed_trade", "run", "run", "cleanup"]
+    result = probe.run(NAMESPACE)
+    if rendered_value:
+        assert result == {"result": "PASS", "failed_checks": [],
+                          "exit_decisions": 1, "replay_duplicate_sells": 0,
+                          "engine_calls": 2, "live_calls": 0,
+                          "rendered_ui_checked": True, "gate_status": "PASS"}
+        assert steps == ["seed_trade", "run", "run", "render", "cleanup"]
+    else:
+        assert result == {"result": "FAIL", "failed_checks": ["rendered_exit_fields_present"],
+                          "engine_calls": 2, "live_calls": 0,
+                          "rendered_ui_checked": True, "gate_status": "FAIL"}
+        assert steps == ["seed_trade", "run", "run", "render", "quarantine"]
 
 
 def test_probe_quarantines_when_persisted_effect_does_not_reconcile(monkeypatch):

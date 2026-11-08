@@ -12,6 +12,50 @@ from backend.scripts import probe_protected_score2_stale_paper as fixture
 from backend.scripts.qa_trader_gate_invariants import check_paper_exit
 
 
+async def _rendered_exit(user_id: int, bot_id: int, expected: dict) -> dict:
+    from backend.scripts.qa_protected_browser import observe_page
+    from backend.utils.auth_utils import create_access_token
+
+    token = create_access_token({"sub": str(user_id), "role": "user"})
+
+    async def inspect(page):
+        details = page.locator("section[aria-label] details:has(dl)")
+        await details.first.locator("summary").wait_for(timeout=20000)
+        if await details.count() != 1:
+            return {"rendered_exit_row_unique": False}
+        await details.first.locator("summary").click()
+        lines = await details.first.locator("dl > div").all_text_contents()
+        return await page.evaluate("""({lines, evidence}) => {
+            const format = (value, digits) => new Intl.NumberFormat('nl-NL', {
+                maximumFractionDigits: digits,
+            }).format(Number(value));
+            const time = (value) => new Intl.DateTimeFormat('nl-NL', {
+                day: '2-digit', month: 'short', year: 'numeric',
+                hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Amsterdam',
+                timeZoneName: 'short',
+            }).format(new Date(value));
+            return {
+                rendered_exit_fields_present: lines.length === 8,
+                rendered_exit_eur_price: lines[3]?.includes(`${format(evidence.execution_eur_price, 6)} EUR`) ?? false,
+                rendered_exit_quantity: lines[4]?.includes(format(evidence.execution_qty, 8)) ?? false,
+                rendered_exit_proceeds: lines[5]?.includes(`${format(evidence.execution_proceeds_eur, 6)} EUR`) ?? false,
+                rendered_exit_source_quote: lines[6]?.includes(format(evidence.execution_source_price, 6)) &&
+                    lines[6]?.includes(evidence.execution_source_price_currency) &&
+                    lines[6]?.includes(time(evidence.execution_source_price_at)),
+                rendered_exit_fx: lines[7]?.includes(format(evidence.execution_fx_eur_per_unit, 6)) &&
+                    lines[7]?.includes(time(evidence.execution_fx_observed_at)),
+            };
+        }""", {"lines": lines, "evidence": expected})
+
+    try:
+        return await observe_page(
+            base_url="https://tradamind.com", path=f"/bot?bot_id={bot_id}",
+            token=token, inspect=inspect,
+        )
+    finally:
+        token = None
+
+
 @contextmanager
 def _stage(name: str):
     try:
@@ -275,6 +319,7 @@ def _evidence(namespace: str, user_id: int, bot_id: int, market_id: int,
             "ledger_cash_delta_eur": ledger[0][0],
             "order_id": order_id, "ledger_order_id": ledger[0][3],
             "history_projection": history_projection,
+            "ui_projection": projection,
         }
     finally:
         connection.close()
@@ -323,11 +368,25 @@ def run(namespace: str) -> dict:
             return {**result, "rendered_ui_checked": False,
                     "gate_status": "FAIL", "engine_calls": 2,
                     "live_calls": live_calls}
+        with _stage("rendered_ui"):
+            rendered = asyncio.run(_rendered_exit(user_id, bot_id, evidence["ui_projection"]))
+        required_rendered = {
+            "rendered_exit_fields_present", "rendered_exit_eur_price",
+            "rendered_exit_quantity", "rendered_exit_proceeds",
+            "rendered_exit_source_quote", "rendered_exit_fx",
+        }
+        if set(rendered) != required_rendered or not all(
+            rendered.get(key) is True for key in required_rendered
+        ):
+            return {"result": "FAIL", "failed_checks": sorted(
+                key for key in required_rendered if rendered.get(key) is not True
+            ), "rendered_ui_checked": True, "gate_status": "FAIL",
+                "engine_calls": 2, "live_calls": live_calls}
         passed = True
         return {**result, "exit_decisions": 1, "replay_duplicate_sells": 0,
                 "engine_calls": 2, "live_calls": live_calls,
-                "rendered_ui_checked": False,
-                "gate_status": "PARTIAL"}
+                "rendered_ui_checked": True,
+                "gate_status": "PASS"}
     finally:
         if user_id is not None and bot_id is not None:
             if passed:

@@ -1,10 +1,11 @@
 # Protected QA contract: four trader gates
 
 Status: QA-owned partial collectors, not four-gate acceptance. The trusted-ref
-and deploy-event guards landed on `main` in PR #892. The two protected profiles
-below are not available on production until this QA control-plane change has
-been reviewed, merged and deployed. Security and Architecture review remains
-required before merge. Never dispatch the workflow from this branch.
+and deploy-event guards landed on `main` in PR #892. The pair-score and
+Paper-exit profiles have produced partial production evidence; the new
+account-answer examiner and browser renderer on this branch are not live QA
+evidence. Security and Architecture review remains required before merge.
+Never dispatch the protected workflow from this branch.
 
 ## Shared boundary
 
@@ -47,6 +48,15 @@ prove factual consistency. An independently verifiable, owner-scoped answer
 projection or protected local answer examiner is required; it must not export
 the original response. This is not permission to make product changes in QA.
 
+The proposed `trader_account_state_readback` profile creates an isolated
+inactive Paper child owner, freezes its persisted plan, bot, position and
+latest-decision facts before each turn, checks typed source evidence, and
+uses a separate in-memory examiner twice per answer. It requires seven
+separate factual claims across two fresh conversations and one follow-up.
+The artifact contains only fixed check codes and counts. This is not a Gate 1
+PASS until the protected profile runs on the deployed revision and its
+postconditions, cleanup and model judgment are independently reviewed.
+
 ## Gate 2: one instant across four surfaces
 
 Fixture: one dated source measurement and associated report, Analysis score,
@@ -63,6 +73,20 @@ string after the product read.
 browser renderer or safe way to pass its in-memory server token into one. API
 timestamp parity plus formatter unit tests are partial evidence only. An
 isolated, non-uploading protected browser process is required before PASS.
+
+**Source-identity contract needed from Build:** the current Analysis and
+report projections carry `source_observed_at` but no shared immutable
+measurement identifier. The FINN score projection carries `market_id`, pair
+and source moments, but not a measurement-row ID shared with the report and
+Paper evidence. A QA-only browser renderer can verify the visible timezone
+and the displayed instant; it cannot prove that four surfaces read the same
+source row from timestamps alone. Expose an owner-scoped, non-secret typed
+`source_ref` on each relevant projection with exact market ID, immutable
+measurement ID and UTC source instant. The report must retain the same
+reference it snapshotted rather than substituting its generation time. QA
+should compare references internally and publish only equality booleans.
+Until that contract exists, Gate 2 remains `BLOCKED` even if browser
+formatting checks pass.
 
 ## Gate 3: two exact BTC markets through outage and recovery
 
@@ -167,6 +191,12 @@ does not run a browser renderer, so it cannot attest to the rendered
 source and execution source are checked separately: EUR fill arithmetic uses
 the recorded execution quote and FX even if they moved after the decision.
 The artifact says `rendered_ui_checked=false` and `gate_status=PARTIAL`.
+
+The proposed QA-only browser step opens the protected child owner's bot page
+with an in-memory bearer token scoped to same-origin read-only API requests.
+It checks the rendered `PaperExitEvidence` values and timestamps against the
+saved exit projection without uploading DOM, screenshots or tokens. The
+published production artifact above predates this step and remains PARTIAL.
 
 ## Local contract checks
 

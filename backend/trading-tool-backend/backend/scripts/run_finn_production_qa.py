@@ -42,6 +42,7 @@ ALLOWED_PROFILES = {
     "score2_outside_paper",
     "score2_exact_eur_paper",
     "trader_pair_score_continuity",
+    "trader_account_state_readback",
     "trader_paper_exit_reconciliation",
     "trader_paper_exit_fixture_audit",
     "trader_strategy_schema_audit",
@@ -190,6 +191,16 @@ def profile_error_category(profile: str, error: Exception) -> str:
             "btc_pair_source_unavailable", "btc_pair_fixture_source_missing",
             "trader_pair_fixture_manifest_forbidden", "fixture_has_exchange_keys",
         } else "trader_pair_probe_runtime_error")
+    if profile == "trader_account_state_readback":
+        code = str(error)
+        return (code if code in {
+            "account_fixture_not_authorized", "account_fixture_namespace_invalid",
+            "account_fixture_manifest_forbidden", "account_fixture_lineage_missing",
+            "account_fixture_portfolio_missing", "account_fixture_facts_missing",
+            "account_safety_measurement_unavailable",
+            "fixture_binding_invalid", "fixture_has_exchange_keys",
+            "fixture_cleanup_failed", "fixture_quarantine_failed",
+        } else "account_probe_runtime_error")
     if profile == "trader_paper_exit_reconciliation":
         code = str(error)
         return (code if code in {
@@ -210,6 +221,7 @@ def profile_error_category(profile: str, error: Exception) -> str:
             "paper_exit_open_bot_update_failed", "paper_exit_open_portfolio_update_failed",
             "paper_exit_open_decision_insert_failed", "paper_exit_open_order_insert_failed",
             "paper_exit_open_ledger_insert_failed", "paper_exit_open_commit_failed",
+            "paper_exit_rendered_ui_failed",
         } else "paper_exit_probe_runtime_error")
     if profile == "trader_paper_exit_fixture_audit":
         code = str(error)
@@ -2379,6 +2391,24 @@ def main() -> int:
                 from backend.scripts.probe_protected_btc_pair_score_continuity import run as run_pair_score_probe
 
                 report[args.profile] = run_pair_score_probe(fixture_namespace or "")
+                report["outcome"] = (
+                    "passed" if report[args.profile]["result"] == "PASS" else "failed"
+                )
+                report["qa_status"] = "COMPLETED"
+            elif args.profile == "trader_account_state_readback":
+                if args.manifest_id != "none" or args.manifest_bundle_path:
+                    raise ValueError("account_fixture_manifest_forbidden")
+                if os.getenv("FINN_QA_ALLOW_TRADER_ACCOUNT_FIXTURE") != "1":
+                    raise ValueError("account_fixture_not_authorized")
+                report["protected_profile_attempted"] = True
+                report["qa_status"] = "INCOMPLETE"
+                report["outcome"] = "incomplete"
+                report["safety"]["read_only_profile"] = False
+                report["safety"]["execution_calls"] = None
+                from backend.scripts.probe_protected_account_answer import run as run_account_probe
+
+                report[args.profile] = run_account_probe(fixture_namespace or "")
+                report["safety"]["execution_calls"] = report[args.profile]["executions"]
                 report["outcome"] = (
                     "passed" if report[args.profile]["result"] == "PASS" else "failed"
                 )

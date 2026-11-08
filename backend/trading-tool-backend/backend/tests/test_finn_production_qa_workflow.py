@@ -54,3 +54,11 @@ def test_privileged_deploy_accepts_only_push_ci_from_this_repository():
     assert "github.event.workflow_run.event == 'push'" in condition
     assert "github.event.workflow_run.head_branch == 'main'" in condition
     assert "github.event.workflow_run.head_repository.full_name == github.repository" in condition
+
+
+def test_account_fixture_authorization_survives_runner_reconnect():
+    text = WORKFLOW_PATH.read_text(encoding="utf-8")
+    assert "export FINN_QA_ALLOW_TRADER_ACCOUNT_FIXTURE=0" in text
+    assert "export FINN_QA_ALLOW_TRADER_ACCOUNT_FIXTURE=1" in text
+    run_script = text.split('cat > "$state_dir/run.sh" <<RUNNER', 1)[1].split('\n          RUNNER', 1)[0]
+    assert 'export FINN_QA_ALLOW_TRADER_ACCOUNT_FIXTURE=$(printf \'%q\' "$FINN_QA_ALLOW_TRADER_ACCOUNT_FIXTURE")' in run_script
