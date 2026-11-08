@@ -2396,9 +2396,9 @@ def main() -> int:
                 report[args.profile] = audit_fixture(args.run_label)
                 report["outcome"] = (
                     "failed" if report[args.profile]["fixture_state"] in {"UNSAFE_ACTIVE", "AMBIGUOUS"}
-                    else "passed"
+                    else "incomplete"
                 )
-                report["qa_status"] = "COMPLETED"
+                report["qa_status"] = "COMPLETED_WITH_FAILURES" if report["outcome"] == "failed" else "INCOMPLETE"
             elif args.profile in {"closed_paper_trade_review", "closed_paper_trade_review_chat"}:
                 if args.manifest_id != "none" or args.manifest_bundle_path:
                     raise ValueError("closed_paper_review_fixture_manifest_forbidden")

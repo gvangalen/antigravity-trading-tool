@@ -53,6 +53,18 @@ def test_audit_does_not_infer_cleanup_from_absent_fixture(monkeypatch):
     assert conn.closed
 
 
+def test_audit_accepts_only_attempted_incomplete_prior_paper_run(monkeypatch):
+    conn = Connection([[]])
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: conn)
+    monkeypatch.setattr(audit.Path, "read_text", lambda *_a, **_k: json.dumps({
+        "workflow_run_id": "42502525173-1",
+        "profile": "trader_paper_exit_reconciliation",
+        "target_sha": "9a72d5e4c8e10533a6a7359861e242efdd2c4808",
+        "protected_profile_attempted": True, "outcome": "incomplete",
+    }))
+    assert audit.run(LABEL)["fixture_state"] == "NO_RETAINED_FIXTURE"
+
+
 def test_audit_reports_only_bounded_quarantine_state(monkeypatch):
     conn = Connection([
         [(17, False, {"qa_namespace": NAMESPACE})], [(False, False)],
@@ -91,6 +103,19 @@ def test_audit_rejects_another_prior_profile(monkeypatch):
     monkeypatch.setattr(audit.Path, "read_text", lambda *_a, **_k: json.dumps({
         "workflow_run_id": "42502525173-1", "profile": "auth_preflight",
         "target_sha": "9a72d5e4c8e10533a6a7359861e242efdd2c4808",
+    }))
+    with pytest.raises(RuntimeError, match="trader_fixture_audit_prior_report_mismatch"):
+        audit.run(LABEL)
+
+
+@pytest.mark.parametrize("attempted,outcome", [(False, "incomplete"), (True, "passed")])
+def test_audit_rejects_unattempted_or_successful_prior_run(monkeypatch, attempted, outcome):
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: pytest.fail("database touched"))
+    monkeypatch.setattr(audit.Path, "read_text", lambda *_a, **_k: json.dumps({
+        "workflow_run_id": "42502525173-1",
+        "profile": "trader_paper_exit_reconciliation",
+        "target_sha": "9a72d5e4c8e10533a6a7359861e242efdd2c4808",
+        "protected_profile_attempted": attempted, "outcome": outcome,
     }))
     with pytest.raises(RuntimeError, match="trader_fixture_audit_prior_report_mismatch"):
         audit.run(LABEL)

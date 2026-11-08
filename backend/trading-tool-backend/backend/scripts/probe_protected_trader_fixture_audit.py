@@ -21,7 +21,9 @@ def _verify_prior_report(workflow_id: str, attempt: str, sha_prefix: str) -> Non
         raise RuntimeError("trader_fixture_audit_prior_report_unavailable") from None
     if (data.get("workflow_run_id") != run_id
             or data.get("profile") != "trader_paper_exit_reconciliation"
-            or not str(data.get("target_sha", "")).startswith(sha_prefix)):
+            or not str(data.get("target_sha", "")).startswith(sha_prefix)
+            or data.get("protected_profile_attempted") is not True
+            or data.get("outcome") not in {"failed", "incomplete"}):
         raise RuntimeError("trader_fixture_audit_prior_report_mismatch")
 
 

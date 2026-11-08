@@ -132,6 +132,8 @@ def test_prior_paper_fixture_audit_is_read_only_and_bounded():
     )[0]
     assert 'audit_fixture(args.run_label)' in audit_branch
     assert 'execution_calls' not in audit_branch
+    assert 'else "incomplete"' in audit_branch
+    assert '"INCOMPLETE"' in audit_branch
 
 
 def test_typed_entry_paper_profile_requires_explicit_fixture_scope(monkeypatch):
