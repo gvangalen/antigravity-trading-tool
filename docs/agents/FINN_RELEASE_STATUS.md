@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Vier trader-gates: eerste FINN-bronlezing en portfoliotijd (8 november 2026)
 
-Phase: `LOCAL_VALIDATED_RUNTIME_PENDING`. Onafhankelijke ingelogde QA stelde in
+Phase: `LOCAL_VALIDATED_CI_PENDING`. Onafhankelijke ingelogde QA stelde in
 twee nieuwe gesprekken dezelfde read-only vraag over setup, strategie, Paper-bot,
 positie en laatste botbeslissing. FINN las het DCA-ritme en basisbedrag, maar
 controleerde de drie gevraagde bot- en portfoliogegevens niet in de eerste beurt.
@@ -14,17 +14,39 @@ Een gerichte vervolgbeurt kon de bronnen wel lezen en de beslissing correct
 omrekenen van 6 november 23:49:44 UTC naar 7 november 00:49:44 CET.
 
 De kandidaat verplicht voor deze samengestelde vraag een eigenaargebonden
-plan/strategielezing en voegt binnen de bestaande account/bot-toolgrens de
-portefeuille- en beslissingshistorie toe. De Portfolio-weergave toont de
-bestaande bron- en ophaalmomenten nu expliciet in Europe/Amsterdam met
-tijdzone. Lokaal: gerichte backendtests **911 passed**, volledige backend-suite
-**4363 passed, 7 skipped**; frontend typecheck, productiebuild, i18n-lint
-en -tests (41), commandtests (44), proposaltests (9) en high-audit
-(0 kwetsbaarheden) geslaagd. Security en Architecture vonden geen resterende
-blocker na herbeoordeling. De vereiste geïsoleerde worker-actiematrix en
-echte-providerproeven zijn op deze kandidaat nog niet uitgevoerd; CI,
-Auto Deploy, publieke SHA-pariteit en onafhankelijke live hertest zijn nog
-niet gemeten. Dit is geen live-acceptatie van de vier gates.
+plan/strategielezing en voorkomt dat ze tot een smalle setup-inventaris wordt
+genormaliseerd. Dezelfde eerste read haalt de expliciet genoemde botstatus,
+portefeuille en beslissingshistorie op. Portfolio toont bron- en ophaalmomenten
+nu in Europe/Amsterdam met expliciete tijdzone. Een tweede modelcontrole kan
+een expliciet en correct als indicatorverwijdering herkend verzoek niet langer
+naar een setupverwijdering ombuigen; eigenaarcontrole en afzonderlijke
+bevestiging blijven vereist.
+
+Gemeten lokaal: volledige backend-suite **4365 passed, 7 skipped** (log
+SHA-256 `c0c0819d3ea995f3e49b220df2cbf4e0a8bb8cab42af612525fbd57ffe116cd5`);
+frontend typecheck, productiebuild, i18n-lint en -tests (41), commandtests
+(44), proposaltests (9) en high-audit (0 kwetsbaarheden) geslaagd. De echte
+providerontwikkelingstest slaagde **20/20** (artifact SHA-256
+`0996b09027fce3be33d08b7d975be8aec12d4647492194d2918bbd0e1ebe6797`),
+de regressie **109/109** (`3ace47b699e4d86f39a90902a449d88b0db5627cc05daea66f91f182832879f5`),
+beide zonder provider-, schema-, parse-, validatie- of timeoutfout. Een echte
+lokale Responses-beurt op een synthetische eigenaar met meerdere bots las in
+één antwoord het strategiebedrag, de actieve Paper-bot, afwezige positie en
+laatste beslissing als **7 november 00:49 CET**; de vijf gevraagde scopes
+waren aanwezig (log SHA-256
+`fb7b5f9b7a26065818c8f6fb496616069f27fc4b6e403f522b67d785aa13b216`).
+De geïsoleerde Linux/amd64 API/prefork-Celery-actiematrix slaagde **16/16**
+op de standaard 2 GB-grens, zonder productieverbindingen, brokerorders,
+Live-calls of Live-bots (artifact SHA-256
+`11a0f3de878e9814be0e588f1f0a28f778ece30b2e22f6a7231442241f247bb5`).
+De container had geen OOM-kill of restart; geheugenpiek 1.367.273.472 bytes.
+Eerdere runs waren rood door een foutieve relevantieafwijzing en later
+geheugendruk in de gedeelde Docker-VM (circa 245 MB beschikbaar, swap vol)
+door twee oude testcontainers. Die zijn gestopt; de volledige schone 2 GB-run
+is opnieuw uitgevoerd, niet uit de rode runs afgeleid. Security en
+Architecture vonden geen resterende codeblocker. CI op de laatste
+statuscommit, Auto Deploy, publieke SHA-pariteit en onafhankelijke live
+hertest zijn nog niet gemeten. Dit is geen live-acceptatie van de vier gates.
 
 ## FINN watchlistgesprek en exacte handelsparen (8 november 2026)
 
