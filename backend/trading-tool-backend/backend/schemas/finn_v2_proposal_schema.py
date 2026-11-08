@@ -122,6 +122,17 @@ class StrategyDeleteChange(BaseModel):
 class WatchlistChange(BaseModel):
     asset: str
     operation: Literal["add", "remove"]
+    quote_currency: Optional[str] = None
+    legacy_market_only: bool = False
+
+    @validator("quote_currency")
+    def _normalize_quote(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        normalized = str(value).strip().upper()
+        if normalized not in {"EUR", "USDT"}:
+            raise ValueError("unsupported_watchlist_quote")
+        return normalized
 
     @validator("asset")
     def _normalize_asset(cls, value: str) -> str:

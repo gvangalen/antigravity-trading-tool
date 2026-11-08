@@ -1,5 +1,12 @@
 import { fetchAuth } from "@/lib/api/auth";
 
+export async function matchAssetsInText(text) {
+  return await fetchAuth("/api/assets/mentions", {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  });
+}
+
 export async function fetchTradingMarkets(symbol) {
   return await fetchAuth(`/api/assets/${encodeURIComponent(String(symbol || "").toUpperCase())}/trading-markets`, {
     method: "GET",

@@ -27,7 +27,7 @@ from backend.utils.auth_utils import create_access_token
 
 ACTION_SPECS = (
     ("select_asset", "Selecteer SOL als mijn actieve asset.", "Selecteer een asset als mijn actieve asset.", "SOL."),
-    ("watchlist_add", "Voeg ETH toe aan mijn watchlist.", "Voeg een asset toe aan mijn watchlist.", "ETH."),
+    ("watchlist_add", "Voeg ETH/EUR toe aan mijn watchlist.", "Voeg een asset toe aan mijn watchlist.", "ETH/EUR."),
     ("watchlist_remove", "Verwijder XRP uit mijn watchlist.", "Verwijder een asset uit mijn watchlist.", "XRP."),
     ("create_indicator_configuration", "Maak een technische RSI indicatorconfiguratie voor ADA.", "Maak een technische RSI indicatorconfiguratie.", "Voor ADA."),
     ("update_indicator_configuration", "Wijzig alleen de weging van Volume voor BTC/EUR naar laag; laat BTC/USDT ongemoeid.", "Pas de weging van mijn Volume-indicator aan.", "Voor BTC/EUR naar laag; laat BTC/USDT ongemoeid."),
@@ -49,7 +49,7 @@ ACTION_SPECS = (
 # every transition to ``OperationContract.required_inputs`` at runtime.
 GUIDED_SLOT_ANSWERS = {
     "select_asset": ("SOL.",),
-    "watchlist_add": ("ETH.",),
+    "watchlist_add": {"asset": "ETH.", "quote_currency": "ETH/EUR."},
     "watchlist_remove": ("XRP.",),
     "create_indicator_configuration": ("Voor ADA.",),
     "update_indicator_configuration": ("Voor BTC/EUR.", "Zet de weging naar laag; laat BTC/USDT ongemoeid."),

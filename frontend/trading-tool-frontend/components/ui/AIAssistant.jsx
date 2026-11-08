@@ -28,6 +28,9 @@ import { parseFinnChatText } from "@/lib/finnChatText.mjs";
 import { finnSubmissionLocale } from "@/lib/finnChatLocale.mjs";
 import { inactiveProposalIds, isFinnProposalCorrection, mapBackendSessionMessages, retireEarlierFinnProposalCards, retireFinnProposalCards, setupDraftFrequencyLabel, setupDraftFromProposal, tradeSetupReviewComplete, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "@/lib/finnProposalCardState.mjs";
 import { clarificationQuestionChoices, draftConversationCopy, draftQuestionChoices, hasConfirmableDraft, isCollectingDraft, isOpenClarification } from "@/lib/finnDraftConversation.mjs";
+import { matchAssetsInText, fetchTradingMarkets } from "@/lib/api/assets";
+import { fetchWatchlist } from "@/lib/api/watchlist";
+import { watchlistIntent, watchlistChoices, watchlistScopeChoices, replacementAfterConfirmedAdd } from "@/lib/finnWatchlistConversation.mjs";
 
 const INDICATOR_MODAL_OPEN_EVENT = "finn-indicator-config:open";
 const INDICATOR_MODAL_COMPLETED_EVENT = "finn-indicator-config:completed";
@@ -455,6 +458,7 @@ function AIAssistantContent({
   const { user } = useAuth();
   const router = useRouter();
   const watchlist = useWatchlist();
+  const pendingWatchlistReplacementRef = useRef(null);
   const { showSnackbar } = useModal();
   const { t, locale } = useTranslation();
 
@@ -1374,13 +1378,91 @@ function AIAssistantContent({
     if (!activeStreamIdRef.current) setLoading(false);
   };
 
-  async function handleChat(directQuery, isSilent = false, overrideContext = null, retryMessageIndex = null) {
+  async function handleGuidedWatchlistChoice(choice) {
+    if (loading || executingAction) return;
+    if (choice.reply) {
+      await handleChat(choice.reply);
+      return;
+    }
+    const action = choice.action;
+    if (!action) return;
+    if (action.kind === "clarify_watchlist_scope") {
+      setLoading(true);
+      try {
+        const ownedRows = await fetchWatchlist();
+        const markets = action.target.asset_class === "crypto"
+          ? (await fetchTradingMarkets(action.target.symbol))?.markets || [] : [];
+        const guidance = watchlistScopeChoices(action.target, ownedRows || [], markets, locale);
+        setMessages((current) => [...current,
+          { role: "user", text: choice.label },
+          { role: "assistant", text: guidance.question, watchlistGuidance: guidance, isComplete: true },
+        ]);
+      } catch (error) {
+        console.warn("Watchlist scope choices unavailable", error);
+        showSnackbar("Watchlistkeuzes zijn tijdelijk niet beschikbaar. Probeer het opnieuw.", "warning");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+    if (action.kind === "replace") {
+      pendingWatchlistReplacementRef.current = action;
+      const target = action.target_quote_currency
+        ? `${action.target_symbol}/${action.target_quote_currency}` : action.target_symbol;
+      await handleChat(`Voeg ${target} toe aan mijn watchlist`, false, null, null, true);
+      return;
+    }
+    if (action.kind === "add" || action.kind === "remove") {
+      const target = action.kind === "add"
+        ? action.target_quote_currency ? `${action.target_symbol}/${action.target_quote_currency}` : action.target_symbol
+        : action.source_quote_currency ? `${action.source_symbol}/${action.source_quote_currency}` : action.source_symbol;
+      const prompt = action.kind === "remove" && action.source_is_legacy && action.source_asset_class === "crypto"
+        ? `Verwijder de oude basisnotering ${action.source_symbol} zonder handelspaar uit mijn watchlist`
+        : action.kind === "add"
+        ? `Voeg ${target} toe aan mijn watchlist`
+        : `Verwijder ${target} uit mijn watchlist`;
+      await handleChat(prompt, false, null, null, true);
+      return;
+    }
+  }
+
+  async function handleChat(directQuery, isSilent = false, overrideContext = null, retryMessageIndex = null, skipWatchlistGuidance = false) {
     if (loading || activeStreamIdRef.current) return;
     const nextQuery = directQuery !== undefined ? directQuery : activeQuery;
     if (!nextQuery.trim()) return;
+    if (!skipWatchlistGuidance) pendingWatchlistReplacementRef.current = null;
     if (shouldBlockFinnSubmission({ isAuthenticated: Boolean(user?.id), assetStatus })) {
       showSnackbar("FINN wacht nog op je accountcontext. Probeer het zo opnieuw.", "warning");
       return;
+    }
+
+    // Resolve explicit watchlist choices from catalog assets and market pairs.
+    // A selected pair still goes through the FINN V2 proposal confirmation.
+    if (!isSilent && !skipWatchlistGuidance && /watchlist|wachtlist|wachtlijst|volglijst|marktenlijst|volgen|aandeel.*(?:aanpassen|wijzigen|veranderen)/i.test(nextQuery)) {
+      setLoading(true);
+      try {
+        const resolved = await matchAssetsInText(nextQuery);
+        const ownedRows = await fetchWatchlist();
+        const intent = watchlistIntent(nextQuery, resolved?.mentions || [], ownedRows || []);
+        if (intent) {
+          let markets = [];
+          if (["add", "replace"].includes(intent.kind) && intent.target?.asset_class === "crypto") {
+            const result = await fetchTradingMarkets(intent.target.symbol);
+            markets = result?.markets || [];
+          }
+          const guidance = watchlistChoices(intent, ownedRows || [], markets, locale);
+          updateQuery("");
+          setMessages((current) => [...current,
+            { role: "user", text: nextQuery },
+            { role: "assistant", text: guidance.question, watchlistGuidance: guidance, isComplete: true },
+          ]);
+          setLoading(false);
+          return;
+        }
+      } catch (error) {
+        console.warn("Watchlist guidance unavailable; continuing with FINN", error);
+      }
+      setLoading(false);
     }
 
     setLoading(true);
@@ -1767,15 +1849,25 @@ function AIAssistantContent({
           || `Je ${operationLabel.toLowerCase()}`;
         const resultVerb = operationId.startsWith("delete_") ? "verwijderd" : operationId.startsWith("update_") || operationId === "deactivate_bot" ? "bijgewerkt" : "opgeslagen";
         const categoryLabel = ({ technical: "Technisch bewijs", macro: "Macro", market: "Marktindicatoren" })[suppliedInputs.category] || suppliedInputs.category;
+        const watchlistAsset = suppliedInputs.asset || execution.action_result?.asset || "De asset";
+        const watchlistQuote = suppliedInputs.quote_currency || execution.action_result?.quote_currency;
+        const watchlistName = watchlistQuote ? `${watchlistAsset}/${watchlistQuote}` : watchlistAsset;
         const analysisResultText = operationId.startsWith("watchlist_")
-          ? `${suppliedInputs.asset || execution.action_result?.canonical_name || "De asset"} is ${operationId === "watchlist_remove" ? "uit je watchlist verwijderd" : "aan je watchlist toegevoegd"}.`
+          ? `${watchlistName} is ${operationId === "watchlist_remove" ? "uit je watchlist verwijderd" : "aan je watchlist toegevoegd"}.`
           : operationId.includes("indicator_configuration")
             ? `${indicatorDisplayName(suppliedInputs.indicator || execution.action_result?.canonical_name)} is ${operationId.startsWith("delete_") ? "verwijderd uit" : operationId.startsWith("update_") ? "bijgewerkt in" : "toegevoegd aan"} ${categoryLabel || "je analyse"}${suppliedInputs.asset ? ` voor ${suppliedInputs.asset}` : ""}.`
             : null;
         const terminalText = analysisResultText || (execution.status === "already_executed"
           ? `${operationLabel} ‘${resultName}’ was al ${resultVerb}.`
           : `${operationLabel} ‘${resultName}’ is ${resultVerb}.`);
-        setMessages((prev) => prev.map((message) => {
+        const pendingReplacement = pendingWatchlistReplacementRef.current;
+        const replacementFollowup = replacementAfterConfirmedAdd(pendingReplacement, operationId, {
+          asset: suppliedInputs.asset || execution.action_result?.asset,
+          quote_currency: suppliedInputs.quote_currency || execution.action_result?.quote_currency,
+        });
+        if (replacementFollowup) pendingWatchlistReplacementRef.current = null;
+        setMessages((prev) => {
+          const updated = prev.map((message) => {
           const ownsProposal = (message.actions || []).some((candidate) => candidate?.proposal_id === action.proposal_id);
           if (!ownsProposal) return message;
           return {
@@ -1788,7 +1880,19 @@ function AIAssistantContent({
             actionDraft: null,
             state: { ...(message.state || {}), setup_draft: null, action_draft: null },
           };
-        }));
+          });
+          if (!replacementFollowup) return updated;
+          const sourceLabel = replacementFollowup.sourceLabel;
+          return [...updated, {
+            role: "assistant",
+            text: at("watchlistGuidance.removeAfterAdd", "De nieuwe notering staat op je watchlist. Wil je nu {source} verwijderen?", { source: sourceLabel }),
+            watchlistGuidance: { choices: [{
+              label: at("watchlistGuidance.removeSource", "{source} verwijderen", { source: sourceLabel }),
+              action: replacementFollowup.action,
+            }] },
+            isComplete: true,
+          }];
+        });
         if (operationId === "watchlist_add" || operationId === "watchlist_remove") {
           invalidateWatchlist();
         }
@@ -2009,7 +2113,9 @@ function AIAssistantContent({
           : operationId === "watchlist_remove" ? at("draftCards.watchlistRemove", "Uit watchlist verwijderen") : at("draftCards.watchlistAdd", "Aan watchlist toevoegen");
     const objectName = supplied.name
       || (isIndicator ? indicatorDisplayName(supplied.indicator) : null)
-      || (isWatchlist ? supplied.asset || context.symbol : null)
+      || (isWatchlist ? supplied.quote_currency
+        ? `${supplied.asset || context.symbol}/${supplied.quote_currency}`
+        : supplied.asset || context.symbol : null)
       || (isStrategy ? at("draftCards.newStrategy", "Nieuwe strategie") : at("draftCards.newBot", "Nieuwe paper-bot"));
     return (
       <div className="mt-4 min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950/45">
@@ -2671,6 +2777,20 @@ function AIAssistantContent({
                   </div>
                 )}
                 {renderBehavioralMemoryAckCard(m)}
+                {m.role === "assistant" && m.watchlistGuidance && !m.watchlistGuidanceCompleted &&
+                  !messages.slice(i + 1).some((later) => later.role === "user") && (
+                    <div className="mt-3 space-y-2" aria-label="Watchlistkeuzes">
+                      {m.watchlistGuidance.choices.map((choice, choiceIndex) => (
+                        <button key={`${i}-${choiceIndex}`} type="button"
+                          disabled={loading || executingAction}
+                          onClick={() => void handleGuidedWatchlistChoice(choice)}
+                          className="flex w-full items-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-sm font-semibold text-slate-800 hover:border-blue-400 hover:bg-blue-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                          {choice.label}
+                        </button>
+                      ))}
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{at("watchlistGuidance.freeText", "Je kunt ook zelf antwoorden in de chat.")}</p>
+                    </div>
+                  )}
                 {renderDraftQuestionChoices(m, i)}
                 {renderV2SetupDraftCard(m, i)}
                 {renderV2ActionDraftCard(m, i)}

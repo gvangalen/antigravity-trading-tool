@@ -19,7 +19,7 @@ from backend.services.bot_service import BotService
 from backend.services.indicator_config_service import IndicatorConfigService
 from backend.services.pair_indicator_config_service import PairIndicatorConfigService
 from backend.services.indicator_score_refresh_service import queue_indicator_score_refresh
-from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
+from backend.services.asset_catalog_service import AssetCatalogService, DEFAULT_ASSET_CATALOG
 from backend.utils.scoring_utils import normalize_indicator_name
 from backend.services.macro_data_service import MacroDataService
 from backend.services.market_data_service import MarketDataService
@@ -28,6 +28,7 @@ from backend.services.setup_service import SetupService
 from backend.services.strategy_service import StrategyService
 from backend.services.technical_data_service import TechnicalDataService
 from backend.services.finn_v2_flag_service import FinnV2FlagService
+from backend.services.trading_market_service import TradingMarketService
 
 
 AdapterFn = Callable[[int, dict], Awaitable[dict]]
@@ -91,15 +92,17 @@ class FinnV2ActionAdapterRegistry:
         observed: dict[str, Any] = {"operation_type": operation_type}
         if operation_type in {"watchlist_add", "watchlist_remove"}:
             asset = str(payload.get("asset") or "").strip().upper()
+            market_id = payload.get("market_id")
             result = await self.session.execute(
-                text("SELECT 1 FROM watchlists WHERE user_id = :user_id AND symbol = :symbol LIMIT 1"),
-                {"user_id": user_id, "symbol": asset},
+                text("SELECT 1 FROM watchlists WHERE user_id = :user_id AND symbol = :symbol "
+                     "AND market_id IS NOT DISTINCT FROM :market_id LIMIT 1"),
+                {"user_id": user_id, "symbol": asset, "market_id": market_id},
             )
             exists = result.first() is not None
             expected = operation_type == "watchlist_add"
             if exists != expected:
                 raise ValueError("watchlist_postcondition_failed")
-            observed.update({"asset": asset, "exists": exists})
+            observed.update({"asset": asset, "market_id": market_id, "exists": exists})
         elif operation_type in {
             "create_indicator_configuration",
             "update_indicator_configuration",
@@ -539,30 +542,48 @@ class FinnV2ActionAdapterRegistry:
             raise ValueError("execution_adapter_unavailable")
         change = payload["change"]
         asset = str(change.get("asset") or payload.get("target", {}).get("asset") or "").strip().upper()
+        quote_currency = str(change.get("quote_currency") or "").strip().upper()
         if not asset:
             raise ValueError("asset_required")
-        await self.session.execute(
-            text(
-                """
+        market_id = None
+        if quote_currency:
+            market = await TradingMarketService(self.session).resolve(asset, quote_currency)
+            market_id = market.id
+            catalog_asset = await AssetCatalogService(self.session).get_asset(asset)
+            if str(catalog_asset.get("quote_currency") or "").upper() == quote_currency:
+                await self.session.execute(text("""
+                    UPDATE watchlists SET market_id = :market_id
+                    WHERE user_id = :user_id AND symbol = :symbol AND market_id IS NULL
+                    AND NOT EXISTS (
+                        SELECT 1 FROM watchlists existing
+                        WHERE existing.user_id = :user_id AND existing.market_id = :market_id
+                    )
+                """), {"user_id": user_id, "symbol": asset, "market_id": market_id})
+        if market_id is None:
+            statement = """
                 INSERT INTO watchlists (user_id, symbol, created_at)
                 VALUES (CAST(:user_id AS INTEGER), CAST(:symbol AS VARCHAR), NOW())
                 ON CONFLICT (user_id, symbol) WHERE market_id IS NULL DO NOTHING
-                """
-            ),
-            {
-                "user_id": user_id,
-                "symbol": asset,
-            },
-        )
-        quote_status = "available"
+            """
+        else:
+            statement = """
+                INSERT INTO watchlists (user_id, symbol, market_id, created_at)
+                VALUES (CAST(:user_id AS INTEGER), CAST(:symbol AS VARCHAR), :market_id, NOW())
+                ON CONFLICT (user_id, market_id) WHERE market_id IS NOT NULL DO NOTHING
+            """
+        parameters = {"user_id": user_id, "symbol": asset}
+        if market_id is not None:
+            parameters["market_id"] = market_id
+        await self.session.execute(text(statement), parameters)
+        quote_status = "pending" if market_id is not None else "available"
         try:
             snapshot = await asyncio.wait_for(
                 self.market_data_ingestion.ingest_latest_snapshots(
                     [asset], commit=False, continue_on_error=True
                 ),
                 timeout=5.0,
-            )
-            if int(snapshot.get("success_count") or 0) != 1:
+            ) if market_id is None else None
+            if snapshot is not None and int(snapshot.get("success_count") or 0) != 1:
                 quote_status = "pending"
         except Exception as exc:
             # The owner-scoped watchlist postcondition remains authoritative;
@@ -572,6 +593,7 @@ class FinnV2ActionAdapterRegistry:
         return {
             "ok": True,
             "asset": asset,
+            **({"market_id": market_id, "quote_currency": quote_currency} if quote_currency else {}),
             "operation": "watchlist_add",
             "quote_status": quote_status,
         }
@@ -581,13 +603,35 @@ class FinnV2ActionAdapterRegistry:
             raise ValueError("execution_adapter_unavailable")
         change = payload["change"]
         asset = str(change.get("asset") or payload.get("target", {}).get("asset") or "").strip().upper()
+        quote_currency = str(change.get("quote_currency") or "").strip().upper()
+        legacy_market_only = change.get("legacy_market_only") is True
         if not asset:
             raise ValueError("asset_required")
+        result = await self.session.execute(text("""
+            SELECT w.id, w.market_id, m.quote_currency
+            FROM watchlists w
+            LEFT JOIN trading_markets m ON m.id = w.market_id
+            WHERE w.user_id = :user_id AND w.symbol = :symbol
+        """), {"user_id": user_id, "symbol": asset})
+        rows = result.mappings().all()
+        if legacy_market_only:
+            rows = [row for row in rows if row["market_id"] is None]
+        elif quote_currency:
+            default_quote = ""
+            if any(row["market_id"] is None for row in rows):
+                catalog_asset = await AssetCatalogService(self.session).get_asset(asset)
+                default_quote = str(catalog_asset.get("quote_currency") or "").upper()
+            rows = [row for row in rows if row["quote_currency"] == quote_currency or
+                    (row["market_id"] is None and quote_currency == default_quote)]
+        if len(rows) != 1:
+            raise ValueError("watchlist_pair_choice_required")
+        row = rows[0]
         await self.session.execute(
-            text("DELETE FROM watchlists WHERE user_id = :user_id AND symbol = :symbol AND market_id IS NULL"),
-            {"user_id": user_id, "symbol": asset},
+            text("DELETE FROM watchlists WHERE id = :row_id AND user_id = :user_id"),
+            {"row_id": row["id"], "user_id": user_id},
         )
-        return {"ok": True, "asset": asset, "operation": "watchlist_remove"}
+        return {"ok": True, "asset": asset, "market_id": row["market_id"],
+                "quote_currency": quote_currency or row["quote_currency"], "operation": "watchlist_remove"}
 
     async def _save_trade_plan(self, user_id: int, payload: dict) -> dict:
         if not self.flags.execute_trade_plan_changes_enabled():

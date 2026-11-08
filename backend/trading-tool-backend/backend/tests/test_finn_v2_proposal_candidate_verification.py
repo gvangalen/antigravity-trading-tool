@@ -6,6 +6,34 @@ from backend.schemas.finn_v2_response_schema import ResponseDraft
 from backend.services.finn_v2_response_verifier_service import FinnV2ResponseVerifierService
 
 
+def test_watchlist_proposal_requires_the_exact_user_selected_crypto_pair():
+    service = FinnV2ResponseVerifierService(session=object())
+    validation = SimpleNamespace(id="validation-1", snapshot_id="snapshot-1", evidence_set_hash="hash-1")
+
+    def proposal(message, quote):
+        draft = ResponseDraft(
+            draft_id="draft-watchlist", run_id="run-watchlist", user_id=7,
+            mode="ACTION_PROPOSAL", direct_answer="Ik heb een voorstel voorbereid.",
+            main_observation="Bevestiging is vereist.",
+            proposal_candidate=ProposalCandidate(
+                operation_type="watchlist_add", target_type="watchlist", asset="BTC",
+                proposed_changes={"asset": "BTC", **({"quote_currency": quote} if quote else {})},
+                impact_summary="impact", risk_summary="risk", confirmation_required=True,
+            ),
+            evidence_set_hash="hash-1", created_at=datetime.now(timezone.utc),
+        )
+        return service._proposal_input_from_candidate(
+            run=SimpleNamespace(id="run-watchlist", message=message),
+            draft=draft, validation=validation,
+        )
+
+    assert proposal("Voeg BTC toe aan mijn watchlist", None) is None
+    assert proposal("Voeg BTC/EUR toe aan mijn watchlist", "USDT") is None
+    exact = proposal("Voeg BTC/EUR toe aan mijn watchlist", "EUR")
+    assert exact is not None
+    assert exact.change.quote_currency == "EUR"
+
+
 def test_proposal_candidate_must_match_policy_and_target_evidence():
     service = FinnV2ResponseVerifierService(session=object())
     draft = ResponseDraft(

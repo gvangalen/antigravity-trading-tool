@@ -152,6 +152,18 @@ def _raw_cases_for_path(path: Path) -> tuple[list[dict[str, Any]], bool]:
                 missing = list(case.get("expected_missing_inputs") or [])
                 if "quote_currency" not in missing:
                     case["expected_missing_inputs"] = missing + ["quote_currency"]
+        if case.get("expected_operation_id") == "watchlist_add":
+            contract = FinnV2OperationRegistry().get("watchlist_add")
+            asset = str((case.get("expected_entities") or {}).get("asset") or "").upper()
+            query = str(case.get("input_query") or "")
+            if (
+                "quote_currency" in contract.required_inputs_for({"asset": asset})
+                and not re.search(r"\b[A-Z0-9]{2,10}\s*/\s*[A-Z0-9]{2,10}\b", query, re.I)
+                and not (case.get("expected_entities") or {}).get("quote_currency")
+            ):
+                missing = list(case.get("expected_missing_inputs") or [])
+                if "quote_currency" not in missing:
+                    case["expected_missing_inputs"] = missing + ["quote_currency"]
         # Dataset assignment is a runner projection only. The frozen source
         # remains byte-for-byte intact and records its original dataset.
         case["dataset"] = "regression"

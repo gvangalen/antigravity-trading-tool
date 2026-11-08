@@ -9,8 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.database import get_db
 from backend.infrastructure.models import AssetCatalog, TradingMarket
+from backend.services.watchlist_conversation_service import asset_mentions
+from backend.services.asset_catalog_service import AssetCatalogService, DEFAULT_ASSET_CATALOG
 from backend.schemas.market_provider_schema import AssetRecord
-from backend.services.asset_catalog_service import AssetCatalogService
 from backend.services.market_data_provider_registry import MarketDataProviderRegistry
 from backend.services.trading_market_service import MarketUnavailable, TradingMarketService
 from backend.services.market_data_ingestion_service import MarketDataIngestionService
@@ -155,6 +156,37 @@ class TradingMarketChoiceResponse(BaseModel):
 class TradingMarketsResponse(BaseModel):
     asset_class: str
     markets: List[TradingMarketChoiceResponse]
+
+
+class AssetMentionsRequest(BaseModel):
+    text: str
+
+
+@router.post("/assets/mentions")
+async def match_assets_in_text(
+    payload: AssetMentionsRequest,
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    """Resolve explicit names for guided UI choices; never infer an action."""
+    _ = current_user
+    if len(payload.text) > 1000:
+        raise HTTPException(422, "Bericht is te lang")
+    catalog = {symbol: dict(asset) for symbol, asset in DEFAULT_ASSET_CATALOG.items()}
+    rows = (await session.execute(select(AssetCatalog))).scalars().all()
+    for row in rows:
+        record = catalog.get(row.symbol, {})
+        metadata = row.metadata_json if isinstance(row.metadata_json, dict) else {}
+        aliases = metadata.get("aliases")
+        aliases = aliases if isinstance(aliases, (list, tuple)) else ()
+        catalog[row.symbol] = {
+            **record,
+            "display_name": row.display_name,
+            "asset_class": row.asset_class,
+            "aliases": list(dict.fromkeys([*(record.get("aliases") or ()), *aliases])),
+            "is_active": row.is_active,
+        }
+    return {"mentions": asset_mentions(payload.text, catalog)}
 
 
 @router.post("/assets/{symbol}/trading-markets/{quote_currency}/select")

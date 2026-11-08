@@ -357,6 +357,15 @@ class FinnV2OperationStateService:
                 # A revision of the open proposal may add the strategy now.
                 # Never let the old setup-only scope silently discard it.
                 explicit["plan_scope"] = "setup_and_strategy"
+        if contract.operation_id in {"watchlist_add", "watchlist_remove"}:
+            pair = requested_catalog_trading_pair(message)
+            if pair is not None:
+                explicit["asset"], explicit["quote_currency"] = pair
+            if contract.operation_id == "watchlist_remove" and re.search(
+                r"\b(?:oude\s+basisnotering|zonder\s+handelspaar|legacy\s+base\s+listing)\b",
+                message, re.I,
+            ):
+                explicit["legacy_market_only"] = True
         if contract.operation_id == "update_indicator_configuration":
             pair = self._explicit_indicator_action_pair(message)
             if pair is not None:
@@ -448,6 +457,11 @@ class FinnV2OperationStateService:
             if contract.operation_id == "create_setup" and key == "quote_currency" and key not in explicit:
                 # A quote cannot be inferred from a workspace default, an
                 # amount written in euros, or the model's own suggestion.
+                continue
+            if contract.operation_id in {"watchlist_add", "watchlist_remove"} and key == "quote_currency" and key not in explicit:
+                # A suggested quote cannot become a confirmable market choice.
+                continue
+            if contract.operation_id == "watchlist_remove" and key == "legacy_market_only" and key not in explicit:
                 continue
             if contract.operation_id == "create_setup" and key in {
                 "entry_signal", "execution_mode", "base_amount", "entry",
@@ -814,6 +828,12 @@ class FinnV2OperationStateService:
                 "en": "Which trading pair should this indicator change apply to: EUR or USDT?",
                 "de": "Für welches Handelspaar gilt diese Indikatoränderung: EUR oder USDT?",
             }.get(language, "Voor welk handelspaar wil je deze indicator wijzigen: EUR of USDT?")
+        if field == "quote_currency" and operation_id == "watchlist_add":
+            asset = str(collected.get("asset") or "").upper()
+            return {
+                "en": f"Which {asset} listing should I add to your watchlist: {asset}/EUR or {asset}/USDT?",
+                "de": f"Welche {asset}-Notierung soll ich zur Watchlist hinzufügen: {asset}/EUR oder {asset}/USDT?",
+            }.get(language, f"Welke {asset}-notering wil je toevoegen aan je watchlist: {asset}/EUR of {asset}/USDT?")
         if language in {"en", "de"}:
             localized = {
                 "en": {
@@ -1053,6 +1073,15 @@ class FinnV2OperationStateService:
             pair = requested_catalog_trading_pair(text)
             if pair is not None:
                 values["symbol"], values["quote_currency"] = pair
+        if contract.operation_id in {"watchlist_add", "watchlist_remove"}:
+            pair = requested_catalog_trading_pair(text)
+            if pair is not None:
+                values["asset"], values["quote_currency"] = pair
+            if contract.operation_id == "watchlist_remove" and re.search(
+                r"\b(?:oude\s+basisnotering|zonder\s+handelspaar|legacy\s+base\s+listing)\b",
+                text, re.I,
+            ):
+                values["legacy_market_only"] = True
         if contract.operation_id == "update_indicator_configuration":
             pair = self._explicit_indicator_action_pair(text)
             if pair is not None:

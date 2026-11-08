@@ -165,7 +165,7 @@
     "expected_target_asset": "ADA",
     "expected_action_polarity": "add",
     "provider_call_expected": true,
-    "expected_missing_inputs": []
+    "expected_missing_inputs": ["quote_currency"]
   },
   {
     "eval_id": "reg-watch-remove-1",
@@ -548,7 +548,7 @@
     "expected_target_asset": "NEAR",
     "expected_action_polarity": "add",
     "expected_conversation_reference": null,
-    "expected_missing_inputs": [],
+    "expected_missing_inputs": ["quote_currency"],
     "expected_clarification": false,
     "provider_call_expected": true
   },
@@ -612,7 +612,7 @@
     "expected_target_asset": "AVAX",
     "expected_action_polarity": "add",
     "expected_conversation_reference": null,
-    "expected_missing_inputs": [],
+    "expected_missing_inputs": ["quote_currency"],
     "expected_clarification": false,
     "provider_call_expected": true
   },
@@ -798,7 +798,7 @@
     "expected_target_asset": "ATOM",
     "expected_action_polarity": "add",
     "expected_conversation_reference": null,
-    "expected_missing_inputs": [],
+    "expected_missing_inputs": ["quote_currency"],
     "expected_clarification": false,
     "provider_call_expected": true
   },

@@ -46,6 +46,110 @@ def test_watchlist_add_uses_database_unique_constraint_for_idempotency():
     }
 
 
+def test_watchlist_add_binds_verified_exact_market(monkeypatch):
+    session = _Session()
+    registry = FinnV2ActionAdapterRegistry(session)
+    registry.flags.execute_watchlist_changes_enabled = lambda: True
+    resolver = SimpleNamespace(resolve=AsyncMock(return_value=SimpleNamespace(id=42)))
+    monkeypatch.setattr(
+        "backend.services.finn_v2_action_adapter_registry.TradingMarketService",
+        lambda _session: resolver,
+    )
+    monkeypatch.setattr(
+        "backend.services.finn_v2_action_adapter_registry.AssetCatalogService",
+        lambda _session: SimpleNamespace(get_asset=AsyncMock(return_value={"quote_currency": "USDT"})),
+    )
+
+    result = asyncio.run(registry._watchlist_add(390, {
+        "change": {"asset": "ETH", "quote_currency": "EUR", "operation": "add"},
+    }))
+
+    assert result["market_id"] == 42
+    assert result["quote_currency"] == "EUR"
+    assert "ON CONFLICT (user_id, market_id)" in session.calls[0][0]
+    assert session.calls[0][1]["market_id"] == 42
+    resolver.resolve.assert_awaited_once_with("ETH", "EUR")
+
+
+def test_watchlist_add_migrates_legacy_default_quote_before_exact_insert(monkeypatch):
+    session = _Session()
+    registry = FinnV2ActionAdapterRegistry(session)
+    registry.flags.execute_watchlist_changes_enabled = lambda: True
+    monkeypatch.setattr(
+        "backend.services.finn_v2_action_adapter_registry.TradingMarketService",
+        lambda _session: SimpleNamespace(resolve=AsyncMock(return_value=SimpleNamespace(id=42))),
+    )
+    monkeypatch.setattr(
+        "backend.services.finn_v2_action_adapter_registry.AssetCatalogService",
+        lambda _session: SimpleNamespace(get_asset=AsyncMock(return_value={"quote_currency": "USDT"})),
+    )
+
+    asyncio.run(registry._watchlist_add(390, {
+        "change": {"asset": "ETH", "quote_currency": "USDT", "operation": "add"},
+    }))
+
+    assert "UPDATE watchlists SET market_id" in session.calls[0][0]
+    assert "INSERT INTO watchlists" in session.calls[1][0]
+
+
+def test_watchlist_remove_never_guesses_between_owner_pairs():
+    class _RowsResult:
+        def mappings(self):
+            return self
+
+        def all(self):
+            return [
+                {"id": 11, "market_id": 21, "quote_currency": "EUR"},
+                {"id": 12, "market_id": 22, "quote_currency": "USDT"},
+            ]
+
+    class _RowsSession(_Session):
+        async def execute(self, statement, params):
+            self.calls.append((str(statement), params))
+            return _RowsResult() if len(self.calls) == 1 else None
+
+    session = _RowsSession()
+    registry = FinnV2ActionAdapterRegistry(session)
+    registry.flags.execute_watchlist_changes_enabled = lambda: True
+
+    with pytest.raises(ValueError, match="watchlist_pair_choice_required"):
+        asyncio.run(registry._watchlist_remove(390, {"change": {"asset": "ETH", "operation": "remove"}}))
+    assert len(session.calls) == 1
+
+    session.calls.clear()
+    result = asyncio.run(registry._watchlist_remove(390, {
+        "change": {"asset": "ETH", "quote_currency": "EUR", "operation": "remove"},
+    }))
+    assert result["market_id"] == 21
+    assert session.calls[1][1] == {"row_id": 11, "user_id": 390}
+
+
+def test_watchlist_remove_can_target_explicit_legacy_base_row():
+    class _Result:
+        def mappings(self):
+            return self
+
+        def all(self):
+            return [
+                {"id": 11, "market_id": None, "quote_currency": None},
+                {"id": 12, "market_id": 22, "quote_currency": "USDT"},
+            ]
+
+    class _SessionWithRows(_Session):
+        async def execute(self, statement, params):
+            self.calls.append((str(statement), params))
+            return _Result() if len(self.calls) == 1 else None
+
+    session = _SessionWithRows()
+    registry = FinnV2ActionAdapterRegistry(session)
+    registry.flags.execute_watchlist_changes_enabled = lambda: True
+    result = asyncio.run(registry._watchlist_remove(390, {
+        "change": {"asset": "BTC", "operation": "remove", "legacy_market_only": True},
+    }))
+    assert result["market_id"] is None
+    assert session.calls[1][1] == {"row_id": 11, "user_id": 390}
+
+
 def test_confirmed_dca_creates_setup_and_strategy_in_one_transaction(monkeypatch):
     monkeypatch.setattr("backend.infrastructure.repositories.onboarding_repository.OnboardingRepository.mark_step_completed", AsyncMock())
     @asynccontextmanager
