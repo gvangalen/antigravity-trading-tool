@@ -19,6 +19,9 @@ async def _rendered_exit(user_id: int, bot_id: int, expected: dict) -> dict:
     token = create_access_token({"sub": str(user_id), "role": "user"})
 
     async def inspect(page):
+        trades_tab = page.locator('section[aria-label] [role="tablist"] [role="tab"]').first
+        await trades_tab.wait_for(timeout=20000)
+        await trades_tab.click()
         details = page.locator("section[aria-label] details:has(dl)")
         await details.first.locator("summary").wait_for(timeout=20000)
         if await details.count() != 1:

@@ -122,6 +122,50 @@ def test_probe_error_category_sanitizes_unexpected_errors():
     ) == "paper_exit_probe_runtime_error"
 
 
+def test_rendered_exit_opens_trades_before_reading_evidence(monkeypatch):
+    from backend.scripts import qa_protected_browser
+    from backend.utils import auth_utils
+
+    events = []
+    class Locator:
+        @property
+        def first(self):
+            return self
+        def locator(self, _selector):
+            return self
+        async def wait_for(self, **_kwargs):
+            events.append("wait")
+        async def click(self):
+            events.append("click")
+        async def count(self):
+            return 1
+        async def all_text_contents(self):
+            assert events[:2] == ["wait", "click"]
+            return ["line"] * 8
+    class Page:
+        def locator(self, selector):
+            if '[role="tablist"]' in selector:
+                assert not events
+            else:
+                assert events[:2] == ["wait", "click"]
+            return Locator()
+        async def evaluate(self, _script, _args):
+            return {key: True for key in (
+                "rendered_exit_fields_present", "rendered_exit_eur_price",
+                "rendered_exit_quantity", "rendered_exit_proceeds",
+                "rendered_exit_source_quote", "rendered_exit_fx",
+            )}
+    async def observe_page(**kwargs):
+        assert kwargs["path"] == "/bot?bot_id=22"
+        return await kwargs["inspect"](Page())
+    monkeypatch.setattr(qa_protected_browser, "observe_page", observe_page)
+    monkeypatch.setattr(auth_utils, "create_access_token", lambda *_args: "in-memory-token")
+    import asyncio
+    result = asyncio.run(probe._rendered_exit(11, 22, {}))
+    assert all(result.values())
+    assert events[:2] == ["wait", "click"]
+
+
 @pytest.mark.parametrize("failed_statement,phase", [
     (2, "setup_update"), (3, "target_type"), (4, "strategy_update"),
     (5, "bot_update"), (6, "portfolio_update"), (7, "decision_insert"),
