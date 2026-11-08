@@ -133,6 +133,9 @@ def test_rendered_exit_opens_trades_before_reading_evidence(monkeypatch):
         @property
         def first(self):
             return self
+        def nth(self, index):
+            assert index == 1
+            return self
         def locator(self, _selector):
             return self
         async def wait_for(self, **_kwargs):
@@ -142,14 +145,16 @@ def test_rendered_exit_opens_trades_before_reading_evidence(monkeypatch):
         async def count(self):
             return 1
         async def all_text_contents(self):
-            assert events[:2] == ["wait", "click"]
+            assert events[:3] == ["wait", "wait", "click"]
             return ["line"] * 8
     class Page:
         def locator(self, selector):
-            if '[role="tablist"]' in selector:
+            if 'button[aria-pressed="true"]' in selector:
                 assert not events
+            elif '> nav[aria-label] > button' in selector:
+                assert events == ["wait"]
             else:
-                assert events[:2] == ["wait", "click"]
+                assert events[:3] == ["wait", "wait", "click"]
             return Locator()
         async def evaluate(self, _script, _args):
             return {key: True for key in (
@@ -166,12 +171,12 @@ def test_rendered_exit_opens_trades_before_reading_evidence(monkeypatch):
     import asyncio
     result = asyncio.run(probe._rendered_exit(11, 22, {}))
     assert all(result.values())
-    assert events[:2] == ["wait", "click"]
+    assert events[:3] == ["wait", "wait", "click"]
 
 
 @pytest.mark.parametrize("fail_in_inspect,expected", [
     (False, "paper_exit_rendered_bootstrap_failed"),
-    (True, "paper_exit_rendered_trades_tab_wait_failed"),
+    (True, "paper_exit_rendered_owner_bot_wait_failed"),
 ])
 def test_rendered_exit_sanitizes_browser_failure_phase(monkeypatch, fail_in_inspect, expected):
     from backend.scripts import qa_protected_browser
@@ -206,15 +211,21 @@ def test_rendered_exit_classifies_missing_tab_without_url_leak(
     from backend.utils import auth_utils
 
     class Locator:
+        def nth(self, index):
+            assert index == 1
+            return self
+        async def wait_for(self, **_kwargs):
+            raise ValueError("private browser response")
+    class OwnerLocator:
         @property
         def first(self):
             return self
         async def wait_for(self, **_kwargs):
-            raise ValueError("private browser response")
+            pass
     class Page:
         url = f"https://tradamind.com{path}?fixture=private"
-        def locator(self, _selector):
-            return Locator()
+        def locator(self, selector):
+            return OwnerLocator() if 'button[aria-pressed="true"]' in selector else Locator()
     async def observe_page(**kwargs):
         return await kwargs["inspect"](Page())
     monkeypatch.setattr(qa_protected_browser, "observe_page", observe_page)

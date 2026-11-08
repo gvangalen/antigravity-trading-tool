@@ -236,6 +236,8 @@ def profile_error_category(profile: str, error: Exception) -> str:
             "paper_exit_open_ledger_insert_failed", "paper_exit_open_commit_failed",
             "paper_exit_rendered_ui_failed",
             "paper_exit_rendered_bootstrap_failed",
+            "paper_exit_rendered_owner_bot_wait_failed",
+            "paper_exit_rendered_owner_bot_absent_failed",
             "paper_exit_rendered_trades_tab_failed",
             "paper_exit_rendered_trades_tab_wait_failed",
             "paper_exit_rendered_trades_tab_click_failed",

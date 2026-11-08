@@ -224,7 +224,7 @@ def _prepare(user_id: int, bot_id: int) -> None:
         if isinstance(error, RuntimeError) and str(error) in SAFE_ACCOUNT_ERRORS:
             raise
         if step == "decisions":
-            sqlstate = getattr(error, "sqlstate", None)
+            sqlstate = getattr(error, "sqlstate", None) or getattr(error, "pgcode", None)
             reason = SAFE_DECISION_SQLSTATES.get(sqlstate)
             if reason:
                 raise RuntimeError(f"account_prepare_decisions_{reason}") from None

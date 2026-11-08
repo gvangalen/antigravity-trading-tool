@@ -312,6 +312,7 @@ def test_account_stage_sanitizes_private_runtime_error():
             raise RuntimeError("private answer and fixture identity")
 
 
+@pytest.mark.parametrize("driver_attribute", ["sqlstate", "pgcode"])
 @pytest.mark.parametrize("sqlstate,expected", [
     ("23505", "unique"), ("23514", "check"), ("23502", "not_null"),
     ("23503", "foreign_key"), ("22P02", "datatype"),
@@ -321,12 +322,12 @@ def test_account_stage_sanitizes_private_runtime_error():
     ("99999", "database_other"), (None, "failed"),
 ])
 def test_account_decision_insert_reports_only_allowlisted_sqlstate(
-    monkeypatch, sqlstate, expected,
+    monkeypatch, sqlstate, expected, driver_attribute,
 ):
     class PrivateDbError(Exception):
         def __init__(self):
             super().__init__("private SQL values")
-            self.sqlstate = sqlstate
+            setattr(self, driver_attribute, sqlstate)
     class Cursor:
         rowcount = 1
         step = 0
