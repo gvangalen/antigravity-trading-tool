@@ -262,12 +262,18 @@ def test_rendered_exit_reports_only_sanitized_page_get_and_ui_state(
     assert "private" not in str(result)
 
 
-def test_rendered_exit_error_observation_exports_only_bounded_codes(monkeypatch):
+def test_rendered_exit_error_observation_exports_only_bounded_codes(monkeypatch, tmp_path):
     import asyncio
     import json
 
     from backend.scripts import qa_protected_browser
+    from backend.scripts import qa_browser_error_signature
     from backend.utils import auth_utils
+
+    bundle = tmp_path / "app" / "(protected)" / "bot" / "page-a1b2c3.js"
+    bundle.parent.mkdir(parents=True)
+    bundle.write_text("var r=123456789;\n", encoding="utf-8")
+    monkeypatch.setattr(qa_browser_error_signature, "_DEFAULT_BUNDLE_ROOT", tmp_path)
 
     class Locator:
         @property
@@ -288,7 +294,8 @@ def test_rendered_exit_error_observation_exports_only_bounded_codes(monkeypatch)
                     "onboarding_guide_present": False}
 
     class PageError(Exception):
-        stack = "at BotFocusView.jsx?token=private-token"
+        stack = ("at https://tradamind.com/_next/static/chunks/"
+                 "app/(protected)/bot/page-a1b2c3.js:1:5\nprivate-token")
 
     class ConsoleMessage:
         type = "error"
@@ -297,7 +304,7 @@ def test_rendered_exit_error_observation_exports_only_bounded_codes(monkeypatch)
 
     async def observe_page(**kwargs):
         _emit_page_bot_response(kwargs)
-        kwargs["observe_page_error"](PageError("TypeError: Cannot read properties of undefined"))
+        kwargs["observe_page_error"](PageError("TypeError: (0,r.A) is not a function"))
         for _ in range(5):
             kwargs["observe_console"](ConsoleMessage())
         return await kwargs["inspect"](Page())
@@ -309,7 +316,9 @@ def test_rendered_exit_error_observation_exports_only_bounded_codes(monkeypatch)
     assert diagnostic["page_error_count"] == 1
     assert diagnostic["console_error_count"] == 5
     assert diagnostic["page_error_signatures"] == [
-        {"kind": "js_undefined_property", "stack_area": "bot_focus_view"},
+        {"kind": "js_non_callable", "stack_area": "next_chunk",
+         "bundle_basename": "page-a1b2c3.js", "line": 1, "column": 5,
+         "minified_call": "(0,r.A)"},
     ]
     assert diagnostic["console_error_signatures"] == [
         {"kind": "next_chunk_load", "stack_area": "next_runtime"},
