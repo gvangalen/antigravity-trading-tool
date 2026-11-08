@@ -4,6 +4,44 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Vier trader-gates: Analyse-bronmoment expliciet UTC (8 november 2026)
+
+Phase: `BUILD_VALIDATED`. Onafhankelijke QA gaf de afgebakende
+Paper/FX-koopketen `ACCEPTED` op live SHA
+`01544068295bdf9a255dbb583b1351bf699ec527`: read-only
+[schema-run 42494526404](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42494526404)
+bevestigde beide prijsvelden als `NUMERIC(30,10)`; de ene beschermde
+[Paper/FX-run 42494604637](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42494604637)
+slaagde zonder falende invariantcodes. Order, ledger, bronprijs/FX,
+waardering, owner-safety en replay zonder tweede fill slaagden. Er was
+één Paper-order en geen Live-tradingcall of Live-botactivatie.
+Artifact SHA-256: schema
+`67731a8dd286a15ed0cf01b22983f236c9b3955c08281c55bf0ed8f0709df43b`,
+Paper/FX
+`e78f3939f14e1bd84e2e2ead557a39b2be652952d8bea194ea5fed65a485723e`.
+
+QA's afzonderlijke gap-assessment van de vier bredere trader-gates vond
+één code-aantoonbare FAIL en drie UNTESTED: Analyse formatteerde
+"Laatste signaal" in de lokale browserzone zonder zonelabel, terwijl
+rapport de zone expliciet als UTC en Paper-exit als Amsterdamse tijd
+noemt. FINN's herhaalde accountstaat, scorecontinuïteit voor beide
+BTC-paren en een actuele automatische Paper-exit met DB/UI-pariteit
+zijn op deze SHA niet volledig bewezen; ontbrekend bewijs is geen
+bevestigde productfout.
+
+Build gebruikt nu voor Analyse's scorebron, indicatorsignaal en
+marktupdate één formatter die tijdzoneloze UTC-bronmomenten ook als UTC
+leest en de weergegeven tijd expliciet `UTC` labelt. De korte brondatum
+bij verouderde indicatoren volgt eveneens de UTC-dag, ook bij een
+bronmoment met een andere offset. QA wees deze daggrens in een read-only
+branchreview aan; Build voegde de regressie toe. Tests met één vast
+UTC-moment in browserzones Amsterdam, New York en Tokio en met een
+offset over de UTC-daggrens slaagden. Alle 41 i18n-tests, i18n-lint,
+frontend typecheck en production build slaagden na de daggrenscorrectie.
+`git diff --check` was schoon. Er is nog geen CI, deploy of
+onafhankelijke live hertest voor deze tijdzonewijziging. De drie
+UNTESTED gates vragen gerichte QA-bewijsvoering op de definitieve SHA.
+
 ## Paper/FX-prijsopslag: tien decimalen voor uitvoeringsbewijs (8 november 2026)
 
 Phase: `DEPLOYED_QA_PENDING`. Onafhankelijke QA gaf op de vorige live SHA

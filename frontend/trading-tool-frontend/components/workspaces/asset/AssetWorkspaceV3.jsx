@@ -36,6 +36,7 @@ import { fetchSetupMarketMatches } from "@/lib/api/setups";
 import { technicalDataAdd } from "@/lib/api/technical";
 import { mapTechnicalToStudies } from "@/config/indicator_mapping";
 import { removeFromWatchlist } from "@/lib/api/watchlist";
+import { formatUtcTimestamp, formatUtcSourceDate } from "@/lib/time/formatUtcTimestamp.mjs";
 import { fetchTradingMarkets } from "@/lib/api/assets";
 import { updateIntelligenceWeights } from "@/lib/api/scores";
 import { getAssistantPreferences, updateAssistantPreferences } from "@/lib/api/ai";
@@ -964,29 +965,6 @@ function formatPercent(value, digits = 2) {
   return `${numericValue >= 0 ? "+" : ""}${numericValue.toFixed(digits)}%`;
 }
 
-function formatTimestamp(value, locale) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return new Intl.DateTimeFormat(locale || "en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
-}
-
-function formatSourceDate(value, locale) {
-  const day = /^\d{4}-\d{2}-\d{2}/.exec(String(value || ""))?.[0];
-  if (!day) return null;
-  const date = new Date(`${day}T12:00:00Z`);
-  if (Number.isNaN(date.getTime())) return null;
-  return new Intl.DateTimeFormat(locale || "en-US", {
-    day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
-  }).format(date);
-}
-
 function buildContextHref({ pathname, symbol, context, variant }) {
   const safeSymbol = encodeURIComponent(symbol || "BTC");
   const params = new URLSearchParams();
@@ -1469,7 +1447,7 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
     const tone = scoreTone(score, ui);
     const unavailableReason = item?.score_unavailable_reason;
     const pendingScore = score === null && unavailableReason === "score_pending";
-    const sourceDate = formatSourceDate(item?.source_observed_at, locale);
+    const sourceDate = formatUtcSourceDate(item?.source_observed_at, locale);
     const datedSource = score === null && unavailableReason === "stale_source" && sourceDate;
     const direction = score !== null ? toDirectionLabel(item, score, ui)
       : pendingScore ? ui.scorePendingShort
@@ -1691,7 +1669,7 @@ function ScoreOverview({ assetSymbol, market, macro, technical, combined, sectio
               {view.currentBand ? conditionOptions?.[view.currentBand.id]?.title || ui.benchmarkCustom(view.currentBand.min, view.currentBand.max) : ui.unavailable}
             </div>
             <div className="text-[11px] text-slate-500">
-              {currentScore !== null ? (combinedSource ? `${ui.scoreSourceDate}: ${formatTimestamp(combinedSource, locale)}` : ui.scoreSourceUnknown) : ui.benchmarkMissing}
+              {currentScore !== null ? (combinedSource ? `${ui.scoreSourceDate}: ${formatUtcTimestamp(combinedSource, locale)}` : ui.scoreSourceUnknown) : ui.benchmarkMissing}
             </div>
           </div>
         </div>
@@ -2131,7 +2109,7 @@ function EvidenceRow({
     : ui.unavailable;
   const historyCoverage = row.raw?.score_history_coverage;
   const freshness = row.raw?.freshness;
-  const sourceDate = formatSourceDate(row.timestamp, locale);
+  const sourceDate = formatUtcSourceDate(row.timestamp, locale);
   const freshnessState = indicatorSourceFreshness(freshness);
   const freshnessText = freshnessState === "stale" && sourceDate
     ? ui.sourceReadingFrom(sourceDate)
@@ -2241,7 +2219,7 @@ function EvidenceRow({
               </div>
             </div>
             <div className="flex flex-wrap justify-between gap-2 border-t border-slate-200 px-4 py-2 text-[11px] text-slate-500">
-              <span>{ui.dataSource}: {String(row.raw?.source || "—").replaceAll("_", " ")} · {ui.latestSignal}: {row.timestamp ? formatTimestamp(row.timestamp, locale) : ui.missingSourceMoment}</span>
+              <span>{ui.dataSource}: {String(row.raw?.source || "—").replaceAll("_", " ")} · {ui.latestSignal}: {row.timestamp ? formatUtcTimestamp(row.timestamp, locale) : ui.missingSourceMoment}</span>
               <span>{ui.freshness}: {freshnessText}</span>
             </div>
           </div>
@@ -3212,7 +3190,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         assetLogoUrl={activeAssetLogo}
         price={formatQuotePrice(assetLive?.price, locale, assetLive?.quote_currency)}
         change24h={assetLive?.change_24h}
-        updatedAt={assetLive?.as_of ? formatTimestamp(assetLive.as_of, locale) : null}
+        updatedAt={assetLive?.as_of ? formatUtcTimestamp(assetLive.as_of, locale) : null}
         statusLabel={isFallbackWorkspace ? ui.fallbackData : quoteStatus === "closed_session" ? ui.closedMarketQuote : quoteStatus === "stale" ? ui.staleData : null}
         quoteStatus={quoteStatus}
         combinedSummary={combinedSummary}
