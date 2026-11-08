@@ -9823,6 +9823,32 @@ def test_explicit_setup_draft_is_not_vetoed_by_second_model_relevance_check(mess
     front.relevance_guard.is_relevant.assert_not_awaited()
 
 
+def test_explicit_indicator_deletion_keeps_its_confirmable_contract_when_relevance_model_disagrees():
+    fake = FakeResponses(
+        response("r1", calls=(tool_call("c1", "create_indicator_proposal", {
+            "operation_id": "delete_indicator_configuration",
+            "draft_intent": "new",
+            "inputs": {"asset": "SOL", "category": "technical", "indicator": "RSI"},
+        }),)),
+        response("r2", text="Dit is het voorstel om RSI uit SOL te verwijderen."),
+    )
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.client = SimpleNamespace(responses=fake)
+    front.user_id = 21
+    front.run_id = "run-explicit-indicator-delete"
+    front.proposals = FinnResponsesProposalSelection()
+    front.relevance_guard = SimpleNamespace(is_relevant=AsyncMock(return_value=False))
+    front.reads = SimpleNamespace(session_factory=None)
+    result = asyncio.run(front.run(
+        message="Verwijder mijn technische RSI indicatorconfiguratie voor SOL.",
+        instructions="Use FINN tools", conversation_context={}, verified_asset="SOL",
+    ))
+    assert result.proposal_analysis is not None
+    assert result.proposal_analysis.request_plan.operation_id == "delete_indicator_configuration"
+    assert result.response.tool_trace[0]["status"] != "retry"
+    front.relevance_guard.is_relevant.assert_not_awaited()
+
+
 @pytest.mark.parametrize("message", [
     "Maak een ETH trade-setup op 4H, maar geen voorstel.",
     "Maak hypothetisch een ETH trade-setup als denkoefening.",

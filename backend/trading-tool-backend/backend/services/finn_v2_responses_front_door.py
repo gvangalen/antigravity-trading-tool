@@ -2385,7 +2385,11 @@ class FinnResponsesFrontDoor:
                 # otherwise veto the proposal on "show it, don't save it".
                 # Contract validation and a separate confirmation still gate
                 # every persisted change.
-                and not (call.operation_id and call.operation_id == explicit_create_request)
+                and not (call.operation_id and (
+                    call.operation_id == explicit_create_request
+                    or (call.operation_id == imperative_operation
+                        and imperative_operation == "delete_indicator_configuration")
+                ))
                 and (
                     call.operation_id is not None
                     or (not getattr(self, "model_led_coach", False)
