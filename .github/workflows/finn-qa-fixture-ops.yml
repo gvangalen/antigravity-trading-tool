@@ -18,7 +18,10 @@ permissions:
 
 jobs:
   diagnose:
-    if: github.repository == 'gvangalen/antigravity-trading-tool'
+    if: >
+      github.repository == 'gvangalen/antigravity-trading-tool' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: production
     steps:

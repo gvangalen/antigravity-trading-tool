@@ -4,6 +4,29 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Productie-QA- en deploygrens voor vier trader-gates (8 november 2026)
+
+Phase: `BUILD_VALIDATED_QA_PENDING`. De vier brede trader-gates zijn op de
+gepubliceerde versie nog niet onafhankelijk live bewezen. De bestaande
+beschermde Paper/FX-koopproef is wel `ACCEPTED`; dat verdict dekt geen
+herhaalde FINN-accountstaat, bronmoment-pariteit, BTC-paar-scorecontinuïteit
+of automatische Paper-exit. QA ontwikkelt daarvoor afzonderlijke beschermde
+profielen met eigenaargebonden fixtures en gesaniteerde bewijsuitvoer.
+
+Security en Architecture vonden dat handmatige productie-QA en andere
+secret-workflows vanaf een andere ref dan `main` konden starten. Auto Deploy
+kon bovendien een CI-run zonder push-oorsprong accepteren en de remote
+`origin/main` resetten terwijl de workflow een oudere CI-SHA vermeldde.
+Build beperkt de handmatige secret-routes tot `main` en Auto Deploy tot een
+geslaagde push-CI uit dezelfde repository. De workflow controleert de
+uitgecheckte CI-SHA; de server haalt de branch op en vergelijkt de actuele
+tip met de doel-SHA vóór gedeelde statusregistratie, reset of migraties. Een
+inmiddels verouderde kandidaat wordt zonder rollback of retry overgeslagen.
+De echte productie-identiteit blijft de backend- en frontend-SHA op HTTP 200.
+Lokaal slaagden `bash -n`, `actionlint`, de gerichte regressies (15 tests) en
+de volledige backend-suite (4304 passed, 4 skipped). Onafhankelijke live QA
+blijft vereist vóór een groen oordeel over de vier gates.
+
 ## Vier trader-gates: Analyse-bronmoment expliciet UTC (8 november 2026)
 
 Phase: `DEPLOYED_QA_PENDING`. Onafhankelijke QA gaf de afgebakende

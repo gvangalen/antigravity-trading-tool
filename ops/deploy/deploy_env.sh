@@ -93,7 +93,6 @@ case "$ENVIRONMENT" in
     AUX_PM2_APPS="${AUX_PM2_APPS:-celery-worker-default,celery-worker-finn-interactive,celery-beat}"
     EXPECTED_PM2_APPS="${EXPECTED_PM2_APPS:-frontend backend celery-worker-default celery-worker-finn-interactive celery-beat}"
     RETIRED_PM2_APPS="${RETIRED_PM2_APPS:-celery-worker-market-portfolio,celery-worker-scoring-execution,celery-worker-ai-reporting}"
-    DEPLOY_REF="origin/${BRANCH}"
     EXTERNAL_BASE_URL="${EXTERNAL_BASE_URL:-https://tradamind.com}"
     ;;
   staging)
@@ -106,7 +105,6 @@ case "$ENVIRONMENT" in
     AUX_PM2_APPS="${AUX_PM2_APPS:-celery-worker-default-staging,celery-worker-finn-interactive-staging,celery-beat-staging}"
     EXPECTED_PM2_APPS="${EXPECTED_PM2_APPS:-frontend-staging backend-staging celery-worker-default-staging celery-worker-finn-interactive-staging celery-beat-staging}"
     RETIRED_PM2_APPS="${RETIRED_PM2_APPS:-celery-worker-market-portfolio-staging,celery-worker-scoring-execution-staging,celery-worker-ai-reporting-staging}"
-    DEPLOY_REF="origin/${BRANCH}"
     EXTERNAL_BASE_URL="${EXTERNAL_BASE_URL:-https://staging.tradamind.com}"
     ;;
   *)
@@ -206,7 +204,7 @@ record_remote_deploy_status() {
   "
 }
 
-if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_COMMAND_TIMEOUT_SECONDS}s" ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
+if printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_COMMAND_TIMEOUT_SECONDS}s" ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
   set -Eeuo pipefail
   IFS= read -r DEPLOY_GIT_TOKEN || true
   export PATH=$NODE_BIN:\$PATH
@@ -241,6 +239,32 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
   export INTERACTIVE_WORKER_READY_ATTEMPTS=$INTERACTIVE_WORKER_READY_ATTEMPTS
   export INTERACTIVE_WORKER_READY_RETRY_DELAY_SECONDS=$INTERACTIVE_WORKER_READY_RETRY_DELAY_SECONDS
   cd $REMOTE_DIR
+  sync_git_ref() {
+    for attempt in \$(seq 1 5); do
+      rm -f .git/index.lock .git/refs/remotes/origin/$BRANCH.lock .git/refs/remotes/origin/$BRANCH
+      fetch_origin() {
+        if [ -n \"\$DEPLOY_GIT_TOKEN\" ]; then
+          GIT_CONFIG_COUNT=1 \\
+            GIT_CONFIG_KEY_0='http.https://github.com/.extraheader' \\
+            GIT_CONFIG_VALUE_0=\"AUTHORIZATION: basic \$(printf 'x-access-token:%s' \"\$DEPLOY_GIT_TOKEN\" | base64 | tr -d '\\n')\" \\
+            git fetch origin $BRANCH
+        else
+          git fetch origin $BRANCH
+        fi
+      }
+      if fetch_origin; then
+        return 0
+      fi
+      echo \"⏳ Waiting for git lock to clear (attempt \$attempt/5)...\" >&2
+      sleep 2
+    done
+    return 1
+  }
+  sync_git_ref
+  test \"\$(git rev-parse FETCH_HEAD)\" = '$TARGET_COMMIT_FULL' || {
+    echo 'Deployment skipped: successful CI commit is no longer the current branch tip.' >&2
+    exit 42
+  }
   DEPLOY_STATUS_FILE='$DEPLOY_STATUS_FILE'
   DEPLOY_STATUS_WRITER_B64='$DEPLOY_STATUS_WRITER_B64'
   DEPLOY_STEP_ID='remote_preflight'
@@ -281,6 +305,10 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
     fi
     if [ \"\$exit_code\" -ne 0 ]; then
       record_deploy_status \"\$DEPLOY_STEP_ID\" failure \"\$exit_code\" || true
+      # Reserve 42 for the explicit stale-tip branch below.
+      if [ \"\$exit_code\" -eq 42 ]; then
+        exit_code=1
+      fi
     fi
     exit \"\$exit_code\"
   }
@@ -324,29 +352,9 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
   if [ -d frontend/trading-tool-frontend/out/_next/static ]; then
     cp -R frontend/trading-tool-frontend/out/_next/static/. \"\$PREVIOUS_FRONTEND_STATIC/\" 2>/dev/null || true
   fi
-  sync_git_ref() {
-    for attempt in \$(seq 1 5); do
-      rm -f .git/index.lock .git/refs/remotes/origin/$BRANCH.lock .git/refs/remotes/origin/$BRANCH
-      fetch_origin() {
-        if [ -n \"\$DEPLOY_GIT_TOKEN\" ]; then
-          GIT_CONFIG_COUNT=1 \\
-            GIT_CONFIG_KEY_0='http.https://github.com/.extraheader' \\
-            GIT_CONFIG_VALUE_0=\"AUTHORIZATION: basic \$(printf 'x-access-token:%s' \"\$DEPLOY_GIT_TOKEN\" | base64 | tr -d '\\n')\" \\
-            git fetch origin $BRANCH
-        else
-          git fetch origin $BRANCH
-        fi
-      }
-      if fetch_origin; then
-        return 0
-      fi
-      echo \"⏳ Waiting for git lock to clear (attempt \$attempt/5)...\" >&2
-      sleep 2
-    done
-    return 1
-  }
-  sync_git_ref
-  git reset --hard $DEPLOY_REF
+  git cat-file -e '$TARGET_COMMIT_FULL^{commit}'
+  git reset --hard '$TARGET_COMMIT_FULL'
+  test \"\$(git rev-parse HEAD)\" = '$TARGET_COMMIT_FULL'
   write_release_metadata() {
     local metadata_path="ops/deploy/.release_metadata.env"
     local temporary_path="\${metadata_path}.tmp.\$\$"
@@ -889,6 +897,13 @@ PY
   cleanup_previous_frontend_static
   trap - EXIT ERR
 "; then
+  :
+else
+  deploy_exit_code=$?
+  if [ "$deploy_exit_code" -eq 42 ]; then
+    echo "ℹ️ ${ENVIRONMENT} deployment skipped: ${TARGET_COMMIT} is no longer the current ${BRANCH} tip."
+    exit 0
+  fi
   echo "❌ ${ENVIRONMENT} deployment failed for ${TARGET_COMMIT}." >&2
   if [ "$(lower_bool "${AUTO_ROLLBACK_ON_FAILURE}")" = "true" ]; then
     echo "↩️ Auto rollback naar ${ROLLBACK_COMMIT}..." >&2
