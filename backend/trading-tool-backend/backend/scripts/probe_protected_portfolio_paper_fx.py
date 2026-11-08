@@ -51,25 +51,26 @@ def _verified_source_price_eur() -> dict:
     connection = _connection()
     try:
         with connection.cursor() as cursor:
+            source_query = """SELECT m.price, m.source_observed_at, a.quote_currency
+                              FROM market_data m
+                              JOIN asset_catalog a ON a.symbol=m.symbol
+                              WHERE m.symbol=%s AND m.market_id IS NULL
+                                AND m.price IS NOT NULL AND m.price>0
+                                AND m.source_observed_at IS NOT NULL
+                                AND m.quote_currency=a.quote_currency
+                              ORDER BY m.source_observed_at DESC, m.timestamp DESC, m.id DESC
+                              LIMIT 1"""
             cursor.execute(
-                """SELECT m.price, m.source_observed_at, a.quote_currency
-                   FROM market_data m
-                   JOIN asset_catalog a ON a.symbol=m.symbol
-                   WHERE m.symbol=%s AND m.price IS NOT NULL
-                   ORDER BY m.timestamp DESC LIMIT 1""",
+                source_query,
                 (SYMBOL,),
             )
             market = cursor.fetchone()
             if not market or str(market[2] or "").upper() not in {"USD", "USDT"}:
                 raise RuntimeError("portfolio_paper_fx_market_unavailable")
             quote = str(market[2]).upper()
+            # Re-read the same source selection to catch a change before fixture writes.
             cursor.execute(
-                """SELECT m.price, m.source_observed_at, a.quote_currency
-                   FROM market_data m
-                   JOIN asset_catalog a ON a.symbol=m.symbol
-                   WHERE m.symbol=%s AND m.price IS NOT NULL AND m.price>0
-                     AND m.source_observed_at IS NOT NULL
-                   ORDER BY m.source_observed_at DESC, m.timestamp DESC LIMIT 1""",
+                source_query,
                 (SYMBOL,),
             )
             projected_market = cursor.fetchone()

@@ -1050,12 +1050,22 @@ def test_portfolio_paper_fx_profile_requires_explicit_authorization_and_real_sou
             self.fx_time = fx_time
             self.diverging_projection = diverging_projection
             self.market_time = datetime.now(timezone.utc)
+            self.market_queries = []
             self.rows = []
 
         def execute(self, query, _params):
             if "FROM market_data" in query:
-                projected = "ORDER BY m.source_observed_at DESC" in query
-                price = 2600 if projected and self.diverging_projection else 2500
+                self.market_queries.append(query)
+                assert "m.market_id IS NULL" in query
+                assert "m.price>0" in query
+                assert "m.source_observed_at IS NOT NULL" in query
+                assert "m.quote_currency=a.quote_currency" in query
+                ordered_by_source = (
+                    "ORDER BY m.source_observed_at DESC, m.timestamp DESC, m.id DESC" in query
+                )
+                price = 2500 if ordered_by_source else 2600
+                if self.diverging_projection and len(self.market_queries) == 2:
+                    price = 2600
                 self.rows = (price, self.market_time, "USDT")
             else:
                 self.rows = (0.8, self.fx_time)
@@ -1080,8 +1090,11 @@ def test_portfolio_paper_fx_profile_requires_explicit_authorization_and_real_sou
             pass
 
     now = datetime.now(timezone.utc)
-    monkeypatch.setattr(probe, "_connection", lambda: SourceConnection(now))
+    stable_connection = SourceConnection(now)
+    monkeypatch.setattr(probe, "_connection", lambda: stable_connection)
     source = probe._verified_source_price_eur()
+    assert len(stable_connection.cursor_value.market_queries) == 2
+    assert stable_connection.cursor_value.market_queries[0] == stable_connection.cursor_value.market_queries[1]
     assert source["eur_price"] == 2000.0
     assert source["raw_price"] == 2500.0
     assert source["fx_factor"] == 0.8
