@@ -10,6 +10,10 @@ from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
 from backend.scripts import probe_protected_score2_stale_paper as fixture
+from backend.scripts.qa_browser_error_signature import (
+    append_bounded_signature,
+    classify_browser_error,
+)
 from backend.scripts.qa_trader_gate_invariants import check_paper_exit
 
 
@@ -20,6 +24,8 @@ async def _rendered_exit(user_id: int, bot_id: int, expected: dict) -> dict:
     onboarding_responses = []
     page_error_count = 0
     console_error_count = 0
+    page_error_signatures = []
+    console_error_signatures = []
 
     def observe_response(response):
         if (urlsplit(response.url).path == "/api/bot/configs"
@@ -29,14 +35,24 @@ async def _rendered_exit(user_id: int, bot_id: int, expected: dict) -> dict:
                 and response.request.method == "GET"):
             onboarding_responses.append(response)
 
-    def observe_page_error(_error):
+    def observe_page_error(error):
         nonlocal page_error_count
         page_error_count += 1
+        append_bounded_signature(
+            page_error_signatures,
+            classify_browser_error(error, stack=getattr(error, "stack", None) or str(error)),
+        )
 
     def observe_console(message):
         nonlocal console_error_count
-        if message.type == "error":
+        if getattr(message, "type", None) == "error":
             console_error_count += 1
+            raw_location = getattr(message, "location", None)
+            location = raw_location if isinstance(raw_location, dict) else {}
+            append_bounded_signature(
+                console_error_signatures,
+                classify_browser_error(getattr(message, "text", ""), stack=location.get("url")),
+            )
 
     async def inspect(page):
         nonlocal phase
@@ -92,6 +108,8 @@ async def _rendered_exit(user_id: int, bot_id: int, expected: dict) -> dict:
                         "onboarding_guide_present": ui.get("onboarding_guide_present") is True,
                         "page_error_count": page_error_count,
                         "console_error_count": console_error_count,
+                        "page_error_signatures": page_error_signatures,
+                        "console_error_signatures": console_error_signatures,
                     },
                 }
             phase = (
