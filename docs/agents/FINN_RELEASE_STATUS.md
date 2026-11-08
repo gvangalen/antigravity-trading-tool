@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Vier trader-gates: stale indicatorreden en Paper/FX-preflight (8 november 2026)
 
-Phase: `BUILD_VALIDATED_QA_PENDING`. Op de geverifieerde live SHA
+Phase: `DEPLOYED_QA_PENDING`. Op de geverifieerde live SHA
 `896cac8a75f23a383e9caeca47dad9c9e5165370` slaagde de beschermde
 Paper-review-chatflow in QA-workflow 42466366068: twee Paper-fills, één
 gesloten positie, beide FINN-beurten met eigenaargebonden dossierbewijs en
@@ -25,8 +25,18 @@ indicatormetingen te oud of afwezig zijn, geeft `generate_scores_db` al
 reproduceerde eerst de ontbrekende sleutel. De scoremotor geeft in dit pad
 nu `missing_or_stale_indicator` terug. De score blijft `None`; dit maakt
 geen verouderde meting bruikbaar voor een besluit. Gerichte scoretests:
-`10 passed`; volledige backend-suite: `4297 passed, 4 skipped`. Deze
-productcorrectie is nog niet gedeployed of onafhankelijk live afgetekend.
+`10 passed`; volledige backend-suite: `4297 passed, 4 skipped`.
+Securityreview: akkoord, omdat `total_score=None` en lege scores behouden
+blijven. [PR #871](https://github.com/gvangalen/antigravity-trading-tool/pull/871)
+en alle vijf PR-controles slaagden; alle vijf controles van
+[main-CI 42467545804](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42467545804)
+en [Auto Deploy 42467793281](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/42467793281)
+slaagden. Git-main, publieke backend-health en frontend-buildinfo meldden
+`b1909bd8ae02b87990ab8aa2e8d3723ca46bb8c7`; beide publieke routes
+gaven HTTP 200. Deze statuswijziging maakt zelf een nieuwe SHA. Vóór de
+QA-handoff worden de laatste main-CI, Auto Deploy en publieke SHA-pariteit
+opnieuw gecontroleerd. De scorecorrectie is nog niet onafhankelijk live
+afgetekend.
 Een afzonderlijke, beperkte toestemming voor correctie van de beschermde
 Paper/FX-QA-preflight is aangevraagd; Build heeft die fixture niet gelezen
 of gewijzigd. Accountstaat, tijdzonepariteit, BTC-paarcontinuïteit en een
