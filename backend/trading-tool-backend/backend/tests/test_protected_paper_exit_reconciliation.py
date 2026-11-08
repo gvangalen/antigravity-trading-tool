@@ -1,4 +1,6 @@
-"""No database calls: test the protected Paper-exit collector boundary."""
+"""Test the protected Paper-exit collector boundary and optional PostgreSQL casts."""
+
+import os
 
 import pytest
 
@@ -145,6 +147,7 @@ def test_opening_fixture_reports_fixed_statement_phase(monkeypatch, failed_state
 
 @pytest.mark.parametrize("udt_name,expected_cast", [
     ("_text", "ARRAY[%s::text]"),
+    ("_varchar", "ARRAY[%s::varchar]"),
     ("_numeric", "ARRAY[%s::numeric]"),
 ])
 def test_opening_fixture_uses_allowlisted_target_array_cast(monkeypatch, udt_name, expected_cast):
@@ -205,6 +208,32 @@ def test_opening_fixture_rejects_unexpected_target_type(monkeypatch):
     with pytest.raises(RuntimeError, match="^paper_exit_target_type_unavailable$"):
         probe._seed_trade(11, 22, 33, {"market_price": 100, "market_price_eur": 90})
     assert conn.rolled_back
+
+
+@pytest.mark.parametrize("column_type,udt_name", [
+    ("text[]", "_text"),
+    ("varchar[]", "_varchar"),
+    ("numeric[]", "_numeric"),
+])
+def test_target_array_cast_updates_real_postgres(column_type, udt_name):
+    dsn = os.getenv("TRADAMIND_TEST_POSTGRES_DSN")
+    if not dsn:
+        pytest.skip("Set TRADAMIND_TEST_POSTGRES_DSN for the PostgreSQL cast regression")
+    import psycopg2
+
+    connection = psycopg2.connect(dsn)
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(f"CREATE TEMP TABLE qa_target_cast_test (id int, targets {column_type}) ON COMMIT DROP")
+            cursor.execute("INSERT INTO qa_target_cast_test (id) VALUES (1)")
+            expression = probe._target_array_expression(udt_name)
+            cursor.execute(f"UPDATE qa_target_cast_test SET targets={expression} WHERE id=1", ("80000",))
+            assert cursor.rowcount == 1
+            cursor.execute("SELECT targets::text FROM qa_target_cast_test WHERE id=1")
+            assert cursor.fetchone() == ("{80000}",)
+    finally:
+        connection.rollback()
+        connection.close()
 
 
 def test_live_exchange_guard_blocks_attempt_and_restores_entrypoint():

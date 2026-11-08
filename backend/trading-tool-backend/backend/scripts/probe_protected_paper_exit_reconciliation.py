@@ -40,6 +40,16 @@ def _guard_live_exchange():
         execution._execute_on_exchange_sync = original
 
 
+def _target_array_expression(udt_name: str | None) -> str:
+    if udt_name == "_text":
+        return "ARRAY[%s::text]"
+    if udt_name == "_varchar":
+        return "ARRAY[%s::varchar]"
+    if udt_name == "_numeric":
+        return "ARRAY[%s::numeric]"
+    raise RuntimeError("paper_exit_target_type_unavailable")
+
+
 def _preflight() -> tuple[int, dict]:
     from backend.engine.trading_bot_execution import (
         PAPER_AUTO_EXIT_CUTOVER, _get_trade_quote_fx_context,
@@ -102,12 +112,7 @@ def _seed_trade(user_id: int, bot_id: int,
                               WHERE table_schema='public' AND table_name='strategies'
                                 AND column_name='targets'""")
             target_type = cursor.fetchone()
-            if target_type == ("_text",):
-                target_expression = "ARRAY[%s::text]"
-            elif target_type == ("_numeric",):
-                target_expression = "ARRAY[%s::numeric]"
-            else:
-                raise RuntimeError("paper_exit_target_type_unavailable")
+            target_expression = _target_array_expression(target_type[0] if target_type else None)
             phase = "strategy_update"
             cursor.execute(f"""UPDATE strategies SET symbol='BTC',market_id=%s,setup_type='trade',
                               entry=%s,stop_loss=%s,targets={target_expression},data=%s::jsonb
