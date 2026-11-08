@@ -521,14 +521,28 @@ def test_paper_buy_failure_reports_only_bounded_immediate_cause():
     assert diagnostic(RuntimeError("auto_paper_execution_not_filled")) == {
         "phase": "paper_buy", "cause_code": "other",
         "paper_buy_cause": "auto_paper_execution_not_filled",
+        "paper_buy_cause_family": "runtime_error",
     }
     assert diagnostic(TimeoutError("private fixture owner and token"))["paper_buy_cause"] == "timeout"
+    assert diagnostic(TimeoutError("private fixture owner and token"))["paper_buy_cause_family"] == "timeout_error"
     integrity_error = type("IntegrityError", (Exception,), {"__module__": "psycopg.errors"})
     assert diagnostic(integrity_error("private SQL and account details"))["paper_buy_cause"] == "database_integrity"
+    assert diagnostic(integrity_error("private SQL and account details"))["paper_buy_cause_family"] == "other_exception"
     private = diagnostic(RuntimeError("private fixture owner and token"))
     assert private["paper_buy_cause"] == "other"
+    assert private["paper_buy_cause_family"] == "runtime_error"
     assert "private" not in json.dumps(private)
     assert "paper_buy_cause" not in diagnostic(TimeoutError("private"), phase="seed")
+    assert "paper_buy_cause_family" not in diagnostic(TimeoutError("private"), phase="seed")
+    for error_type, family in (
+        (ValueError, "value_error"), (TypeError, "type_error"),
+        (AttributeError, "attribute_error"), (KeyError, "key_error"),
+        (AssertionError, "assertion_error"), (OSError, "os_error"),
+    ):
+        result = diagnostic(error_type("private fixture owner and token"))
+        assert result["paper_buy_cause_family"] == family
+        assert "private" not in json.dumps(result)
+    assert diagnostic(None)["paper_buy_cause_family"] == "no_context"
 
 
 def test_closed_paper_review_chat_cleanup_failure_takes_priority(monkeypatch):

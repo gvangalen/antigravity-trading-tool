@@ -143,6 +143,24 @@ def _safe_paper_buy_cause(error: Exception) -> str:
     return "other"
 
 
+def _safe_paper_buy_cause_family(error: Exception) -> str:
+    """Export a fixed exception family, without private error text or type names."""
+    cause = error.__context__
+    families = {
+        RuntimeError: "runtime_error",
+        ValueError: "value_error",
+        TypeError: "type_error",
+        AttributeError: "attribute_error",
+        KeyError: "key_error",
+        AssertionError: "assertion_error",
+        OSError: "os_error",
+        TimeoutError: "timeout_error",
+    }
+    if cause is None:
+        return "no_context"
+    return families.get(type(cause), "other_exception")
+
+
 def safe_closed_paper_chat_diagnostic(error: Exception) -> Dict[str, Any] | None:
     """Expose terminal categories only, never a raw model/provider message."""
     if str(error) == "closed_paper_review_chat_phase_failed":
@@ -177,6 +195,7 @@ def safe_closed_paper_chat_diagnostic(error: Exception) -> Dict[str, Any] | None
         }
         if phase == "paper_buy":
             result["paper_buy_cause"] = _safe_paper_buy_cause(error)
+            result["paper_buy_cause_family"] = _safe_paper_buy_cause_family(error)
         review_read = _safe_review_read_diagnostic(
             getattr(error, "review_read_diagnostic", None)
         )
