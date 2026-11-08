@@ -49,6 +49,9 @@ async def observe_page(
     *, base_url: str, path: str, token: str,
     inspect: Callable, timezone_id: str = "Europe/Amsterdam",
     timeout_ms: int = 30000, bypass_fixture_onboarding: bool = False,
+    observe_response: Callable | None = None,
+    observe_page_error: Callable | None = None,
+    observe_console: Callable | None = None,
 ):
     """Render one production page, inspect it in memory, and discard context.
 
@@ -106,6 +109,12 @@ async def observe_page(
 
                 await context.route("**/*", route_request)
                 page = await context.new_page()
+                if observe_response is not None:
+                    page.on("response", observe_response)
+                if observe_page_error is not None:
+                    page.on("pageerror", observe_page_error)
+                if observe_console is not None:
+                    page.on("console", observe_console)
                 await page.goto(
                     f"{base_url.rstrip('/')}{path}",
                     wait_until="domcontentloaded", timeout=timeout_ms,

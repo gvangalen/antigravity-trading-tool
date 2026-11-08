@@ -156,6 +156,8 @@ def test_account_turns_use_two_fresh_conversations_and_sanitize_result(monkeypat
                                    confirmation_required=False, evidence=evidence)
         return SimpleNamespace(status="completed", response=response,
                                run_id=f"run-{len(calls)}", conversation_id=conv,
+                                   runtime_trace={"contract": {"final_operation_id": "read_active_setup"},
+                                                  "tool_calls": [{"tool_name": "read_portfolio"}]},
                                policy=SimpleNamespace(execute_allowed=False))
     async def examined(**_kwargs):
         return {"result": "PASS", "failed_checks": []}
@@ -169,6 +171,16 @@ def test_account_turns_use_two_fresh_conversations_and_sanitize_result(monkeypat
     assert result["result"] == "PASS"
     assert result["fresh_conversations"] == 2
     assert result["public_account_references"] == "not_emitted"
+    assert [item["turn"] for item in result["turn_diagnostics"]] == [
+        "initial", "followup", "fresh_repeat",
+    ]
+    assert all(item["operation"] == "read_active_setup" for item in result["turn_diagnostics"])
+    assert all(item["tools"] == ["read_portfolio"] for item in result["turn_diagnostics"])
+    assert all(len(item["read_scopes"]) == 4 for item in result["turn_diagnostics"])
+    assert all(item["bot_status_decision_matches_frozen"] is True
+               for item in result["turn_diagnostics"])
+    assert all(item["review_history_closed_trade_multi_bot"] is None
+               for item in result["turn_diagnostics"])
     assert "private" not in str(result)
 
 

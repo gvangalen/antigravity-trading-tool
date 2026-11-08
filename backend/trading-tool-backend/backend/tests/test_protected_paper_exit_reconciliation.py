@@ -11,6 +11,17 @@ from backend.scripts.run_finn_production_qa import profile_error_category
 NAMESPACE = "qa-123-1-ad9fe0d3-deadbeef"
 
 
+def _emit_page_bot_response(kwargs, *, status=200, bots=None):
+    class Response:
+        url = "https://tradamind.com/api/bot/configs?_=cache-bust"
+        request = type("Request", (), {"method": "GET"})()
+        async def json(self):
+            return [{"id": 22}] if bots is None else bots
+    response = Response()
+    response.status = status
+    kwargs["observe_response"](response)
+
+
 def test_probe_requires_authorization_before_source_read(monkeypatch):
     monkeypatch.delenv("FINN_QA_ALLOW_PAPER_EXIT_FIXTURE", raising=False)
     monkeypatch.setattr(probe, "_preflight", lambda: pytest.fail("unexpected source read"))
@@ -158,9 +169,6 @@ def test_rendered_exit_opens_trades_before_reading_evidence(monkeypatch):
                 assert events[:3] == ["wait", "wait", "click"]
             return Locator()
         async def evaluate(self, script, _args):
-            if '/api/bot/configs' in script:
-                reads.append('bots')
-                return {"status": 200, "present": True}
             if '/api/bot/trades/all' in script:
                 reads.append('trades')
                 return {"status": 200, "present": True}
@@ -172,6 +180,8 @@ def test_rendered_exit_opens_trades_before_reading_evidence(monkeypatch):
     async def observe_page(**kwargs):
         assert kwargs["path"] == "/bot?bot_id=22"
         assert kwargs["bypass_fixture_onboarding"] is True
+        _emit_page_bot_response(kwargs)
+        reads.append('bots')
         return await kwargs["inspect"](Page())
     monkeypatch.setattr(qa_protected_browser, "observe_page", observe_page)
     monkeypatch.setattr(auth_utils, "create_access_token", lambda *_args: "in-memory-token")
@@ -183,18 +193,24 @@ def test_rendered_exit_opens_trades_before_reading_evidence(monkeypatch):
 
 
 @pytest.mark.parametrize("status,present,expected", [
-    (401, False, "paper_exit_rendered_owner_bot_api_auth_failed"),
-    (503, False, "paper_exit_rendered_owner_bot_api_unavailable_failed"),
-    (200, False, "paper_exit_rendered_owner_bot_api_missing_failed"),
+    (401, False, "paper_exit_rendered_owner_bot_page_get_auth_failed"),
+    (503, False, "paper_exit_rendered_owner_bot_page_get_unavailable_failed"),
 ])
 def test_rendered_exit_sanitizes_owner_bot_read(monkeypatch, status, present, expected):
     from backend.scripts import qa_protected_browser
     from backend.utils import auth_utils
 
     class Page:
-        async def evaluate(self, _script, _args):
-            return {"status": status, "present": present}
+        def locator(self, _selector):
+            class Locator:
+                @property
+                def first(self):
+                    return self
+                async def wait_for(self, **_kwargs):
+                    pass
+            return Locator()
     async def observe_page(**kwargs):
+        _emit_page_bot_response(kwargs, status=status, bots=[{"id": 22}] if present else [])
         return await kwargs["inspect"](Page())
     monkeypatch.setattr(qa_protected_browser, "observe_page", observe_page)
     monkeypatch.setattr(auth_utils, "create_access_token", lambda *_args: "in-memory-token")
@@ -206,9 +222,49 @@ def test_rendered_exit_sanitizes_owner_bot_read(monkeypatch, status, present, ex
     ) == expected
 
 
+@pytest.mark.parametrize("bots,selected_missing,reason,shape,count", [
+    ([{"id": 22}], True, "owner_bot_not_selected", "array", 1),
+    ([], False, "owner_bot_page_get_missing", "array", 0),
+    ({"items": [{"id": 22}]}, False, "owner_bot_page_get_missing", "wrapper", None),
+])
+def test_rendered_exit_reports_only_sanitized_page_get_and_ui_state(
+    monkeypatch, bots, selected_missing, reason, shape, count,
+):
+    from backend.scripts import qa_protected_browser
+    from backend.utils import auth_utils
+
+    class Locator:
+        @property
+        def first(self):
+            return self
+        async def wait_for(self, **_kwargs):
+            if selected_missing:
+                raise ValueError("private DOM content")
+    class Page:
+        url = "https://tradamind.com/bot?bot_id=private"
+        def locator(self, _selector):
+            return Locator()
+        async def evaluate(self, _script):
+            return {"focus_nav_present": False, "bot_button_count": 0,
+                    "onboarding_guide_present": True}
+    async def observe_page(**kwargs):
+        _emit_page_bot_response(kwargs, bots=bots)
+        return await kwargs["inspect"](Page())
+    monkeypatch.setattr(qa_protected_browser, "observe_page", observe_page)
+    monkeypatch.setattr(auth_utils, "create_access_token", lambda *_args: "in-memory-token")
+    import asyncio
+    result = asyncio.run(probe._rendered_exit(11, 22, {}))
+    assert result["rendered_failure_reason"] == reason
+    assert result["ui_diagnostic"]["bot_get_status"] == 200
+    assert result["ui_diagnostic"]["bot_get_shape"] == shape
+    assert result["ui_diagnostic"]["bot_get_count"] == count
+    assert result["ui_diagnostic"]["owner_bot_present"] is (shape == "array" and count == 1)
+    assert "private" not in str(result)
+
+
 @pytest.mark.parametrize("fail_in_inspect,expected", [
     (False, "paper_exit_rendered_bootstrap_failed"),
-    (True, "paper_exit_rendered_owner_bot_wait_failed"),
+    (True, "paper_exit_rendered_login_redirect_failed"),
 ])
 def test_rendered_exit_sanitizes_browser_failure_phase(monkeypatch, fail_in_inspect, expected):
     from backend.scripts import qa_protected_browser
@@ -217,10 +273,10 @@ def test_rendered_exit_sanitizes_browser_failure_phase(monkeypatch, fail_in_insp
     async def observe_page(**kwargs):
         if fail_in_inspect:
             class Page:
-                async def evaluate(self, _script, _args):
-                    return {"status": 200, "present": True}
+                url = "https://tradamind.com/login"
                 def locator(self, _selector):
                     raise ValueError("private DOM and fixture identity")
+            _emit_page_bot_response(kwargs)
             return await kwargs["inspect"](Page())
         raise ValueError("private browser error and fixture identity")
     monkeypatch.setattr(qa_protected_browser, "observe_page", observe_page)
@@ -258,11 +314,10 @@ def test_rendered_exit_classifies_missing_tab_without_url_leak(
             pass
     class Page:
         url = f"https://tradamind.com{path}?fixture=private"
-        async def evaluate(self, _script, _args):
-            return {"status": 200, "present": True}
         def locator(self, selector):
             return OwnerLocator() if 'button[aria-pressed="true"]' in selector else Locator()
     async def observe_page(**kwargs):
+        _emit_page_bot_response(kwargs)
         return await kwargs["inspect"](Page())
     monkeypatch.setattr(qa_protected_browser, "observe_page", observe_page)
     monkeypatch.setattr(auth_utils, "create_access_token", lambda *_args: "in-memory-token")
