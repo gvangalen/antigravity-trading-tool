@@ -130,7 +130,13 @@ flags. It reads only metadata for `strategies.targets`, `market_id`, `data`,
 `setup_type`, `entry`, and `stop_loss`, plus allowlisted constraint names and
 bounded presence counts for other constraints and user triggers. It emits no
 user rows, values, raw SQL errors, trigger definitions, or unknown names. A
-schema match alone does not prove the failed UPDATE's root cause.
+schema match alone does not prove the failed UPDATE's root cause. The probe is
+transferred with the QA control-plane runner and checksum-checked, so its own
+presence does not depend on the product checkout. Its database helper still
+comes from that checkout. After a QA-only main deployment, the audit
+must target the then-current live SHA. It observes the current schema, not a
+historical snapshot; any inference about the earlier failed UPDATE remains
+conditional on no intervening schema change.
 
 ## Gate 4: automatic Paper exit and reproducible cashflow
 

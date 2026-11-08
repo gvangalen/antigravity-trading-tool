@@ -2419,9 +2419,10 @@ def main() -> int:
                 report["protected_profile_attempted"] = True
                 report["qa_status"] = "INCOMPLETE"
                 report["outcome"] = "incomplete"
-                from backend.scripts.probe_protected_trader_strategy_schema import run as audit_strategy_schema
+                import runpy
 
-                report[args.profile] = audit_strategy_schema()
+                probe_path = Path(__file__).resolve().with_name("strategy_schema_probe.py")
+                report[args.profile] = runpy.run_path(str(probe_path))["run"]()
                 report["outcome"] = "passed" if report[args.profile]["result"] == "PASS" else "failed"
                 report["qa_status"] = "COMPLETED"
             elif args.profile in {"closed_paper_trade_review", "closed_paper_trade_review_chat"}:
