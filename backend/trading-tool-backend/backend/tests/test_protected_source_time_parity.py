@@ -294,18 +294,32 @@ def test_real_playwright_dom_binds_eur_quote_inside_active_card():
                 pytest.skip("Chromium is unavailable in this test environment")
             try:
                 page = await browser.new_page()
+                expected_price = await page.evaluate(
+                    "price => new Intl.NumberFormat('nl-NL', "
+                    "{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(price)",
+                    68000,
+                )
                 await page.set_content(f"""
                     <p>{expected}</p>
-                    <section><div>Actieve analyse</div><span>68.000 EUR</span>
+                    <section><div>Actieve analyse</div><span>{expected_price}</span>
                       <span>{expected}</span></section>
                 """)
                 assert await probe._target_quote_visible(
                     page, surface="analysis", locale="nl-NL", expected=expected,
-                    quote_currency="EUR", timeout_ms=150,
+                    quote_currency="EUR", expected_price=expected_price, timeout_ms=150,
                 ) == "ok"
                 assert await probe._target_quote_visible(
                     page, surface="analysis", locale="nl-NL", expected=expected,
                     quote_currency="USDT", timeout_ms=150,
+                ) == "selector_missing"
+                await page.set_content(f"""
+                    <p>{expected_price}</p><p>{expected}</p>
+                    <section><div>Actieve analyse</div><span>verkeerde prijs</span>
+                      <span>{expected}</span></section>
+                """)
+                assert await probe._target_quote_visible(
+                    page, surface="analysis", locale="nl-NL", expected=expected,
+                    quote_currency="EUR", expected_price=expected_price, timeout_ms=150,
                 ) == "selector_missing"
             finally:
                 await browser.close()

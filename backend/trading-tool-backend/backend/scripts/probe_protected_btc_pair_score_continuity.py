@@ -7,8 +7,11 @@ release identity, fixture auth, namespace and action authorization first.
 from __future__ import annotations
 
 import asyncio
+import math
 import os
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 from backend.scripts import probe_protected_score2_stale_paper as fixture
 from backend.scripts.qa_trader_gate_invariants import check_pair_score_isolation
@@ -44,6 +47,45 @@ _SAFE_FINN_STATUSES = frozenset({
     "clarification_required", "unavailable", "downgraded", "rejected",
     "blocked", "completed", "failed", "canceled",
 })
+_SAFE_PROVIDER_EXCEPTIONS = frozenset({
+    "BadRequestError", "AuthenticationError", "PermissionDeniedError",
+    "RateLimitError", "InternalServerError", "APIStatusError", "APIConnectionError",
+    "APITimeoutError", "ConnectError", "ReadError",
+})
+
+
+@contextmanager
+def _provider_failure_probe():
+    """Observe only a fixed SDK error class/status, never request or response data."""
+    from openai.resources.responses import AsyncResponses
+
+    original = AsyncResponses.create
+    observations: list[dict[str, object]] = []
+    calls = 0
+
+    async def observed_create(self, *args, **kwargs):
+        nonlocal calls
+        calls += 1
+        try:
+            return await original(self, *args, **kwargs)
+        except Exception as error:
+            status = getattr(error, "status_code", None)
+            status_class = (
+                "429" if status == 429 else
+                "4xx" if isinstance(status, int) and 400 <= status < 500 else
+                "5xx" if isinstance(status, int) and 500 <= status < 600 else
+                "none" if status is None else "other"
+            )
+            kind = type(error).__name__
+            observations.append({
+                "provider_call": calls if calls <= 3 else "4_plus",
+                "status_class": status_class,
+                "exception_kind": kind if kind in _SAFE_PROVIDER_EXCEPTIONS else "other",
+            })
+            raise
+
+    with patch.object(AsyncResponses, "create", observed_create):
+        yield observations
 
 
 def _assessment_error_code(error: Exception) -> str:
@@ -87,6 +129,38 @@ def _business_snapshot(user_id: int) -> dict:
     return _business_state(user_id)
 
 
+async def _score_tool_seen(*, user_id: int, run_id: str, conversation_id: str) -> bool | str:
+    """Whether an owner-bound durable trace recorded a score tool, including progress."""
+    from backend.infrastructure.database import async_session_factory
+    from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import (
+        FinnV2RuntimeContractRepository,
+    )
+
+    try:
+        async with async_session_factory() as session:
+            contract = await FinnV2RuntimeContractRepository(session).get_for_run(run_id=run_id)
+            if (contract is None or contract.user_id != user_id
+                    or contract.conversation_id != conversation_id):
+                return "unknown"
+            state = contract.state_json or {}
+            checkpoints = [state[name] for name in ("responses_exchange", "responses_progress")
+                           if state.get(name) is not None]
+            if any(not isinstance(checkpoint, dict)
+                   or checkpoint.get("run_id") != run_id
+                   or checkpoint.get("conversation_id") != conversation_id
+                   or not isinstance(checkpoint.get("tool_trace"), list)
+                   for checkpoint in checkpoints):
+                return "unknown"
+            return any(
+                isinstance(call, dict) and isinstance(call.get("result"), dict)
+                and any(isinstance(row, dict) and row.get("scope") == "read_asset_scores"
+                        for row in (call["result"].get("results") or []))
+                for checkpoint in checkpoints for call in checkpoint["tool_trace"]
+            )
+    except Exception:
+        return "unknown"
+
+
 async def _finn_pair_read(user_id: int, pair: str):
     """Keep the FINN turn and its evidence on one loop, then release the pool."""
     from backend.infrastructure.database import engine
@@ -94,14 +168,24 @@ async def _finn_pair_read(user_id: int, pair: str):
     from backend.scripts.probe_protected_closed_paper_review import _chat_turn
 
     try:
-        turn = await _chat_turn(
-            user_id,
-            f"Lees alleen mijn actuele Score 2.0 voor {pair} uit opgeslagen brondata. "
-            "Geef de benchmarkscore en bronstatus; wijzig niets.",
-        )
+        with _provider_failure_probe() as provider_failures:
+            turn = await _chat_turn(
+                user_id,
+                f"Lees alleen mijn actuele Score 2.0 voor {pair} uit opgeslagen brondata. "
+                "Geef de benchmarkscore en bronstatus; wijzig niets.",
+            )
         if turn.status != "completed":
             status = turn.status if turn.status in _SAFE_FINN_STATUSES else "other"
-            return None, f"turn_{status}", _finn_terminal_diagnostic(turn)
+            diagnostic = _finn_terminal_diagnostic(turn)
+            if diagnostic["error_code"] == "responses_provider_error":
+                diagnostic["provider_failure"] = (
+                    provider_failures[-1] if provider_failures else {"provider_call": 0,
+                        "status_class": "unobserved", "exception_kind": "unobserved"}
+                )
+                diagnostic["score_tool_seen"] = await _score_tool_seen(
+                    run_id=turn.run_id, conversation_id=turn.conversation_id, user_id=user_id,
+                )
+            return None, f"turn_{status}", diagnostic
         if turn.response is None:
             return None, "response_missing", _finn_terminal_diagnostic(turn)
         if (turn.response.proposal_id or turn.response.confirmation_required
@@ -288,6 +372,16 @@ async def _stale_date_display(user_id: int, source_at: str, market_id: int) -> d
                     if (workspace.get("pair") != "BTC/EUR" or workspace.get("market_id") != market_id
                             or quote_ref is None or quote_ref[0] != market_id):
                         return "api_source_unverified"
+                    price = (workspace.get("quote") or {}).get("price")
+                    if (isinstance(price, bool) or not isinstance(price, (int, float))
+                            or not math.isfinite(price)):
+                        return "api_price_unverified"
+                    expected_price = await page.evaluate(
+                        "price => new Intl.NumberFormat('nl-NL', "
+                        "{style:'currency',currency:'EUR',maximumFractionDigits:price>=1000?0:2})"
+                        ".format(price)",
+                        price,
+                    )
                     expected = await page.evaluate(
                         "source => new Intl.DateTimeFormat('nl-NL', "
                         "{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'UTC'})"
@@ -296,7 +390,7 @@ async def _stale_date_display(user_id: int, source_at: str, market_id: int) -> d
                     )
                     quote_phase = await _target_quote_visible(
                         page, surface="analysis", locale="nl-NL", expected=expected,
-                        quote_currency="EUR",
+                        quote_currency="EUR", expected_price=expected_price,
                     )
                     if quote_phase != "ok":
                         return "quote_" + quote_phase
