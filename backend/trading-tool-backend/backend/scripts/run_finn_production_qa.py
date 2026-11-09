@@ -201,7 +201,7 @@ def profile_error_category(profile: str, error: Exception) -> str:
         }
         boundary_codes = {
             f"trader_pair_{stage}_{kind}_failed"
-            for stage in ("live_guard_import", "live_guard_entry")
+            for stage in ("live_guard_import", "live_guard_entry", "runner_entry")
             for kind in ("importerror", "modulenotfounderror", "attributeerror",
                          "runtimeerror", "typeerror", "other")
         } | {

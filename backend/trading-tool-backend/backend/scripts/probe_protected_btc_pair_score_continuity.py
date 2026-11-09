@@ -654,35 +654,37 @@ def run(namespace: str) -> dict:
         from backend.scripts.probe_protected_paper_exit_reconciliation import _guard_live_exchange
 
         stage = "live_guard_entry"
-        with _guard_live_exchange() as live_attempts, asyncio.Runner() as runner:
-            stage = "initial_snapshot"
-            initial = _snapshot(user_id, markets)
-            stage = "initial_transport"
-            initial_transport = _transport_checks(user_id, initial, runner=runner)
-            stage = "outage_source"
-            _set_eur_source_time(user_id, markets["BTC/EUR"]["market_id"],
-                                 markets["BTC/EUR"]["source_at"], stale=True)
-            stage = "outage_snapshot"
-            outage = _snapshot(user_id, markets)
-            stage = "outage_transport"
-            outage_transport = _transport_checks(user_id, outage, runner=runner)
-            stage = "browser"
-            browser_source_facts = {}
-            try:
-                stale_browser = runner.run(_stale_date_display(
-                    user_id, outage["pairs"]["BTC/EUR"]["source_at"],
-                    markets["BTC/EUR"]["market_id"],
-                    source_facts=browser_source_facts,
-                ))
-            except Exception:
-                stale_browser = {}
-            stage = "recovery_source"
-            _set_eur_source_time(user_id, markets["BTC/EUR"]["market_id"],
-                                 markets["BTC/EUR"]["source_at"], stale=False)
-            stage = "recovery_snapshot"
-            recovered = _snapshot(user_id, markets)
-            stage = "recovery_transport"
-            recovered_transport = _transport_checks(user_id, recovered, runner=runner)
+        with _guard_live_exchange() as live_attempts:
+            stage = "runner_entry"
+            with asyncio.Runner() as runner:
+                stage = "initial_snapshot"
+                initial = _snapshot(user_id, markets)
+                stage = "initial_transport"
+                initial_transport = _transport_checks(user_id, initial, runner=runner)
+                stage = "outage_source"
+                _set_eur_source_time(user_id, markets["BTC/EUR"]["market_id"],
+                                     markets["BTC/EUR"]["source_at"], stale=True)
+                stage = "outage_snapshot"
+                outage = _snapshot(user_id, markets)
+                stage = "outage_transport"
+                outage_transport = _transport_checks(user_id, outage, runner=runner)
+                stage = "browser"
+                browser_source_facts = {}
+                try:
+                    stale_browser = runner.run(_stale_date_display(
+                        user_id, outage["pairs"]["BTC/EUR"]["source_at"],
+                        markets["BTC/EUR"]["market_id"],
+                        source_facts=browser_source_facts,
+                    ))
+                except Exception:
+                    stale_browser = {}
+                stage = "recovery_source"
+                _set_eur_source_time(user_id, markets["BTC/EUR"]["market_id"],
+                                     markets["BTC/EUR"]["source_at"], stale=False)
+                stage = "recovery_snapshot"
+                recovered = _snapshot(user_id, markets)
+                stage = "recovery_transport"
+                recovered_transport = _transport_checks(user_id, recovered, runner=runner)
         stage = "after_read"
         after_business = _business_snapshot(user_id)
         stage = "validation"
@@ -738,7 +740,7 @@ def run(namespace: str) -> dict:
                 "outage_quote_pending_browser_checked": True,
                 "gate_status": "PASS"}
     except Exception as error:
-        if stage in {"live_guard_import", "live_guard_entry"}:
+        if stage in {"live_guard_import", "live_guard_entry", "runner_entry"}:
             kind = type(error).__name__.lower()
             if kind not in {"importerror", "modulenotfounderror", "attributeerror",
                             "runtimeerror", "typeerror"}:
