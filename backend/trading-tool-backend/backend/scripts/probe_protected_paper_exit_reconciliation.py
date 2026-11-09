@@ -168,6 +168,9 @@ async def _rendered_exit(user_id: int, bot_id: int, expected: dict) -> dict:
             }).format(new Date(value));
             return {
                 rendered_exit_fields_present: lines.length === 8,
+                rendered_decision_source_quote: lines[2]?.includes(format(evidence.source_price, 6)) &&
+                    lines[2]?.includes(evidence.source_price_currency) &&
+                    lines[2]?.includes(time(evidence.source_price_at)),
                 rendered_exit_eur_price: lines[3]?.includes(`${format(evidence.execution_eur_price, 6)} EUR`) ?? false,
                 rendered_exit_quantity: lines[4]?.includes(format(evidence.execution_qty, 8)) ?? false,
                 rendered_exit_proceeds: lines[5]?.includes(`${format(evidence.execution_proceeds_eur, 6)} EUR`) ?? false,
@@ -465,7 +468,7 @@ def _evidence(namespace: str, user_id: int, bot_id: int, market_id: int,
         connection.close()
 
 
-def run(namespace: str) -> dict:
+def run(namespace: str, *, source_parity: bool = False) -> dict:
     if os.getenv("FINN_QA_ALLOW_PAPER_EXIT_FIXTURE") != "1":
         raise RuntimeError("paper_exit_fixture_not_authorized")
     if not fixture.NAMESPACE_PATTERN.fullmatch(namespace):
@@ -511,7 +514,8 @@ def run(namespace: str) -> dict:
         with _stage("rendered_ui"):
             rendered = asyncio.run(_rendered_exit(user_id, bot_id, evidence["ui_projection"]))
         required_rendered = {
-            "rendered_exit_fields_present", "rendered_exit_eur_price",
+            "rendered_exit_fields_present", "rendered_decision_source_quote",
+            "rendered_exit_eur_price",
             "rendered_exit_quantity", "rendered_exit_proceeds",
             "rendered_exit_source_quote", "rendered_exit_fx",
         }
@@ -528,11 +532,41 @@ def run(namespace: str) -> dict:
                     "rendered_ui_checked": True, "gate_status": "FAIL",
                 "engine_calls": 2, "live_calls": live_calls,
                 "onboarding_navigation_override": True}
+        parity = None
+        if source_parity:
+            from backend.scripts.probe_protected_source_time_parity import run as check_source_parity
+            from backend.scripts.probe_protected_account_answer import _business_state
+            with _stage("source_parity"):
+                before_readback = _business_state(user_id)
+                with _guard_live_exchange() as parity_live_attempts:
+                    parity = check_source_parity(
+                        user_id=user_id, market_id=market_id,
+                        paper_evidence=evidence, frozen_ref=context.get("source_ref"),
+                    )
+                after_readback = _business_state(user_id)
+            live_calls += len(parity_live_attempts)
+            safety_failures = []
+            if parity_live_attempts:
+                safety_failures.append("live_execution_attempt")
+            if (before_readback["counts"] != after_readback["counts"]
+                    or before_readback["fingerprints"] != after_readback["fingerprints"]):
+                safety_failures.append("unexpected_business_write")
+            if safety_failures:
+                return {"result": "FAIL", "failed_checks": safety_failures,
+                        "rendered_ui_checked": True, "gate_status": "FAIL",
+                        "engine_calls": 2, "live_calls": live_calls,
+                        "onboarding_navigation_override": True}
+            if parity["result"] != "PASS":
+                return {"result": "FAIL", "failed_checks": parity["failed_checks"],
+                        "source_time_parity": parity, "rendered_ui_checked": True,
+                        "gate_status": "FAIL", "engine_calls": 2,
+                        "live_calls": live_calls, "onboarding_navigation_override": True}
         passed = True
         return {**result, "exit_decisions": 1, "replay_duplicate_sells": 0,
                 "engine_calls": 2, "live_calls": live_calls,
                 "rendered_ui_checked": True,
                 "onboarding_navigation_override": True,
+                **({"source_time_parity": parity} if parity is not None else {}),
                 "gate_status": "PASS"}
     finally:
         if user_id is not None and bot_id is not None:

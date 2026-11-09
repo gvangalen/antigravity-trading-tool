@@ -31,6 +31,7 @@ name: FINN Production QA
           - score2_exact_usdt_paper
           - trader_pair_score_continuity
           - trader_account_state_readback
+          - trader_source_time_parity
           - trader_paper_exit_reconciliation
           - trader_paper_exit_fixture_audit
           - trader_strategy_schema_audit
@@ -113,7 +114,7 @@ jobs:
         run: |
           set -uo pipefail
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$QA_PROFILE" =~ ^(auth_preflight|trade_review_preflight|manifest_key|targeted_regression|runtime_acceptance|action_contract_acceptance|full_release_acceptance|safety|latency|score2_stale_paper|score2_positive_paper|score2_outside_paper|score2_exact_eur_paper|score2_exact_usdt_paper|trader_pair_score_continuity|trader_account_state_readback|trader_paper_exit_reconciliation|trader_paper_exit_fixture_audit|trader_strategy_schema_audit|closed_paper_trade_review|closed_paper_trade_review_chat|auto_paper_trade_history|portfolio_paper_fx|portfolio_paper_fx_schema|typed_entry_paper)$ ]]
+          [[ "$QA_PROFILE" =~ ^(auth_preflight|trade_review_preflight|manifest_key|targeted_regression|runtime_acceptance|action_contract_acceptance|full_release_acceptance|safety|latency|score2_stale_paper|score2_positive_paper|score2_outside_paper|score2_exact_eur_paper|score2_exact_usdt_paper|trader_pair_score_continuity|trader_account_state_readback|trader_source_time_parity|trader_paper_exit_reconciliation|trader_paper_exit_fixture_audit|trader_strategy_schema_audit|closed_paper_trade_review|closed_paper_trade_review_chat|auto_paper_trade_history|portfolio_paper_fx|portfolio_paper_fx_schema|typed_entry_paper)$ ]]
           [[ "$MANIFEST_ID" =~ ^[a-z0-9][a-z0-9._-]{0,80}$ ]]
           [[ "$RUN_LABEL" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$ ]]
           [ "${#MANIFEST_BUNDLE}" -le 65535 ]
@@ -157,6 +158,10 @@ jobs:
           fi
           if [ "$QA_PROFILE" = "trader_paper_exit_reconciliation" ] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ] || [ "$ALLOW_FIXTURE_ACTIONS" != "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" != "true" ]; }; then
             echo "The automatic Paper-exit probe requires fixture and safe-execution authorization with no manifest." >&2
+            exit 1
+          fi
+          if [ "$QA_PROFILE" = "trader_source_time_parity" ] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ] || [ "$ALLOW_FIXTURE_ACTIONS" != "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" != "true" ]; }; then
+            echo "The source-time probe requires Paper fixture and safe-execution authorization with no manifest." >&2
             exit 1
           fi
           if [ "$QA_PROFILE" = "trader_paper_exit_fixture_audit" ] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ] || [ "$ALLOW_FIXTURE_ACTIONS" != "false" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" != "false" ] || [[ ! "$RUN_LABEL" =~ ^audit-[1-9][0-9]{5,15}-[1-9][0-9]*-[0-9a-f]{8}$ ]]; }; then
@@ -368,6 +373,9 @@ jobs:
             export FINN_QA_ALLOW_TRADER_ACCOUNT_FIXTURE=1
           fi
           if [ "$qa_profile" = "trader_paper_exit_reconciliation" ] && [ "$allow_fixture_actions" = "true" ] && [ "$allow_safe_fixture_execution" = "true" ]; then
+            export FINN_QA_ALLOW_PAPER_EXIT_FIXTURE=1
+          fi
+          if [ "$qa_profile" = "trader_source_time_parity" ] && [ "$allow_fixture_actions" = "true" ] && [ "$allow_safe_fixture_execution" = "true" ]; then
             export FINN_QA_ALLOW_PAPER_EXIT_FIXTURE=1
           fi
           if [ "$qa_profile" = "auto_paper_trade_history" ] && [ "$allow_fixture_actions" = "true" ] && [ "$allow_safe_fixture_execution" = "true" ]; then

@@ -14,6 +14,93 @@ from backend.scripts import probe_protected_score2_stale_paper as fixture
 from backend.scripts.qa_trader_gate_invariants import check_pair_score_isolation
 
 
+def _business_snapshot(user_id: int) -> dict:
+    from backend.scripts.probe_protected_account_answer import _business_state
+
+    return _business_state(user_id)
+
+
+def _transport_checks(user_id: int, snapshot: dict) -> dict[str, bool]:
+    """Compare normal owner-scoped Analysis GET and FINN chat reads with frozen scores."""
+    from backend.scripts.qa_protected_readback import read_json
+    from backend.scripts.probe_protected_account_answer import _read_tool_results
+    from backend.scripts.probe_protected_closed_paper_review import _chat_turn
+
+    checks = {"analysis": True, "finn": True}
+    for pair, expected in snapshot["pairs"].items():
+        quote = pair.split("/", 1)[1]
+        try:
+            analysis = read_json(
+                owner_id=user_id,
+                path=f"/api/workspace/exact-market?symbol=BTC&quote_currency={quote}",
+            )
+            checks["analysis"] &= (
+                analysis.get("market_id") == expected["market_id"]
+                and analysis.get("pair") == pair
+                and (analysis.get("combined") or {}).get("score") == expected["score"]
+            )
+        except Exception:
+            checks["analysis"] = False
+        try:
+            turn = asyncio.run(_chat_turn(
+                user_id,
+                f"Lees alleen mijn actuele Score 2.0 voor {pair} uit opgeslagen brondata. "
+                "Geef de benchmarkscore en bronstatus; wijzig niets.",
+            ))
+            if (turn.status != "completed" or turn.response is None
+                    or turn.response.proposal_id
+                    or turn.response.confirmation_required
+                    or turn.policy and turn.policy.execute_allowed):
+                checks["finn"] = False
+                continue
+            rows = asyncio.run(_read_tool_results(
+                run_id=turn.run_id, conversation_id=turn.conversation_id, user_id=user_id,
+            ))
+            matches = [row["data"] for row in rows if isinstance(row, dict)
+                       and row.get("scope") == "read_asset_scores"
+                       and row.get("status") == "completed"
+                       and isinstance(row.get("data"), dict)
+                       and row["data"].get("market_id") == expected["market_id"]
+                       and row["data"].get("pair") == pair]
+            checks["finn"] &= len(matches) == 1 and matches[0].get("benchmark_score") == expected["score"]
+        except Exception:
+            checks["finn"] = False
+    return checks
+
+
+async def _stale_date_display(user_id: int, source_at: str) -> dict[str, bool]:
+    """Exercise the deployed short UTC source-date formatter across offset zones."""
+    from backend.scripts.qa_protected_browser import observe_page
+    from backend.utils.auth_utils import create_access_token
+
+    token = create_access_token({"sub": str(user_id), "role": "user"})
+    checks = {}
+    try:
+        for zone in ("Europe/Amsterdam", "America/New_York", "Asia/Tokyo"):
+            async def inspect(page):
+                expected = await page.evaluate(
+                    "source => new Intl.DateTimeFormat('nl-NL', "
+                    "{day:'numeric',month:'long',year:'numeric',timeZone:'UTC'}).format(new Date(source))",
+                    source_at,
+                )
+                try:
+                    await page.get_by_text(expected, exact=False).first.wait_for(timeout=15000)
+                    return True
+                except Exception:
+                    return False
+            try:
+                checks[zone.split("/")[-1].lower()] = await observe_page(
+                    base_url="https://tradamind.com", path="/asset?symbol=BTC&quote=EUR",
+                    token=token, inspect=inspect, timezone_id=zone,
+                    bypass_fixture_onboarding=True,
+                ) is True
+            except Exception:
+                checks[zone.split("/")[-1].lower()] = False
+        return checks
+    finally:
+        token = None
+
+
 def _markets() -> dict[str, dict]:
     from backend.utils.scoring_utils import score_source_is_fresh
 
@@ -93,14 +180,16 @@ def _seed_pair_readings(user_id: int, markets: dict[str, dict]) -> None:
 
 def _set_eur_source_time(user_id: int, market_id: int, source_at: datetime,
                          *, stale: bool) -> None:
+    selected_at = ((datetime.now(timezone.utc) - timedelta(days=30)).replace(
+        hour=0, minute=30, second=0, microsecond=0, tzinfo=None,
+    ) if stale else source_at)
     connection = fixture._connection()
     try:
         with connection.cursor() as cursor:
             cursor.execute("""UPDATE market_data_indicators
-                SET source_observed_at=CASE WHEN %s THEN NOW()-INTERVAL '30 days' ELSE %s END,
-                    timestamp=CASE WHEN %s THEN NOW()-INTERVAL '30 days' ELSE %s END
+                SET source_observed_at=%s, timestamp=%s
                 WHERE user_id=%s AND symbol='BTC' AND market_id=%s AND name='change_24h'""",
-                (stale, source_at, stale, source_at, user_id, market_id))
+                (selected_at, selected_at, user_id, market_id))
             if cursor.rowcount != 1:
                 raise RuntimeError("btc_pair_fixture_source_missing")
         connection.commit()
@@ -191,26 +280,62 @@ def run(namespace: str) -> dict:
     try:
         user_id, bot_id, _ = fixture._seed(namespace, int(bound))
         _seed_pair_readings(user_id, markets)
-        initial = _snapshot(user_id, markets)
-        _set_eur_source_time(user_id, markets["BTC/EUR"]["market_id"],
-                             markets["BTC/EUR"]["source_at"], stale=True)
-        outage = _snapshot(user_id, markets)
-        _set_eur_source_time(user_id, markets["BTC/EUR"]["market_id"],
-                             markets["BTC/EUR"]["source_at"], stale=False)
-        recovered = _snapshot(user_id, markets)
+        before_business = _business_snapshot(user_id)
+        from backend.scripts.probe_protected_paper_exit_reconciliation import _guard_live_exchange
+
+        with _guard_live_exchange() as live_attempts:
+            initial = _snapshot(user_id, markets)
+            initial_transport = _transport_checks(user_id, initial)
+            _set_eur_source_time(user_id, markets["BTC/EUR"]["market_id"],
+                                 markets["BTC/EUR"]["source_at"], stale=True)
+            outage = _snapshot(user_id, markets)
+            outage_transport = _transport_checks(user_id, outage)
+            try:
+                stale_browser = asyncio.run(_stale_date_display(
+                    user_id, outage["pairs"]["BTC/EUR"]["source_at"],
+                ))
+            except Exception:
+                stale_browser = {}
+            _set_eur_source_time(user_id, markets["BTC/EUR"]["market_id"],
+                                 markets["BTC/EUR"]["source_at"], stale=False)
+            recovered = _snapshot(user_id, markets)
+            recovered_transport = _transport_checks(user_id, recovered)
+        after_business = _business_snapshot(user_id)
         result = check_pair_score_isolation(
             owner_id=user_id, initial=initial, outage=outage, recovered=recovered,
         )
+        transport = (initial_transport, outage_transport, recovered_transport)
+        transport_failures = [
+            f"{name}_transport_{surface}"
+            for name, checks in zip(("initial", "outage", "recovered"), transport)
+            for surface, passed_check in checks.items() if not passed_check
+        ]
+        if len(stale_browser) != 3 or not all(stale_browser.values()):
+            transport_failures.append("outage_stale_date_browser")
+        if live_attempts:
+            transport_failures.append("live_execution_attempt")
+        if (before_business["counts"] != after_business["counts"]
+                or before_business["fingerprints"] != after_business["fingerprints"]):
+            transport_failures.append("unexpected_business_write")
+        if transport_failures:
+            return {"result": "FAIL", "failed_checks": sorted(set(
+                result["failed_checks"] + transport_failures)),
+                "pairs": 2, "phases": 3, "analysis_transport_checked": True,
+                "finn_transport_checked": True, "stale_date_browser_checked": True,
+                "gate_status": "FAIL", "live_calls": len(live_attempts)}
         if result["result"] != "PASS":
             return {**result, "gate_status": "FAIL",
-                    "analysis_transport_checked": False,
-                    "finn_transport_checked": False}
+                    "analysis_transport_checked": True,
+                    "finn_transport_checked": True,
+                    "stale_date_browser_checked": True,
+                    "live_calls": len(live_attempts)}
         passed = True
         return {**result, "pairs": 2, "phases": 3,
-                "source_outage": "owner_scoped", "live_calls": 0,
-                "analysis_transport_checked": False,
-                "finn_transport_checked": False,
-                "gate_status": "PARTIAL"}
+                "source_outage": "owner_scoped", "live_calls": len(live_attempts),
+                "analysis_transport_checked": True,
+                "finn_transport_checked": True,
+                "stale_date_browser_checked": True,
+                "gate_status": "PASS"}
     finally:
         if user_id is not None and bot_id is not None:
             if passed:

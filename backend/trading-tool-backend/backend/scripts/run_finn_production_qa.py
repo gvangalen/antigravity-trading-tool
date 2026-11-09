@@ -43,6 +43,7 @@ ALLOWED_PROFILES = {
     "score2_exact_eur_paper",
     "trader_pair_score_continuity",
     "trader_account_state_readback",
+    "trader_source_time_parity",
     "trader_paper_exit_reconciliation",
     "trader_paper_exit_fixture_audit",
     "trader_strategy_schema_audit",
@@ -214,7 +215,7 @@ def profile_error_category(profile: str, error: Exception) -> str:
             "fixture_binding_invalid", "fixture_has_exchange_keys",
             "fixture_cleanup_failed", "fixture_quarantine_failed",
         } else "account_probe_runtime_error")
-    if profile == "trader_paper_exit_reconciliation":
+    if profile in {"trader_paper_exit_reconciliation", "trader_source_time_parity"}:
         code = str(error)
         return (code if code in {
             "paper_exit_fixture_not_authorized", "paper_exit_namespace_invalid",
@@ -260,6 +261,7 @@ def profile_error_category(profile: str, error: Exception) -> str:
             "paper_exit_rendered_tab_absent_failed",
             "paper_exit_rendered_details_failed",
             "paper_exit_rendered_projection_failed",
+            "paper_exit_source_parity_failed",
         } else "paper_exit_probe_runtime_error")
     if profile == "trader_paper_exit_fixture_audit":
         code = str(error)
@@ -2451,7 +2453,7 @@ def main() -> int:
                     "passed" if report[args.profile]["result"] == "PASS" else "failed"
                 )
                 report["qa_status"] = "COMPLETED"
-            elif args.profile == "trader_paper_exit_reconciliation":
+            elif args.profile in {"trader_paper_exit_reconciliation", "trader_source_time_parity"}:
                 if args.manifest_id != "none" or args.manifest_bundle_path:
                     raise ValueError("paper_exit_fixture_manifest_forbidden")
                 if os.getenv("FINN_QA_ALLOW_PAPER_EXIT_FIXTURE") != "1":
@@ -2463,7 +2465,10 @@ def main() -> int:
                 report["safety"]["execution_calls"] = None
                 from backend.scripts.probe_protected_paper_exit_reconciliation import run as run_exit_probe
 
-                report[args.profile] = run_exit_probe(fixture_namespace or "")
+                report[args.profile] = run_exit_probe(
+                    fixture_namespace or "",
+                    source_parity=args.profile == "trader_source_time_parity",
+                )
                 report["safety"]["execution_calls"] = report[args.profile].get("engine_calls")
                 report["outcome"] = (
                     "passed" if report[args.profile]["result"] == "PASS" else "failed"

@@ -91,7 +91,8 @@ def test_trader_gate_profiles_are_protected_and_distinguish_execution_scope():
     module = _module()
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
     dispatch = DISPATCH_SCRIPT_PATH.read_text(encoding="utf-8")
-    for profile in ("trader_pair_score_continuity", "trader_paper_exit_reconciliation"):
+    for profile in ("trader_pair_score_continuity", "trader_account_state_readback",
+                    "trader_source_time_parity", "trader_paper_exit_reconciliation"):
         assert profile in module.ALLOWED_PROFILES
         assert profile in workflow and profile in dispatch
         assert f'if [ "$QA_PROFILE" = "{profile}" ]' in workflow
@@ -103,11 +104,11 @@ def test_trader_gate_profiles_are_protected_and_distinguish_execution_scope():
     assert "The automatic Paper-exit probe requires fixture and safe-execution authorization" in workflow
     source = SCRIPT_PATH.read_text(encoding="utf-8")
     pair_branch = source.split('elif args.profile == "trader_pair_score_continuity":', 1)[1].split(
-        'elif args.profile == "trader_paper_exit_reconciliation":', 1
+        'elif args.profile == "trader_account_state_readback":', 1
     )[0]
-    exit_branch = source.split('elif args.profile == "trader_paper_exit_reconciliation":', 1)[1].split(
-        'elif args.profile in {"closed_paper_trade_review"', 1
-    )[0]
+    exit_branch = source.split(
+        'elif args.profile in {"trader_paper_exit_reconciliation", "trader_source_time_parity"}:', 1
+    )[1].split('elif args.profile == "trader_paper_exit_fixture_audit":', 1)[0]
     for branch in (pair_branch, exit_branch):
         assert branch.index('report["protected_profile_attempted"] = True') < branch.index('report[args.profile] =')
         assert branch.index('report["qa_status"] = "INCOMPLETE"') < branch.index('report[args.profile] =')
