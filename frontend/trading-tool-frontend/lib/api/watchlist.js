@@ -4,7 +4,7 @@ export async function fetchWatchlist() {
   return await fetchAuth("/api/watchlist", { forceFresh: true });
 }
 
-export async function addToWatchlist(asset) {
+export async function addToWatchlist(asset, options = {}) {
   const payload = typeof asset === "string"
     ? { symbol: asset }
     : {
@@ -17,6 +17,7 @@ export async function addToWatchlist(asset) {
   return await fetchAuth("/api/watchlist", {
     method: "POST",
     body: JSON.stringify(payload),
+    ...options,
   });
 }
 

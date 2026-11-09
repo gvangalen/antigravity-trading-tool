@@ -139,12 +139,20 @@ export function useWatchlist(options = {}) {
   async function add(asset) {
     try {
       if (!cacheKey || activeCacheKeyRef.current !== cacheKey) return;
-      await addToWatchlist(asset);
+      const controller = new AbortController();
+      const abortOnAuthChange = () => controller.abort();
+      window.addEventListener("tradamind:auth-scope-changed", abortOnAuthChange);
+      try {
+        await addToWatchlist(asset, { signal: controller.signal });
+      } finally {
+        window.removeEventListener("tradamind:auth-scope-changed", abortOnAuthChange);
+      }
       if (activeCacheKeyRef.current !== cacheKey) return;
       await loadWatchlist(true);
       if (activeCacheKeyRef.current !== cacheKey) return;
       invalidateWatchlist();
     } catch (err) {
+      if (err?.name === "AbortError") return;
       console.error("❌ Watchlist add error:", err);
       throw err;
     }
@@ -153,12 +161,20 @@ export function useWatchlist(options = {}) {
   async function remove(symbol, marketId = null) {
     try {
       if (!cacheKey || activeCacheKeyRef.current !== cacheKey) return;
-      await removeFromWatchlist(symbol, marketId);
+      const controller = new AbortController();
+      const abortOnAuthChange = () => controller.abort();
+      window.addEventListener("tradamind:auth-scope-changed", abortOnAuthChange);
+      try {
+        await removeFromWatchlist(symbol, marketId, { signal: controller.signal });
+      } finally {
+        window.removeEventListener("tradamind:auth-scope-changed", abortOnAuthChange);
+      }
       if (activeCacheKeyRef.current !== cacheKey) return;
       await loadWatchlist(true);
       if (activeCacheKeyRef.current !== cacheKey) return;
       invalidateWatchlist();
     } catch (err) {
+      if (err?.name === "AbortError") return;
       console.error("❌ Watchlist remove error:", err);
       throw err;
     }
