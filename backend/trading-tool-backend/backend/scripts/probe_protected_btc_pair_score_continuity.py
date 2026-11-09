@@ -127,7 +127,7 @@ def _finn_terminal_diagnostic(turn) -> dict[str, str]:
 def _business_snapshot(user_id: int) -> dict:
     from backend.scripts.probe_protected_account_answer import _business_state
 
-    return _business_state(user_id)
+    return _business_state(user_id, diagnostic=True)
 
 
 async def _score_tool_seen(*, user_id: int, run_id: str, conversation_id: str) -> bool | str:
@@ -736,6 +736,17 @@ def run(namespace: str) -> dict:
                 "outage_quote_pending_browser_checked": True,
                 "gate_status": "PASS"}
     except Exception as error:
+        if stage == "baseline":
+            from backend.scripts.probe_protected_account_answer import (
+                BUSINESS_MEASUREMENT_ERROR_KINDS, BUSINESS_MEASUREMENT_STAGES,
+            )
+            code = str(error)
+            for measurement_stage in BUSINESS_MEASUREMENT_STAGES:
+                for kind in BUSINESS_MEASUREMENT_ERROR_KINDS:
+                    if code == f"account_safety_measurement_{measurement_stage}_{kind}_unavailable":
+                        raise RuntimeError(
+                            f"trader_pair_baseline_{measurement_stage}_{kind}_failed"
+                        ) from None
         snapshot_step = str(error).removeprefix("trader_pair_snapshot_").removesuffix("_failed")
         if (stage in {"initial_snapshot", "outage_snapshot", "recovery_snapshot"}
                 and snapshot_step.startswith("assessment_")

@@ -191,6 +191,14 @@ def profile_error_category(profile: str, error: Exception) -> str:
                 else "portfolio_paper_fx_schema_runtime_error")
     if profile == "trader_pair_score_continuity":
         code = str(error)
+        from backend.scripts.probe_protected_account_answer import (
+            BUSINESS_MEASUREMENT_ERROR_KINDS, BUSINESS_MEASUREMENT_STAGES,
+        )
+        baseline_codes = {
+            f"trader_pair_baseline_{stage}_{kind}_failed"
+            for stage in BUSINESS_MEASUREMENT_STAGES
+            for kind in BUSINESS_MEASUREMENT_ERROR_KINDS
+        }
         snapshot_codes = {
             f"trader_pair_{phase}_snapshot_{step}_failed"
             for phase in ("initial", "outage", "recovery")
@@ -206,7 +214,7 @@ def profile_error_category(profile: str, error: Exception) -> str:
             for origin in ("match_asset", "match_source", "match_weights",
                            "pair_weights", "score_diagnosis", "other")
         }
-        return (code if code in snapshot_codes | assessment_codes | {
+        return (code if code in snapshot_codes | assessment_codes | baseline_codes | {
             "trader_pair_fixture_not_authorized", "trader_pair_namespace_invalid",
             "fixture_binding_invalid", "btc_pair_markets_unavailable",
             "btc_pair_source_unavailable", "btc_pair_fixture_source_missing",

@@ -634,6 +634,87 @@ def test_probe_error_category_does_not_export_database_details():
     assert profile_error_category(
         "trader_pair_score_continuity", RuntimeError("btc_pair_source_unavailable")
     ) == "btc_pair_source_unavailable"
+    assert profile_error_category(
+        "trader_pair_score_continuity", RuntimeError(
+            "trader_pair_baseline_bot_ledger_undefinedcolumn_failed")
+    ) == "trader_pair_baseline_bot_ledger_undefinedcolumn_failed"
+    assert profile_error_category(
+        "trader_pair_score_continuity", RuntimeError(
+            "trader_pair_baseline_private_owner_undefinedcolumn_failed")
+    ) == "trader_pair_probe_runtime_error"
+
+
+def test_baseline_measurement_reports_only_fixed_table_and_error_kind(monkeypatch):
+    from backend.scripts import probe_protected_account_answer as account_probe
+
+    class UndefinedColumn(Exception):
+        pass
+
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, query, *_args):
+            if "FROM bot_ledger" in query:
+                raise UndefinedColumn("private owner 92741 and SQL details")
+
+        def fetchall(self):
+            return []
+
+        def fetchone(self):
+            return (0,)
+
+    class Connection:
+        closed = False
+
+        def cursor(self):
+            return Cursor()
+
+        def close(self):
+            self.closed = True
+
+    connection = Connection()
+    monkeypatch.setattr(account_probe.fixture, "_connection", lambda: connection)
+    with pytest.raises(RuntimeError,
+                       match="^account_safety_measurement_bot_ledger_undefinedcolumn_unavailable$"):
+        probe._business_snapshot(11)
+    assert connection.closed
+    with pytest.raises(RuntimeError, match="^account_safety_measurement_unavailable$"):
+        account_probe._business_state(11)
+
+
+def test_baseline_measurement_masks_unrecognized_exception_class_and_message(monkeypatch):
+    from backend.scripts import probe_protected_account_answer as account_probe
+
+    class PrivateFixtureOwner92741(Exception):
+        pass
+
+    def fail_connection():
+        raise PrivateFixtureOwner92741("private token and SQL details")
+
+    monkeypatch.setattr(account_probe.fixture, "_connection", fail_connection)
+    with pytest.raises(RuntimeError,
+                       match="^account_safety_measurement_connection_other_unavailable$"):
+        probe._business_snapshot(11)
+
+
+def test_baseline_failure_is_classified_and_quarantined(monkeypatch):
+    monkeypatch.setenv("FINN_QA_ALLOW_TRADER_PAIR_FIXTURE", "1")
+    monkeypatch.setenv("FINN_QA_USER_ID", "7")
+    monkeypatch.setattr(probe, "_markets", lambda: MARKETS)
+    monkeypatch.setattr(probe.fixture, "_seed", lambda *_args: (11, 22, "today"))
+    monkeypatch.setattr(probe, "_seed_pair_readings", lambda *_args: None)
+    monkeypatch.setattr(probe, "_business_snapshot", lambda *_args: (_ for _ in ()).throw(
+        RuntimeError("account_safety_measurement_bot_ledger_undefinedcolumn_unavailable")))
+    quarantined = []
+    monkeypatch.setattr(probe.fixture, "_quarantine", lambda *_args: quarantined.append(True))
+    with pytest.raises(RuntimeError,
+                       match="^trader_pair_baseline_bot_ledger_undefinedcolumn_failed$"):
+        probe.run(NAMESPACE)
+    assert quarantined == [True]
 
 
 def test_probe_reports_fixed_readings_stage_and_quarantines(monkeypatch):
