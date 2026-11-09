@@ -211,8 +211,35 @@ async def _read_finn_pairs(user_id: int, pairs: list[str]) -> dict:
     return results
 
 
+class _LoopRunner:
+    """Run every protected FINN/browser read on one Python 3.10-compatible loop."""
+
+    def __init__(self, loop: asyncio.AbstractEventLoop):
+        self.loop = loop
+
+    def run(self, coroutine):
+        return self.loop.run_until_complete(coroutine)
+
+
+@contextmanager
+def _shared_loop_runner():
+    loop = asyncio.new_event_loop()
+    try:
+        asyncio.set_event_loop(loop)
+        yield _LoopRunner(loop)
+    finally:
+        try:
+            if not loop.is_closed():
+                loop.run_until_complete(loop.shutdown_asyncgens())
+                if hasattr(loop, "shutdown_default_executor"):
+                    loop.run_until_complete(loop.shutdown_default_executor())
+        finally:
+            asyncio.set_event_loop(None)
+            loop.close()
+
+
 def _transport_checks(user_id: int, snapshot: dict,
-                      runner: asyncio.Runner | None = None) -> dict[str, bool]:
+                      runner: _LoopRunner | None = None) -> dict[str, bool]:
     """Compare normal owner-scoped Analysis GET and FINN chat reads with frozen scores."""
     from backend.scripts.qa_protected_readback import read_json
 
@@ -656,7 +683,7 @@ def run(namespace: str) -> dict:
         stage = "live_guard_entry"
         with _guard_live_exchange() as live_attempts:
             stage = "runner_entry"
-            with asyncio.Runner() as runner:
+            with _shared_loop_runner() as runner:
                 stage = "initial_snapshot"
                 initial = _snapshot(user_id, markets)
                 stage = "initial_transport"

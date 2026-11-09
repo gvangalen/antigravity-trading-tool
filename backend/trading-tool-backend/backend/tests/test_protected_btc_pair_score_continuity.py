@@ -778,13 +778,11 @@ def test_runner_entry_failure_is_not_mislabeled_as_live_guard(monkeypatch):
     def live_guard():
         yield []
     monkeypatch.setattr(exit_probe, "_guard_live_exchange", live_guard)
-    class BrokenRunner:
-        def __enter__(self):
-            raise TypeError("private owner 92741")
-
-        def __exit__(self, *_args):
-            return False
-    monkeypatch.setattr(probe.asyncio, "Runner", BrokenRunner)
+    @contextmanager
+    def broken_runner():
+        raise TypeError("private owner 92741")
+        yield
+    monkeypatch.setattr(probe, "_shared_loop_runner", broken_runner)
     quarantined = []
     monkeypatch.setattr(probe.fixture, "_quarantine", lambda *_args: quarantined.append(True))
     with pytest.raises(RuntimeError, match="^trader_pair_runner_entry_typeerror_failed$"):
@@ -792,6 +790,20 @@ def test_runner_entry_failure_is_not_mislabeled_as_live_guard(monkeypatch):
     assert quarantined == [True]
     assert profile_error_category("trader_pair_score_continuity", RuntimeError(
         "trader_pair_runner_entry_typeerror_failed")) == "trader_pair_runner_entry_typeerror_failed"
+
+
+def test_shared_loop_is_python_310_compatible_and_closes_after_failure(monkeypatch):
+    # Production may lack asyncio.Runner (added in Python 3.11).
+    with monkeypatch.context() as scoped:
+        scoped.delattr(probe.asyncio, "Runner", raising=False)
+        with pytest.raises(ValueError, match="test failure"):
+            with probe._shared_loop_runner() as runner:
+                loop = runner.loop
+                async def loop_id():
+                    return id(asyncio.get_running_loop())
+                assert runner.run(loop_id()) == runner.run(loop_id())
+                raise ValueError("test failure")
+        assert loop.is_closed()
 
 
 def test_baseline_failure_is_classified_and_quarantined(monkeypatch):
