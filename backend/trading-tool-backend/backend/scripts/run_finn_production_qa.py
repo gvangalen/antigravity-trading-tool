@@ -31,6 +31,7 @@ from backend.scripts.finn_v2_matrix_transport import TERMINAL_STATUSES, observe_
 ALLOWED_PROFILES = {
     "auth_preflight",
     "watchlist_browser_ui",
+    "watchlist_context_audit",
     "trade_review_preflight",
     "manifest_key",
     "targeted_regression",
@@ -2386,6 +2387,50 @@ def load_watchlist_browser_probe(args: argparse.Namespace):
     return loaded[-1]
 
 
+def audit_watchlist_context(run_label: str) -> dict[str, bool]:
+    """Emit only owner-bound booleans for one already published QA read run."""
+    match = re.fullmatch(r"audit-([0-9a-f]{32})-([a-z0-9]+)-([a-z0-9]+)", run_label)
+    raw_owner = os.environ.get("FINN_QA_USER_ID", "")
+    if not match or not raw_owner.isdigit():
+        raise ValueError("watchlist_context_audit_input_invalid")
+    run_id = "finn-v2-run-" + match.group(1)
+    pair = f"{match.group(2)}/{match.group(3)}".upper()
+
+    async def read():
+        from sqlalchemy import text
+        from backend.infrastructure.database import async_session_factory
+
+        async with async_session_factory() as session:
+            row = (await session.execute(text("""
+                SELECT u.ai_preferences, c.state_json
+                FROM finn_v2_runs AS r
+                JOIN finn_v2_runtime_contracts AS c ON c.run_id = r.id
+                JOIN users AS u ON u.id = r.user_id
+                WHERE r.id = :run_id AND r.user_id = :owner_id AND c.user_id = :owner_id
+            """), {"run_id": run_id, "owner_id": int(raw_owner)})).one_or_none()
+        if row is None:
+            raise ValueError("watchlist_context_audit_run_not_owned")
+        prefs = row[0] if isinstance(row[0], dict) else {}
+        state = row[1] if isinstance(row[1], dict) else {}
+        exchange = state.get("responses_exchange") or {}
+        calls = exchange.get("tool_trace") or []
+        watchlist_calls = [item for item in calls if isinstance(item, dict) and item.get("name") == "read_watchlist"]
+        base, quote = pair.split("/", 1)
+        answer = str(exchange.get("answer") or "").upper()
+        return {
+            "selected_asset_present": bool(prefs.get("selected_asset")),
+            "active_asset_present": bool(prefs.get("active_asset")),
+            "read_active_asset_invoked": any(isinstance(item, dict) and item.get("name") == "read_active_asset" for item in calls),
+            "read_watchlist_invoked": bool(watchlist_calls),
+            "typed_pair_present_in_tool_result": any(pair in json.dumps(item.get("result"), ensure_ascii=False).upper() for item in watchlist_calls),
+            "answer_has_base": base in answer,
+            "answer_has_quote": quote in answer,
+            "answer_has_exact_pair": pair in answer,
+        }
+
+    return asyncio.run(read())
+
+
 def main() -> int:
     args = parse_args()
     if not re.fullmatch(r"[0-9a-f]{40}", args.release_sha):
@@ -2451,6 +2496,15 @@ def main() -> int:
                 probe = load_watchlist_browser_probe(args)
                 report["watchlist_browser_ui"] = probe.run(token)
                 report["outcome"] = "passed" if report["watchlist_browser_ui"]["passed"] else "failed"
+                report["qa_status"] = "COMPLETED"
+            elif args.profile == "watchlist_context_audit":
+                if args.manifest_id != "none" or args.manifest_bundle_path:
+                    raise ValueError("watchlist_context_audit_manifest_forbidden")
+                if (os.getenv("FINN_QA_ALLOW_FIXTURE_ACTIONS") == "1"
+                        or os.getenv("FINN_QA_ALLOW_FIXTURE_EXECUTION") == "1"):
+                    raise ValueError("watchlist_context_audit_writes_forbidden")
+                report["watchlist_context_audit"] = audit_watchlist_context(args.run_label)
+                report["outcome"] = "passed"
                 report["qa_status"] = "COMPLETED"
             elif args.profile == "trade_review_preflight":
                 if args.manifest_id != "none" or args.manifest_bundle_path:
