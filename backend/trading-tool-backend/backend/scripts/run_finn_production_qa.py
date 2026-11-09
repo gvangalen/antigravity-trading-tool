@@ -2389,11 +2389,11 @@ def load_watchlist_browser_probe(args: argparse.Namespace):
 
 def audit_watchlist_context(run_label: str) -> dict[str, bool]:
     """Emit only owner-bound booleans for one already published QA read run."""
-    match = re.fullmatch(r"audit-([0-9a-f]{32})-([a-z0-9]+)-([a-z0-9]+)", run_label)
+    match = re.fullmatch(r"audit-([0-9a-f]{64})-([a-z0-9]+)-([a-z0-9]+)", run_label)
     raw_owner = os.environ.get("FINN_QA_USER_ID", "")
     if not match or not raw_owner.isdigit():
         raise ValueError("watchlist_context_audit_input_invalid")
-    run_id = "finn-v2-run-" + match.group(1)
+    run_selector = match.group(1)
     pair = f"{match.group(2)}/{match.group(3)}".upper()
 
     async def read():
@@ -2401,13 +2401,22 @@ def audit_watchlist_context(run_label: str) -> dict[str, bool]:
         from backend.infrastructure.database import async_session_factory
 
         async with async_session_factory() as session:
+            candidate_rows = (await session.execute(text("""
+                SELECT id FROM finn_v2_runs
+                WHERE user_id = :owner_id AND created_at > NOW() - INTERVAL '7 days'
+                ORDER BY created_at DESC LIMIT 5000
+            """), {"owner_id": int(raw_owner)})).all()
+            matched = [item[0] for item in candidate_rows
+                       if hashlib.sha256(str(item[0]).encode()).hexdigest() == run_selector]
+            if len(matched) != 1:
+                raise ValueError("watchlist_context_audit_run_not_owned")
             row = (await session.execute(text("""
                 SELECT u.ai_preferences, c.state_json
                 FROM finn_v2_runs AS r
                 JOIN finn_v2_runtime_contracts AS c ON c.run_id = r.id
                 JOIN users AS u ON u.id = r.user_id
                 WHERE r.id = :run_id AND r.user_id = :owner_id AND c.user_id = :owner_id
-            """), {"run_id": run_id, "owner_id": int(raw_owner)})).one_or_none()
+            """), {"run_id": matched[0], "owner_id": int(raw_owner)})).one_or_none()
         if row is None:
             raise ValueError("watchlist_context_audit_run_not_owned")
         prefs = row[0] if isinstance(row[0], dict) else {}
@@ -2443,6 +2452,8 @@ def main() -> int:
     report_path = Path(args.report_path)
     fixture_namespace = getattr(args, "fixture_namespace", None)
     report: Dict[str, Any] = {"schema_version": 1, "workflow": "finn-production-qa", "workflow_run_id": args.workflow_run_id, "runner_revision": runner_revision, "target_sha": args.release_sha, "profile": args.profile, "run_label": args.run_label, "manifest_id": args.manifest_id, "manifest_sha256": None, "base_manifest_hash": None, "manifest_public_key": None, "fixture_namespace_present": bool(fixture_namespace), "release_identity": {}, "auth_preflight": {}, "cases": [], "planned_count": 0, "attempted_count": 0, "completed_count": 0, "failed_count": 0, "not_run_count": 0, "incomplete": False, "failure_summary": {"product": 0, "runner": 0, "infrastructure": 0}, "safety": {"read_only_profile": True, "confirmation_calls": 0, "execution_calls": 0, "live_trading_calls": 0, "live_bot_activation_calls": 0}, "outcome": "failed", "qa_status": "NOT_STARTED", "error_category": None}
+    if args.profile == "watchlist_context_audit":
+        report["run_label"] = "watchlist-context-audit"
     token: Optional[str] = None
     known_cases: list[Dict[str, Any]] = []
     try:

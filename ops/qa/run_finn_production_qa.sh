@@ -28,7 +28,7 @@ fi
 if [[ "$qa_profile" == "trade_review_preflight" && ( "$manifest_id" != "none" || -n "$manifest_bundle_path" || "$allow_fixture_actions" == "true" || "$allow_safe_fixture_execution" == "true" ) ]]; then
   usage
 fi
-if [[ "$qa_profile" == "watchlist_context_audit" && ( "$manifest_id" != "none" || -n "$manifest_bundle_path" || "$allow_fixture_actions" == "true" || "$allow_safe_fixture_execution" == "true" || ! "$run_label" =~ ^audit-[0-9a-f]{32}-[a-z0-9]+-[a-z0-9]+$ ) ]]; then
+if [[ "$qa_profile" == "watchlist_context_audit" && ( "$manifest_id" != "none" || -n "$manifest_bundle_path" || "$allow_fixture_actions" == "true" || "$allow_safe_fixture_execution" == "true" || ! "$run_label" =~ ^audit-[0-9a-f]{64}-[a-z0-9]+-[a-z0-9]+$ ) ]]; then
   usage
 fi
 if [[ "$qa_profile" == "watchlist_browser_ui" && ( "$manifest_id" != "none" || -n "$manifest_bundle_path" || "$allow_fixture_actions" == "true" || "$allow_safe_fixture_execution" == "true" ) ]]; then

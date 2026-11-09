@@ -1,9 +1,11 @@
 import pytest
+import hashlib
 
 from backend.scripts.run_finn_production_qa import audit_watchlist_context
 
 
 class _Session:
+    query_kind = None
     async def __aenter__(self):
         return self
 
@@ -11,11 +13,18 @@ class _Session:
         return None
 
     async def execute(self, statement, params):
-        assert "r.user_id = :owner_id" in str(statement)
-        assert "c.user_id = :owner_id" in str(statement)
+        self.query_kind = "candidate" if "SELECT id FROM finn_v2_runs" in str(statement) else "bound"
+        if self.query_kind == "bound":
+            assert "r.user_id = :owner_id" in str(statement)
+            assert "c.user_id = :owner_id" in str(statement)
         assert params["owner_id"] == 42
-        assert params["run_id"].startswith("finn-v2-run-")
+        if self.query_kind == "bound":
+            assert params["run_id"].startswith("finn-v2-run-")
         return self
+
+    def all(self):
+        assert self.query_kind == "candidate"
+        return [("finn-v2-run-5733cb84bd40445688d0c7a394c0ed85",)]
 
     def one_or_none(self):
         return (
@@ -32,7 +41,8 @@ def test_context_audit_emits_only_bound_boolean_evidence(monkeypatch):
 
     monkeypatch.setenv("FINN_QA_USER_ID", "42")
     monkeypatch.setattr(database, "async_session_factory", lambda: _Session())
-    result = audit_watchlist_context("audit-5733cb84bd40445688d0c7a394c0ed85-btc-usdt")
+    selector = hashlib.sha256(b"finn-v2-run-5733cb84bd40445688d0c7a394c0ed85").hexdigest()
+    result = audit_watchlist_context(f"audit-{selector}-btc-usdt")
     assert result == {
         "selected_asset_present": False,
         "active_asset_present": False,

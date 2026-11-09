@@ -140,7 +140,7 @@ jobs:
             echo "Watchlist browser profile does not accept a manifest." >&2
             exit 1
           fi
-          if [ "$QA_PROFILE" = "watchlist_context_audit" ] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ] || [[ ! "$RUN_LABEL" =~ ^audit-[0-9a-f]{32}-[a-z0-9]+-[a-z0-9]+$ ]]; }; then
+          if [ "$QA_PROFILE" = "watchlist_context_audit" ] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ] || [[ ! "$RUN_LABEL" =~ ^audit-[0-9a-f]{64}-[a-z0-9]+-[a-z0-9]+$ ]]; }; then
             echo "Watchlist context audit requires a bound run label and no manifest." >&2
             exit 1
           fi
