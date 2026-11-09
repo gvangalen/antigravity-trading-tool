@@ -109,7 +109,14 @@ def test_finn_transport_diagnostic_uses_only_fixed_phase_codes(monkeypatch, rows
     assert "99" not in str(result) and "11" not in str(result)
 
 
-def test_outage_browser_scopes_pending_score_to_btc_eur_indicator(monkeypatch):
+@pytest.mark.parametrize("quote_market_id,response_market_id,phase", [
+    (1, 1, "indicator_missing"),
+    (2, 1, "page_unavailable"),
+    (1, 2, "api_source_unverified"),
+])
+def test_outage_browser_scopes_pending_score_and_quote_market(
+    monkeypatch, quote_market_id, response_market_id, phase,
+):
     from backend.scripts import qa_protected_browser, qa_protected_readback
     from backend.scripts import probe_protected_source_time_parity as source_probe
 
@@ -118,8 +125,10 @@ def test_outage_browser_scopes_pending_score_to_btc_eur_indicator(monkeypatch):
         "market_id": 1, "pair": "BTC/EUR", "daily": {"market": {"score": None}},
         "combined": {"score": None},
         "score_source_observed_at": {"market": {"change_24h": source_at}},
-        "categories": {"market": {"rows": [{"name": "change_24h", "score": None}]}},
-        "quote": {"source_ref": {"market_id": 1, "measurement_id": 9,
+        "categories": {"market": {"rows": [{"name": "change_24h", "score": None,
+            "indicator_source_observed_at": source_at,
+            "source_observed_at": "2026-11-09T09:12:00+00:00"}]}},
+        "quote": {"source_ref": {"market_id": quote_market_id, "measurement_id": 9,
                                  "source_observed_at_utc": "2026-11-09T09:12:00+00:00"}},
     }
     monkeypatch.setattr(qa_protected_readback, "read_json", lambda **_kwargs: workspace)
@@ -131,7 +140,9 @@ def test_outage_browser_scopes_pending_score_to_btc_eur_indicator(monkeypatch):
         url = "https://tradamind.com/api/assets/BTC/trading-markets/EUR/select?include_workspace=true"
         status = 200
         async def json(self):
-            return {"workspace": workspace}
+            projected = deepcopy(workspace)
+            projected["quote"]["source_ref"]["market_id"] = response_market_id
+            return {"workspace": projected}
 
     class Locator:
         async def count(self):
@@ -164,9 +175,48 @@ def test_outage_browser_scopes_pending_score_to_btc_eur_indicator(monkeypatch):
         observe_response(Response())
         return await inspect(Page())
     monkeypatch.setattr(qa_protected_browser, "observe_page", observe_page)
-    phases = asyncio.run(probe._stale_date_display(11, source_at))
-    assert phases == {"amsterdam": "indicator_missing", "new_york": "indicator_missing",
-                      "tokyo": "indicator_missing"}
+    phases = asyncio.run(probe._stale_date_display(11, source_at, 1))
+    assert phases == {"amsterdam": phase, "new_york": phase, "tokyo": phase}
+
+
+def test_real_browser_requires_old_source_date_inside_btc_eur_indicator_row():
+    playwright = pytest.importorskip("playwright.async_api")
+
+    async def exercise():
+        async with playwright.async_playwright() as runtime:
+            try:
+                browser = await runtime.chromium.launch(headless=True, args=["--no-sandbox"])
+            except playwright.Error:
+                pytest.skip("Chromium unavailable")
+            try:
+                page = await browser.new_page()
+                old = "10 okt 2026 00:30 UTC"
+                current = "9 nov 2026 09:12 UTC"
+                await page.set_content(f"""
+                    <p>{old}</p>
+                    <section><h2>Markt</h2><button>Prijsverandering 24 uur
+                      <span>Score wordt berekend</span>
+                      <span>Laatste indicatormeting: {old}.</span>
+                      <span>Getoonde 24-uursverandering uit koersbron: {current}.</span>
+                    </button></section>
+                """)
+                assert await probe._outage_indicator_visible(
+                    page, old_source_time=old, current_quote_time=current, timeout_ms=150,
+                ) == "ok"
+                await page.set_content(f"""
+                    <p>{old}</p>
+                    <section><h2>Markt</h2><button>Prijsverandering 24 uur
+                      <span>Score wordt berekend</span>
+                      <span>Getoonde 24-uursverandering uit koersbron: {current}.</span>
+                    </button></section>
+                """)
+                assert await probe._outage_indicator_visible(
+                    page, old_source_time=old, current_quote_time=current, timeout_ms=150,
+                ) == "old_source_date_or_pending_missing"
+            finally:
+                await browser.close()
+
+    asyncio.run(exercise())
 
 
 def test_probe_runs_three_pair_snapshots_and_cleans_only_verified_fixture(monkeypatch):

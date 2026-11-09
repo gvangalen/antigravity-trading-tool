@@ -97,14 +97,18 @@ def _observed_utc(value: object) -> str | None:
 
 
 async def _target_quote_visible(page, *, surface: str, locale: str, expected: str,
-                                timeout_ms: int = 15000) -> str:
+                                timeout_ms: int = 15000,
+                                quote_currency: str = "USDT") -> str:
     """Inspect only the active USDT card or the report's BTC/USDT quote row."""
     try:
         if surface == "analysis":
             card = page.get_by_text("Actieve analyse", exact=True).locator("xpath=ancestor::section[1]")
             if await card.count() != 1:
                 return "target_card_missing"
-            await card.get_by_text(re.compile(r"\bUSDT\b")).first.wait_for(timeout=5000)
+            if quote_currency not in {"EUR", "USDT"}:
+                return "target_quote_missing"
+            await card.get_by_text(re.compile(rf"\b{re.escape(quote_currency)}\b")).first.wait_for(
+                timeout=min(timeout_ms, 5000))
             quote = card.get_by_text(expected, exact=True)
         else:
             card = page.locator(".report-v2-at-glance-item").filter(

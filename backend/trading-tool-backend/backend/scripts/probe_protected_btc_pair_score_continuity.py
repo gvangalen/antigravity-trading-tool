@@ -121,7 +121,31 @@ def _transport_checks(user_id: int, snapshot: dict) -> dict[str, bool]:
     return checks
 
 
-async def _stale_date_display(user_id: int, source_at: str) -> dict[str, str]:
+async def _outage_indicator_visible(page, *, old_source_time: str,
+                                    current_quote_time: str,
+                                    timeout_ms: int = 15000) -> str:
+    """Require the old measurement date in the exact visible BTC/EUR row."""
+    try:
+        market = page.get_by_role("heading", name="Markt", exact=True).locator(
+            "xpath=ancestor::section[1]")
+        if await market.count() != 1:
+            return "market_section_missing"
+        indicator = market.get_by_role("button").filter(has_text="Prijsverandering 24 uur")
+        if await indicator.count() != 1:
+            return "indicator_missing"
+        await indicator.get_by_text("Score wordt berekend", exact=False).wait_for(timeout=timeout_ms)
+        await indicator.get_by_text(
+            f"Laatste indicatormeting: {old_source_time}", exact=False,
+        ).wait_for(timeout=timeout_ms)
+        await indicator.get_by_text(
+            f"Getoonde 24-uursverandering uit koersbron: {current_quote_time}", exact=False,
+        ).wait_for(timeout=timeout_ms)
+        return "ok"
+    except Exception:
+        return "old_source_date_or_pending_missing"
+
+
+async def _stale_date_display(user_id: int, source_at: str, market_id: int) -> dict[str, str]:
     """Check the current quote date and pending pair score during an outage."""
     from backend.scripts.qa_protected_browser import observe_page
     from backend.scripts.qa_protected_readback import read_json
@@ -142,6 +166,7 @@ async def _stale_date_display(user_id: int, source_at: str) -> dict[str, str]:
                 )
                 stale_moment = ((workspace.get("score_source_observed_at") or {})
                                 .get("market") or {}).get("change_24h")
+                expected_stale = None
                 try:
                     selected_stale = datetime.fromisoformat(str(stale_moment).replace("Z", "+00:00"))
                     expected_stale = datetime.fromisoformat(str(source_at).replace("Z", "+00:00"))
@@ -153,12 +178,22 @@ async def _stale_date_display(user_id: int, source_at: str) -> dict[str, str]:
                     same_stale = False
                 row = [item for item in (workspace.get("categories") or {}).get("market", {}).get("rows", [])
                        if item.get("name") == "change_24h"]
-                if (workspace.get("pair") != "BTC/EUR"
+                quote_ref = _normalized_ref((workspace.get("quote") or {}).get("source_ref"))
+                try:
+                    row_old = datetime.fromisoformat(
+                        str(row[0].get("indicator_source_observed_at")).replace("Z", "+00:00"))
+                    row_current = datetime.fromisoformat(
+                        str(row[0].get("source_observed_at")).replace("Z", "+00:00"))
+                    row_old = row_old.replace(tzinfo=row_old.tzinfo or timezone.utc).astimezone(timezone.utc)
+                    row_current = row_current.replace(tzinfo=row_current.tzinfo or timezone.utc).astimezone(timezone.utc)
+                except (IndexError, ValueError):
+                    row_old = row_current = None
+                if (workspace.get("pair") != "BTC/EUR" or workspace.get("market_id") != market_id
+                        or quote_ref is None or quote_ref[0] != market_id
                         or len(row) != 1 or row[0].get("score") is not None
                         or (workspace.get("daily") or {}).get("market", {}).get("score") is not None
                         or (workspace.get("combined") or {}).get("score") is not None
-                        or not same_stale
-                        or _normalized_ref((workspace.get("quote") or {}).get("source_ref")) is None):
+                        or not same_stale or row_old != expected_stale or row_current != quote_ref[2]):
                     raise RuntimeError("trader_pair_browser_readback_invalid")
                 return {"market_id": workspace["market_id"], "pair": "BTC/EUR",
                         "quote_currency": "EUR", "workspace": workspace}
@@ -178,7 +213,8 @@ async def _stale_date_display(user_id: int, source_at: str) -> dict[str, str]:
                     payload = await observed_responses[-1].json()
                     workspace = payload.get("workspace") or {}
                     quote_ref = _normalized_ref((workspace.get("quote") or {}).get("source_ref"))
-                    if quote_ref is None:
+                    if (workspace.get("pair") != "BTC/EUR" or workspace.get("market_id") != market_id
+                            or quote_ref is None or quote_ref[0] != market_id):
                         return "api_source_unverified"
                     expected = await page.evaluate(
                         "source => new Intl.DateTimeFormat('nl-NL', "
@@ -188,20 +224,22 @@ async def _stale_date_display(user_id: int, source_at: str) -> dict[str, str]:
                     )
                     quote_phase = await _target_quote_visible(
                         page, surface="analysis", locale="nl-NL", expected=expected,
+                        quote_currency="EUR",
                     )
                     if quote_phase != "ok":
                         return "quote_" + quote_phase
-                    market = page.get_by_role("heading", name="Markt", exact=True).locator(
-                        "xpath=ancestor::section[1]")
-                    if await market.count() != 1:
-                        return "market_section_missing"
-                    indicator = market.get_by_role("button").filter(has_text="Prijsverandering 24 uur")
-                    if await indicator.count() != 1:
-                        return "indicator_missing"
-                    await indicator.get_by_text("Score wordt berekend", exact=False).wait_for(timeout=15000)
-                    return "ok"
+                    old_source_time = await page.evaluate(
+                        "source => new Intl.DateTimeFormat('nl-NL', "
+                        "{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'UTC'})"
+                        ".format(new Date(source)) + ' UTC'",
+                        source_at,
+                    )
+                    return await _outage_indicator_visible(
+                        page, old_source_time=old_source_time,
+                        current_quote_time=expected,
+                    )
                 except Exception:
-                    return "pending_score_missing"
+                    return "browser_inspection_failed"
             try:
                 checks[zone.split("/")[-1].lower()] = await observe_page(
                     base_url="https://tradamind.com", path="/asset?symbol=BTC&quote=EUR",
@@ -431,6 +469,7 @@ def run(namespace: str) -> dict:
             try:
                 stale_browser = asyncio.run(_stale_date_display(
                     user_id, outage["pairs"]["BTC/EUR"]["source_at"],
+                    markets["BTC/EUR"]["market_id"],
                 ))
             except Exception:
                 stale_browser = {}
