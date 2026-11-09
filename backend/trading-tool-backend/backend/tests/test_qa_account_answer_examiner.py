@@ -39,7 +39,7 @@ def test_examiner_does_not_accept_omission_or_fabricated_quote():
     fabricated = judgment()
     fabricated["claims"][0]["quote"] = "Invented plan"
     assert check_judgment(answer=ANSWER, judgment=fabricated) == {
-        "result": "UNTESTED", "failed_checks": ["answer_examiner_quote"],
+        "result": "UNTESTED", "failed_checks": ["answer_examiner_quote_plan_cadence"],
     }
 
 
@@ -74,7 +74,7 @@ def test_independent_examiner_requires_two_agreeing_passes_without_export(monkey
             "position": {}, "latest_decision": {},
         },
     ))
-    assert result == {"result": "UNTESTED", "failed_checks": ["answer_examiner_disagreement"]}
+    assert result == {"result": "UNTESTED", "failed_checks": ["answer_examiner_disagreement_position_quantity"]}
     assert len(seen) == 2
     assert all(call["store"] is False and call["tool_choice"] == "none" for call in seen)
     assert "private-plan" not in str(result)

@@ -274,33 +274,48 @@ def run(namespace: str) -> dict:
     bound = os.getenv("FINN_QA_USER_ID", "")
     if not bound.isdecimal() or int(bound) <= 0:
         raise RuntimeError("fixture_binding_invalid")
-    markets = _markets()  # No fixture write until both exact markets exist.
     user_id = bot_id = None
     passed = False
+    stage = "markets"
     try:
+        markets = _markets()  # No fixture write until both exact markets exist.
+        stage = "seed"
         user_id, bot_id, _ = fixture._seed(namespace, int(bound))
+        stage = "readings"
         _seed_pair_readings(user_id, markets)
+        stage = "baseline"
         before_business = _business_snapshot(user_id)
         from backend.scripts.probe_protected_paper_exit_reconciliation import _guard_live_exchange
 
         with _guard_live_exchange() as live_attempts:
+            stage = "initial_snapshot"
             initial = _snapshot(user_id, markets)
+            stage = "initial_transport"
             initial_transport = _transport_checks(user_id, initial)
+            stage = "outage_source"
             _set_eur_source_time(user_id, markets["BTC/EUR"]["market_id"],
                                  markets["BTC/EUR"]["source_at"], stale=True)
+            stage = "outage_snapshot"
             outage = _snapshot(user_id, markets)
+            stage = "outage_transport"
             outage_transport = _transport_checks(user_id, outage)
+            stage = "browser"
             try:
                 stale_browser = asyncio.run(_stale_date_display(
                     user_id, outage["pairs"]["BTC/EUR"]["source_at"],
                 ))
             except Exception:
                 stale_browser = {}
+            stage = "recovery_source"
             _set_eur_source_time(user_id, markets["BTC/EUR"]["market_id"],
                                  markets["BTC/EUR"]["source_at"], stale=False)
+            stage = "recovery_snapshot"
             recovered = _snapshot(user_id, markets)
+            stage = "recovery_transport"
             recovered_transport = _transport_checks(user_id, recovered)
+        stage = "after_read"
         after_business = _business_snapshot(user_id)
+        stage = "validation"
         result = check_pair_score_isolation(
             owner_id=user_id, initial=initial, outage=outage, recovered=recovered,
         )
@@ -336,9 +351,22 @@ def run(namespace: str) -> dict:
                 "finn_transport_checked": True,
                 "stale_date_browser_checked": True,
                 "gate_status": "PASS"}
+    except Exception as error:
+        if isinstance(error, RuntimeError) and str(error) in {
+            "btc_pair_markets_unavailable", "btc_pair_source_unavailable",
+            "btc_pair_fixture_source_missing", "fixture_binding_invalid",
+            "fixture_has_exchange_keys",
+        }:
+            raise
+        raise RuntimeError(f"trader_pair_{stage}_failed") from None
     finally:
         if user_id is not None and bot_id is not None:
-            if passed:
-                fixture._cleanup(namespace, user_id, bot_id)
-            else:
-                fixture._quarantine(namespace, user_id, bot_id)
+            try:
+                if passed:
+                    fixture._cleanup(namespace, user_id, bot_id)
+                else:
+                    fixture._quarantine(namespace, user_id, bot_id)
+            except Exception:
+                raise RuntimeError(
+                    "trader_pair_cleanup_failed" if passed else "trader_pair_quarantine_failed"
+                ) from None

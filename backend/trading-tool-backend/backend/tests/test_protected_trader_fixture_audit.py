@@ -83,6 +83,37 @@ def test_audit_reports_only_bounded_quarantine_state(monkeypatch):
     assert conn.closed
 
 
+def test_pair_audit_requires_matching_prior_pair_run_and_reports_only_fixed_presence(monkeypatch):
+    conn = Connection([
+        [(17, False, {"qa_namespace": NAMESPACE})], [(False, False)], [(0,)],
+        [(3,)], [(2,)], [(2,)], [(2,)], [(0,)], [(0,)],
+    ])
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: conn)
+    monkeypatch.setattr(audit.Path, "read_text", lambda *_a, **_k: json.dumps({
+        "workflow_run_id": "42502525173-1", "profile": "trader_pair_score_continuity",
+        "target_sha": "9a72d5e4c8e10533a6a7359861e242efdd2c4808",
+        "protected_profile_attempted": True, "outcome": "incomplete",
+    }))
+    assert audit.run(LABEL, expected_profile="trader_pair_score_continuity") == {
+        "fixture_state": "QUARANTINED_INACTIVE", "cleanup_verified": False,
+        "pair_configs_present": True, "pair_market_readings_present": True,
+        "pair_technical_readings_present": True, "pair_scores_present": True,
+        "orders_present": False, "executions_present": False,
+    }
+    assert conn.closed
+
+
+def test_pair_audit_rejects_paper_prior_report_before_database(monkeypatch):
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: pytest.fail("database touched"))
+    monkeypatch.setattr(audit.Path, "read_text", lambda *_a, **_k: json.dumps({
+        "workflow_run_id": "42502525173-1", "profile": "trader_paper_exit_reconciliation",
+        "target_sha": "9a72d5e4c8e10533a6a7359861e242efdd2c4808",
+        "protected_profile_attempted": True, "outcome": "incomplete",
+    }))
+    with pytest.raises(RuntimeError, match="trader_fixture_audit_prior_report_mismatch"):
+        audit.run(LABEL, expected_profile="trader_pair_score_continuity")
+
+
 def test_audit_rejects_unscoped_label_before_database(monkeypatch):
     monkeypatch.setattr(audit.fixture, "_connection", lambda: pytest.fail("database touched"))
     with pytest.raises(RuntimeError, match="trader_fixture_audit_label_invalid"):

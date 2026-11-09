@@ -170,6 +170,35 @@ def test_probe_error_category_does_not_export_database_details():
     ) == "btc_pair_source_unavailable"
 
 
+def test_probe_reports_fixed_readings_stage_and_quarantines(monkeypatch):
+    monkeypatch.setenv("FINN_QA_ALLOW_TRADER_PAIR_FIXTURE", "1")
+    monkeypatch.setenv("FINN_QA_USER_ID", "7")
+    monkeypatch.setattr(probe, "_markets", lambda: MARKETS)
+    monkeypatch.setattr(probe.fixture, "_seed", lambda *_args: (11, 22, "today"))
+    monkeypatch.setattr(probe, "_seed_pair_readings", lambda *_args: (_ for _ in ()).throw(
+        RuntimeError("private owner 11 secret")))
+    quarantined = []
+    monkeypatch.setattr(probe.fixture, "_quarantine", lambda *_args: quarantined.append(True))
+    with pytest.raises(RuntimeError, match="^trader_pair_readings_failed$"):
+        probe.run(NAMESPACE)
+    assert quarantined == [True]
+    assert profile_error_category("trader_pair_score_continuity", RuntimeError(
+        "trader_pair_readings_failed")) == "trader_pair_readings_failed"
+
+
+def test_probe_reports_quarantine_failure_without_raw_exception(monkeypatch):
+    monkeypatch.setenv("FINN_QA_ALLOW_TRADER_PAIR_FIXTURE", "1")
+    monkeypatch.setenv("FINN_QA_USER_ID", "7")
+    monkeypatch.setattr(probe, "_markets", lambda: MARKETS)
+    monkeypatch.setattr(probe.fixture, "_seed", lambda *_args: (11, 22, "today"))
+    monkeypatch.setattr(probe, "_seed_pair_readings", lambda *_args: (_ for _ in ()).throw(
+        RuntimeError("private owner 11 secret")))
+    monkeypatch.setattr(probe.fixture, "_quarantine", lambda *_args: (_ for _ in ()).throw(
+        RuntimeError("private bot 22 secret")))
+    with pytest.raises(RuntimeError, match="^trader_pair_quarantine_failed$"):
+        probe.run(NAMESPACE)
+
+
 def test_snapshot_keeps_missing_score_with_independent_stale_source_diagnosis(monkeypatch):
     from backend.celery_task import store_daily_scores_task
 

@@ -41,6 +41,14 @@ disabled. The source-time profile runs the Paper-exit contract as its fixture
 and additionally checks four-source quote identity and deployed browser times;
 its PASS cannot be inferred from the Paper-exit profile alone.
 
+`trader_pair_fixture_audit` is a read-only follow-up for one failed or
+incomplete `trader_pair_score_continuity` run. It requires `manifest_id=none`,
+both fixture flags `false`, and `run_label=audit-<workflow-id>-<attempt>-<sha8>`.
+It binds the prior sanitized report and namespace before querying only the
+isolated QA child. An absent child is reported as before-seed-or-cleaned, not
+proof of cleanup. A retained child reports only inactive/quarantined safety and
+fixed row-presence booleans; it never deletes rows or reveals owner IDs.
+
 `action_contract_acceptance` is the strict registry-wide profile. Before any
 product request it requires exactly one independent case for every active
 registry contract, all 16 safe write contracts, all nine declared natural

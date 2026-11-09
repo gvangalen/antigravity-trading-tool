@@ -40,6 +40,25 @@ def test_source_time_parity_requires_explicit_zone_and_same_instant():
     assert check_source_time_parity(canonical_source_at=canonical, surfaces=surfaces)["failed_checks"] == ["explicit_zone"]
 
 
+def test_source_time_parity_respects_only_finn_display_second_precision():
+    canonical = "2026-11-08T23:59:59.876543+00:00"
+    surfaces = {
+        name: {"source_at": canonical, "displayed_at": canonical, "zone_label": "UTC"}
+        for name in ("analysis", "report", "bot", "finn")
+    }
+    surfaces["finn"]["displayed_at"] = "2026-11-08T23:59:59+00:00"
+    assert check_source_time_parity(canonical_source_at=canonical, surfaces=surfaces)["result"] == "PASS"
+    surfaces["bot"]["displayed_at"] = "2026-11-08T23:59:59+00:00"
+    assert "same_display_instant" in check_source_time_parity(
+        canonical_source_at=canonical, surfaces=surfaces,
+    )["failed_checks"]
+    surfaces["bot"]["displayed_at"] = canonical
+    surfaces["finn"]["source_at"] = "2026-11-08T23:59:59+00:00"
+    assert "same_source_instant" in check_source_time_parity(
+        canonical_source_at=canonical, surfaces=surfaces,
+    )["failed_checks"]
+
+
 def _pair(owner, market, score):
     return {
         "owner_id": owner, "market_id": market, "indicator_config": {"Price": 1},

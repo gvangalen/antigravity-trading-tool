@@ -1,5 +1,6 @@
 """Synthetic source refs only; the protected collector never contacts production here."""
 
+import asyncio
 from datetime import datetime, timezone
 
 from backend.scripts import probe_protected_source_time_parity as probe
@@ -85,8 +86,11 @@ def test_four_surface_collector_returns_only_fixed_checks(monkeypatch):
                "source_price_at": REF["source_observed_at_utc"]}}
     result = probe.run(user_id=7, market_id=43,
                        paper_evidence=evidence, frozen_ref=REF)
-    assert result == {"result": "PASS", "failed_checks": [], "gate_status": "PASS",
-                      "browser_zones_checked": 6}
+    assert result["result"] == "PASS" and result["failed_checks"] == []
+    assert result["gate_status"] == "PASS" and result["browser_zones_checked"] == 6
+    assert all(result["browser_zone_checks"].values())
+    assert all(result["surface_display_checks"].values())
+    assert result["parity_subchecks"] == []
     assert "987" not in str(result) and "2026" not in str(result)
 
     def wrong_analysis(*, owner_id, path):
@@ -102,3 +106,55 @@ def test_four_surface_collector_returns_only_fixed_checks(monkeypatch):
         failed["failed_checks"] == ["analysis_source"]
     )
     assert "988" not in str(failed)
+
+
+def test_browser_checks_classify_page_source_refresh_without_leaking_payload(monkeypatch):
+    from backend.scripts import qa_protected_browser
+    from backend.utils import auth_utils
+
+    monkeypatch.setattr(auth_utils, "create_access_token", lambda *_args: "private-token")
+    seen_locales = []
+
+    class Response:
+        status = 200
+        def __init__(self, path, payload):
+            self.url = "https://tradamind.com" + path
+            self.payload = payload
+        async def json(self):
+            return self.payload
+
+    class Locator:
+        async def wait_for(self, **_kwargs):
+            return None
+
+    class Page:
+        async def evaluate(self, _script, args):
+            seen_locales.append(args[1])
+            return "visible UTC"
+        def get_by_text(self, *_args, **_kwargs):
+            return type("Match", (), {"first": Locator()})()
+
+    calls = 0
+    async def observe_page(*, path, inspect, observe_response, **_kwargs):
+        nonlocal calls
+        calls += 1
+        if path.startswith("/asset"):
+            source = ({**REF, "source_observed_at_utc": "2026-11-08T09:31:00+00:00"}
+                      if calls == 1 else REF)
+            payload = {"quote": {"source_ref": source, "private": "private-fixture-value"}}
+            api_path = "/api/workspace/exact-market?symbol=BTC&quote_currency=USDT"
+        else:
+            payload = {"score_source_snapshot": {"content_locale": "en", "assets": [
+                {"pair": "BTC/USDT", "market_snapshot": {"source_ref": REF}},
+            ]}}
+            api_path = "/api/report/daily/latest"
+        observe_response(Response(api_path, payload))
+        return await inspect(Page())
+
+    monkeypatch.setattr(qa_protected_browser, "observe_page", observe_page)
+    phases = asyncio.run(probe._rendered_quote_times(7, REF))
+    assert phases["analysis_amsterdam"] == "page_source_changed"
+    assert all(value == "ok" for key, value in phases.items() if key != "analysis_amsterdam")
+    assert seen_locales.count("en-US") == 3
+    assert "private-token" not in str(phases)
+    assert "private-fixture-value" not in str(phases)
