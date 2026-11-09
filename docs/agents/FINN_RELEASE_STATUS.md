@@ -4,6 +4,34 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Vier trader-gates: gecombineerde herstelkandidaat (9 november 2026)
+
+Phase: `BUILD_VALIDATING_LOCAL`. De productbranch `codex/trader-source-ref`
+bundelt een eigenaargebonden FINN-herlezing voor de vervolgvraag over dezelfde
+vier accountfeiten, een eenduidige koersrijverwijzing voor Analyse/FINN/rapport/
+Paper, en normalisatie van opgeslagen botredenen. Een bestaande `reasons`-vorm
+zonder array liet de botpagina tijdens renderen crashen. Onafhankelijke QA
+herleidde die fout op live SHA `ec63477275c1dc1f380baea8283245304fd70277`
+in Paper-only run `42536849454` tot de `.find`-aanroep in `BotFocusView`.
+De backend levert voor actuele en historische beslissingen nu een lijst met
+leesbare redenen; beide frontendweergaven verwerken ook oudere objectvormen.
+De historische botroute geeft bovendien de genormaliseerde UTC
+`market_quote_source_ref` van een opgeslagen beoordeling terug.
+
+Lokaal slaagden de volledige backend-suite vóór de laatste historische
+projectiewijziging (**4458 passed, 7 skipped**), frontend build, typecheck,
+i18n-lint/-tests, command-/proposal-/setuptests en high-audit (nul
+kwetsbaarheden). Een geoptimaliseerde browserbuild met een synthetisch
+oud `reasons`-object toonde de botnavigatie en botknop zonder pageerror.
+De actiematrix vóór de laatste historische projectiewijziging gaf **16/16**
+(plus 26 adaptertests),
+zonder brokerorders, Live-calls, Live-bots of productieverbindingen. De
+echte-provider ontwikkelset gaf **20/20** met nul provider-, schema-,
+parse-, validatie- of timeoutfouten. De providerregressie, definitieve
+herhalingen, PR-CI, deploy en onafhankelijke vier-gates-live-QA staan nog open.
+Security en Architecture gaven GO voor de gecombineerde code en het beperkte
+marktkoersbroncontract; dit is geen bewijs voor individuele indicatorbronnen.
+
 ## Vier trader-gates: gedeelde marktkoersbron (8 november 2026)
 
 Phase: `BUILD_VALIDATED_LOCAL_ONLY`. De lokale branch

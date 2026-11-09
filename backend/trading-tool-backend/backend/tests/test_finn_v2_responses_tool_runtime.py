@@ -62,7 +62,7 @@ from backend.services.finn_v2_run_service import (
     _pure_strategy_price_reentry,
     _select_open_strategy_for_correction,
     _multiple_open_correction_requires_clarification,
-    _strategy_rule_is_unencoded,
+    _strategy_rule_is_unencoded, _trusted_cursor_previous_response,
 )
 from backend.infrastructure.repositories.finn_v2_conversation_repository import FinnV2ConversationRepository
 from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
@@ -13680,6 +13680,36 @@ def test_same_account_facts_followup_rechecks_all_owner_scopes(monkeypatch):
         selected, message=followup, read_only=True, account_bundle=True,
     )
     assert {"read_active_setup", "read_linked_strategy", "read_bot_status", "read_portfolio"} <= set(bound.read_tools)
+
+
+def test_account_followup_uses_owner_verified_prior_runtime_projection():
+    cursor = {"run_id": "prior", "response_id": "resp-prior", "locale": "nl"}
+    contract = SimpleNamespace(
+        run_id="prior", user_id=7, conversation_id="conv-7",
+        state_json={
+            "terminal_status": "completed",
+            "responses_exchange": {
+                "response_id": "resp-prior",
+                "tool_trace": [{"result": {"results": [
+                    {"scope": scope, "status": "completed", "data": {"setup_id": 19} if scope == "read_active_setup" else {}}
+                    for scope in ("read_active_setup", "read_linked_strategy", "read_bot_status", "read_portfolio")
+                ]}}],
+            },
+        },
+    )
+    prior = _trusted_cursor_previous_response(
+        contract, cursor, user_id=7, conversation_id="conv-7", locale="nl",
+    )
+    assert prior["owner_user_id"] == 7
+    assert FinnResponsesFrontDoor._follows_account_state_bundle(
+        "Geef dezelfde vier feiten uit mijn opgeslagen gegevens.", prior,
+    )
+    assert _trusted_cursor_previous_response(
+        contract, cursor, user_id=8, conversation_id="conv-7", locale="nl",
+    ) is None
+    assert _trusted_cursor_previous_response(
+        contract, cursor, user_id=7, conversation_id="conv-other", locale="nl",
+    ) is None
 
 
 def test_same_account_facts_followup_reads_one_complete_bundle():
