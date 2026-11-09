@@ -146,9 +146,11 @@ async def _saved_pair_visibility(token: str) -> dict[str, str | bool]:
                 if request.method == "POST" else None)
         page.on("requestfailed", lambda request: failed_posts.append(request)
                 if request.method == "POST" else None)
-        first_eur = page.get_by_role("button", name="Asset verwijderen: BTC/EUR")
-        first_usdt = page.get_by_role("button", name="Asset verwijderen: BTC/USDT")
-        second_eth = page.get_by_role("button", name="Asset verwijderen: ETH/EUR")
+        first_eur_all = page.locator('button[aria-label="Asset verwijderen: BTC/EUR"]')
+        first_usdt_all = page.locator('button[aria-label="Asset verwijderen: BTC/USDT"]')
+        first_eur = page.locator('button[aria-label="Asset verwijderen: BTC/EUR"]:visible').first
+        first_usdt = page.locator('button[aria-label="Asset verwijderen: BTC/USDT"]:visible').first
+        second_eth = page.locator('button[aria-label="Asset verwijderen: ETH/EUR"]:visible').first
         state["stage"] = "crypto_group"
         await page.get_by_role("button", name="Crypto", exact=True).click()
         state["stage"] = "first_rows"
@@ -165,8 +167,12 @@ async def _saved_pair_visibility(token: str) -> dict[str, str | bool]:
                     "watchlist_get_seen": state["watchlist_gets"] > 0,
                     "eur_label_in_dom": "BTC/EUR" in body,
                     "usdt_label_in_dom": "BTC/USDT" in body,
-                    "eur_button_count_positive": await first_eur.count() > 0,
-                    "usdt_button_count_positive": await first_usdt.count() > 0}
+                    "eur_button_count_positive": await first_eur_all.count() > 0,
+                    "usdt_button_count_positive": await first_usdt_all.count() > 0,
+                    "eur_button_multiple": await first_eur_all.count() > 1,
+                    "usdt_button_multiple": await first_usdt_all.count() > 1,
+                    "eur_visible_positive": await first_eur.count() > 0,
+                    "usdt_visible_positive": await first_usdt.count() > 0}
         both_initial = await first_eur.is_visible() and await first_usdt.is_visible()
 
         state["stage"] = "select_eur"
