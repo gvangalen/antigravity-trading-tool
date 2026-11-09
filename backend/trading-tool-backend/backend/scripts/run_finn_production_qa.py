@@ -199,6 +199,16 @@ def profile_error_category(profile: str, error: Exception) -> str:
             for stage in BUSINESS_MEASUREMENT_STAGES
             for kind in BUSINESS_MEASUREMENT_ERROR_KINDS
         }
+        boundary_codes = {
+            f"trader_pair_{stage}_{kind}_failed"
+            for stage in ("live_guard_import", "live_guard_entry")
+            for kind in ("importerror", "modulenotfounderror", "attributeerror",
+                         "runtimeerror", "typeerror", "other")
+        } | {
+            f"trader_pair_baseline_unclassified_{kind}_failed"
+            for kind in ("runtimeerror", "importerror", "modulenotfounderror",
+                         "attributeerror", "typeerror", "operationalerror", "other")
+        }
         snapshot_codes = {
             f"trader_pair_{phase}_snapshot_{step}_failed"
             for phase in ("initial", "outage", "recovery")
@@ -214,7 +224,7 @@ def profile_error_category(profile: str, error: Exception) -> str:
             for origin in ("match_asset", "match_source", "match_weights",
                            "pair_weights", "score_diagnosis", "other")
         }
-        return (code if code in snapshot_codes | assessment_codes | baseline_codes | {
+        return (code if code in snapshot_codes | assessment_codes | baseline_codes | boundary_codes | {
             "trader_pair_fixture_not_authorized", "trader_pair_namespace_invalid",
             "fixture_binding_invalid", "btc_pair_markets_unavailable",
             "btc_pair_source_unavailable", "btc_pair_fixture_source_missing",

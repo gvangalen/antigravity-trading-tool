@@ -650,8 +650,10 @@ def run(namespace: str) -> dict:
         _seed_pair_readings(user_id, markets)
         stage = "baseline"
         before_business = _business_snapshot(user_id)
+        stage = "live_guard_import"
         from backend.scripts.probe_protected_paper_exit_reconciliation import _guard_live_exchange
 
+        stage = "live_guard_entry"
         with _guard_live_exchange() as live_attempts, asyncio.Runner() as runner:
             stage = "initial_snapshot"
             initial = _snapshot(user_id, markets)
@@ -736,6 +738,12 @@ def run(namespace: str) -> dict:
                 "outage_quote_pending_browser_checked": True,
                 "gate_status": "PASS"}
     except Exception as error:
+        if stage in {"live_guard_import", "live_guard_entry"}:
+            kind = type(error).__name__.lower()
+            if kind not in {"importerror", "modulenotfounderror", "attributeerror",
+                            "runtimeerror", "typeerror"}:
+                kind = "other"
+            raise RuntimeError(f"trader_pair_{stage}_{kind}_failed") from None
         if stage == "baseline":
             from backend.scripts.probe_protected_account_answer import (
                 BUSINESS_MEASUREMENT_ERROR_KINDS, BUSINESS_MEASUREMENT_STAGES,
@@ -747,6 +755,11 @@ def run(namespace: str) -> dict:
                         raise RuntimeError(
                             f"trader_pair_baseline_{measurement_stage}_{kind}_failed"
                         ) from None
+            kind = type(error).__name__.lower()
+            if kind not in {"runtimeerror", "importerror", "modulenotfounderror",
+                            "attributeerror", "typeerror", "operationalerror"}:
+                kind = "other"
+            raise RuntimeError(f"trader_pair_baseline_unclassified_{kind}_failed") from None
         snapshot_step = str(error).removeprefix("trader_pair_snapshot_").removesuffix("_failed")
         if (stage in {"initial_snapshot", "outage_snapshot", "recovery_snapshot"}
                 and snapshot_step.startswith("assessment_")
