@@ -27,6 +27,7 @@ YAHOO_DXY = "https://query1.finance.yahoo.com/v8/finance/chart/DX-Y.NYB"
 YAHOO_DXY_HEADERS = {"User-Agent": "Mozilla/5.0"}
 ALT_FNG = "https://api.alternative.me/fng/?limit=1"
 FRED_CSV_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}&cosd={start_date}"
+CBOE_SP500_HISTORY = "https://cdn.cboe.com/api/global/us_indices/daily_prices/SPX_History.csv"
 YAHOO_SP500_GSPC = "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC"
 YAHOO_SP500_GSPC_ALT = "https://query2.finance.yahoo.com/v8/finance/chart/%5EGSPC"
 YAHOO_SP500 = "https://query1.finance.yahoo.com/v8/finance/chart/%5ESPX"
@@ -287,6 +288,23 @@ def _sp500_dated_closes(*, now: datetime | None = None) -> dict[str, float]:
             return selected
     except Exception:
         logger.warning("S&P 500 FRED reading unavailable; trying dated fallback")
+
+    try:
+        text = _fetch_text(CBOE_SP500_HISTORY, timeout=20)
+        readings = {}
+        for day, raw_value in _extract_csv_rows(text):
+            try:
+                parsed_day = datetime.strptime(day, "%m/%d/%Y").date()
+                value = float(raw_value)
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(value) and value > 0:
+                readings[parsed_day.isoformat()] = value
+        selected = usable(readings)
+        if selected:
+            return selected
+    except Exception:
+        logger.warning("S&P 500 Cboe fallback unavailable")
 
     for endpoint in (YAHOO_SP500_GSPC_ALT, YAHOO_SP500_GSPC):
         try:
