@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { reconcileWatchlistMembership, watchlistRowKey } from "../lib/workspace/watchlistMembership.mjs";
+import { reconcileWatchlistMembership, watchlistCacheKey, watchlistRowKey } from "../lib/workspace/watchlistMembership.mjs";
+import { getCachedResourceSnapshot, setCachedResourceData } from "../lib/clientDataCache.js";
 
 const eur = { symbol: "BTC", market_id: 41, quote_currency: "EUR" };
 const usdt = { symbol: "BTC", market_id: 42, quote_currency: "USDT" };
@@ -26,4 +27,14 @@ test("adding and removing a pair follows saved membership immediately", () => {
 
   const removed = reconcileWatchlistMembership([usdt], [{ ...eur, price: 68000 }, ...staleWorkspace]);
   assert.deepEqual(removed.map(({ saved }) => watchlistRowKey(saved)), ["market:42"]);
+});
+
+test("saved pairs from one account cannot populate another account's cache", () => {
+  const firstKey = watchlistCacheKey(701);
+  const secondKey = watchlistCacheKey(702);
+  setCachedResourceData(firstKey, [eur, usdt]);
+
+  assert.notEqual(firstKey, secondKey);
+  assert.deepEqual(getCachedResourceSnapshot(secondKey, []).data, []);
+  assert.equal(watchlistCacheKey(null), null);
 });

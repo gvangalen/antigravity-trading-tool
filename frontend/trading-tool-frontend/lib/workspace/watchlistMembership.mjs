@@ -1,3 +1,7 @@
+export function watchlistCacheKey(userId) {
+  return userId == null ? null : `watchlist:user:${userId}`;
+}
+
 export function watchlistRowKey(row) {
   const marketId = row?.market_id ?? row?.marketId;
   if (marketId !== null && marketId !== undefined && marketId !== "") {
