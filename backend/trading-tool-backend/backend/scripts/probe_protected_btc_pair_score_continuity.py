@@ -91,12 +91,14 @@ async def _finn_pair_read(user_id: int, pair: str):
             f"Lees alleen mijn actuele Score 2.0 voor {pair} uit opgeslagen brondata. "
             "Geef de benchmarkscore en bronstatus; wijzig niets.",
         )
-        if (turn.status != "completed" or turn.response is None
-                or turn.response.proposal_id
-                or turn.response.confirmation_required
-                or turn.policy and turn.policy.execute_allowed):
+        if turn.status != "completed":
             status = turn.status if turn.status in _SAFE_FINN_STATUSES else "other"
-            return None, (f"turn_{status}" if turn.status != "completed" else "action_boundary"), _finn_terminal_diagnostic(turn)
+            return None, f"turn_{status}", _finn_terminal_diagnostic(turn)
+        if turn.response is None:
+            return None, "response_missing", _finn_terminal_diagnostic(turn)
+        if (turn.response.proposal_id or turn.response.confirmation_required
+                or turn.policy and turn.policy.execute_allowed):
+            return None, "action_boundary", _finn_terminal_diagnostic(turn)
         rows = await _read_tool_results(
             run_id=turn.run_id, conversation_id=turn.conversation_id, user_id=user_id,
         )

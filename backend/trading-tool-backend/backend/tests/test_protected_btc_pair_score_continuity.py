@@ -211,6 +211,29 @@ def test_finn_noncompleted_turn_reports_fixed_status_and_reason(monkeypatch):
     )
 
 
+@pytest.mark.parametrize("response,expected", [
+    (None, "response_missing"),
+    (SimpleNamespace(proposal_id="private-proposal", confirmation_required=False), "action_boundary"),
+])
+def test_finn_completed_turn_separates_missing_response_from_action_boundary(
+    monkeypatch, response, expected,
+):
+    from backend.infrastructure import database
+    from backend.scripts import probe_protected_closed_paper_review
+
+    async def chat(*_args):
+        return SimpleNamespace(status="completed", response=response, policy=None,
+                               error_code=None, runtime_trace={})
+    async def dispose():
+        return None
+    monkeypatch.setattr(probe_protected_closed_paper_review, "_chat_turn", chat)
+    monkeypatch.setattr(database, "engine", SimpleNamespace(dispose=dispose))
+    rows, phase, diagnostic = asyncio.run(probe._finn_pair_read(11, "BTC/EUR"))
+    assert rows is None and phase == expected
+    assert diagnostic == {"status": "completed", "error_code": "none",
+                          "reasoning_status": "other", "orchestrator_outcome": "other"}
+
+
 @pytest.mark.parametrize("callback_mode,expected", [
     ("absent", "request_absent"),
     ("owner_get_error", "owner_get_error"),
