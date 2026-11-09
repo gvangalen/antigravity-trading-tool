@@ -70,6 +70,7 @@ export function useWatchlist(options = {}) {
   const cacheKey = watchlistCacheKey(user?.id);
   const activeCacheKeyRef = useRef(cacheKey);
   activeCacheKeyRef.current = cacheKey;
+  const [authEpoch, setAuthEpoch] = useState(0);
   const initialSnapshot = cacheKey ? getCachedResourceSnapshot(cacheKey, []) : { data: [], hasData: false };
   const [watchlistState, setWatchlistState] = useState({ key: cacheKey, data: initialSnapshot.data || [] });
   const [loading, setLoading] = useState(() => autoLoad && Boolean(cacheKey) && !initialSnapshot.hasData);
@@ -103,6 +104,7 @@ export function useWatchlist(options = {}) {
       clearCachedResource(cacheKey);
       setWatchlistState({ key: null, data: [] });
       setLoading(false);
+      setAuthEpoch((current) => current + 1);
     };
     window.addEventListener("watchlist-updated", handleSync);
     window.addEventListener("tradamind:auth-scope-changed", handleAuthScopeChanged);
@@ -114,7 +116,7 @@ export function useWatchlist(options = {}) {
       window.removeEventListener("watchlist-updated", handleSync);
       window.removeEventListener("tradamind:auth-scope-changed", handleAuthScopeChanged);
     };
-  }, [autoLoad, cacheKey]);
+  }, [autoLoad, authEpoch, cacheKey]);
 
   async function loadWatchlist(forceFresh = false) {
     if (!cacheKey || activeCacheKeyRef.current !== cacheKey) return [];

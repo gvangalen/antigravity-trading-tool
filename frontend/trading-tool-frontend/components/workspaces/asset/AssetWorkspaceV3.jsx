@@ -2996,7 +2996,17 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       onConfirm: async () => {
         if (watchlistOwnerRef.current !== watchlistOwnerId) return;
         const normalizedSymbol = String(row.symbol || "").toUpperCase();
-        await removeFromWatchlist(normalizedSymbol, row.marketId);
+        const controller = new AbortController();
+        const abortOnAuthChange = () => controller.abort();
+        window.addEventListener("tradamind:auth-scope-changed", abortOnAuthChange);
+        try {
+          await removeFromWatchlist(normalizedSymbol, row.marketId, { signal: controller.signal });
+        } catch (error) {
+          if (controller.signal.aborted) return;
+          throw error;
+        } finally {
+          window.removeEventListener("tradamind:auth-scope-changed", abortOnAuthChange);
+        }
         if (watchlistOwnerRef.current !== watchlistOwnerId) return;
         const removedKey = watchlistRowKey(row);
         setRemovedWatchlistSymbols((current) => current.includes(removedKey)

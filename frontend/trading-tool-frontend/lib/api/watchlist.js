@@ -20,9 +20,10 @@ export async function addToWatchlist(asset) {
   });
 }
 
-export async function removeFromWatchlist(symbol, marketId = null) {
+export async function removeFromWatchlist(symbol, marketId = null, options = {}) {
   const query = marketId == null ? "" : `?market_id=${encodeURIComponent(marketId)}`;
   return await fetchAuth(`/api/watchlist/${encodeURIComponent(symbol)}${query}`, {
     method: "DELETE",
+    ...options,
   });
 }
