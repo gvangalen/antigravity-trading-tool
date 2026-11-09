@@ -497,7 +497,7 @@ class MacroDataService:
     async def delete_macro_indicator(self, name: str, user_id: int, symbol: Optional[str] = None) -> dict:
         normalized_symbol = str(symbol or "").strip().upper() or None
         asset_scope = await self._get_asset_scope(normalized_symbol or "BTC")
-        await self.preference_repository.remove_user_config(
+        removed_config = await self.preference_repository.remove_user_config(
             user_id,
             normalize_indicator_name(name),
             category="macro",
@@ -505,6 +505,6 @@ class MacroDataService:
             asset_class=asset_scope.get("asset_class"),
         )
         deleted = await self.repository.delete_user_macro_indicator(name, user_id, symbol=normalized_symbol)
-        if not deleted:
+        if not removed_config and not deleted:
             raise HTTPException(404, f"Indicator '{name}' niet gevonden voor deze gebruiker.")
-        return {"message": f"Indicator '{name}' verwijderd.", "rows_deleted": 1}
+        return {"message": f"Indicator '{name}' verwijderd.", "rows_deleted": int(bool(deleted))}
