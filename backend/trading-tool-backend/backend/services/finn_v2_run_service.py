@@ -1970,7 +1970,8 @@ class FinnV2RunService:
                 **({"provider_response_id": response_id}
                    if reasoning_source != "owner_scoped_account_projection" else
                    {"answer_boundary": "owner_scoped_account_bundle"}),
-                **({"answer_boundary": "minimal_typed_source"} if minimal_source_boundary else {}),
+                **({"answer_boundary": "minimal_typed_source"}
+                   if minimal_source_boundary and reasoning_source != "owner_scoped_account_projection" else {}),
                 **({"local_model_only_experiment": True} if model_only_experiment else {}),
             },
         }
