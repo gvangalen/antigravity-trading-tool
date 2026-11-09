@@ -96,7 +96,8 @@ def _observed_utc(value: object) -> str | None:
         return None
 
 
-async def _target_quote_visible(page, *, surface: str, locale: str, expected: str) -> str:
+async def _target_quote_visible(page, *, surface: str, locale: str, expected: str,
+                                timeout_ms: int = 15000) -> str:
     """Inspect only the active USDT card or the report's BTC/USDT quote row."""
     try:
         if surface == "analysis":
@@ -107,7 +108,7 @@ async def _target_quote_visible(page, *, surface: str, locale: str, expected: st
             quote = card.get_by_text(expected, exact=True)
         else:
             card = page.locator(".report-v2-at-glance-item").filter(
-                has=page.get_by_role("heading", name=re.compile(r"^BTC/USDT(?:\s|$)")),
+                has=page.get_by_role("heading", name=re.compile(r"^BTC\/USDT(?:\s|$)")),
             )
             if await card.count() != 1:
                 return "target_card_missing"
@@ -116,7 +117,7 @@ async def _target_quote_visible(page, *, surface: str, locale: str, expected: st
             if await quote_row.count() != 1:
                 return "target_quote_missing"
             quote = quote_row.locator("dd").get_by_text(expected, exact=False)
-        await quote.first.wait_for(timeout=15000)
+        await quote.first.wait_for(timeout=timeout_ms)
         return "ok"
     except Exception:
         return "selector_missing"

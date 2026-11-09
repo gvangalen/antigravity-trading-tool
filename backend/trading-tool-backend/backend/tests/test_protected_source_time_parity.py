@@ -3,6 +3,8 @@
 import asyncio
 from datetime import datetime, timezone
 
+import pytest
+
 from backend.scripts import probe_protected_source_time_parity as probe
 from backend.scripts.run_finn_production_qa import profile_error_category
 
@@ -211,3 +213,59 @@ def test_target_quote_selector_rejects_duplicate_time_outside_btc_usdt_card():
     assert asyncio.run(probe._target_quote_visible(
         page, surface="report", locale="nl-NL", expected="8 nov 2026 09:30 UTC",
     )) == "selector_missing"
+
+
+def test_real_playwright_dom_scopes_both_quote_timestamps():
+    playwright = pytest.importorskip("playwright.async_api")
+    expected = "8 nov 2026 09:30 UTC"
+
+    async def exercise():
+        async with playwright.async_playwright() as runtime:
+            try:
+                browser = await runtime.chromium.launch(headless=True, args=["--no-sandbox"])
+            except playwright.Error:
+                pytest.skip("Chromium is unavailable in this test environment")
+            try:
+                page = await browser.new_page()
+                await page.set_content(f"""
+                    <p>{expected}</p>
+                    <section><div>Actieve analyse</div><div>Koers van <span>{expected}</span></div>
+                      <span>BTC</span><span>76.100 USDT</span></section>
+                """)
+                assert await probe._target_quote_visible(
+                    page, surface="analysis", locale="nl-NL", expected=expected,
+                    timeout_ms=150,
+                ) == "ok"
+                await page.set_content(f"""
+                    <p>{expected}</p>
+                    <section><div>Actieve analyse</div><div>Koers van <span>ander moment</span></div>
+                      <span>BTC</span><span>76.100 USDT</span></section>
+                """)
+                assert await probe._target_quote_visible(
+                    page, surface="analysis", locale="nl-NL", expected=expected,
+                    timeout_ms=150,
+                ) == "selector_missing"
+                await page.set_content(f"""
+                    <p>{expected}</p>
+                    <div class="report-v2-at-glance-item"><h3>BTC/USDT · Benchmark</h3>
+                      <dl><div><dt>Koersbron: </dt><dd>{expected} · 2 h</dd></div></dl>
+                    </div>
+                """)
+                assert await probe._target_quote_visible(
+                    page, surface="report", locale="nl-NL", expected=expected,
+                    timeout_ms=150,
+                ) == "ok"
+                await page.set_content(f"""
+                    <p>{expected}</p>
+                    <div class="report-v2-at-glance-item"><h3>BTC/USDT · Benchmark</h3>
+                      <dl><div><dt>Koersbron: </dt><dd>ander moment</dd></div></dl>
+                    </div>
+                """)
+                assert await probe._target_quote_visible(
+                    page, surface="report", locale="nl-NL", expected=expected,
+                    timeout_ms=150,
+                ) == "selector_missing"
+            finally:
+                await browser.close()
+
+    asyncio.run(exercise())
