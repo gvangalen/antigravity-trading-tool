@@ -3946,7 +3946,10 @@ class FinnResponsesFrontDoor:
                 and result.tool_trace):
             canonical_answer = render_account_bundle_answer(result.tool_trace, locale=locale)
             if canonical_answer is not None:
-                result = replace(result, text=canonical_answer, model_owned_repair=False)
+                result = replace(
+                    result, text=canonical_answer, model_owned_repair=False,
+                    response_id_reusable=False, account_source_projection=True,
+                )
         recent_action_result = dict(conversation_context.get("previous_action_result") or {})
         if recent_action_result.get("owner_user_id") != self.user_id or recent_action_result.get("result_status") != "succeeded":
             recent_action_result = {}

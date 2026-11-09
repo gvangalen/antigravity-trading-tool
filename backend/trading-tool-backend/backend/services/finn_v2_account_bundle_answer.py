@@ -1,4 +1,4 @@
-"""Render a combined account read from one consistent owner-scoped tool bundle."""
+"""Render an ID-coherent account read from owner-scoped tool results."""
 
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ from backend.services.finn_v2_tool_adapters.display_source_moment import amsterd
 
 
 _SCOPES = {"read_active_setup", "read_linked_strategy", "read_bot_status", "read_portfolio"}
+_CADENCE_NL = {"daily": "dagelijks", "weekly": "wekelijks", "monthly": "maandelijks"}
+_ACTION_NL = {"hold": "aanhouden", "buy": "kopen", "sell": "verkopen"}
 
 
 def _number(value: Any) -> str | None:
@@ -23,7 +25,7 @@ def _number(value: Any) -> str | None:
 
 
 def render_account_bundle_answer(tool_trace: tuple[dict[str, Any], ...], *, locale: str) -> str | None:
-    """Return an exact answer only when all requested facts have one coherent read."""
+    """Return an exact answer only when the requested reads are ID-coherent."""
     if not locale.lower().startswith("nl"):
         return None
     collected: dict[str, dict[str, Any]] = {}
@@ -55,8 +57,20 @@ def render_account_bundle_answer(tool_trace: tuple[dict[str, Any], ...], *, loca
     if len(positions) != 1 or positions[0].get("strategy_id") != strategy_id:
         return None
     position = positions[0]
-    if position.get("setup_id") != setup_id:
+    # A default portfolio read is a Paper ledger. It does not reconcile a Live
+    # bot against the broker, so never turn that ledger into a Live holding.
+    if (position.get("setup_id") != setup_id or bot["is_live"] is not False
+            or position.get("is_live") is not False):
         return None
+    symbols = {str(value).upper() for value in (
+        setup.get("symbol"), strategy.get("symbol"), position.get("symbol"),
+    ) if value}
+    if len(symbols) != 1:
+        return None
+    for field in ("market_id", "quote_currency"):
+        left, right = setup.get(field), strategy.get(field)
+        if left is not None and right is not None and str(left).upper() != str(right).upper():
+            return None
 
     cadence = setup.get("dca_frequency")
     amount = _number(strategy.get("base_amount"))
@@ -67,6 +81,8 @@ def render_account_bundle_answer(tool_trace: tuple[dict[str, Any], ...], *, loca
             or amount is None or currency not in {"EUR", "USD", "USDT"}
             or quantity is None or not isinstance(decision, dict)
             or not isinstance(decision.get("action"), str) or not decision["action"].strip()):
+        return None
+    if Decimal(quantity) < 0:
         return None
     raw_at = decision.get("decision_at")
     try:
@@ -80,14 +96,18 @@ def render_account_bundle_answer(tool_trace: tuple[dict[str, Any], ...], *, loca
     if not local_at:
         return None
     bot_mode = "actief" if bot["is_active"] else "gepauzeerd"
-    execution_mode = "Live" if bot["is_live"] else "Paper (niet live)"
-    position_mode = "Live" if bot["is_live"] else "Paper"
+    execution_mode = "Paper (niet live)"
     position_state = "wel" if Decimal(quantity) > 0 else "geen"
+    cadence_label = _CADENCE_NL.get(cadence.casefold())
+    cadence_text = f"{cadence_label} ({cadence})" if cadence_label else cadence
+    action = decision["action"].strip()
+    action_label = _ACTION_NL.get(action.casefold())
+    action_text = f"{action} ({action_label})" if action_label else action
     return (
-        f"Volgens je opgeslagen gegevens: de DCA-setup heeft ritme {cadence.strip()} "
+        f"Volgens je opgeslagen gegevens: de DCA-setup heeft ritme {cadence_text} "
         f"en het basisbedrag is {amount} {currency}. De gekoppelde bot is {bot_mode} "
-        f"en staat in {execution_mode}-modus. Je hebt {position_state} {position_mode}-positie: "
+        f"en staat in {execution_mode}-modus. Je hebt {position_state} Paper-positie: "
         f"{quantity} {position.get('symbol') or setup.get('symbol') or 'eenheden'}. "
-        f"De laatst opgeslagen botbeslissing is {decision['action'].strip()} op "
+        f"De laatst opgeslagen botbeslissing is {action_text} op "
         f"{utc_at.strftime('%Y-%m-%d %H:%M:%S')} UTC ({local_at}, Europe/Amsterdam)."
     )
