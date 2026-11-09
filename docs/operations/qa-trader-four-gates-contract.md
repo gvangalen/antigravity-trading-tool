@@ -86,6 +86,11 @@ reference returned to that page and reports `page_source_changed` if a live
 market refresh supersedes the frozen reference. FINN's human-readable `as_of`
 is compared to whole seconds, its documented display precision; its immutable
 `source_ref` is still compared at full precision.
+The browser locator is scoped to the active USDT quote card in Analyse and
+the BTC/USDT quote row in the report card. A matching time elsewhere on the
+page does not pass. If only a page-source refresh prevents parity, the gate is
+`INCONCLUSIVE` and the runner marks the protected outcome incomplete, not a
+product timestamp failure.
 
 **Source-identity contract:** exact-market quote projections carry an immutable
 `market_data.id`, exact `market_id`, and UTC `source_observed_at` as a typed

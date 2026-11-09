@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import date, datetime, timezone
+import re
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
@@ -95,6 +96,32 @@ def _observed_utc(value: object) -> str | None:
         return None
 
 
+async def _target_quote_visible(page, *, surface: str, locale: str, expected: str) -> str:
+    """Inspect only the active USDT card or the report's BTC/USDT quote row."""
+    try:
+        if surface == "analysis":
+            card = page.get_by_text("Actieve analyse", exact=True).locator("xpath=ancestor::section[1]")
+            if await card.count() != 1:
+                return "target_card_missing"
+            await card.get_by_text(re.compile(r"\bUSDT\b")).first.wait_for(timeout=5000)
+            quote = card.get_by_text(expected, exact=True)
+        else:
+            card = page.locator(".report-v2-at-glance-item").filter(
+                has=page.get_by_role("heading", name=re.compile(r"^BTC/USDT(?:\s|$)")),
+            )
+            if await card.count() != 1:
+                return "target_card_missing"
+            label = {"nl-NL": "Koersbron", "en-US": "Quote source", "de-DE": "Kursquelle"}[locale]
+            quote_row = card.locator("dt").filter(has_text=label).locator("xpath=..")
+            if await quote_row.count() != 1:
+                return "target_quote_missing"
+            quote = quote_row.locator("dd").get_by_text(expected, exact=False)
+        await quote.first.wait_for(timeout=15000)
+        return "ok"
+    except Exception:
+        return "selector_missing"
+
+
 async def _rendered_quote_times(user_id: int, canonical_ref: dict) -> dict[str, str]:
     from backend.scripts.qa_protected_browser import observe_page
     from backend.utils.auth_utils import create_access_token
@@ -156,11 +183,9 @@ async def _rendered_quote_times(user_id: int, canonical_ref: dict) -> dict[str, 
                         "([source, locale]) => new Intl.DateTimeFormat(locale, " + formatter +
                         ").format(new Date(source)) + ' UTC'", [page_ref[2].isoformat(), locale],
                     )
-                    try:
-                        await page.get_by_text(expected, exact=False).first.wait_for(timeout=15000)
-                        return "ok"
-                    except Exception:
-                        return "selector_missing"
+                    return await _target_quote_visible(
+                        page, surface=expected_surface, locale=locale, expected=expected,
+                    )
 
                 try:
                     checks[f"{surface}_{zone.split('/')[-1].lower()}"] = await observe_page(
@@ -256,8 +281,14 @@ def run(*, user_id: int, market_id: int, paper_evidence: dict,
                    for surface in ("analysis", "report")
                    for zone in ("amsterdam", "new_york", "tokyo")}
     failed = sorted(name for name, passed in checks.items() if not passed)
-    return {"result": "FAIL" if failed else "PASS", "failed_checks": failed,
-            "gate_status": "FAIL" if failed else "PASS",
+    source_changed_only = (bool(failed) and failed == ["deployed_browser_zones"]
+                           and "page_source_changed" in browser.values()
+                           and all(value in {"ok", "page_source_changed"}
+                                   for value in browser.values()))
+    status = "INCONCLUSIVE" if source_changed_only else "FAIL" if failed else "PASS"
+    return {"result": status,
+            "failed_checks": ["page_source_changed"] if source_changed_only else failed,
+            "gate_status": status,
             "browser_zones_checked": browser_zones_checked,
             "browser_zone_checks": {key: browser.get(key) is True or browser.get(key) == "ok" for key in (
                 "analysis_amsterdam", "analysis_new_york", "analysis_tokyo",
@@ -268,7 +299,8 @@ def run(*, user_id: int, market_id: int, paper_evidence: dict,
                 "report_amsterdam", "report_new_york", "report_tokyo",
             ) if (value := browser.get(key)) in {
                 "ok", "api_unseen", "api_http_failure", "api_source_unverified",
-                "page_source_changed", "selector_missing", "page_unavailable",
+                "page_source_changed", "target_card_missing", "target_quote_missing",
+                "selector_missing", "page_unavailable",
             }},
             "surface_display_checks": {key: bool(surface_display_checks.get(key))
                                        for key in ("analysis", "report", "bot", "finn")},

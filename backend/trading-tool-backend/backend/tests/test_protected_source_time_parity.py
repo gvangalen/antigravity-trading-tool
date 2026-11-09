@@ -107,6 +107,19 @@ def test_four_surface_collector_returns_only_fixed_checks(monkeypatch):
     )
     assert "988" not in str(failed)
 
+    monkeypatch.setattr(probe, "read_json", read_json)
+    async def refreshed_browser(_owner, _source):
+        return {f"{surface}_{zone}": (
+            "page_source_changed" if surface == "analysis" and zone == "amsterdam" else "ok"
+        ) for surface in ("analysis", "report")
+            for zone in ("amsterdam", "new_york", "tokyo")}
+    monkeypatch.setattr(probe, "_rendered_quote_times", refreshed_browser)
+    inconclusive = probe.run(user_id=7, market_id=43,
+                             paper_evidence=evidence, frozen_ref=REF)
+    assert inconclusive["result"] == "INCONCLUSIVE"
+    assert inconclusive["failed_checks"] == ["page_source_changed"]
+    assert inconclusive["browser_zone_phases"]["analysis_amsterdam"] == "page_source_changed"
+
 
 def test_browser_checks_classify_page_source_refresh_without_leaking_payload(monkeypatch):
     from backend.scripts import qa_protected_browser
@@ -152,9 +165,49 @@ def test_browser_checks_classify_page_source_refresh_without_leaking_payload(mon
         return await inspect(Page())
 
     monkeypatch.setattr(qa_protected_browser, "observe_page", observe_page)
+    async def visible(*_args, **_kwargs):
+        return "ok"
+    monkeypatch.setattr(probe, "_target_quote_visible", visible)
     phases = asyncio.run(probe._rendered_quote_times(7, REF))
     assert phases["analysis_amsterdam"] == "page_source_changed"
     assert all(value == "ok" for key, value in phases.items() if key != "analysis_amsterdam")
     assert seen_locales.count("en-US") == 3
     assert "private-token" not in str(phases)
     assert "private-fixture-value" not in str(phases)
+
+
+def test_target_quote_selector_rejects_duplicate_time_outside_btc_usdt_card():
+    class Locator:
+        def __init__(self, scope, *, count=1):
+            self.scope, self._count = scope, count
+            self.first = self
+        async def count(self):
+            return self._count
+        def locator(self, selector):
+            return Locator(f"{self.scope}/{selector}")
+        def filter(self, **_kwargs):
+            return self
+        def get_by_text(self, text, **_kwargs):
+            if getattr(text, "pattern", "") == r"\bUSDT\b":
+                return Locator(f"{self.scope}/currency")
+            return Locator(f"{self.scope}/target_time", count=0)
+        async def wait_for(self, **_kwargs):
+            if "target_time" in self.scope:
+                raise TimeoutError("duplicate exists elsewhere, target absent")
+
+    class Page:
+        def get_by_text(self, text, **_kwargs):
+            # A page-wide time locator would succeed; the target card does not.
+            return Locator("page/time" if "UTC" in text else "page/active_anchor")
+        def get_by_role(self, *_args, **_kwargs):
+            return Locator("page/heading")
+        def locator(self, selector):
+            return Locator(f"page/{selector}")
+
+    page = Page()
+    assert asyncio.run(probe._target_quote_visible(
+        page, surface="analysis", locale="nl-NL", expected="8 nov 2026 09:30 UTC",
+    )) == "selector_missing"
+    assert asyncio.run(probe._target_quote_visible(
+        page, surface="report", locale="nl-NL", expected="8 nov 2026 09:30 UTC",
+    )) == "selector_missing"

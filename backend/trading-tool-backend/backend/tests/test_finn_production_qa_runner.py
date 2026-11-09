@@ -114,6 +114,7 @@ def test_trader_gate_profiles_are_protected_and_distinguish_execution_scope():
         assert branch.index('report["qa_status"] = "INCOMPLETE"') < branch.index('report[args.profile] =')
     assert 'report["safety"]["execution_calls"] = None' in exit_branch
     assert 'report["safety"]["execution_calls"] = report[args.profile].get("engine_calls")' in exit_branch
+    assert '"incomplete" if report[args.profile]["result"] == "INCONCLUSIVE"' in exit_branch
 
 
 def test_prior_trader_fixture_audits_are_read_only_and_bounded():

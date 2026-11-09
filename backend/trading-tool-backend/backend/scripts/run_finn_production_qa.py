@@ -2488,9 +2488,13 @@ def main() -> int:
                 report["safety"]["execution_calls"] = report[args.profile].get("engine_calls")
                 report["safety"]["live_trading_calls"] = report[args.profile].get("live_calls")
                 report["outcome"] = (
-                    "passed" if report[args.profile]["result"] == "PASS" else "failed"
+                    "passed" if report[args.profile]["result"] == "PASS" else
+                    "incomplete" if report[args.profile]["result"] == "INCONCLUSIVE" else "failed"
                 )
-                report["qa_status"] = "COMPLETED"
+                report["qa_status"] = (
+                    "INCOMPLETE" if report[args.profile]["result"] == "INCONCLUSIVE"
+                    else "COMPLETED"
+                )
             elif args.profile in {"trader_paper_exit_fixture_audit", "trader_pair_fixture_audit"}:
                 if args.manifest_id != "none" or args.manifest_bundle_path:
                     raise ValueError("trader_fixture_audit_manifest_forbidden")

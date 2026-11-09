@@ -43,6 +43,16 @@ def test_examiner_does_not_accept_omission_or_fabricated_quote():
     }
 
 
+def test_examiner_quote_accepts_only_unicode_whitespace_layout_changes():
+    answer = ANSWER.replace("Positie: 0,01 BTC", "Positie:\n0,01\u00a0BTC")
+    assert check_judgment(answer=answer, judgment=judgment())["result"] == "PASS"
+    wrong = judgment()
+    wrong["claims"][4]["quote"] = "Positie: 0,02 BTC"
+    assert check_judgment(answer=answer, judgment=wrong)["failed_checks"] == [
+        "answer_examiner_quote_position_quantity",
+    ]
+
+
 def test_examiner_rejects_duplicate_or_missing_categories():
     duplicate = judgment()
     duplicate["claims"][3]["fact"] = "plan_cadence"

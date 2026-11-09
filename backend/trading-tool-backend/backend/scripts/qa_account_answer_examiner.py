@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import unicodedata
 from typing import Any
 
 
@@ -39,6 +40,12 @@ SCHEMA = {
 }
 
 
+def _same_quote_text(quote: str, answer: str) -> bool:
+    """Ignore only Unicode whitespace layout, not numbers, words or punctuation."""
+    normalize = lambda value: " ".join(unicodedata.normalize("NFC", value).split())
+    return normalize(quote) in normalize(answer)
+
+
 def check_judgment(*, answer: str, judgment: dict[str, Any]) -> dict[str, Any]:
     claims = judgment.get("claims") if isinstance(judgment, dict) else None
     if not isinstance(claims, list) or len(claims) != len(FACTS):
@@ -50,7 +57,7 @@ def check_judgment(*, answer: str, judgment: dict[str, Any]) -> dict[str, Any]:
         if claim["fact"] in by_fact or claim.get("verdict") not in VERDICTS:
             return {"result": "UNTESTED", "failed_checks": ["answer_examiner_schema"]}
         quote = claim.get("quote")
-        if not isinstance(quote, str) or (quote and quote not in answer):
+        if not isinstance(quote, str) or (quote and not _same_quote_text(quote, answer)):
             return {"result": "UNTESTED", "failed_checks": [f"answer_examiner_quote_{claim['fact']}"]}
         if claim["verdict"] != "omitted" and not quote:
             return {"result": "UNTESTED", "failed_checks": [f"answer_examiner_quote_{claim['fact']}"]}
