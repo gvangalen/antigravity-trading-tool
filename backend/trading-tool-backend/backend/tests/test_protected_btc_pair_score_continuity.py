@@ -806,6 +806,26 @@ def test_shared_loop_is_python_310_compatible_and_closes_after_failure(monkeypat
         assert loop.is_closed()
 
 
+def test_shared_loop_drains_pending_provider_task_on_failure():
+    events = []
+    with pytest.raises(ValueError, match="test failure"):
+        with probe._shared_loop_runner() as runner:
+            loop = runner.loop
+            async def provider_task():
+                try:
+                    await asyncio.Event().wait()
+                except asyncio.CancelledError:
+                    events.append("cancelled")
+                    raise
+            async def start_task():
+                asyncio.create_task(provider_task())
+                await asyncio.sleep(0)
+            runner.run(start_task())
+            raise ValueError("test failure")
+    assert events == ["cancelled"]
+    assert loop.is_closed()
+
+
 def test_baseline_failure_is_classified_and_quarantined(monkeypatch):
     monkeypatch.setenv("FINN_QA_ALLOW_TRADER_PAIR_FIXTURE", "1")
     monkeypatch.setenv("FINN_QA_USER_ID", "7")
