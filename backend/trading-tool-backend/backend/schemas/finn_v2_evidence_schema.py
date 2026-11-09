@@ -276,6 +276,9 @@ class BotStatusData(BaseModel):
 
 class WatchlistEntryData(BaseModel):
     symbol: str
+    market_id: Optional[int] = None
+    quote_currency: Optional[str] = None
+    pair: Optional[str] = None
     present: bool = True
 
 

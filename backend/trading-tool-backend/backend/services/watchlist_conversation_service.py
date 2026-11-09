@@ -66,3 +66,23 @@ def replacement_mentions(text: str, catalog: Mapping[str, Mapping[str, Any]]) ->
     else:
         return None
     return {"source": source, "target": target}
+
+
+def ambiguous_asset_change_scope(text: str, catalog: Mapping[str, Mapping[str, Any]]) -> bool:
+    """A change to an asset with no named product surface needs clarification.
+
+    The asset itself is resolved from the catalog. We only recognize the
+    ambiguous shape of the request; we do not infer a watchlist or portfolio
+    mutation from it.
+    """
+    value = str(text or "")
+    if len(asset_mentions(value, catalog)) != 1:
+        return False
+    if re.search(r"\b(?:watchlist|wachtlist|wachtlijst|volglijst|portfolio|portefeuille|bot|strategie|strategy|setup)\b", value, re.I):
+        return False
+    if re.search(r"\b(?:volg|volgen|follow|following|voeg|toevoegen|add|verwijder|remove)\b", value, re.I):
+        return False
+    return bool(
+        re.search(r"\b(?:aandeel|share|stock|asset|anteil|aktie)\b", value, re.I)
+        and re.search(r"\b(?:aanpass\w*|wijzig\w*|verander\w*|omzet\w*|change|switch|convert|adjust|änder\w*|wechsel\w*)\b", value, re.I)
+    )

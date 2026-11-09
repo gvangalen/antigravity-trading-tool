@@ -1,6 +1,6 @@
 import asyncio
 
-from backend.services.watchlist_conversation_service import asset_mentions, replacement_mentions
+from backend.services.watchlist_conversation_service import ambiguous_asset_change_scope, asset_mentions, replacement_mentions
 from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor
 
 
@@ -60,5 +60,28 @@ def test_responses_front_door_routes_replacements_through_action_contract():
         assert ambiguous.proposal_analysis is None
         assert "watchlist" in ambiguous.response.text
         assert "portfolio" in ambiguous.response.text
+
+    asyncio.run(exercise())
+
+
+def test_single_catalog_asset_with_ambiguous_change_asks_scope_before_any_action():
+    for message in (
+        "Ik wil mijn aandeel aanpassen in bitcoin.",
+        "Ik wil mijn aandeel aanpassen in Ethereum.",
+        "I want to change my stock into Apple.",
+    ):
+        assert ambiguous_asset_change_scope(message, CATALOG)
+    assert not ambiguous_asset_change_scope("Voeg Bitcoin toe aan mijn watchlist", CATALOG)
+    assert not ambiguous_asset_change_scope("Ik wil mijn portfolio aanpassen in Ethereum", CATALOG)
+    assert not ambiguous_asset_change_scope("Ik wil mijn aandeel aanpassen in onbekende munt", CATALOG)
+
+    async def exercise():
+        front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="ambiguous-asset-change")
+        result = await front.run(
+            message="Ik wil mijn aandeel aanpassen in bitcoin.", instructions="",
+            conversation_context={}, verified_asset="AAPL",
+        )
+        assert result.proposal_analysis is None
+        assert result.response.text == "Bedoel je een wijziging in je watchlist of je portfolio?"
 
     asyncio.run(exercise())
