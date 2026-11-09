@@ -116,7 +116,8 @@ async def _saved_pair_visibility(token: str) -> dict[str, str | bool]:
     The first identity is the authenticated protected fixture. The second is a
     synthetic in-memory owner; no second account or product mutation is made.
     """
-    state = {"phase": "first", "auth_user": None, "stage": "browser_open"}
+    state = {"phase": "first", "auth_user": None, "stage": "browser_open",
+             "watchlist_gets": 0, "route": "unknown"}
     first_rows = [
         {"symbol": "BTC", "market_id": 410001, "quote_currency": "EUR",
          "asset_class": "crypto", "display_name": "Bitcoin"},
@@ -129,12 +130,16 @@ async def _saved_pair_visibility(token: str) -> dict[str, str | bool]:
     ]
 
     def rows():
+        state["watchlist_gets"] += 1
         return first_rows if state["phase"] == "first" else second_rows
 
     def user():
         return state["auth_user"] if state["phase"] == "second" else None
 
     async def inspect(page):
+        state["route"] = urlsplit(page.url).path if urlsplit(page.url).path in {
+            "/asset", "/login", "/onboarding", "/dashboard",
+        } else "other"
         product_posts = []
         failed_posts = []
         page.on("request", lambda request: product_posts.append(request)
@@ -144,9 +149,24 @@ async def _saved_pair_visibility(token: str) -> dict[str, str | bool]:
         first_eur = page.get_by_role("button", name="Asset verwijderen: BTC/EUR")
         first_usdt = page.get_by_role("button", name="Asset verwijderen: BTC/USDT")
         second_eth = page.get_by_role("button", name="Asset verwijderen: ETH/EUR")
+        state["stage"] = "crypto_group"
+        await page.get_by_role("button", name="Crypto", exact=True).click()
         state["stage"] = "first_rows"
-        await first_eur.wait_for(state="visible", timeout=15000)
-        await first_usdt.wait_for(state="visible", timeout=15000)
+        try:
+            await first_eur.wait_for(state="visible", timeout=15000)
+            await first_usdt.wait_for(state="visible", timeout=15000)
+        except Exception:
+            body = await page.locator("body").inner_text()
+            return {"case_id": "saved_pair_owner_switch", "both_initial": False,
+                    "both_after_eur": False, "both_after_usdt": False,
+                    "isolated_second": False, "restored_first": False,
+                    "product_post_blocked": len(product_posts) == len(failed_posts),
+                    "error_code": "first_rows_failed", "route_code": state["route"],
+                    "watchlist_get_seen": state["watchlist_gets"] > 0,
+                    "eur_label_in_dom": "BTC/EUR" in body,
+                    "usdt_label_in_dom": "BTC/USDT" in body,
+                    "eur_button_count_positive": await first_eur.count() > 0,
+                    "usdt_button_count_positive": await first_usdt.count() > 0}
         both_initial = await first_eur.is_visible() and await first_usdt.is_visible()
 
         state["stage"] = "select_eur"
@@ -187,7 +207,7 @@ async def _saved_pair_visibility(token: str) -> dict[str, str | bool]:
 
     try:
         return await observe_page(
-            base_url="https://tradamind.com", path="/asset?quote=USDT", token=token,
+            base_url="https://tradamind.com", path="/asset", token=token,
             inspect=inspect, bypass_fixture_onboarding=True,
             fixture_watchlist_rows=rows, fixture_auth_user=user,
         )
@@ -195,7 +215,9 @@ async def _saved_pair_visibility(token: str) -> dict[str, str | bool]:
         return {"case_id": "saved_pair_owner_switch", "both_initial": False,
                 "both_after_eur": False, "both_after_usdt": False,
                 "isolated_second": False, "restored_first": False,
-                "product_post_blocked": False, "error_code": state["stage"] + "_failed"}
+                "product_post_blocked": False, "error_code": state["stage"] + "_failed",
+                "route_code": state["route"],
+                "watchlist_get_seen": state["watchlist_gets"] > 0}
 
 
 def run(token: str) -> dict:
