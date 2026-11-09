@@ -7,6 +7,7 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 import { fetchBotTrades, fetchPortfolioSummary, fetchVerifiedPortfolioHistory, saveLiveCashAllocations, transferPaperCash } from "@/lib/api/botApi";
 import { openFinnContext } from "@/lib/finnCommandSearch";
 import { formatCurrency, formatDateTime, formatNumber } from "@/lib/i18n";
+import { PORTFOLIO_TIME_OPTIONS } from "@/lib/portfolioDateTime.mjs";
 import { useTranslation } from "@/app/providers/I18nProvider";
 
 const known = (value) => value !== null && value !== undefined && Number.isFinite(Number(value));
@@ -37,9 +38,7 @@ function PortfolioPageInner() {
     ? formatCurrency(Number(value), locale, "EUR", { maximumFractionDigits: 2 })
     : "—", [locale]);
   const time = useCallback((value) => value
-    ? formatDateTime(new Date(value), locale, {
-      dateStyle: "medium", timeStyle: "short", timeZone: "Europe/Amsterdam", timeZoneName: "short",
-    })
+    ? formatDateTime(new Date(value), locale, PORTFOLIO_TIME_OPTIONS)
     : null, [locale]);
 
   const load = useCallback(async () => {
