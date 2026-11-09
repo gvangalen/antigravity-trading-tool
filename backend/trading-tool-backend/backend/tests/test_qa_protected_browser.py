@@ -2,7 +2,8 @@ import asyncio
 import pytest
 
 from backend.scripts.qa_protected_browser import (
-    block_websocket, fixture_onboarding_response, observe_page, request_policy,
+    block_websocket, fixture_exact_selection_allowed, fixture_onboarding_response,
+    observe_page, request_policy, route_protected_request,
 )
 
 
@@ -63,3 +64,60 @@ def test_fixture_navigation_override_cannot_be_used_on_unrelated_pages():
             base_url="https://tradamind.com", path="/portfolio", token="in-memory-token",
             inspect=lambda _page: None, bypass_fixture_onboarding=True,
         ))
+
+
+def test_exact_selection_override_is_one_owner_scoped_in_memory_post_only():
+    base = "https://tradamind.com"
+    request = (f"{base}/api/assets/BTC/trading-markets/USDT/select?"
+               "include_workspace=true&market_period=day")
+    args = {"base_url": base, "request_url": request, "method": "POST", "enabled": True}
+    assert fixture_exact_selection_allowed(**args) is True
+    for change in (
+        {"enabled": False}, {"method": "GET"},
+        {"request_url": request.replace("BTC", "ETH")},
+        {"request_url": request.replace("USDT", "EUR")},
+        {"request_url": request.replace("include_workspace=true", "include_workspace=false")},
+        {"request_url": request + "&owner=private"},
+        {"request_url": request.replace(base, "https://evil.example")},
+    ):
+        assert fixture_exact_selection_allowed(**(args | change)) is False
+
+
+def test_exact_selection_override_requires_asset_page():
+    with pytest.raises(ValueError, match="qa_browser_exact_selection_override_scope_invalid"):
+        asyncio.run(observe_page(
+            base_url="https://tradamind.com", path="/report", token="in-memory-token",
+            inspect=lambda _page: None, fixture_exact_selection=lambda: {},
+        ))
+
+
+def test_browser_fulfills_only_allowlisted_selection_post_without_network():
+    class Route:
+        def __init__(self, url, method):
+            self.request = type("Request", (), {
+                "url": url, "method": method, "headers": {},
+            })()
+            self.actions = []
+        async def abort(self):
+            self.actions.append("abort")
+        async def fulfill(self, **kwargs):
+            self.actions.append(("fulfill", kwargs["status"]))
+        async def continue_(self, **_kwargs):
+            self.actions.append("continue")
+
+    base = "https://tradamind.com"
+    exact = f"{base}/api/assets/BTC/trading-markets/USDT/select?include_workspace=true"
+    for url, method, expected in (
+        (exact, "POST", [("fulfill", 200)]),
+        (exact.replace("USDT", "EUR"), "POST", ["abort"]),
+        (exact + "&owner=private", "POST", ["abort"]),
+        ("https://evil.example/api/assets/BTC/trading-markets/USDT/select?include_workspace=true",
+         "POST", ["abort"]),
+    ):
+        route = Route(url, method)
+        asyncio.run(route_protected_request(
+            route, base_url=base, token="private-token",
+            bypass_fixture_onboarding=True,
+            fixture_exact_selection=lambda: {"workspace": {"private": "private-value"}},
+        ))
+        assert route.actions == expected

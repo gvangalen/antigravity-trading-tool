@@ -132,6 +132,20 @@ async def _rendered_quote_times(user_id: int, canonical_ref: dict) -> dict[str, 
     canonical = _normalized_ref(canonical_ref)
     if canonical is None:
         raise RuntimeError("source_parity_browser_ref_invalid")
+
+    def selection_readback():
+        # The product's selection POST can ingest shared market data. Render its
+        # response shape from an owner-scoped GET without dispatching that POST.
+        workspace = read_json(
+            owner_id=user_id,
+            path="/api/workspace/exact-market?symbol=BTC&quote_currency=USDT",
+        )
+        if (workspace.get("market_id") != canonical[0]
+                or workspace.get("pair") != "BTC/USDT"
+                or _normalized_ref((workspace.get("quote") or {}).get("source_ref")) is None):
+            raise RuntimeError("source_parity_browser_readback_invalid")
+        return {"market_id": canonical[0], "pair": "BTC/USDT",
+                "quote_currency": "USDT", "workspace": workspace}
     try:
         for zone in ("Europe/Amsterdam", "America/New_York", "Asia/Tokyo"):
             for surface, path in (
@@ -141,7 +155,7 @@ async def _rendered_quote_times(user_id: int, canonical_ref: dict) -> dict[str, 
                 observed_responses = []
 
                 def observe_response(response, *, expected_surface=surface):
-                    expected_path = ("/api/workspace/exact-market" if expected_surface == "analysis"
+                    expected_path = ("/api/assets/BTC/trading-markets/USDT/select" if expected_surface == "analysis"
                                      else "/api/report/daily/latest")
                     if urlsplit(response.url).path == expected_path:
                         observed_responses.append(response)
@@ -159,7 +173,8 @@ async def _rendered_quote_times(user_id: int, canonical_ref: dict) -> dict[str, 
                     try:
                         payload = await response.json()
                         if expected_surface == "analysis":
-                            page_ref = _normalized_ref((payload.get("quote") or {}).get("source_ref"))
+                            workspace = payload.get("workspace") or {}
+                            page_ref = _normalized_ref((workspace.get("quote") or {}).get("source_ref"))
                             locale = "nl-NL"
                         else:
                             snapshot = payload.get("score_source_snapshot") or {}
@@ -194,6 +209,7 @@ async def _rendered_quote_times(user_id: int, canonical_ref: dict) -> dict[str, 
                         inspect=inspect, timezone_id=zone,
                         bypass_fixture_onboarding=True,
                         observe_response=observe_response,
+                        fixture_exact_selection=(selection_readback if surface == "analysis" else None),
                     )
                 except Exception:
                     checks[f"{surface}_{zone.split('/')[-1].lower()}"] = "page_unavailable"
@@ -307,4 +323,5 @@ def run(*, user_id: int, market_id: int, paper_evidence: dict,
                                        for key in ("analysis", "report", "bot", "finn")},
             "parity_subchecks": [code for code in parity_subchecks if code in {
                 "dated_source", "same_source_instant", "same_display_instant", "explicit_zone",
-            }]}
+            }],
+            "market_selection_readback_override": True}

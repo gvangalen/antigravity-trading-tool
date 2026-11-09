@@ -49,6 +49,15 @@ isolated QA child. An absent child is reported as before-seed-or-cleaned, not
 proof of cleanup. A retained child reports only inactive/quarantined safety and
 fixed row-presence booleans; it never deletes rows or reveals owner IDs.
 
+`trader_pair_fixture_cleanup` is a separately authorized, bounded follow-up
+for a previously failed or incomplete pair probe. It uses the same scoped
+`audit-<workflow-id>-<attempt>-<sha8>` label and prior-report proof, requires
+`allow_fixture_actions=true` and `allow_safe_fixture_execution=false`, and
+deletes only one still-inactive, non-Live, uncredentialed child with no orders
+or executions. The cleanup helper verifies namespace and ownership again
+inside its transaction. The profile reports `CLEANED` only after a second
+owner- and row-absence check; otherwise it fails closed.
+
 `action_contract_acceptance` is the strict registry-wide profile. Before any
 product request it requires exactly one independent case for every active
 registry contract, all 16 safe write contracts, all nine declared natural

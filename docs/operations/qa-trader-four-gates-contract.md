@@ -140,6 +140,9 @@ until the extended collector runs on the deployed revision.
 On an incomplete run, `trader_pair_fixture_audit` may read only the prior
 run's namespaced child and publish fixed active/Live/key and row-presence
 booleans. It cannot prove cleanup from an absent child or repair a failed run.
+`trader_pair_fixture_cleanup` is a separate authorized action for an audited,
+inactive child with no exchange keys, orders or executions; it verifies absence
+of the owner and pair evidence rows after deletion.
 
 ## Prior Paper-exit runner diagnosis
 

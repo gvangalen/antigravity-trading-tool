@@ -114,6 +114,39 @@ def test_pair_audit_rejects_paper_prior_report_before_database(monkeypatch):
         audit.run(LABEL, expected_profile="trader_pair_score_continuity")
 
 
+def test_pair_cleanup_requires_inactive_uncredentialed_child_and_verifies_zero_rows(monkeypatch):
+    before = Connection([
+        [(17, False, {"qa_namespace": NAMESPACE})], [(22, False, False)],
+        [(0,)], [(0,)], [(0,)],
+    ])
+    after = Connection([[(0,)], *([[(0,)]] * 7)])
+    connections = iter((before, after))
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: next(connections))
+    monkeypatch.setattr(audit, "_verify_prior_report", lambda *_args: None)
+    cleaned = []
+    monkeypatch.setattr(audit.fixture, "_cleanup", lambda *args: cleaned.append(args))
+    result = audit.cleanup_pair(LABEL)
+    assert result == {"fixture_state": "CLEANED", "cleanup_verified": True}
+    assert cleaned == [(NAMESPACE, 17, 22)]
+    assert before.closed and after.closed
+    assert NAMESPACE not in str(result) and "17" not in str(result)
+
+
+def test_pair_cleanup_refuses_active_or_credentialed_child_before_write(monkeypatch):
+    for responses, code in (
+        ([[(17, True, {"qa_namespace": NAMESPACE})]], "trader_pair_cleanup_owner_unsafe"),
+        ([[(17, False, {"qa_namespace": NAMESPACE})], [(22, True, False)]],
+         "trader_pair_cleanup_bot_unsafe"),
+        ([[(17, False, {"qa_namespace": NAMESPACE})], [(22, False, False)], [(1,)]],
+         "trader_pair_cleanup_keys_unsafe"),
+    ):
+        monkeypatch.setattr(audit, "_verify_prior_report", lambda *_args: None)
+        monkeypatch.setattr(audit.fixture, "_connection", lambda values=responses: Connection(values))
+        monkeypatch.setattr(audit.fixture, "_cleanup", lambda *_args: pytest.fail("unexpected write"))
+        with pytest.raises(RuntimeError, match=f"^{code}$"):
+            audit.cleanup_pair(LABEL)
+
+
 def test_audit_rejects_unscoped_label_before_database(monkeypatch):
     monkeypatch.setattr(audit.fixture, "_connection", lambda: pytest.fail("database touched"))
     with pytest.raises(RuntimeError, match="trader_fixture_audit_label_invalid"):

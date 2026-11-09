@@ -218,12 +218,16 @@ def _snapshot(user_id: int, markets: dict[str, dict]) -> dict:
     from backend.utils.scoring_utils import score_source_is_fresh
 
     connection = fixture._connection()
+    step = "score_builder"
     try:
         pairs = {}
         for pair, source in markets.items():
             market_id = source["market_id"]
+            step = "score_builder"
             built = build_daily_scores_for_market(user_id, market_id)
+            step = "assessment"
             assessment = asyncio.run(_assessment(user_id, market_id))
+            step = "source_read"
             with connection.cursor() as cursor:
                 cursor.execute("""SELECT source_observed_at FROM market_data_indicators
                                   WHERE user_id=%s AND symbol='BTC' AND market_id=%s
@@ -235,6 +239,7 @@ def _snapshot(user_id: int, markets: dict[str, dict]) -> dict:
                                   WHERE user_id=%s AND symbol='BTC' AND market_id=%s
                                   ORDER BY category, indicator""", (user_id, market_id))
                 config = tuple(cursor.fetchall())
+            step = "stale_eval"
             components = assessment.get("component_source_status") or {}
             market_reason = components.get("market_score")
             verified = assessment.get("source_status") == "available" and assessment.get("benchmark_score") is not None
@@ -245,6 +250,7 @@ def _snapshot(user_id: int, markets: dict[str, dict]) -> dict:
                 )
                 and (built.get("scores") or {}).get("market") is None
             )
+            step = "projection"
             pairs[pair] = {
                 "owner_id": user_id, "market_id": market_id,
                 "indicator_config": config,
@@ -262,6 +268,8 @@ def _snapshot(user_id: int, markets: dict[str, dict]) -> dict:
                 "stale_reading_proven": stale_reading_proven,
             }
         return {"pairs": pairs}
+    except Exception:
+        raise RuntimeError(f"trader_pair_snapshot_{step}_failed") from None
     finally:
         connection.close()
 
@@ -352,6 +360,12 @@ def run(namespace: str) -> dict:
                 "stale_date_browser_checked": True,
                 "gate_status": "PASS"}
     except Exception as error:
+        snapshot_step = str(error).removeprefix("trader_pair_snapshot_").removesuffix("_failed")
+        if (stage in {"initial_snapshot", "outage_snapshot", "recovery_snapshot"}
+                and str(error) == f"trader_pair_snapshot_{snapshot_step}_failed"
+                and snapshot_step in {"score_builder", "assessment", "source_read",
+                                      "stale_eval", "projection"}):
+            raise RuntimeError(f"trader_pair_{stage}_{snapshot_step}_failed") from None
         if isinstance(error, RuntimeError) and str(error) in {
             "btc_pair_markets_unavailable", "btc_pair_source_unavailable",
             "btc_pair_fixture_source_missing", "fixture_binding_invalid",

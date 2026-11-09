@@ -199,6 +199,46 @@ def test_probe_reports_quarantine_failure_without_raw_exception(monkeypatch):
         probe.run(NAMESPACE)
 
 
+def test_snapshot_substage_classifies_builder_failure_without_private_exception(monkeypatch):
+    from backend.celery_task import store_daily_scores_task
+
+    class Connection:
+        def close(self):
+            pass
+    monkeypatch.setattr(probe.fixture, "_connection", Connection)
+    monkeypatch.setattr(store_daily_scores_task, "build_daily_scores_for_market",
+                        lambda *_args: (_ for _ in ()).throw(RuntimeError("private market value")))
+    with pytest.raises(RuntimeError, match="^trader_pair_snapshot_score_builder_failed$"):
+        probe._snapshot(11, MARKETS)
+
+
+def test_probe_reports_outage_snapshot_substage_and_quarantines(monkeypatch):
+    monkeypatch.setenv("FINN_QA_ALLOW_TRADER_PAIR_FIXTURE", "1")
+    monkeypatch.setenv("FINN_QA_USER_ID", "7")
+    monkeypatch.setattr(probe, "_markets", lambda: MARKETS)
+    monkeypatch.setattr(probe.fixture, "_seed", lambda *_args: (11, 22, "today"))
+    monkeypatch.setattr(probe, "_seed_pair_readings", lambda *_args: None)
+    monkeypatch.setattr(probe, "_business_snapshot", _stable_business)
+    snapshots = iter((_snapshot(45, 70), RuntimeError("trader_pair_snapshot_assessment_failed")))
+    def snapshot(*_args):
+        value = next(snapshots)
+        if isinstance(value, Exception):
+            raise value
+        return value
+    monkeypatch.setattr(probe, "_snapshot", snapshot)
+    monkeypatch.setattr(probe, "_transport_checks", lambda *_args: {"analysis": True, "finn": True})
+    monkeypatch.setattr(probe, "_set_eur_source_time", lambda *_args, **_kwargs: None)
+    quarantined = []
+    monkeypatch.setattr(probe.fixture, "_quarantine", lambda *_args: quarantined.append(True))
+    with pytest.raises(RuntimeError, match="^trader_pair_outage_snapshot_assessment_failed$"):
+        probe.run(NAMESPACE)
+    assert quarantined == [True]
+    assert profile_error_category(
+        "trader_pair_score_continuity",
+        RuntimeError("trader_pair_outage_snapshot_assessment_failed"),
+    ) == "trader_pair_outage_snapshot_assessment_failed"
+
+
 def test_snapshot_keeps_missing_score_with_independent_stale_source_diagnosis(monkeypatch):
     from backend.celery_task import store_daily_scores_task
 
