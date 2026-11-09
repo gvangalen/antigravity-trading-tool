@@ -204,7 +204,8 @@ function getUiCopy(locale = "nl") {
       sourceReadingFrom: (date) => `Reading from ${date}`,
       scoreAwaitingUpdate: "after next reading",
       datedSourceDetail: (date) => `The latest available source reading is from ${date}. The value remains visible. The score will update when the source provides a new reading.`,
-      scorePending: "A current source reading exists, but no indicator score is available. Check the score rule or wait for the next calculation.",
+      scorePending: "A source reading is available, but no matching indicator score has been saved yet. The next calculation will try again.",
+      scorePendingAt: (moment) => `Source reading from ${moment} is available. A score for this reading has not been saved yet; the next calculation will try again.`,
       pendingScoreWithPriorIndicator: (indicatorMoment, quoteMoment) => `Last indicator reading: ${indicatorMoment}. Displayed 24-hour change uses quote source: ${quoteMoment}. The score awaits recalculation.`,
       scoreRebuilding: "Your indicator choices changed. The score is being recalculated; previous readings have not been erased.",
       scoreIncomplete: "One or more selected indicators do not have a usable score yet. The group score will return when their evidence is complete.",
@@ -417,7 +418,8 @@ function getUiCopy(locale = "nl") {
       sourceReadingFrom: (date) => `Messung vom ${date}`,
       scoreAwaitingUpdate: "nach neuer Messung",
       datedSourceDetail: (date) => `Die letzte verfügbare Quellmessung stammt vom ${date}. Der Wert bleibt sichtbar. Der Score wird aktualisiert, sobald die Quelle eine neue Messung liefert.`,
-      scorePending: "Ein aktueller Quellwert liegt vor, aber kein Indikator-Score. Prüfe die Scoreregel oder warte auf die nächste Berechnung.",
+      scorePending: "Eine Quellmessung liegt vor, aber noch kein passender Indikator-Score. Bei der nächsten Berechnung wird es erneut versucht.",
+      scorePendingAt: (moment) => `Eine Quellmessung vom ${moment} liegt vor. Für diese Messung ist noch kein Score gespeichert; bei der nächsten Berechnung wird es erneut versucht.`,
       pendingScoreWithPriorIndicator: (indicatorMoment, quoteMoment) => `Letzte Indikatormessung: ${indicatorMoment}. Die angezeigte 24-Stunden-Veränderung stammt aus der Kursquelle vom ${quoteMoment}. Der Score wartet auf eine Neuberechnung.`,
       scoreRebuilding: "Deine Indikatorauswahl hat sich geändert. Der Score wird neu berechnet; frühere Messwerte wurden nicht gelöscht.",
       scoreIncomplete: "Mindestens ein gewählter Indikator hat noch keinen nutzbaren Score. Der Gruppenscore erscheint wieder, sobald die Daten vollständig sind.",
@@ -629,7 +631,8 @@ function getUiCopy(locale = "nl") {
     sourceReadingFrom: (date) => `Meting van ${date}`,
     scoreAwaitingUpdate: "volgt na nieuwe meting",
     datedSourceDetail: (date) => `De laatste beschikbare bronmeting is van ${date}. De waarde blijft zichtbaar. De score wordt bijgewerkt zodra de bron een nieuwe meting levert.`,
-    scorePending: "Er is een actuele bronmeting, maar nog geen indicatorscore. Controleer de scoreregel of wacht op de volgende berekening.",
+    scorePending: "Er is een bronmeting, maar nog geen bijpassende indicatorscore opgeslagen. Bij de volgende berekening wordt dit opnieuw geprobeerd.",
+    scorePendingAt: (moment) => `Bronmeting van ${moment} is beschikbaar. Voor deze meting is nog geen score opgeslagen; bij de volgende berekening wordt dit opnieuw geprobeerd.`,
     pendingScoreWithPriorIndicator: (indicatorMoment, quoteMoment) => `Laatste indicatormeting: ${indicatorMoment}. Getoonde 24-uursverandering uit koersbron: ${quoteMoment}. Score wacht op herberekening.`,
     scoreRebuilding: "Je indicatoren zijn gewijzigd. De score wordt opnieuw berekend; eerdere metingen zijn niet gewist.",
     scoreIncomplete: "Een of meer gekozen indicatoren hebben nog geen bruikbare score. De groepsscore komt terug zodra hun gegevens compleet zijn.",
@@ -1497,7 +1500,8 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
           : unavailableReason === "missing_rule"
             ? ui.missingScoreRule
           : unavailableReason === "score_pending"
-            ? ui.scorePending
+            ? currentQuoteMoment && currentQuoteMoment !== "—"
+              ? ui.scorePendingAt(currentQuoteMoment) : ui.scorePending
       : unavailableReason === "missing_source_reading"
         ? ui.missingDatedSource
       : !hasValue && item?.data_status === "pending_refresh"
@@ -1540,7 +1544,7 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
       score,
       signalTone: tone,
       scoreLabel: score === null
-        ? pendingScore ? ui.scorePendingShort
+        ? pendingScore ? "…"
           : datedSource ? ui.scoreAwaitingUpdate : ui.unavailable
         : `${Math.round(score)}/100`,
       detail,

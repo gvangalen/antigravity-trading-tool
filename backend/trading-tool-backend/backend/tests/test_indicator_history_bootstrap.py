@@ -111,7 +111,10 @@ class _MacroSession:
         self.commits = 0
 
     async def execute(self, _query):
-        return _Result([row.source_observed_at for row in self.rows if row.user_id == self.owner_id])
+        params = _query.compile().params
+        symbol = next((value for key, value in params.items() if key.startswith("symbol_")), None)
+        return _Result([row.source_observed_at for row in self.rows
+                        if row.user_id == self.owner_id and row.symbol == symbol])
 
     def add(self, row):
         self.rows.append(row)
@@ -259,7 +262,7 @@ def test_rsi_backfill_continues_after_price_has_five_days(monkeypatch):
     assert result["inserted"] >= 10
 
 
-def test_macro_backfill_is_owner_scoped_and_never_creates_a_score(monkeypatch):
+def test_macro_backfill_is_asset_scoped_and_never_creates_a_score(monkeypatch):
     from backend.services import indicator_history_bootstrap as module
 
     monkeypatch.setattr(module, "fetch_absolute_macro_history", lambda _name: [
@@ -273,9 +276,31 @@ def test_macro_backfill_is_owner_scoped_and_never_creates_a_score(monkeypatch):
     second = asyncio.run(bootstrap.bootstrap_macro(7, "dxy", "ETH"))
 
     assert first == {"inserted": 6, "status": "ready", "observed_days": 6}
-    assert second == {"inserted": 0, "status": "ready", "observed_days": 6}
+    assert second == {"inserted": 6, "status": "ready", "observed_days": 6}
     assert all(row.user_id == 7 and row.score is None for row in session.rows)
-    assert session.commits == 1
+    assert {row.symbol for row in session.rows} == {"BTC", "ETH"}
+    assert session.commits == 2
+
+
+def test_macro_backfill_only_skips_days_already_present_for_that_asset(monkeypatch):
+    from backend.services import indicator_history_bootstrap as module
+
+    history = [(datetime.combine(_day(offset), datetime.min.time()), 95.0 + offset)
+               for offset in range(1, 7)]
+    monkeypatch.setattr(module, "fetch_absolute_macro_history", lambda _name: history)
+    session = _MacroSession(owner_id=7)
+    for observed_at, value in history:
+        session.rows.append(SimpleNamespace(user_id=7, symbol="BTC", name="dxy",
+                                            source_observed_at=observed_at, value=value))
+    for observed_at, value in history[:2]:
+        session.rows.append(SimpleNamespace(user_id=7, symbol="AAPL", name="dxy",
+                                            source_observed_at=observed_at, value=value))
+
+    result = asyncio.run(IndicatorHistoryBootstrap(session).bootstrap_macro(7, "dxy", "AAPL"))
+
+    assert result == {"inserted": 4, "status": "ready", "observed_days": 6}
+    assert len([row for row in session.rows if row.symbol == "BTC"]) == 6
+    assert len([row for row in session.rows if row.symbol == "AAPL"]) == 6
 
 
 def test_completed_history_queues_score_refresh_for_affected_owner(monkeypatch):
@@ -284,6 +309,7 @@ def test_completed_history_queues_score_refresh_for_affected_owner(monkeypatch):
 
     rows = [SimpleNamespace(user_id=7, symbol="ETH", category="market", indicator="price"),
             SimpleNamespace(user_id=7, symbol="ETH", category="macro", indicator="dxy"),
+            SimpleNamespace(user_id=7, symbol="BTC", category="macro", indicator="dxy"),
             SimpleNamespace(user_id=8, symbol="ETH", category="market", indicator="price")]
 
     class _Session:
@@ -299,6 +325,8 @@ def test_completed_history_queues_score_refresh_for_affected_owner(monkeypatch):
         async def commit(self):
             pass
 
+    macro_scopes = []
+
     class _Bootstrap:
         def __init__(self, _session):
             pass
@@ -307,6 +335,7 @@ def test_completed_history_queues_score_refresh_for_affected_owner(monkeypatch):
             return {"status": "ready", "inserted": 5}
 
         async def bootstrap_macro(self, _owner, _name, _symbol):
+            macro_scopes.append((_owner, _name, _symbol))
             return {"status": "ready", "inserted": 5}
 
     class _MacroService:
@@ -325,7 +354,8 @@ def test_completed_history_queues_score_refresh_for_affected_owner(monkeypatch):
 
     result = asyncio.run(task_module._bootstrap_indicator_histories())
 
-    assert len(result["scopes"]) == 2
+    assert len(result["scopes"]) == 3
+    assert macro_scopes == [(7, "dxy", "BTC"), (7, "dxy", "ETH")]
     assert queued == [
         ("backend.celery_task.store_daily_scores_task.store_daily_scores_task",
          {"kwargs": {"user_id": 7}}),

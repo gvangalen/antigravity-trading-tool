@@ -528,6 +528,9 @@ def test_positive_match_uses_saved_evidence_for_each_selected_source():
                           "rule_origin": "system_template"}}
         for category, (name, value) in readings.items()
     }
+    evidence["macro"]["dxy"].update({
+        "source_symbol": "BTC", "history_scope_version": "asset_history_v1",
+    })
     row = {"report_date": date.today(), "calculated_at": now,
            "market_score": 70, "macro_score": 50, "technical_score": 75,
            "indicator_evidence": evidence}
@@ -644,6 +647,49 @@ def test_twenty_assets_keep_distinct_owner_setup_ids():
         assert {item["setup_id"]: item["symbol"] for item in result["matches"]} == {
             index: f"ASSET{index}" for index in range(1, 21)
         }
+
+    asyncio.run(run())
+
+
+def test_macro_source_freshness_uses_the_selected_asset_reading():
+    async def run():
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        observed = now - timedelta(minutes=1)
+        other_asset_observed = now
+        queries = []
+
+        class Result:
+            def __init__(self, rows):
+                self.rows = rows
+
+            def fetchall(self):
+                return self.rows
+
+        async def execute(query, params):
+            sql = str(query)
+            queries.append((sql, params))
+            if "FROM user_indicator_configs" in sql:
+                return Result([("dxy", now - timedelta(minutes=2))])
+            assert "FROM macro_data" in sql
+            # A newer BTC row exists for this owner. AAPL must not use it.
+            if "AND symbol = :symbol" not in sql or params["symbol"] != "AAPL":
+                return Result([("dxy", 103.0, other_asset_observed)])
+            return Result([("dxy", 102.3, observed)])
+
+        source = {"calculated_at": now, "indicator_evidence": {"macro": {
+            "dxy": {"value": 102.3, "source_observed_at": observed.isoformat(),
+                    "rule_origin": "system_template", "score": 20,
+                    "source_symbol": "AAPL", "history_scope_version": "asset_history_v1"},
+        }}}
+        service = SetupMarketMatchService(SimpleNamespace(execute=execute))
+        assert await service._source_is_fresh(7, "AAPL", "macro", source) is True
+        old_evidence = {"calculated_at": now, "indicator_evidence": {"macro": {
+            "dxy": {"value": 102.3, "source_observed_at": observed.isoformat(),
+                    "rule_origin": "system_template", "score": 20},
+        }}}
+        assert await service._source_is_fresh(7, "AAPL", "macro", old_evidence) is False
+        assert len(queries) == 4
+        assert all("AND symbol = :symbol" in queries[index][0] for index in (1, 3))
 
     asyncio.run(run())
 

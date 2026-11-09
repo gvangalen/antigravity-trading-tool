@@ -21,7 +21,7 @@ from backend.services.macro_data_service import MacroDataService
 from backend.services.market_data_service import MarketDataService
 from backend.services.score_service import ScoreService
 from backend.services.technical_data_service import TechnicalDataService
-from backend.utils.scoring_utils import score_source_is_fresh
+from backend.utils.scoring_utils import MACRO_HISTORY_SCOPE_VERSION, score_source_is_fresh
 
 logger = logging.getLogger(__name__)
 
@@ -176,7 +176,8 @@ def _indicator_key(value: Any) -> str:
 
 
 def _current_indicator_rows(rows: list[dict[str, Any]], category: str,
-                            daily: dict[str, Any] | None) -> list[dict[str, Any]]:
+                            daily: dict[str, Any] | None,
+                            *, symbol: str | None = None) -> list[dict[str, Any]]:
     """Use the same verified daily indicator evidence as the category score."""
     component = (daily or {}).get(category) or {}
     evidence = ((daily or {}).get("indicator_evidence") or {}).get(category) or {}
@@ -196,6 +197,10 @@ def _current_indicator_rows(rows: list[dict[str, Any]], category: str,
             item["score_issue"] = "missing_rule"
         saved = evidence.get(_indicator_key(row.get("name")))
         if (isinstance(saved, dict) and saved.get("rule_origin") in {"custom", "system_template"}
+                and (category != "macro" or (
+                    saved.get("source_symbol") == str(symbol or "").upper()
+                    and saved.get("history_scope_version") == MACRO_HISTORY_SCOPE_VERSION
+                ))
                 and (component.get("source_status") == "fresh" or saved.get("verified_current") is True)):
             try:
                 same_value = math.isclose(float(row["value"]), float(saved["value"]), rel_tol=1e-12)
@@ -492,7 +497,8 @@ class WorkspaceDataService:
         }
         canonical_day = all(period == "day" for period in periods.values())
         market_rows = _current_indicator_rows(market_rows, "market", daily if periods["market"] == "day" else None)
-        macro_rows = _current_indicator_rows(macro_rows, "macro", daily if periods["macro"] == "day" else None)
+        macro_rows = _current_indicator_rows(macro_rows, "macro", daily if periods["macro"] == "day" else None,
+                                            symbol=symbol)
         technical_rows = _current_indicator_rows(technical_rows, "technical", daily if periods["technical"] == "day" else None)
         categories = {
             "market": self._category_payload(market_rows, periods["market"], STALE_AFTER_SECONDS[periods["market"]], "market_data_indicators", symbol=symbol),
@@ -843,6 +849,7 @@ class WorkspaceDataService:
             macro_name = func.lower(MacroData.name)
             stmt = select(func.count(func.distinct(func.date(MacroData.source_observed_at)))).where(
                 MacroData.user_id == user_id,
+                MacroData.symbol == symbol,
                 macro_name.in_(macro_keys),
                 MacroData.source_observed_at >= now - timedelta(days=90),
                 MacroData.value.is_not(None),
