@@ -86,3 +86,16 @@ def ambiguous_asset_change_scope(text: str, catalog: Mapping[str, Mapping[str, A
         re.search(r"\b(?:aandeel|share|stock|asset|anteil|aktie)\b", value, re.I)
         and re.search(r"\b(?:aanpass\w*|wijzig\w*|verander\w*|omzet\w*|change|switch|convert|adjust|änder\w*|wechsel\w*)\b", value, re.I)
     )
+
+
+def asks_for_watchlist_inventory(text: str) -> bool:
+    """Identify an explicit request to list saved watchlist entries."""
+    value = str(text or "")
+    if not re.search(r"\b(?:watchlist|wachtlist|wachtlijst|volglijst|marktenlijst)\b", value, re.I):
+        return False
+    if re.search(r"\b(?:voeg|toevoegen|add|verwijder|remove|vervang|replace|koop|buy|sell|verkoop)\b", value, re.I):
+        return False
+    return bool(
+        re.search(r"\b(?:toon|laat\s+(?:me\s+)?zien|geef\s+(?:me\s+)?een\s+overzicht|show|list|zeige|auflisten)\b", value, re.I)
+        or re.search(r"\b(?:welke|wat|which|what|welche|was)\b.*\b(?:staan|staat|op|in|are|is|on|stehen|steht|sind)\b", value, re.I)
+    )

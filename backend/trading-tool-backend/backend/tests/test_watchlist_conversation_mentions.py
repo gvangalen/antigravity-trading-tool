@@ -1,7 +1,8 @@
 import asyncio
 
-from backend.services.watchlist_conversation_service import ambiguous_asset_change_scope, asset_mentions, replacement_mentions
+from backend.services.watchlist_conversation_service import ambiguous_asset_change_scope, asks_for_watchlist_inventory, asset_mentions, replacement_mentions
 from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor
+from backend.services.finn_v2_responses_answer_verifier import FinnResponsesAnswerVerifier
 
 
 CATALOG = {
@@ -83,5 +84,42 @@ def test_single_catalog_asset_with_ambiguous_change_asks_scope_before_any_action
         )
         assert result.proposal_analysis is None
         assert result.response.text == "Bedoel je een wijziging in je watchlist of je portfolio?"
+
+    asyncio.run(exercise())
+
+
+def test_explicit_watchlist_inventory_reads_owner_entries_without_a_selected_asset():
+    assert asks_for_watchlist_inventory("Welke assets staan op mijn watchlist?")
+    assert asks_for_watchlist_inventory("Show my watchlist")
+    assert not asks_for_watchlist_inventory("Wat vind je van mijn watchlist?")
+    assert not asks_for_watchlist_inventory("Voeg ETH toe aan mijn watchlist")
+
+    async def exercise():
+        front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="inventory-test")
+
+        async def read(call):
+            assert call.read_tools == ("read_watchlist",)
+            assert call.inputs == {}
+            return {"status": "completed", "results": [{
+                "scope": "read_watchlist", "status": "completed",
+                "data": {"symbols": [
+                    {"symbol": "BTC", "quote_currency": "USDT", "pair": "BTC/USDT"},
+                    {"symbol": "ETH", "quote_currency": "EUR", "pair": "ETH/EUR"},
+                    {"symbol": "AAPL", "quote_currency": None, "pair": None},
+                ]},
+            }]}
+
+        front.reads = read
+        result = await front.run(
+            message="Welke assets staan op mijn watchlist?", instructions="",
+            conversation_context={}, verified_asset=None,
+        )
+        assert result.proposal_analysis is None
+        assert result.response.answer_kind == "watchlist_inventory"
+        verified = await FinnResponsesAnswerVerifier().verify(
+            message="Welke assets staan op mijn watchlist?", result=result.response, locale="nl",
+        )
+        assert verified.status == "completed", verified.reason
+        assert verified.text == "Op je watchlist staan: BTC/USDT, ETH/EUR, AAPL."
 
     asyncio.run(exercise())

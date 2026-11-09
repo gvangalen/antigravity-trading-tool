@@ -44,7 +44,7 @@ from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResol
 from backend.services import finn_v2_entity_resolution_service as entity_resolution_module
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
 from backend.services.finn_v2_operation_classification_service import FinnV2OperationClassificationService
-from backend.services.watchlist_conversation_service import ambiguous_asset_change_scope, replacement_mentions
+from backend.services.watchlist_conversation_service import ambiguous_asset_change_scope, asks_for_watchlist_inventory, replacement_mentions
 from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
 from backend.services.finn_v2_account_bundle_answer import render_account_bundle_answer
 
@@ -1074,6 +1074,29 @@ class FinnResponsesFrontDoor:
             and os.getenv("FINN_PER_OPERATION_TOOLS_EXPERIMENT") == "1"
         )
         catalog = FinnResponsesToolCatalog(individual_proposals=individual_proposals)
+        if asks_for_watchlist_inventory(message):
+            # A list of saved entries belongs to the owner-scoped watchlist
+            # read. It must not depend on a selected workspace asset or on
+            # whether the model decides to request that read.
+            call = FinnResponsesToolCall(
+                name="get_active_asset_context", operation_id=None,
+                inputs={}, read_tools=("read_watchlist",),
+                required_inputs=(), missing_inputs=(),
+            )
+            try:
+                read_result = await self.reads(call)
+            except Exception:
+                logger.warning("FINN owner-scoped watchlist inventory read failed", exc_info=True)
+                read_result = {"status": "unavailable", "results": []}
+            return FinnResponsesFrontDoorResult(
+                FinnResponsesResult(
+                    text="Verified watchlist inventory.", response_id=f"watchlist-inventory-{self.run_id}",
+                    tool_trace=({"name": call.name, "status": read_result.get("status", "unavailable"),
+                                 "arguments": {}, "result": read_result},),
+                    answer_kind="watchlist_inventory",
+                    response_id_reusable=False,
+                ), None, previous_response, locale=locale,
+            )
         replacement = replacement_mentions(message, DEFAULT_ASSET_CATALOG)
         if not replacement and ambiguous_asset_change_scope(message, DEFAULT_ASSET_CATALOG):
             question = {

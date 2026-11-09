@@ -717,8 +717,14 @@ class FinnV2ToolExecutionService:
             bot_state = await self._ensure_bot(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
             return await self.bot_adapter.execute_status(bot=bot_state["bot"], user_id=user_id)
         if tool_name == "read_watchlist":
-            asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
-            return await self.watchlist_adapter.execute(user_id=user_id, asset=asset_state["asset"])
+            # A collection read is owner-scoped and does not need an active
+            # asset. Resolve only an explicitly selected target for the
+            # separate contains_target_asset fact.
+            target = None
+            if selector.get("asset"):
+                asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
+                target = asset_state["asset"]
+            return await self.watchlist_adapter.execute(user_id=user_id, asset=target)
         if tool_name == "read_portfolio":
             # ``asset`` is an optional slot on the resolved portfolio
             # contract. It originates from the persisted contract-derived

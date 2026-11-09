@@ -3149,6 +3149,45 @@ class FinnResponsesAnswerVerifier:
                 return FinnResponsesVerifiedAnswer(
                     "completed", answer, "saved_confirmation_readback", evidence,
                 )
+        if result.answer_kind == "watchlist_inventory":
+            watchlist_read = next((
+                item for item in evidence
+                if item.get("scope") == "read_watchlist"
+                and item.get("status") == "completed"
+                and isinstance(item.get("data"), dict)
+                and isinstance(item["data"].get("symbols"), list)
+            ), None)
+            language = str(locale or "nl").split("-")[0].lower()
+            if watchlist_read is None:
+                answer = {
+                    "en": "I cannot read your watchlist right now.",
+                    "de": "Ich kann deine Watchlist gerade nicht lesen.",
+                }.get(language, "Ik kan je watchlist nu niet lezen.")
+                return FinnResponsesVerifiedAnswer(
+                    "completed", answer, "watchlist_inventory_unavailable", evidence,
+                )
+            labels = []
+            for row in watchlist_read["data"]["symbols"]:
+                if not isinstance(row, dict):
+                    continue
+                symbol = str(row.get("symbol") or "").upper()
+                quote = str(row.get("quote_currency") or "").upper()
+                if symbol:
+                    labels.append(f"{symbol}/{quote}" if quote else symbol)
+            if labels:
+                prefix = {
+                    "en": "Your watchlist contains: ",
+                    "de": "Auf deiner Watchlist stehen: ",
+                }.get(language, "Op je watchlist staan: ")
+                answer = prefix + ", ".join(labels) + "."
+            else:
+                answer = {
+                    "en": "Your watchlist is empty.",
+                    "de": "Deine Watchlist ist leer.",
+                }.get(language, "Je watchlist is leeg.")
+            return FinnResponsesVerifiedAnswer(
+                "completed", answer, "watchlist_inventory", evidence,
+            )
         if result.answer_kind == "saved_setup_collection":
             setup_read = next((
                 item for item in evidence
