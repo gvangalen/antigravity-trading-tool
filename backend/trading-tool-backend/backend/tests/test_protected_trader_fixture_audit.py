@@ -146,6 +146,11 @@ def test_pair_cleanup_refuses_active_or_credentialed_child_before_write(monkeypa
 
 
 def test_pair_cleanup_label_is_bound_to_audited_runs(monkeypatch):
+    assert audit.PAIR_CLEANUP_LABELS == {
+        "audit-42543306392-1-20322165",
+        "audit-42546922438-1-169d0252",
+        "audit-42549516935-1-1d8c6a3a",
+    }
     monkeypatch.setattr(audit.fixture, "_connection", lambda: pytest.fail("database touched"))
     with pytest.raises(RuntimeError, match="^trader_pair_cleanup_label_not_allowed$"):
         audit.cleanup_pair("audit-42502525173-1-9a72d5e4")

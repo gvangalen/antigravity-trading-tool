@@ -13,6 +13,7 @@ LABEL = re.compile(r"audit-([1-9][0-9]{5,15})-([1-9][0-9]*)-([0-9a-f]{8})\Z")
 PAIR_CLEANUP_LABELS = frozenset({
     "audit-42543306392-1-20322165",
     "audit-42546922438-1-169d0252",
+    "audit-42549516935-1-1d8c6a3a",
 })
 
 

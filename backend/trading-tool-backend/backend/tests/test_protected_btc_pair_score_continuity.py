@@ -239,6 +239,59 @@ def test_probe_reports_outage_snapshot_substage_and_quarantines(monkeypatch):
     ) == "trader_pair_outage_snapshot_assessment_failed"
 
 
+def test_assessment_diagnostic_exposes_only_allowlisted_class_and_static_origin():
+    secret = "fixture-owner-92741-private-token"
+    source = compile(
+        "def _source_is_fresh():\n    raise TypeError(secret)\n",
+        "/srv/backend/services/setup_market_match_service.py", "exec",
+    )
+    scope = {"secret": secret}
+    exec(source, scope)
+    try:
+        scope["_source_is_fresh"]()
+    except TypeError as error:
+        code = probe._assessment_error_code(error)
+    assert code == "typeerror_match_source"
+    assert secret not in code and "92741" not in code
+    safe = "trader_pair_outage_snapshot_assessment_typeerror_match_source_failed"
+    assert profile_error_category("trader_pair_score_continuity", RuntimeError(safe)) == safe
+    assert profile_error_category(
+        "trader_pair_score_continuity", RuntimeError(safe + secret),
+    ) == "trader_pair_probe_runtime_error"
+
+
+def test_assessment_diagnostic_does_not_export_unlisted_python_error_text():
+    secret = "private-sql-owner-8732"
+    try:
+        raise OSError(secret)
+    except OSError as error:
+        code = probe._assessment_error_code(error)
+    assert code == "other_other"
+    assert secret not in code
+
+
+def test_probe_preserves_bounded_assessment_diagnostic_at_outage(monkeypatch):
+    monkeypatch.setenv("FINN_QA_ALLOW_TRADER_PAIR_FIXTURE", "1")
+    monkeypatch.setenv("FINN_QA_USER_ID", "7")
+    monkeypatch.setattr(probe, "_markets", lambda: MARKETS)
+    monkeypatch.setattr(probe.fixture, "_seed", lambda *_args: (11, 22, "today"))
+    monkeypatch.setattr(probe, "_seed_pair_readings", lambda *_args: None)
+    monkeypatch.setattr(probe, "_business_snapshot", _stable_business)
+    snapshots = iter((_snapshot(45, 70), RuntimeError(
+        "trader_pair_snapshot_assessment_typeerror_match_source_failed")))
+    def snapshot(*_args):
+        value = next(snapshots)
+        if isinstance(value, Exception):
+            raise value
+        return value
+    monkeypatch.setattr(probe, "_snapshot", snapshot)
+    monkeypatch.setattr(probe, "_transport_checks", lambda *_args: {"analysis": True, "finn": True})
+    monkeypatch.setattr(probe, "_set_eur_source_time", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(probe.fixture, "_quarantine", lambda *_args: None)
+    with pytest.raises(RuntimeError, match="^trader_pair_outage_snapshot_assessment_typeerror_match_source_failed$"):
+        probe.run(NAMESPACE)
+
+
 def test_snapshot_keeps_missing_score_with_independent_stale_source_diagnosis(monkeypatch):
     from backend.celery_task import store_daily_scores_task
 
