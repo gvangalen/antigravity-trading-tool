@@ -45,8 +45,11 @@ def _mentions(body: str | None) -> dict:
 
 async def _scenario(token: str, scenario: tuple) -> dict[str, str | bool]:
     case_id, prompt, expected_labels, click_label, expected_submission = scenario
+    state = {"stage": "browser_open", "route": "unknown"}
 
     async def inspect(page):
+        route = urlsplit(page.url).path
+        state["route"] = route if route in {"/asset", "/login", "/onboarding", "/dashboard"} else "other"
         outgoing = []
         failed = []
         page.on("request", lambda request: outgoing.append(request)
@@ -54,19 +57,24 @@ async def _scenario(token: str, scenario: tuple) -> dict[str, str | bool]:
         page.on("requestfailed", lambda request: failed.append(request)
                 if request.method == "POST" and urlsplit(request.url).path == "/api/assistant/chat/stream" else None)
         composer = page.locator("textarea").last
+        state["stage"] = "composer_visible"
         await composer.wait_for(state="visible", timeout=15000)
+        state["stage"] = "composer_submit"
         await composer.fill(prompt)
         await composer.press("Enter")
         choices = page.locator('[aria-label="Watchlistkeuzes"]')
+        state["stage"] = "choices_visible"
         await choices.wait_for(state="visible", timeout=15000)
         labels = [value.strip() for value in await choices.locator("button").all_text_contents()]
         options_ok = all(label in labels for label in expected_labels)
         if not options_ok:
             return {"case_id": case_id, "options_visible": False, "click_handled": False,
                     "product_post_blocked": True}
+        state["stage"] = "choice_click"
         await choices.get_by_role("button", name=click_label, exact=True).click()
         if expected_submission is None:
             next_choices = page.locator('[aria-label="Watchlistkeuzes"]')
+            state["stage"] = "followup_choices_visible"
             await next_choices.wait_for(state="visible", timeout=10000)
             next_labels = [value.strip() for value in await next_choices.locator("button").all_text_contents()]
             return {"case_id": case_id, "options_visible": True,
@@ -94,7 +102,8 @@ async def _scenario(token: str, scenario: tuple) -> dict[str, str | bool]:
     except Exception:
         return {"case_id": case_id, "options_visible": False,
                 "click_handled": False, "product_post_blocked": False,
-                "error_code": "browser_probe_failed"}
+                "error_code": state["stage"] + "_failed",
+                "route_code": state["route"]}
 
 
 def run(token: str) -> dict:
