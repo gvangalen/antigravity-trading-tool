@@ -1,19 +1,21 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { watchlistCacheKey } from "@/lib/workspace/watchlistMembership.mjs";
+import { createWatchlistRequestTracker, watchlistCacheKey } from "@/lib/workspace/watchlistMembership.mjs";
 import { fetchWatchlist, addToWatchlist, removeFromWatchlist } from "@/lib/api/watchlist";
 import {
-  fetchCachedResource,
   getCachedResourceSnapshot,
+  isCachedResourceFresh,
   markCachedResourceStale,
   setCachedResourceData,
   subscribeCachedResource,
+  clearCachedResource,
 } from "@/lib/clientDataCache";
 
 const WATCHLIST_CACHE_TTL_MS = 30_000;
 const activeWatchlistKeys = new Map();
+const requestTracker = createWatchlistRequestTracker();
 
 export function invalidateWatchlist() {
   activeWatchlistKeys.forEach((_count, key) => markCachedResourceStale(key));
@@ -49,23 +51,25 @@ function normalizeWatchlistItem(item) {
 }
 
 async function loadWatchlistShared(cacheKey, forceFresh = false) {
-  return fetchCachedResource(cacheKey, {
-    ttlMs: WATCHLIST_CACHE_TTL_MS,
-    forceFresh,
-    initialData: [],
-    fetcher: async () => {
-      const data = await fetchWatchlist();
-      return Array.isArray(data)
-        ? data.map(normalizeWatchlistItem).filter((item) => item.symbol)
-        : [];
-    },
-  });
+  if (!forceFresh && isCachedResourceFresh(cacheKey, WATCHLIST_CACHE_TTL_MS)) {
+    return { data: getCachedResourceSnapshot(cacheKey, []).data || [], current: true };
+  }
+  const generation = requestTracker.next(cacheKey);
+  const data = await fetchWatchlist();
+  if (!requestTracker.isCurrent(cacheKey, generation)) return { data: [], current: false };
+  const normalized = Array.isArray(data)
+    ? data.map(normalizeWatchlistItem).filter((item) => item.symbol)
+    : [];
+  setCachedResourceData(cacheKey, normalized);
+  return { data: normalized, current: true };
 }
 
 export function useWatchlist(options = {}) {
   const { autoLoad = true } = options;
   const { user } = useAuth() || {};
   const cacheKey = watchlistCacheKey(user?.id);
+  const activeCacheKeyRef = useRef(cacheKey);
+  activeCacheKeyRef.current = cacheKey;
   const initialSnapshot = cacheKey ? getCachedResourceSnapshot(cacheKey, []) : { data: [], hasData: false };
   const [watchlistState, setWatchlistState] = useState({ key: cacheKey, data: initialSnapshot.data || [] });
   const [loading, setLoading] = useState(() => autoLoad && Boolean(cacheKey) && !initialSnapshot.hasData);
@@ -80,6 +84,7 @@ export function useWatchlist(options = {}) {
     activeWatchlistKeys.set(cacheKey, (activeWatchlistKeys.get(cacheKey) || 0) + 1);
     setWatchlistState({ key: cacheKey, data: getCachedResourceSnapshot(cacheKey, []).data || [] });
     const unsubscribe = subscribeCachedResource(cacheKey, () => {
+      if (activeCacheKeyRef.current !== cacheKey) return;
       const snapshot = getCachedResourceSnapshot(cacheKey, []);
       setWatchlistState({ key: cacheKey, data: snapshot.data || [] });
     });
@@ -92,7 +97,13 @@ export function useWatchlist(options = {}) {
 
     // Listen for changes from other components
     const handleSync = () => loadWatchlist(true);
-    const handleAuthScopeChanged = () => setWatchlistState({ key: null, data: [] });
+    const handleAuthScopeChanged = () => {
+      activeCacheKeyRef.current = null;
+      requestTracker.next(cacheKey);
+      clearCachedResource(cacheKey);
+      setWatchlistState({ key: null, data: [] });
+      setLoading(false);
+    };
     window.addEventListener("watchlist-updated", handleSync);
     window.addEventListener("tradamind:auth-scope-changed", handleAuthScopeChanged);
     return () => {
@@ -106,27 +117,30 @@ export function useWatchlist(options = {}) {
   }, [autoLoad, cacheKey]);
 
   async function loadWatchlist(forceFresh = false) {
-    if (!cacheKey) return [];
+    if (!cacheKey || activeCacheKeyRef.current !== cacheKey) return [];
     try {
       if (!getCachedResourceSnapshot(cacheKey, []).hasData) {
         setLoading(true);
       }
-      const data = await loadWatchlistShared(cacheKey, forceFresh);
-      setWatchlistState({ key: cacheKey, data: data || [] });
-      return data || [];
+      const result = await loadWatchlistShared(cacheKey, forceFresh);
+      if (!result.current || activeCacheKeyRef.current !== cacheKey) return [];
+      setWatchlistState({ key: cacheKey, data: result.data });
+      return result.data;
     } catch (err) {
       console.error("❌ Watchlist load error:", err);
       return getCachedResourceSnapshot(cacheKey, []).data || [];
     } finally {
-      setLoading(false);
+      if (activeCacheKeyRef.current === cacheKey) setLoading(false);
     }
   }
 
   async function add(asset) {
     try {
+      if (!cacheKey || activeCacheKeyRef.current !== cacheKey) return;
       await addToWatchlist(asset);
-      const data = await loadWatchlist(true);
-      setCachedResourceData(cacheKey, data || []);
+      if (activeCacheKeyRef.current !== cacheKey) return;
+      await loadWatchlist(true);
+      if (activeCacheKeyRef.current !== cacheKey) return;
       invalidateWatchlist();
     } catch (err) {
       console.error("❌ Watchlist add error:", err);
@@ -136,9 +150,11 @@ export function useWatchlist(options = {}) {
 
   async function remove(symbol, marketId = null) {
     try {
+      if (!cacheKey || activeCacheKeyRef.current !== cacheKey) return;
       await removeFromWatchlist(symbol, marketId);
-      const data = await loadWatchlist(true);
-      setCachedResourceData(cacheKey, data || []);
+      if (activeCacheKeyRef.current !== cacheKey) return;
+      await loadWatchlist(true);
+      if (activeCacheKeyRef.current !== cacheKey) return;
       invalidateWatchlist();
     } catch (err) {
       console.error("❌ Watchlist remove error:", err);

@@ -2,6 +2,24 @@ export function watchlistCacheKey(userId) {
   return userId == null ? null : `watchlist:user:${userId}`;
 }
 
+export function createWatchlistRequestTracker() {
+  const generations = new Map();
+  return {
+    next(key) {
+      const generation = (generations.get(key) || 0) + 1;
+      generations.set(key, generation);
+      return generation;
+    },
+    isCurrent(key, generation) {
+      return generations.get(key) === generation;
+    },
+  };
+}
+
+export function ownerScopedWatchlistValues(state, ownerId, field) {
+  return state?.ownerId === ownerId && Array.isArray(state[field]) ? state[field] : [];
+}
+
 export function watchlistRowKey(row) {
   const marketId = row?.market_id ?? row?.marketId;
   if (marketId !== null && marketId !== undefined && marketId !== "") {

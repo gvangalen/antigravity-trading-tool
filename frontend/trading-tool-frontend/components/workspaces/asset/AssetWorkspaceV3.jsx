@@ -21,7 +21,7 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 import { useModal } from "@/components/modal/ModalProvider";
 import { useAssetWorkspaceData } from "@/hooks/useAssetWorkspaceData";
 import { useWatchlist } from "@/hooks/useWatchlist";
-import { reconcileWatchlistMembership, watchlistRowKey } from "@/lib/workspace/watchlistMembership.mjs";
+import { ownerScopedWatchlistValues, reconcileWatchlistMembership, watchlistRowKey } from "@/lib/workspace/watchlistMembership.mjs";
 import IndicatorConfigModal from "@/components/scoring/IndicatorConfigModal";
 import { deletePairIndicatorConfig, savePairBenchmarkWeights, getBenchmarkCopySources, previewBenchmarkCopy, confirmBenchmarkCopy } from "@/lib/api/indicatorConfig";
 import MarketForwardReturnTabs from "@/components/market/MarketForwardReturnTabs";
@@ -2557,8 +2557,23 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const [copyPreview, setCopyPreview] = useState(null);
   const [copyBusy, setCopyBusy] = useState(false);
   const [copyOpen, setCopyOpen] = useState(false);
-  const [watchlistRows, setWatchlistRows] = useState([]);
-  const [removedWatchlistSymbols, setRemovedWatchlistSymbols] = useState([]);
+  const watchlistOwnerId = user?.id ?? null;
+  const watchlistOwnerRef = useRef(watchlistOwnerId);
+  watchlistOwnerRef.current = watchlistOwnerId;
+  const [watchlistRowsState, setWatchlistRowsState] = useState({ ownerId: watchlistOwnerId, rows: [] });
+  const [removedWatchlistState, setRemovedWatchlistState] = useState({ ownerId: watchlistOwnerId, keys: [] });
+  const watchlistRows = ownerScopedWatchlistValues(watchlistRowsState, watchlistOwnerId, "rows");
+  const removedWatchlistSymbols = ownerScopedWatchlistValues(removedWatchlistState, watchlistOwnerId, "keys");
+  const setWatchlistRows = useCallback((updater) => setWatchlistRowsState((current) => {
+    if (watchlistOwnerRef.current !== watchlistOwnerId) return current;
+    const previous = current.ownerId === watchlistOwnerId ? current.rows : [];
+    return { ownerId: watchlistOwnerId, rows: typeof updater === "function" ? updater(previous) : updater };
+  }), [watchlistOwnerId]);
+  const setRemovedWatchlistSymbols = useCallback((updater) => setRemovedWatchlistState((current) => {
+    if (watchlistOwnerRef.current !== watchlistOwnerId) return current;
+    const previous = current.ownerId === watchlistOwnerId ? current.keys : [];
+    return { ownerId: watchlistOwnerId, keys: typeof updater === "function" ? updater(previous) : updater };
+  }), [watchlistOwnerId]);
   const [showChart, setShowChart] = useState(true);
   const [analysisChartInterval, setAnalysisChartInterval] = useState(DEFAULT_TRADINGVIEW_INTERVAL);
   const appliedIndicatorsRef = useRef(new Set());
@@ -2934,7 +2949,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       };
     }));
     setRemovedWatchlistSymbols((current) => current.filter((key) => savedKeys.has(key)));
-  }, [locale, persistedWatchlist, watchlistData]);
+  }, [locale, persistedWatchlist, setRemovedWatchlistSymbols, setWatchlistRows, watchlistData]);
 
   const currentWatchlistRows = useMemo(
     () => watchlistRows.filter((row) => !removedWatchlistSymbols.includes(watchlistRowKey(row))),
@@ -2961,7 +2976,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     }
   };
   const handleRemoveWatchlistAsset = useCallback((row) => {
-    if (!row?.symbol) return;
+    if (!row?.symbol || watchlistOwnerRef.current !== watchlistOwnerId) return;
 
     openConfirm({
       title: ui.watchlistRemoveTitle,
@@ -2979,8 +2994,10 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       confirmText: ui.watchlistRemoveConfirm,
       busyText: ui.watchlistRemoveBusy,
       onConfirm: async () => {
+        if (watchlistOwnerRef.current !== watchlistOwnerId) return;
         const normalizedSymbol = String(row.symbol || "").toUpperCase();
         await removeFromWatchlist(normalizedSymbol, row.marketId);
+        if (watchlistOwnerRef.current !== watchlistOwnerId) return;
         const removedKey = watchlistRowKey(row);
         setRemovedWatchlistSymbols((current) => current.includes(removedKey)
           ? current : [...current, removedKey]);
@@ -3014,12 +3031,15 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   }, [
     activeQuoteCurrency,
     activeSymbol,
+    watchlistOwnerId,
     initialTab,
     openConfirm,
     pathname,
     currentWatchlistRows,
     reloadWatchlist,
     refreshPersistedWatchlist,
+    setRemovedWatchlistSymbols,
+    setWatchlistRows,
     router,
     setSelectedAsset,
     showSnackbar,

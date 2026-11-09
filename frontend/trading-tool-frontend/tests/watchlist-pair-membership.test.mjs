@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { reconcileWatchlistMembership, watchlistCacheKey, watchlistRowKey } from "../lib/workspace/watchlistMembership.mjs";
+import {
+  createWatchlistRequestTracker,
+  ownerScopedWatchlistValues,
+  reconcileWatchlistMembership,
+  watchlistCacheKey,
+  watchlistRowKey,
+} from "../lib/workspace/watchlistMembership.mjs";
 import { getCachedResourceSnapshot, setCachedResourceData } from "../lib/clientDataCache.js";
 
 const eur = { symbol: "BTC", market_id: 41, quote_currency: "EUR" };
@@ -37,4 +43,36 @@ test("saved pairs from one account cannot populate another account's cache", () 
   assert.notEqual(firstKey, secondKey);
   assert.deepEqual(getCachedResourceSnapshot(secondKey, []).data, []);
   assert.equal(watchlistCacheKey(null), null);
+});
+
+test("an older watchlist response cannot replace a newer add or remove", async () => {
+  const tracker = createWatchlistRequestTracker();
+  const key = watchlistCacheKey(701);
+  let finishOld;
+  const oldResponse = new Promise((resolve) => { finishOld = resolve; });
+  const oldGeneration = tracker.next(key);
+  const newGeneration = tracker.next(key);
+  const applied = [];
+
+  const oldCompletion = oldResponse.then((rows) => {
+    if (tracker.isCurrent(key, oldGeneration)) applied.push(rows);
+  });
+  if (tracker.isCurrent(key, newGeneration)) applied.push([eur, usdt]);
+  finishOld([usdt]);
+  await oldCompletion;
+
+  assert.deepEqual(applied, [[eur, usdt]]);
+});
+
+test("an account switch hides old rows and rejects its late response", () => {
+  const tracker = createWatchlistRequestTracker();
+  const firstKey = watchlistCacheKey(701);
+  const secondKey = watchlistCacheKey(702);
+  const firstGeneration = tracker.next(firstKey);
+  tracker.next(firstKey);
+  tracker.next(secondKey);
+
+  assert.equal(tracker.isCurrent(firstKey, firstGeneration), false);
+  assert.deepEqual(ownerScopedWatchlistValues({ ownerId: 701, rows: [eur] }, 702, "rows"), []);
+  assert.deepEqual(ownerScopedWatchlistValues({ ownerId: 702, rows: [usdt] }, 702, "rows"), [usdt]);
 });
