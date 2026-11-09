@@ -506,8 +506,15 @@ def test_probe_runs_three_pair_snapshots_and_cleans_only_verified_fixture(monkey
     monkeypatch.setattr(probe, "_business_snapshot", _stable_business)
     snapshots = iter((_snapshot(45, 70), _snapshot(None, 70, stale=True), _snapshot(45, 70)))
     monkeypatch.setattr(probe, "_snapshot", lambda *args: deepcopy(next(snapshots)))
-    monkeypatch.setattr(probe, "_transport_checks", lambda *args: {"analysis": True, "finn": True})
+    loop_ids = []
+    async def loop_id():
+        return id(asyncio.get_running_loop())
+    def transport(_owner, _snapshot, *, runner):
+        loop_ids.append(runner.run(loop_id()))
+        return {"analysis": True, "finn": True}
+    monkeypatch.setattr(probe, "_transport_checks", transport)
     async def stale_browser(*_args, **_kwargs):
+        loop_ids.append(id(asyncio.get_running_loop()))
         return {"amsterdam": "ok", "new_york": "ok", "tokyo": "ok"}
     monkeypatch.setattr(probe, "_stale_date_display", stale_browser)
     monkeypatch.setattr(probe, "_set_eur_source_time", lambda *args, stale: steps.append(f"stale:{stale}"))
@@ -521,6 +528,7 @@ def test_probe_runs_three_pair_snapshots_and_cleans_only_verified_fixture(monkey
                                     "outage_quote_pending_browser_checked": True,
                                     "gate_status": "PASS"}
     assert steps == ["seed_readings", "stale:True", "stale:False", "cleanup"]
+    assert len(loop_ids) == 4 and len(set(loop_ids)) == 1
 
 
 def test_probe_quarantines_on_score_cross_contamination(monkeypatch):
@@ -533,7 +541,7 @@ def test_probe_quarantines_on_score_cross_contamination(monkeypatch):
     monkeypatch.setattr(probe, "_business_snapshot", _stable_business)
     snapshots = iter((_snapshot(45, 70), _snapshot(None, 45, stale=True), _snapshot(45, 70)))
     monkeypatch.setattr(probe, "_snapshot", lambda *args: next(snapshots))
-    monkeypatch.setattr(probe, "_transport_checks", lambda *args: {"analysis": True, "finn": True})
+    monkeypatch.setattr(probe, "_transport_checks", lambda *args, **kwargs: {"analysis": True, "finn": True})
     async def stale_browser(*_args, **_kwargs):
         return {"amsterdam": "ok", "new_york": "ok", "tokyo": "ok"}
     monkeypatch.setattr(probe, "_stale_date_display", stale_browser)
@@ -563,7 +571,7 @@ def test_probe_quarantines_when_one_transport_misreports_pair(monkeypatch):
     transport = iter(({"analysis": True, "finn": True},
                       {"analysis": False, "finn": True},
                       {"analysis": True, "finn": True}))
-    monkeypatch.setattr(probe, "_transport_checks", lambda *args: next(transport))
+    monkeypatch.setattr(probe, "_transport_checks", lambda *args, **kwargs: next(transport))
     async def stale_browser(*_args, **_kwargs):
         return {"amsterdam": "ok", "new_york": "ok", "tokyo": "ok"}
     monkeypatch.setattr(probe, "_stale_date_display", stale_browser)
@@ -591,7 +599,7 @@ def test_probe_measures_live_attempt_and_unexpected_business_write(monkeypatch):
                                          "fingerprints": {"bot_orders": b"changed"}}))
     monkeypatch.setattr(probe, "_business_snapshot", lambda *_args: next(business))
     called = False
-    def transport(*_args):
+    def transport(*_args, **_kwargs):
         nonlocal called
         if not called:
             called = True
@@ -684,7 +692,7 @@ def test_probe_reports_outage_snapshot_substage_and_quarantines(monkeypatch):
             raise value
         return value
     monkeypatch.setattr(probe, "_snapshot", snapshot)
-    monkeypatch.setattr(probe, "_transport_checks", lambda *_args: {"analysis": True, "finn": True})
+    monkeypatch.setattr(probe, "_transport_checks", lambda *_args, **_kwargs: {"analysis": True, "finn": True})
     monkeypatch.setattr(probe, "_set_eur_source_time", lambda *_args, **_kwargs: None)
     quarantined = []
     monkeypatch.setattr(probe.fixture, "_quarantine", lambda *_args: quarantined.append(True))
@@ -743,7 +751,7 @@ def test_probe_preserves_bounded_assessment_diagnostic_at_outage(monkeypatch):
             raise value
         return value
     monkeypatch.setattr(probe, "_snapshot", snapshot)
-    monkeypatch.setattr(probe, "_transport_checks", lambda *_args: {"analysis": True, "finn": True})
+    monkeypatch.setattr(probe, "_transport_checks", lambda *_args, **_kwargs: {"analysis": True, "finn": True})
     monkeypatch.setattr(probe, "_set_eur_source_time", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(probe.fixture, "_quarantine", lambda *_args: None)
     with pytest.raises(RuntimeError, match="^trader_pair_outage_snapshot_assessment_typeerror_match_source_failed$"):

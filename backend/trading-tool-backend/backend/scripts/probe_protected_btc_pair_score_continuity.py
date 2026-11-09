@@ -211,13 +211,15 @@ async def _read_finn_pairs(user_id: int, pairs: list[str]) -> dict:
     return results
 
 
-def _transport_checks(user_id: int, snapshot: dict) -> dict[str, bool]:
+def _transport_checks(user_id: int, snapshot: dict,
+                      runner: asyncio.Runner | None = None) -> dict[str, bool]:
     """Compare normal owner-scoped Analysis GET and FINN chat reads with frozen scores."""
     from backend.scripts.qa_protected_readback import read_json
 
     checks = {"analysis": True, "finn": True, "finn_codes": {}, "finn_runtime_codes": {}}
     pairs = list(snapshot["pairs"])
-    finn_results = asyncio.run(_read_finn_pairs(user_id, pairs))
+    finn_results = (runner.run(_read_finn_pairs(user_id, pairs)) if runner is not None
+                    else asyncio.run(_read_finn_pairs(user_id, pairs)))
     for pair, expected in snapshot["pairs"].items():
         quote = pair.split("/", 1)[1]
         try:
@@ -650,22 +652,22 @@ def run(namespace: str) -> dict:
         before_business = _business_snapshot(user_id)
         from backend.scripts.probe_protected_paper_exit_reconciliation import _guard_live_exchange
 
-        with _guard_live_exchange() as live_attempts:
+        with _guard_live_exchange() as live_attempts, asyncio.Runner() as runner:
             stage = "initial_snapshot"
             initial = _snapshot(user_id, markets)
             stage = "initial_transport"
-            initial_transport = _transport_checks(user_id, initial)
+            initial_transport = _transport_checks(user_id, initial, runner=runner)
             stage = "outage_source"
             _set_eur_source_time(user_id, markets["BTC/EUR"]["market_id"],
                                  markets["BTC/EUR"]["source_at"], stale=True)
             stage = "outage_snapshot"
             outage = _snapshot(user_id, markets)
             stage = "outage_transport"
-            outage_transport = _transport_checks(user_id, outage)
+            outage_transport = _transport_checks(user_id, outage, runner=runner)
             stage = "browser"
             browser_source_facts = {}
             try:
-                stale_browser = asyncio.run(_stale_date_display(
+                stale_browser = runner.run(_stale_date_display(
                     user_id, outage["pairs"]["BTC/EUR"]["source_at"],
                     markets["BTC/EUR"]["market_id"],
                     source_facts=browser_source_facts,
@@ -678,7 +680,7 @@ def run(namespace: str) -> dict:
             stage = "recovery_snapshot"
             recovered = _snapshot(user_id, markets)
             stage = "recovery_transport"
-            recovered_transport = _transport_checks(user_id, recovered)
+            recovered_transport = _transport_checks(user_id, recovered, runner=runner)
         stage = "after_read"
         after_business = _business_snapshot(user_id)
         stage = "validation"
