@@ -115,6 +115,8 @@ def test_selected_pair_without_a_setup_is_registered_and_read_exactly(monkeypatc
     monkeypatch.setattr(asset_catalog_api, "queue_exact_market_refresh",
                         lambda market_id, *, debounce_seconds:
                         calls.append((market_id, debounce_seconds)))
+    monkeypatch.setattr(asset_catalog_api, "queue_exact_market_owner_repair",
+                        lambda user_id, market_id: calls.append((user_id, market_id, "owner_repair")))
 
     result = asyncio.run(asset_catalog_api.select_crypto_trading_market(
         "eth", "eur", current_user={"id": 8}, session=session,
@@ -122,7 +124,8 @@ def test_selected_pair_without_a_setup_is_registered_and_read_exactly(monkeypatc
     assert result["pair"] == "ETH/EUR"
     assert result["tradingview_symbol"] == "BINANCE:ETHEUR"
     assert result["snapshot_status"] == "available"
-    assert calls == [("ETH", "EUR"), ("ETH/EUR", "snapshot"), (73, 300)]
+    assert calls == [("ETH", "EUR"), ("ETH/EUR", "snapshot"), (73, 300),
+                     (8, 73, "owner_repair")]
     assert session.commits == 1
 
 
@@ -178,6 +181,8 @@ def test_selection_returns_owner_scoped_exact_workspace_in_same_request(monkeypa
     monkeypatch.setattr(asset_catalog_api, "queue_exact_market_refresh",
                         lambda market_id, *, debounce_seconds:
                         queued.append((market_id, debounce_seconds)))
+    monkeypatch.setattr(asset_catalog_api, "queue_exact_market_owner_repair",
+                        lambda user_id, market_id: queued.append((user_id, market_id, "owner_repair")))
     result = asyncio.run(asset_catalog_api.select_crypto_trading_market(
         "sol", "eur", current_user={"id": 8}, session=session,
         include_workspace=True, market_period="week", watchlist_symbols="BTC,ETH",
@@ -185,7 +190,7 @@ def test_selection_returns_owner_scoped_exact_workspace_in_same_request(monkeypa
     assert result["workspace"]["pair"] == "SOL/EUR"
     assert result["workspace"]["quote"]["price"] is None
     assert session.commits == 1
-    assert queued == [(81, 300)]
+    assert queued == [(81, 300), (8, 81, "owner_repair")]
 
 
 def test_unverified_pair_never_uses_another_quote(monkeypatch):
@@ -292,12 +297,14 @@ def test_existing_pair_requests_full_refresh_without_quote_only_write(monkeypatc
     monkeypatch.setattr(asset_catalog_api, "queue_exact_market_refresh",
                         lambda market_id, *, debounce_seconds:
                         requested.append((market_id, debounce_seconds)))
+    monkeypatch.setattr(asset_catalog_api, "queue_exact_market_owner_repair",
+                        lambda user_id, market_id: requested.append((user_id, market_id, "owner_repair")))
 
     result = asyncio.run(asset_catalog_api.select_crypto_trading_market(
         "ETH", "USDT", current_user={"id": 8}, session=session,
     ))
     assert result["snapshot_status"] == "pending"
-    assert requested == ([(74, 300)] if tracked else [])
+    assert requested == ([(74, 300), (8, 74, "owner_repair")] if tracked else [])
 
 
 def test_provider_reply_without_source_moment_stays_pending(monkeypatch):
@@ -341,6 +348,8 @@ def test_provider_reply_without_source_moment_stays_pending(monkeypatch):
                         lambda *_args: asyncio.sleep(0, result=True))
     monkeypatch.setattr(asset_catalog_api, "queue_exact_market_refresh",
                         lambda market_id, *, debounce_seconds: True)
+    monkeypatch.setattr(asset_catalog_api, "queue_exact_market_owner_repair",
+                        lambda user_id, market_id: True)
     result = asyncio.run(asset_catalog_api.select_crypto_trading_market(
         "ETH", "EUR", current_user={"id": 8}, session=session,
     ))

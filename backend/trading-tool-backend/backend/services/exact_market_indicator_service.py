@@ -16,25 +16,30 @@ from backend.services.trading_market_service import TradingMarket
 from backend.services.pair_indicator_config_service import effective_pair_configs
 from backend.utils.scoring_utils import normalize_indicator_name, score_exact_market_measurement
 
+PAIR_MATERIALIZATION_LOCK_NAMESPACE = 271025
+
 
 class ExactMarketIndicatorService:
     def __init__(self, session):
         self.session = session
 
-    async def _configured_owners(self, market: TradingMarket, owner_ids: set[int] | None = None) -> dict[int, dict[str, set[str]]]:
+    async def _configured_owners(self, market: TradingMarket, owner_ids: set[int] | None = None,
+                                 *, only_owner: bool = False) -> dict[int, dict[str, set[str]]]:
         # A watched pair needs its own readings even before the owner creates a
         # plan or pair-specific indicator configuration. Base indicator choices
         # carry over unless this pair has been isolated.
-        owners_result = await self.session.execute(text("""
-            SELECT user_id FROM setups WHERE market_id = :market_id
-            UNION
-            SELECT user_id FROM watchlists WHERE market_id = :market_id
-        """), {"market_id": market.id})
-        owner_ids = set(owner_ids or ()) | {int(row[0]) for row in owners_result.fetchall()}
-        configured_result = await self.session.execute(select(UserIndicatorConfig.user_id).where(
-            UserIndicatorConfig.market_id == market.id,
-        ).distinct())
-        owner_ids.update(int(row[0]) for row in configured_result.all())
+        owner_ids = set(owner_ids or ())
+        if not only_owner:
+            owners_result = await self.session.execute(text("""
+                SELECT user_id FROM setups WHERE market_id = :market_id
+                UNION
+                SELECT user_id FROM watchlists WHERE market_id = :market_id
+            """), {"market_id": market.id})
+            owner_ids.update(int(row[0]) for row in owners_result.fetchall())
+            configured_result = await self.session.execute(select(UserIndicatorConfig.user_id).where(
+                UserIndicatorConfig.market_id == market.id,
+            ).distinct())
+            owner_ids.update(int(row[0]) for row in configured_result.all())
         if not owner_ids:
             return {}
         result = await self.session.execute(select(UserIndicatorConfig).where(
@@ -92,7 +97,8 @@ class ExactMarketIndicatorService:
         existing = (await self.session.execute(select(model).where(
             model.user_id == user_id, model.market_id == market.id,
             column == name,
-        ).order_by(model.source_observed_at.desc(), model.id.desc()).limit(1))).scalars().first()
+        ).order_by(model.source_observed_at.desc(), model.id.desc()).limit(1)
+          .with_for_update())).scalars().first()
         fields = {"value": value, "score": scored.get("score"),
                   "source_observed_at": observed_at, "timestamp": observed_at}
         if model is MarketDataIndicator:
@@ -102,6 +108,11 @@ class ExactMarketIndicatorService:
         else:
             fields.update({"advies": scored.get("trend"),
                            "uitleg": scored.get("interpretation")})
+        if (existing is not None and existing.source_observed_at is not None
+                and existing.source_observed_at > observed_at):
+            # Shared source refresh and owner repair can overlap. Never let
+            # a repair based on an older quote replace the newer row.
+            return
         if (existing is not None and existing.source_observed_at is not None
                 and existing.source_observed_at.date() == observed_at.date()):
             for key, field_value in fields.items():
@@ -113,9 +124,22 @@ class ExactMarketIndicatorService:
             **fields,
         ))
 
-    async def materialize(self, market: TradingMarket, owner_ids: set[int] | None = None) -> dict:
-        owners = await self._configured_owners(market, owner_ids)
+    async def materialize(self, market: TradingMarket, owner_ids: set[int] | None = None,
+                          *, only_owner: bool = False) -> dict:
+        # Shared refresh and owner repair may run on different Celery queues.
+        # Serialize pair writes before reading sources or looking for existing
+        # indicator rows, including the first insert for a new owner.
+        await self.session.execute(text(
+            "SELECT pg_advisory_xact_lock(:namespace, :market_id)"),
+            {"namespace": PAIR_MATERIALIZATION_LOCK_NAMESPACE,
+             "market_id": market.id},
+        )
+        owners = await self._configured_owners(market, owner_ids, only_owner=only_owner)
+        if only_owner:
+            owners = {owner_id: owners[owner_id] for owner_id in (owner_ids or set())
+                      if owner_id in owners}
         if not owners:
+            await self.session.commit()
             return {"market_id": market.id, "owners": [], "written": 0}
         market_values, technical_values, market_at, technical_at = await self._source_values(market)
         written = 0
@@ -140,6 +164,5 @@ class ExactMarketIndicatorService:
                         model, market=market, user_id=user_id, name=name,
                         value=value, observed_at=observed_at, scored=scored)
                     written += 1
-        if written:
-            await self.session.commit()
+        await self.session.commit()
         return {"market_id": market.id, "owners": sorted(owners), "written": written}
