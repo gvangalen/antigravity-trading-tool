@@ -21,6 +21,7 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 import { useModal } from "@/components/modal/ModalProvider";
 import { useAssetWorkspaceData } from "@/hooks/useAssetWorkspaceData";
 import { useWatchlist } from "@/hooks/useWatchlist";
+import { ownerScopedWatchlistValues, reconcileWatchlistMembership, watchlistRowKey } from "@/lib/workspace/watchlistMembership.mjs";
 import IndicatorConfigModal from "@/components/scoring/IndicatorConfigModal";
 import { deletePairIndicatorConfig, savePairBenchmarkWeights, getBenchmarkCopySources, previewBenchmarkCopy, confirmBenchmarkCopy } from "@/lib/api/indicatorConfig";
 import MarketForwardReturnTabs from "@/components/market/MarketForwardReturnTabs";
@@ -54,7 +55,6 @@ import { marketConditionForScore } from "@/lib/setup/scoreConditions.mjs";
 import { availableTradingQuotes, benchmarkScaleBands, benchmarkSetupSessionKey, benchmarkSetupView, resolveTradingQuote, selectedBenchmarkSetupMatch, tradingQuoteSessionKey, withSelectedBenchmarkSetup, withSelectedTradingQuote } from "@/lib/setup/benchmarkScale.mjs";
 
 const SEARCH_OPEN_EVENT = "finn-command-search:open";
-const watchlistRowKey = (row) => row?.marketId ? `market:${row.marketId}` : `symbol:${row?.symbol}`;
 
 const SECTION_META = {
   market: {
@@ -2501,7 +2501,11 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const searchParams = useSearchParams();
   const { user, sessionChecked } = useAuth();
   const { selectedAsset, setSelectedAsset } = useAsset();
-  const { symbols: persistedWatchlistSymbols = [], refresh: refreshPersistedWatchlist } = useWatchlist();
+  const {
+    watchlist: persistedWatchlist = [],
+    symbols: persistedWatchlistSymbols = [],
+    refresh: refreshPersistedWatchlist,
+  } = useWatchlist();
   const { locale, t } = useTranslation();
   const { openConfirm, showSnackbar } = useModal();
   const ui = useMemo(() => getUiCopy(locale), [locale]);
@@ -2553,8 +2557,23 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const [copyPreview, setCopyPreview] = useState(null);
   const [copyBusy, setCopyBusy] = useState(false);
   const [copyOpen, setCopyOpen] = useState(false);
-  const [watchlistRows, setWatchlistRows] = useState([]);
-  const [removedWatchlistSymbols, setRemovedWatchlistSymbols] = useState([]);
+  const watchlistOwnerId = user?.id ?? null;
+  const watchlistOwnerRef = useRef(watchlistOwnerId);
+  watchlistOwnerRef.current = watchlistOwnerId;
+  const [watchlistRowsState, setWatchlistRowsState] = useState({ ownerId: watchlistOwnerId, rows: [] });
+  const [removedWatchlistState, setRemovedWatchlistState] = useState({ ownerId: watchlistOwnerId, keys: [] });
+  const watchlistRows = ownerScopedWatchlistValues(watchlistRowsState, watchlistOwnerId, "rows");
+  const removedWatchlistSymbols = ownerScopedWatchlistValues(removedWatchlistState, watchlistOwnerId, "keys");
+  const setWatchlistRows = useCallback((updater) => setWatchlistRowsState((current) => {
+    if (watchlistOwnerRef.current !== watchlistOwnerId) return current;
+    const previous = current.ownerId === watchlistOwnerId ? current.rows : [];
+    return { ownerId: watchlistOwnerId, rows: typeof updater === "function" ? updater(previous) : updater };
+  }), [watchlistOwnerId]);
+  const setRemovedWatchlistSymbols = useCallback((updater) => setRemovedWatchlistState((current) => {
+    if (watchlistOwnerRef.current !== watchlistOwnerId) return current;
+    const previous = current.ownerId === watchlistOwnerId ? current.keys : [];
+    return { ownerId: watchlistOwnerId, keys: typeof updater === "function" ? updater(previous) : updater };
+  }), [watchlistOwnerId]);
   const [showChart, setShowChart] = useState(true);
   const [analysisChartInterval, setAnalysisChartInterval] = useState(DEFAULT_TRADINGVIEW_INTERVAL);
   const appliedIndicatorsRef = useRef(new Set());
@@ -2625,7 +2644,6 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     workspace: loadedWorkspace,
     watchlist: watchlistData,
     loading: workspaceLoading,
-    watchlistLoading,
     isFallbackWorkspace,
     reloadWorkspace,
     reloadWatchlist,
@@ -2904,45 +2922,34 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   }, [activeSymbol, refreshWorkspaceOnce, scheduleScoreRefresh]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function loadWatchlistRows() {
-        const nextRows = (watchlistData || []).map((row) => {
-          const changeValue = row?.change_24h == null ? NaN : Number(row.change_24h);
-          const assetClass = String(row?.asset_class || "").toLowerCase();
-          return {
-            symbol: row.symbol,
-            displayName: row?.display_name || row?.displayName || ASSET_NAMES[row.symbol] || row.symbol,
-            logoUrl: resolveAssetLogoUrl(row?.symbol, row?.logo_url || row?.logoUrl || null, assetClass),
-            tradingviewSymbol: row?.tradingview_symbol || row?.tradingviewSymbol || null,
-            assetClass,
-            assetGroup: normalizeAssetGroup(assetClass),
-            marketId: row?.market_id || null,
-            quoteCurrency: String(row?.quote_currency || "").toUpperCase(),
-            lastPrice: formatQuotePrice(row?.price, locale, row?.quote_currency),
-            change24h: formatPercent(changeValue, 2),
-            changeTone: Number.isFinite(changeValue)
-            ? changeValue >= 0 ? "text-emerald-600" : "text-red-600"
-            : "text-slate-400",
-          score: formatScore(row?.score),
-          rawScore: row?.score,
-        };
-      });
-
-      if (!cancelled) {
-        setWatchlistRows(nextRows);
-        setRemovedWatchlistSymbols((current) => {
-          const remaining = current.filter((key) => nextRows.some((row) => watchlistRowKey(row) === key));
-          return remaining.length === current.length ? current : remaining;
-        });
-      }
-    }
-
-    if (!watchlistLoading) loadWatchlistRows();
-    return () => {
-      cancelled = true;
-    };
-  }, [locale, ui, watchlistData, watchlistLoading]);
+    const savedKeys = new Set(persistedWatchlist.map(watchlistRowKey).filter(Boolean));
+    setWatchlistRows((previousRows) => reconcileWatchlistMembership(
+      persistedWatchlist, watchlistData, previousRows,
+    ).map(({ saved, workspace: row, previous }) => {
+      const symbol = String(saved.symbol || "").toUpperCase();
+      const assetClass = String(saved.asset_class || row?.asset_class || previous?.assetClass || "").toLowerCase();
+      const quoteCurrency = String(saved.quote_currency || row?.quote_currency || previous?.quoteCurrency || "").toUpperCase();
+      const changeValue = row?.change_24h == null ? NaN : Number(row.change_24h);
+      return {
+        symbol,
+        displayName: saved.display_name || row?.display_name || previous?.displayName || ASSET_NAMES[symbol] || symbol,
+        logoUrl: resolveAssetLogoUrl(symbol, saved.logo_url || row?.logo_url || previous?.logoUrl || null, assetClass),
+        tradingviewSymbol: saved.tradingview_symbol || row?.tradingview_symbol || previous?.tradingviewSymbol || null,
+        assetClass,
+        assetGroup: normalizeAssetGroup(assetClass),
+        marketId: saved.market_id ?? null,
+        quoteCurrency,
+        lastPrice: row ? formatQuotePrice(row.price, locale, quoteCurrency) : previous?.lastPrice || "—",
+        change24h: row ? formatPercent(changeValue, 2) : previous?.change24h || "—",
+        changeTone: row
+          ? Number.isFinite(changeValue) ? changeValue >= 0 ? "text-emerald-600" : "text-red-600" : "text-slate-400"
+          : previous?.changeTone || "text-slate-400",
+        score: row ? formatScore(row.score) : previous?.score || "—",
+        rawScore: row ? row.score : previous?.rawScore ?? null,
+      };
+    }));
+    setRemovedWatchlistSymbols((current) => current.filter((key) => savedKeys.has(key)));
+  }, [locale, persistedWatchlist, setRemovedWatchlistSymbols, setWatchlistRows, watchlistData]);
 
   const currentWatchlistRows = useMemo(
     () => watchlistRows.filter((row) => !removedWatchlistSymbols.includes(watchlistRowKey(row))),
@@ -2969,7 +2976,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     }
   };
   const handleRemoveWatchlistAsset = useCallback((row) => {
-    if (!row?.symbol) return;
+    if (!row?.symbol || watchlistOwnerRef.current !== watchlistOwnerId) return;
 
     openConfirm({
       title: ui.watchlistRemoveTitle,
@@ -2987,8 +2994,20 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       confirmText: ui.watchlistRemoveConfirm,
       busyText: ui.watchlistRemoveBusy,
       onConfirm: async () => {
+        if (watchlistOwnerRef.current !== watchlistOwnerId) return;
         const normalizedSymbol = String(row.symbol || "").toUpperCase();
-        await removeFromWatchlist(normalizedSymbol, row.marketId);
+        const controller = new AbortController();
+        const abortOnAuthChange = () => controller.abort();
+        window.addEventListener("tradamind:auth-scope-changed", abortOnAuthChange);
+        try {
+          await removeFromWatchlist(normalizedSymbol, row.marketId, { signal: controller.signal });
+        } catch (error) {
+          if (controller.signal.aborted) return;
+          throw error;
+        } finally {
+          window.removeEventListener("tradamind:auth-scope-changed", abortOnAuthChange);
+        }
+        if (watchlistOwnerRef.current !== watchlistOwnerId) return;
         const removedKey = watchlistRowKey(row);
         setRemovedWatchlistSymbols((current) => current.includes(removedKey)
           ? current : [...current, removedKey]);
@@ -3022,12 +3041,15 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   }, [
     activeQuoteCurrency,
     activeSymbol,
+    watchlistOwnerId,
     initialTab,
     openConfirm,
     pathname,
     currentWatchlistRows,
     reloadWatchlist,
     refreshPersistedWatchlist,
+    setRemovedWatchlistSymbols,
+    setWatchlistRows,
     router,
     setSelectedAsset,
     showSnackbar,

@@ -4,7 +4,7 @@ export async function fetchWatchlist() {
   return await fetchAuth("/api/watchlist", { forceFresh: true });
 }
 
-export async function addToWatchlist(asset) {
+export async function addToWatchlist(asset, options = {}) {
   const payload = typeof asset === "string"
     ? { symbol: asset }
     : {
@@ -17,12 +17,14 @@ export async function addToWatchlist(asset) {
   return await fetchAuth("/api/watchlist", {
     method: "POST",
     body: JSON.stringify(payload),
+    ...options,
   });
 }
 
-export async function removeFromWatchlist(symbol, marketId = null) {
+export async function removeFromWatchlist(symbol, marketId = null, options = {}) {
   const query = marketId == null ? "" : `?market_id=${encodeURIComponent(marketId)}`;
   return await fetchAuth(`/api/watchlist/${encodeURIComponent(symbol)}${query}`, {
     method: "DELETE",
+    ...options,
   });
 }

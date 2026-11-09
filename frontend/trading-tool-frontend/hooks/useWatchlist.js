@@ -1,20 +1,24 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { createWatchlistRequestTracker, watchlistCacheKey } from "@/lib/workspace/watchlistMembership.mjs";
 import { fetchWatchlist, addToWatchlist, removeFromWatchlist } from "@/lib/api/watchlist";
 import {
-  fetchCachedResource,
   getCachedResourceSnapshot,
+  isCachedResourceFresh,
   markCachedResourceStale,
   setCachedResourceData,
   subscribeCachedResource,
+  clearCachedResource,
 } from "@/lib/clientDataCache";
 
 const WATCHLIST_CACHE_TTL_MS = 30_000;
-const WATCHLIST_CACHE_KEY = "watchlist:default";
+const activeWatchlistKeys = new Map();
+const requestTracker = createWatchlistRequestTracker();
 
 export function invalidateWatchlist() {
-  markCachedResourceStale(WATCHLIST_CACHE_KEY);
+  activeWatchlistKeys.forEach((_count, key) => markCachedResourceStale(key));
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("watchlist-updated"));
   }
@@ -46,70 +50,109 @@ function normalizeWatchlistItem(item) {
   };
 }
 
-async function loadWatchlistShared(forceFresh = false) {
-  return fetchCachedResource(WATCHLIST_CACHE_KEY, {
-    ttlMs: WATCHLIST_CACHE_TTL_MS,
-    forceFresh,
-    initialData: [],
-    fetcher: async () => {
-      const data = await fetchWatchlist();
-      return Array.isArray(data)
-        ? data.map(normalizeWatchlistItem).filter((item) => item.symbol)
-        : [];
-    },
-  });
+async function loadWatchlistShared(cacheKey, forceFresh = false) {
+  if (!forceFresh && isCachedResourceFresh(cacheKey, WATCHLIST_CACHE_TTL_MS)) {
+    return { data: getCachedResourceSnapshot(cacheKey, []).data || [], current: true };
+  }
+  const generation = requestTracker.next(cacheKey);
+  const data = await fetchWatchlist();
+  if (!requestTracker.isCurrent(cacheKey, generation)) return { data: [], current: false };
+  const normalized = Array.isArray(data)
+    ? data.map(normalizeWatchlistItem).filter((item) => item.symbol)
+    : [];
+  setCachedResourceData(cacheKey, normalized);
+  return { data: normalized, current: true };
 }
 
 export function useWatchlist(options = {}) {
   const { autoLoad = true } = options;
-  const initialSnapshot = getCachedResourceSnapshot(WATCHLIST_CACHE_KEY, []);
-  const [watchlist, setWatchlist] = useState(initialSnapshot.data || []);
-  const [loading, setLoading] = useState(() => autoLoad && !initialSnapshot.hasData);
+  const { user } = useAuth() || {};
+  const cacheKey = watchlistCacheKey(user?.id);
+  const activeCacheKeyRef = useRef(cacheKey);
+  activeCacheKeyRef.current = cacheKey;
+  const [authEpoch, setAuthEpoch] = useState(0);
+  const initialSnapshot = cacheKey ? getCachedResourceSnapshot(cacheKey, []) : { data: [], hasData: false };
+  const [watchlistState, setWatchlistState] = useState({ key: cacheKey, data: initialSnapshot.data || [] });
+  const [loading, setLoading] = useState(() => autoLoad && Boolean(cacheKey) && !initialSnapshot.hasData);
+  const watchlist = watchlistState.key === cacheKey ? watchlistState.data : [];
 
   useEffect(() => {
-    const unsubscribe = subscribeCachedResource(WATCHLIST_CACHE_KEY, () => {
-      const snapshot = getCachedResourceSnapshot(WATCHLIST_CACHE_KEY, []);
-      setWatchlist(snapshot.data || []);
+    if (!cacheKey) {
+      setWatchlistState({ key: null, data: [] });
+      setLoading(false);
+      return undefined;
+    }
+    activeWatchlistKeys.set(cacheKey, (activeWatchlistKeys.get(cacheKey) || 0) + 1);
+    setWatchlistState({ key: cacheKey, data: getCachedResourceSnapshot(cacheKey, []).data || [] });
+    const unsubscribe = subscribeCachedResource(cacheKey, () => {
+      if (activeCacheKeyRef.current !== cacheKey) return;
+      const snapshot = getCachedResourceSnapshot(cacheKey, []);
+      setWatchlistState({ key: cacheKey, data: snapshot.data || [] });
     });
 
     if (autoLoad) {
-      void loadWatchlist();
+      void loadWatchlist(true);
     } else {
       setLoading(false);
     }
 
     // Listen for changes from other components
-    const handleSync = () => loadWatchlist();
+    const handleSync = () => loadWatchlist(true);
+    const handleAuthScopeChanged = () => {
+      activeCacheKeyRef.current = null;
+      requestTracker.next(cacheKey);
+      clearCachedResource(cacheKey);
+      setWatchlistState({ key: null, data: [] });
+      setLoading(false);
+      setAuthEpoch((current) => current + 1);
+    };
     window.addEventListener("watchlist-updated", handleSync);
+    window.addEventListener("tradamind:auth-scope-changed", handleAuthScopeChanged);
     return () => {
+      const remaining = (activeWatchlistKeys.get(cacheKey) || 1) - 1;
+      if (remaining) activeWatchlistKeys.set(cacheKey, remaining);
+      else activeWatchlistKeys.delete(cacheKey);
       unsubscribe();
       window.removeEventListener("watchlist-updated", handleSync);
+      window.removeEventListener("tradamind:auth-scope-changed", handleAuthScopeChanged);
     };
-  }, [autoLoad]);
+  }, [autoLoad, authEpoch, cacheKey]);
 
   async function loadWatchlist(forceFresh = false) {
+    if (!cacheKey || activeCacheKeyRef.current !== cacheKey) return [];
     try {
-      if (!getCachedResourceSnapshot(WATCHLIST_CACHE_KEY, []).hasData) {
+      if (!getCachedResourceSnapshot(cacheKey, []).hasData) {
         setLoading(true);
       }
-      const data = await loadWatchlistShared(forceFresh);
-      setWatchlist(data || []);
-      return data || [];
+      const result = await loadWatchlistShared(cacheKey, forceFresh);
+      if (!result.current || activeCacheKeyRef.current !== cacheKey) return [];
+      setWatchlistState({ key: cacheKey, data: result.data });
+      return result.data;
     } catch (err) {
       console.error("❌ Watchlist load error:", err);
-      return getCachedResourceSnapshot(WATCHLIST_CACHE_KEY, []).data || [];
+      return getCachedResourceSnapshot(cacheKey, []).data || [];
     } finally {
-      setLoading(false);
+      if (activeCacheKeyRef.current === cacheKey) setLoading(false);
     }
   }
 
   async function add(asset) {
     try {
-      await addToWatchlist(asset);
-      const data = await loadWatchlist(true);
-      setCachedResourceData(WATCHLIST_CACHE_KEY, data || []);
+      if (!cacheKey || activeCacheKeyRef.current !== cacheKey) return;
+      const controller = new AbortController();
+      const abortOnAuthChange = () => controller.abort();
+      window.addEventListener("tradamind:auth-scope-changed", abortOnAuthChange);
+      try {
+        await addToWatchlist(asset, { signal: controller.signal });
+      } finally {
+        window.removeEventListener("tradamind:auth-scope-changed", abortOnAuthChange);
+      }
+      if (activeCacheKeyRef.current !== cacheKey) return;
+      await loadWatchlist(true);
+      if (activeCacheKeyRef.current !== cacheKey) return;
       invalidateWatchlist();
     } catch (err) {
+      if (err?.name === "AbortError") return;
       console.error("❌ Watchlist add error:", err);
       throw err;
     }
@@ -117,11 +160,21 @@ export function useWatchlist(options = {}) {
 
   async function remove(symbol, marketId = null) {
     try {
-      await removeFromWatchlist(symbol, marketId);
-      const data = await loadWatchlist(true);
-      setCachedResourceData(WATCHLIST_CACHE_KEY, data || []);
+      if (!cacheKey || activeCacheKeyRef.current !== cacheKey) return;
+      const controller = new AbortController();
+      const abortOnAuthChange = () => controller.abort();
+      window.addEventListener("tradamind:auth-scope-changed", abortOnAuthChange);
+      try {
+        await removeFromWatchlist(symbol, marketId, { signal: controller.signal });
+      } finally {
+        window.removeEventListener("tradamind:auth-scope-changed", abortOnAuthChange);
+      }
+      if (activeCacheKeyRef.current !== cacheKey) return;
+      await loadWatchlist(true);
+      if (activeCacheKeyRef.current !== cacheKey) return;
       invalidateWatchlist();
     } catch (err) {
+      if (err?.name === "AbortError") return;
       console.error("❌ Watchlist remove error:", err);
       throw err;
     }
@@ -135,7 +188,7 @@ export function useWatchlist(options = {}) {
   return {
     watchlist,
     symbols: Array.from(new Set((watchlist || []).map((item) => item.symbol).filter(Boolean))),
-    loading,
+    loading: watchlistState.key === cacheKey ? loading : Boolean(cacheKey && autoLoad),
     add,
     remove,
     isInWatchlist,

@@ -27,5 +27,6 @@ test("analysis proposal cards suppress the generic inline action card", () => {
 test("a confirmed FINN watchlist change invalidates the shared watchlist before Analyse reads it", () => {
   assert.match(source, /\["succeeded", "already_executed"\]\.includes\(execution\.status\)/);
   assert.match(source, /operationId === "watchlist_add" \|\| operationId === "watchlist_remove"[\s\S]*?invalidateWatchlist\(\)/);
-  assert.match(watchlistHook, /function invalidateWatchlist\(\)[\s\S]*?markCachedResourceStale\(WATCHLIST_CACHE_KEY\)[\s\S]*?dispatchEvent\(new CustomEvent\("watchlist-updated"\)\)/);
+  assert.match(watchlistHook, /function invalidateWatchlist\(\)[\s\S]*?activeWatchlistKeys\.forEach\([\s\S]*?markCachedResourceStale\(key\)[\s\S]*?dispatchEvent\(new CustomEvent\("watchlist-updated"\)\)/);
+  assert.match(watchlistHook, /handleAuthScopeChanged[\s\S]*?setAuthEpoch\(\(current\) => current \+ 1\)[\s\S]*?\[autoLoad, authEpoch, cacheKey\]/);
 });
