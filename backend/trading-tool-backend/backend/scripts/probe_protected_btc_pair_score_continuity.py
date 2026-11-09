@@ -650,37 +650,41 @@ def run(namespace: str) -> dict:
         _seed_pair_readings(user_id, markets)
         stage = "baseline"
         before_business = _business_snapshot(user_id)
+        stage = "live_guard_import"
         from backend.scripts.probe_protected_paper_exit_reconciliation import _guard_live_exchange
 
-        with _guard_live_exchange() as live_attempts, asyncio.Runner() as runner:
-            stage = "initial_snapshot"
-            initial = _snapshot(user_id, markets)
-            stage = "initial_transport"
-            initial_transport = _transport_checks(user_id, initial, runner=runner)
-            stage = "outage_source"
-            _set_eur_source_time(user_id, markets["BTC/EUR"]["market_id"],
-                                 markets["BTC/EUR"]["source_at"], stale=True)
-            stage = "outage_snapshot"
-            outage = _snapshot(user_id, markets)
-            stage = "outage_transport"
-            outage_transport = _transport_checks(user_id, outage, runner=runner)
-            stage = "browser"
-            browser_source_facts = {}
-            try:
-                stale_browser = runner.run(_stale_date_display(
-                    user_id, outage["pairs"]["BTC/EUR"]["source_at"],
-                    markets["BTC/EUR"]["market_id"],
-                    source_facts=browser_source_facts,
-                ))
-            except Exception:
-                stale_browser = {}
-            stage = "recovery_source"
-            _set_eur_source_time(user_id, markets["BTC/EUR"]["market_id"],
-                                 markets["BTC/EUR"]["source_at"], stale=False)
-            stage = "recovery_snapshot"
-            recovered = _snapshot(user_id, markets)
-            stage = "recovery_transport"
-            recovered_transport = _transport_checks(user_id, recovered, runner=runner)
+        stage = "live_guard_entry"
+        with _guard_live_exchange() as live_attempts:
+            stage = "runner_entry"
+            with asyncio.Runner() as runner:
+                stage = "initial_snapshot"
+                initial = _snapshot(user_id, markets)
+                stage = "initial_transport"
+                initial_transport = _transport_checks(user_id, initial, runner=runner)
+                stage = "outage_source"
+                _set_eur_source_time(user_id, markets["BTC/EUR"]["market_id"],
+                                     markets["BTC/EUR"]["source_at"], stale=True)
+                stage = "outage_snapshot"
+                outage = _snapshot(user_id, markets)
+                stage = "outage_transport"
+                outage_transport = _transport_checks(user_id, outage, runner=runner)
+                stage = "browser"
+                browser_source_facts = {}
+                try:
+                    stale_browser = runner.run(_stale_date_display(
+                        user_id, outage["pairs"]["BTC/EUR"]["source_at"],
+                        markets["BTC/EUR"]["market_id"],
+                        source_facts=browser_source_facts,
+                    ))
+                except Exception:
+                    stale_browser = {}
+                stage = "recovery_source"
+                _set_eur_source_time(user_id, markets["BTC/EUR"]["market_id"],
+                                     markets["BTC/EUR"]["source_at"], stale=False)
+                stage = "recovery_snapshot"
+                recovered = _snapshot(user_id, markets)
+                stage = "recovery_transport"
+                recovered_transport = _transport_checks(user_id, recovered, runner=runner)
         stage = "after_read"
         after_business = _business_snapshot(user_id)
         stage = "validation"
@@ -736,6 +740,12 @@ def run(namespace: str) -> dict:
                 "outage_quote_pending_browser_checked": True,
                 "gate_status": "PASS"}
     except Exception as error:
+        if stage in {"live_guard_import", "live_guard_entry", "runner_entry"}:
+            kind = type(error).__name__.lower()
+            if kind not in {"importerror", "modulenotfounderror", "attributeerror",
+                            "runtimeerror", "typeerror"}:
+                kind = "other"
+            raise RuntimeError(f"trader_pair_{stage}_{kind}_failed") from None
         if stage == "baseline":
             from backend.scripts.probe_protected_account_answer import (
                 BUSINESS_MEASUREMENT_ERROR_KINDS, BUSINESS_MEASUREMENT_STAGES,
@@ -747,6 +757,11 @@ def run(namespace: str) -> dict:
                         raise RuntimeError(
                             f"trader_pair_baseline_{measurement_stage}_{kind}_failed"
                         ) from None
+            kind = type(error).__name__.lower()
+            if kind not in {"runtimeerror", "importerror", "modulenotfounderror",
+                            "attributeerror", "typeerror", "operationalerror"}:
+                kind = "other"
+            raise RuntimeError(f"trader_pair_baseline_unclassified_{kind}_failed") from None
         snapshot_step = str(error).removeprefix("trader_pair_snapshot_").removesuffix("_failed")
         if (stage in {"initial_snapshot", "outage_snapshot", "recovery_snapshot"}
                 and snapshot_step.startswith("assessment_")

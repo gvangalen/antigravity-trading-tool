@@ -701,6 +701,99 @@ def test_baseline_measurement_masks_unrecognized_exception_class_and_message(mon
         probe._business_snapshot(11)
 
 
+def test_baseline_measurement_classifies_close_failure(monkeypatch):
+    from backend.scripts import probe_protected_account_answer as account_probe
+
+    class Connection:
+        def cursor(self):
+            class Cursor:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *_args):
+                    return False
+
+                def execute(self, *_args):
+                    pass
+
+                def fetchall(self):
+                    return []
+
+                def fetchone(self):
+                    return (0,)
+
+            return Cursor()
+
+        def close(self):
+            raise RuntimeError("private connection details")
+
+    monkeypatch.setattr(account_probe.fixture, "_connection", Connection)
+    with pytest.raises(RuntimeError,
+                       match="^account_safety_measurement_close_runtimeerror_unavailable$"):
+        probe._business_snapshot(11)
+
+
+def test_baseline_boundary_has_fixed_guard_entry_and_fallback_codes(monkeypatch):
+    from contextlib import contextmanager
+    from backend.scripts import probe_protected_paper_exit_reconciliation as exit_probe
+
+    monkeypatch.setenv("FINN_QA_ALLOW_TRADER_PAIR_FIXTURE", "1")
+    monkeypatch.setenv("FINN_QA_USER_ID", "7")
+    monkeypatch.setattr(probe, "_markets", lambda: MARKETS)
+    monkeypatch.setattr(probe.fixture, "_seed", lambda *_args: (11, 22, "today"))
+    monkeypatch.setattr(probe, "_seed_pair_readings", lambda *_args: None)
+    monkeypatch.setattr(probe, "_business_snapshot", lambda *_args: {"counts": {}, "fingerprints": {}})
+    @contextmanager
+    def fail_guard():
+        raise AttributeError("private owner 92741")
+        yield []
+    monkeypatch.setattr(exit_probe, "_guard_live_exchange", fail_guard)
+    quarantined = []
+    monkeypatch.setattr(probe.fixture, "_quarantine", lambda *_args: quarantined.append(True))
+    with pytest.raises(RuntimeError,
+                       match="^trader_pair_live_guard_entry_attributeerror_failed$"):
+        probe.run(NAMESPACE)
+    assert quarantined == [True]
+    assert profile_error_category("trader_pair_score_continuity", RuntimeError(
+        "trader_pair_live_guard_entry_attributeerror_failed")) == (
+            "trader_pair_live_guard_entry_attributeerror_failed")
+    assert profile_error_category("trader_pair_score_continuity", RuntimeError(
+        "trader_pair_baseline_unclassified_importerror_failed")) == (
+            "trader_pair_baseline_unclassified_importerror_failed")
+    assert profile_error_category("trader_pair_score_continuity", RuntimeError(
+        "trader_pair_live_guard_entry_private_owner_failed")) == "trader_pair_probe_runtime_error"
+
+
+def test_runner_entry_failure_is_not_mislabeled_as_live_guard(monkeypatch):
+    from contextlib import contextmanager
+    from backend.scripts import probe_protected_paper_exit_reconciliation as exit_probe
+
+    monkeypatch.setenv("FINN_QA_ALLOW_TRADER_PAIR_FIXTURE", "1")
+    monkeypatch.setenv("FINN_QA_USER_ID", "7")
+    monkeypatch.setattr(probe, "_markets", lambda: MARKETS)
+    monkeypatch.setattr(probe.fixture, "_seed", lambda *_args: (11, 22, "today"))
+    monkeypatch.setattr(probe, "_seed_pair_readings", lambda *_args: None)
+    monkeypatch.setattr(probe, "_business_snapshot", lambda *_args: {"counts": {}, "fingerprints": {}})
+    @contextmanager
+    def live_guard():
+        yield []
+    monkeypatch.setattr(exit_probe, "_guard_live_exchange", live_guard)
+    class BrokenRunner:
+        def __enter__(self):
+            raise TypeError("private owner 92741")
+
+        def __exit__(self, *_args):
+            return False
+    monkeypatch.setattr(probe.asyncio, "Runner", BrokenRunner)
+    quarantined = []
+    monkeypatch.setattr(probe.fixture, "_quarantine", lambda *_args: quarantined.append(True))
+    with pytest.raises(RuntimeError, match="^trader_pair_runner_entry_typeerror_failed$"):
+        probe.run(NAMESPACE)
+    assert quarantined == [True]
+    assert profile_error_category("trader_pair_score_continuity", RuntimeError(
+        "trader_pair_runner_entry_typeerror_failed")) == "trader_pair_runner_entry_typeerror_failed"
+
+
 def test_baseline_failure_is_classified_and_quarantined(monkeypatch):
     monkeypatch.setenv("FINN_QA_ALLOW_TRADER_PAIR_FIXTURE", "1")
     monkeypatch.setenv("FINN_QA_USER_ID", "7")

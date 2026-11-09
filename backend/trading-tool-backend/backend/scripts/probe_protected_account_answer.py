@@ -18,7 +18,7 @@ BUSINESS_TABLES = (
     "bot_orders", "bot_executions", "bot_ledger", "finn_v2_proposals",
     "finn_v2_confirmations", "finn_v2_executions", "exchange_keys",
 )
-BUSINESS_MEASUREMENT_STAGES = ("connection", *BUSINESS_TABLES, "broker_orders")
+BUSINESS_MEASUREMENT_STAGES = ("connection", *BUSINESS_TABLES, "broker_orders", "close")
 BUSINESS_MEASUREMENT_ERROR_KINDS = frozenset({
     "operationalerror", "programmingerror", "interfaceerror", "dataerror",
     "integrityerror", "timeouterror", "runtimeerror", "undefinedtable",
@@ -284,7 +284,15 @@ def _business_state(user_id: int, *, diagnostic: bool = False) -> dict:
         raise RuntimeError("account_safety_measurement_unavailable") from None
     finally:
         if connection is not None:
-            connection.close()
+            try:
+                connection.close()
+            except Exception as error:
+                if diagnostic:
+                    kind = type(error).__name__.lower()
+                    if kind not in BUSINESS_MEASUREMENT_ERROR_KINDS:
+                        kind = "other"
+                    raise RuntimeError(f"account_safety_measurement_close_{kind}_unavailable") from None
+                raise RuntimeError("account_safety_measurement_unavailable") from None
 
 
 def _frozen_facts(user_id: int, bot_id: int) -> dict:
