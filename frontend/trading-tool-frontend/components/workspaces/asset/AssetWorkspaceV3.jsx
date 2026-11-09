@@ -205,6 +205,7 @@ function getUiCopy(locale = "nl") {
       scoreAwaitingUpdate: "after next reading",
       datedSourceDetail: (date) => `The latest available source reading is from ${date}. The value remains visible. The score will update when the source provides a new reading.`,
       scorePending: "A current source reading exists, but no indicator score is available. Check the score rule or wait for the next calculation.",
+      pendingScoreWithPriorIndicator: (indicatorMoment, quoteMoment) => `Last indicator reading: ${indicatorMoment}. Displayed 24-hour change uses quote source: ${quoteMoment}. The score awaits recalculation.`,
       scoreRebuilding: "Your indicator choices changed. The score is being recalculated; previous readings have not been erased.",
       scoreIncomplete: "One or more selected indicators do not have a usable score yet. The group score will return when their evidence is complete.",
       missingScoreRule: "A source reading is available, but no scoring rule is configured. This indicator has no score yet.",
@@ -417,6 +418,7 @@ function getUiCopy(locale = "nl") {
       scoreAwaitingUpdate: "nach neuer Messung",
       datedSourceDetail: (date) => `Die letzte verfügbare Quellmessung stammt vom ${date}. Der Wert bleibt sichtbar. Der Score wird aktualisiert, sobald die Quelle eine neue Messung liefert.`,
       scorePending: "Ein aktueller Quellwert liegt vor, aber kein Indikator-Score. Prüfe die Scoreregel oder warte auf die nächste Berechnung.",
+      pendingScoreWithPriorIndicator: (indicatorMoment, quoteMoment) => `Letzte Indikatormessung: ${indicatorMoment}. Die angezeigte 24-Stunden-Veränderung stammt aus der Kursquelle vom ${quoteMoment}. Der Score wartet auf eine Neuberechnung.`,
       scoreRebuilding: "Deine Indikatorauswahl hat sich geändert. Der Score wird neu berechnet; frühere Messwerte wurden nicht gelöscht.",
       scoreIncomplete: "Mindestens ein gewählter Indikator hat noch keinen nutzbaren Score. Der Gruppenscore erscheint wieder, sobald die Daten vollständig sind.",
       missingScoreRule: "Ein Quellwert ist vorhanden, aber keine Scoreregel eingerichtet. Dieser Indikator hat noch keinen Score.",
@@ -628,6 +630,7 @@ function getUiCopy(locale = "nl") {
     scoreAwaitingUpdate: "volgt na nieuwe meting",
     datedSourceDetail: (date) => `De laatste beschikbare bronmeting is van ${date}. De waarde blijft zichtbaar. De score wordt bijgewerkt zodra de bron een nieuwe meting levert.`,
     scorePending: "Er is een actuele bronmeting, maar nog geen indicatorscore. Controleer de scoreregel of wacht op de volgende berekening.",
+    pendingScoreWithPriorIndicator: (indicatorMoment, quoteMoment) => `Laatste indicatormeting: ${indicatorMoment}. Getoonde 24-uursverandering uit koersbron: ${quoteMoment}. Score wacht op herberekening.`,
     scoreRebuilding: "Je indicatoren zijn gewijzigd. De score wordt opnieuw berekend; eerdere metingen zijn niet gewist.",
     scoreIncomplete: "Een of meer gekozen indicatoren hebben nog geen bruikbare score. De groepsscore komt terug zodra hun gegevens compleet zijn.",
     missingScoreRule: "Er is een bronmeting, maar geen scoreregel ingesteld. Deze indicator heeft daarom nog geen score.",
@@ -1448,6 +1451,12 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
     const unavailableReason = item?.score_unavailable_reason;
     const pendingScore = score === null && unavailableReason === "score_pending";
     const sourceDate = formatUtcSourceDate(item?.source_observed_at, locale);
+    const priorIndicatorMoment = item?.indicator_source_observed_at
+      ? formatUtcTimestamp(item.indicator_source_observed_at, locale) : null;
+    const currentQuoteMoment = item?.source_observed_at
+      ? formatUtcTimestamp(item.source_observed_at, locale) : null;
+    const pendingWithPriorIndicator = pendingScore && priorIndicatorMoment && priorIndicatorMoment !== "—"
+      && currentQuoteMoment && currentQuoteMoment !== "—";
     const datedSource = score === null && unavailableReason === "stale_source" && sourceDate;
     const direction = score !== null ? toDirectionLabel(item, score, ui)
       : pendingScore ? ui.scorePendingShort
@@ -1506,7 +1515,9 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
               ? ui.change24hMethod(Math.round(normalizedPosition), Math.round(score))
           : null
       : null;
-    const detail = scoreConflict
+    const detail = pendingWithPriorIndicator
+      ? ui.pendingScoreWithPriorIndicator(priorIndicatorMoment, currentQuoteMoment)
+      : scoreConflict
       ? ui.positiveMoveWeakScore(value, Math.round(score))
       : methodDetail
         ? methodDetail

@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -41,11 +41,13 @@ def test_24_hour_row_uses_selected_pairs_latest_quote_while_recalculation_is_pen
     row = {"name": "change_24h", "value": 14.5, "score": 50,
            "source_observed_at": observed.isoformat()}
     latest = SimpleNamespace(change_24h=0.02,
-                             source_observed_at=observed.replace(tzinfo=None))
+                             source_observed_at=(observed + timedelta(days=1)).replace(tzinfo=None))
     module._align_change_24h_row([row], latest)
     assert row["value"] == 0.02
     assert row["score"] is None
     assert row["data_status"] == "pending_refresh"
+    assert row["indicator_source_observed_at"] == observed.isoformat()
+    assert row["source_observed_at"] == (observed + timedelta(days=1)).isoformat()
 
 
 def test_exact_market_workspace_never_borrows_base_quote_or_score(monkeypatch):
