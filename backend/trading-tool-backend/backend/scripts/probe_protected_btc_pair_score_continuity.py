@@ -143,18 +143,19 @@ async def _score_tool_seen(*, user_id: int, run_id: str, conversation_id: str) -
                     or contract.conversation_id != conversation_id):
                 return "unknown"
             state = contract.state_json or {}
-            checkpoint = state.get("responses_exchange") or state.get("responses_progress") or {}
-            if (checkpoint.get("run_id") != run_id
-                    or checkpoint.get("conversation_id") != conversation_id):
-                return False
-            trace = checkpoint.get("tool_trace")
-            if not isinstance(trace, list):
+            checkpoints = [state[name] for name in ("responses_exchange", "responses_progress")
+                           if state.get(name) is not None]
+            if any(not isinstance(checkpoint, dict)
+                   or checkpoint.get("run_id") != run_id
+                   or checkpoint.get("conversation_id") != conversation_id
+                   or not isinstance(checkpoint.get("tool_trace"), list)
+                   for checkpoint in checkpoints):
                 return "unknown"
             return any(
                 isinstance(call, dict) and isinstance(call.get("result"), dict)
                 and any(isinstance(row, dict) and row.get("scope") == "read_asset_scores"
                         for row in (call["result"].get("results") or []))
-                for call in trace
+                for checkpoint in checkpoints for call in checkpoint["tool_trace"]
             )
     except Exception:
         return "unknown"

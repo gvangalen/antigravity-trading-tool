@@ -307,6 +307,18 @@ def test_score_tool_presence_reads_owner_bound_progress_without_exporting_data(
         user_id=11, run_id="private-run", conversation_id="private-conversation",
     ))
     assert result is expected and secret not in str(result)
+    row.state_json["responses_exchange"] = {
+        "run_id": "private-run", "conversation_id": "private-conversation",
+        "tool_trace": [{"result": {"results": [{"scope": "read_market_snapshot",
+                                               "data": secret}]}}],
+    }
+    assert asyncio.run(probe._score_tool_seen(
+        user_id=11, run_id="private-run", conversation_id="private-conversation",
+    )) is expected
+    row.state_json["responses_exchange"]["conversation_id"] = "other-private-conversation"
+    assert asyncio.run(probe._score_tool_seen(
+        user_id=11, run_id="private-run", conversation_id="private-conversation",
+    )) == "unknown"
     assert asyncio.run(probe._score_tool_seen(
         user_id=12, run_id="private-run", conversation_id="private-conversation",
     )) == "unknown"
