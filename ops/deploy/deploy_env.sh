@@ -350,7 +350,7 @@ if printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_COM
     rm -rf \"\$PREVIOUS_FRONTEND_STATIC\"
   }
   if [ -d frontend/trading-tool-frontend/out/_next/static ]; then
-    cp -R frontend/trading-tool-frontend/out/_next/static/. \"\$PREVIOUS_FRONTEND_STATIC/\" 2>/dev/null || true
+    cp -R frontend/trading-tool-frontend/out/_next/static/. \"\$PREVIOUS_FRONTEND_STATIC/\"
   fi
   git cat-file -e '$TARGET_COMMIT_FULL^{commit}'
   git reset --hard '$TARGET_COMMIT_FULL'
@@ -477,12 +477,14 @@ if printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_COM
   DEPLOY_STEP_ID='frontend_export'
   cd ../../frontend/trading-tool-frontend
   rm -rf .next
-  git clean -fd out/_next/static
+  # Keep hashed chunks from the previous export for tabs opened before this
+  # deployment. The git-sync step restored them after reset; cleaning this
+  # directory here would remove them again and break client-side navigation.
   if [ ! -f out/index.html ]; then
     echo \"❌ Prebuilt frontend export missing: frontend/trading-tool-frontend/out/index.html\" >&2
     exit 1
   fi
-  echo \"✅ Using prebuilt frontend export from git (server build skipped). Old static chunks removed to avoid mixed-build clients.\"
+  echo \"✅ Using prebuilt frontend export from git (server build skipped). Previous hashed chunks remain available to open tabs.\"
   cat > out/build-info.json <<EOF
 {\"service\":\"frontend\",\"commit_sha\":\"$TARGET_COMMIT_FULL\",\"build_time\":\"$BUILD_TIMESTAMP_UTC\"}
 EOF
