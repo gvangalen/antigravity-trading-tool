@@ -194,7 +194,16 @@ def profile_error_category(profile: str, error: Exception) -> str:
             for step in ("score_builder", "assessment", "source_read",
                          "stale_eval", "projection")
         }
-        return (code if code in snapshot_codes | {
+        assessment_codes = {
+            f"trader_pair_{phase}_snapshot_assessment_{kind}_{origin}_failed"
+            for phase in ("initial", "outage", "recovery")
+            for kind in ("runtimeerror", "typeerror", "valueerror", "attributeerror",
+                         "keyerror", "operationalerror", "dataerror", "integrityerror",
+                         "programmingerror", "statementerror", "other")
+            for origin in ("match_asset", "match_source", "match_weights",
+                           "pair_weights", "score_diagnosis", "other")
+        }
+        return (code if code in snapshot_codes | assessment_codes | {
             "trader_pair_fixture_not_authorized", "trader_pair_namespace_invalid",
             "fixture_binding_invalid", "btc_pair_markets_unavailable",
             "btc_pair_source_unavailable", "btc_pair_fixture_source_missing",
@@ -304,6 +313,7 @@ def profile_error_category(profile: str, error: Exception) -> str:
             "trader_pair_cleanup_trade_unsafe",
             "trader_pair_cleanup_failed",
             "trader_pair_cleanup_postcondition_failed",
+            "trader_pair_cleanup_label_not_allowed",
         } else "trader_pair_cleanup_runtime_error")
     if profile == "trader_strategy_schema_audit":
         code = str(error)

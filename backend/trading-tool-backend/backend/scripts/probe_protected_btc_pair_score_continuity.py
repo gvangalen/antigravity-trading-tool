@@ -14,6 +14,35 @@ from backend.scripts import probe_protected_score2_stale_paper as fixture
 from backend.scripts.qa_trader_gate_invariants import check_pair_score_isolation
 
 
+_ASSESSMENT_ERROR_KINDS = frozenset({
+    "RuntimeError", "TypeError", "ValueError", "AttributeError", "KeyError",
+    "OperationalError", "DataError", "IntegrityError", "ProgrammingError",
+    "StatementError",
+})
+_ASSESSMENT_ORIGINS = {
+    ("setup_market_match_service.py", "for_asset"): "match_asset",
+    ("setup_market_match_service.py", "_source_is_fresh"): "match_source",
+    ("setup_market_match_service.py", "_benchmark_weights"): "match_weights",
+    ("pair_benchmark_service.py", "benchmark_weights"): "pair_weights",
+    ("scoring_utils.py", "score_snapshot_diagnosis"): "score_diagnosis",
+}
+
+
+def _assessment_error_code(error: Exception) -> str:
+    """Classify only a fixed exception type and static source function."""
+    kind = type(error).__name__
+    if kind not in _ASSESSMENT_ERROR_KINDS:
+        kind = "Other"
+    origin = "other"
+    frame = error.__traceback__
+    while frame is not None:
+        code = frame.tb_frame.f_code
+        name = code.co_filename.rsplit("/", 1)[-1]
+        origin = _ASSESSMENT_ORIGINS.get((name, code.co_name), origin)
+        frame = frame.tb_next
+    return f"{kind.lower()}_{origin}"
+
+
 def _business_snapshot(user_id: int) -> dict:
     from backend.scripts.probe_protected_account_answer import _business_state
 
@@ -268,7 +297,11 @@ def _snapshot(user_id: int, markets: dict[str, dict]) -> dict:
                 "stale_reading_proven": stale_reading_proven,
             }
         return {"pairs": pairs}
-    except Exception:
+    except Exception as error:
+        if step == "assessment":
+            raise RuntimeError(
+                f"trader_pair_snapshot_assessment_{_assessment_error_code(error)}_failed"
+            ) from None
         raise RuntimeError(f"trader_pair_snapshot_{step}_failed") from None
     finally:
         connection.close()
@@ -361,6 +394,14 @@ def run(namespace: str) -> dict:
                 "gate_status": "PASS"}
     except Exception as error:
         snapshot_step = str(error).removeprefix("trader_pair_snapshot_").removesuffix("_failed")
+        if (stage in {"initial_snapshot", "outage_snapshot", "recovery_snapshot"}
+                and snapshot_step.startswith("assessment_")
+                and snapshot_step.removeprefix("assessment_") in {
+                    f"{kind.lower()}_{origin}"
+                    for kind in _ASSESSMENT_ERROR_KINDS | {"Other"}
+                    for origin in set(_ASSESSMENT_ORIGINS.values()) | {"other"}
+                }):
+            raise RuntimeError(f"trader_pair_{stage}_{snapshot_step}_failed") from None
         if (stage in {"initial_snapshot", "outage_snapshot", "recovery_snapshot"}
                 and str(error) == f"trader_pair_snapshot_{snapshot_step}_failed"
                 and snapshot_step in {"score_builder", "assessment", "source_read",
