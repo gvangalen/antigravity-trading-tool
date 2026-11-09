@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -110,6 +110,11 @@ def test_selected_pair_without_a_setup_is_registered_and_read_exactly(monkeypatc
     monkeypatch.setattr(asset_catalog_api, "TradingMarketService", Markets)
     monkeypatch.setattr(asset_catalog_api, "MarketDataRepository", Repository)
     monkeypatch.setattr(asset_catalog_api, "MarketDataIngestionService", Ingestion)
+    monkeypatch.setattr(asset_catalog_api, "_owner_tracks_exact_market",
+                        lambda *_args: asyncio.sleep(0, result=True))
+    monkeypatch.setattr(asset_catalog_api, "queue_exact_market_refresh",
+                        lambda market_id, *, debounce_seconds:
+                        calls.append((market_id, debounce_seconds)))
 
     result = asyncio.run(asset_catalog_api.select_crypto_trading_market(
         "eth", "eur", current_user={"id": 8}, session=session,
@@ -117,12 +122,13 @@ def test_selected_pair_without_a_setup_is_registered_and_read_exactly(monkeypatc
     assert result["pair"] == "ETH/EUR"
     assert result["tradingview_symbol"] == "BINANCE:ETHEUR"
     assert result["snapshot_status"] == "available"
-    assert calls == [("ETH", "EUR"), ("ETH/EUR", "snapshot")]
+    assert calls == [("ETH", "EUR"), ("ETH/EUR", "snapshot"), (73, 300)]
     assert session.commits == 1
 
 
 def test_selection_returns_owner_scoped_exact_workspace_in_same_request(monkeypatch):
     session = _Session()
+    queued = []
     market = SimpleNamespace(id=81, pair="SOL/EUR", quote_currency="EUR",
                              provider_symbol="SOLEUR", tradingview_symbol="BINANCE:SOLEUR")
 
@@ -159,12 +165,19 @@ def test_selection_returns_owner_scoped_exact_workspace_in_same_request(monkeypa
             assert periods == {"market": "week", "macro": "day", "technical": "day"}
             assert watchlist_symbols == ["BTC", "ETH"]
             return {"symbol": symbol, "pair": f"{symbol}/{quote}", "market_id": 81,
+                    "daily": {"market": {"source_status": "fresh"},
+                              "macro": {"source_status": "missing_score"}},
                     "quote": {"price": None, "status": "insufficient_data"}}
 
     monkeypatch.setattr(asset_catalog_api, "AssetCatalogService", Catalog)
     monkeypatch.setattr(asset_catalog_api, "TradingMarketService", Markets)
     monkeypatch.setattr(asset_catalog_api, "MarketDataRepository", Repository)
     monkeypatch.setattr(asset_catalog_api, "ExactMarketWorkspaceService", Workspace)
+    monkeypatch.setattr(asset_catalog_api, "_owner_tracks_exact_market",
+                        lambda *_args: asyncio.sleep(0, result=True))
+    monkeypatch.setattr(asset_catalog_api, "queue_exact_market_refresh",
+                        lambda market_id, *, debounce_seconds:
+                        queued.append((market_id, debounce_seconds)))
     result = asyncio.run(asset_catalog_api.select_crypto_trading_market(
         "sol", "eur", current_user={"id": 8}, session=session,
         include_workspace=True, market_period="week", watchlist_symbols="BTC,ETH",
@@ -172,6 +185,7 @@ def test_selection_returns_owner_scoped_exact_workspace_in_same_request(monkeypa
     assert result["workspace"]["pair"] == "SOL/EUR"
     assert result["workspace"]["quote"]["price"] is None
     assert session.commits == 1
+    assert queued == [(81, 300)]
 
 
 def test_unverified_pair_never_uses_another_quote(monkeypatch):
@@ -240,6 +254,52 @@ def test_existing_fresh_snapshot_does_not_requery_the_provider(monkeypatch):
     assert result["snapshot_status"] == "available"
 
 
+@pytest.mark.parametrize("tracked", [True, False])
+def test_existing_pair_requests_full_refresh_without_quote_only_write(monkeypatch, tracked):
+    session = _Session()
+    market = SimpleNamespace(id=74, pair="ETH/USDT", quote_currency="USDT",
+                             provider_symbol="ETHUSDT", tradingview_symbol="BINANCE:ETHUSDT")
+    requested = []
+
+    class Catalog:
+        def __init__(self, _session):
+            pass
+
+        async def get_asset(self, _symbol):
+            return {"asset_class": "crypto"}
+
+    class Markets:
+        def __init__(self, _session):
+            pass
+
+        async def resolve(self, _base, _quote):
+            return market
+
+    class Repository:
+        def __init__(self, _session):
+            pass
+
+        async def get_latest_exact_market_snapshot(self, _market_id):
+            return SimpleNamespace(source_observed_at=datetime.now(timezone.utc) - timedelta(minutes=4))
+
+    monkeypatch.setattr(asset_catalog_api, "AssetCatalogService", Catalog)
+    monkeypatch.setattr(asset_catalog_api, "TradingMarketService", Markets)
+    monkeypatch.setattr(asset_catalog_api, "MarketDataRepository", Repository)
+    monkeypatch.setattr(asset_catalog_api, "MarketDataIngestionService",
+                        lambda _session: (_ for _ in ()).throw(AssertionError("quote-only write")))
+    monkeypatch.setattr(asset_catalog_api, "_owner_tracks_exact_market",
+                        lambda *_args: asyncio.sleep(0, result=tracked))
+    monkeypatch.setattr(asset_catalog_api, "queue_exact_market_refresh",
+                        lambda market_id, *, debounce_seconds:
+                        requested.append((market_id, debounce_seconds)))
+
+    result = asyncio.run(asset_catalog_api.select_crypto_trading_market(
+        "ETH", "USDT", current_user={"id": 8}, session=session,
+    ))
+    assert result["snapshot_status"] == "pending"
+    assert requested == ([(74, 300)] if tracked else [])
+
+
 def test_provider_reply_without_source_moment_stays_pending(monkeypatch):
     session = _Session()
     market = SimpleNamespace(id=75, pair="ETH/EUR", quote_currency="EUR",
@@ -277,6 +337,10 @@ def test_provider_reply_without_source_moment_stays_pending(monkeypatch):
     monkeypatch.setattr(asset_catalog_api, "TradingMarketService", Markets)
     monkeypatch.setattr(asset_catalog_api, "MarketDataRepository", Repository)
     monkeypatch.setattr(asset_catalog_api, "MarketDataIngestionService", Ingestion)
+    monkeypatch.setattr(asset_catalog_api, "_owner_tracks_exact_market",
+                        lambda *_args: asyncio.sleep(0, result=True))
+    monkeypatch.setattr(asset_catalog_api, "queue_exact_market_refresh",
+                        lambda market_id, *, debounce_seconds: True)
     result = asyncio.run(asset_catalog_api.select_crypto_trading_market(
         "ETH", "EUR", current_user={"id": 8}, session=session,
     ))
