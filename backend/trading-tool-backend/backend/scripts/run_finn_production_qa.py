@@ -29,6 +29,7 @@ from backend.scripts.finn_v2_matrix_transport import TERMINAL_STATUSES, observe_
 
 ALLOWED_PROFILES = {
     "auth_preflight",
+    "watchlist_browser_ui",
     "trade_review_preflight",
     "manifest_key",
     "targeted_regression",
@@ -2407,6 +2408,16 @@ def main() -> int:
                 report["error_category"] = report["auth_preflight"].get("error_category") or "auth"
             elif args.profile == "auth_preflight":
                 report["outcome"] = "passed"
+            elif args.profile == "watchlist_browser_ui":
+                if args.manifest_id != "none" or args.manifest_bundle_path:
+                    raise ValueError("watchlist_browser_manifest_forbidden")
+                if (os.getenv("FINN_QA_ALLOW_FIXTURE_ACTIONS") == "1"
+                        or os.getenv("FINN_QA_ALLOW_FIXTURE_EXECUTION") == "1"):
+                    raise ValueError("watchlist_browser_fixture_actions_forbidden")
+                from backend.scripts.probe_protected_watchlist_ui import run as run_watchlist_browser
+                report["watchlist_browser_ui"] = run_watchlist_browser(token)
+                report["outcome"] = "passed" if report["watchlist_browser_ui"]["passed"] else "failed"
+                report["qa_status"] = "COMPLETED"
             elif args.profile == "trade_review_preflight":
                 if args.manifest_id != "none" or args.manifest_bundle_path:
                     raise ValueError("trade_review_preflight_manifest_forbidden")

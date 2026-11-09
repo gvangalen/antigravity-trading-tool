@@ -131,3 +131,43 @@ def test_browser_fulfills_only_allowlisted_selection_post_without_network():
         fixture_exact_selection_quote="EUR",
     ))
     assert eur_route.actions == [("fulfill", 200)]
+
+
+def test_watchlist_ui_fixture_fulfills_only_exact_read_semantics():
+    class Route:
+        def __init__(self, url, method, body=None):
+            self.request = type("Request", (), {
+                "url": url, "method": method, "headers": {}, "post_data": body,
+            })()
+            self.actions = []
+        async def abort(self):
+            self.actions.append("abort")
+        async def fulfill(self, **kwargs):
+            self.actions.append(("fulfill", kwargs["status"]))
+        async def continue_(self, **_kwargs):
+            self.actions.append("continue")
+
+    base = "https://tradamind.com"
+    for path, method, expected in (
+        ("/api/assets/mentions", "POST", [("fulfill", 200)]),
+        ("/api/watchlist", "GET", [("fulfill", 200)]),
+        ("/api/assistant/chat/stream", "POST", ["abort"]),
+        ("/api/watchlist", "DELETE", ["abort"]),
+        ("/api/assets/mentions?unexpected=1", "POST", ["abort"]),
+    ):
+        route = Route(base + path, method, '{"text":"BTC"}')
+        asyncio.run(route_protected_request(
+            route, base_url=base, token="private-token",
+            bypass_fixture_onboarding=True, fixture_exact_selection=None,
+            fixture_asset_mentions=lambda _body: {"mentions": []},
+            fixture_watchlist_rows=lambda: [],
+        ))
+        assert route.actions == expected
+
+
+def test_watchlist_ui_override_restricted_to_asset_page():
+    with pytest.raises(ValueError, match="qa_browser_watchlist_override_scope_invalid"):
+        asyncio.run(observe_page(
+            base_url="https://tradamind.com", path="/portfolio", token="in-memory-token",
+            inspect=lambda _page: None, fixture_asset_mentions=lambda _body: {},
+        ))
