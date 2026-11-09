@@ -1,5 +1,6 @@
 from backend.celery_task.store_daily_scores_task import run_rule_based_daily_scores
 import threading
+from types import SimpleNamespace
 
 
 def test_indicator_change_rebuilds_only_its_asset(monkeypatch):
@@ -45,6 +46,36 @@ def test_exact_market_refresh_never_rebuilds_the_legacy_asset(monkeypatch):
     invoke()
     assert queued[0][1] == {"user_id": 7, "market_id": 23}
     assert exact == [(7, 23)]
+
+
+def test_repeated_pair_selection_queues_one_full_refresh(monkeypatch):
+    import redis
+    from backend.celery_task.celery_app import celery_app
+    from backend.services.indicator_score_refresh_service import queue_exact_market_refresh
+
+    queued = []
+    keys = set()
+    closed = []
+
+    class Throttle:
+        def set(self, key, value, *, nx, ex):
+            assert nx is True and ex == 60
+            if key in keys:
+                return False
+            keys.add(key)
+            return True
+
+        def close(self):
+            closed.append(True)
+
+    monkeypatch.setattr(redis, "from_url", lambda *_args, **_kwargs: Throttle())
+    monkeypatch.setattr(celery_app, "send_task", lambda name, kwargs: queued.append((name, kwargs)))
+
+    assert queue_exact_market_refresh(23, debounce_seconds=60)
+    assert queue_exact_market_refresh(23, debounce_seconds=60)
+    assert queued == [("backend.celery_task.market_task.sync_exact_market_snapshots",
+                       {"market_id": 23})]
+    assert len(closed) == 2
 
 
 def test_run_rule_based_daily_scores_skips_when_previous_run_is_active(monkeypatch):

@@ -4,7 +4,7 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.database import get_db
@@ -17,11 +17,26 @@ from backend.services.trading_market_service import MarketUnavailable, TradingMa
 from backend.services.market_data_ingestion_service import MarketDataIngestionService
 from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
 from backend.services.exact_market_workspace_service import ExactMarketWorkspaceService
+from backend.services.indicator_score_refresh_service import queue_exact_market_refresh
 from backend.utils.auth_utils import get_current_user
 from backend.services.chart_candle_cache_service import cached_chart_candles, check_chart_request
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+async def _owner_tracks_exact_market(session: AsyncSession, user_id: int, market_id: int) -> bool:
+    """Only a saved owner interest may start the expensive pair score pipeline."""
+    result = await session.execute(text("""
+        SELECT EXISTS (
+            SELECT 1 FROM watchlists WHERE user_id=:user_id AND market_id=:market_id
+            UNION ALL
+            SELECT 1 FROM setups WHERE user_id=:user_id AND market_id=:market_id
+            UNION ALL
+            SELECT 1 FROM user_indicator_configs WHERE user_id=:user_id AND market_id=:market_id
+        )
+    """), {"user_id": user_id, "market_id": market_id})
+    return bool(result.scalar())
 
 
 @router.get("/assets/chart-candles")
@@ -232,16 +247,24 @@ async def select_crypto_trading_market(
         return -30 <= age <= 120
 
     snapshot_status = "available" if is_current(observed_at) else "pending"
+    refresh_queued = False
     if snapshot_status == "pending":
-        try:
-            ingested = await MarketDataIngestionService(session).ingest_exact_market_snapshot(market)
-            captured_at = ingested.get("observed_at")
-            parsed_at = datetime.fromisoformat(captured_at) if captured_at else None
-            snapshot_status = "available" if is_current(parsed_at) else "pending"
-        except Exception as exc:
-            await session.rollback()
-            logger.warning("Exact market snapshot pending after selection: pair=%s code=%s",
-                           market.pair, type(exc).__name__)
+        # A quote-only refresh makes the latest quote newer than the scored
+        # change_24h reading and hides its verified score on every page reload.
+        # Seed a new pair once, then let the full pair pipeline update quote,
+        # indicator readings and daily score together.
+        if snapshot is None:
+            try:
+                ingested = await MarketDataIngestionService(session).ingest_exact_market_snapshot(market)
+                captured_at = ingested.get("observed_at")
+                parsed_at = datetime.fromisoformat(captured_at) if captured_at else None
+                snapshot_status = "available" if is_current(parsed_at) else "pending"
+            except Exception as exc:
+                await session.rollback()
+                logger.warning("Exact market snapshot pending after selection: pair=%s code=%s",
+                               market.pair, type(exc).__name__)
+        if await _owner_tracks_exact_market(session, int(current_user["id"]), int(market.id)):
+            refresh_queued = queue_exact_market_refresh(int(market.id), debounce_seconds=300)
     response = {
         "market_id": market.id,
         "pair": market.pair,
@@ -261,6 +284,22 @@ async def select_crypto_trading_market(
             logger.error("Selected exact market missing in same-session workspace read: pair=%s id=%s",
                          market.pair, market.id)
             raise HTTPException(503, "selected_market_workspace_unavailable")
+        # A quote can be fresh while a pair indicator/score snapshot is still
+        # absent. Request the shared full pipeline without writing another
+        # quote in this request. A stale FRED macro source waits for the
+        # periodic source sweep instead of provoking repeated on-demand reads.
+        daily = workspace.get("daily") or {}
+        retryable = {"missing_score", "score_rebuild_pending", "missing_indicator_reading",
+                     "score_unverified", "configuration_unverified"}
+        needs_refresh = any(
+            ((daily.get(category) or {}).get("source_status") in retryable or
+             (category != "macro" and (daily.get(category) or {}).get("source_status") == "stale_source"))
+            for category in ("market", "macro", "technical")
+        )
+        if not refresh_queued and needs_refresh and await _owner_tracks_exact_market(
+            session, int(current_user["id"]), int(market.id)
+        ):
+            queue_exact_market_refresh(int(market.id), debounce_seconds=300)
         response["workspace"] = workspace
     return response
 

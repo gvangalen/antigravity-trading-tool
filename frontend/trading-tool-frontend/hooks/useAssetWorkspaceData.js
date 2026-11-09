@@ -18,6 +18,7 @@ import {
   pendingWorkspaceEvidenceCategories,
 } from "@/lib/workspace/pendingEvidence.mjs";
 import { matchesWorkspaceAsset } from "@/lib/workspace/workspaceAssetScope.mjs";
+import { exactMarketScoreNeedsRefresh } from "@/lib/workspace/pendingExactMarketScore.mjs";
 
 const WORKSPACE_REQUEST_TIMEOUT_MS = 15000;
 const WORKSPACE_CACHE_TTL_MS = 300_000;
@@ -537,7 +538,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols, quoteCu
 
   const refreshWorkspaceIfStale = useCallback(() => {
     const cached = getFreshCache(workspaceCache, workspaceKey, WORKSPACE_CACHE_TTL_MS);
-    if (cached && !isFallbackWorkspace) {
+    if (cached && !isFallbackWorkspace && !exactMarketScoreNeedsRefresh(cached, selectedQuote)) {
       if (latestWorkspaceRef.current !== cached) {
         setWorkspace(cached);
         setWatchlist(Array.isArray(cached?.watchlist?.rows) ? cached.watchlist.rows : []);
@@ -547,17 +548,18 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols, quoteCu
       return Promise.resolve(cached);
     }
 
-    const shouldForceNetwork = !cached || isFallbackWorkspace;
+    const shouldForceNetwork = !cached || isFallbackWorkspace || exactMarketScoreNeedsRefresh(cached, selectedQuote);
     return reloadWorkspace({ forceNetwork: shouldForceNetwork });
-  }, [isFallbackWorkspace, reloadWorkspace, workspaceKey]);
+  }, [isFallbackWorkspace, reloadWorkspace, selectedQuote, workspaceKey]);
 
   async function reloadWatchlist() {
     return reloadWorkspace({ forceNetwork: true });
   }
 
   useEffect(() => {
-    void reloadWorkspace({ forceNetwork: false });
-  }, [workspaceKey]);
+    const cached = getFreshCache(workspaceCache, workspaceKey, WORKSPACE_CACHE_TTL_MS);
+    void reloadWorkspace({ forceNetwork: exactMarketScoreNeedsRefresh(cached, selectedQuote) });
+  }, [workspaceKey, selectedQuote]);
 
   useEffect(() => {
     if (selectedQuote || !matchesWorkspaceAsset(workspace, assetSymbol, periods)) return;
