@@ -14,6 +14,12 @@ from backend.scripts import probe_protected_score2_stale_paper as fixture
 from backend.scripts.qa_trader_gate_invariants import check_pair_score_isolation
 
 
+def _business_snapshot(user_id: int) -> dict:
+    from backend.scripts.probe_protected_account_answer import _business_state
+
+    return _business_state(user_id)
+
+
 def _transport_checks(user_id: int, snapshot: dict) -> dict[str, bool]:
     """Compare normal owner-scoped Analysis GET and FINN chat reads with frozen scores."""
     from backend.scripts.qa_protected_readback import read_json
@@ -274,22 +280,27 @@ def run(namespace: str) -> dict:
     try:
         user_id, bot_id, _ = fixture._seed(namespace, int(bound))
         _seed_pair_readings(user_id, markets)
-        initial = _snapshot(user_id, markets)
-        initial_transport = _transport_checks(user_id, initial)
-        _set_eur_source_time(user_id, markets["BTC/EUR"]["market_id"],
-                             markets["BTC/EUR"]["source_at"], stale=True)
-        outage = _snapshot(user_id, markets)
-        outage_transport = _transport_checks(user_id, outage)
-        try:
-            stale_browser = asyncio.run(_stale_date_display(
-                user_id, outage["pairs"]["BTC/EUR"]["source_at"],
-            ))
-        except Exception:
-            stale_browser = {}
-        _set_eur_source_time(user_id, markets["BTC/EUR"]["market_id"],
-                             markets["BTC/EUR"]["source_at"], stale=False)
-        recovered = _snapshot(user_id, markets)
-        recovered_transport = _transport_checks(user_id, recovered)
+        before_business = _business_snapshot(user_id)
+        from backend.scripts.probe_protected_paper_exit_reconciliation import _guard_live_exchange
+
+        with _guard_live_exchange() as live_attempts:
+            initial = _snapshot(user_id, markets)
+            initial_transport = _transport_checks(user_id, initial)
+            _set_eur_source_time(user_id, markets["BTC/EUR"]["market_id"],
+                                 markets["BTC/EUR"]["source_at"], stale=True)
+            outage = _snapshot(user_id, markets)
+            outage_transport = _transport_checks(user_id, outage)
+            try:
+                stale_browser = asyncio.run(_stale_date_display(
+                    user_id, outage["pairs"]["BTC/EUR"]["source_at"],
+                ))
+            except Exception:
+                stale_browser = {}
+            _set_eur_source_time(user_id, markets["BTC/EUR"]["market_id"],
+                                 markets["BTC/EUR"]["source_at"], stale=False)
+            recovered = _snapshot(user_id, markets)
+            recovered_transport = _transport_checks(user_id, recovered)
+        after_business = _business_snapshot(user_id)
         result = check_pair_score_isolation(
             owner_id=user_id, initial=initial, outage=outage, recovered=recovered,
         )
@@ -301,20 +312,26 @@ def run(namespace: str) -> dict:
         ]
         if len(stale_browser) != 3 or not all(stale_browser.values()):
             transport_failures.append("outage_stale_date_browser")
+        if live_attempts:
+            transport_failures.append("live_execution_attempt")
+        if (before_business["counts"] != after_business["counts"]
+                or before_business["fingerprints"] != after_business["fingerprints"]):
+            transport_failures.append("unexpected_business_write")
         if transport_failures:
             return {"result": "FAIL", "failed_checks": sorted(set(
                 result["failed_checks"] + transport_failures)),
                 "pairs": 2, "phases": 3, "analysis_transport_checked": True,
                 "finn_transport_checked": True, "stale_date_browser_checked": True,
-                "gate_status": "FAIL", "live_calls": 0}
+                "gate_status": "FAIL", "live_calls": len(live_attempts)}
         if result["result"] != "PASS":
             return {**result, "gate_status": "FAIL",
                     "analysis_transport_checked": True,
                     "finn_transport_checked": True,
-                    "stale_date_browser_checked": True}
+                    "stale_date_browser_checked": True,
+                    "live_calls": len(live_attempts)}
         passed = True
         return {**result, "pairs": 2, "phases": 3,
-                "source_outage": "owner_scoped", "live_calls": 0,
+                "source_outage": "owner_scoped", "live_calls": len(live_attempts),
                 "analysis_transport_checked": True,
                 "finn_transport_checked": True,
                 "stale_date_browser_checked": True,

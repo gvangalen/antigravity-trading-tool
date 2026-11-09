@@ -93,6 +93,7 @@ def test_probe_replays_once_and_cleans_only_after_contract_pass(monkeypatch, ren
 def test_source_parity_profile_requires_its_own_four_surface_result(monkeypatch):
     from backend.engine import trading_bot_execution
     from backend.scripts import probe_protected_source_time_parity
+    from backend.scripts import probe_protected_account_answer
 
     monkeypatch.setenv("FINN_QA_ALLOW_PAPER_EXIT_FIXTURE", "1")
     monkeypatch.setenv("FINN_QA_USER_ID", "7")
@@ -129,6 +130,9 @@ def test_source_parity_profile_requires_its_own_four_surface_result(monkeypatch)
             "rendered_exit_source_quote", "rendered_exit_fx",
         )}
     monkeypatch.setattr(probe, "_rendered_exit", rendered)
+    monkeypatch.setattr(probe_protected_account_answer, "_business_state", lambda *_args: {
+        "counts": {"bot_orders": 1}, "fingerprints": {"bot_orders": b"same"},
+    })
     monkeypatch.setattr(probe_protected_source_time_parity, "run", lambda **_kwargs: {
         "result": "FAIL", "failed_checks": ["report_source"],
         "gate_status": "FAIL", "browser_zones_checked": 6,
@@ -141,6 +145,17 @@ def test_source_parity_profile_requires_its_own_four_surface_result(monkeypatch)
     assert result["source_time_parity"]["browser_zones_checked"] == 6
     assert "private" not in str(result)
     assert steps == ["quarantine"]
+
+    def attempted_live(**_kwargs):
+        with pytest.raises(RuntimeError, match="paper_exit_live_execution_attempt"):
+            trading_bot_execution._execute_on_exchange_sync()
+        return {"result": "PASS", "failed_checks": [], "gate_status": "PASS",
+                "browser_zones_checked": 6}
+    monkeypatch.setattr(probe_protected_source_time_parity, "run", attempted_live)
+    result = probe.run(NAMESPACE, source_parity=True)
+    assert result["failed_checks"] == ["live_execution_attempt"]
+    assert result["live_calls"] == 1
+    assert steps == ["quarantine", "quarantine"]
 
 
 def test_probe_quarantines_when_persisted_effect_does_not_reconcile(monkeypatch):

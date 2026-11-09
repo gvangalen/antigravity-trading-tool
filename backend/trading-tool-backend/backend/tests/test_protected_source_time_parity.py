@@ -86,7 +86,7 @@ def test_four_surface_collector_returns_only_fixed_checks(monkeypatch):
     result = probe.run(user_id=7, market_id=43,
                        paper_evidence=evidence, frozen_ref=REF)
     assert result == {"result": "PASS", "failed_checks": [], "gate_status": "PASS",
-                      "browser_zones_checked": 6, "live_calls": 0}
+                      "browser_zones_checked": 6}
     assert "987" not in str(result) and "2026" not in str(result)
 
     def wrong_analysis(*, owner_id, path):

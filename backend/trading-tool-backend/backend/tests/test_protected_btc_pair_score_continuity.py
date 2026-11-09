@@ -34,6 +34,10 @@ def _snapshot(eur_score, usdt_score, *, stale=False):
     return {"pairs": rows}
 
 
+def _stable_business(_owner):
+    return {"counts": {"bot_orders": 0}, "fingerprints": {"bot_orders": b"same"}}
+
+
 def test_probe_runs_three_pair_snapshots_and_cleans_only_verified_fixture(monkeypatch):
     monkeypatch.setenv("FINN_QA_ALLOW_TRADER_PAIR_FIXTURE", "1")
     monkeypatch.setenv("FINN_QA_USER_ID", "7")
@@ -41,6 +45,7 @@ def test_probe_runs_three_pair_snapshots_and_cleans_only_verified_fixture(monkey
     monkeypatch.setattr(probe, "_markets", lambda: MARKETS)
     monkeypatch.setattr(probe.fixture, "_seed", lambda namespace, owner: (11, 22, "today"))
     monkeypatch.setattr(probe, "_seed_pair_readings", lambda *args: steps.append("seed_readings"))
+    monkeypatch.setattr(probe, "_business_snapshot", _stable_business)
     snapshots = iter((_snapshot(45, 70), _snapshot(None, 70, stale=True), _snapshot(45, 70)))
     monkeypatch.setattr(probe, "_snapshot", lambda *args: deepcopy(next(snapshots)))
     monkeypatch.setattr(probe, "_transport_checks", lambda *args: {"analysis": True, "finn": True})
@@ -67,6 +72,7 @@ def test_probe_quarantines_on_score_cross_contamination(monkeypatch):
     monkeypatch.setattr(probe, "_markets", lambda: MARKETS)
     monkeypatch.setattr(probe.fixture, "_seed", lambda *args: (11, 22, "today"))
     monkeypatch.setattr(probe, "_seed_pair_readings", lambda *args: None)
+    monkeypatch.setattr(probe, "_business_snapshot", _stable_business)
     snapshots = iter((_snapshot(45, 70), _snapshot(None, 45, stale=True), _snapshot(45, 70)))
     monkeypatch.setattr(probe, "_snapshot", lambda *args: next(snapshots))
     monkeypatch.setattr(probe, "_transport_checks", lambda *args: {"analysis": True, "finn": True})
@@ -81,6 +87,7 @@ def test_probe_quarantines_on_score_cross_contamination(monkeypatch):
                                     "analysis_transport_checked": True,
                                     "finn_transport_checked": True,
                                     "stale_date_browser_checked": True,
+                                    "live_calls": 0,
                                     "gate_status": "FAIL"}
     assert steps == ["quarantine"]
 
@@ -92,6 +99,7 @@ def test_probe_quarantines_when_one_transport_misreports_pair(monkeypatch):
     monkeypatch.setattr(probe, "_markets", lambda: MARKETS)
     monkeypatch.setattr(probe.fixture, "_seed", lambda *args: (11, 22, "today"))
     monkeypatch.setattr(probe, "_seed_pair_readings", lambda *args: None)
+    monkeypatch.setattr(probe, "_business_snapshot", _stable_business)
     snapshots = iter((_snapshot(45, 70), _snapshot(None, 70, stale=True), _snapshot(45, 70)))
     monkeypatch.setattr(probe, "_snapshot", lambda *args: next(snapshots))
     transport = iter(({"analysis": True, "finn": True},
@@ -107,6 +115,42 @@ def test_probe_quarantines_when_one_transport_misreports_pair(monkeypatch):
     result = probe.run(NAMESPACE)
     assert result["failed_checks"] == ["outage_transport_analysis"]
     assert result["gate_status"] == "FAIL"
+    assert steps == ["quarantine"]
+
+
+def test_probe_measures_live_attempt_and_unexpected_business_write(monkeypatch):
+    from backend.engine import trading_bot_execution
+
+    monkeypatch.setenv("FINN_QA_ALLOW_TRADER_PAIR_FIXTURE", "1")
+    monkeypatch.setenv("FINN_QA_USER_ID", "7")
+    steps = []
+    monkeypatch.setattr(probe, "_markets", lambda: MARKETS)
+    monkeypatch.setattr(probe.fixture, "_seed", lambda *args: (11, 22, "today"))
+    monkeypatch.setattr(probe, "_seed_pair_readings", lambda *args: None)
+    snapshots = iter((_snapshot(45, 70), _snapshot(None, 70, stale=True), _snapshot(45, 70)))
+    monkeypatch.setattr(probe, "_snapshot", lambda *args: next(snapshots))
+    business = iter((_stable_business(11), {"counts": {"bot_orders": 1},
+                                         "fingerprints": {"bot_orders": b"changed"}}))
+    monkeypatch.setattr(probe, "_business_snapshot", lambda *_args: next(business))
+    called = False
+    def transport(*_args):
+        nonlocal called
+        if not called:
+            called = True
+            with pytest.raises(RuntimeError, match="paper_exit_live_execution_attempt"):
+                trading_bot_execution._execute_on_exchange_sync()
+        return {"analysis": True, "finn": True}
+    monkeypatch.setattr(probe, "_transport_checks", transport)
+    async def stale_browser(*_args):
+        return {"amsterdam": True, "new_york": True, "tokyo": True}
+    monkeypatch.setattr(probe, "_stale_date_display", stale_browser)
+    monkeypatch.setattr(probe, "_set_eur_source_time", lambda *args, **kwargs: None)
+    monkeypatch.setattr(probe.fixture, "_cleanup", lambda *args: steps.append("cleanup"))
+    monkeypatch.setattr(probe.fixture, "_quarantine", lambda *args: steps.append("quarantine"))
+    result = probe.run(NAMESPACE)
+    assert result["result"] == "FAIL"
+    assert result["failed_checks"] == ["live_execution_attempt", "unexpected_business_write"]
+    assert result["live_calls"] == 1
     assert steps == ["quarantine"]
 
 

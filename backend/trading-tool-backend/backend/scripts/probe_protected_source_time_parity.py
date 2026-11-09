@@ -202,4 +202,4 @@ def run(*, user_id: int, market_id: int, paper_evidence: dict,
     failed = sorted(name for name, passed in checks.items() if not passed)
     return {"result": "FAIL" if failed else "PASS", "failed_checks": failed,
             "gate_status": "FAIL" if failed else "PASS",
-            "browser_zones_checked": len(browser), "live_calls": 0}
+            "browser_zones_checked": len(browser)}

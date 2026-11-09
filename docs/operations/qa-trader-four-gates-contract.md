@@ -75,7 +75,9 @@ execution, runs the normal report generator and writer without push/feed,
 reads the saved report and Analysis through owner-scoped GETs, reads FINN's
 market tool evidence, and checks Paper decision provenance. Its protected
 browser renders the deployed Analysis and report pages in Amsterdam, New York
-and Tokyo zones and returns only fixed booleans. This is not live acceptance
+and Tokyo zones and returns only fixed booleans. The entire report/FINN
+readback phase is guarded against Live exchange execution and checked for
+unexpected owner business writes. This is not live acceptance
 until the profile passes on the exact deployed revision.
 
 **Source-identity contract:** exact-market quote projections carry an immutable
@@ -112,7 +114,8 @@ the normal score builder, persisted `daily_scores` and the canonical
 after an owner-only BTC/EUR source outage. The QA-only collector also reads
 Analysis through the owner-scoped exact-market GET and FINN through read-only
 chat/tool evidence in all three phases, then renders the stale source date in
-three browser zones. It requires a fresh quote for
+three browser zones. All three readback phases have a measured Live-execution
+guard and before/after owner business-state check. It requires a fresh quote for
 both pairs; otherwise the collector must fail without inventing a score.
 When the builder correctly persists a NULL market score, the match service may
 report `missing_score` rather than `stale_source`; the collector only accepts

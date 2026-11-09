@@ -535,11 +535,27 @@ def run(namespace: str, *, source_parity: bool = False) -> dict:
         parity = None
         if source_parity:
             from backend.scripts.probe_protected_source_time_parity import run as check_source_parity
+            from backend.scripts.probe_protected_account_answer import _business_state
             with _stage("source_parity"):
-                parity = check_source_parity(
-                    user_id=user_id, market_id=market_id,
-                    paper_evidence=evidence, frozen_ref=context.get("source_ref"),
-                )
+                before_readback = _business_state(user_id)
+                with _guard_live_exchange() as parity_live_attempts:
+                    parity = check_source_parity(
+                        user_id=user_id, market_id=market_id,
+                        paper_evidence=evidence, frozen_ref=context.get("source_ref"),
+                    )
+                after_readback = _business_state(user_id)
+            live_calls += len(parity_live_attempts)
+            safety_failures = []
+            if parity_live_attempts:
+                safety_failures.append("live_execution_attempt")
+            if (before_readback["counts"] != after_readback["counts"]
+                    or before_readback["fingerprints"] != after_readback["fingerprints"]):
+                safety_failures.append("unexpected_business_write")
+            if safety_failures:
+                return {"result": "FAIL", "failed_checks": safety_failures,
+                        "rendered_ui_checked": True, "gate_status": "FAIL",
+                        "engine_calls": 2, "live_calls": live_calls,
+                        "onboarding_navigation_override": True}
             if parity["result"] != "PASS":
                 return {"result": "FAIL", "failed_checks": parity["failed_checks"],
                         "source_time_parity": parity, "rendered_ui_checked": True,
