@@ -236,12 +236,12 @@ def test_finn_provider_diagnostic_captures_only_fixed_error_and_prior_tool_prese
         return SimpleNamespace(status="unavailable", response=None,
                                error_code="responses_provider_error", runtime_trace={},
                                run_id="private-run", conversation_id="private-conversation")
-    async def evidence(**_kwargs):
-        return [{"scope": "read_asset_scores", "data": {"private": secret}}]
+    async def score_seen(**_kwargs):
+        return True
     async def dispose():
         return None
     monkeypatch.setattr(probe_protected_closed_paper_review, "_chat_turn", chat)
-    monkeypatch.setattr(probe_protected_account_answer, "_read_tool_results", evidence)
+    monkeypatch.setattr(probe, "_score_tool_seen", score_seen)
     monkeypatch.setattr(database, "engine", SimpleNamespace(dispose=dispose))
     rows, phase, diagnostic = asyncio.run(probe._finn_pair_read(11, "BTC/EUR"))
     assert rows is None and phase == "turn_unavailable"
@@ -250,6 +250,66 @@ def test_finn_provider_diagnostic_captures_only_fixed_error_and_prior_tool_prese
     }
     assert diagnostic["score_tool_seen"] is True
     assert secret not in str(diagnostic)
+
+
+def test_provider_call_over_cap_is_explicit_bucket_not_exact_round(monkeypatch):
+    from openai.resources.responses import AsyncResponses
+
+    secret = "private-provider-error-owner-92871"
+    async def failed_provider(self, *_args, **_kwargs):
+        raise RuntimeError(secret)
+    monkeypatch.setattr(AsyncResponses, "create", failed_provider)
+    async def exercise():
+        with probe._provider_failure_probe() as observations:
+            for _ in range(5):
+                with pytest.raises(RuntimeError):
+                    await AsyncResponses.create(None)
+        return observations
+    observations = asyncio.run(exercise())
+    assert [item["provider_call"] for item in observations] == [1, 2, 3, "4_plus", "4_plus"]
+    assert all(item["status_class"] == "none" and item["exception_kind"] == "other"
+               for item in observations)
+    assert secret not in str(observations)
+
+
+@pytest.mark.parametrize("scope,expected", [
+    ("read_asset_scores", True),
+    ("read_market_snapshot", False),
+])
+def test_score_tool_presence_reads_owner_bound_progress_without_exporting_data(
+    monkeypatch, scope, expected,
+):
+    from backend.infrastructure import database
+    from backend.infrastructure.repositories import finn_v2_runtime_contract_repository as contracts
+
+    secret = "private-progress-body-owner-92871"
+    row = SimpleNamespace(
+        user_id=11, conversation_id="private-conversation",
+        state_json={"responses_progress": {
+            "run_id": "private-run", "conversation_id": "private-conversation",
+            "tool_trace": [{"result": {"results": [{"scope": scope, "data": secret}]}}],
+        }},
+    )
+    class Session:
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *_args):
+            return None
+    class Repository:
+        def __init__(self, _session):
+            pass
+        async def get_for_run(self, *, run_id):
+            assert run_id == "private-run"
+            return row
+    monkeypatch.setattr(database, "async_session_factory", Session)
+    monkeypatch.setattr(contracts, "FinnV2RuntimeContractRepository", Repository)
+    result = asyncio.run(probe._score_tool_seen(
+        user_id=11, run_id="private-run", conversation_id="private-conversation",
+    ))
+    assert result is expected and secret not in str(result)
+    assert asyncio.run(probe._score_tool_seen(
+        user_id=12, run_id="private-run", conversation_id="private-conversation",
+    )) == "unknown"
 
 
 @pytest.mark.parametrize("response,expected", [

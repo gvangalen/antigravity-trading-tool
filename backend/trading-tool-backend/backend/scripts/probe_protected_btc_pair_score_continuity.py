@@ -78,7 +78,7 @@ def _provider_failure_probe():
             )
             kind = type(error).__name__
             observations.append({
-                "provider_call": min(calls, 4),
+                "provider_call": calls if calls <= 3 else "4_plus",
                 "status_class": status_class,
                 "exception_kind": kind if kind in _SAFE_PROVIDER_EXCEPTIONS else "other",
             })
@@ -129,6 +129,37 @@ def _business_snapshot(user_id: int) -> dict:
     return _business_state(user_id)
 
 
+async def _score_tool_seen(*, user_id: int, run_id: str, conversation_id: str) -> bool | str:
+    """Whether an owner-bound durable trace recorded a score tool, including progress."""
+    from backend.infrastructure.database import async_session_factory
+    from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import (
+        FinnV2RuntimeContractRepository,
+    )
+
+    try:
+        async with async_session_factory() as session:
+            contract = await FinnV2RuntimeContractRepository(session).get_for_run(run_id=run_id)
+            if (contract is None or contract.user_id != user_id
+                    or contract.conversation_id != conversation_id):
+                return "unknown"
+            state = contract.state_json or {}
+            checkpoint = state.get("responses_exchange") or state.get("responses_progress") or {}
+            if (checkpoint.get("run_id") != run_id
+                    or checkpoint.get("conversation_id") != conversation_id):
+                return False
+            trace = checkpoint.get("tool_trace")
+            if not isinstance(trace, list):
+                return "unknown"
+            return any(
+                isinstance(call, dict) and isinstance(call.get("result"), dict)
+                and any(isinstance(row, dict) and row.get("scope") == "read_asset_scores"
+                        for row in (call["result"].get("results") or []))
+                for call in trace
+            )
+    except Exception:
+        return "unknown"
+
+
 async def _finn_pair_read(user_id: int, pair: str):
     """Keep the FINN turn and its evidence on one loop, then release the pool."""
     from backend.infrastructure.database import engine
@@ -150,16 +181,9 @@ async def _finn_pair_read(user_id: int, pair: str):
                     provider_failures[-1] if provider_failures else {"provider_call": 0,
                         "status_class": "unobserved", "exception_kind": "unobserved"}
                 )
-                try:
-                    prior_rows = await _read_tool_results(
-                        run_id=turn.run_id, conversation_id=turn.conversation_id, user_id=user_id,
-                    )
-                    diagnostic["score_tool_seen"] = any(
-                        isinstance(row, dict) and row.get("scope") == "read_asset_scores"
-                        for row in prior_rows
-                    )
-                except Exception:
-                    diagnostic["score_tool_seen"] = "unknown"
+                diagnostic["score_tool_seen"] = await _score_tool_seen(
+                    run_id=turn.run_id, conversation_id=turn.conversation_id, user_id=user_id,
+                )
             return None, f"turn_{status}", diagnostic
         if turn.response is None:
             return None, "response_missing", _finn_terminal_diagnostic(turn)
