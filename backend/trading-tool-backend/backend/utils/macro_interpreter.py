@@ -18,6 +18,7 @@ from backend.services.providers.twelve_data_macro_provider import (
 from backend.utils.scoring_utils import (
     normalize_indicator_name,
     get_score_rule_from_db,
+    score_source_is_fresh,
 )
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,7 @@ YAHOO_DXY = "https://query1.finance.yahoo.com/v8/finance/chart/DX-Y.NYB"
 YAHOO_DXY_HEADERS = {"User-Agent": "Mozilla/5.0"}
 ALT_FNG = "https://api.alternative.me/fng/?limit=1"
 FRED_CSV_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}&cosd={start_date}"
+CBOE_SP500_HISTORY = "https://cdn.cboe.com/api/global/us_indices/daily_prices/SPX_History.csv"
 YAHOO_SP500_GSPC = "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC"
 YAHOO_SP500_GSPC_ALT = "https://query2.finance.yahoo.com/v8/finance/chart/%5EGSPC"
 YAHOO_SP500 = "https://query1.finance.yahoo.com/v8/finance/chart/%5ESPX"
@@ -242,9 +244,10 @@ def _fred_json_result(payload: dict, *, inflation: bool) -> dict:
     )
 
 
-def _sp500_dated_closes() -> dict[str, float]:
+def _sp500_dated_closes(*, now: datetime | None = None) -> dict[str, float]:
     """Use dated S&P 500 closes; tolerate a FRED maintenance page or outage."""
-    today = datetime.now(timezone.utc).date()
+    current = now or datetime.now(timezone.utc)
+    today = current.date()
     cutoff = today - timedelta(days=90)
 
     def usable(rows: dict[str, float]) -> dict[str, float]:
@@ -257,7 +260,14 @@ def _sp500_dated_closes() -> dict[str, float]:
                 continue
             if cutoff <= parsed_day < today and math.isfinite(value) and value > 0:
                 complete[parsed_day.isoformat()] = value
-        if len(complete) < 5 or today - date.fromisoformat(max(complete)) > timedelta(days=4):
+        # FRED dates are stored as UTC midnight by the macro writer. Use the
+        # same timestamp-based freshness rule as Score 2.0, otherwise a
+        # four-calendar-day-old FRED row blocks a fresher fallback all day.
+        newest = date.fromisoformat(max(complete)) if complete else None
+        if (len(complete) < 5 or newest is None or not score_source_is_fresh(
+            "macro", "sp500", datetime.combine(newest, datetime.min.time(), timezone.utc),
+            now=current,
+        )):
             return {}
         return complete
 
@@ -278,6 +288,23 @@ def _sp500_dated_closes() -> dict[str, float]:
             return selected
     except Exception:
         logger.warning("S&P 500 FRED reading unavailable; trying dated fallback")
+
+    try:
+        text = _fetch_text(CBOE_SP500_HISTORY, timeout=20)
+        readings = {}
+        for day, raw_value in _extract_csv_rows(text):
+            try:
+                parsed_day = datetime.strptime(day, "%m/%d/%Y").date()
+                value = float(raw_value)
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(value) and value > 0:
+                readings[parsed_day.isoformat()] = value
+        selected = usable(readings)
+        if selected:
+            return selected
+    except Exception:
+        logger.warning("S&P 500 Cboe fallback unavailable")
 
     for endpoint in (YAHOO_SP500_GSPC_ALT, YAHOO_SP500_GSPC):
         try:

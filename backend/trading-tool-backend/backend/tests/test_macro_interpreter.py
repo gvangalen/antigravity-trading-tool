@@ -113,6 +113,60 @@ def test_sp500_uses_second_yahoo_chart_host_without_twelve_data_key(monkeypatch)
     assert urls == [f"{macro_interpreter.YAHOO_SP500_GSPC_ALT}?range=6mo&interval=1d"]
 
 
+def test_sp500_falls_back_when_fred_passes_calendar_check_but_score_would_be_stale(monkeypatch):
+    from datetime import datetime, timezone
+    from backend.utils import macro_interpreter
+
+    now = datetime(2026, 11, 9, 20, 13, tzinfo=timezone.utc)
+    fred_dates = ["2026-10-30", "2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05"]
+    yahoo_dates = ["2026-10-30", "2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05", "2026-11-06"]
+    monkeypatch.setattr(
+        macro_interpreter,
+        "_fetch_text",
+        lambda *_args, **_kwargs: "observation_date,SP500\n" + "\n".join(
+            f"{date},7353.73" for date in fred_dates
+        ),
+    )
+    urls = []
+
+    def fake_fetch_json(url, timeout=10):
+        urls.append(url)
+        return {"chart": {"result": [{
+            "timestamp": [int(datetime.fromisoformat(date).replace(tzinfo=timezone.utc).timestamp())
+                          for date in yahoo_dates],
+            "indicators": {"quote": [{"close": [7353.73] * 5 + [7376.86]}]},
+        }]}}
+
+    monkeypatch.setattr(macro_interpreter, "_fetch_json", fake_fetch_json)
+
+    assert macro_interpreter._sp500_dated_closes(now=now)["2026-11-06"] == 7376.86
+    assert urls == [f"{macro_interpreter.YAHOO_SP500_GSPC_ALT}?range=6mo&interval=1d"]
+
+
+def test_sp500_uses_cboe_close_when_fred_is_too_old_to_score(monkeypatch):
+    from datetime import datetime, timezone
+    from backend.utils import macro_interpreter
+
+    now = datetime(2026, 11, 9, 20, 13, tzinfo=timezone.utc)
+    requested = []
+
+    def fake_fetch_text(url, timeout=20):
+        requested.append(url)
+        if url == _fred_csv_url("SP500"):
+            return ("observation_date,SP500\n2026-10-30,7580.07\n2026-11-02,7541.40\n"
+                    "2026-11-03,7568.92\n2026-11-04,7688.62\n2026-11-05,7353.73\n")
+        assert url == macro_interpreter.CBOE_SP500_HISTORY
+        return ("DATE,SPX\n10/30/2026,7580.07\n11/02/2026,7541.40\n"
+                "11/03/2026,7568.92\n11/04/2026,7688.62\n11/05/2026,7353.73\n"
+                "11/06/2026,7376.86\n")
+
+    monkeypatch.setattr(macro_interpreter, "_fetch_text", fake_fetch_text)
+    monkeypatch.setattr(macro_interpreter, "_fetch_json", lambda *_args, **_kwargs: pytest.fail("Yahoo should not be needed"))
+
+    assert macro_interpreter._sp500_dated_closes(now=now)["2026-11-06"] == 7376.86
+    assert requested == [_fred_csv_url("SP500"), macro_interpreter.CBOE_SP500_HISTORY]
+
+
 def test_sp500_legacy_fred_json_url_returns_last_value(monkeypatch):
     from datetime import datetime, timedelta, timezone
     today = datetime.now(timezone.utc).date()
