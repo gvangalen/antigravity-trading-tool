@@ -51,6 +51,7 @@ _SAFE_PROVIDER_EXCEPTIONS = frozenset({
     "BadRequestError", "AuthenticationError", "PermissionDeniedError",
     "RateLimitError", "InternalServerError", "APIStatusError", "APIConnectionError",
     "APITimeoutError", "ConnectError", "ReadError",
+    "RuntimeError",
 })
 
 
@@ -199,11 +200,26 @@ async def _finn_pair_read(user_id: int, pair: str):
         await engine.dispose()
 
 
-def _transport_checks(user_id: int, snapshot: dict) -> dict[str, bool]:
+async def _read_finn_pairs(user_id: int, pairs: list[str]) -> dict:
+    """Read both exact pairs on one loop for the shared async provider client."""
+    results = {}
+    for pair in pairs:
+        try:
+            results[pair] = await _finn_pair_read(user_id, pair)
+        except Exception:
+            results[pair] = (None, "read_error", None)
+    return results
+
+
+def _transport_checks(user_id: int, snapshot: dict,
+                      runner: asyncio.Runner | None = None) -> dict[str, bool]:
     """Compare normal owner-scoped Analysis GET and FINN chat reads with frozen scores."""
     from backend.scripts.qa_protected_readback import read_json
 
     checks = {"analysis": True, "finn": True, "finn_codes": {}, "finn_runtime_codes": {}}
+    pairs = list(snapshot["pairs"])
+    finn_results = (runner.run(_read_finn_pairs(user_id, pairs)) if runner is not None
+                    else asyncio.run(_read_finn_pairs(user_id, pairs)))
     for pair, expected in snapshot["pairs"].items():
         quote = pair.split("/", 1)[1]
         try:
@@ -219,7 +235,7 @@ def _transport_checks(user_id: int, snapshot: dict) -> dict[str, bool]:
         except Exception:
             checks["analysis"] = False
         try:
-            rows, phase, runtime_code = asyncio.run(_finn_pair_read(user_id, pair))
+            rows, phase, runtime_code = finn_results[pair]
             if rows is None:
                 checks["finn"] = False
                 checks["finn_codes"][pair] = phase
@@ -260,19 +276,23 @@ async def _outage_indicator_visible(page, *, old_source_time: str,
         indicator = market.get_by_role("button").filter(has_text="Prijsverandering 24 uur")
         if await indicator.count() != 1:
             return "indicator_missing"
-        await indicator.get_by_text("Score wordt berekend", exact=False).wait_for(timeout=timeout_ms)
-        await indicator.get_by_text(
-            f"Laatste indicatormeting: {old_source_time}", exact=False,
-        ).wait_for(timeout=timeout_ms)
-        await indicator.get_by_text(
-            f"Getoonde 24-uursverandering uit koersbron: {current_quote_time}", exact=False,
-        ).wait_for(timeout=timeout_ms)
+        for expected, missing in (
+            ("Score wordt berekend", "pending_label_missing"),
+            (f"Laatste indicatormeting: {old_source_time}", "old_indicator_moment_missing"),
+            (f"Getoonde 24-uursverandering uit koersbron: {current_quote_time}",
+             "current_quote_moment_missing"),
+        ):
+            try:
+                await indicator.get_by_text(expected, exact=False).wait_for(timeout=timeout_ms)
+            except Exception:
+                return missing
         return "ok"
     except Exception:
-        return "old_source_date_or_pending_missing"
+        return "indicator_inspection_failed"
 
 
-async def _stale_date_display(user_id: int, source_at: str, market_id: int) -> dict[str, str]:
+async def _stale_date_display(user_id: int, source_at: str, market_id: int,
+                              source_facts: dict | None = None) -> dict[str, str]:
     """Check the current quote date and pending pair score during an outage."""
     from backend.scripts.qa_protected_browser import observe_page
     from backend.scripts.qa_protected_readback import read_json
@@ -284,6 +304,7 @@ async def _stale_date_display(user_id: int, source_at: str, market_id: int) -> d
     checks = {}
     try:
         for zone in ("Europe/Amsterdam", "America/New_York", "Asia/Tokyo"):
+            zone_code = zone.split("/")[-1].lower()
             observed_responses = []
             selection_state = {"code": "request_absent"}
 
@@ -321,6 +342,18 @@ async def _stale_date_display(user_id: int, source_at: str, market_id: int) -> d
                 row = [item for item in (workspace.get("categories") or {}).get("market", {}).get("rows", [])
                        if item.get("name") == "change_24h"]
                 quote_ref = _normalized_ref((workspace.get("quote") or {}).get("source_ref"))
+                if source_facts is not None:
+                    reason = row[0].get("score_unavailable_reason") if len(row) == 1 else None
+                    safe_reasons = {"score_pending", "stale_source", "missing_rule",
+                                    "missing_source_reading", "insufficient_dated_history"}
+                    source_facts[zone_code] = {
+                        "reason": reason if isinstance(reason, str) and reason in safe_reasons else "other",
+                        "old_indicator_moment_present": bool(
+                            len(row) == 1 and row[0].get("indicator_source_observed_at")),
+                        "current_quote_moment_present": bool(
+                            len(row) == 1 and row[0].get("source_observed_at")),
+                        "saved_score_source_present": stale_moment is not None,
+                    }
                 try:
                     row_old = datetime.fromisoformat(
                         str(row[0].get("indicator_source_observed_at")).replace("Z", "+00:00"))
@@ -407,7 +440,7 @@ async def _stale_date_display(user_id: int, source_at: str, market_id: int) -> d
                 except Exception:
                     return "browser_inspection_failed"
             try:
-                checks[zone.split("/")[-1].lower()] = await observe_page(
+                checks[zone_code] = await observe_page(
                     base_url="https://tradamind.com", path="/asset?symbol=BTC&quote=EUR",
                     token=token, inspect=inspect, timezone_id=zone,
                     bypass_fixture_onboarding=True,
@@ -415,7 +448,7 @@ async def _stale_date_display(user_id: int, source_at: str, market_id: int) -> d
                     fixture_exact_selection=selection_readback,
                 )
             except Exception:
-                checks[zone.split("/")[-1].lower()] = "page_unavailable"
+                checks[zone_code] = "page_unavailable"
         return checks
     finally:
         token = None
@@ -619,23 +652,25 @@ def run(namespace: str) -> dict:
         before_business = _business_snapshot(user_id)
         from backend.scripts.probe_protected_paper_exit_reconciliation import _guard_live_exchange
 
-        with _guard_live_exchange() as live_attempts:
+        with _guard_live_exchange() as live_attempts, asyncio.Runner() as runner:
             stage = "initial_snapshot"
             initial = _snapshot(user_id, markets)
             stage = "initial_transport"
-            initial_transport = _transport_checks(user_id, initial)
+            initial_transport = _transport_checks(user_id, initial, runner=runner)
             stage = "outage_source"
             _set_eur_source_time(user_id, markets["BTC/EUR"]["market_id"],
                                  markets["BTC/EUR"]["source_at"], stale=True)
             stage = "outage_snapshot"
             outage = _snapshot(user_id, markets)
             stage = "outage_transport"
-            outage_transport = _transport_checks(user_id, outage)
+            outage_transport = _transport_checks(user_id, outage, runner=runner)
             stage = "browser"
+            browser_source_facts = {}
             try:
-                stale_browser = asyncio.run(_stale_date_display(
+                stale_browser = runner.run(_stale_date_display(
                     user_id, outage["pairs"]["BTC/EUR"]["source_at"],
                     markets["BTC/EUR"]["market_id"],
+                    source_facts=browser_source_facts,
                 ))
             except Exception:
                 stale_browser = {}
@@ -645,7 +680,7 @@ def run(namespace: str) -> dict:
             stage = "recovery_snapshot"
             recovered = _snapshot(user_id, markets)
             stage = "recovery_transport"
-            recovered_transport = _transport_checks(user_id, recovered)
+            recovered_transport = _transport_checks(user_id, recovered, runner=runner)
         stage = "after_read"
         after_business = _business_snapshot(user_id)
         stage = "validation"
@@ -684,6 +719,8 @@ def run(namespace: str) -> dict:
                 **({"finn_runtime_codes": finn_runtime_codes} if finn_runtime_codes else {}),
                 **({"outage_browser_codes": stale_browser}
                    if any(code != "ok" for code in stale_browser.values()) else {}),
+                **({"outage_browser_source_facts": browser_source_facts}
+                   if browser_source_facts and any(code != "ok" for code in stale_browser.values()) else {}),
                 "gate_status": "FAIL", "live_calls": len(live_attempts)}
         if result["result"] != "PASS":
             return {**result, "gate_status": "FAIL",

@@ -83,6 +83,31 @@ def test_finn_pair_read_disposes_engine_after_failed_turn(monkeypatch):
     assert steps == ["turn", "dispose"]
 
 
+def test_finn_pair_transport_reuses_one_loop_for_both_exact_pairs(monkeypatch):
+    from backend.scripts import qa_protected_readback
+
+    seen = []
+    async def finn_read(_owner, pair):
+        seen.append((pair, id(asyncio.get_running_loop())))
+        return ([{"scope": "read_asset_scores", "status": "completed", "data": {
+            "pair": pair, "market_id": 1 if pair == "BTC/EUR" else 2,
+            "benchmark_score": 45 if pair == "BTC/EUR" else 70,
+        }}], "ok", None)
+    monkeypatch.setattr(probe, "_finn_pair_read", finn_read)
+    monkeypatch.setattr(qa_protected_readback, "read_json", lambda **kwargs: {
+        "market_id": 1 if "EUR" in kwargs["path"] else 2,
+        "pair": "BTC/EUR" if "EUR" in kwargs["path"] else "BTC/USDT",
+        "combined": {"score": 45 if "EUR" in kwargs["path"] else 70},
+    })
+    result = probe._transport_checks(11, {"pairs": {
+        "BTC/EUR": {"market_id": 1, "score": 45},
+        "BTC/USDT": {"market_id": 2, "score": 70},
+    }})
+    assert result["analysis"] is True and result["finn"] is True
+    assert [pair for pair, _ in seen] == ["BTC/EUR", "BTC/USDT"]
+    assert len({loop for _, loop in seen}) == 1
+
+
 @pytest.mark.parametrize("rows,expected", [
     ([], "scope_missing"),
     ([{"scope": "read_asset_scores", "status": "partial"}], "scope_unverified"),
@@ -126,6 +151,7 @@ def test_outage_browser_scopes_pending_score_and_quote_market(
         "combined": {"score": None},
         "score_source_observed_at": {"market": {"change_24h": source_at}},
         "categories": {"market": {"rows": [{"name": "change_24h", "score": None,
+            "score_unavailable_reason": "score_pending",
             "indicator_source_observed_at": source_at,
             "source_observed_at": "2026-11-09T09:12:00+00:00"}]}},
         "quote": {"price": 68267.0,
@@ -176,8 +202,22 @@ def test_outage_browser_scopes_pending_score_and_quote_market(
         observe_response(Response())
         return await inspect(Page())
     monkeypatch.setattr(qa_protected_browser, "observe_page", observe_page)
-    phases = asyncio.run(probe._stale_date_display(11, source_at, 1))
+    source_facts = {}
+    phases = asyncio.run(probe._stale_date_display(11, source_at, 1,
+                                                   source_facts=source_facts))
     assert phases == {"amsterdam": phase, "new_york": phase, "tokyo": phase}
+    assert set(source_facts) == {"amsterdam", "new_york", "tokyo"}
+    assert all(facts == {"reason": "score_pending",
+                         "old_indicator_moment_present": True,
+                         "current_quote_moment_present": True,
+                         "saved_score_source_present": True}
+               for facts in source_facts.values())
+    secret = "private-owner-92871-source-reason"
+    workspace["categories"]["market"]["rows"][0]["score_unavailable_reason"] = secret
+    redacted = {}
+    asyncio.run(probe._stale_date_display(11, source_at, 1, source_facts=redacted))
+    assert all(facts["reason"] == "other" for facts in redacted.values())
+    assert secret not in str(redacted)
 
 
 def test_finn_terminal_diagnostic_is_allowlisted_and_redacts_secret_values():
@@ -267,7 +307,7 @@ def test_provider_call_over_cap_is_explicit_bucket_not_exact_round(monkeypatch):
         return observations
     observations = asyncio.run(exercise())
     assert [item["provider_call"] for item in observations] == [1, 2, 3, "4_plus", "4_plus"]
-    assert all(item["status_class"] == "none" and item["exception_kind"] == "other"
+    assert all(item["status_class"] == "none" and item["exception_kind"] == "RuntimeError"
                for item in observations)
     assert secret not in str(observations)
 
@@ -431,7 +471,25 @@ def test_real_browser_requires_old_source_date_inside_btc_eur_indicator_row():
                 """)
                 assert await probe._outage_indicator_visible(
                     page, old_source_time=old, current_quote_time=current, timeout_ms=150,
-                ) == "old_source_date_or_pending_missing"
+                ) == "old_indicator_moment_missing"
+                await page.set_content(f"""
+                    <section><h2>Markt</h2><button>Prijsverandering 24 uur
+                      <span>Laatste indicatormeting: {old}.</span>
+                      <span>Getoonde 24-uursverandering uit koersbron: {current}.</span>
+                    </button></section>
+                """)
+                assert await probe._outage_indicator_visible(
+                    page, old_source_time=old, current_quote_time=current, timeout_ms=150,
+                ) == "pending_label_missing"
+                await page.set_content(f"""
+                    <section><h2>Markt</h2><button>Prijsverandering 24 uur
+                      <span>Score wordt berekend</span>
+                      <span>Laatste indicatormeting: {old}.</span>
+                    </button></section>
+                """)
+                assert await probe._outage_indicator_visible(
+                    page, old_source_time=old, current_quote_time=current, timeout_ms=150,
+                ) == "current_quote_moment_missing"
             finally:
                 await browser.close()
 
@@ -448,8 +506,15 @@ def test_probe_runs_three_pair_snapshots_and_cleans_only_verified_fixture(monkey
     monkeypatch.setattr(probe, "_business_snapshot", _stable_business)
     snapshots = iter((_snapshot(45, 70), _snapshot(None, 70, stale=True), _snapshot(45, 70)))
     monkeypatch.setattr(probe, "_snapshot", lambda *args: deepcopy(next(snapshots)))
-    monkeypatch.setattr(probe, "_transport_checks", lambda *args: {"analysis": True, "finn": True})
-    async def stale_browser(*_args):
+    loop_ids = []
+    async def loop_id():
+        return id(asyncio.get_running_loop())
+    def transport(_owner, _snapshot, *, runner):
+        loop_ids.append(runner.run(loop_id()))
+        return {"analysis": True, "finn": True}
+    monkeypatch.setattr(probe, "_transport_checks", transport)
+    async def stale_browser(*_args, **_kwargs):
+        loop_ids.append(id(asyncio.get_running_loop()))
         return {"amsterdam": "ok", "new_york": "ok", "tokyo": "ok"}
     monkeypatch.setattr(probe, "_stale_date_display", stale_browser)
     monkeypatch.setattr(probe, "_set_eur_source_time", lambda *args, stale: steps.append(f"stale:{stale}"))
@@ -463,6 +528,7 @@ def test_probe_runs_three_pair_snapshots_and_cleans_only_verified_fixture(monkey
                                     "outage_quote_pending_browser_checked": True,
                                     "gate_status": "PASS"}
     assert steps == ["seed_readings", "stale:True", "stale:False", "cleanup"]
+    assert len(loop_ids) == 4 and len(set(loop_ids)) == 1
 
 
 def test_probe_quarantines_on_score_cross_contamination(monkeypatch):
@@ -475,8 +541,8 @@ def test_probe_quarantines_on_score_cross_contamination(monkeypatch):
     monkeypatch.setattr(probe, "_business_snapshot", _stable_business)
     snapshots = iter((_snapshot(45, 70), _snapshot(None, 45, stale=True), _snapshot(45, 70)))
     monkeypatch.setattr(probe, "_snapshot", lambda *args: next(snapshots))
-    monkeypatch.setattr(probe, "_transport_checks", lambda *args: {"analysis": True, "finn": True})
-    async def stale_browser(*_args):
+    monkeypatch.setattr(probe, "_transport_checks", lambda *args, **kwargs: {"analysis": True, "finn": True})
+    async def stale_browser(*_args, **_kwargs):
         return {"amsterdam": "ok", "new_york": "ok", "tokyo": "ok"}
     monkeypatch.setattr(probe, "_stale_date_display", stale_browser)
     monkeypatch.setattr(probe, "_set_eur_source_time", lambda *args, **kwargs: None)
@@ -505,8 +571,8 @@ def test_probe_quarantines_when_one_transport_misreports_pair(monkeypatch):
     transport = iter(({"analysis": True, "finn": True},
                       {"analysis": False, "finn": True},
                       {"analysis": True, "finn": True}))
-    monkeypatch.setattr(probe, "_transport_checks", lambda *args: next(transport))
-    async def stale_browser(*_args):
+    monkeypatch.setattr(probe, "_transport_checks", lambda *args, **kwargs: next(transport))
+    async def stale_browser(*_args, **_kwargs):
         return {"amsterdam": "ok", "new_york": "ok", "tokyo": "ok"}
     monkeypatch.setattr(probe, "_stale_date_display", stale_browser)
     monkeypatch.setattr(probe, "_set_eur_source_time", lambda *args, **kwargs: None)
@@ -533,7 +599,7 @@ def test_probe_measures_live_attempt_and_unexpected_business_write(monkeypatch):
                                          "fingerprints": {"bot_orders": b"changed"}}))
     monkeypatch.setattr(probe, "_business_snapshot", lambda *_args: next(business))
     called = False
-    def transport(*_args):
+    def transport(*_args, **_kwargs):
         nonlocal called
         if not called:
             called = True
@@ -541,7 +607,7 @@ def test_probe_measures_live_attempt_and_unexpected_business_write(monkeypatch):
                 trading_bot_execution._execute_on_exchange_sync()
         return {"analysis": True, "finn": True}
     monkeypatch.setattr(probe, "_transport_checks", transport)
-    async def stale_browser(*_args):
+    async def stale_browser(*_args, **_kwargs):
         return {"amsterdam": "ok", "new_york": "ok", "tokyo": "ok"}
     monkeypatch.setattr(probe, "_stale_date_display", stale_browser)
     monkeypatch.setattr(probe, "_set_eur_source_time", lambda *args, **kwargs: None)
@@ -626,7 +692,7 @@ def test_probe_reports_outage_snapshot_substage_and_quarantines(monkeypatch):
             raise value
         return value
     monkeypatch.setattr(probe, "_snapshot", snapshot)
-    monkeypatch.setattr(probe, "_transport_checks", lambda *_args: {"analysis": True, "finn": True})
+    monkeypatch.setattr(probe, "_transport_checks", lambda *_args, **_kwargs: {"analysis": True, "finn": True})
     monkeypatch.setattr(probe, "_set_eur_source_time", lambda *_args, **_kwargs: None)
     quarantined = []
     monkeypatch.setattr(probe.fixture, "_quarantine", lambda *_args: quarantined.append(True))
@@ -685,7 +751,7 @@ def test_probe_preserves_bounded_assessment_diagnostic_at_outage(monkeypatch):
             raise value
         return value
     monkeypatch.setattr(probe, "_snapshot", snapshot)
-    monkeypatch.setattr(probe, "_transport_checks", lambda *_args: {"analysis": True, "finn": True})
+    monkeypatch.setattr(probe, "_transport_checks", lambda *_args, **_kwargs: {"analysis": True, "finn": True})
     monkeypatch.setattr(probe, "_set_eur_source_time", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(probe.fixture, "_quarantine", lambda *_args: None)
     with pytest.raises(RuntimeError, match="^trader_pair_outage_snapshot_assessment_typeerror_match_source_failed$"):
