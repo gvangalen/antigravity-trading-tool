@@ -79,10 +79,10 @@ async def _scenario(token: str, scenario: tuple) -> dict[str, str | bool]:
         if expected_submission is None:
             next_choices = page.locator('[aria-label="Watchlistkeuzes"]')
             state["stage"] = "followup_choices_visible"
-            await next_choices.wait_for(state="visible", timeout=10000)
-            next_labels = [value.strip() for value in await next_choices.locator("button").all_text_contents()]
+            replacement = next_choices.locator("button").filter(has_text="vervangen").first
+            await replacement.wait_for(state="visible", timeout=10000)
             return {"case_id": case_id, "options_visible": True,
-                    "click_handled": any("vervangen" in label for label in next_labels),
+                    "click_handled": True,
                     "product_post_blocked": len(outgoing) == 0}
         await page.wait_for_timeout(1200)
         matched = False
