@@ -16,6 +16,7 @@ name: FINN Production QA
         type: choice
         options:
           - auth_preflight
+          - watchlist_browser_ui
           - trade_review_preflight
           - manifest_key
           - targeted_regression
@@ -116,7 +117,7 @@ jobs:
         run: |
           set -uo pipefail
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$QA_PROFILE" =~ ^(auth_preflight|trade_review_preflight|manifest_key|targeted_regression|runtime_acceptance|action_contract_acceptance|full_release_acceptance|safety|latency|score2_stale_paper|score2_positive_paper|score2_outside_paper|score2_exact_eur_paper|score2_exact_usdt_paper|trader_pair_score_continuity|trader_account_state_readback|trader_source_time_parity|trader_paper_exit_reconciliation|trader_paper_exit_fixture_audit|trader_pair_fixture_audit|trader_pair_fixture_cleanup|trader_strategy_schema_audit|closed_paper_trade_review|closed_paper_trade_review_chat|auto_paper_trade_history|portfolio_paper_fx|portfolio_paper_fx_schema|typed_entry_paper)$ ]]
+          [[ "$QA_PROFILE" =~ ^(auth_preflight|watchlist_browser_ui|trade_review_preflight|manifest_key|targeted_regression|runtime_acceptance|action_contract_acceptance|full_release_acceptance|safety|latency|score2_stale_paper|score2_positive_paper|score2_outside_paper|score2_exact_eur_paper|score2_exact_usdt_paper|trader_pair_score_continuity|trader_account_state_readback|trader_source_time_parity|trader_paper_exit_reconciliation|trader_paper_exit_fixture_audit|trader_pair_fixture_audit|trader_pair_fixture_cleanup|trader_strategy_schema_audit|closed_paper_trade_review|closed_paper_trade_review_chat|auto_paper_trade_history|portfolio_paper_fx|portfolio_paper_fx_schema|typed_entry_paper)$ ]]
           [[ "$MANIFEST_ID" =~ ^[a-z0-9][a-z0-9._-]{0,80}$ ]]
           [[ "$RUN_LABEL" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$ ]]
           [ "${#MANIFEST_BUNDLE}" -le 65535 ]
@@ -126,12 +127,16 @@ jobs:
             echo "Safe fixture execution requires fixture-action authorization." >&2
             exit 1
           fi
-          if [[ "$QA_PROFILE" =~ ^(auth_preflight|trade_review_preflight|manifest_key|portfolio_paper_fx_schema)$ ]] && { [ "$ALLOW_FIXTURE_ACTIONS" = "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" = "true" ]; }; then
+          if [[ "$QA_PROFILE" =~ ^(auth_preflight|watchlist_browser_ui|trade_review_preflight|manifest_key|portfolio_paper_fx_schema)$ ]] && { [ "$ALLOW_FIXTURE_ACTIONS" = "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" = "true" ]; }; then
             echo "Fixture actions are invalid for a non-case QA profile." >&2
             exit 1
           fi
           if [ "$QA_PROFILE" = "trade_review_preflight" ] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ]; }; then
             echo "Trade-review preflight does not accept a manifest." >&2
+            exit 1
+          fi
+          if [ "$QA_PROFILE" = "watchlist_browser_ui" ] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ]; }; then
+            echo "Watchlist browser profile does not accept a manifest." >&2
             exit 1
           fi
           if [ "$QA_PROFILE" = "portfolio_paper_fx_schema" ] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ]; }; then
@@ -254,6 +259,12 @@ jobs:
           control_plane_runner=".qa-control-plane/backend/trading-tool-backend/backend/scripts/run_finn_production_qa.py"
           remote_runner="${remote_state_dir}/runner.py"
           runner_sha256="$(sha256sum "$control_plane_runner" | awk '{print $1}')"
+          control_plane_browser_helper=".qa-control-plane/backend/trading-tool-backend/backend/scripts/qa_protected_browser.py"
+          control_plane_watchlist_probe=".qa-control-plane/backend/trading-tool-backend/backend/scripts/probe_protected_watchlist_ui.py"
+          remote_browser_helper="${remote_state_dir}/qa_protected_browser.py"
+          remote_watchlist_probe="${remote_state_dir}/probe_protected_watchlist_ui.py"
+          browser_helper_sha256="$(sha256sum "$control_plane_browser_helper" | awk '{print $1}')"
+          watchlist_probe_sha256="$(sha256sum "$control_plane_watchlist_probe" | awk '{print $1}')"
           control_plane_schema_probe=".qa-control-plane/backend/trading-tool-backend/backend/scripts/probe_protected_trader_strategy_schema.py"
           remote_schema_probe="${remote_state_dir}/strategy_schema_probe.py"
           schema_probe_sha256="$(sha256sum "$control_plane_schema_probe" | awk '{print $1}')"
@@ -291,6 +302,9 @@ jobs:
           ssh "${ssh_opts[@]}" "ubuntu@${QA_HOST}" "mkdir -p '$remote_state_dir' && chmod 700 '$remote_state_dir'"
           failure_stage="runner_transfer"
           scp -i "$RUNNER_TEMP/finn-production-qa-key" -o UserKnownHostsFile="$RUNNER_TEMP/finn-production-qa-known-hosts" -o BatchMode=yes -o StrictHostKeyChecking=yes "$control_plane_runner" "ubuntu@${QA_HOST}:${remote_runner}"
+          if [ "$QA_PROFILE" = "watchlist_browser_ui" ]; then
+            scp -i "$RUNNER_TEMP/finn-production-qa-key" -o UserKnownHostsFile="$RUNNER_TEMP/finn-production-qa-known-hosts" -o BatchMode=yes -o StrictHostKeyChecking=yes "$control_plane_browser_helper" "$control_plane_watchlist_probe" "ubuntu@${QA_HOST}:${remote_state_dir}/"
+          fi
           if [ "$QA_PROFILE" = "trader_strategy_schema_audit" ]; then
             scp -i "$RUNNER_TEMP/finn-production-qa-key" -o UserKnownHostsFile="$RUNNER_TEMP/finn-production-qa-known-hosts" -o BatchMode=yes -o StrictHostKeyChecking=yes "$control_plane_schema_probe" "ubuntu@${QA_HOST}:${remote_schema_probe}"
           fi
@@ -302,7 +316,7 @@ jobs:
           else
             remote_bundle=""
           fi
-          remote_command=$(printf 'bash -s -- %q %q %q %q %q %q %q %q %q %q %q %q %q %q %q %q %q' "$RELEASE_SHA" "$QA_PROFILE" "$MANIFEST_ID" "$RUN_LABEL" "$QA_REMOTE_DIR" "$remote_report" "$workflow_attempt_id" "$remote_bundle" "$ALLOW_FIXTURE_ACTIONS" "$ALLOW_SAFE_FIXTURE_EXECUTION" "$FINN_QA_FIXTURE_NAMESPACE" "$remote_runner" "$runner_sha256" "$QA_RUNNER_REVISION" "$remote_state_dir" "$remote_schema_probe" "$schema_probe_sha256")
+          remote_command=$(printf 'bash -s -- %q %q %q %q %q %q %q %q %q %q %q %q %q %q %q %q %q %q %q %q %q' "$RELEASE_SHA" "$QA_PROFILE" "$MANIFEST_ID" "$RUN_LABEL" "$QA_REMOTE_DIR" "$remote_report" "$workflow_attempt_id" "$remote_bundle" "$ALLOW_FIXTURE_ACTIONS" "$ALLOW_SAFE_FIXTURE_EXECUTION" "$FINN_QA_FIXTURE_NAMESPACE" "$remote_runner" "$runner_sha256" "$QA_RUNNER_REVISION" "$remote_state_dir" "$remote_schema_probe" "$schema_probe_sha256" "$remote_browser_helper" "$browser_helper_sha256" "$remote_watchlist_probe" "$watchlist_probe_sha256")
           failure_stage="remote_bootstrap"
           # shellcheck disable=SC2029 # The SSH arguments are intentionally constructed by this protected runner.
           ssh "${ssh_opts[@]}" "ubuntu@${QA_HOST}" "$remote_command" <<'REMOTE'
@@ -325,6 +339,10 @@ jobs:
           state_dir="${15}"
           schema_probe_path="${16}"
           schema_probe_sha256="${17}"
+          browser_helper_path="${18}"
+          browser_helper_sha256="${19}"
+          watchlist_probe_path="${20}"
+          watchlist_probe_sha256="${21}"
           fail_preflight() {
             printf '%s\n' "$1" > "$state_dir/preflight_status"
             printf '%s\n' "$1" >&2
@@ -335,6 +353,10 @@ jobs:
           test "$(sha256sum "$runner_path" | awk '{print $1}')" = "$runner_sha256" || fail_preflight qa_runner_checksum_mismatch
           if [ "$qa_profile" = "trader_strategy_schema_audit" ]; then
             test "$(sha256sum "$schema_probe_path" | awk '{print $1}')" = "$schema_probe_sha256" || fail_preflight qa_runner_checksum_mismatch
+          fi
+          if [ "$qa_profile" = "watchlist_browser_ui" ]; then
+            test "$(sha256sum "$browser_helper_path" | awk '{print $1}')" = "$browser_helper_sha256" || fail_preflight qa_runner_checksum_mismatch
+            test "$(sha256sum "$watchlist_probe_path" | awk '{print $1}')" = "$watchlist_probe_sha256" || fail_preflight qa_runner_checksum_mismatch
           fi
           test ! -f "$state_dir/runner.pid" || ! kill -0 "$(cat "$state_dir/runner.pid")" 2>/dev/null || exit 0
           test ! -f "$state_dir/runner.child.pid" || ! kill -0 "$(cat "$state_dir/runner.child.pid")" 2>/dev/null || exit 0
@@ -412,6 +434,9 @@ jobs:
           )
           if [ -n "$manifest_bundle_path" ]; then
             runner_args+=(--manifest-bundle-path "$manifest_bundle_path")
+          fi
+          if [ "$qa_profile" = "watchlist_browser_ui" ]; then
+            runner_args+=(--watchlist-browser-helper-path "$browser_helper_path" --watchlist-browser-helper-sha256 "$browser_helper_sha256" --watchlist-browser-probe-path "$watchlist_probe_path" --watchlist-browser-probe-sha256 "$watchlist_probe_sha256")
           fi
           cat > "$state_dir/run.sh" <<RUNNER
           #!/usr/bin/env bash

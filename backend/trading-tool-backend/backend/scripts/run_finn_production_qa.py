@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -29,6 +30,7 @@ from backend.scripts.finn_v2_matrix_transport import TERMINAL_STATUSES, observe_
 
 ALLOWED_PROFILES = {
     "auth_preflight",
+    "watchlist_browser_ui",
     "trade_review_preflight",
     "manifest_key",
     "targeted_regression",
@@ -2340,6 +2342,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--workflow-run-id", default="local")
     parser.add_argument("--fixture-namespace", default=os.environ.get("FINN_QA_FIXTURE_NAMESPACE"))
     parser.add_argument("--runner-revision")
+    parser.add_argument("--watchlist-browser-helper-path")
+    parser.add_argument("--watchlist-browser-helper-sha256")
+    parser.add_argument("--watchlist-browser-probe-path")
+    parser.add_argument("--watchlist-browser-probe-sha256")
     parser.add_argument("--matrix-deadline-seconds", type=float, default=2100.0)
     parser.add_argument("--case-timeout-seconds", type=float, default=60.0)
     parser.add_argument(
@@ -2349,6 +2355,35 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--dry-preflight", action="store_true")
     return parser.parse_args()
+
+
+def load_watchlist_browser_probe(args: argparse.Namespace):
+    """Import the pinned QA-only modules from this workflow attempt's directory."""
+    attempt_dir = Path(args.report_path).resolve().parent
+    modules = (
+        ("backend.scripts.qa_protected_browser", args.watchlist_browser_helper_path,
+         args.watchlist_browser_helper_sha256),
+        ("backend.scripts.probe_protected_watchlist_ui", args.watchlist_browser_probe_path,
+         args.watchlist_browser_probe_sha256),
+    )
+    checked = []
+    for name, raw_path, expected_hash in modules:
+        if not raw_path or not expected_hash or not re.fullmatch(r"[0-9a-f]{64}", expected_hash):
+            raise ValueError("watchlist_browser_module_invalid")
+        path = Path(raw_path).resolve()
+        if path.parent != attempt_dir or not path.is_file() or sha256_file(path) != expected_hash:
+            raise ValueError("watchlist_browser_module_invalid")
+        checked.append((name, path))
+    loaded = []
+    for name, path in checked:
+        spec = importlib.util.spec_from_file_location(name, path)
+        if spec is None or spec.loader is None:
+            raise ValueError("watchlist_browser_module_invalid")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+        loaded.append(module)
+    return loaded[-1]
 
 
 def main() -> int:
@@ -2407,6 +2442,16 @@ def main() -> int:
                 report["error_category"] = report["auth_preflight"].get("error_category") or "auth"
             elif args.profile == "auth_preflight":
                 report["outcome"] = "passed"
+            elif args.profile == "watchlist_browser_ui":
+                if args.manifest_id != "none" or args.manifest_bundle_path:
+                    raise ValueError("watchlist_browser_manifest_forbidden")
+                if (os.getenv("FINN_QA_ALLOW_FIXTURE_ACTIONS") == "1"
+                        or os.getenv("FINN_QA_ALLOW_FIXTURE_EXECUTION") == "1"):
+                    raise ValueError("watchlist_browser_fixture_actions_forbidden")
+                probe = load_watchlist_browser_probe(args)
+                report["watchlist_browser_ui"] = probe.run(token)
+                report["outcome"] = "passed" if report["watchlist_browser_ui"]["passed"] else "failed"
+                report["qa_status"] = "COMPLETED"
             elif args.profile == "trade_review_preflight":
                 if args.manifest_id != "none" or args.manifest_bundle_path:
                     raise ValueError("trade_review_preflight_manifest_forbidden")

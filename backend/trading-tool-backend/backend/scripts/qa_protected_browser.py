@@ -67,10 +67,34 @@ def fixture_exact_selection_allowed(*, base_url: str, request_url: str,
 async def route_protected_request(route, *, base_url: str, token: str,
                                   bypass_fixture_onboarding: bool,
                                   fixture_exact_selection: Callable | None,
-                                  fixture_exact_selection_quote: str = "USDT") -> None:
+                                  fixture_exact_selection_quote: str = "USDT",
+                                  fixture_asset_mentions: Callable | None = None,
+                                  fixture_watchlist_rows: Callable | None = None) -> None:
     policy = request_policy(base_url=base_url, request_url=route.request.url)
     if policy == "block":
         await route.abort()
+    elif (fixture_asset_mentions is not None and route.request.method == "POST"
+          and urlsplit(route.request.url).path == "/api/assets/mentions"
+          and not urlsplit(route.request.url).query):
+        try:
+            payload = fixture_asset_mentions(route.request.post_data)
+            if not isinstance(payload, dict):
+                raise ValueError("invalid protected mentions")
+        except Exception:
+            await route.abort()
+        else:
+            await route.fulfill(status=200, content_type="application/json", body=json.dumps(payload))
+    elif (fixture_watchlist_rows is not None and route.request.method == "GET"
+          and urlsplit(route.request.url).path == "/api/watchlist"
+          and not urlsplit(route.request.url).query):
+        try:
+            payload = fixture_watchlist_rows()
+            if not isinstance(payload, list):
+                raise ValueError("invalid protected watchlist")
+        except Exception:
+            await route.abort()
+        else:
+            await route.fulfill(status=200, content_type="application/json", body=json.dumps(payload))
     elif fixture_exact_selection_allowed(
         base_url=base_url, request_url=route.request.url,
         method=route.request.method,
@@ -115,6 +139,8 @@ async def observe_page(
     observe_page_error: Callable | None = None,
     observe_console: Callable | None = None,
     fixture_exact_selection: Callable | None = None,
+    fixture_asset_mentions: Callable | None = None,
+    fixture_watchlist_rows: Callable | None = None,
 ):
     """Render one production page, inspect it in memory, and discard context.
 
@@ -128,6 +154,8 @@ async def observe_page(
         raise ValueError("qa_browser_fixture_override_scope_invalid")
     if fixture_exact_selection is not None and urlsplit(path).path != "/asset":
         raise ValueError("qa_browser_exact_selection_override_scope_invalid")
+    if (fixture_asset_mentions is not None or fixture_watchlist_rows is not None) and urlsplit(path).path != "/asset":
+        raise ValueError("qa_browser_watchlist_override_scope_invalid")
     selection_quote = parse_qs(urlsplit(path).query).get("quote", [])
     if fixture_exact_selection is not None and selection_quote not in (["EUR"], ["USDT"]):
         raise ValueError("qa_browser_exact_selection_override_scope_invalid")
@@ -159,6 +187,8 @@ async def observe_page(
                         bypass_fixture_onboarding=bypass_fixture_onboarding,
                         fixture_exact_selection=fixture_exact_selection,
                         fixture_exact_selection_quote=selection_quote[0] if selection_quote else "USDT",
+                        fixture_asset_mentions=fixture_asset_mentions,
+                        fixture_watchlist_rows=fixture_watchlist_rows,
                     )
 
                 await context.route("**/*", route_request)
