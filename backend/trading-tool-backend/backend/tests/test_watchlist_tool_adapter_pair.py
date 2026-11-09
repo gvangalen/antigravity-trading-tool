@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 from backend.schemas.finn_v2_evidence_schema import WatchlistData
 from backend.services.finn_v2_reasoning_context_service import FinnV2ReasoningContextService
+from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
 from backend.services.finn_v2_tool_adapters.watchlist_tool_adapter import WatchlistToolAdapter
 
 
@@ -33,3 +34,17 @@ def test_watchlist_read_preserves_exact_market_identity_for_multiple_assets():
     assert data.contains_target_asset is True
     context = FinnV2ReasoningContextService(session=object())._sanitize_facts(result["data"], "read_watchlist")
     assert context["symbols"][0]["pair"] == "BTC/USDT"
+
+
+def test_watchlist_collection_dispatch_does_not_require_an_active_asset():
+    service = FinnV2ToolExecutionService(session=object())
+
+    async def read(**kwargs):
+        assert kwargs == {"user_id": 7, "asset": None}
+        return {"data": {"symbols": [{"symbol": "BTC", "pair": "BTC/USDT"}]}}
+
+    service.watchlist_adapter.execute = read
+    result = asyncio.run(service._dispatch_tool(
+        tool_name="read_watchlist", user_id=7, selector={}, run=SimpleNamespace(), shared_state={},
+    ))
+    assert result["data"]["symbols"][0]["pair"] == "BTC/USDT"
