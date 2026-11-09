@@ -110,9 +110,104 @@ async def _scenario(token: str, scenario: tuple) -> dict[str, str | bool]:
                 "route_code": state["route"]}
 
 
+async def _saved_pair_visibility(token: str) -> dict[str, str | bool]:
+    """Check deployed rendering and account scoping with in-memory watchlists.
+
+    The first identity is the authenticated protected fixture. The second is a
+    synthetic in-memory owner; no second account or product mutation is made.
+    """
+    state = {"phase": "first", "auth_user": None, "stage": "browser_open"}
+    first_rows = [
+        {"symbol": "BTC", "market_id": 410001, "quote_currency": "EUR",
+         "asset_class": "crypto", "display_name": "Bitcoin"},
+        {"symbol": "BTC", "market_id": 410002, "quote_currency": "USDT",
+         "asset_class": "crypto", "display_name": "Bitcoin"},
+    ]
+    second_rows = [
+        {"symbol": "ETH", "market_id": 410003, "quote_currency": "EUR",
+         "asset_class": "crypto", "display_name": "Ethereum"},
+    ]
+
+    def rows():
+        return first_rows if state["phase"] == "first" else second_rows
+
+    def user():
+        return state["auth_user"] if state["phase"] == "second" else None
+
+    async def inspect(page):
+        product_posts = []
+        failed_posts = []
+        page.on("request", lambda request: product_posts.append(request)
+                if request.method == "POST" else None)
+        page.on("requestfailed", lambda request: failed_posts.append(request)
+                if request.method == "POST" else None)
+        first_eur = page.get_by_role("button", name="Asset verwijderen: BTC/EUR")
+        first_usdt = page.get_by_role("button", name="Asset verwijderen: BTC/USDT")
+        second_eth = page.get_by_role("button", name="Asset verwijderen: ETH/EUR")
+        state["stage"] = "first_rows"
+        await first_eur.wait_for(state="visible", timeout=15000)
+        await first_usdt.wait_for(state="visible", timeout=15000)
+        both_initial = await first_eur.is_visible() and await first_usdt.is_visible()
+
+        state["stage"] = "select_eur"
+        await first_eur.locator("xpath=..").click()
+        await page.wait_for_url("**/asset?*quote=EUR*", timeout=10000)
+        both_after_eur = await first_eur.is_visible() and await first_usdt.is_visible()
+
+        state["stage"] = "select_usdt"
+        await first_usdt.locator("xpath=..").click()
+        await page.wait_for_url("**/asset?*quote=USDT*", timeout=10000)
+        both_after_usdt = await first_eur.is_visible() and await first_usdt.is_visible()
+
+        state["stage"] = "switch_owner"
+        real_user = await page.evaluate("""async () => {
+            const response = await fetch('/api/auth/me', {credentials: 'include'});
+            return response.ok ? await response.json() : null;
+        }""")
+        if not isinstance(real_user, dict) or not real_user.get("id"):
+            raise ValueError("protected_identity_unavailable")
+        state["auth_user"] = {**real_user, "id": "qa-synthetic-secondary-owner"}
+        state["phase"] = "second"
+        await page.reload(wait_until="domcontentloaded")
+        await second_eth.wait_for(state="visible", timeout=15000)
+        isolated_second = (await second_eth.is_visible()
+                           and await first_eur.count() == 0 and await first_usdt.count() == 0)
+
+        state["stage"] = "restore_owner"
+        state["phase"] = "first"
+        await page.reload(wait_until="domcontentloaded")
+        await first_eur.wait_for(state="visible", timeout=15000)
+        await first_usdt.wait_for(state="visible", timeout=15000)
+        restored_first = (await first_eur.is_visible() and await first_usdt.is_visible()
+                          and await second_eth.count() == 0)
+        return {"case_id": "saved_pair_owner_switch", "both_initial": both_initial,
+                "both_after_eur": both_after_eur, "both_after_usdt": both_after_usdt,
+                "isolated_second": isolated_second, "restored_first": restored_first,
+                "product_post_blocked": len(product_posts) == len(failed_posts)}
+
+    try:
+        return await observe_page(
+            base_url="https://tradamind.com", path="/asset?quote=USDT", token=token,
+            inspect=inspect, bypass_fixture_onboarding=True,
+            fixture_watchlist_rows=rows, fixture_auth_user=user,
+        )
+    except Exception:
+        return {"case_id": "saved_pair_owner_switch", "both_initial": False,
+                "both_after_eur": False, "both_after_usdt": False,
+                "isolated_second": False, "restored_first": False,
+                "product_post_blocked": False, "error_code": state["stage"] + "_failed"}
+
+
 def run(token: str) -> dict:
     cases = [asyncio.run(_scenario(token, scenario)) for scenario in SCENARIOS]
-    return {"cases": cases, "passed": all(
+    choices_passed = all(
         case["options_visible"] and case["click_handled"] and case["product_post_blocked"]
         for case in cases
-    )}
+    )
+    visibility = asyncio.run(_saved_pair_visibility(token))
+    cases.append(visibility)
+    visibility_passed = all(visibility.get(field) is True for field in (
+        "both_initial", "both_after_eur", "both_after_usdt",
+        "isolated_second", "restored_first", "product_post_blocked",
+    ))
+    return {"cases": cases, "passed": choices_passed and visibility_passed}

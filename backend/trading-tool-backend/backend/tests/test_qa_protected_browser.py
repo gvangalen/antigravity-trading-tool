@@ -171,3 +171,42 @@ def test_watchlist_ui_override_restricted_to_asset_page():
             base_url="https://tradamind.com", path="/portfolio", token="in-memory-token",
             inspect=lambda _page: None, fixture_asset_mentions=lambda _body: {},
         ))
+
+
+def test_watchlist_owner_override_only_fulfills_exact_auth_get_in_memory():
+    class Route:
+        def __init__(self, url, method):
+            self.request = type("Request", (), {
+                "url": url, "method": method, "headers": {},
+            })()
+            self.actions = []
+        async def abort(self):
+            self.actions.append("abort")
+        async def fulfill(self, **kwargs):
+            self.actions.append(("fulfill", kwargs["status"]))
+        async def continue_(self, **_kwargs):
+            self.actions.append("continue")
+
+    base = "https://tradamind.com"
+    for path, method, expected in (
+        ("/api/auth/me", "GET", [("fulfill", 200)]),
+        ("/api/auth/me?unexpected=1", "GET", ["continue"]),
+        ("/api/auth/me", "POST", ["abort"]),
+        ("/api/watchlist", "GET", ["continue"]),
+        ("/api/auth/me", "HEAD", ["continue"]),
+    ):
+        route = Route(base + path, method)
+        asyncio.run(route_protected_request(
+            route, base_url=base, token="private-token",
+            bypass_fixture_onboarding=True, fixture_exact_selection=None,
+            fixture_auth_user=lambda: {"id": "qa-synthetic-secondary-owner"},
+        ))
+        assert route.actions == expected
+
+    real_owner_route = Route(base + "/api/auth/me", "GET")
+    asyncio.run(route_protected_request(
+        real_owner_route, base_url=base, token="private-token",
+        bypass_fixture_onboarding=True, fixture_exact_selection=None,
+        fixture_auth_user=lambda: None,
+    ))
+    assert real_owner_route.actions == ["continue"]

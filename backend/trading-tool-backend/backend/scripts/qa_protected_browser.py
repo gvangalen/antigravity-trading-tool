@@ -69,10 +69,25 @@ async def route_protected_request(route, *, base_url: str, token: str,
                                   fixture_exact_selection: Callable | None,
                                   fixture_exact_selection_quote: str = "USDT",
                                   fixture_asset_mentions: Callable | None = None,
-                                  fixture_watchlist_rows: Callable | None = None) -> None:
+                                  fixture_watchlist_rows: Callable | None = None,
+                                  fixture_auth_user: Callable | None = None) -> None:
     policy = request_policy(base_url=base_url, request_url=route.request.url)
     if policy == "block":
         await route.abort()
+    elif (fixture_auth_user is not None and route.request.method == "GET"
+          and urlsplit(route.request.url).path == "/api/auth/me"
+          and not urlsplit(route.request.url).query):
+        try:
+            payload = fixture_auth_user()
+            if payload is not None and (not isinstance(payload, dict) or not payload.get("id")):
+                raise ValueError("invalid protected auth user")
+        except Exception:
+            await route.abort()
+        else:
+            if payload is None:
+                await route.continue_(headers={**route.request.headers, "authorization": f"Bearer {token}"})
+            else:
+                await route.fulfill(status=200, content_type="application/json", body=json.dumps(payload))
     elif (fixture_asset_mentions is not None and route.request.method == "POST"
           and urlsplit(route.request.url).path == "/api/assets/mentions"
           and not urlsplit(route.request.url).query):
@@ -141,6 +156,7 @@ async def observe_page(
     fixture_exact_selection: Callable | None = None,
     fixture_asset_mentions: Callable | None = None,
     fixture_watchlist_rows: Callable | None = None,
+    fixture_auth_user: Callable | None = None,
 ):
     """Render one production page, inspect it in memory, and discard context.
 
@@ -154,7 +170,8 @@ async def observe_page(
         raise ValueError("qa_browser_fixture_override_scope_invalid")
     if fixture_exact_selection is not None and urlsplit(path).path != "/asset":
         raise ValueError("qa_browser_exact_selection_override_scope_invalid")
-    if (fixture_asset_mentions is not None or fixture_watchlist_rows is not None) and urlsplit(path).path != "/asset":
+    if (fixture_asset_mentions is not None or fixture_watchlist_rows is not None
+            or fixture_auth_user is not None) and urlsplit(path).path != "/asset":
         raise ValueError("qa_browser_watchlist_override_scope_invalid")
     selection_quote = parse_qs(urlsplit(path).query).get("quote", [])
     if fixture_exact_selection is not None and selection_quote not in (["EUR"], ["USDT"]):
@@ -189,6 +206,7 @@ async def observe_page(
                         fixture_exact_selection_quote=selection_quote[0] if selection_quote else "USDT",
                         fixture_asset_mentions=fixture_asset_mentions,
                         fixture_watchlist_rows=fixture_watchlist_rows,
+                        fixture_auth_user=fixture_auth_user,
                     )
 
                 await context.route("**/*", route_request)
