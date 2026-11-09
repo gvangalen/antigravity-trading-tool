@@ -32,6 +32,15 @@ The profile defines only the execution class. The active QA goal remains the
 authority for scope, acceptance criteria, and whether a sealed QA manifest is
 allowed. The workflow never silently substitutes a sealed 32-case matrix.
 
+The four trader-gate profiles use `manifest_id=none` and no bundle.
+`trader_account_state_readback` and `trader_pair_score_continuity` require
+`allow_fixture_actions=true`, `allow_safe_fixture_execution=false`.
+`trader_source_time_parity` and `trader_paper_exit_reconciliation` require both
+flags `true` for an isolated virtual Paper fixture. All four keep Live trading
+disabled. The source-time profile runs the Paper-exit contract as its fixture
+and additionally checks four-source quote identity and deployed browser times;
+its PASS cannot be inferred from the Paper-exit profile alone.
+
 `action_contract_acceptance` is the strict registry-wide profile. Before any
 product request it requires exactly one independent case for every active
 registry contract, all 16 safe write contracts, all nine declared natural

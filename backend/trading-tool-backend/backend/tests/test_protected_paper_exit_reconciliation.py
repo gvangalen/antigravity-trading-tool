@@ -64,6 +64,7 @@ def test_probe_replays_once_and_cleans_only_after_contract_pass(monkeypatch, ren
         steps.append("render")
         return {
             "rendered_exit_fields_present": rendered_value,
+            "rendered_decision_source_quote": True,
             "rendered_exit_eur_price": True,
             "rendered_exit_quantity": True,
             "rendered_exit_proceeds": True,
@@ -87,6 +88,59 @@ def test_probe_replays_once_and_cleans_only_after_contract_pass(monkeypatch, ren
                           "rendered_ui_checked": True, "gate_status": "FAIL",
                           "onboarding_navigation_override": True}
         assert steps == ["seed_trade", "run", "run", "render", "quarantine"]
+
+
+def test_source_parity_profile_requires_its_own_four_surface_result(monkeypatch):
+    from backend.engine import trading_bot_execution
+    from backend.scripts import probe_protected_source_time_parity
+
+    monkeypatch.setenv("FINN_QA_ALLOW_PAPER_EXIT_FIXTURE", "1")
+    monkeypatch.setenv("FINN_QA_USER_ID", "7")
+    steps = []
+    monkeypatch.setattr(probe, "_preflight", lambda: (2, {"market_price": 100,
+        "market_price_eur": 90, "source_ref": {"secret": "private"}}))
+    monkeypatch.setattr(probe.fixture, "_seed", lambda *args: (11, 22, "today"))
+    monkeypatch.setattr(probe, "_seed_trade", lambda *args: None)
+    class Cursor:
+        def __enter__(self):
+            return self
+        def __exit__(self, *_args):
+            return False
+        def execute(self, *_args):
+            pass
+        def fetchone(self):
+            return (910, 0.001)
+    class Connection:
+        def cursor(self):
+            return Cursor()
+        def close(self):
+            pass
+    monkeypatch.setattr(probe.fixture, "_connection", Connection)
+    monkeypatch.setattr(trading_bot_execution, "run_trading_bot_execution",
+                        lambda *args, **kwargs: {"ok": True})
+    monkeypatch.setattr(probe, "_evidence", lambda *args: {"ui_projection": {}})
+    monkeypatch.setattr(probe, "check_paper_exit",
+                        lambda *_args: {"result": "PASS", "failed_checks": []})
+    async def rendered(*_args):
+        return {key: True for key in (
+            "rendered_exit_fields_present", "rendered_decision_source_quote",
+            "rendered_exit_eur_price",
+            "rendered_exit_quantity", "rendered_exit_proceeds",
+            "rendered_exit_source_quote", "rendered_exit_fx",
+        )}
+    monkeypatch.setattr(probe, "_rendered_exit", rendered)
+    monkeypatch.setattr(probe_protected_source_time_parity, "run", lambda **_kwargs: {
+        "result": "FAIL", "failed_checks": ["report_source"],
+        "gate_status": "FAIL", "browser_zones_checked": 6,
+    })
+    monkeypatch.setattr(probe.fixture, "_cleanup", lambda *args: steps.append("cleanup"))
+    monkeypatch.setattr(probe.fixture, "_quarantine", lambda *args: steps.append("quarantine"))
+    result = probe.run(NAMESPACE, source_parity=True)
+    assert result["result"] == "FAIL"
+    assert result["failed_checks"] == ["report_source"]
+    assert result["source_time_parity"]["browser_zones_checked"] == 6
+    assert "private" not in str(result)
+    assert steps == ["quarantine"]
 
 
 def test_probe_quarantines_when_persisted_effect_does_not_reconcile(monkeypatch):
@@ -173,7 +227,8 @@ def test_rendered_exit_opens_trades_before_reading_evidence(monkeypatch):
                 reads.append('trades')
                 return {"status": 200, "present": True}
             return {key: True for key in (
-                "rendered_exit_fields_present", "rendered_exit_eur_price",
+                "rendered_exit_fields_present", "rendered_decision_source_quote",
+                "rendered_exit_eur_price",
                 "rendered_exit_quantity", "rendered_exit_proceeds",
                 "rendered_exit_source_quote", "rendered_exit_fx",
             )}

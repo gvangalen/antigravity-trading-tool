@@ -57,9 +57,9 @@ def test_fixture_onboarding_override_is_only_exact_same_origin_get():
         assert fixture_onboarding_response(**(kwargs | change)) is None
 
 
-def test_fixture_navigation_override_cannot_be_used_on_other_pages():
+def test_fixture_navigation_override_cannot_be_used_on_unrelated_pages():
     with pytest.raises(ValueError, match="qa_browser_fixture_override_scope_invalid"):
         asyncio.run(observe_page(
-            base_url="https://tradamind.com", path="/asset", token="in-memory-token",
+            base_url="https://tradamind.com", path="/portfolio", token="in-memory-token",
             inspect=lambda _page: None, bypass_fixture_onboarding=True,
         ))

@@ -61,7 +61,7 @@ async def observe_page(
     """
     if not path.startswith("/") or path.startswith("//") or not token:
         raise ValueError("qa_browser_input_invalid")
-    if bypass_fixture_onboarding and urlsplit(path).path != "/bot":
+    if bypass_fixture_onboarding and urlsplit(path).path not in {"/bot", "/asset", "/report"}:
         raise ValueError("qa_browser_fixture_override_scope_invalid")
     if request_policy(base_url=base_url, request_url=base_url) != "public":
         raise ValueError("qa_browser_origin_invalid")

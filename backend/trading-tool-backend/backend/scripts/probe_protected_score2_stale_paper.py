@@ -280,6 +280,7 @@ def _cleanup(namespace: str, user_id: int, bot_id: int) -> None:
                 "bot_decisions", "portfolio_value_snapshots_v2",
                 "bot_portfolio_snapshots", "portfolio_balance_snapshots",
                 "bot_portfolios", "bot_configs", "strategies", "setups", "daily_scores",
+                "daily_reports",
                 "macro_data", "technical_indicators", "market_data_indicators",
                 "user_indicator_configs",
             ):

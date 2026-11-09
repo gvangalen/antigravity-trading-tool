@@ -69,10 +69,14 @@ least Amsterdam, New York and Tokyo browser zones; source-code inspection alone
 is not live UI acceptance. Do not replace the source timestamp with a synthetic
 string after the product read.
 
-**Collector blocker:** the protected runner currently has no authenticated
-browser renderer or safe way to pass its in-memory server token into one. API
-timestamp parity plus formatter unit tests are partial evidence only. An
-isolated, non-uploading protected browser process is required before PASS.
+The QA-only `trader_source_time_parity` profile reuses an isolated automatic
+Paper-exit child fixture. It freezes the dated exact-market quote before
+execution, runs the normal report generator and writer without push/feed,
+reads the saved report and Analysis through owner-scoped GETs, reads FINN's
+market tool evidence, and checks Paper decision provenance. Its protected
+browser renders the deployed Analysis and report pages in Amsterdam, New York
+and Tokyo zones and returns only fixed booleans. This is not live acceptance
+until the profile passes on the exact deployed revision.
 
 **Source-identity contract:** exact-market quote projections carry an immutable
 `market_data.id`, exact `market_id`, and UTC `source_observed_at` as a typed
@@ -105,16 +109,18 @@ supply independent database facts, not product-response-derived expectations.
 actual dated market quote for each pair, owner-only indicator configurations,
 the normal score builder, persisted `daily_scores` and the canonical
 `SetupMarketMatchService` assessment. It reads both pairs before, during and
-after an owner-only BTC/EUR source outage. The profile is a partial gate:
-Analysis and FINN transport projections are not yet read back, so even a PASS
-from this profile is not a PASS for all of Gate 3. It requires a fresh quote for
+after an owner-only BTC/EUR source outage. The QA-only collector also reads
+Analysis through the owner-scoped exact-market GET and FINN through read-only
+chat/tool evidence in all three phases, then renders the stale source date in
+three browser zones. It requires a fresh quote for
 both pairs; otherwise the collector must fail without inventing a score.
 When the builder correctly persists a NULL market score, the match service may
 report `missing_score` rather than `stale_source`; the collector only accepts
 that state when the pair remains isolated and a separate fixture check proves
-the dated, owner-scoped stale reading. This does not assert that the UI or FINN
-displayed `stale_source`. Its artifact says `gate_status=PARTIAL` and explicitly
-marks both transport projections unchecked.
+the dated, owner-scoped stale reading. The collector verifies the actual
+transport projections and rendered date; it does not assert that the UI or
+FINN used the literal status string `stale_source`. No production PASS exists
+until the extended collector runs on the deployed revision.
 
 ## Prior Paper-exit runner diagnosis
 
@@ -182,20 +188,19 @@ must not be imported as a PASS for this gate.
 against the existing dated BTC/USDT quote and FX, invokes the normal automatic
 exit engine twice, and reconciles the persisted decision/order/execution,
 ledger, portfolio and owner-scoped `BotService.get_bot_history` projection. It
-does not run a browser renderer, so it cannot attest to the rendered
-`PaperExitEvidence` component. A server-side profile PASS remains partial Gate
-4 evidence; rendered UI acceptance needs a protected browser check. Decision
+also renders the deployed `PaperExitEvidence` component in a protected browser
+and verifies decision quote, execution quote, FX, quantity and EUR values. Decision
 source and execution source are checked separately: EUR fill arithmetic uses
 the recorded execution quote and FX even if they moved after the decision.
-The artifact says `rendered_ui_checked=false` and `gate_status=PARTIAL`.
+Its current QA-only artifact requires `rendered_ui_checked=true` for PASS.
 
-The proposed QA-only browser step opens the protected child owner's bot page
+The QA-only browser step opens the protected child owner's bot page
 with an in-memory bearer token scoped to same-origin read-only API requests.
 It checks the rendered `PaperExitEvidence` values and timestamps against the
 saved exit projection without uploading DOM, screenshots or tokens. The
-published production artifact above predates this step and remains PARTIAL.
+previously published production artifact predates this step and remains PARTIAL.
 The inactive QA child can be redirected by the unrelated onboarding guard.
-For this Paper-exit display check only, the protected browser may answer the
+For the Paper-exit and source-time display checks only, the protected browser may answer the
 exact GET `/api/onboarding/status` with a fixed completed-navigation response;
 all bot, trade and exit evidence still comes from real owner-scoped GETs. The
 artifact marks this override. This does not test onboarding or its API.
