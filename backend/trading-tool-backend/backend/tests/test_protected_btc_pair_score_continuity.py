@@ -128,7 +128,8 @@ def test_outage_browser_scopes_pending_score_and_quote_market(
         "categories": {"market": {"rows": [{"name": "change_24h", "score": None,
             "indicator_source_observed_at": source_at,
             "source_observed_at": "2026-11-09T09:12:00+00:00"}]}},
-        "quote": {"source_ref": {"market_id": quote_market_id, "measurement_id": 9,
+        "quote": {"price": 68267.0,
+                  "source_ref": {"market_id": quote_market_id, "measurement_id": 9,
                                  "source_observed_at_utc": "2026-11-09T09:12:00+00:00"}},
     }
     monkeypatch.setattr(qa_protected_readback, "read_json", lambda **_kwargs: workspace)
@@ -211,6 +212,44 @@ def test_finn_noncompleted_turn_reports_fixed_status_and_reason(monkeypatch):
         None, "turn_unavailable", {"status": "unavailable", "error_code": "selector_phase_timeout",
                                    "reasoning_status": "unavailable", "orchestrator_outcome": "failed"},
     )
+
+
+def test_finn_provider_diagnostic_captures_only_fixed_error_and_prior_tool_presence(monkeypatch):
+    from openai import AsyncOpenAI
+    from openai.resources.responses import AsyncResponses
+    from backend.infrastructure import database
+    from backend.scripts import probe_protected_account_answer, probe_protected_closed_paper_review
+
+    secret = "private-provider-payload-owner-92871"
+    bad_request = type("BadRequestError", (Exception,), {})
+    async def failed_provider(self, *_args, **_kwargs):
+        error = bad_request(secret)
+        error.status_code = 400
+        raise error
+    monkeypatch.setattr(AsyncResponses, "create", failed_provider)
+    async def chat(*_args):
+        client = AsyncOpenAI(api_key="synthetic-test-key")
+        try:
+            await client.with_options(max_retries=0).responses.create(model="synthetic")
+        except bad_request:
+            pass
+        return SimpleNamespace(status="unavailable", response=None,
+                               error_code="responses_provider_error", runtime_trace={},
+                               run_id="private-run", conversation_id="private-conversation")
+    async def evidence(**_kwargs):
+        return [{"scope": "read_asset_scores", "data": {"private": secret}}]
+    async def dispose():
+        return None
+    monkeypatch.setattr(probe_protected_closed_paper_review, "_chat_turn", chat)
+    monkeypatch.setattr(probe_protected_account_answer, "_read_tool_results", evidence)
+    monkeypatch.setattr(database, "engine", SimpleNamespace(dispose=dispose))
+    rows, phase, diagnostic = asyncio.run(probe._finn_pair_read(11, "BTC/EUR"))
+    assert rows is None and phase == "turn_unavailable"
+    assert diagnostic["provider_failure"] == {
+        "provider_call": 1, "status_class": "4xx", "exception_kind": "BadRequestError",
+    }
+    assert diagnostic["score_tool_seen"] is True
+    assert secret not in str(diagnostic)
 
 
 @pytest.mark.parametrize("response,expected", [
