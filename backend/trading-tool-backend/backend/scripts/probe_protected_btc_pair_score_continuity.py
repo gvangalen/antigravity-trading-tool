@@ -26,6 +26,16 @@ _ASSESSMENT_ORIGINS = {
     ("pair_benchmark_service.py", "benchmark_weights"): "pair_weights",
     ("scoring_utils.py", "score_snapshot_diagnosis"): "score_diagnosis",
 }
+_SAFE_FINN_ERROR_CODES = frozenset({
+    "orchestrator_failed", "selector_phase_timeout", "lifecycle_deadline_exceeded",
+    "responses_provider_quota_unavailable", "runtime_contract_terminal_projection_missing",
+    "tool_execution_failed", "run_canceled",
+})
+_SAFE_FINN_STATUSES = frozenset({
+    "created", "queued", "collecting", "planned", "reasoning", "verifying",
+    "clarification_required", "unavailable", "downgraded", "rejected",
+    "blocked", "completed", "failed", "canceled",
+})
 
 
 def _assessment_error_code(error: Exception) -> str:
@@ -41,6 +51,26 @@ def _assessment_error_code(error: Exception) -> str:
         origin = _ASSESSMENT_ORIGINS.get((name, code.co_name), origin)
         frame = frame.tb_next
     return f"{kind.lower()}_{origin}"
+
+
+def _finn_terminal_diagnostic(turn) -> dict[str, str]:
+    """Export only enum-like terminal fields, never answer or error text."""
+    trace = turn.runtime_trace if isinstance(getattr(turn, "runtime_trace", None), dict) else {}
+    reasoning = trace.get("reasoning") if isinstance(trace.get("reasoning"), dict) else {}
+    orchestrator = trace.get("orchestrator") if isinstance(trace.get("orchestrator"), dict) else {}
+    status = getattr(turn, "status", None)
+    error_code = getattr(turn, "error_code", None)
+    return {
+        "status": status if status in _SAFE_FINN_STATUSES else "other",
+        "error_code": (error_code if error_code in _SAFE_FINN_ERROR_CODES
+                       else "none" if error_code is None else "other"),
+        "reasoning_status": (reasoning.get("status") if reasoning.get("status") in {
+            "completed", "failed", "unavailable", "partial", "pending",
+        } else "other"),
+        "orchestrator_outcome": (orchestrator.get("outcome") if orchestrator.get("outcome") in {
+            "completed", "failed", "unavailable", "clarification_required",
+        } else "other"),
+    }
 
 
 def _business_snapshot(user_id: int) -> dict:
@@ -65,11 +95,12 @@ async def _finn_pair_read(user_id: int, pair: str):
                 or turn.response.proposal_id
                 or turn.response.confirmation_required
                 or turn.policy and turn.policy.execute_allowed):
-            return None, ("turn_incomplete" if turn.status != "completed" else "action_boundary")
+            status = turn.status if turn.status in _SAFE_FINN_STATUSES else "other"
+            return None, (f"turn_{status}" if turn.status != "completed" else "action_boundary"), _finn_terminal_diagnostic(turn)
         rows = await _read_tool_results(
             run_id=turn.run_id, conversation_id=turn.conversation_id, user_id=user_id,
         )
-        return rows, "ok"
+        return rows, "ok", None
     finally:
         await engine.dispose()
 
@@ -78,7 +109,7 @@ def _transport_checks(user_id: int, snapshot: dict) -> dict[str, bool]:
     """Compare normal owner-scoped Analysis GET and FINN chat reads with frozen scores."""
     from backend.scripts.qa_protected_readback import read_json
 
-    checks = {"analysis": True, "finn": True, "finn_codes": {}}
+    checks = {"analysis": True, "finn": True, "finn_codes": {}, "finn_runtime_codes": {}}
     for pair, expected in snapshot["pairs"].items():
         quote = pair.split("/", 1)[1]
         try:
@@ -94,10 +125,12 @@ def _transport_checks(user_id: int, snapshot: dict) -> dict[str, bool]:
         except Exception:
             checks["analysis"] = False
         try:
-            rows, phase = asyncio.run(_finn_pair_read(user_id, pair))
+            rows, phase, runtime_code = asyncio.run(_finn_pair_read(user_id, pair))
             if rows is None:
                 checks["finn"] = False
                 checks["finn_codes"][pair] = phase
+                if runtime_code:
+                    checks["finn_runtime_codes"][pair] = runtime_code
                 continue
             scoped = [row for row in rows if isinstance(row, dict)
                       and row.get("scope") == "read_asset_scores"]
@@ -158,12 +191,15 @@ async def _stale_date_display(user_id: int, source_at: str, market_id: int) -> d
     try:
         for zone in ("Europe/Amsterdam", "America/New_York", "Asia/Tokyo"):
             observed_responses = []
+            selection_state = {"code": "request_absent"}
 
             def selection_readback():
+                selection_state["code"] = "owner_get_error"
                 workspace = read_json(
                     owner_id=user_id,
                     path="/api/workspace/exact-market?symbol=BTC&quote_currency=EUR",
                 )
+                selection_state["code"] = "owner_get_invariant"
                 stale_moment = ((workspace.get("score_source_observed_at") or {})
                                 .get("market") or {}).get("change_24h")
                 expected_stale = None
@@ -195,12 +231,14 @@ async def _stale_date_display(user_id: int, source_at: str, market_id: int) -> d
                         or (workspace.get("combined") or {}).get("score") is not None
                         or not same_stale or row_old != expected_stale or row_current != quote_ref[2]):
                     raise RuntimeError("trader_pair_browser_readback_invalid")
+                selection_state["code"] = "owner_get_ok"
                 return {"market_id": workspace["market_id"], "pair": "BTC/EUR",
                         "quote_currency": "EUR", "workspace": workspace}
 
             def observe_response(response):
                 if urlsplit(response.url).path == "/api/assets/BTC/trading-markets/EUR/select":
                     observed_responses.append(response)
+                    selection_state["code"] = "response_seen"
 
             async def inspect(page):
                 try:
@@ -208,8 +246,11 @@ async def _stale_date_display(user_id: int, source_at: str, market_id: int) -> d
                         if observed_responses:
                             break
                         await asyncio.sleep(0.1)
-                    if not observed_responses or observed_responses[-1].status != 200:
-                        return "api_unseen"
+                    if not observed_responses:
+                        return ("selection_response_absent" if selection_state["code"] == "owner_get_ok"
+                                else selection_state["code"])
+                    if observed_responses[-1].status != 200:
+                        return "selection_response_error"
                     payload = await observed_responses[-1].json()
                     workspace = payload.get("workspace") or {}
                     quote_ref = _normalized_ref((workspace.get("quote") or {}).get("source_ref"))
@@ -505,11 +546,17 @@ def run(namespace: str) -> dict:
                 for phase, checks in zip(("initial", "outage", "recovered"), transport)
                 if checks.get("finn_codes")
             }
+            finn_runtime_codes = {
+                phase: checks["finn_runtime_codes"]
+                for phase, checks in zip(("initial", "outage", "recovered"), transport)
+                if checks.get("finn_runtime_codes")
+            }
             return {"result": "FAIL", "failed_checks": sorted(set(
                 result["failed_checks"] + transport_failures)),
                 "pairs": 2, "phases": 3, "analysis_transport_checked": True,
                 "finn_transport_checked": True, "outage_quote_pending_browser_checked": True,
                 **({"finn_transport_codes": finn_codes} if finn_codes else {}),
+                **({"finn_runtime_codes": finn_runtime_codes} if finn_runtime_codes else {}),
                 **({"outage_browser_codes": stale_browser}
                    if any(code != "ok" for code in stale_browser.values()) else {}),
                 "gate_status": "FAIL", "live_calls": len(live_attempts)}
