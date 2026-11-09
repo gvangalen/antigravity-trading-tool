@@ -280,3 +280,34 @@ def test_real_playwright_dom_scopes_both_quote_timestamps():
                 await browser.close()
 
     asyncio.run(exercise())
+
+
+def test_real_playwright_dom_binds_eur_quote_inside_active_card():
+    playwright = pytest.importorskip("playwright.async_api")
+    expected = "9 nov 2026 09:12 UTC"
+
+    async def exercise():
+        async with playwright.async_playwright() as runtime:
+            try:
+                browser = await runtime.chromium.launch(headless=True, args=["--no-sandbox"])
+            except playwright.Error:
+                pytest.skip("Chromium is unavailable in this test environment")
+            try:
+                page = await browser.new_page()
+                await page.set_content(f"""
+                    <p>{expected}</p>
+                    <section><div>Actieve analyse</div><span>68.000 EUR</span>
+                      <span>{expected}</span></section>
+                """)
+                assert await probe._target_quote_visible(
+                    page, surface="analysis", locale="nl-NL", expected=expected,
+                    quote_currency="EUR", timeout_ms=150,
+                ) == "ok"
+                assert await probe._target_quote_visible(
+                    page, surface="analysis", locale="nl-NL", expected=expected,
+                    quote_currency="USDT", timeout_ms=150,
+                ) == "selector_missing"
+            finally:
+                await browser.close()
+
+    asyncio.run(exercise())

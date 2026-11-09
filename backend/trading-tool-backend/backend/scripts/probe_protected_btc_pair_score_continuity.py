@@ -65,10 +65,11 @@ async def _finn_pair_read(user_id: int, pair: str):
                 or turn.response.proposal_id
                 or turn.response.confirmation_required
                 or turn.policy and turn.policy.execute_allowed):
-            return None
-        return await _read_tool_results(
+            return None, ("turn_incomplete" if turn.status != "completed" else "action_boundary")
+        rows = await _read_tool_results(
             run_id=turn.run_id, conversation_id=turn.conversation_id, user_id=user_id,
         )
+        return rows, "ok"
     finally:
         await engine.dispose()
 
@@ -77,7 +78,7 @@ def _transport_checks(user_id: int, snapshot: dict) -> dict[str, bool]:
     """Compare normal owner-scoped Analysis GET and FINN chat reads with frozen scores."""
     from backend.scripts.qa_protected_readback import read_json
 
-    checks = {"analysis": True, "finn": True}
+    checks = {"analysis": True, "finn": True, "finn_codes": {}}
     for pair, expected in snapshot["pairs"].items():
         quote = pair.split("/", 1)[1]
         try:
@@ -93,50 +94,162 @@ def _transport_checks(user_id: int, snapshot: dict) -> dict[str, bool]:
         except Exception:
             checks["analysis"] = False
         try:
-            rows = asyncio.run(_finn_pair_read(user_id, pair))
+            rows, phase = asyncio.run(_finn_pair_read(user_id, pair))
             if rows is None:
                 checks["finn"] = False
+                checks["finn_codes"][pair] = phase
                 continue
-            matches = [row["data"] for row in rows if isinstance(row, dict)
-                       and row.get("scope") == "read_asset_scores"
-                       and row.get("status") == "completed"
-                       and isinstance(row.get("data"), dict)
-                       and row["data"].get("market_id") == expected["market_id"]
-                       and row["data"].get("pair") == pair]
-            checks["finn"] &= len(matches) == 1 and matches[0].get("benchmark_score") == expected["score"]
+            scoped = [row for row in rows if isinstance(row, dict)
+                      and row.get("scope") == "read_asset_scores"]
+            if not scoped:
+                phase = "scope_missing"
+            elif len(scoped) != 1:
+                phase = "scope_ambiguous"
+            elif scoped[0].get("status") != "completed" or not isinstance(scoped[0].get("data"), dict):
+                phase = "scope_unverified"
+            elif scoped[0]["data"].get("pair") != pair:
+                phase = "pair_mismatch"
+            elif scoped[0]["data"].get("market_id") != expected["market_id"]:
+                phase = "market_mismatch"
+            elif scoped[0]["data"].get("benchmark_score") != expected["score"]:
+                phase = "score_mismatch"
+            checks["finn"] &= phase == "ok"
+            checks["finn_codes"][pair] = phase
         except Exception:
             checks["finn"] = False
+            checks["finn_codes"][pair] = "read_error"
     return checks
 
 
-async def _stale_date_display(user_id: int, source_at: str) -> dict[str, bool]:
-    """Exercise the deployed short UTC source-date formatter across offset zones."""
+async def _outage_indicator_visible(page, *, old_source_time: str,
+                                    current_quote_time: str,
+                                    timeout_ms: int = 15000) -> str:
+    """Require the old measurement date in the exact visible BTC/EUR row."""
+    try:
+        market = page.get_by_role("heading", name="Markt", exact=True).locator(
+            "xpath=ancestor::section[1]")
+        if await market.count() != 1:
+            return "market_section_missing"
+        indicator = market.get_by_role("button").filter(has_text="Prijsverandering 24 uur")
+        if await indicator.count() != 1:
+            return "indicator_missing"
+        await indicator.get_by_text("Score wordt berekend", exact=False).wait_for(timeout=timeout_ms)
+        await indicator.get_by_text(
+            f"Laatste indicatormeting: {old_source_time}", exact=False,
+        ).wait_for(timeout=timeout_ms)
+        await indicator.get_by_text(
+            f"Getoonde 24-uursverandering uit koersbron: {current_quote_time}", exact=False,
+        ).wait_for(timeout=timeout_ms)
+        return "ok"
+    except Exception:
+        return "old_source_date_or_pending_missing"
+
+
+async def _stale_date_display(user_id: int, source_at: str, market_id: int) -> dict[str, str]:
+    """Check the current quote date and pending pair score during an outage."""
     from backend.scripts.qa_protected_browser import observe_page
+    from backend.scripts.qa_protected_readback import read_json
+    from backend.scripts.probe_protected_source_time_parity import _normalized_ref, _target_quote_visible
     from backend.utils.auth_utils import create_access_token
+    from urllib.parse import urlsplit
 
     token = create_access_token({"sub": str(user_id), "role": "user"})
     checks = {}
     try:
         for zone in ("Europe/Amsterdam", "America/New_York", "Asia/Tokyo"):
-            async def inspect(page):
-                expected = await page.evaluate(
-                    "source => new Intl.DateTimeFormat('nl-NL', "
-                    "{day:'numeric',month:'long',year:'numeric',timeZone:'UTC'}).format(new Date(source))",
-                    source_at,
+            observed_responses = []
+
+            def selection_readback():
+                workspace = read_json(
+                    owner_id=user_id,
+                    path="/api/workspace/exact-market?symbol=BTC&quote_currency=EUR",
                 )
+                stale_moment = ((workspace.get("score_source_observed_at") or {})
+                                .get("market") or {}).get("change_24h")
+                expected_stale = None
                 try:
-                    await page.get_by_text(expected, exact=False).first.wait_for(timeout=15000)
-                    return True
+                    selected_stale = datetime.fromisoformat(str(stale_moment).replace("Z", "+00:00"))
+                    expected_stale = datetime.fromisoformat(str(source_at).replace("Z", "+00:00"))
+                    same_stale = (
+                        selected_stale.replace(tzinfo=selected_stale.tzinfo or timezone.utc).astimezone(timezone.utc)
+                        == expected_stale.replace(tzinfo=expected_stale.tzinfo or timezone.utc).astimezone(timezone.utc)
+                    )
+                except ValueError:
+                    same_stale = False
+                row = [item for item in (workspace.get("categories") or {}).get("market", {}).get("rows", [])
+                       if item.get("name") == "change_24h"]
+                quote_ref = _normalized_ref((workspace.get("quote") or {}).get("source_ref"))
+                try:
+                    row_old = datetime.fromisoformat(
+                        str(row[0].get("indicator_source_observed_at")).replace("Z", "+00:00"))
+                    row_current = datetime.fromisoformat(
+                        str(row[0].get("source_observed_at")).replace("Z", "+00:00"))
+                    row_old = row_old.replace(tzinfo=row_old.tzinfo or timezone.utc).astimezone(timezone.utc)
+                    row_current = row_current.replace(tzinfo=row_current.tzinfo or timezone.utc).astimezone(timezone.utc)
+                except (IndexError, ValueError):
+                    row_old = row_current = None
+                if (workspace.get("pair") != "BTC/EUR" or workspace.get("market_id") != market_id
+                        or quote_ref is None or quote_ref[0] != market_id
+                        or len(row) != 1 or row[0].get("score") is not None
+                        or (workspace.get("daily") or {}).get("market", {}).get("score") is not None
+                        or (workspace.get("combined") or {}).get("score") is not None
+                        or not same_stale or row_old != expected_stale or row_current != quote_ref[2]):
+                    raise RuntimeError("trader_pair_browser_readback_invalid")
+                return {"market_id": workspace["market_id"], "pair": "BTC/EUR",
+                        "quote_currency": "EUR", "workspace": workspace}
+
+            def observe_response(response):
+                if urlsplit(response.url).path == "/api/assets/BTC/trading-markets/EUR/select":
+                    observed_responses.append(response)
+
+            async def inspect(page):
+                try:
+                    for _ in range(50):
+                        if observed_responses:
+                            break
+                        await asyncio.sleep(0.1)
+                    if not observed_responses or observed_responses[-1].status != 200:
+                        return "api_unseen"
+                    payload = await observed_responses[-1].json()
+                    workspace = payload.get("workspace") or {}
+                    quote_ref = _normalized_ref((workspace.get("quote") or {}).get("source_ref"))
+                    if (workspace.get("pair") != "BTC/EUR" or workspace.get("market_id") != market_id
+                            or quote_ref is None or quote_ref[0] != market_id):
+                        return "api_source_unverified"
+                    expected = await page.evaluate(
+                        "source => new Intl.DateTimeFormat('nl-NL', "
+                        "{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'UTC'})"
+                        ".format(new Date(source)) + ' UTC'",
+                        quote_ref[2].isoformat(),
+                    )
+                    quote_phase = await _target_quote_visible(
+                        page, surface="analysis", locale="nl-NL", expected=expected,
+                        quote_currency="EUR",
+                    )
+                    if quote_phase != "ok":
+                        return "quote_" + quote_phase
+                    old_source_time = await page.evaluate(
+                        "source => new Intl.DateTimeFormat('nl-NL', "
+                        "{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'UTC'})"
+                        ".format(new Date(source)) + ' UTC'",
+                        source_at,
+                    )
+                    return await _outage_indicator_visible(
+                        page, old_source_time=old_source_time,
+                        current_quote_time=expected,
+                    )
                 except Exception:
-                    return False
+                    return "browser_inspection_failed"
             try:
                 checks[zone.split("/")[-1].lower()] = await observe_page(
                     base_url="https://tradamind.com", path="/asset?symbol=BTC&quote=EUR",
                     token=token, inspect=inspect, timezone_id=zone,
                     bypass_fixture_onboarding=True,
-                ) is True
+                    observe_response=observe_response,
+                    fixture_exact_selection=selection_readback,
+                )
             except Exception:
-                checks[zone.split("/")[-1].lower()] = False
+                checks[zone.split("/")[-1].lower()] = "page_unavailable"
         return checks
     finally:
         token = None
@@ -356,6 +469,7 @@ def run(namespace: str) -> dict:
             try:
                 stale_browser = asyncio.run(_stale_date_display(
                     user_id, outage["pairs"]["BTC/EUR"]["source_at"],
+                    markets["BTC/EUR"]["market_id"],
                 ))
             except Exception:
                 stale_browser = {}
@@ -376,33 +490,41 @@ def run(namespace: str) -> dict:
         transport_failures = [
             f"{name}_transport_{surface}"
             for name, checks in zip(("initial", "outage", "recovered"), transport)
-            for surface, passed_check in checks.items() if not passed_check
+            for surface in ("analysis", "finn") if not checks[surface]
         ]
-        if len(stale_browser) != 3 or not all(stale_browser.values()):
-            transport_failures.append("outage_stale_date_browser")
+        if len(stale_browser) != 3 or any(code != "ok" for code in stale_browser.values()):
+            transport_failures.append("outage_quote_pending_browser")
         if live_attempts:
             transport_failures.append("live_execution_attempt")
         if (before_business["counts"] != after_business["counts"]
                 or before_business["fingerprints"] != after_business["fingerprints"]):
             transport_failures.append("unexpected_business_write")
         if transport_failures:
+            finn_codes = {
+                phase: checks["finn_codes"]
+                for phase, checks in zip(("initial", "outage", "recovered"), transport)
+                if checks.get("finn_codes")
+            }
             return {"result": "FAIL", "failed_checks": sorted(set(
                 result["failed_checks"] + transport_failures)),
                 "pairs": 2, "phases": 3, "analysis_transport_checked": True,
-                "finn_transport_checked": True, "stale_date_browser_checked": True,
+                "finn_transport_checked": True, "outage_quote_pending_browser_checked": True,
+                **({"finn_transport_codes": finn_codes} if finn_codes else {}),
+                **({"outage_browser_codes": stale_browser}
+                   if any(code != "ok" for code in stale_browser.values()) else {}),
                 "gate_status": "FAIL", "live_calls": len(live_attempts)}
         if result["result"] != "PASS":
             return {**result, "gate_status": "FAIL",
                     "analysis_transport_checked": True,
                     "finn_transport_checked": True,
-                    "stale_date_browser_checked": True,
+                    "outage_quote_pending_browser_checked": True,
                     "live_calls": len(live_attempts)}
         passed = True
         return {**result, "pairs": 2, "phases": 3,
                 "source_outage": "owner_scoped", "live_calls": len(live_attempts),
                 "analysis_transport_checked": True,
                 "finn_transport_checked": True,
-                "stale_date_browser_checked": True,
+                "outage_quote_pending_browser_checked": True,
                 "gate_status": "PASS"}
     except Exception as error:
         snapshot_step = str(error).removeprefix("trader_pair_snapshot_").removesuffix("_failed")
