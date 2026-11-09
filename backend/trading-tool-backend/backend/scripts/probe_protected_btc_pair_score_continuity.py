@@ -315,7 +315,12 @@ async def _outage_indicator_visible(page, *, old_source_time: str,
              "current_quote_moment_missing"),
         ):
             try:
-                await indicator.get_by_text(expected, exact=False).wait_for(timeout=timeout_ms)
+                locator = indicator.get_by_text(expected, exact=False)
+                # Pending appears in both the direction and score badge.
+                # Keep the dated-source locators strict within this exact row.
+                if missing == "pending_label_missing":
+                    locator = locator.first
+                await locator.wait_for(timeout=timeout_ms)
             except Exception:
                 return missing
         return "ok"

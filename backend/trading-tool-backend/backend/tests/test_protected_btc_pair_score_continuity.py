@@ -463,6 +463,17 @@ def test_real_browser_requires_old_source_date_inside_btc_eur_indicator_row():
                     page, old_source_time=old, current_quote_time=current, timeout_ms=150,
                 ) == "ok"
                 await page.set_content(f"""
+                    <section><h2>Markt</h2><button>Prijsverandering 24 uur
+                      <span>Score wordt berekend</span>
+                      <span>Score Score wordt berekend</span>
+                      <span>Laatste indicatormeting: {old}.</span>
+                      <span>Getoonde 24-uursverandering uit koersbron: {current}.</span>
+                    </button></section>
+                """)
+                assert await probe._outage_indicator_visible(
+                    page, old_source_time=old, current_quote_time=current, timeout_ms=150,
+                ) == "ok"
+                await page.set_content(f"""
                     <p>{old}</p>
                     <section><h2>Markt</h2><button>Prijsverandering 24 uur
                       <span>Score wordt berekend</span>
