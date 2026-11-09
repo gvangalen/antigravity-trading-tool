@@ -114,11 +114,13 @@ class IndicatorHistoryBootstrap:
                            if stamp and stamp < today and volume is not None}),
         }
 
-    async def macro_coverage(self, user_id: int, indicator: str) -> int:
+    async def macro_coverage(self, user_id: int, indicator: str, symbol: str) -> int:
+        normalized_symbol = str(symbol or "").strip().upper()
         cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=90)
         rows = (await self.session.execute(
             select(MacroData.source_observed_at).where(
                 MacroData.user_id == user_id,
+                MacroData.symbol == normalized_symbol,
                 MacroData.name.ilike(indicator),
                 MacroData.source_observed_at >= cutoff,
                 MacroData.value.is_not(None),
@@ -187,9 +189,12 @@ class IndicatorHistoryBootstrap:
 
     async def bootstrap_macro(self, user_id: int, indicator: str, symbol: str) -> dict:
         name = str(indicator or "").strip().lower()
+        normalized_symbol = str(symbol or "").strip().upper()
         if name not in ABSOLUTE_MACRO_INDICATORS:
             return {"inserted": 0, "status": "not_required"}
-        coverage = await self.macro_coverage(user_id, name)
+        if not normalized_symbol:
+            return {"inserted": 0, "status": "insufficient_history", "observed_days": 0}
+        coverage = await self.macro_coverage(user_id, name, normalized_symbol)
         if coverage >= REQUIRED_SOURCE_DAYS:
             return {"inserted": 0, "status": "ready", "observed_days": coverage}
 
@@ -200,6 +205,7 @@ class IndicatorHistoryBootstrap:
         existing = (await self.session.execute(
             select(MacroData.source_observed_at).where(
                 MacroData.user_id == user_id,
+                MacroData.symbol == normalized_symbol,
                 MacroData.name.ilike(name),
                 MacroData.source_observed_at >= datetime.combine(cutoff_day, time.min),
             )
@@ -211,7 +217,7 @@ class IndicatorHistoryBootstrap:
             if day in existing_days or not cutoff_day <= day < today or not isfinite(value):
                 continue
             self.session.add(MacroData(
-                name=name, user_id=user_id, symbol=str(symbol or "BTC").upper(),
+                name=name, user_id=user_id, symbol=normalized_symbol,
                 value=value, score=None, timestamp=observed_at,
                 source_observed_at=observed_at,
             ))
@@ -219,7 +225,7 @@ class IndicatorHistoryBootstrap:
             inserted += 1
         if inserted:
             await self.session.commit()
-        coverage = await self.macro_coverage(user_id, name)
+        coverage = await self.macro_coverage(user_id, name, normalized_symbol)
         return {"inserted": inserted, "status": (
             "ready" if coverage >= REQUIRED_SOURCE_DAYS else "insufficient_history"
         ), "observed_days": coverage}

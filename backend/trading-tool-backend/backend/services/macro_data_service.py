@@ -236,7 +236,9 @@ class MacroDataService:
             return {}
         try:
             from backend.utils.macro_interpreter import normalize_macro_value_with_history
-            normalized = normalize_macro_value_with_history(conn, user_id, indicator, value, observed_at)
+            normalized = normalize_macro_value_with_history(
+                conn, user_id, indicator, value, observed_at, symbol=symbol,
+            )
             if normalized is None:
                 return {"score": None, "trend": None,
                         "interpretation": "Nog onvoldoende gedateerde meetpunten voor deze indicator.",

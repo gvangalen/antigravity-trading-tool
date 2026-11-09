@@ -6,6 +6,8 @@ from typing import Dict, Any, List, Optional
 from backend.utils.db import get_db_connection
 from backend.utils.scoring_engine import score_indicator
 
+MACRO_HISTORY_SCOPE_VERSION = "asset_history_v1"
+
 # =========================================================
 # ⚙️ Logging
 # =========================================================
@@ -137,6 +139,15 @@ def score_snapshot_diagnosis(category: str, symbol: str, configurations,
         # provenance field is mandatory for a current decision-grade score.
         if saved.get("rule_origin") not in {"custom", "system_template"}:
             return "rule_unverified"
+        # Older macro evidence was normalized against owner-wide history.
+        # Its value and source timestamp can still match this asset while its
+        # score was derived from another asset's history. Require a new,
+        # asset-scoped calculation before the category is decision-grade.
+        if category == "macro" and (
+            saved.get("history_scope_version") != MACRO_HISTORY_SCOPE_VERSION
+            or saved.get("source_symbol") != symbol
+        ):
+            return "score_rebuild_pending"
         try:
             if not math.isclose(float(saved["value"]), float(value), rel_tol=1e-12):
                 return "score_rebuild_pending"
@@ -179,6 +190,7 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
     if category not in table_map:
         raise ValueError(f"❌ Onbekende category: {category}")
 
+    symbol = str(symbol or "BTC").strip().upper()
     data_table, name_col = table_map[category]
 
     conn = get_db_connection()
@@ -208,20 +220,21 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
             if not configured:
                 return {"scores": {}, "total_score": None, "top_contributors": [],
                         "source_status": "missing_configuration"}
-            # Macro measurements are global to the owner, while the owner's
-            # selected macro indicators and weights remain asset-scoped.
+            # Macro readings are stored per asset. Selecting the newest row
+            # across the owner would attach another asset's DXY observation
+            # to this asset's saved score evidence.
             source_scope = (
                 "AND market_id = %s" if market_id is not None
                 else "AND market_id IS NULL AND symbol = %s"
             )
             if category == "macro":
-                source_scope = ""
+                source_scope = "AND symbol = %s"
             cur.execute(f"""
                 SELECT DISTINCT ON ({name_col}) {name_col}, value, source_observed_at
                 FROM {data_table}
                 WHERE user_id = %s {source_scope}
                 ORDER BY {name_col}, source_observed_at DESC NULLS LAST, timestamp DESC NULLS LAST
-            """, (user_id,) if category == "macro" else
+            """, (user_id, symbol) if category == "macro" else
                   ((user_id, market_id) if market_id is not None else (user_id, symbol)))
             rows = {normalize_indicator_name(row[0]): row for row in cur.fetchall()
                     if normalize_indicator_name(row[0]) in configured}
@@ -259,7 +272,9 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
                     conn, symbol, indicator, value, market_id=market_id,
                 )
             elif category == "macro":
-                normalized_value = normalize_macro_value_with_history(conn, user_id, indicator, value)
+                normalized_value = normalize_macro_value_with_history(
+                    conn, user_id, indicator, value, symbol=symbol,
+                )
             else:
                 normalized_value = normalize_technical_value_for_rules(
                     conn, indicator, value, user_id, symbol, market_id=market_id,
@@ -295,6 +310,11 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
                 "mode": scored["score_mode"],
                 "rule_origin": scored["rule_origin"],
             }
+            if category == "macro":
+                scores[indicator].update({
+                    "source_symbol": symbol,
+                    "history_scope_version": MACRO_HISTORY_SCOPE_VERSION,
+                })
 
             weighted_total += scored["score"] * weight
             total_weight += weight

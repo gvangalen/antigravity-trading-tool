@@ -20,6 +20,7 @@ class _Cursor:
         return False
 
     def execute(self, sql, params):
+        self.connection.executed.append((sql, params))
         if "SELECT indicator FROM (" in sql and "FROM user_indicator_configs" in sql:
             self.rows = [("dxy",), ("fear_greed_index",)]
         elif "FROM macro_data" in sql and "source_observed_at::date" in sql:
@@ -62,6 +63,9 @@ class _Cursor:
 
 
 class _Connection:
+    def __init__(self):
+        self.executed = []
+
     def cursor(self):
         return _Cursor(self)
 
@@ -81,6 +85,57 @@ def test_personal_indicator_rules_feed_weighted_macro_score(monkeypatch):
     assert result["scores"]["dxy"]["weight"] == 2
     assert result["scores"]["fear_greed_index"]["score"] == 25
     assert result["total_score"] == 62
+
+
+def test_macro_score_reads_only_the_selected_assets_observations(monkeypatch):
+    connection = _Connection()
+    monkeypatch.setattr(scoring_utils, "get_db_connection", lambda: connection)
+
+    result = scoring_utils.generate_scores_db("macro", user_id=7, symbol="AAPL")
+
+    assert result["source_status"] == "available"
+    source_reads = [(sql, params) for sql, params in connection.executed
+                    if "SELECT DISTINCT ON" in sql and "FROM macro_data" in sql
+                    and "SELECT DISTINCT ON (name) name, value, source_observed_at" in sql]
+    assert len(source_reads) == 1
+    sql, params = source_reads[0]
+    assert "WHERE user_id = %s AND symbol = %s" in sql
+    assert params == (7, "AAPL")
+
+
+def test_macro_normalization_does_not_borrow_other_assets_history():
+    from backend.utils.macro_interpreter import normalize_macro_value_with_history
+
+    class HistoryCursor:
+        def __init__(self):
+            self.query = None
+            self.params = None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, query, params):
+            self.query = query
+            self.params = params
+
+        def fetchall(self):
+            today = datetime.now(timezone.utc).date()
+            if "AND symbol = %s" in self.query and self.params[1] == "AAPL":
+                return [(today - timedelta(days=1), 102.3)]
+            return [(today - timedelta(days=day), 100.0 + day) for day in range(1, 6)]
+
+    cursor = HistoryCursor()
+    connection = type("Connection", (), {"cursor": lambda self: cursor})()
+    normalized = normalize_macro_value_with_history(
+        connection, 7, "dxy", 102.3, symbol="AAPL",
+    )
+
+    assert normalized is None
+    assert "WHERE user_id = %s AND symbol = %s" in cursor.query
+    assert cursor.params == (7, "AAPL", "dxy")
 
 
 def test_generated_bucket_is_not_decision_grade(monkeypatch):

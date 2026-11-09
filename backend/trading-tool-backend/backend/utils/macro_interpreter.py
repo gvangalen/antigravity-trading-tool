@@ -747,8 +747,9 @@ def normalize_macro_value(indicator: str, value: float) -> float:
 
 
 def normalize_macro_value_with_history(conn, user_id: int, indicator: str,
-                                       value: float, observed_at=None) -> float | None:
-    """Rank absolute index/commodity levels against dated owner readings.
+                                       value: float, observed_at=None,
+                                       *, symbol: str) -> float | None:
+    """Rank absolute index/commodity levels against dated asset readings.
 
     Fixed ranges such as a 3000 gold ceiling eventually turn every new
     observation into 100. Until enough distinct observations exist, leave
@@ -760,11 +761,11 @@ def normalize_macro_value_with_history(conn, user_id: int, indicator: str,
         cur.execute("""
             SELECT DISTINCT ON (source_observed_at::date) source_observed_at::date, value
             FROM macro_data
-            WHERE user_id = %s AND LOWER(name) = LOWER(%s)
+            WHERE user_id = %s AND symbol = %s AND LOWER(name) = LOWER(%s)
               AND source_observed_at >= NOW() - INTERVAL '90 days'
               AND source_observed_at IS NOT NULL AND value IS NOT NULL
             ORDER BY source_observed_at::date, source_observed_at DESC, timestamp DESC
-        """, (user_id, indicator))
+        """, (user_id, symbol, indicator))
         dated_history = {row[0]: float(row[1]) for row in cur.fetchall()}
     if observed_at is not None:
         dated_history[observed_at.date()] = float(value)

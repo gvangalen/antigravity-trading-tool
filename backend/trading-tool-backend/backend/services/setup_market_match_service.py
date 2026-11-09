@@ -117,7 +117,8 @@ class SetupMarketMatchService:
             ) effective WHERE enabled = TRUE
         """), {**parameters, "category": category})
         configured = configured_result.fetchall()
-        asset_clause = "" if category == "macro" else f"AND symbol = :symbol {market_scope}"
+        asset_clause = ("AND symbol = :symbol" if category == "macro"
+                        else f"AND symbol = :symbol {market_scope}")
         # Table and column names are selected from the constant map above.
         result = await self.session.execute(text(f"""
             SELECT DISTINCT ON ({name_column}) {name_column}, value, source_observed_at

@@ -68,6 +68,21 @@ def test_day_indicator_rejects_evidence_for_a_different_observation():
     assert _current_indicator_rows(raw, "market", daily)[0]["score"] is None
 
 
+def test_day_macro_hides_legacy_owner_wide_score_until_asset_rebuild():
+    observed = datetime.now(timezone.utc).isoformat()
+    raw = [{"name": "dxy", "value": 102.3, "score": 20,
+            "source_observed_at": observed}]
+    evidence = {"value": 102.3, "score": 20,
+                "source_observed_at": observed, "rule_origin": "system_template"}
+    daily = {"macro": {"score": 20, "source_status": "fresh"},
+             "indicator_evidence": {"macro": {"dxy": evidence}}}
+
+    assert _current_indicator_rows(raw, "macro", daily, symbol="AAPL")[0]["score"] is None
+    evidence.update({"source_symbol": "AAPL", "history_scope_version": "asset_history_v1"})
+    assert _current_indicator_rows(raw, "macro", daily, symbol="AAPL")[0]["score"] == 20
+    assert _current_indicator_rows(raw, "macro", daily, symbol="BTC")[0]["score"] is None
+
+
 def test_day_indicator_matches_equivalent_utc_source_moments():
     raw = [{"name": "RSI", "value": 31.91, "score": None,
             "source_observed_at": "2026-10-07T23:55:00+00:00"}]

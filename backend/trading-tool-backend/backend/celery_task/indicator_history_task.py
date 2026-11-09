@@ -53,7 +53,7 @@ async def _bootstrap_indicator_histories(
         market: dict[str, set[str]] = defaultdict(set)
         market_owners: dict[str, set[int]] = defaultdict(set)
         rsi_owners: dict[str, set[int]] = defaultdict(set)
-        macro: dict[tuple[int, str], str] = {}
+        macro: set[tuple[int, str, str]] = set()
         for row in rows:
             name = str(row.indicator or "").lower()
             asset = str(row.symbol or "").upper()
@@ -61,7 +61,7 @@ async def _bootstrap_indicator_histories(
                 market[asset].add(name)
                 market_owners[asset].add(int(row.user_id))
             elif row.category == "macro" and name in ABSOLUTE_MACRO_INDICATORS:
-                macro[(int(row.user_id), name)] = asset
+                macro.add((int(row.user_id), name, asset))
             elif (row.category == "technical" and name == "rsi" and
                   str(getattr(row, "asset_class", None) or
                       DEFAULT_ASSET_CATALOG.get(asset, {}).get("asset_class") or "").lower() == "crypto"):
@@ -69,7 +69,8 @@ async def _bootstrap_indicator_histories(
                 market_owners[asset].add(int(row.user_id))
                 rsi_owners[asset].add(int(row.user_id))
         scopes = [("market", asset, names) for asset, names in sorted(market.items())]
-        scopes += [("macro", key, asset) for key, asset in sorted(macro.items())]
+        scopes += [("macro", (owner_id, name), asset)
+                   for owner_id, name, asset in sorted(macro)]
         if user_id is None and len(scopes) > MAX_HISTORY_SCOPES_PER_SWEEP:
             start = (int(time.time() // 3600) * MAX_HISTORY_SCOPES_PER_SWEEP) % len(scopes)
             scopes = [scopes[(start + offset) % len(scopes)]

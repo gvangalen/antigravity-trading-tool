@@ -116,7 +116,8 @@ class ExactMarketWorkspaceService:
                for category in ("market", "macro", "technical")},
         }
         market_rows = _current_indicator_rows(market_rows, "market", verified_daily)
-        macro_rows = _current_indicator_rows(macro_rows, "macro", verified_daily)
+        macro_rows = _current_indicator_rows(macro_rows, "macro", verified_daily,
+                                             symbol=symbol)
         technical_rows = _current_indicator_rows(technical_rows, "technical", verified_daily)
         source_row = assessment.get("as_of")
         categories = {}
