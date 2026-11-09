@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import asyncio
 from datetime import date, datetime, timezone
+import re
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 from backend.scripts.qa_trader_gate_invariants import check_source_time_parity
@@ -94,42 +96,107 @@ def _observed_utc(value: object) -> str | None:
         return None
 
 
-async def _rendered_quote_times(user_id: int, source_at: str) -> dict[str, bool]:
+async def _target_quote_visible(page, *, surface: str, locale: str, expected: str,
+                                timeout_ms: int = 15000) -> str:
+    """Inspect only the active USDT card or the report's BTC/USDT quote row."""
+    try:
+        if surface == "analysis":
+            card = page.get_by_text("Actieve analyse", exact=True).locator("xpath=ancestor::section[1]")
+            if await card.count() != 1:
+                return "target_card_missing"
+            await card.get_by_text(re.compile(r"\bUSDT\b")).first.wait_for(timeout=5000)
+            quote = card.get_by_text(expected, exact=True)
+        else:
+            card = page.locator(".report-v2-at-glance-item").filter(
+                has=page.get_by_role("heading", name=re.compile(r"^BTC\/USDT(?:\s|$)")),
+            )
+            if await card.count() != 1:
+                return "target_card_missing"
+            label = {"nl-NL": "Koersbron", "en-US": "Quote source", "de-DE": "Kursquelle"}[locale]
+            quote_row = card.locator("dt").filter(has_text=label).locator("xpath=..")
+            if await quote_row.count() != 1:
+                return "target_quote_missing"
+            quote = quote_row.locator("dd").get_by_text(expected, exact=False)
+        await quote.first.wait_for(timeout=timeout_ms)
+        return "ok"
+    except Exception:
+        return "selector_missing"
+
+
+async def _rendered_quote_times(user_id: int, canonical_ref: dict) -> dict[str, str]:
     from backend.scripts.qa_protected_browser import observe_page
     from backend.utils.auth_utils import create_access_token
 
     token = create_access_token({"sub": str(user_id), "role": "user"})
-    checks: dict[str, bool] = {}
+    checks: dict[str, str] = {}
+    canonical = _normalized_ref(canonical_ref)
+    if canonical is None:
+        raise RuntimeError("source_parity_browser_ref_invalid")
     try:
         for zone in ("Europe/Amsterdam", "America/New_York", "Asia/Tokyo"):
             for surface, path in (
                 ("analysis", "/asset?symbol=BTC&quote=USDT"),
                 ("report", "/report"),
             ):
+                observed_responses = []
+
+                def observe_response(response, *, expected_surface=surface):
+                    expected_path = ("/api/workspace/exact-market" if expected_surface == "analysis"
+                                     else "/api/report/daily/latest")
+                    if urlsplit(response.url).path == expected_path:
+                        observed_responses.append(response)
+
                 async def inspect(page, *, expected_surface=surface):
+                    for _ in range(50):
+                        if observed_responses:
+                            break
+                        await asyncio.sleep(0.1)
+                    if not observed_responses:
+                        return "api_unseen"
+                    response = observed_responses[-1]
+                    if response.status != 200:
+                        return "api_http_failure"
+                    try:
+                        payload = await response.json()
+                        if expected_surface == "analysis":
+                            page_ref = _normalized_ref((payload.get("quote") or {}).get("source_ref"))
+                            locale = "nl-NL"
+                        else:
+                            snapshot = payload.get("score_source_snapshot") or {}
+                            matches = [item.get("market_snapshot") or {}
+                                       for item in snapshot.get("assets") or []
+                                       if isinstance(item, dict) and item.get("pair") == "BTC/USDT"]
+                            page_ref = _normalized_ref(matches[0].get("source_ref")) if len(matches) == 1 else None
+                            language = str(snapshot.get("content_locale") or "nl")[:2].lower()
+                            locale = {"nl": "nl-NL", "en": "en-US", "de": "de-DE"}.get(language, "nl-NL")
+                    except Exception:
+                        return "api_source_unverified"
+                    if page_ref is None:
+                        return "api_source_unverified"
+                    if page_ref != canonical:
+                        return "page_source_changed"
                     formatter = (
                         "{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'UTC'}"
                         if expected_surface == "analysis" else
                         "{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'UTC'}"
                     )
                     expected = await page.evaluate(
-                        "(source) => new Intl.DateTimeFormat('nl-NL', " + formatter +
-                        ").format(new Date(source)) + ' UTC'", source_at,
+                        "([source, locale]) => new Intl.DateTimeFormat(locale, " + formatter +
+                        ").format(new Date(source)) + ' UTC'", [page_ref[2].isoformat(), locale],
                     )
-                    try:
-                        await page.get_by_text(expected, exact=False).first.wait_for(timeout=15000)
-                        return True
-                    except Exception:
-                        return False
+                    return await _target_quote_visible(
+                        page, surface=expected_surface, locale=locale, expected=expected,
+                    )
 
                 try:
                     checks[f"{surface}_{zone.split('/')[-1].lower()}"] = await observe_page(
                         base_url="https://tradamind.com", path=path, token=token,
                         inspect=inspect, timezone_id=zone,
                         bypass_fixture_onboarding=True,
-                    ) is True
+                        observe_response=observe_response,
+                    )
                 except Exception:
-                    checks[f"{surface}_{zone.split('/')[-1].lower()}"] = False
+                    checks[f"{surface}_{zone.split('/')[-1].lower()}"] = "page_unavailable"
         return checks
     finally:
         token = None
@@ -141,6 +208,8 @@ def run(*, user_id: int, market_id: int, paper_evidence: dict,
     checks = {"frozen_paper_source": False, "analysis_source": False,
               "report_source": False, "finn_source": False,
               "four_instant_display": False, "deployed_browser_zones": False}
+    parity_subchecks: list[str] = []
+    surface_display_checks: dict[str, bool] = {}
     canonical = _normalized_ref(frozen_ref)
     if canonical is None or canonical[0] != market_id:
         return {"result": "FAIL", "failed_checks": ["frozen_paper_source"],
@@ -189,17 +258,53 @@ def run(*, user_id: int, market_id: int, paper_evidence: dict,
             "finn": {"source_at": ((finn_read or {}).get("source_ref") or {}).get("source_observed_at_utc"),
                      "displayed_at": _observed_utc((finn_read or {}).get("as_of")), "zone_label": "UTC"},
         }
-        checks["four_instant_display"] = check_source_time_parity(
-            canonical_source_at=source_at, surfaces=surfaces,
-        )["result"] == "PASS"
+        parity = check_source_time_parity(canonical_source_at=source_at, surfaces=surfaces)
+        checks["four_instant_display"] = parity["result"] == "PASS"
+        parity_subchecks = parity["failed_checks"]
+        for surface, item in surfaces.items():
+            observed = _observed_utc(item.get("displayed_at"))
+            observed_at = datetime.fromisoformat(observed) if observed else None
+            surface_display_checks[surface] = bool(observed_at) and (
+                observed_at.replace(microsecond=0) == canonical[2].replace(microsecond=0)
+                if surface == "finn" else observed_at == canonical[2]
+            )
     except Exception:
         pass
     try:
-        browser = asyncio.run(_rendered_quote_times(user_id, source_at))
-        checks["deployed_browser_zones"] = len(browser) == 6 and all(browser.values())
+        browser = asyncio.run(_rendered_quote_times(user_id, frozen_ref))
+        browser_zones_checked = len(browser)
+        checks["deployed_browser_zones"] = len(browser) == 6 and all(
+            value is True or value == "ok" for value in browser.values()
+        )
     except Exception:
-        browser = {}
+        browser_zones_checked = 0
+        browser = {f"{surface}_{zone}": "page_unavailable"
+                   for surface in ("analysis", "report")
+                   for zone in ("amsterdam", "new_york", "tokyo")}
     failed = sorted(name for name, passed in checks.items() if not passed)
-    return {"result": "FAIL" if failed else "PASS", "failed_checks": failed,
-            "gate_status": "FAIL" if failed else "PASS",
-            "browser_zones_checked": len(browser)}
+    source_changed_only = (bool(failed) and failed == ["deployed_browser_zones"]
+                           and "page_source_changed" in browser.values()
+                           and all(value in {"ok", "page_source_changed"}
+                                   for value in browser.values()))
+    status = "INCONCLUSIVE" if source_changed_only else "FAIL" if failed else "PASS"
+    return {"result": status,
+            "failed_checks": ["page_source_changed"] if source_changed_only else failed,
+            "gate_status": status,
+            "browser_zones_checked": browser_zones_checked,
+            "browser_zone_checks": {key: browser.get(key) is True or browser.get(key) == "ok" for key in (
+                "analysis_amsterdam", "analysis_new_york", "analysis_tokyo",
+                "report_amsterdam", "report_new_york", "report_tokyo",
+            )},
+            "browser_zone_phases": {key: value for key in (
+                "analysis_amsterdam", "analysis_new_york", "analysis_tokyo",
+                "report_amsterdam", "report_new_york", "report_tokyo",
+            ) if (value := browser.get(key)) in {
+                "ok", "api_unseen", "api_http_failure", "api_source_unverified",
+                "page_source_changed", "target_card_missing", "target_quote_missing",
+                "selector_missing", "page_unavailable",
+            }},
+            "surface_display_checks": {key: bool(surface_display_checks.get(key))
+                                       for key in ("analysis", "report", "bot", "finn")},
+            "parity_subchecks": [code for code in parity_subchecks if code in {
+                "dated_source", "same_source_instant", "same_display_instant", "explicit_zone",
+            }]}

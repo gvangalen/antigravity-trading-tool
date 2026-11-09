@@ -108,30 +108,33 @@ def test_trader_gate_profiles_are_protected_and_distinguish_execution_scope():
     )[0]
     exit_branch = source.split(
         'elif args.profile in {"trader_paper_exit_reconciliation", "trader_source_time_parity"}:', 1
-    )[1].split('elif args.profile == "trader_paper_exit_fixture_audit":', 1)[0]
+    )[1].split('elif args.profile in {"trader_paper_exit_fixture_audit", "trader_pair_fixture_audit"}:', 1)[0]
     for branch in (pair_branch, exit_branch):
         assert branch.index('report["protected_profile_attempted"] = True') < branch.index('report[args.profile] =')
         assert branch.index('report["qa_status"] = "INCOMPLETE"') < branch.index('report[args.profile] =')
     assert 'report["safety"]["execution_calls"] = None' in exit_branch
     assert 'report["safety"]["execution_calls"] = report[args.profile].get("engine_calls")' in exit_branch
+    assert '"incomplete" if report[args.profile]["result"] == "INCONCLUSIVE"' in exit_branch
 
 
-def test_prior_paper_fixture_audit_is_read_only_and_bounded():
+def test_prior_trader_fixture_audits_are_read_only_and_bounded():
     module = _module()
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
     dispatch = DISPATCH_SCRIPT_PATH.read_text(encoding="utf-8")
-    profile = "trader_paper_exit_fixture_audit"
-    assert profile in module.ALLOWED_PROFILES
-    assert profile in workflow and profile in dispatch
+    for profile in ("trader_paper_exit_fixture_audit", "trader_pair_fixture_audit"):
+        assert profile in module.ALLOWED_PROFILES
+        assert profile in workflow and profile in dispatch
     assert '"$ALLOW_FIXTURE_ACTIONS" != "false"' in workflow
     assert '"$ALLOW_SAFE_FIXTURE_EXECUTION" != "false"' in workflow
     assert '"$allow_fixture_actions" != "false"' in dispatch
     assert '"$allow_safe_fixture_execution" != "false"' in dispatch
     source = SCRIPT_PATH.read_text(encoding="utf-8")
-    audit_branch = source.split(f'elif args.profile == "{profile}":', 1)[1].split(
-        'elif args.profile in {"closed_paper_trade_review"', 1
+    audit_branch = source.split(
+        'elif args.profile in {"trader_paper_exit_fixture_audit", "trader_pair_fixture_audit"}:', 1
+    )[1].split(
+        'elif args.profile == "trader_strategy_schema_audit":', 1
     )[0]
-    assert 'audit_fixture(args.run_label)' in audit_branch
+    assert 'expected_profile=("trader_pair_score_continuity"' in audit_branch
     assert 'execution_calls' not in audit_branch
     assert 'else "incomplete"' in audit_branch
     assert '"INCOMPLETE"' in audit_branch

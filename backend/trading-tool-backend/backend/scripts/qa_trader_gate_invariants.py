@@ -104,8 +104,12 @@ def check_source_time_parity(*, canonical_source_at: str, surfaces: dict) -> dic
     same_source = bool(all_present) and all(
         _utc(item["source_at"]) == canonical for item in surfaces.values()
     )
+    # FINN's read adapter intentionally presents source moments to the second.
+    # The source reference above still has to match the full immutable instant.
     same_display = bool(all_present) and all(
-        _utc(item["displayed_at"]) == canonical for item in surfaces.values()
+        (_utc(item["displayed_at"]).replace(microsecond=0) == canonical.replace(microsecond=0)
+         if surface == "finn" else _utc(item["displayed_at"]) == canonical)
+        for surface, item in surfaces.items()
     )
     zone_offsets = {"UTC": 0, "CET": 3600, "CEST": 7200}
     explicit_zone = all(

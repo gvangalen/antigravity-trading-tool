@@ -12,7 +12,8 @@ from backend.scripts import probe_protected_score2_stale_paper as fixture
 LABEL = re.compile(r"audit-([1-9][0-9]{5,15})-([1-9][0-9]*)-([0-9a-f]{8})\Z")
 
 
-def _verify_prior_report(workflow_id: str, attempt: str, sha_prefix: str) -> None:
+def _verify_prior_report(workflow_id: str, attempt: str, sha_prefix: str,
+                         expected_profile: str = "trader_paper_exit_reconciliation") -> None:
     run_id = f"{workflow_id}-{attempt}"
     report = Path("/tmp") / f"finn-production-qa-{run_id}" / f"finn-production-qa-{run_id}.json"
     try:
@@ -20,19 +21,21 @@ def _verify_prior_report(workflow_id: str, attempt: str, sha_prefix: str) -> Non
     except (OSError, ValueError):
         raise RuntimeError("trader_fixture_audit_prior_report_unavailable") from None
     if (data.get("workflow_run_id") != run_id
-            or data.get("profile") != "trader_paper_exit_reconciliation"
+            or data.get("profile") != expected_profile
             or not str(data.get("target_sha", "")).startswith(sha_prefix)
             or data.get("protected_profile_attempted") is not True
             or data.get("outcome") not in {"failed", "incomplete"}):
         raise RuntimeError("trader_fixture_audit_prior_report_mismatch")
 
 
-def run(label: str) -> dict:
+def run(label: str, *, expected_profile: str = "trader_paper_exit_reconciliation") -> dict:
+    if expected_profile not in {"trader_paper_exit_reconciliation", "trader_pair_score_continuity"}:
+        raise RuntimeError("trader_fixture_audit_profile_invalid")
     match = LABEL.fullmatch(label)
     if not match:
         raise RuntimeError("trader_fixture_audit_label_invalid")
     workflow_id, attempt, sha_prefix = match.groups()
-    _verify_prior_report(workflow_id, attempt, sha_prefix)
+    _verify_prior_report(workflow_id, attempt, sha_prefix, expected_profile)
     namespace_prefix = f"qa-{workflow_id}-{attempt}-{sha_prefix}-"
     conn = fixture._connection()
     try:
@@ -57,6 +60,24 @@ def run(label: str) -> dict:
             bots = cur.fetchall()
             cur.execute("SELECT COUNT(*) FROM exchange_keys WHERE user_id=%s", (user_id,))
             keys = int(cur.fetchone()[0])
+            unsafe = bool(owner_active or keys or any(active or live for active, live in bots))
+            if expected_profile == "trader_pair_score_continuity":
+                present = {}
+                for table in ("user_indicator_configs", "market_data_indicators",
+                              "technical_indicators", "daily_scores", "bot_orders",
+                              "bot_executions"):
+                    cur.execute(f"SELECT COUNT(*) FROM {table} WHERE user_id=%s", (user_id,))
+                    present[table] = bool(cur.fetchone()[0])
+                return {
+                    "fixture_state": "UNSAFE_ACTIVE" if unsafe else "QUARANTINED_INACTIVE",
+                    "cleanup_verified": False,
+                    "pair_configs_present": present["user_indicator_configs"],
+                    "pair_market_readings_present": present["market_data_indicators"],
+                    "pair_technical_readings_present": present["technical_indicators"],
+                    "pair_scores_present": present["daily_scores"],
+                    "orders_present": present["bot_orders"],
+                    "executions_present": present["bot_executions"],
+                }
             cur.execute(
                 """SELECT decision_kind,COUNT(*) FROM bot_decisions
                    WHERE user_id=%s GROUP BY decision_kind""", (user_id,),
@@ -81,7 +102,6 @@ def run(label: str) -> dict:
                    WHERE l.user_id=%s AND d.decision_kind='paper_exit'""", (user_id,),
             )
             exit_ledger = int(cur.fetchone()[0])
-            unsafe = bool(owner_active or keys or any(active or live for active, live in bots))
             return {
                 "fixture_state": "UNSAFE_ACTIVE" if unsafe else "QUARANTINED_INACTIVE",
                 "cleanup_verified": False,

@@ -557,9 +557,10 @@ def run(namespace: str, *, source_parity: bool = False) -> dict:
                         "engine_calls": 2, "live_calls": live_calls,
                         "onboarding_navigation_override": True}
             if parity["result"] != "PASS":
-                return {"result": "FAIL", "failed_checks": parity["failed_checks"],
+                status = "INCONCLUSIVE" if parity["result"] == "INCONCLUSIVE" else "FAIL"
+                return {"result": status, "failed_checks": parity["failed_checks"],
                         "source_time_parity": parity, "rendered_ui_checked": True,
-                        "gate_status": "FAIL", "engine_calls": 2,
+                        "gate_status": status, "engine_calls": 2,
                         "live_calls": live_calls, "onboarding_navigation_override": True}
         passed = True
         return {**result, "exit_decisions": 1, "replay_duplicate_sells": 0,

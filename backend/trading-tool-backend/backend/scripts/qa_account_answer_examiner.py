@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import unicodedata
 from typing import Any
 
 
@@ -39,6 +40,12 @@ SCHEMA = {
 }
 
 
+def _same_quote_text(quote: str, answer: str) -> bool:
+    """Ignore only Unicode whitespace layout, not numbers, words or punctuation."""
+    normalize = lambda value: " ".join(unicodedata.normalize("NFC", value).split())
+    return normalize(quote) in normalize(answer)
+
+
 def check_judgment(*, answer: str, judgment: dict[str, Any]) -> dict[str, Any]:
     claims = judgment.get("claims") if isinstance(judgment, dict) else None
     if not isinstance(claims, list) or len(claims) != len(FACTS):
@@ -50,10 +57,10 @@ def check_judgment(*, answer: str, judgment: dict[str, Any]) -> dict[str, Any]:
         if claim["fact"] in by_fact or claim.get("verdict") not in VERDICTS:
             return {"result": "UNTESTED", "failed_checks": ["answer_examiner_schema"]}
         quote = claim.get("quote")
-        if not isinstance(quote, str) or (quote and quote not in answer):
-            return {"result": "UNTESTED", "failed_checks": ["answer_examiner_quote"]}
+        if not isinstance(quote, str) or (quote and not _same_quote_text(quote, answer)):
+            return {"result": "UNTESTED", "failed_checks": [f"answer_examiner_quote_{claim['fact']}"]}
         if claim["verdict"] != "omitted" and not quote:
-            return {"result": "UNTESTED", "failed_checks": ["answer_examiner_quote"]}
+            return {"result": "UNTESTED", "failed_checks": [f"answer_examiner_quote_{claim['fact']}"]}
         by_fact[claim["fact"]] = claim["verdict"]
     if set(by_fact) != set(FACTS):
         return {"result": "UNTESTED", "failed_checks": ["answer_examiner_schema"]}
@@ -97,13 +104,23 @@ async def examine_answer(*, answer: str, frozen_facts: dict[str, Any]) -> dict[s
                 ),
                 timeout=18,
             )
-            return check_judgment(answer=answer, judgment=json.loads(response.output_text))
+            judgment = json.loads(response.output_text)
+            checked = check_judgment(answer=answer, judgment=judgment)
+            claims = judgment.get("claims") if isinstance(judgment, dict) else None
+            verdicts = ({item["fact"]: item["verdict"] for item in claims}
+                        if isinstance(claims, list) and all(
+                            isinstance(item, dict) and item.get("fact") in FACTS
+                            and item.get("verdict") in VERDICTS for item in claims
+                        ) else {})
+            return checked, verdicts
 
         first = await one_pass()
         second = await one_pass()
         if first != second:
-            return {"result": "UNTESTED", "failed_checks": ["answer_examiner_disagreement"]}
-        return first
+            differing = [f"answer_examiner_disagreement_{fact}" for fact in FACTS
+                         if first[1].get(fact) != second[1].get(fact)]
+            return {"result": "UNTESTED", "failed_checks": differing or ["answer_examiner_disagreement"]}
+        return first[0]
     except Exception:
         return {"result": "UNTESTED", "failed_checks": ["answer_examiner_unavailable"]}
     finally:

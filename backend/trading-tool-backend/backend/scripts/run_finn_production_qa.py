@@ -46,6 +46,7 @@ ALLOWED_PROFILES = {
     "trader_source_time_parity",
     "trader_paper_exit_reconciliation",
     "trader_paper_exit_fixture_audit",
+    "trader_pair_fixture_audit",
     "trader_strategy_schema_audit",
     "score2_exact_usdt_paper",
     "closed_paper_trade_review",
@@ -191,6 +192,15 @@ def profile_error_category(profile: str, error: Exception) -> str:
             "fixture_binding_invalid", "btc_pair_markets_unavailable",
             "btc_pair_source_unavailable", "btc_pair_fixture_source_missing",
             "trader_pair_fixture_manifest_forbidden", "fixture_has_exchange_keys",
+            "trader_pair_markets_failed", "trader_pair_seed_failed",
+            "trader_pair_readings_failed", "trader_pair_baseline_failed",
+            "trader_pair_initial_snapshot_failed", "trader_pair_initial_transport_failed",
+            "trader_pair_outage_source_failed", "trader_pair_outage_snapshot_failed",
+            "trader_pair_outage_transport_failed", "trader_pair_browser_failed",
+            "trader_pair_recovery_source_failed", "trader_pair_recovery_snapshot_failed",
+            "trader_pair_recovery_transport_failed", "trader_pair_after_read_failed",
+            "trader_pair_validation_failed", "trader_pair_cleanup_failed",
+            "trader_pair_quarantine_failed",
         } else "trader_pair_probe_runtime_error")
     if profile == "trader_account_state_readback":
         code = str(error)
@@ -263,13 +273,14 @@ def profile_error_category(profile: str, error: Exception) -> str:
             "paper_exit_rendered_projection_failed",
             "paper_exit_source_parity_failed",
         } else "paper_exit_probe_runtime_error")
-    if profile == "trader_paper_exit_fixture_audit":
+    if profile in {"trader_paper_exit_fixture_audit", "trader_pair_fixture_audit"}:
         code = str(error)
         return (code if code in {
             "trader_fixture_audit_label_invalid", "trader_fixture_audit_scope_invalid",
             "trader_fixture_audit_manifest_forbidden",
             "trader_fixture_audit_prior_report_unavailable",
             "trader_fixture_audit_prior_report_mismatch",
+            "trader_fixture_audit_profile_invalid",
         } else "trader_fixture_audit_runtime_error")
     if profile == "trader_strategy_schema_audit":
         code = str(error)
@@ -2428,9 +2439,11 @@ def main() -> int:
                 report["outcome"] = "incomplete"
                 report["safety"]["read_only_profile"] = False
                 report["safety"]["execution_calls"] = 0
+                report["safety"]["live_trading_calls"] = None
                 from backend.scripts.probe_protected_btc_pair_score_continuity import run as run_pair_score_probe
 
                 report[args.profile] = run_pair_score_probe(fixture_namespace or "")
+                report["safety"]["live_trading_calls"] = report[args.profile].get("live_calls")
                 report["outcome"] = (
                     "passed" if report[args.profile]["result"] == "PASS" else "failed"
                 )
@@ -2445,10 +2458,12 @@ def main() -> int:
                 report["outcome"] = "incomplete"
                 report["safety"]["read_only_profile"] = False
                 report["safety"]["execution_calls"] = None
+                report["safety"]["live_trading_calls"] = None
                 from backend.scripts.probe_protected_account_answer import run as run_account_probe
 
                 report[args.profile] = run_account_probe(fixture_namespace or "")
                 report["safety"]["execution_calls"] = report[args.profile]["executions"]
+                report["safety"]["live_trading_calls"] = report[args.profile].get("live_calls")
                 report["outcome"] = (
                     "passed" if report[args.profile]["result"] == "PASS" else "failed"
                 )
@@ -2463,6 +2478,7 @@ def main() -> int:
                 report["outcome"] = "incomplete"
                 report["safety"]["read_only_profile"] = False
                 report["safety"]["execution_calls"] = None
+                report["safety"]["live_trading_calls"] = None
                 from backend.scripts.probe_protected_paper_exit_reconciliation import run as run_exit_probe
 
                 report[args.profile] = run_exit_probe(
@@ -2470,11 +2486,16 @@ def main() -> int:
                     source_parity=args.profile == "trader_source_time_parity",
                 )
                 report["safety"]["execution_calls"] = report[args.profile].get("engine_calls")
+                report["safety"]["live_trading_calls"] = report[args.profile].get("live_calls")
                 report["outcome"] = (
-                    "passed" if report[args.profile]["result"] == "PASS" else "failed"
+                    "passed" if report[args.profile]["result"] == "PASS" else
+                    "incomplete" if report[args.profile]["result"] == "INCONCLUSIVE" else "failed"
                 )
-                report["qa_status"] = "COMPLETED"
-            elif args.profile == "trader_paper_exit_fixture_audit":
+                report["qa_status"] = (
+                    "INCOMPLETE" if report[args.profile]["result"] == "INCONCLUSIVE"
+                    else "COMPLETED"
+                )
+            elif args.profile in {"trader_paper_exit_fixture_audit", "trader_pair_fixture_audit"}:
                 if args.manifest_id != "none" or args.manifest_bundle_path:
                     raise ValueError("trader_fixture_audit_manifest_forbidden")
                 report["protected_profile_attempted"] = True
@@ -2482,7 +2503,12 @@ def main() -> int:
                 report["outcome"] = "incomplete"
                 from backend.scripts.probe_protected_trader_fixture_audit import run as audit_fixture
 
-                report[args.profile] = audit_fixture(args.run_label)
+                report[args.profile] = audit_fixture(
+                    args.run_label,
+                    expected_profile=("trader_pair_score_continuity"
+                                      if args.profile == "trader_pair_fixture_audit"
+                                      else "trader_paper_exit_reconciliation"),
+                )
                 report["outcome"] = (
                     "failed" if report[args.profile]["fixture_state"] in {"UNSAFE_ACTIVE", "AMBIGUOUS"}
                     else "incomplete"
