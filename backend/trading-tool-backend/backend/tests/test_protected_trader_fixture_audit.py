@@ -151,6 +151,7 @@ def test_pair_cleanup_label_is_bound_to_audited_runs(monkeypatch):
         "audit-42546922438-1-169d0252",
         "audit-42549516935-1-1d8c6a3a",
         "audit-42551140172-1-43009b2a",
+        "audit-42552626218-1-a30e0117",
     }
     monkeypatch.setattr(audit.fixture, "_connection", lambda: pytest.fail("database touched"))
     with pytest.raises(RuntimeError, match="^trader_pair_cleanup_label_not_allowed$"):

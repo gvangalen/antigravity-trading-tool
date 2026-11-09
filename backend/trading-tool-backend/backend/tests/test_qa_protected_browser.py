@@ -75,12 +75,14 @@ def test_exact_selection_override_is_one_owner_scoped_in_memory_post_only():
     for change in (
         {"enabled": False}, {"method": "GET"},
         {"request_url": request.replace("BTC", "ETH")},
-        {"request_url": request.replace("USDT", "EUR")},
         {"request_url": request.replace("include_workspace=true", "include_workspace=false")},
         {"request_url": request + "&owner=private"},
         {"request_url": request.replace(base, "https://evil.example")},
     ):
         assert fixture_exact_selection_allowed(**(args | change)) is False
+    assert fixture_exact_selection_allowed(**(args | {
+        "request_url": request.replace("USDT", "EUR"), "quote_currency": "EUR",
+    })) is True
 
 
 def test_exact_selection_override_requires_asset_page():
@@ -121,3 +123,11 @@ def test_browser_fulfills_only_allowlisted_selection_post_without_network():
             fixture_exact_selection=lambda: {"workspace": {"private": "private-value"}},
         ))
         assert route.actions == expected
+    eur_route = Route(exact.replace("USDT", "EUR"), "POST")
+    asyncio.run(route_protected_request(
+        eur_route, base_url=base, token="private-token",
+        bypass_fixture_onboarding=True,
+        fixture_exact_selection=lambda: {"workspace": {}},
+        fixture_exact_selection_quote="EUR",
+    ))
+    assert eur_route.actions == [("fulfill", 200)]

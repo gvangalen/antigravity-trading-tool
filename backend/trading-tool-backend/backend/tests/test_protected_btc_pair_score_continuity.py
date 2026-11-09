@@ -61,7 +61,7 @@ def test_finn_pair_read_uses_one_event_loop_and_disposes_engine(monkeypatch):
     monkeypatch.setattr(probe_protected_closed_paper_review, "_chat_turn", chat)
     monkeypatch.setattr(probe_protected_account_answer, "_read_tool_results", evidence)
     monkeypatch.setattr(database, "engine", SimpleNamespace(dispose=dispose))
-    assert asyncio.run(probe._finn_pair_read(11, "BTC/EUR")) == [{"scope": "read_asset_scores"}]
+    assert asyncio.run(probe._finn_pair_read(11, "BTC/EUR")) == ([{"scope": "read_asset_scores"}], "ok")
     assert [name for name, _loop in steps] == ["turn", "evidence", "dispose"]
     assert len({loop for _name, loop in steps}) == 1
 
@@ -83,6 +83,92 @@ def test_finn_pair_read_disposes_engine_after_failed_turn(monkeypatch):
     assert steps == ["turn", "dispose"]
 
 
+@pytest.mark.parametrize("rows,expected", [
+    ([], "scope_missing"),
+    ([{"scope": "read_asset_scores", "status": "partial"}], "scope_unverified"),
+    ([{"scope": "read_asset_scores", "status": "completed", "data": {
+        "pair": "BTC/USDT", "market_id": 1, "benchmark_score": 45}}], "pair_mismatch"),
+    ([{"scope": "read_asset_scores", "status": "completed", "data": {
+        "pair": "BTC/EUR", "market_id": 99, "benchmark_score": 45}}], "market_mismatch"),
+    ([{"scope": "read_asset_scores", "status": "completed", "data": {
+        "pair": "BTC/EUR", "market_id": 1, "benchmark_score": 99}}], "score_mismatch"),
+])
+def test_finn_transport_diagnostic_uses_only_fixed_phase_codes(monkeypatch, rows, expected):
+    from backend.scripts import qa_protected_readback
+    monkeypatch.setattr(qa_protected_readback, "read_json", lambda **_kwargs: {
+        "market_id": 1, "pair": "BTC/EUR", "combined": {"score": 45},
+    })
+    async def finn_read(*_args):
+        return rows, "ok"
+    monkeypatch.setattr(probe, "_finn_pair_read", finn_read)
+    result = probe._transport_checks(11, {"pairs": {"BTC/EUR": {
+        "market_id": 1, "score": 45,
+    }}})
+    assert result == {"analysis": True, "finn": False,
+                      "finn_codes": {"BTC/EUR": expected}}
+    assert "99" not in str(result) and "11" not in str(result)
+
+
+def test_outage_browser_scopes_pending_score_to_btc_eur_indicator(monkeypatch):
+    from backend.scripts import qa_protected_browser, qa_protected_readback
+    from backend.scripts import probe_protected_source_time_parity as source_probe
+
+    source_at = "2026-10-10T00:30:00+00:00"
+    workspace = {
+        "market_id": 1, "pair": "BTC/EUR", "daily": {"market": {"score": None}},
+        "combined": {"score": None},
+        "score_source_observed_at": {"market": {"change_24h": source_at}},
+        "categories": {"market": {"rows": [{"name": "change_24h", "score": None}]}},
+        "quote": {"source_ref": {"market_id": 1, "measurement_id": 9,
+                                 "source_observed_at_utc": "2026-11-09T09:12:00+00:00"}},
+    }
+    monkeypatch.setattr(qa_protected_readback, "read_json", lambda **_kwargs: workspace)
+    async def quote_visible(*_args, **_kwargs):
+        return "ok"
+    monkeypatch.setattr(source_probe, "_target_quote_visible", quote_visible)
+
+    class Response:
+        url = "https://tradamind.com/api/assets/BTC/trading-markets/EUR/select?include_workspace=true"
+        status = 200
+        async def json(self):
+            return {"workspace": workspace}
+
+    class Locator:
+        async def count(self):
+            return 1
+        def locator(self, _selector):
+            return self
+        def get_by_role(self, *_args, **_kwargs):
+            return self
+        def filter(self, **_kwargs):
+            return self
+        async def wait_for(self, **_kwargs):
+            return None
+    class MissingIndicator(Locator):
+        async def count(self):
+            return 0
+    class Market(Locator):
+        def filter(self, **_kwargs):
+            return MissingIndicator()
+    class Heading(Locator):
+        def locator(self, _selector):
+            return Market()
+    class Page:
+        async def evaluate(self, *_args):
+            return "current quote UTC"
+        def get_by_role(self, *_args, **_kwargs):
+            return Heading()
+
+    async def observe_page(*, fixture_exact_selection, observe_response, inspect, **_kwargs):
+        assert fixture_exact_selection()["pair"] == "BTC/EUR"
+        observe_response(Response())
+        return await inspect(Page())
+    monkeypatch.setattr(qa_protected_browser, "observe_page", observe_page)
+    phases = asyncio.run(probe._stale_date_display(11, source_at))
+    assert phases == {"amsterdam": "indicator_missing", "new_york": "indicator_missing",
+                      "tokyo": "indicator_missing"}
+
+
 def test_probe_runs_three_pair_snapshots_and_cleans_only_verified_fixture(monkeypatch):
     monkeypatch.setenv("FINN_QA_ALLOW_TRADER_PAIR_FIXTURE", "1")
     monkeypatch.setenv("FINN_QA_USER_ID", "7")
@@ -95,7 +181,7 @@ def test_probe_runs_three_pair_snapshots_and_cleans_only_verified_fixture(monkey
     monkeypatch.setattr(probe, "_snapshot", lambda *args: deepcopy(next(snapshots)))
     monkeypatch.setattr(probe, "_transport_checks", lambda *args: {"analysis": True, "finn": True})
     async def stale_browser(*_args):
-        return {"amsterdam": True, "new_york": True, "tokyo": True}
+        return {"amsterdam": "ok", "new_york": "ok", "tokyo": "ok"}
     monkeypatch.setattr(probe, "_stale_date_display", stale_browser)
     monkeypatch.setattr(probe, "_set_eur_source_time", lambda *args, stale: steps.append(f"stale:{stale}"))
     monkeypatch.setattr(probe.fixture, "_cleanup", lambda *args: steps.append("cleanup"))
@@ -105,7 +191,7 @@ def test_probe_runs_three_pair_snapshots_and_cleans_only_verified_fixture(monkey
                                     "source_outage": "owner_scoped", "live_calls": 0,
                                     "analysis_transport_checked": True,
                                     "finn_transport_checked": True,
-                                    "stale_date_browser_checked": True,
+                                    "outage_quote_pending_browser_checked": True,
                                     "gate_status": "PASS"}
     assert steps == ["seed_readings", "stale:True", "stale:False", "cleanup"]
 
@@ -122,7 +208,7 @@ def test_probe_quarantines_on_score_cross_contamination(monkeypatch):
     monkeypatch.setattr(probe, "_snapshot", lambda *args: next(snapshots))
     monkeypatch.setattr(probe, "_transport_checks", lambda *args: {"analysis": True, "finn": True})
     async def stale_browser(*_args):
-        return {"amsterdam": True, "new_york": True, "tokyo": True}
+        return {"amsterdam": "ok", "new_york": "ok", "tokyo": "ok"}
     monkeypatch.setattr(probe, "_stale_date_display", stale_browser)
     monkeypatch.setattr(probe, "_set_eur_source_time", lambda *args, **kwargs: None)
     monkeypatch.setattr(probe.fixture, "_cleanup", lambda *args: steps.append("cleanup"))
@@ -131,7 +217,7 @@ def test_probe_quarantines_on_score_cross_contamination(monkeypatch):
                                     "failed_checks": ["outage_isolated"],
                                     "analysis_transport_checked": True,
                                     "finn_transport_checked": True,
-                                    "stale_date_browser_checked": True,
+                                    "outage_quote_pending_browser_checked": True,
                                     "live_calls": 0,
                                     "gate_status": "FAIL"}
     assert steps == ["quarantine"]
@@ -152,7 +238,7 @@ def test_probe_quarantines_when_one_transport_misreports_pair(monkeypatch):
                       {"analysis": True, "finn": True}))
     monkeypatch.setattr(probe, "_transport_checks", lambda *args: next(transport))
     async def stale_browser(*_args):
-        return {"amsterdam": True, "new_york": True, "tokyo": True}
+        return {"amsterdam": "ok", "new_york": "ok", "tokyo": "ok"}
     monkeypatch.setattr(probe, "_stale_date_display", stale_browser)
     monkeypatch.setattr(probe, "_set_eur_source_time", lambda *args, **kwargs: None)
     monkeypatch.setattr(probe.fixture, "_cleanup", lambda *args: steps.append("cleanup"))
@@ -187,7 +273,7 @@ def test_probe_measures_live_attempt_and_unexpected_business_write(monkeypatch):
         return {"analysis": True, "finn": True}
     monkeypatch.setattr(probe, "_transport_checks", transport)
     async def stale_browser(*_args):
-        return {"amsterdam": True, "new_york": True, "tokyo": True}
+        return {"amsterdam": "ok", "new_york": "ok", "tokyo": "ok"}
     monkeypatch.setattr(probe, "_stale_date_display", stale_browser)
     monkeypatch.setattr(probe, "_set_eur_source_time", lambda *args, **kwargs: None)
     monkeypatch.setattr(probe.fixture, "_cleanup", lambda *args: steps.append("cleanup"))
