@@ -690,7 +690,7 @@ class MarketDataService:
     async def delete_user_market_indicator(self, name: str, user_id: int, symbol: str = "BTC") -> dict:
         symbol = symbol.upper() if symbol else "BTC"
         asset_scope = await self._get_asset_scope(symbol)
-        await self.preference_repository.remove_user_config(
+        removed_config = await self.preference_repository.remove_user_config(
             user_id,
             normalize_indicator_name(name),
             category="market",
@@ -698,10 +698,10 @@ class MarketDataService:
             asset_class=asset_scope.get("asset_class"),
         )
         deleted = await self.repository.delete_user_market_indicator(name, user_id, symbol=symbol)
-        if not deleted:
+        if not removed_config and not deleted:
             raise HTTPException(404, f"Indicator '{name}' niet gevonden voor {symbol}.")
         await self.session.commit()
-        return {"message": f"Indicator '{name}' verwijderd voor {symbol}.", "rows_deleted": 1}
+        return {"message": f"Indicator '{name}' verwijderd voor {symbol}.", "rows_deleted": int(bool(deleted))}
 
     async def get_market_day_data(self, user_id: int, symbol: str = "BTC") -> List[dict]:
         symbol = symbol.upper() if symbol else "BTC"

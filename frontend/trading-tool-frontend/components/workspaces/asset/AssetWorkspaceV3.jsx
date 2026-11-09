@@ -31,10 +31,11 @@ import {
   fetchForwardReturnsWeek,
   fetchForwardReturnsYear,
   marketIndicatorAdd,
+  marketIndicatorDelete,
 } from "@/lib/api/market";
-import { macroDataAdd } from "@/lib/api/macro";
+import { deleteMacroIndicator, macroDataAdd } from "@/lib/api/macro";
 import { fetchSetupMarketMatches } from "@/lib/api/setups";
-import { technicalDataAdd } from "@/lib/api/technical";
+import { deleteTechnicalIndicator, technicalDataAdd } from "@/lib/api/technical";
 import { mapTechnicalToStudies } from "@/config/indicator_mapping";
 import { removeFromWatchlist } from "@/lib/api/watchlist";
 import { formatUtcTimestamp, formatUtcSourceDate } from "@/lib/time/formatUtcTimestamp.mjs";
@@ -185,10 +186,11 @@ function getUiCopy(locale = "nl") {
       marketRegime: "Market regime",
       addIndicator: "Add indicator",
       editIndicator: "Edit indicator",
-      removeIndicator: "Remove from this market",
+      removeIndicator: "Remove indicator",
       removeIndicatorConfirm: "Remove indicator",
       removeIndicatorContext: (name, pair) => `Remove ${name} from ${pair}?`,
       removeIndicatorImpact: "This market's benchmark will be recalculated. Other trading pairs stay unchanged.",
+      removeAssetIndicatorImpact: "This asset's benchmark will be recalculated. Other assets stay unchanged.",
       removeIndicatorSuccess: (name, pair) => `${name} removed from ${pair}.`,
       positive: "Positive",
       negative: "Negative",
@@ -399,10 +401,11 @@ function getUiCopy(locale = "nl") {
       marketRegime: "Marktregime",
       addIndicator: "Indikator hinzufügen",
       editIndicator: "Indikator bearbeiten",
-      removeIndicator: "Aus diesem Markt entfernen",
+      removeIndicator: "Indikator entfernen",
       removeIndicatorConfirm: "Indikator entfernen",
       removeIndicatorContext: (name, pair) => `${name} aus ${pair} entfernen?`,
       removeIndicatorImpact: "Der Benchmark dieses Marktes wird neu berechnet. Andere Handelspaare bleiben unverändert.",
+      removeAssetIndicatorImpact: "Der Benchmark dieses Assets wird neu berechnet. Andere Assets bleiben unverändert.",
       removeIndicatorSuccess: (name, pair) => `${name} aus ${pair} entfernt.`,
       positive: "Positiv",
       negative: "Negativ",
@@ -612,10 +615,11 @@ function getUiCopy(locale = "nl") {
     marketRegime: "Marktregime",
     addIndicator: "Indicator toevoegen",
     editIndicator: "Indicator bewerken",
-    removeIndicator: "Verwijderen uit deze markt",
+    removeIndicator: "Indicator verwijderen",
     removeIndicatorConfirm: "Indicator verwijderen",
     removeIndicatorContext: (name, pair) => `${name} verwijderen uit ${pair}?`,
     removeIndicatorImpact: "De benchmark van deze markt wordt opnieuw berekend. Andere handelsparen blijven ongewijzigd.",
+    removeAssetIndicatorImpact: "De benchmark van deze asset wordt opnieuw berekend. Andere assets blijven ongewijzigd.",
     removeIndicatorSuccess: (name, pair) => `${name} verwijderd uit ${pair}.`,
     positive: "Positief",
     negative: "Negatief",
@@ -2189,14 +2193,18 @@ function EvidenceRow({
 
       {expanded ? (
         <div className="border-t border-slate-100 px-4 py-4">
-          {onEdit ? (
+          {onEdit || onRemove ? (
             <div className="mb-4 flex flex-wrap gap-2">
-              <button type="button" onClick={onEdit} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">
-                {ui.editIndicator}
-              </button>
-              <button type="button" onClick={onRemove} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50">
-                {ui.removeIndicator}
-              </button>
+              {onEdit ? (
+                <button type="button" onClick={onEdit} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">
+                  {ui.editIndicator}
+                </button>
+              ) : null}
+              {onRemove ? (
+                <button type="button" onClick={onRemove} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50">
+                  {ui.removeIndicator}
+                </button>
+              ) : null}
             </div>
           ) : null}
           <h3 className="text-[14px] font-bold text-slate-900">{ui.scoreCalculationTitle}</h3>
@@ -3078,12 +3086,12 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   };
   const handleRemoveIndicator = (category, row) => {
     const marketId = workspace?.market_id;
-    if (!marketId || !row?.name) return;
+    if (!row?.name) return;
     const pair = workspace?.pair || activeSymbol;
     openConfirm({
       title: ui.removeIndicatorConfirm,
       context: ui.removeIndicatorContext(row.label, pair),
-      impact: ui.removeIndicatorImpact,
+      impact: marketId ? ui.removeIndicatorImpact : ui.removeAssetIndicatorImpact,
       contextLabel: ui.modalContextLabel,
       impactLabel: ui.modalImpactLabel,
       closeLabel: ui.modalCloseLabel,
@@ -3091,8 +3099,18 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       tone: "danger",
       confirmText: ui.removeIndicatorConfirm,
       onConfirm: async () => {
-        await deletePairIndicatorConfig(marketId, category, row.name);
-        await refreshWorkspaceOnce();
+        if (marketId) {
+          await deletePairIndicatorConfig(marketId, category, row.name);
+        } else if (category === "market") {
+          await marketIndicatorDelete(row.name, activeSymbol);
+        } else if (category === "macro") {
+          await deleteMacroIndicator(row.name, activeSymbol);
+        } else if (category === "technical") {
+          await deleteTechnicalIndicator(row.name, activeSymbol);
+        } else {
+          throw new Error(`Unknown indicator category: ${category}`);
+        }
+        await reloadWorkspace({ forceNetwork: true, bypassCooldown: true });
         scheduleScoreRefresh();
         showSnackbar(ui.removeIndicatorSuccess(row.label, pair));
       },
@@ -3352,7 +3370,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
             expandedRowKey={expandedRowKey}
             onToggleRow={(key) => setExpandedRowKey((current) => (current === key ? null : key))}
             onEditIndicator={workspace?.market_id ? handleEditIndicator : null}
-            onRemoveIndicator={workspace?.market_id ? handleRemoveIndicator : null}
+            onRemoveIndicator={handleRemoveIndicator}
             emptyState={section.emptyState}
             emptyAction={section.emptyAction}
             period={
