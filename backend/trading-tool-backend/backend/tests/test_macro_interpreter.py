@@ -113,6 +113,36 @@ def test_sp500_uses_second_yahoo_chart_host_without_twelve_data_key(monkeypatch)
     assert urls == [f"{macro_interpreter.YAHOO_SP500_GSPC_ALT}?range=6mo&interval=1d"]
 
 
+def test_sp500_falls_back_when_fred_passes_calendar_check_but_score_would_be_stale(monkeypatch):
+    from datetime import datetime, timezone
+    from backend.utils import macro_interpreter
+
+    now = datetime(2026, 11, 9, 20, 13, tzinfo=timezone.utc)
+    fred_dates = ["2026-10-30", "2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05"]
+    yahoo_dates = ["2026-10-30", "2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05", "2026-11-06"]
+    monkeypatch.setattr(
+        macro_interpreter,
+        "_fetch_text",
+        lambda *_args, **_kwargs: "observation_date,SP500\n" + "\n".join(
+            f"{date},7353.73" for date in fred_dates
+        ),
+    )
+    urls = []
+
+    def fake_fetch_json(url, timeout=10):
+        urls.append(url)
+        return {"chart": {"result": [{
+            "timestamp": [int(datetime.fromisoformat(date).replace(tzinfo=timezone.utc).timestamp())
+                          for date in yahoo_dates],
+            "indicators": {"quote": [{"close": [7353.73] * 5 + [7376.86]}]},
+        }]}}
+
+    monkeypatch.setattr(macro_interpreter, "_fetch_json", fake_fetch_json)
+
+    assert macro_interpreter._sp500_dated_closes(now=now)["2026-11-06"] == 7376.86
+    assert urls == [f"{macro_interpreter.YAHOO_SP500_GSPC_ALT}?range=6mo&interval=1d"]
+
+
 def test_sp500_legacy_fred_json_url_returns_last_value(monkeypatch):
     from datetime import datetime, timedelta, timezone
     today = datetime.now(timezone.utc).date()

@@ -18,6 +18,7 @@ from backend.services.providers.twelve_data_macro_provider import (
 from backend.utils.scoring_utils import (
     normalize_indicator_name,
     get_score_rule_from_db,
+    score_source_is_fresh,
 )
 
 logger = logging.getLogger(__name__)
@@ -242,9 +243,10 @@ def _fred_json_result(payload: dict, *, inflation: bool) -> dict:
     )
 
 
-def _sp500_dated_closes() -> dict[str, float]:
+def _sp500_dated_closes(*, now: datetime | None = None) -> dict[str, float]:
     """Use dated S&P 500 closes; tolerate a FRED maintenance page or outage."""
-    today = datetime.now(timezone.utc).date()
+    current = now or datetime.now(timezone.utc)
+    today = current.date()
     cutoff = today - timedelta(days=90)
 
     def usable(rows: dict[str, float]) -> dict[str, float]:
@@ -257,7 +259,14 @@ def _sp500_dated_closes() -> dict[str, float]:
                 continue
             if cutoff <= parsed_day < today and math.isfinite(value) and value > 0:
                 complete[parsed_day.isoformat()] = value
-        if len(complete) < 5 or today - date.fromisoformat(max(complete)) > timedelta(days=4):
+        # FRED dates are stored as UTC midnight by the macro writer. Use the
+        # same timestamp-based freshness rule as Score 2.0, otherwise a
+        # four-calendar-day-old FRED row blocks a fresher fallback all day.
+        newest = date.fromisoformat(max(complete)) if complete else None
+        if (len(complete) < 5 or newest is None or not score_source_is_fresh(
+            "macro", "sp500", datetime.combine(newest, datetime.min.time(), timezone.utc),
+            now=current,
+        )):
             return {}
         return complete
 
