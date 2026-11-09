@@ -150,15 +150,25 @@ def test_browser_checks_classify_page_source_refresh_without_leaking_payload(mon
             return type("Match", (), {"first": Locator()})()
 
     calls = 0
-    async def observe_page(*, path, inspect, observe_response, **_kwargs):
+    def selected_workspace(*, owner_id, path):
+        assert owner_id == 7
+        assert path == "/api/workspace/exact-market?symbol=BTC&quote_currency=USDT"
+        source = ({**REF, "source_observed_at_utc": "2026-11-08T09:31:00+00:00"}
+                  if calls == 1 else REF)
+        return {"market_id": 43, "pair": "BTC/USDT", "quote": {
+            "source_ref": source, "private": "private-fixture-value",
+        }}
+
+    async def observe_page(*, path, inspect, observe_response,
+                           fixture_exact_selection=None, **_kwargs):
         nonlocal calls
         calls += 1
         if path.startswith("/asset"):
-            source = ({**REF, "source_observed_at_utc": "2026-11-08T09:31:00+00:00"}
-                      if calls == 1 else REF)
-            payload = {"quote": {"source_ref": source, "private": "private-fixture-value"}}
-            api_path = "/api/workspace/exact-market?symbol=BTC&quote_currency=USDT"
+            assert fixture_exact_selection is not None
+            payload = fixture_exact_selection()
+            api_path = "/api/assets/BTC/trading-markets/USDT/select?include_workspace=true"
         else:
+            assert fixture_exact_selection is None
             payload = {"score_source_snapshot": {"content_locale": "en", "assets": [
                 {"pair": "BTC/USDT", "market_snapshot": {"source_ref": REF}},
             ]}}
@@ -167,6 +177,7 @@ def test_browser_checks_classify_page_source_refresh_without_leaking_payload(mon
         return await inspect(Page())
 
     monkeypatch.setattr(qa_protected_browser, "observe_page", observe_page)
+    monkeypatch.setattr(probe, "read_json", selected_workspace)
     async def visible(*_args, **_kwargs):
         return "ok"
     monkeypatch.setattr(probe, "_target_quote_visible", visible)

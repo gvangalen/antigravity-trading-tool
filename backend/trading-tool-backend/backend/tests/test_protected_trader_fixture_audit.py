@@ -114,6 +114,85 @@ def test_pair_audit_rejects_paper_prior_report_before_database(monkeypatch):
         audit.run(LABEL, expected_profile="trader_pair_score_continuity")
 
 
+def test_pair_cleanup_requires_inactive_uncredentialed_child_and_verifies_zero_rows(monkeypatch):
+    before = Connection([
+        [(17, {"qa_namespace": NAMESPACE})], [(22, False, False)],
+    ])
+    after = Connection([[(0,)], *([[(0,)]] * 9)])
+    connections = iter((before, after))
+    monkeypatch.setattr(audit, "PAIR_CLEANUP_LABELS", {LABEL})
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: next(connections))
+    monkeypatch.setattr(audit, "_verify_prior_report", lambda *_args: None)
+    cleaned = []
+    monkeypatch.setattr(audit.fixture, "_cleanup", lambda *args, **kwargs: cleaned.append((args, kwargs)))
+    result = audit.cleanup_pair(LABEL)
+    assert result == {"fixture_state": "CLEANED", "cleanup_verified": True}
+    assert cleaned == [((NAMESPACE, 17, 22), {"require_safe_pair_cleanup": True})]
+    assert before.closed and after.closed
+    assert NAMESPACE not in str(result) and "17" not in str(result)
+
+
+def test_pair_cleanup_refuses_active_or_credentialed_child_before_write(monkeypatch):
+    for responses, code in (
+        ([[(17, {"qa_namespace": "wrong"})]], "trader_pair_cleanup_owner_unsafe"),
+        ([[(17, {"qa_namespace": NAMESPACE})], []], "trader_pair_cleanup_bot_unsafe"),
+    ):
+        monkeypatch.setattr(audit, "PAIR_CLEANUP_LABELS", {LABEL})
+        monkeypatch.setattr(audit, "_verify_prior_report", lambda *_args: None)
+        monkeypatch.setattr(audit.fixture, "_connection", lambda values=responses: Connection(values))
+        monkeypatch.setattr(audit.fixture, "_cleanup", lambda *_args: pytest.fail("unexpected write"))
+        with pytest.raises(RuntimeError, match=f"^{code}$"):
+            audit.cleanup_pair(LABEL)
+
+
+def test_pair_cleanup_label_is_bound_to_audited_runs(monkeypatch):
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: pytest.fail("database touched"))
+    with pytest.raises(RuntimeError, match="^trader_pair_cleanup_label_not_allowed$"):
+        audit.cleanup_pair("audit-42502525173-1-9a72d5e4")
+
+
+@pytest.mark.parametrize("blocked_table", ["bot_decisions", "bot_orders", "bot_executions", "bot_ledger"])
+def test_locked_cleanup_blocks_prior_decisions_and_trades_without_delete(monkeypatch, blocked_table):
+    queries = []
+    class LockedCursor:
+        rowcount = 0
+        def execute(self, query, params):
+            queries.append(query)
+        def fetchone(self):
+            if len(queries) == 1:
+                return ({"qa_fixture": audit.fixture.FIXTURE_MARKER,
+                         "qa_namespace": NAMESPACE},)
+            if len(queries) == 2:
+                return (False,)
+            if len(queries) == 4:
+                return (0,)
+            if len(queries) in (5, 6, 7, 8):
+                return (int(blocked_table in queries[-1]),)
+            raise AssertionError("unexpected query")
+        def fetchall(self):
+            return [(22, False, False)]
+    class LockedConnection:
+        rolled_back = False
+        committed = False
+        @contextmanager
+        def cursor(self):
+            yield LockedCursor()
+        def rollback(self):
+            self.rolled_back = True
+        def commit(self):
+            self.committed = True
+        def close(self):
+            pass
+    conn = LockedConnection()
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: conn)
+    with pytest.raises(RuntimeError, match="^fixture_cleanup_failed$"):
+        audit.fixture._cleanup(NAMESPACE, 17, 22, require_safe_pair_cleanup=True)
+    assert conn.rolled_back and not conn.committed
+    assert "FOR UPDATE" in queries[0] and "FOR UPDATE" in queries[2]
+    assert blocked_table in queries[-1]
+    assert not any("DELETE FROM" in query for query in queries)
+
+
 def test_audit_rejects_unscoped_label_before_database(monkeypatch):
     monkeypatch.setattr(audit.fixture, "_connection", lambda: pytest.fail("database touched"))
     with pytest.raises(RuntimeError, match="trader_fixture_audit_label_invalid"):

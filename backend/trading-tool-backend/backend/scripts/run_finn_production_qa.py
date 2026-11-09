@@ -47,6 +47,7 @@ ALLOWED_PROFILES = {
     "trader_paper_exit_reconciliation",
     "trader_paper_exit_fixture_audit",
     "trader_pair_fixture_audit",
+    "trader_pair_fixture_cleanup",
     "trader_strategy_schema_audit",
     "score2_exact_usdt_paper",
     "closed_paper_trade_review",
@@ -187,7 +188,13 @@ def profile_error_category(profile: str, error: Exception) -> str:
                 else "portfolio_paper_fx_schema_runtime_error")
     if profile == "trader_pair_score_continuity":
         code = str(error)
-        return (code if code in {
+        snapshot_codes = {
+            f"trader_pair_{phase}_snapshot_{step}_failed"
+            for phase in ("initial", "outage", "recovery")
+            for step in ("score_builder", "assessment", "source_read",
+                         "stale_eval", "projection")
+        }
+        return (code if code in snapshot_codes | {
             "trader_pair_fixture_not_authorized", "trader_pair_namespace_invalid",
             "fixture_binding_invalid", "btc_pair_markets_unavailable",
             "btc_pair_source_unavailable", "btc_pair_fixture_source_missing",
@@ -282,6 +289,22 @@ def profile_error_category(profile: str, error: Exception) -> str:
             "trader_fixture_audit_prior_report_mismatch",
             "trader_fixture_audit_profile_invalid",
         } else "trader_fixture_audit_runtime_error")
+    if profile == "trader_pair_fixture_cleanup":
+        code = str(error)
+        return (code if code in {
+            "trader_fixture_audit_label_invalid",
+            "trader_fixture_audit_prior_report_unavailable",
+            "trader_fixture_audit_prior_report_mismatch",
+            "trader_pair_cleanup_manifest_forbidden",
+            "trader_pair_cleanup_not_authorized",
+            "trader_pair_cleanup_scope_ambiguous",
+            "trader_pair_cleanup_owner_unsafe",
+            "trader_pair_cleanup_bot_unsafe",
+            "trader_pair_cleanup_keys_unsafe",
+            "trader_pair_cleanup_trade_unsafe",
+            "trader_pair_cleanup_failed",
+            "trader_pair_cleanup_postcondition_failed",
+        } else "trader_pair_cleanup_runtime_error")
     if profile == "trader_strategy_schema_audit":
         code = str(error)
         return (code if code in {
@@ -2514,6 +2537,25 @@ def main() -> int:
                     else "incomplete"
                 )
                 report["qa_status"] = "COMPLETED_WITH_FAILURES" if report["outcome"] == "failed" else "INCOMPLETE"
+            elif args.profile == "trader_pair_fixture_cleanup":
+                if args.manifest_id != "none" or args.manifest_bundle_path:
+                    raise ValueError("trader_pair_cleanup_manifest_forbidden")
+                if os.getenv("FINN_QA_ALLOW_FIXTURE_ACTIONS") != "1" or os.getenv(
+                    "FINN_QA_ALLOW_FIXTURE_EXECUTION") == "1":
+                    raise ValueError("trader_pair_cleanup_not_authorized")
+                report["protected_profile_attempted"] = True
+                report["qa_status"] = "INCOMPLETE"
+                report["outcome"] = "incomplete"
+                report["safety"]["read_only_profile"] = False
+                from backend.scripts.probe_protected_trader_fixture_audit import cleanup_pair
+
+                report[args.profile] = cleanup_pair(args.run_label)
+                report["outcome"] = (
+                    "passed" if report[args.profile]["cleanup_verified"] else "incomplete"
+                )
+                report["qa_status"] = (
+                    "COMPLETED" if report[args.profile]["cleanup_verified"] else "INCOMPLETE"
+                )
             elif args.profile == "trader_strategy_schema_audit":
                 if args.manifest_id != "none" or args.manifest_bundle_path:
                     raise ValueError("trader_strategy_schema_manifest_forbidden")

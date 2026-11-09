@@ -10,6 +10,10 @@ from backend.scripts import probe_protected_score2_stale_paper as fixture
 
 
 LABEL = re.compile(r"audit-([1-9][0-9]{5,15})-([1-9][0-9]*)-([0-9a-f]{8})\Z")
+PAIR_CLEANUP_LABELS = frozenset({
+    "audit-42543306392-1-20322165",
+    "audit-42546922438-1-169d0252",
+})
 
 
 def _verify_prior_report(workflow_id: str, attempt: str, sha_prefix: str,
@@ -113,3 +117,64 @@ def run(label: str, *, expected_profile: str = "trader_paper_exit_reconciliation
             }
     finally:
         conn.close()
+
+
+def cleanup_pair(label: str) -> dict:
+    """Delete only a verified inactive, uncredentialed prior Gate3 child."""
+    if label not in PAIR_CLEANUP_LABELS:
+        raise RuntimeError("trader_pair_cleanup_label_not_allowed")
+    match = LABEL.fullmatch(label)
+    if not match:
+        raise RuntimeError("trader_fixture_audit_label_invalid")
+    workflow_id, attempt, sha_prefix = match.groups()
+    _verify_prior_report(workflow_id, attempt, sha_prefix, "trader_pair_score_continuity")
+    namespace_prefix = f"qa-{workflow_id}-{attempt}-{sha_prefix}-"
+    conn = fixture._connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT id,ai_preferences FROM users
+                   WHERE ai_preferences->>'qa_fixture'=%s
+                     AND ai_preferences->>'qa_namespace' LIKE %s""",
+                (fixture.FIXTURE_MARKER, namespace_prefix + "%"),
+            )
+            owners = cur.fetchall()
+            if not owners:
+                return {"fixture_state": "NO_RETAINED_FIXTURE", "cleanup_verified": False}
+            if len(owners) != 1:
+                raise RuntimeError("trader_pair_cleanup_scope_ambiguous")
+            user_id, preferences = owners[0]
+            namespace = (preferences or {}).get("qa_namespace", "")
+            if (not fixture.NAMESPACE_PATTERN.fullmatch(namespace)
+                    or not namespace.startswith(namespace_prefix)):
+                raise RuntimeError("trader_pair_cleanup_owner_unsafe")
+            cur.execute("SELECT id,is_active,is_live FROM bot_configs WHERE user_id=%s", (user_id,))
+            bots = cur.fetchall()
+            if len(bots) != 1:
+                raise RuntimeError("trader_pair_cleanup_bot_unsafe")
+            bot_id = bots[0][0]
+    finally:
+        conn.close()
+    try:
+        fixture._cleanup(namespace, user_id, bot_id, require_safe_pair_cleanup=True)
+    except Exception:
+        raise RuntimeError("trader_pair_cleanup_failed") from None
+    conn = fixture._connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT COUNT(*) FROM users WHERE ai_preferences->>'qa_fixture'=%s
+                   AND ai_preferences->>'qa_namespace' LIKE %s""",
+                (fixture.FIXTURE_MARKER, namespace_prefix + "%"),
+            )
+            if cur.fetchone()[0]:
+                raise RuntimeError("trader_pair_cleanup_postcondition_failed")
+            for table in ("user_indicator_configs", "market_data_indicators",
+                          "technical_indicators", "daily_scores", "bot_configs",
+                          "bot_decisions", "bot_orders", "bot_executions", "bot_ledger"):
+                cur.execute(f"SELECT COUNT(*) FROM {table} WHERE user_id=%s", (user_id,))
+                if cur.fetchone()[0]:
+                    raise RuntimeError("trader_pair_cleanup_postcondition_failed")
+    finally:
+        conn.close()
+    return {"fixture_state": "CLEANED", "cleanup_verified": True}

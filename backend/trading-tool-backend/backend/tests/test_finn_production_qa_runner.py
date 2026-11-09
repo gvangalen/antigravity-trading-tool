@@ -140,6 +140,25 @@ def test_prior_trader_fixture_audits_are_read_only_and_bounded():
     assert '"INCOMPLETE"' in audit_branch
 
 
+def test_prior_pair_cleanup_is_scoped_and_requires_fixture_permission():
+    module = _module()
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    dispatch = DISPATCH_SCRIPT_PATH.read_text(encoding="utf-8")
+    source = SCRIPT_PATH.read_text(encoding="utf-8")
+    profile = "trader_pair_fixture_cleanup"
+    assert profile in module.ALLOWED_PROFILES
+    assert profile in workflow and profile in dispatch
+    assert '"$ALLOW_FIXTURE_ACTIONS" != "true"' in workflow
+    assert '"$ALLOW_SAFE_FIXTURE_EXECUTION" != "false"' in workflow
+    assert '"$allow_fixture_actions" != "true"' in dispatch
+    assert '"$allow_safe_fixture_execution" != "false"' in dispatch
+    branch = source.split(f'elif args.profile == "{profile}":', 1)[1].split(
+        'elif args.profile == "trader_strategy_schema_audit":', 1
+    )[0]
+    assert 'cleanup_pair(args.run_label)' in branch
+    assert 'report["safety"]["read_only_profile"] = False' in branch
+
+
 def test_strategy_schema_audit_has_no_fixture_action_permission():
     module = _module()
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
