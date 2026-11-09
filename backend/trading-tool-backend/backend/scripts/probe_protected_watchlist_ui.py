@@ -117,7 +117,7 @@ async def _saved_pair_visibility(token: str) -> dict[str, str | bool]:
     synthetic in-memory owner; no second account or product mutation is made.
     """
     state = {"phase": "first", "auth_user": None, "stage": "browser_open",
-             "watchlist_gets": 0, "route": "unknown"}
+             "watchlist_gets": 0, "route": "unknown", "selection_click_done": False}
     first_rows = [
         {"symbol": "BTC", "market_id": 410001, "quote_currency": "EUR",
          "asset_class": "crypto", "display_name": "Bitcoin"},
@@ -176,13 +176,20 @@ async def _saved_pair_visibility(token: str) -> dict[str, str | bool]:
         both_initial = await first_eur.is_visible() and await first_usdt.is_visible()
 
         state["stage"] = "select_eur"
-        await first_eur.locator("xpath=..").click()
-        await page.wait_for_url("**/asset?*quote=EUR*", timeout=10000)
+        await first_eur.locator("xpath=../..").click(position={"x": 20, "y": 20})
+        state["selection_click_done"] = True
+        await page.wait_for_function(
+            "new URLSearchParams(window.location.search).get('quote') === 'EUR'",
+            timeout=10000,
+        )
         both_after_eur = await first_eur.is_visible() and await first_usdt.is_visible()
 
         state["stage"] = "select_usdt"
-        await first_usdt.locator("xpath=..").click()
-        await page.wait_for_url("**/asset?*quote=USDT*", timeout=10000)
+        await first_usdt.locator("xpath=../..").click(position={"x": 20, "y": 20})
+        await page.wait_for_function(
+            "new URLSearchParams(window.location.search).get('quote') === 'USDT'",
+            timeout=10000,
+        )
         both_after_usdt = await first_eur.is_visible() and await first_usdt.is_visible()
 
         state["stage"] = "switch_owner"
@@ -223,7 +230,8 @@ async def _saved_pair_visibility(token: str) -> dict[str, str | bool]:
                 "isolated_second": False, "restored_first": False,
                 "product_post_blocked": False, "error_code": state["stage"] + "_failed",
                 "route_code": state["route"],
-                "watchlist_get_seen": state["watchlist_gets"] > 0}
+                "watchlist_get_seen": state["watchlist_gets"] > 0,
+                "selection_click_done": state["selection_click_done"]}
 
 
 def run(token: str) -> dict:
