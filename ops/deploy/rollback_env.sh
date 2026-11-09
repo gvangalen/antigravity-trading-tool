@@ -99,6 +99,11 @@ if [ -f backend/trading-tool-backend/backend/scripts/trading_market_migration_st
 fi
 
 echo "↩️ Rolling ${ENVIRONMENT} back to ${ROLLBACK_COMMIT}..."
+PRE_ROLLBACK_FRONTEND_STATIC="$(mktemp -d /tmp/tradamind-rollback-static.XXXXXX)"
+trap 'rm -rf "$PRE_ROLLBACK_FRONTEND_STATIC"' EXIT
+if [ -d frontend/trading-tool-frontend/out/_next/static ]; then
+  cp -R frontend/trading-tool-frontend/out/_next/static/. "$PRE_ROLLBACK_FRONTEND_STATIC/"
+fi
 for attempt in $(seq 1 5); do
   rm -f .git/index.lock .git/refs/remotes/origin/main.lock .git/refs/remotes/origin/main .git/refs/remotes/origin/develop.lock .git/refs/remotes/origin/develop
   if git fetch origin; then
@@ -108,6 +113,8 @@ for attempt in $(seq 1 5); do
   sleep 2
 done
 git reset --hard "$ROLLBACK_COMMIT"
+mkdir -p frontend/trading-tool-frontend/out/_next/static
+cp -Rn "$PRE_ROLLBACK_FRONTEND_STATIC/." frontend/trading-tool-frontend/out/_next/static/
 write_release_metadata() {
   local metadata_path="ops/deploy/.release_metadata.env"
   local temporary_path="${metadata_path}.tmp.$$"
@@ -121,7 +128,8 @@ export TRADAMIND_BUILD_COMMIT_SHA="$(git rev-parse HEAD)"
 
 cd frontend/trading-tool-frontend
 rm -rf .next
-git clean -fd out/_next/static
+# A tab can still use the export that was live before rollback. Preserve its
+# hashed chunks alongside the restored commit's export during navigation.
 if [ ! -f out/index.html ]; then
   echo "❌ Prebuilt frontend export missing during rollback: frontend/trading-tool-frontend/out/index.html" >&2
   exit 1

@@ -153,8 +153,17 @@ def test_deploy_script_uses_fixed_step_ids_and_preserves_rollback() -> None:
 def test_rollback_restores_frontend_identity_with_rolled_back_commit() -> None:
     source = ROLLBACK_SCRIPT.read_text(encoding="utf-8")
     assert 'export TRADAMIND_BUILD_COMMIT_SHA="$(git rev-parse HEAD)"' in source
-    assert 'git clean -fd out/_next/static' in source
+    assert source.index('cp -R frontend/trading-tool-frontend/out/_next/static/.') < source.index('git reset --hard "$ROLLBACK_COMMIT"')
+    assert source.index('cp -Rn "$PRE_ROLLBACK_FRONTEND_STATIC/."') > source.index('git reset --hard "$ROLLBACK_COMMIT"')
+    assert 'git clean -fd out/_next/static' not in source
     assert '"$TRADAMIND_BUILD_COMMIT_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > out/build-info.json' in source
+
+
+def test_deploy_keeps_previous_frontend_chunks_for_open_tabs() -> None:
+    source = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+    assert 'cp -R frontend/trading-tool-frontend/out/_next/static/.' in source
+    assert 'cp -Rn \\"\\$PREVIOUS_FRONTEND_STATIC/.\\" frontend/trading-tool-frontend/out/_next/static/' in source
+    assert 'git clean -fd out/_next/static' not in source
 
 
 def test_worker_queue_readiness_requires_registered_topology_consumers() -> None:
