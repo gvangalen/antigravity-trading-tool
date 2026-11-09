@@ -1,7 +1,9 @@
 """No database or network access: prove protected probe control flow."""
 
+import asyncio
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 
@@ -36,6 +38,49 @@ def _snapshot(eur_score, usdt_score, *, stale=False):
 
 def _stable_business(_owner):
     return {"counts": {"bot_orders": 0}, "fingerprints": {"bot_orders": b"same"}}
+
+
+def test_finn_pair_read_uses_one_event_loop_and_disposes_engine(monkeypatch):
+    from backend.infrastructure import database
+    from backend.scripts import probe_protected_account_answer, probe_protected_closed_paper_review
+
+    steps = []
+    async def chat(owner, message):
+        steps.append(("turn", id(asyncio.get_running_loop())))
+        assert owner == 11 and "BTC/EUR" in message
+        return SimpleNamespace(
+            status="completed", run_id="private-run", conversation_id="private-conversation",
+            response=SimpleNamespace(proposal_id=None, confirmation_required=False), policy=None,
+        )
+    async def evidence(**kwargs):
+        steps.append(("evidence", id(asyncio.get_running_loop())))
+        assert kwargs["user_id"] == 11
+        return [{"scope": "read_asset_scores"}]
+    async def dispose():
+        steps.append(("dispose", id(asyncio.get_running_loop())))
+    monkeypatch.setattr(probe_protected_closed_paper_review, "_chat_turn", chat)
+    monkeypatch.setattr(probe_protected_account_answer, "_read_tool_results", evidence)
+    monkeypatch.setattr(database, "engine", SimpleNamespace(dispose=dispose))
+    assert asyncio.run(probe._finn_pair_read(11, "BTC/EUR")) == [{"scope": "read_asset_scores"}]
+    assert [name for name, _loop in steps] == ["turn", "evidence", "dispose"]
+    assert len({loop for _name, loop in steps}) == 1
+
+
+def test_finn_pair_read_disposes_engine_after_failed_turn(monkeypatch):
+    from backend.infrastructure import database
+    from backend.scripts import probe_protected_closed_paper_review
+
+    steps = []
+    async def chat(*_args):
+        steps.append("turn")
+        raise RuntimeError("private fixture owner 92741")
+    async def dispose():
+        steps.append("dispose")
+    monkeypatch.setattr(probe_protected_closed_paper_review, "_chat_turn", chat)
+    monkeypatch.setattr(database, "engine", SimpleNamespace(dispose=dispose))
+    with pytest.raises(RuntimeError):
+        asyncio.run(probe._finn_pair_read(11, "BTC/EUR"))
+    assert steps == ["turn", "dispose"]
 
 
 def test_probe_runs_three_pair_snapshots_and_cleans_only_verified_fixture(monkeypatch):

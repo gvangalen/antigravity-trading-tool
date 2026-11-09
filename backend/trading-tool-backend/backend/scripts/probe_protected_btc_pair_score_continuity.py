@@ -49,11 +49,33 @@ def _business_snapshot(user_id: int) -> dict:
     return _business_state(user_id)
 
 
+async def _finn_pair_read(user_id: int, pair: str):
+    """Keep the FINN turn and its evidence on one loop, then release the pool."""
+    from backend.infrastructure.database import engine
+    from backend.scripts.probe_protected_account_answer import _read_tool_results
+    from backend.scripts.probe_protected_closed_paper_review import _chat_turn
+
+    try:
+        turn = await _chat_turn(
+            user_id,
+            f"Lees alleen mijn actuele Score 2.0 voor {pair} uit opgeslagen brondata. "
+            "Geef de benchmarkscore en bronstatus; wijzig niets.",
+        )
+        if (turn.status != "completed" or turn.response is None
+                or turn.response.proposal_id
+                or turn.response.confirmation_required
+                or turn.policy and turn.policy.execute_allowed):
+            return None
+        return await _read_tool_results(
+            run_id=turn.run_id, conversation_id=turn.conversation_id, user_id=user_id,
+        )
+    finally:
+        await engine.dispose()
+
+
 def _transport_checks(user_id: int, snapshot: dict) -> dict[str, bool]:
     """Compare normal owner-scoped Analysis GET and FINN chat reads with frozen scores."""
     from backend.scripts.qa_protected_readback import read_json
-    from backend.scripts.probe_protected_account_answer import _read_tool_results
-    from backend.scripts.probe_protected_closed_paper_review import _chat_turn
 
     checks = {"analysis": True, "finn": True}
     for pair, expected in snapshot["pairs"].items():
@@ -71,20 +93,10 @@ def _transport_checks(user_id: int, snapshot: dict) -> dict[str, bool]:
         except Exception:
             checks["analysis"] = False
         try:
-            turn = asyncio.run(_chat_turn(
-                user_id,
-                f"Lees alleen mijn actuele Score 2.0 voor {pair} uit opgeslagen brondata. "
-                "Geef de benchmarkscore en bronstatus; wijzig niets.",
-            ))
-            if (turn.status != "completed" or turn.response is None
-                    or turn.response.proposal_id
-                    or turn.response.confirmation_required
-                    or turn.policy and turn.policy.execute_allowed):
+            rows = asyncio.run(_finn_pair_read(user_id, pair))
+            if rows is None:
                 checks["finn"] = False
                 continue
-            rows = asyncio.run(_read_tool_results(
-                run_id=turn.run_id, conversation_id=turn.conversation_id, user_id=user_id,
-            ))
             matches = [row["data"] for row in rows if isinstance(row, dict)
                        and row.get("scope") == "read_asset_scores"
                        and row.get("status") == "completed"
