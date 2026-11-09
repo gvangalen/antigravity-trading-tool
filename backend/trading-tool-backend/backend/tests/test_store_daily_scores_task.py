@@ -78,6 +78,42 @@ def test_repeated_pair_selection_queues_one_full_refresh(monkeypatch):
     assert len(closed) == 2
 
 
+def test_owner_score_repair_does_not_queue_a_second_provider_refresh(monkeypatch):
+    import redis
+    from backend.celery_task.celery_app import celery_app
+    from backend.services.indicator_score_refresh_service import (
+        queue_exact_market_owner_repair, queue_exact_market_refresh,
+    )
+
+    queued = []
+    keys = set()
+
+    class Throttle:
+        def set(self, key, value, *, nx, ex):
+            if key in keys:
+                return False
+            keys.add(key)
+            return True
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(redis, "from_url", lambda *_args, **_kwargs: Throttle())
+    monkeypatch.setattr(celery_app, "send_task", lambda name, kwargs: queued.append((name, kwargs)))
+
+    assert queue_exact_market_refresh(23, debounce_seconds=300)
+    assert queue_exact_market_refresh(23, debounce_seconds=300)
+    assert queue_exact_market_owner_repair(7, 23)
+    assert queue_exact_market_owner_repair(7, 23)
+    assert queue_exact_market_owner_repair(8, 23)
+
+    assert [name for name, _ in queued].count(
+        "backend.celery_task.market_task.sync_exact_market_snapshots") == 1
+    assert [kwargs for name, kwargs in queued if name.endswith("repair_exact_market_owner_scores")] == [
+        {"user_id": 7, "market_id": 23}, {"user_id": 8, "market_id": 23},
+    ]
+
+
 def test_run_rule_based_daily_scores_skips_when_previous_run_is_active(monkeypatch):
     import backend.celery_task.store_daily_scores_task as task_module
 

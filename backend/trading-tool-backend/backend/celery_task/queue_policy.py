@@ -34,6 +34,7 @@ TASK_QUEUE_ROUTES: Dict[str, str] = {
     "backend.celery_task.market_task.fetch_market_data": "market_data",
     "backend.celery_task.market_task.sync_configured_market_snapshots": "market_data",
     "backend.celery_task.market_task.sync_exact_market_snapshots": "market_data",
+    "backend.celery_task.market_task.repair_exact_market_owner_scores": "scoring",
     "backend.celery_task.indicator_history_task.bootstrap_indicator_histories": "market_data",
     "backend.celery_task.market_task.fetch_market_data_7d": "market_data",
     "backend.celery_task.market_task.save_market_data_daily": "market_data",

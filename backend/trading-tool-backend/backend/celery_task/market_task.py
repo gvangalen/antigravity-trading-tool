@@ -246,6 +246,50 @@ async def _sync_exact_market_snapshots(market_id: int | None = None) -> dict:
 def sync_exact_market_snapshots(market_id: int | None = None):
     return run_celery_coroutine(_sync_exact_market_snapshots(market_id=market_id))
 
+
+async def _repair_exact_market_owner_scores(user_id: int, market_id: int) -> dict:
+    """Rebuild one owner's pair evidence from stored sources, without provider calls."""
+    from backend.services.exact_market_indicator_service import ExactMarketIndicatorService
+    from backend.services.trading_market_service import TradingMarket
+    from backend.celery_task.store_daily_scores_task import build_daily_scores_for_market
+
+    if type(user_id) is not int or user_id <= 0 or type(market_id) is not int or market_id <= 0:
+        return {"status": "invalid_scope"}
+    async with async_session_factory() as session:
+        result = await session.execute(text("""
+            SELECT tm.id, tm.asset_symbol, tm.quote_currency, tm.venue,
+                   tm.provider, tm.provider_symbol, tm.tradingview_symbol,
+                   tm.source_verified_at
+            FROM trading_markets tm
+            WHERE tm.id = :market_id AND tm.is_active = TRUE
+              AND (EXISTS (SELECT 1 FROM watchlists w
+                           WHERE w.user_id = :user_id AND w.market_id = tm.id)
+                   OR EXISTS (SELECT 1 FROM setups s
+                              WHERE s.user_id = :user_id AND s.market_id = tm.id)
+                   OR EXISTS (SELECT 1 FROM user_indicator_configs c
+                              WHERE c.user_id = :user_id AND c.market_id = tm.id))
+        """), {"user_id": user_id, "market_id": market_id})
+        row = result.mappings().first()
+        if row is None:
+            return {"status": "owner_market_not_tracked"}
+        market = TradingMarket(**row)
+        materialized = await ExactMarketIndicatorService(session).materialize(
+            market, owner_ids={user_id}, only_owner=True)
+        await session.rollback()
+    scored = await asyncio.to_thread(build_daily_scores_for_market, user_id, market_id)
+    scores = scored["scores"]
+    status = ("complete" if all(scores.get(category) is not None
+                                for category in ("market", "macro", "technical"))
+              else "incomplete")
+    return {"status": status, "market_id": market_id, "user_id": user_id,
+            "indicator_count": materialized["written"], "scores": scores}
+
+
+@shared_task(name="backend.celery_task.market_task.repair_exact_market_owner_scores")
+def repair_exact_market_owner_scores(user_id: int, market_id: int):
+    return run_celery_coroutine(_repair_exact_market_owner_scores(
+        user_id=user_id, market_id=market_id))
+
 # =====================================================
 # 🔁 Safe HTTP-get met retry
 # =====================================================

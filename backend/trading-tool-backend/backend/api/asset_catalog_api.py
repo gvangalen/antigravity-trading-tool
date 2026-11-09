@@ -17,7 +17,9 @@ from backend.services.trading_market_service import MarketUnavailable, TradingMa
 from backend.services.market_data_ingestion_service import MarketDataIngestionService
 from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
 from backend.services.exact_market_workspace_service import ExactMarketWorkspaceService
-from backend.services.indicator_score_refresh_service import queue_exact_market_refresh
+from backend.services.indicator_score_refresh_service import (
+    queue_exact_market_refresh, queue_exact_market_owner_repair,
+)
 from backend.utils.auth_utils import get_current_user
 from backend.services.chart_candle_cache_service import cached_chart_candles, check_chart_request
 
@@ -265,6 +267,7 @@ async def select_crypto_trading_market(
                                market.pair, type(exc).__name__)
         if await _owner_tracks_exact_market(session, int(current_user["id"]), int(market.id)):
             refresh_queued = queue_exact_market_refresh(int(market.id), debounce_seconds=300)
+            queue_exact_market_owner_repair(int(current_user["id"]), int(market.id))
     response = {
         "market_id": market.id,
         "pair": market.pair,
@@ -300,6 +303,7 @@ async def select_crypto_trading_market(
             session, int(current_user["id"]), int(market.id)
         ):
             queue_exact_market_refresh(int(market.id), debounce_seconds=300)
+            queue_exact_market_owner_repair(int(current_user["id"]), int(market.id))
         response["workspace"] = workspace
     return response
 

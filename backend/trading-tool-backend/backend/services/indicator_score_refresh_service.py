@@ -41,6 +41,43 @@ def queue_exact_market_refresh(market_id: int, *, debounce_seconds: int = 0) -> 
             throttle.close()
 
 
+def queue_exact_market_owner_repair(user_id: int, market_id: int,
+                                    *, debounce_seconds: int = 60) -> bool:
+    """Rebuild one owner's score from stored pair sources without refetching them."""
+    if (type(user_id) is not int or user_id <= 0 or
+            type(market_id) is not int or market_id <= 0):
+        return False
+    throttle = None
+    throttle_key = f"exact-market-owner-score-repair:{market_id}:{user_id}"
+    try:
+        from backend.celery_task.celery_app import celery_app
+        if debounce_seconds > 0:
+            import redis
+            throttle = redis.from_url(
+                os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0"),
+                socket_connect_timeout=1, socket_timeout=1,
+            )
+            if not throttle.set(throttle_key, "1", nx=True, ex=debounce_seconds):
+                return True
+        celery_app.send_task(
+            "backend.celery_task.market_task.repair_exact_market_owner_scores",
+            kwargs={"user_id": user_id, "market_id": market_id},
+        )
+        return True
+    except Exception:
+        if throttle is not None:
+            try:
+                throttle.delete(throttle_key)
+            except Exception:
+                pass
+        logger.warning("Exact owner score repair could not be queued: market_id=%s",
+                       market_id, exc_info=True)
+        return False
+    finally:
+        if throttle is not None:
+            throttle.close()
+
+
 def queue_indicator_score_refresh(user_id: int, symbol: str,
                                   *, market_id: int | None = None) -> bool:
     """Refresh only the affected asset; the periodic sweep remains a fallback."""
