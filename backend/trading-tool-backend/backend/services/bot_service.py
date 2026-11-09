@@ -47,6 +47,7 @@ def _utc_iso(value: datetime | None) -> str | None:
 
 _PAPER_EXIT_EVIDENCE_FIELDS = (
     "trigger", "market_id", "market_quote_currency",
+    "source_ref", "execution_source_ref",
     "source_price_currency", "source_price", "source_price_at",
     "saved_stop_loss", "saved_first_target", "fx_eur_per_unit", "fx_observed_at",
     "execution_source_price_currency", "execution_source_price",
@@ -68,6 +69,17 @@ def _paper_exit_evidence(kind: str | None, raw: Any) -> dict | None:
     if not isinstance(data, dict):
         return None
     result = {key: data[key] for key in _PAPER_EXIT_EVIDENCE_FIELDS if data.get(key) is not None}
+    from backend.services.market_source_ref import market_source_ref
+    for key in ("source_ref", "execution_source_ref"):
+        source = result.get(key)
+        if isinstance(source, dict):
+            result[key] = market_source_ref(
+                market_id=source.get("market_id"),
+                measurement_id=source.get("measurement_id"),
+                source_observed_at=source.get("source_observed_at_utc"),
+            )
+        if not result.get(key):
+            result.pop(key, None)
     for key in ("source_price_at", "fx_observed_at", "execution_source_price_at", "execution_fx_observed_at"):
         raw_time = result.get(key)
         if isinstance(raw_time, str):
@@ -176,6 +188,31 @@ class BotService:
             return json.loads(v)
         except Exception:
             return fallback
+
+    @staticmethod
+    def _display_reasons(value) -> list[str]:
+        """Keep the today and history decision contracts as readable string lists."""
+        if isinstance(value, list):
+            candidates = value
+        elif isinstance(value, dict):
+            candidates = [value.get(key) for key in ("reason", "message", "detail")]
+        else:
+            candidates = []
+        return [item.strip() for item in candidates
+                if isinstance(item, str) and item.strip()
+                and item.strip() not in ("{}", "[]", "null")]
+
+    @staticmethod
+    def _market_quote_source_ref(scores: dict) -> dict | None:
+        source = scores.get("market_quote_source_ref")
+        if not isinstance(source, dict):
+            return None
+        from backend.services.market_source_ref import market_source_ref
+        return market_source_ref(
+            market_id=source.get("market_id"),
+            measurement_id=source.get("measurement_id"),
+            source_observed_at=source.get("source_observed_at_utc"),
+        )
 
     @staticmethod
     def _paper_preview_token(*, user_id: int, payload: BotManualOrderSchema,
@@ -1803,7 +1840,7 @@ class BotService:
                 scores_payload = {**scores_payload, **{
                     key: None for key in ("macro", "technical", "market", "setup", "combined", "setup_match")
                 }, "score_semantics": "legacy_unverified"}
-            reasons_payload = self._safe_json(r["reason_json"], [])
+            reasons_payload = self._display_reasons(self._safe_json(r["reason_json"], []))
             
             trade_plan = {"entry_plan": [], "stop_loss": {}, "targets": [], "risk": {}}
             if not lean:
@@ -1829,6 +1866,7 @@ class BotService:
                 "action": r["action"],
                 "confidence": r["confidence"],
                 "decision_basis": scores_payload.get("decision_basis"),
+                "market_quote_source_ref": self._market_quote_source_ref(scores_payload),
                 "scores_json": scores_payload or daily_scores,
                 "requested_amount_eur": scores_payload.get("requested_amount_eur"),
                 "amount_eur": scores_payload.get("amount_eur"),
@@ -1868,18 +1906,7 @@ class BotService:
         out = []
         for r in rows:
             scores = self._safe_json(r["scores_json"], {})
-            reasons = self._safe_json(r["reason_json"], [])
-            # Legacy rows may contain an empty JSON object. It is not a
-            # human-readable reason and must not appear as literal "{}".
-            if isinstance(reasons, list):
-                reasons = [reason.strip() for reason in reasons
-                           if isinstance(reason, str) and reason.strip()
-                           and reason.strip() not in ("{}", "[]", "null")]
-            elif isinstance(reasons, dict):
-                reasons = [reasons[key].strip() for key in ("reason", "message", "detail")
-                           if isinstance(reasons.get(key), str) and reasons[key].strip()]
-            else:
-                reasons = []
+            reasons = self._display_reasons(self._safe_json(r["reason_json"], []))
             
             setup_match = (
                 scores.get("setup_match")
@@ -1900,6 +1927,7 @@ class BotService:
                 "action": r["action"],
                 "confidence": r["confidence"],
                 "decision_basis": scores.get("decision_basis"),
+                "market_quote_source_ref": self._market_quote_source_ref(scores),
                 "exit_evidence": _paper_exit_evidence(r.get("decision_kind"), scores),
                 "amount_eur": r["amount_eur"],
                 "setup_match": setup_match,

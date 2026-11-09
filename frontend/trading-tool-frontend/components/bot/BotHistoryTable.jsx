@@ -5,6 +5,7 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 import { formatCurrency, formatDateTime, formatNumber } from "@/lib/i18n";
 import { paperPriceMessageKey } from "@/lib/bot/paperPriceMessage.mjs";
 import PaperExitEvidence from "@/components/bot/PaperExitEvidence";
+import { firstDisplayReason } from "@/lib/bot/displayReason.mjs";
 
 export default function BotHistoryTable({
   history = [],
@@ -109,7 +110,7 @@ export default function BotHistoryTable({
                     return hasAmounts ? `${label}: ${formatCurrency(Number(item.from_amount_eur), locale)} → ${formatCurrency(Number(item.to_amount_eur), locale)}` : label;
                   }).join(" · ")
                 : riskCodes[safety.reason_code] || riskCodes[guardrailResult.blocked_by] || (h.is_trade ? copy.tradeExecutedReason : null)
-                  || localizeReason(h.reasons?.find((item) => typeof item === "string" && item.trim() && !["{}", "[]", "null"].includes(item.trim())))
+                  || localizeReason(firstDisplayReason(h.reasons))
                   || guardrailResult.reason
                   || (status === "executed" ? copy.executedDecisionReason : copy.reasonNotRecorded));
               const dateValue = h.is_trade ? h.created_at : safety.checked_at || h.decision_ts || h.created_at || h.date;

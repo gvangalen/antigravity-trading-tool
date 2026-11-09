@@ -3,6 +3,7 @@ from __future__ import annotations
 from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
 from backend.schemas.finn_v2_evidence_schema import MarketSnapshotData
 from backend.services.finn_v2_tool_adapters.display_source_moment import display_source_moment
+from backend.services.market_source_ref import market_source_ref
 
 
 class MarketToolAdapter:
@@ -28,6 +29,11 @@ class MarketToolAdapter:
             "symbol": snapshot.symbol,
             "market_id": market_id,
             "pair": f"{asset}/{quote_currency}" if market_id is not None else None,
+            "source_ref": market_source_ref(
+                market_id=getattr(snapshot, "market_id", None),
+                measurement_id=getattr(snapshot, "id", None),
+                source_observed_at=getattr(snapshot, "source_observed_at", None),
+            ),
             "price": float(snapshot.price) if snapshot.price is not None else None,
             "quote_currency": (
                 str(snapshot.quote_currency).upper()

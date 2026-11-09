@@ -28,7 +28,7 @@ from backend.utils.auth_utils import create_access_token
 ACTION_SPECS = (
     ("select_asset", "Selecteer SOL als mijn actieve asset.", "Selecteer een asset als mijn actieve asset.", "SOL."),
     ("watchlist_add", "Voeg ETH/EUR toe aan mijn watchlist.", "Voeg een asset toe aan mijn watchlist.", "ETH/EUR."),
-    ("watchlist_remove", "Verwijder XRP uit mijn watchlist.", "Verwijder een asset uit mijn watchlist.", "XRP."),
+    ("watchlist_remove", "Verwijder mijn oude basisnotering XRP zonder handelspaar uit mijn watchlist.", "Verwijder mijn oude basisnotering uit mijn watchlist.", "XRP zonder handelspaar."),
     ("create_indicator_configuration", "Maak een technische RSI indicatorconfiguratie voor ADA.", "Maak een technische RSI indicatorconfiguratie.", "Voor ADA."),
     ("update_indicator_configuration", "Wijzig alleen de weging van Volume voor BTC/EUR naar laag; laat BTC/USDT ongemoeid.", "Pas de weging van mijn Volume-indicator aan.", "Voor BTC/EUR naar laag; laat BTC/USDT ongemoeid."),
     ("delete_indicator_configuration", "Verwijder mijn technische RSI indicatorconfiguratie voor SOL.", "Verwijder mijn technische RSI indicatorconfiguratie.", "Voor SOL."),
@@ -50,7 +50,7 @@ ACTION_SPECS = (
 GUIDED_SLOT_ANSWERS = {
     "select_asset": ("SOL.",),
     "watchlist_add": {"asset": "ETH.", "quote_currency": "ETH/EUR."},
-    "watchlist_remove": ("XRP.",),
+    "watchlist_remove": ("XRP zonder handelspaar.",),
     "create_indicator_configuration": ("Voor ADA.",),
     "update_indicator_configuration": ("Voor BTC/EUR.", "Zet de weging naar laag; laat BTC/USDT ongemoeid."),
     "delete_indicator_configuration": ("Voor SOL.",),
@@ -183,6 +183,15 @@ def _seed_fixtures(user_id: int) -> dict[str, int]:
             VALUES ('BTC', 'Bitcoin', 'crypto', 'local_fixture', 'matrix-btc-v1', CAST(:payload AS jsonb))
             ON CONFLICT (symbol) DO NOTHING
         """), {"payload": json.dumps({"fixture": "local_action_matrix"})})
+        connection.execute(text("""
+            INSERT INTO trading_markets
+                (asset_symbol, quote_currency, venue, provider, provider_symbol,
+                 tradingview_symbol, source_verified_at, is_active)
+            VALUES ('ETH', 'EUR', 'BINANCE', 'binance', 'ETHEUR',
+                    'BINANCE:ETHEUR', NOW(), TRUE)
+            ON CONFLICT (asset_symbol, quote_currency, venue) DO UPDATE SET
+                source_verified_at = EXCLUDED.source_verified_at, is_active = TRUE
+        """))
         # Fixture evidence is persisted domain data, not an injected FINN
         # answer. It lets the real evaluator release a verified score response
         # for follow-up lineage certification.

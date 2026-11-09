@@ -21,6 +21,7 @@ from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.services.finn_v2_tool_adapters.indicator_tool_adapter import IndicatorToolAdapter
 from backend.services.setup_market_match_service import SetupMarketMatchService
 from backend.services.setup_market_match_service import verified_indicator_evidence
+from backend.services.market_source_ref import market_source_ref
 from backend.services.pair_indicator_config_service import PairIndicatorConfigService, effective_pair_configs
 from backend.utils.scoring_utils import score_source_is_fresh
 from backend.services.trader_profile_service import normalize_trader_context, normalize_trader_profile_preferences
@@ -88,9 +89,20 @@ class FinnSharedContextService:
             )
             price_row = (await self.market_data.get_latest_exact_market_snapshot(market_id)
                          if market_id is not None else await self.market_data.get_latest_snapshot(asset))
+            if market_id is not None and price_row is not None:
+                market = await PairIndicatorConfigService(self.session).market(market_id)
+                if (market is None or market.asset_symbol != asset or
+                    str(getattr(price_row, "symbol", "")).upper() != asset or
+                    str(getattr(price_row, "quote_currency", "")).upper() != market.quote_currency):
+                    price_row = None
             price_as_of = getattr(price_row, "source_observed_at", None)
             price_fresh = score_source_is_fresh("market", "price", price_as_of, symbol=asset)
             market_snapshot = {
+                "source_ref": market_source_ref(
+                    market_id=getattr(price_row, "market_id", None),
+                    measurement_id=getattr(price_row, "id", None),
+                    source_observed_at=price_as_of,
+                ),
                 "source_status": "fresh" if price_fresh else "stale_or_missing",
                 "as_of": price_as_of,
                 "price": float(price_row.price) if price_fresh and price_row.price is not None else None,

@@ -269,6 +269,7 @@ def test_shared_context_serializes_real_indicator_schema_without_losing_configur
     service.strategies.query_strategies = AsyncMock(return_value=[])
     service.bots.get_bot_configs = AsyncMock(return_value=[])
     service.market_data.get_latest_snapshot = AsyncMock(return_value=SimpleNamespace(
+        id=456, market_id=None,
         source_observed_at=datetime.now(timezone.utc), price=61234.5,
         change_24h=1.2, volume=12345,
     ))
@@ -288,6 +289,9 @@ def test_shared_context_serializes_real_indicator_schema_without_losing_configur
             for category in ("market", "macro", "technical")] == ["Price", "DXY", "RSI"]
     assert asset["market_snapshot"]["source_status"] == "fresh"
     assert asset["market_snapshot"]["price"] == 61234.5
+    assert asset["market_snapshot"]["source_ref"]["measurement_id"] == 456
+    assert reports._report_facts(snapshot)["assets"][0]["market_snapshot"]["source_ref"] == (
+        asset["market_snapshot"]["source_ref"])
 
     service.market_data.get_latest_snapshot.return_value.source_observed_at = (
         datetime.now(timezone.utc) - timedelta(days=10)

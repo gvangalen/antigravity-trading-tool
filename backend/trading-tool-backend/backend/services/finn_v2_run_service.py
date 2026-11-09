@@ -82,6 +82,38 @@ from backend.utils import openai_client
 logger = logging.getLogger(__name__)
 
 
+def _trusted_cursor_previous_response(prior_contract, cursor: dict, *, user_id: int,
+                                      conversation_id: str, locale: str) -> dict | None:
+    """Project only a completed prior turn verified for this owner and conversation."""
+    if (prior_contract is None or prior_contract.user_id != user_id
+            or prior_contract.conversation_id != conversation_id):
+        return None
+    prior_state = dict(prior_contract.state_json or {})
+    exchange = dict(prior_state.get("responses_exchange") or {})
+    if (exchange.get("response_id") != cursor.get("response_id")
+            or prior_state.get("terminal_status") not in {"completed", "clarification_required"}):
+        return None
+    return {
+        "run_id": prior_contract.run_id,
+        "owner_user_id": prior_contract.user_id,
+        "response_id": (
+            cursor["response_id"]
+            if exchange.get("response_id_reusable", True)
+            and normalize_locale(cursor.get("locale")) == locale else None
+        ),
+        "answer": dict(prior_state.get("terminal_response") or {}).get("content"),
+        "terminal_kind": exchange.get("answer_kind") or prior_state.get("terminal_status"),
+        "terminal_status": prior_state.get("terminal_status"),
+        "open_choice": dict(prior_state.get("responses_clarification") or {}).get("question"),
+        "terminal_reason": (
+            dict(prior_state.get("responses_clarification") or {}).get("reason")
+            or next(iter(dict(prior_state.get("terminal_response") or {}).get("uncertainty") or []), None)
+        ),
+        "tool_trace": list(exchange.get("tool_trace") or []),
+        "turn_contract": exchange.get("turn_contract"),
+    }
+
+
 def _prior_inputs_for_open_correction(
     origin_inputs: dict[str, object], *, retain_parent_ids: bool,
     target_change_requested: bool, explicit_proposal_correction: bool,
@@ -2661,37 +2693,10 @@ class FinnV2RunService:
                 prior_contract = await orchestrator.runtime_contracts.get_for_run(
                     run_id=str(cursor["run_id"]),
                 )
-                if (
-                    prior_contract is not None
-                    and prior_contract.user_id == user_id
-                    and prior_contract.conversation_id == conversation_id
-                ):
-                    prior_state = dict(prior_contract.state_json or {})
-                    exchange = dict(prior_state.get("responses_exchange") or {})
-                    if (
-                        exchange.get("response_id") == cursor["response_id"]
-                        and prior_state.get("terminal_status") in {"completed", "clarification_required"}
-                    ):
-                        previous_response = {
-                            "run_id": prior_contract.run_id,
-                            "response_id": (
-                                cursor["response_id"]
-                                if (
-                                    exchange.get("response_id_reusable", True)
-                                    and normalize_locale(cursor.get("locale")) == locale
-                                ) else None
-                            ),
-                            "answer": dict(prior_state.get("terminal_response") or {}).get("content"),
-                            "terminal_kind": exchange.get("answer_kind") or prior_state.get("terminal_status"),
-                            "terminal_status": prior_state.get("terminal_status"),
-                            "open_choice": dict(prior_state.get("responses_clarification") or {}).get("question"),
-                            "terminal_reason": (
-                                dict(prior_state.get("responses_clarification") or {}).get("reason")
-                                or next(iter(dict(prior_state.get("terminal_response") or {}).get("uncertainty") or []), None)
-                            ),
-                            "tool_trace": list(exchange.get("tool_trace") or []),
-                            "turn_contract": exchange.get("turn_contract"),
-                        }
+                previous_response = _trusted_cursor_previous_response(
+                    prior_contract, cursor, user_id=user_id,
+                    conversation_id=conversation_id, locale=locale,
+                )
             prior_contract = await orchestrator.runtime_contracts.get_latest_for_conversation(
                 conversation_id=conversation_id, user_id=user_id, exclude_run_id=run_id,
             ) if conversation_id else None

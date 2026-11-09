@@ -4,6 +4,70 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Vier trader-gates: gecombineerde herstelkandidaat (9 november 2026)
+
+Phase: `BUILD_VALIDATING_LOCAL`. De productbranch `codex/trader-source-ref`
+bundelt een eigenaargebonden FINN-herlezing voor de vervolgvraag over dezelfde
+vier accountfeiten, een eenduidige koersrijverwijzing voor Analyse/FINN/rapport/
+Paper, en normalisatie van opgeslagen botredenen. Een bestaande `reasons`-vorm
+zonder array liet de botpagina tijdens renderen crashen. Onafhankelijke QA
+herleidde die fout op live SHA `ec63477275c1dc1f380baea8283245304fd70277`
+in Paper-only run `42536849454` tot de `.find`-aanroep in `BotFocusView`.
+De backend levert voor actuele en historische beslissingen nu een lijst met
+leesbare redenen; beide frontendweergaven verwerken ook oudere objectvormen.
+De historische botroute geeft bovendien de genormaliseerde UTC
+`market_quote_source_ref` van een opgeslagen beoordeling terug.
+
+Lokaal slaagden de volledige backend-suite vóór de laatste historische
+projectiewijziging (**4458 passed, 7 skipped**), frontend build, typecheck,
+i18n-lint/-tests, command-/proposal-/setuptests en high-audit (nul
+kwetsbaarheden). Een geoptimaliseerde browserbuild met een synthetisch
+oud `reasons`-object toonde de botnavigatie en botknop zonder pageerror.
+De actiematrix vóór de laatste historische projectiewijziging gaf **16/16**
+(plus 26 adaptertests),
+zonder brokerorders, Live-calls, Live-bots of productieverbindingen. De
+echte-provider ontwikkelset gaf **20/20** met nul provider-, schema-,
+parse-, validatie- of timeoutfouten. De providerregressie, definitieve
+herhalingen, PR-CI, deploy en onafhankelijke vier-gates-live-QA staan nog open.
+Security en Architecture gaven GO voor de gecombineerde code en het beperkte
+marktkoersbroncontract; dit is geen bewijs voor individuele indicatorbronnen.
+
+## Vier trader-gates: gedeelde marktkoersbron (8 november 2026)
+
+Phase: `BUILD_VALIDATED_LOCAL_ONLY`. De lokale branch
+`codex/trader-source-ref` koppelt een exacte marktkoers aan de geselecteerde
+`market_data`-rij met `market_id`, `measurement_id` en UTC-bronmoment. Analyse,
+FINN-marktlezing, de vastgelegde rapportsnapshot en Paper-botbesluit/exit/
+uitvoering dragen die verwijzing; de selecties eisen dezelfde actieve
+Binance-markt, symbool, quotevaluta, prijs en gedateerde bron en gebruiken
+dezelfde sorteervolgorde. De FINN-scoreprojectie noemt haar afzonderlijk
+gelezen koersverwijzing expliciet `market_quote_source_ref`: dit is geen bewijs
+voor de herkomst van afzonderlijke indicatorscores. De QA-contracttekst voor
+Gate 2 beperkt de acceptatie daarom tot marktkoersherkomst en vereist
+afzonderlijke browser- en transportcontrole. Architecture en Security gaven
+beide GO voor dit beperkte datacontract; onafhankelijke live QA heeft deze
+lokale productwijziging nog niet beoordeeld.
+
+De volledige backend-suite op de afgeronde code gaf **4394 passed, 7 skipped**.
+Frontend build, typecheck, i18n-lint, i18n-/command-/proposal-/setuptests en
+high-audit slaagden; de audit vond nul kwetsbaarheden. De laatste geïsoleerde
+API/prefork-Celery/Responses-matrix slaagde **38/38** (waaronder **16/16**
+actiecontracten), artifact
+`.local-finn-parity-artifacts/trader-source-ref-full-action-matrix-final.json`
+SHA-256 `8a02927a3abd08b691a9a7dc3acfa1f3e5b9ed4c6b93d2879d7ff3154db7b179`.
+De echte provider-developmentset gaf **20/20**, artifact SHA-256
+`9fe98d2b94cb81250ef7c7e3fa9eb3907b72a899ed831f6682b2c6b49c5ce09b`;
+de providerregressie gaf **109/109**, artifact SHA-256
+`f300fb384af12a6be9e6dd406dbac950b40fe99e1fedab114c4c84d726226c6c`.
+Beide hadden nul provider-, schema-, parse-, validatie- of timeoutfouten.
+Er is voor deze productbranch nog geen PR-CI, deploy of publieke SHA-pariteit.
+
+De actieve QA-control-plane-release is `a9b6a37772d6ee19d4859b746aa11ca70354ca59`:
+main-CI `42525133870`, Auto Deploy `42525398456`, backend en frontend HTTP
+200 met exact die SHA. De bestaande QA-agent herhaalt daarop de beschermde
+account- en Paper-UI-profielen. Deze productbranch wordt niet gedeployed
+tijdens die actieve onafhankelijke proef.
+
 ## FINN samengestelde watchlistvervanging na live QA (8 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_STATUS_UPDATE_PENDING`. De kandidaat op branch

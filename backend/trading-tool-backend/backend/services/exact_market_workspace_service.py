@@ -13,6 +13,7 @@ from backend.infrastructure.models import (
 from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
 from backend.services.setup_market_match_service import SetupMarketMatchService, verified_indicator_evidence
 from backend.services.pair_indicator_config_service import PairIndicatorConfigService, effective_pair_configs
+from backend.services.market_source_ref import market_source_ref
 from backend.utils.scoring_utils import normalize_indicator_name
 from backend.services.workspace_data_service import (
     STALE_AFTER_SECONDS, WorkspaceDataService, _current_indicator_rows, _freshness, _include_configured_rows, _iso, _market_row,
@@ -167,6 +168,11 @@ class ExactMarketWorkspaceService:
             "asset": {"symbol": symbol, "asset_class": "crypto",
                       "tradingview_symbol": market.tradingview_symbol},
             "quote": {
+                "source_ref": market_source_ref(
+                    market_id=int(market.id),
+                    measurement_id=getattr(latest, "id", None),
+                    source_observed_at=getattr(latest, "source_observed_at", None),
+                ),
                 "price": float(latest.price) if latest and latest.price is not None else None,
                 "change_24h": float(latest.change_24h) if latest and latest.change_24h is not None else None,
                 "volume": float(latest.volume) if latest and latest.volume is not None else None,
