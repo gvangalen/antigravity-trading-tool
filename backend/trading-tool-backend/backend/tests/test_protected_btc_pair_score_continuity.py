@@ -61,7 +61,7 @@ def test_finn_pair_read_uses_one_event_loop_and_disposes_engine(monkeypatch):
     monkeypatch.setattr(probe_protected_closed_paper_review, "_chat_turn", chat)
     monkeypatch.setattr(probe_protected_account_answer, "_read_tool_results", evidence)
     monkeypatch.setattr(database, "engine", SimpleNamespace(dispose=dispose))
-    assert asyncio.run(probe._finn_pair_read(11, "BTC/EUR")) == ([{"scope": "read_asset_scores"}], "ok")
+    assert asyncio.run(probe._finn_pair_read(11, "BTC/EUR")) == ([{"scope": "read_asset_scores"}], "ok", None)
     assert [name for name, _loop in steps] == ["turn", "evidence", "dispose"]
     assert len({loop for _name, loop in steps}) == 1
 
@@ -99,13 +99,13 @@ def test_finn_transport_diagnostic_uses_only_fixed_phase_codes(monkeypatch, rows
         "market_id": 1, "pair": "BTC/EUR", "combined": {"score": 45},
     })
     async def finn_read(*_args):
-        return rows, "ok"
+        return rows, "ok", None
     monkeypatch.setattr(probe, "_finn_pair_read", finn_read)
     result = probe._transport_checks(11, {"pairs": {"BTC/EUR": {
         "market_id": 1, "score": 45,
     }}})
     assert result == {"analysis": True, "finn": False,
-                      "finn_codes": {"BTC/EUR": expected}}
+                      "finn_codes": {"BTC/EUR": expected}, "finn_runtime_codes": {}}
     assert "99" not in str(result) and "11" not in str(result)
 
 
@@ -177,6 +177,102 @@ def test_outage_browser_scopes_pending_score_and_quote_market(
     monkeypatch.setattr(qa_protected_browser, "observe_page", observe_page)
     phases = asyncio.run(probe._stale_date_display(11, source_at, 1))
     assert phases == {"amsterdam": phase, "new_york": phase, "tokyo": phase}
+
+
+def test_finn_terminal_diagnostic_is_allowlisted_and_redacts_secret_values():
+    secret = "private-owner-92871-token-value"
+    turn = SimpleNamespace(
+        status="failed", error_code=secret, error_message=secret,
+        runtime_trace={"reasoning": {"status": "failed", "error_codes": [secret]},
+                       "orchestrator": {"outcome": "failed", "snapshot_id": secret}},
+    )
+    result = probe._finn_terminal_diagnostic(turn)
+    assert result == {"status": "failed", "error_code": "other",
+                      "reasoning_status": "failed", "orchestrator_outcome": "failed"}
+    assert secret not in str(result)
+
+
+def test_finn_noncompleted_turn_reports_fixed_status_and_reason(monkeypatch):
+    from backend.infrastructure import database
+    from backend.scripts import probe_protected_closed_paper_review
+
+    async def chat(*_args):
+        return SimpleNamespace(status="unavailable", response=None,
+                               error_code="selector_phase_timeout",
+                               runtime_trace={"reasoning": {"status": "unavailable"},
+                                              "orchestrator": {"outcome": "failed"}})
+    async def dispose():
+        return None
+    monkeypatch.setattr(probe_protected_closed_paper_review, "_chat_turn", chat)
+    monkeypatch.setattr(database, "engine", SimpleNamespace(dispose=dispose))
+    assert asyncio.run(probe._finn_pair_read(11, "BTC/EUR")) == (
+        None, "turn_unavailable", {"status": "unavailable", "error_code": "selector_phase_timeout",
+                                   "reasoning_status": "unavailable", "orchestrator_outcome": "failed"},
+    )
+
+
+@pytest.mark.parametrize("response,expected", [
+    (None, "response_missing"),
+    (SimpleNamespace(proposal_id="private-proposal", confirmation_required=False), "action_boundary"),
+])
+def test_finn_completed_turn_separates_missing_response_from_action_boundary(
+    monkeypatch, response, expected,
+):
+    from backend.infrastructure import database
+    from backend.scripts import probe_protected_closed_paper_review
+
+    async def chat(*_args):
+        return SimpleNamespace(status="completed", response=response, policy=None,
+                               error_code=None, runtime_trace={})
+    async def dispose():
+        return None
+    monkeypatch.setattr(probe_protected_closed_paper_review, "_chat_turn", chat)
+    monkeypatch.setattr(database, "engine", SimpleNamespace(dispose=dispose))
+    rows, phase, diagnostic = asyncio.run(probe._finn_pair_read(11, "BTC/EUR"))
+    assert rows is None and phase == expected
+    assert diagnostic == {"status": "completed", "error_code": "none",
+                          "reasoning_status": "other", "orchestrator_outcome": "other"}
+
+
+@pytest.mark.parametrize("callback_mode,expected", [
+    ("absent", "request_absent"),
+    ("owner_get_error", "owner_get_error"),
+    ("owner_get_invariant", "owner_get_invariant"),
+    ("owner_get_ok_no_response", "selection_response_absent"),
+    ("response_error", "selection_response_error"),
+])
+def test_outage_browser_classifies_selection_subphase(monkeypatch, callback_mode, expected):
+    from backend.scripts import qa_protected_browser, qa_protected_readback
+
+    source_at = "2026-10-10T00:30:00+00:00"
+    if callback_mode == "owner_get_error":
+        monkeypatch.setattr(qa_protected_readback, "read_json", lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("private-92741")))
+    elif callback_mode == "owner_get_invariant":
+        monkeypatch.setattr(qa_protected_readback, "read_json", lambda **_kwargs: {"pair": "BTC/USDT"})
+    elif callback_mode == "owner_get_ok_no_response":
+        monkeypatch.setattr(qa_protected_readback, "read_json", lambda **_kwargs: {
+            "pair": "BTC/EUR", "market_id": 1,
+            "score_source_observed_at": {"market": {"change_24h": source_at}},
+            "categories": {"market": {"rows": [{"name": "change_24h", "score": None,
+                "indicator_source_observed_at": source_at,
+                "source_observed_at": "2026-11-09T09:12:00+00:00"}]}},
+            "quote": {"source_ref": {"market_id": 1, "measurement_id": 9,
+                                     "source_observed_at_utc": "2026-11-09T09:12:00+00:00"}},
+            "daily": {"market": {"score": None}}, "combined": {"score": None},
+        })
+    async def observe_page(*, fixture_exact_selection, observe_response, inspect, **_kwargs):
+        if callback_mode.startswith("owner_get"):
+            if callback_mode == "owner_get_ok_no_response":
+                assert fixture_exact_selection()["pair"] == "BTC/EUR"
+            else:
+                with pytest.raises(Exception):
+                    fixture_exact_selection()
+        if callback_mode == "response_error":
+            observe_response(SimpleNamespace(url="https://tradamind.com/api/assets/BTC/trading-markets/EUR/select", status=500))
+        return await inspect(SimpleNamespace())
+    monkeypatch.setattr(qa_protected_browser, "observe_page", observe_page)
+    result = asyncio.run(probe._stale_date_display(11, source_at, 1))
+    assert result == {"amsterdam": expected, "new_york": expected, "tokyo": expected}
 
 
 def test_real_browser_requires_old_source_date_inside_btc_eur_indicator_row():
