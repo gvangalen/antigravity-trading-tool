@@ -56,6 +56,10 @@ async def _scenario(token: str, scenario: tuple) -> dict[str, str | bool]:
                 if request.method == "POST" and urlsplit(request.url).path == "/api/assistant/chat/stream" else None)
         page.on("requestfailed", lambda request: failed.append(request)
                 if request.method == "POST" and urlsplit(request.url).path == "/api/assistant/chat/stream" else None)
+        state["stage"] = "composer_open"
+        launcher = page.locator('form input[type="text"]').last
+        await launcher.wait_for(state="visible", timeout=15000)
+        await launcher.click()
         composer = page.locator("textarea").last
         state["stage"] = "composer_visible"
         await composer.wait_for(state="visible", timeout=15000)
