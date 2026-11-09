@@ -44,7 +44,7 @@ from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResol
 from backend.services import finn_v2_entity_resolution_service as entity_resolution_module
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
 from backend.services.finn_v2_operation_classification_service import FinnV2OperationClassificationService
-from backend.services.watchlist_conversation_service import replacement_mentions
+from backend.services.watchlist_conversation_service import ambiguous_asset_change_scope, replacement_mentions
 from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
 from backend.services.finn_v2_account_bundle_answer import render_account_bundle_answer
 
@@ -1075,6 +1075,17 @@ class FinnResponsesFrontDoor:
         )
         catalog = FinnResponsesToolCatalog(individual_proposals=individual_proposals)
         replacement = replacement_mentions(message, DEFAULT_ASSET_CATALOG)
+        if not replacement and ambiguous_asset_change_scope(message, DEFAULT_ASSET_CATALOG):
+            question = {
+                "en": "Do you mean a change to your watchlist or your portfolio?",
+                "de": "Meinst du eine Änderung an deiner Watchlist oder deinem Portfolio?",
+            }.get(str(locale).split("-")[0].lower(), "Bedoel je een wijziging in je watchlist of je portfolio?")
+            return FinnResponsesFrontDoorResult(
+                FinnResponsesResult(
+                    text=question, response_id=f"asset-change-scope-{self.run_id}",
+                    tool_trace=(), response_id_reusable=False,
+                ), None, previous_response, locale=locale,
+            )
         if replacement:
             follows_asset = bool(re.search(r"\b(?:volg|volgen|follow|following)\b", message, re.I))
             watchlist_scope = bool(re.search(r"\b(?:watchlist|volglijst)\b", message, re.I)) or follows_asset
