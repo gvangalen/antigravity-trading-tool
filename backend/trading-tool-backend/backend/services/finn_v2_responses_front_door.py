@@ -46,6 +46,7 @@ from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestP
 from backend.services.finn_v2_operation_classification_service import FinnV2OperationClassificationService
 from backend.services.watchlist_conversation_service import replacement_mentions
 from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
+from backend.services.finn_v2_account_bundle_answer import render_account_bundle_answer
 
 logger = logging.getLogger(__name__)
 
@@ -3941,6 +3942,11 @@ class FinnResponsesFrontDoor:
                 previous_subject=(previous_response or {}).get("verified_setup_subject"),
                 previous_contract=previous_turn_contract,
             ), model_owned_repair=result.answer_kind == "free_text")
+        if (account_state_bundle and is_read_only_turn and result.answer_kind == "free_text"
+                and result.tool_trace):
+            canonical_answer = render_account_bundle_answer(result.tool_trace, locale=locale)
+            if canonical_answer is not None:
+                result = replace(result, text=canonical_answer, model_owned_repair=False)
         recent_action_result = dict(conversation_context.get("previous_action_result") or {})
         if recent_action_result.get("owner_user_id") != self.user_id or recent_action_result.get("result_status") != "succeeded":
             recent_action_result = {}
