@@ -30,6 +30,14 @@ _SAFE_FINN_ERROR_CODES = frozenset({
     "orchestrator_failed", "selector_phase_timeout", "lifecycle_deadline_exceeded",
     "responses_provider_quota_unavailable", "runtime_contract_terminal_projection_missing",
     "tool_execution_failed", "run_canceled",
+    "responses_evidence_not_verified", "insufficient_evidence", "source_unavailable",
+    "responses_tool_execution_failed", "responses_provider_timeout",
+    "responses_provider_error", "responses_lifecycle_budget_exhausted",
+    "responses_tool_round_limit", "responses_incomplete", "responses_empty_answer",
+    "responses_selection_missing", "responses_internal_preamble_without_answer",
+    "tool_relevance_unverified", "tool_not_relevant_to_request",
+    "market_pair_ambiguous", "market_pair_not_supported", "score_missing",
+    "turn_contract_mismatch", "price_relation_conflicts_with_source",
 })
 _SAFE_FINN_STATUSES = frozenset({
     "created", "queued", "collecting", "planned", "reasoning", "verifying",
@@ -206,14 +214,26 @@ async def _stale_date_display(user_id: int, source_at: str, market_id: int) -> d
                                 .get("market") or {}).get("change_24h")
                 expected_stale = None
                 try:
-                    selected_stale = datetime.fromisoformat(str(stale_moment).replace("Z", "+00:00"))
                     expected_stale = datetime.fromisoformat(str(source_at).replace("Z", "+00:00"))
-                    same_stale = (
-                        selected_stale.replace(tzinfo=selected_stale.tzinfo or timezone.utc).astimezone(timezone.utc)
-                        == expected_stale.replace(tzinfo=expected_stale.tzinfo or timezone.utc).astimezone(timezone.utc)
-                    )
                 except ValueError:
-                    same_stale = False
+                    pass
+                if expected_stale is not None:
+                    expected_stale = expected_stale.replace(
+                        tzinfo=expected_stale.tzinfo or timezone.utc,
+                    ).astimezone(timezone.utc)
+                # A pending score may have no verified score-source projection.
+                # The independent fixture snapshot and visible indicator row
+                # still prove the old measurement instant exactly.
+                same_saved_source = stale_moment is None
+                if stale_moment is not None:
+                    try:
+                        selected_stale = datetime.fromisoformat(str(stale_moment).replace("Z", "+00:00"))
+                        same_saved_source = (
+                            selected_stale.replace(tzinfo=selected_stale.tzinfo or timezone.utc)
+                            .astimezone(timezone.utc) == expected_stale
+                        )
+                    except ValueError:
+                        same_saved_source = False
                 row = [item for item in (workspace.get("categories") or {}).get("market", {}).get("rows", [])
                        if item.get("name") == "change_24h"]
                 quote_ref = _normalized_ref((workspace.get("quote") or {}).get("source_ref"))
@@ -226,12 +246,21 @@ async def _stale_date_display(user_id: int, source_at: str, market_id: int) -> d
                     row_current = row_current.replace(tzinfo=row_current.tzinfo or timezone.utc).astimezone(timezone.utc)
                 except (IndexError, ValueError):
                     row_old = row_current = None
-                if (workspace.get("pair") != "BTC/EUR" or workspace.get("market_id") != market_id
-                        or quote_ref is None or quote_ref[0] != market_id
-                        or len(row) != 1 or row[0].get("score") is not None
-                        or (workspace.get("daily") or {}).get("market", {}).get("score") is not None
-                        or (workspace.get("combined") or {}).get("score") is not None
-                        or not same_stale or row_old != expected_stale or row_current != quote_ref[2]):
+                failed = [code for condition, code in (
+                    (workspace.get("pair") != "BTC/EUR", "pair"),
+                    (workspace.get("market_id") != market_id, "market"),
+                    (quote_ref is None, "quote_ref_missing"),
+                    (quote_ref is not None and quote_ref[0] != market_id, "quote_ref_market"),
+                    (len(row) != 1, "indicator_row"),
+                    (len(row) == 1 and row[0].get("score") is not None, "indicator_score"),
+                    ((workspace.get("daily") or {}).get("market", {}).get("score") is not None, "daily_score"),
+                    ((workspace.get("combined") or {}).get("score") is not None, "combined_score"),
+                    (not same_saved_source, "saved_source"),
+                    (row_old != expected_stale, "indicator_source"),
+                    (row_current != (quote_ref[2] if quote_ref else None), "quote_source"),
+                ) if condition]
+                if failed:
+                    selection_state["code"] = "owner_get_invariant_" + failed[0]
                     raise RuntimeError("trader_pair_browser_readback_invalid")
                 selection_state["code"] = "owner_get_ok"
                 return {"market_id": workspace["market_id"], "pair": "BTC/EUR",

@@ -17,6 +17,7 @@ PAIR_CLEANUP_LABELS = frozenset({
     "audit-42551140172-1-43009b2a",
     "audit-42552626218-1-a30e0117",
     "audit-42556709762-1-30a20e36",
+    "audit-42559343113-1-dcc45900",
 })
 
 

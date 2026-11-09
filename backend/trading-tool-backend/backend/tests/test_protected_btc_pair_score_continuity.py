@@ -190,6 +190,8 @@ def test_finn_terminal_diagnostic_is_allowlisted_and_redacts_secret_values():
     assert result == {"status": "failed", "error_code": "other",
                       "reasoning_status": "failed", "orchestrator_outcome": "failed"}
     assert secret not in str(result)
+    turn.error_code = "market_pair_ambiguous"
+    assert probe._finn_terminal_diagnostic(turn)["error_code"] == "market_pair_ambiguous"
 
 
 def test_finn_noncompleted_turn_reports_fixed_status_and_reason(monkeypatch):
@@ -237,8 +239,10 @@ def test_finn_completed_turn_separates_missing_response_from_action_boundary(
 @pytest.mark.parametrize("callback_mode,expected", [
     ("absent", "request_absent"),
     ("owner_get_error", "owner_get_error"),
-    ("owner_get_invariant", "owner_get_invariant"),
+    ("owner_get_invariant", "owner_get_invariant_pair"),
     ("owner_get_ok_no_response", "selection_response_absent"),
+    ("owner_get_bad_saved_source", "owner_get_invariant_saved_source"),
+    ("owner_get_bad_indicator_source", "owner_get_invariant_indicator_source"),
     ("response_error", "selection_response_error"),
 ])
 def test_outage_browser_classifies_selection_subphase(monkeypatch, callback_mode, expected):
@@ -249,17 +253,25 @@ def test_outage_browser_classifies_selection_subphase(monkeypatch, callback_mode
         monkeypatch.setattr(qa_protected_readback, "read_json", lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("private-92741")))
     elif callback_mode == "owner_get_invariant":
         monkeypatch.setattr(qa_protected_readback, "read_json", lambda **_kwargs: {"pair": "BTC/USDT"})
-    elif callback_mode == "owner_get_ok_no_response":
-        monkeypatch.setattr(qa_protected_readback, "read_json", lambda **_kwargs: {
+    elif callback_mode in {"owner_get_ok_no_response", "owner_get_bad_saved_source",
+                           "owner_get_bad_indicator_source"}:
+        workspace = {
             "pair": "BTC/EUR", "market_id": 1,
-            "score_source_observed_at": {"market": {"change_24h": source_at}},
+            "score_source_observed_at": {},
             "categories": {"market": {"rows": [{"name": "change_24h", "score": None,
                 "indicator_source_observed_at": source_at,
                 "source_observed_at": "2026-11-09T09:12:00+00:00"}]}},
             "quote": {"source_ref": {"market_id": 1, "measurement_id": 9,
                                      "source_observed_at_utc": "2026-11-09T09:12:00+00:00"}},
             "daily": {"market": {"score": None}}, "combined": {"score": None},
-        })
+        }
+        if callback_mode == "owner_get_bad_saved_source":
+            workspace["score_source_observed_at"] = {
+                "market": {"change_24h": "2026-10-09T00:30:00+00:00"}}
+        if callback_mode == "owner_get_bad_indicator_source":
+            workspace["categories"]["market"]["rows"][0]["indicator_source_observed_at"] = (
+                "2026-10-09T00:30:00+00:00")
+        monkeypatch.setattr(qa_protected_readback, "read_json", lambda **_kwargs: workspace)
     async def observe_page(*, fixture_exact_selection, observe_response, inspect, **_kwargs):
         if callback_mode.startswith("owner_get"):
             if callback_mode == "owner_get_ok_no_response":
