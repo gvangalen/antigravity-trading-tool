@@ -4,6 +4,55 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Vier trader-gates: FINN-accountantwoord en gedateerde indicatormeting (9 november 2026)
+
+Phase: `BUILD_VALIDATED_LOCAL_CI_PENDING`. Branch `codex/trader-four-gates-followup`
+bundelt de nog niet gedeployde productreparaties voor Gate 1 en Gate 3. Voor een
+samengestelde Nederlandstalige Paper-accountvraag projecteert FINN de zeven
+gevraagde feiten uit coherente eigenaargebonden setup-, strategie-, bot- en
+portfoliobronnen. De laatste beslissingstijd komt rechtstreeks uit de
+gedateerde botbron en wordt als UTC én Amsterdam-tijd getoond. Een onvolledige
+of tegenstrijdige read valt terug naar de bestaande verificatie; Live-posities
+worden niet uit een Paper-ledger afgeleid. De serverprojectie heeft een eigen
+provenance en hergebruikt de oorspronkelijke provider-cursor niet.
+
+Bij een actuele BTC/EUR-koers en een achterlopende 24-uursindicator bewaart de
+exact-market-workspace zowel het oude indicatorbronmoment als het bronmoment
+van de getoonde koers. Analyse toont beide met expliciet UTC-label in de altijd
+zichtbare indicatorrij en houdt de indicatorscore op wachten tot herberekening.
+De oude score wordt niet hergebruikt. Security en Architecture gaven GO voor
+deze beperkte productdiff; de bestaande QA-agent gaf een gerichte code-GO.
+
+Gemeten lokaal op de productcode: root backend **4501 passed, 7 skipped**;
+frontend build, typecheck, i18n-lint en -tests, command-/voorstel-/setuptests en
+high-severity audit slaagden (nul kwetsbaarheden). De finale geïsoleerde
+FastAPI/Celery-actiematrix slaagde **16/16** met nul Live-calls, Live-bots,
+brokerorders of productieverbindingen (artifact SHA-256
+`aefb029e524c85875e7e9f055e4dcabf15cb93a4c27dc05786634ea2c169f24f`).
+Een lokale echte worker-/Responses-accountproef voltooide eerste vraag én
+vervolgvraag met juiste UTC/Amsterdam-tijd, Paper-positie, polling/SSE-pariteit
+en niet-herbruikbare cursor, zonder order (artifact SHA-256
+`ecd2bcf191d9b8bbb7126acd30c618eb2ccef1115cea42c7470de689e4b478a2`).
+De echte-provider selectorontwikkeling slaagde **20/20** en regressie **109/109**
+zonder provider-, schema-, timeout-, parse- of validatiefouten (artifact
+SHA-256 `f5c349db5a56d280ba984826c13bea9b5ffbcbe9527b9ac5a5d8ac3657a9dfea`
+en `49c07cde6e6544bf80dab087e04c72a033015999d778af817180fb7466bb2cfe`).
+De selector is na die meting niet gewijzigd. Na de volledige suite is alleen
+een gerichte backendregressie uitgebreid; alle acht exact-market-tests slagen.
+
+Onafhankelijke live QA: Gate 2 **PASS** op `1d8c6a3a` (run `42549360658-1`)
+voor vier bronnen en zes browserzones. Gate 4 **PASS** op `20322165` (run
+`42543404227-1`) met één Paper-exit en geen dubbele verkoop; productcode voor
+de exit is sindsdien niet veranderd. Gate 1 **FAIL** op `169d0252` door een
+tegenstrijdige beslissingstijd in de vervolgvraag; de reparatie wacht op live
+hertest. Gate 3 **niet geaccepteerd** op `a30e0117`: de score-/paarinvarianten
+gaven geen failcodes, maar FINN-readback en de browserdatumcheck faalden. QA
+heeft de onjuiste browseraanname vastgesteld; de aangescherpte beschermde
+proef in PR #921 eist beide zichtbare bronmomenten en een wachtende score op
+dezelfde BTC/EUR-rij. PR #921 mag pas na deze productdeploy draaien. Alle vier
+oude Gate 3-kindfixtures zijn begrensd opgeruimd; een vijfde is inactief
+geaudit en wacht op de exact toegestane cleanup. Dit is nog geen live-GO.
+
 ## Vier trader-gates: gecombineerde herstelkandidaat (9 november 2026)
 
 Phase: `BUILD_VALIDATING_LOCAL`. De productbranch `codex/trader-source-ref`

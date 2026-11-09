@@ -1967,8 +1967,11 @@ class FinnV2RunService:
             "confirmation_required": False,
             "reasoning_provenance": {
                 "reasoning_source": reasoning_source,
-                "provider_response_id": response_id,
-                **({"answer_boundary": "minimal_typed_source"} if minimal_source_boundary else {}),
+                **({"provider_response_id": response_id}
+                   if reasoning_source != "owner_scoped_account_projection" else
+                   {"answer_boundary": "owner_scoped_account_bundle"}),
+                **({"answer_boundary": "minimal_typed_source"}
+                   if minimal_source_boundary and reasoning_source != "owner_scoped_account_projection" else {}),
                 **({"local_model_only_experiment": True} if model_only_experiment else {}),
             },
         }
@@ -5439,6 +5442,10 @@ class FinnV2RunService:
                                 ),
                                 persist_owner_bound_subject=minimal_read_used,
                                 minimal_source_boundary=minimal_read_used,
+                                reasoning_source=(
+                                    "owner_scoped_account_projection"
+                                    if prepared.response.account_source_projection else "responses_tool_loop"
+                                ),
                             )
                         return
 

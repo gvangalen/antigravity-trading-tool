@@ -345,6 +345,7 @@ class FinnResponsesResult:
     response_id_reusable: bool = True
     turn_contract: dict[str, Any] | None = None
     model_owned_repair: bool = False
+    account_source_projection: bool = False
 
 
 class FinnResponsesLoop:

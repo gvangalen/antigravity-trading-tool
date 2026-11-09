@@ -33,6 +33,10 @@ def _align_change_24h_row(market_rows: list[dict], latest) -> None:
         except (TypeError, ValueError):
             same_value = False
         if row.get("source_observed_at") != _iso(latest.source_observed_at) or not same_value:
+            # The visible 24h value now comes from the latest pair quote. Keep
+            # the older indicator measurement moment separately so the UI can
+            # explain why its score has not caught up with that quote yet.
+            row["indicator_source_observed_at"] = row.get("source_observed_at")
             row.update({"value": float(latest.change_24h),
                         "source_observed_at": _iso(latest.source_observed_at),
                         "score": None, "data_status": "pending_refresh"})

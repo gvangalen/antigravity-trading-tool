@@ -94,6 +94,39 @@ def test_read_only_bot_turn_keeps_the_owner_verified_setup_for_next_score_questi
     )
 
 
+def test_owner_account_projection_has_server_provenance_without_provider_answer_id():
+    run = SimpleNamespace(
+        id="account-turn", conversation_id="conversation-1", trace_id="trace-1",
+        user_id=7, status="planned", message="Wat zijn mijn opgeslagen accountfeiten?",
+        client_context_json={},
+    )
+    service = FinnV2RunService.__new__(FinnV2RunService)
+    service.runs = SimpleNamespace(
+        get_by_id_for_user=AsyncMock(return_value=run), update_status=AsyncMock(),
+    )
+    service.runtime_contracts = SimpleNamespace(
+        get_for_run=AsyncMock(return_value=SimpleNamespace(state_json={
+            "responses_exchange": {"answer_kind": "free_text", "tool_trace": [], "turn_contract": {}},
+        })),
+        record_verified_setup_subject=AsyncMock(),
+        materialize_terminal=AsyncMock(return_value=SimpleNamespace(terminal_projection_json={})),
+    )
+    service.traces = SimpleNamespace(append_event=AsyncMock())
+    service.conversations = SimpleNamespace(set_responses_cursor=AsyncMock())
+    service._trace_payload = lambda *_args, **_kwargs: {}
+    service._commit_session_if_possible = AsyncMock()
+    asyncio.run(service.complete_responses_read(
+        run_id=run.id, user_id=7, response_id="model-original",
+        answer=FinnResponsesVerifiedAnswer("completed", "Exacte opgeslagen feiten.", None, ()),
+        reasoning_source="owner_scoped_account_projection", locale="nl",
+    ))
+    response = service.runtime_contracts.materialize_terminal.call_args.kwargs["response"]
+    assert response["reasoning_provenance"] == {
+        "reasoning_source": "owner_scoped_account_projection",
+        "answer_boundary": "owner_scoped_account_bundle",
+    }
+
+
 def test_completed_owner_review_read_persists_only_verified_dossier_references():
     run = SimpleNamespace(
         id="review-turn", conversation_id="conversation-1", trace_id="trace-1",
