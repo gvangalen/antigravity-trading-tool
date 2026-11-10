@@ -34,7 +34,13 @@ class ExactMarketIndicatorService:
                 SELECT user_id FROM setups WHERE market_id = :market_id
                 UNION
                 SELECT user_id FROM watchlists WHERE market_id = :market_id
-            """), {"market_id": market.id})
+            UNION
+            SELECT w.user_id FROM watchlists w
+            JOIN asset_catalog a ON a.symbol = :asset_symbol
+            WHERE w.symbol = :asset_symbol AND w.market_id IS NULL
+              AND a.quote_currency = :quote_currency
+            """), {"market_id": market.id, "asset_symbol": market.asset_symbol,
+                    "quote_currency": market.quote_currency})
             owner_ids.update(int(row[0]) for row in owners_result.fetchall())
             configured_result = await self.session.execute(select(UserIndicatorConfig.user_id).where(
                 UserIndicatorConfig.market_id == market.id,
