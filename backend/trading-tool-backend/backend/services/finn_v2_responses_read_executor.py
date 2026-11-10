@@ -170,9 +170,12 @@ class FinnResponsesReadExecutor:
         missing_linked_bot = (
             call.name == "get_active_plan_and_strategy"
             and all(item["status"] == "completed" for item in results[:4])
-            and {item["scope"] for item in results[4:]} == {"read_linked_bot", "read_bot_status"}
+            and {item["scope"] for item in results[4:] if item["scope"] != "read_latest_report"}
+            == {"read_linked_bot", "read_bot_status"}
             and all(item["status"] == "unavailable" and item["reason"] == "bot_not_resolved"
-                    for item in results[4:])
+                    for item in results[4:] if item["scope"] != "read_latest_report")
+            and all(item["status"] == "completed" for item in results[4:]
+                    if item["scope"] == "read_latest_report")
         )
         output = {
             "status": "completed" if missing_linked_bot or all(
@@ -405,6 +408,14 @@ class FinnResponsesReadExecutor:
                 "paper_initial_cash_eur is starting virtual cash, not proof of current cash. "
                 "A budget cap is distinct from current Paper cash and from whether the bot is paused."
             ).strip()
+        if any(item["scope"] == "read_latest_report" and item["status"] == "completed" for item in results):
+            output["evidence_boundary"] = " ".join(filter(None, (
+                output.get("evidence_boundary"),
+                "The owner-read daily report is a historical snapshot. When comparing it "
+                "with the current market quote, state each source moment with the full "
+                "date including year, clock time and explicit time zone. Never describe "
+                "the report price as the latest market price.",
+            )))
         if any(
             item["scope"] == "read_asset_scores" and item["status"] == "completed"
             for item in results

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 
 from backend.infrastructure.repositories.report_repository import ReportRepository
 from backend.schemas.finn_v2_evidence_schema import LatestReportData
@@ -12,7 +13,12 @@ class ReportToolAdapter:
 
     async def execute(self, *, user_id: int, asset: str, selector: dict, **_kwargs):
         table_name = selector.get("report_type") or "daily_reports"
-        row = await self.repository.get_latest_report(user_id, table_name)
+        if selector.get("report_date_unresolved"):
+            raise LookupError("report_date_required")
+        requested_date = selector.get("report_date")
+        row = (await self.repository.get_report_by_date(
+            user_id, table_name, date.fromisoformat(str(requested_date)),
+        ) if requested_date else await self.repository.get_latest_report(user_id, table_name))
         if not row:
             raise LookupError("report_not_found")
         snapshot = row.get("score_source_snapshot") if table_name == "daily_reports" else None
@@ -24,11 +30,20 @@ class ReportToolAdapter:
         if not isinstance(snapshot, dict):
             snapshot = None
         elif isinstance(snapshot.get("assets"), list):
+            if asset and not any(
+                isinstance(item, dict) and str(item.get("symbol") or "").upper() == asset.upper()
+                for item in snapshot["assets"]
+            ):
+                raise LookupError("report_asset_not_found")
             # Read only the saved, owner-scoped report facts; bound the context
             # size without substituting today's scores for a historical report.
-            snapshot = {**snapshot, "assets": snapshot["assets"][:30]}
+            snapshot = {**snapshot, "assets": (
+                [item for item in snapshot["assets"] if isinstance(item, dict)
+                 and str(item.get("symbol") or "").upper() == asset.upper()]
+                if requested_date and asset else snapshot["assets"][:30]
+            )}
         report_assets = snapshot.get("assets") if snapshot else None
-        report_symbol = asset if not isinstance(report_assets, list) else (
+        report_symbol = None if not isinstance(report_assets, list) else (
             report_assets[0].get("symbol") if len(report_assets) == 1
             and isinstance(report_assets[0], dict) else None
         )
