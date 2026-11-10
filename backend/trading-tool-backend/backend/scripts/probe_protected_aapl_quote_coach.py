@@ -178,15 +178,24 @@ def _prepare(namespace: str, user_id: int, bot_id: int) -> dict:
         conn.close()
 
 
-def _market_evidence(rows: list, source: dict) -> dict:
+def _consistent_read(rows: list, scope: str, source: str) -> dict | None:
+    """Repeated identical product reads are valid; any conflicting row is not."""
     candidates = [item for item in rows if isinstance(item, dict)
-                  and item.get("scope") == "read_market_snapshot"]
-    if (len(candidates) != 1 or candidates[0].get("source") != "market_data"
-            or candidates[0].get("status") != "completed"
-            or not isinstance(candidates[0].get("data"), dict)
-            or candidates[0]["data"].get("symbol") != "AAPL"):
+                  and item.get("scope") == scope]
+    if not candidates or any(
+        item.get("source") != source or item.get("status") != "completed"
+        or not isinstance(item.get("data"), dict)
+        for item in candidates
+    ):
+        return None
+    first = candidates[0]["data"]
+    return first if all(item["data"] == first for item in candidates[1:]) else None
+
+
+def _market_evidence(rows: list, source: dict) -> dict:
+    data = _consistent_read(rows, "read_market_snapshot", "market_data")
+    if not data or data.get("symbol") != "AAPL":
         return {"market_read": "missing_or_ambiguous", "source_match": False}
-    data = candidates[0]["data"]
     try:
         price_match = abs(Decimal(str(data.get("price"))) - source["price"]) <= Decimal("0.05")
     except (InvalidOperation, TypeError):
@@ -199,20 +208,10 @@ def _market_evidence(rows: list, source: dict) -> dict:
 
 
 def _owner_evidence(rows: list, ids: dict) -> dict:
-    report_rows = [item for item in rows if isinstance(item, dict)
-                   and item.get("scope") == "read_latest_report"]
-    bot_rows = [item for item in rows if isinstance(item, dict)
-                and item.get("scope") == "read_bot_status"]
-    reports = [report_rows[0]["data"]] if (
-        len(report_rows) == 1 and report_rows[0].get("source") == "daily_reports"
-        and report_rows[0].get("status") == "completed"
-        and isinstance(report_rows[0].get("data"), dict)
-    ) else []
-    bots = [bot_rows[0]["data"]] if (
-        len(bot_rows) == 1 and bot_rows[0].get("source") == "bot_configs"
-        and bot_rows[0].get("status") == "completed"
-        and isinstance(bot_rows[0].get("data"), dict)
-    ) else []
+    report = _consistent_read(rows, "read_latest_report", "daily_reports")
+    bot = _consistent_read(rows, "read_bot_status", "bot_configs")
+    reports = [report] if report else []
+    bots = [bot] if bot else []
     snapshot = (reports[0].get("score_source_snapshot") or {}) if len(reports) == 1 else {}
     assets = snapshot.get("assets") if isinstance(snapshot, dict) else None
     old = assets[0].get("market_snapshot") if isinstance(assets, list) and len(assets) == 1 and isinstance(assets[0], dict) and assets[0].get("symbol") == "AAPL" else None
@@ -236,13 +235,9 @@ def _plan_score_evidence(rows: list, ids: dict) -> bool:
     for scope in ("read_active_setup", "read_linked_strategy", "read_asset_scores"):
         expected_source = {"read_active_setup": "setups", "read_linked_strategy": "strategies",
                            "read_asset_scores": "daily_scores_and_source_indicators"}[scope]
-        candidates = [item for item in rows if isinstance(item, dict)
-                      and item.get("scope") == scope]
-        if (len(candidates) != 1 or candidates[0].get("status") != "completed"
-                or candidates[0].get("source") != expected_source
-                or not isinstance(candidates[0].get("data"), dict)):
+        data = _consistent_read(rows, scope, expected_source)
+        if not data:
             return False
-        data = candidates[0]["data"]
         if data.get("symbol") != "AAPL":
             return False
         if scope == "read_active_setup" and data.get("setup_id") != ids["setup"]:
@@ -290,19 +285,30 @@ def _owner_references(evidence: list, ids: dict) -> bool:
     return seen == set(expected)
 
 
+def _owner_reference_check(evidence: list, ids: dict, *, plan_score: bool,
+                           owner: dict) -> bool:
+    if evidence:
+        return _owner_references(evidence, ids)
+    # The Responses terminal envelope currently has no public refs. The
+    # checkpoint was already verified for this run, conversation and owner;
+    # exact child IDs and report date must still all match its typed reads.
+    return bool(plan_score and owner["old_report_match"]
+                and owner["paper_bot_stale_reason"])
+
+
 def _answer_moments(answer: str, source_at: datetime, source_price: Decimal) -> dict:
     utc_clock = source_at.strftime("%H:%M")
     local = source_at.astimezone(ZoneInfo("Europe/Amsterdam"))
     amsterdam_clock = local.strftime("%H:%M")
     sentences = re.split(r"(?<=[.!?])\s+|\n+", answer)
     current_utc = any(_answer_current_price(sentence, source_price)
-                      and re.search(rf"\b{re.escape(utc_clock)}\s*UTC\b", sentence, re.I)
+                      and re.search(rf"\b{re.escape(utc_clock)}(?::\d{{2}})?\s*UTC\b", sentence, re.I)
                       for sentence in sentences)
     current_local = any(_answer_current_price(sentence, source_price)
-                        and re.search(rf"\b{re.escape(amsterdam_clock)}\s*{local.tzname()}\b", sentence, re.I)
+                        and re.search(rf"\b{re.escape(amsterdam_clock)}(?::\d{{2}})?\s*{local.tzname()}\b", sentence, re.I)
                         for sentence in sentences)
     old_clock = any(OLD_AMOUNT.search(sentence)
-                    and re.search(r"\b19:03\s*UTC\b", sentence, re.I)
+                    and re.search(r"\b19:03(?::\d{2})?\s*UTC\b", sentence, re.I)
                     for sentence in sentences)
     return {"current_source_time_explained": current_utc or current_local,
             "old_report_time_explained": old_clock}
@@ -412,7 +418,11 @@ async def _turns(user_id: int, source: dict, ids: dict) -> dict:
         market = _market_evidence(rows, source)
         owner = _owner_evidence(rows, ids)
         plan_score = _plan_score_evidence(rows, ids)
-        owner_refs = _owner_references(response.evidence or [], ids)
+        # Responses v2 currently projects no public evidence refs, while the
+        # owner-bound runtime checkpoint carries exact typed tool data. If refs
+        # are projected, validate every nonpublic one fail-closed.
+        owner_refs = _owner_reference_check(response.evidence or [], ids,
+                                            plan_score=plan_score, owner=owner)
         missing = sorted(REQUIRED_SCOPES - scopes)
         if missing:
             failures.append("required_reads_missing")
