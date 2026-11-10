@@ -136,6 +136,71 @@ def test_latest_quote_accepts_dutch_thousands_separator_for_crypto():
     )
 
 
+def test_latest_aapl_quote_with_iso_date_and_seconds_matches_full_source_moment():
+    evidence = ({
+        "scope": "read_market_snapshot", "status": "completed", "freshness": "fresh",
+        "data": {"symbol": "AAPL", "price": 348.58, "quote_currency": "USD",
+                 "source_observed_at_utc": "2026-11-10T19:48:00+00:00"},
+    },)
+    correct = (
+        "De nieuwste door een bron gemeten AAPL-koers is USD 348,58, "
+        "met bronmoment 2026-11-10 19:48:00 UTC. "
+        "Het oude dagrapport vermeldt USD 351,19 op 2026-11-09 19:03:00 UTC."
+    )
+    assert FinnResponsesAnswerVerifier._latest_quote_claim_supported(correct, evidence)
+    assert FinnResponsesAnswerVerifier._latest_quote_claim_supported(
+        "Op 2026-11-10 19:48:00 UTC is de nieuwste AAPL-koers USD 348,58.", evidence,
+    )
+    same_sentence = (
+        "De nieuwste AAPL-koers is USD 348,58 op 2026-11-10 19:48:00 UTC; "
+        "het oude rapport vermeldt USD 351,19 op 2026-11-09 19:03:00 UTC."
+    )
+    assert FinnResponsesAnswerVerifier._latest_quote_claim_supported(same_sentence, evidence)
+    report_before_its_price = (
+        "De actuele AAPL-koers is USD 348,58 op 2026-11-10 19:48:00 UTC "
+        "en het oude dagrapport van 2026-11-09 19:03:00 UTC noemt USD 351,19."
+    )
+    assert FinnResponsesAnswerVerifier._latest_quote_claim_supported(report_before_its_price, evidence)
+    assert FinnResponsesAnswerVerifier._latest_quote_claim_supported(
+        "Het oude rapport vermeldt USD 351,19 op 2026-11-09 19:03:00 UTC; "
+        "de nieuwste AAPL-koers is USD 348,58 op 2026-11-10 19:48:00 UTC.",
+        evidence,
+    )
+    historical_first = (
+        "De laatste koers in het oude rapport was USD 351,19; "
+        "op 2026-11-10 19:48:00 UTC is de actuele AAPL-koers USD 348,58."
+    )
+    assert FinnResponsesAnswerVerifier._latest_quote_claim_supported(historical_first, evidence)
+    for wrong in (
+        correct.replace("19:48:00 UTC", "19:48:01 UTC"),
+        correct.replace("2026-11-10 19:48:00 UTC", "2026-11-09 19:48:00 UTC"),
+        correct.replace("19:48:00 UTC", "48:00 UTC"),
+        same_sentence.replace("2026-11-10 19:48:00 UTC", "2026-11-09 19:03:00 UTC"),
+        report_before_its_price.replace("2026-11-10 19:48:00 UTC", "2026-11-09 19:03:00 UTC"),
+        historical_first.replace("USD 348,58", "USD 999,00"),
+        historical_first.replace("2026-11-10 19:48:00 UTC", "2026-11-09 19:03:00 UTC"),
+        "Het oude rapport vermeldt USD 351,19; op 2026-11-09 19:03:00 UTC "
+        "is de nieuwste AAPL-koers USD 348,58.",
+    ):
+        assert not FinnResponsesAnswerVerifier._latest_quote_claim_supported(wrong, evidence)
+
+
+def test_stale_latest_quote_accepts_exact_iso_source_moment_with_seconds():
+    evidence = ({
+        "scope": "read_market_snapshot", "status": "completed", "freshness": "stale",
+        "data": {"symbol": "AAPL", "price": 348.58, "quote_currency": "USD",
+                 "source_observed_at_utc": "2026-11-10T19:48:00+00:00"},
+    },)
+    assert FinnResponsesAnswerVerifier._latest_quote_claim_supported(
+        "De laatste beschikbare AAPL-koers is USD 348,58 van 2026-11-10 19:48:00 UTC.",
+        evidence,
+    )
+    assert not FinnResponsesAnswerVerifier._latest_quote_claim_supported(
+        "De laatste beschikbare AAPL-koers is USD 348,58 van 2026-11-10 19:48:01 UTC.",
+        evidence,
+    )
+
+
 def test_latest_quote_matches_exact_currency_when_two_pairs_are_read():
     evidence = tuple({
         "scope": "read_market_snapshot", "status": "completed", "freshness": "fresh",

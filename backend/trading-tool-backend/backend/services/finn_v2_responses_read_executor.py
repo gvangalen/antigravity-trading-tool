@@ -200,6 +200,14 @@ class FinnResponsesReadExecutor:
                 "Do not promise protected returns or secure investment methods. If the profile "
                 "is empty, ask naturally for the user's goal and risk style."
             )
+        if call.name == "get_decision_history":
+            output["evidence_boundary"] = (
+                "A saved daily report is a historical snapshot, not the latest market quote. "
+                "When comparing its price with a current market read, give each source "
+                "moment with the full date including year, clock time and explicit UTC "
+                "or Amsterdam time zone. Do not shorten a dated report source to a day "
+                "and month merely because the user's question omitted the year."
+            )
         if call.name == "get_closed_trade_review":
             review_rows = [
                 row for item in results if item.get("scope") == "read_review_history"
@@ -321,7 +329,8 @@ class FinnResponsesReadExecutor:
                 "and the linked bot status with its latest decision when available, "
                 "not an owner-scoped risk evaluation. A price in indicator evidence is "
                 "a historical score measurement; use only read_market_snapshot for the "
-                "latest quoted price, and state its source moment and freshness. "
+                "latest quoted price, and state its full source date including year, "
+                "clock time, time zone and freshness. "
                 "A numeric dca_day is a stored weekday code, "
                 "not a user-facing day; use dca_day_name and translate it into the answer language. "
                 "A chart timeframe, DCA frequency, and broad profile goal do not record the "
