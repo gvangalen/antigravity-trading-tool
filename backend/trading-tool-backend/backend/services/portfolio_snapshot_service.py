@@ -3,14 +3,26 @@ import json
 import math
 from datetime import datetime, timedelta, timezone
 from typing import Literal, List, Tuple
+from types import SimpleNamespace
 
 from backend.utils.db import get_db_connection
 from backend.services.portfolio_fx_service import price_in_eur
+from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 BucketType = Literal["1h", "1d"]
+
+
+def _verified_quote_row(cur, query: str, params: tuple):
+    """Return one provider-dated price only when its highest rank is consistent."""
+    cur.execute(query, params)
+    rows = [SimpleNamespace(
+        id=row[0], symbol=row[1], price=row[2], source_observed_at=row[3],
+        quote_currency=row[4], price_provider=row[5], timestamp=row[6],
+    ) for row in cur.fetchall()]
+    return MarketDataRepository._verified_top_quote(rows)
 
 
 # =====================================================
@@ -68,27 +80,64 @@ def _snapshot_verified_paper(cur, user_id: int, bucket: BucketType, ts: datetime
     prices = {}
     if held_symbols:
         cur.execute("""
-            SELECT DISTINCT ON (m.symbol) m.symbol, m.price, m.source_observed_at, a.quote_currency, m.id
-            FROM market_data m LEFT JOIN asset_catalog a ON a.symbol=m.symbol
-            WHERE m.symbol = ANY(%s) AND m.price IS NOT NULL AND m.price>0
-                  AND m.market_id IS NULL
-                  AND m.source_observed_at IS NOT NULL
-            ORDER BY m.symbol, m.source_observed_at DESC, m.timestamp DESC
+            SELECT m.id, m.symbol, m.price, m.source_observed_at, m.quote_currency,
+                   m.price_provider, m.timestamp, m.market_id
+            FROM unnest(%s::text[]) AS wanted(symbol)
+            CROSS JOIN LATERAL (
+                SELECT id, symbol, price, source_observed_at, quote_currency,
+                       price_provider, timestamp, market_id
+                FROM market_data
+                WHERE symbol=wanted.symbol AND market_id IS NULL
+                  AND source_observed_at IS NOT NULL
+                ORDER BY source_observed_at DESC, timestamp DESC, id DESC
+                LIMIT 4096
+            ) m
         """, (held_symbols,))
-        prices = {(str(row[0]).upper(), None): row[1:] for row in cur.fetchall()}
+        grouped = {symbol: [] for symbol in held_symbols}
+        for row in cur.fetchall():
+            grouped[str(row[1]).upper()].append(SimpleNamespace(
+                id=row[0], symbol=row[1], price=row[2], source_observed_at=row[3],
+                quote_currency=row[4], price_provider=row[5], timestamp=row[6],
+            ))
+        for symbol, rows in grouped.items():
+            quote = MarketDataRepository._verified_top_quote(rows)
+            if quote is None:
+                return False
+            prices[(symbol, None)] = (quote.price, quote.source_observed_at,
+                                      quote.quote_currency, quote.id)
     if held_market_ids:
         cur.execute("""
-            SELECT DISTINCT ON (m.market_id) m.market_id, m.symbol, m.price,
-                   m.source_observed_at, tm.quote_currency, m.id
-            FROM market_data m
-            JOIN trading_markets tm ON tm.id=m.market_id
-            WHERE m.market_id=ANY(%s) AND m.price IS NOT NULL AND m.price>0
-              AND m.source_observed_at IS NOT NULL
-              AND m.quote_currency=tm.quote_currency AND tm.is_active=TRUE
-            ORDER BY m.market_id, m.source_observed_at DESC, m.timestamp DESC
+            SELECT m.id, m.symbol, m.price, m.source_observed_at, m.quote_currency,
+                   m.price_provider, m.timestamp, m.market_id,
+                   tm.asset_symbol AS expected_symbol, tm.quote_currency AS expected_quote
+            FROM unnest(%s::int[]) AS wanted(market_id)
+            JOIN trading_markets tm ON tm.id=wanted.market_id
+                                   AND tm.is_active=TRUE AND tm.venue='BINANCE'
+            CROSS JOIN LATERAL (
+                SELECT id, symbol, price, source_observed_at, quote_currency,
+                       price_provider, timestamp, market_id
+                FROM market_data
+                WHERE market_id=wanted.market_id AND source_observed_at IS NOT NULL
+                ORDER BY source_observed_at DESC, timestamp DESC, id DESC
+                LIMIT 4096
+            ) m
         """, (held_market_ids,))
-        prices.update({(str(row[1]).upper(), int(row[0])): row[2:]
-                       for row in cur.fetchall()})
+        grouped = {market_id: [] for market_id in held_market_ids}
+        expected = {}
+        for row in cur.fetchall():
+            expected[int(row[7])] = (str(row[8]).upper(), str(row[9]).upper())
+            grouped[int(row[7])].append(SimpleNamespace(
+                id=row[0], symbol=row[1], price=row[2], source_observed_at=row[3],
+                quote_currency=row[4], price_provider=row[5], timestamp=row[6],
+            ))
+        for market_id, rows in grouped.items():
+            quote = MarketDataRepository._verified_top_quote(rows)
+            if (quote is None or (str(quote.symbol).upper(),
+                                  str(quote.quote_currency).upper()) != expected.get(market_id)):
+                return False
+            prices[(str(quote.symbol).upper(), market_id)] = (
+                quote.price, quote.source_observed_at, quote.quote_currency, quote.id,
+            )
     cash = 0.0
     position_value = 0.0
     source_times = []
@@ -147,29 +196,27 @@ def _snapshot_verified_paper(cur, user_id: int, bucket: BucketType, ts: datetime
 # =====================================================
 
 def _get_latest_price(cur, symbol: str) -> float:
-    cur.execute("""
-        SELECT m.price, a.quote_currency, m.source_observed_at
+    quote = _verified_quote_row(cur, """
+        SELECT m.id, m.symbol, m.price, m.source_observed_at,
+               m.quote_currency, m.price_provider, m.timestamp
         FROM market_data m
-        LEFT JOIN asset_catalog a ON a.symbol = m.symbol
         WHERE m.symbol = %s AND m.market_id IS NULL
-          AND m.price IS NOT NULL
           AND m.source_observed_at IS NOT NULL
-        ORDER BY m.source_observed_at DESC, m.timestamp DESC
-        LIMIT 1
+        ORDER BY m.source_observed_at DESC, m.timestamp DESC, m.id DESC
+        LIMIT 4096
     """, (symbol.upper(),))
-    row = cur.fetchone()
-    if not row:
+    if quote is None:
         raise RuntimeError(f"Geen {symbol.upper()} prijs gevonden")
-    if str(row[1] or "").upper() != "EUR":
+    if str(quote.quote_currency or "").upper() != "EUR":
         raise RuntimeError(f"Geen gecontroleerde EUR-prijs voor {symbol.upper()}")
-    observed_at = row[2]
+    observed_at = quote.source_observed_at
     if observed_at is None:
         raise RuntimeError(f"Geen gedateerde EUR-prijs voor {symbol.upper()}")
     if observed_at.tzinfo is None:
         observed_at = observed_at.replace(tzinfo=timezone.utc)
     if not timedelta(0) <= datetime.now(timezone.utc) - observed_at <= timedelta(hours=24):
         raise RuntimeError(f"Geen recente EUR-prijs voor {symbol.upper()}")
-    price = float(row[0])
+    price = float(quote.price)
     if not math.isfinite(price) or price <= 0:
         raise RuntimeError(f"Geen geldige EUR-prijs voor {symbol.upper()}")
     return price

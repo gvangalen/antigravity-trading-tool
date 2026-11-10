@@ -129,6 +129,35 @@ def test_twelve_data_quote_without_epoch_uses_exchange_timezone(monkeypatch):
     assert snapshot.observed_at.isoformat() == "2026-10-22T18:33:00+00:00"
 
 
+def test_twelve_data_quote_prefers_last_update_time_over_interval_open(monkeypatch):
+    interval_open = datetime(2026, 10, 22, 18, 33, tzinfo=timezone.utc)
+    last_quote = interval_open + timedelta(seconds=42)
+    last_update = interval_open + timedelta(seconds=48)
+    monkeypatch.setattr(
+        "backend.services.providers.twelve_data_market_data_adapter.TwelveDataResponseCache.get",
+        lambda *_args, **_kwargs: {
+            "close": "346.08", "currency": "USD",
+            "timestamp": int(interval_open.timestamp()),
+            "last_quote_at": int(last_quote.timestamp()),
+            "last_update_at": int(last_update.timestamp()),
+        },
+    )
+    asset = AssetRecord(
+        symbol="AAPL", display_name="Apple Inc.", asset_class="stock",
+        provider="twelve_data", quote_currency="USD", provider_symbol="AAPL",
+        timezone="America/New_York",
+    )
+    snapshot = asyncio.run(TwelveDataMarketDataAdapter(api_key="test-key").fetch_latest_snapshot(asset))
+    assert snapshot.observed_at == last_update
+
+
+def test_provider_update_accepts_explicit_utc_text():
+    from backend.services.providers.twelve_data_market_data_adapter import _parse_provider_update
+    assert _parse_provider_update("2026-11-10T20:48:42Z") == datetime(
+        2026, 11, 10, 20, 48, 42, tzinfo=timezone.utc,
+    )
+
+
 def test_twelve_data_exchange_time_conversion_tracks_daylight_saving():
     assert _parse_datetime("2026-10-22 14:33:00", "America/New_York").isoformat() == "2026-10-22T18:33:00+00:00"
     assert _parse_datetime("2026-11-02 14:33:00", "America/New_York").isoformat() == "2026-11-02T19:33:00+00:00"

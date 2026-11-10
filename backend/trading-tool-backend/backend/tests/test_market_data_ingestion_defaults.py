@@ -41,6 +41,7 @@ def test_market_ingestion_preserves_provider_time_separately_from_receipt_time()
     unknown = service._build_market_data_row(PriceSnapshotDTO(**base, observed_at=None))
 
     assert verified.source_observed_at == observed.replace(tzinfo=None)
+    assert verified.timestamp == verified.source_observed_at
     assert verified.quote_currency == "USDT"
     assert verified.price_provider == "binance"
     assert unknown.source_observed_at is None

@@ -10,8 +10,9 @@ import json
 
 
 class _Cursor:
-    def __init__(self, *, bots, prices, fx):
+    def __init__(self, *, bots, prices, fx, quote_rows=None):
         self.bots, self.prices, self.fx = bots, prices, fx
+        self.quote_rows = quote_rows or {}
         self.rows = []
         self.snapshots = []
         self.queries = []
@@ -29,6 +30,40 @@ class _Cursor:
             quote = params[0]
             match = next((row for row in self.fx if row[0] == quote), None)
             self.rows = [(match[1], match[2])] if match else []
+        elif "cross join lateral" in statement and "limit 4096" in statement:
+            keys = params[0]
+            if "join trading_markets tm" in statement:
+                self.rows = []
+                for key in keys:
+                    candidate = next(((symbol, self.prices[(symbol, key)])
+                                      for symbol in ("ETH", "BTC")
+                                      if (symbol, key) in self.prices), None)
+                    if candidate is None:
+                        continue
+                    symbol, value = candidate
+                    rows = self.quote_rows.get(key) or [
+                        (key, symbol, *value, "test", value[1])
+                    ]
+                    self.rows.extend((*row, key, symbol, value[2]) for row in rows)
+            else:
+                self.rows = []
+                for index, key in enumerate(keys):
+                    candidates = self.quote_rows.get(key)
+                    if candidates is None and key in self.prices:
+                        value = self.prices[key]
+                        candidates = [(index, key, *value, "test", value[1])]
+                    self.rows.extend((*row, None) for row in candidates or [])
+        elif "from market_data m" in statement and "limit 4096" in statement:
+            key = params[0]
+            if key in self.quote_rows:
+                self.rows = self.quote_rows[key]
+            elif isinstance(key, int):
+                self.rows = [(key, symbol, *self.prices[(symbol, key)], "test",
+                              self.prices[(symbol, key)][1])
+                             for symbol in ("ETH", "BTC") if (symbol, key) in self.prices]
+            else:
+                value = self.prices.get(key)
+                self.rows = [(0, key, *value, "test", value[1])] if value else []
         elif "from market_data m" in statement and "join trading_markets" in statement:
             self.rows = [(market_id, symbol, *self.prices[(symbol, market_id)], market_id)
                          for market_id in params[0]
@@ -88,6 +123,21 @@ def test_verified_paper_snapshot_requires_all_bots_and_uses_fx():
     assert evidence["positions"][1]["portfolio_updated_at"] == now.isoformat()
 
 
+def test_paper_snapshot_rejects_conflicting_top_aapl_quotes():
+    now = datetime.now(timezone.utc)
+    rows = [(12, "AAPL", 348.49, now, "USD", "twelve_data", now),
+            (11, "AAPL", 348.63, now, "USD", "twelve_data", now)]
+    cursor = _Cursor(
+        bots=[(1, "AAPL", True, 100, 1, False, now)], prices={},
+        fx=[("USD", 0.9, now, "test", "EURUSD")], quote_rows={"AAPL": rows},
+    )
+    assert _snapshot_verified_paper(cursor, 17, "1h", now) is False
+    assert cursor.snapshots == []
+    rows[1] = (11, "AAPL", 348.49, now, "USD", "twelve_data", now)
+    assert _snapshot_verified_paper(cursor, 17, "1h", now) is True
+    assert len(cursor.snapshots) == 1
+
+
 def test_unfunded_or_stale_fx_never_writes_partial_history():
     now = datetime.now(timezone.utc)
     stale = _Cursor(bots=[(1, "ETH", True, 100, 1, False, now)],
@@ -117,7 +167,7 @@ def test_twenty_assets_use_one_price_read_and_one_complete_snapshot():
     cursor = _Cursor(bots=bots, prices=prices, fx=[])
     assert _snapshot_verified_paper(cursor, 17, "1h", now)
     assert cursor.snapshots[0][3:7] == (2200.0, 200.0, 2000.0, 20)
-    assert sum("from market_data m" in sql for sql, _ in cursor.queries) == 1
+    assert sum("cross join lateral" in sql for sql, _ in cursor.queries) == 1
 
 
 def test_pair_paper_snapshot_uses_exact_market_price_without_base_fallback():

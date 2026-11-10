@@ -231,7 +231,9 @@ class _FakeCursor:
         if "from market_data" in sql_lower:
             symbol = params[0]
             price = self.prices.get(symbol)
-            self._rows = [(price, self.quotes.get(symbol, "EUR"), datetime.now(timezone.utc))] if price is not None else []
+            observed_at = datetime.now(timezone.utc)
+            self._rows = [(1, symbol, price, observed_at,
+                           self.quotes.get(symbol, "EUR"), "test", observed_at)] if price is not None else []
             return
         if "from bot_portfolios" in sql_lower:
             self._rows = [(*row, None) if len(row) == 7 else row for row in self.portfolios]

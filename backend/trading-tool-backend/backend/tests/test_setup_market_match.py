@@ -213,10 +213,15 @@ def test_exact_pair_24_hour_score_waits_for_latest_quote():
                 return self.rows
             def first(self):
                 return self.rows[0] if self.rows else None
+            def all(self):
+                return self.rows
         session = SimpleNamespace(execute=AsyncMock(side_effect=[
             Result([("change_24h", now - timedelta(hours=1))]),
             Result([("change_24h", 14.5, observed)]),
-            Result([(0.02, current)]),
+            Result([(SimpleNamespace(id=1, symbol="BTC", price=100000,
+                                     quote_currency="EUR", price_provider="binance",
+                                     source_observed_at=current, timestamp=current,
+                                     change_24h=0.02), "BTC", "EUR")]),
         ]))
         source = {"calculated_at": now - timedelta(minutes=2),
                   "indicator_evidence": {"market": {"change_24h": {
