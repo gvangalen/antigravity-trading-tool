@@ -26,7 +26,8 @@ OLD_SOURCE = datetime(2026, 11, 9, 19, 3, tzinfo=timezone.utc)
 SAFE_FAILURES = frozenset({
     "aapl_fixture_not_authorized", "aapl_fixture_namespace_invalid",
     "fixture_binding_invalid", "fixture_has_exchange_keys",
-    "aapl_source_unavailable", "aapl_source_not_newer", "aapl_fixture_prepare_failed",
+    "aapl_source_unavailable", "aapl_source_not_newer", "aapl_source_ambiguous",
+    "aapl_fixture_prepare_failed",
     "aapl_fixture_manifest_forbidden",
     "aapl_baseline_failed", "aapl_turn_failed", "aapl_safety_failed",
     "aapl_cleanup_failed", "aapl_quarantine_failed",
@@ -60,19 +61,22 @@ def _source():
     conn = fixture._connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("""SELECT price,source_observed_at,quote_currency,id
+            cur.execute("""SELECT price,source_observed_at,quote_currency,id,timestamp
                            FROM market_data WHERE symbol='AAPL' AND market_id IS NULL
-                             AND quote_currency='USD' AND price IS NOT NULL
-                             AND source_observed_at IS NOT NULL
-                           ORDER BY source_observed_at DESC,timestamp DESC,id DESC LIMIT 1""")
-            row = cur.fetchone()
-        if not row or _utc(row[1]) is None or Decimal(str(row[0])) <= 0:
+                             AND quote_currency IS NOT NULL AND source_observed_at IS NOT NULL
+                           ORDER BY source_observed_at DESC,timestamp DESC LIMIT 2""")
+            rows = cur.fetchall()
+        row = rows[0] if rows else None
+        if len(rows) > 1 and rows[0][1] == rows[1][1] and rows[0][4] == rows[1][4]:
+            raise RuntimeError("aapl_source_ambiguous")
+        if (not row or row[2] != "USD" or row[0] is None
+                or _utc(row[1]) is None or Decimal(str(row[0])) <= 0):
             raise RuntimeError("aapl_source_unavailable")
         if _utc(row[1]) <= OLD_SOURCE or abs(Decimal(str(row[0])) - OLD_PRICE) <= Decimal("0.05"):
             raise RuntimeError("aapl_source_not_newer")
         return {"price": Decimal(str(row[0])), "at": _utc(row[1]), "measurement_id": row[3]}
     except RuntimeError as error:
-        if str(error) in {"aapl_source_unavailable", "aapl_source_not_newer"}:
+        if str(error) in {"aapl_source_unavailable", "aapl_source_not_newer", "aapl_source_ambiguous"}:
             raise
         raise RuntimeError("aapl_source_unavailable") from None
     except Exception:
@@ -81,7 +85,13 @@ def _source():
         conn.close()
 
 
-def _prepare(namespace: str, user_id: int, bot_id: int) -> None:
+def _same_source(first: dict, second: dict) -> bool:
+    return (first["measurement_id"] == second["measurement_id"]
+            and first["at"] == second["at"]
+            and first["price"] == second["price"])
+
+
+def _prepare(namespace: str, user_id: int, bot_id: int) -> dict:
     """Convert only the new child fixture from ETH to AAPL and save old evidence."""
     conn = fixture._connection()
     try:
@@ -109,8 +119,9 @@ def _prepare(namespace: str, user_id: int, bot_id: int) -> None:
                 (user_id,bot_id,strategy_id,setup_id,symbol,decision_date,decision_ts,
                  action,confidence,amount_eur,scores_json,status,executed_by)
                 VALUES (%s,%s,%s,%s,'AAPL',CURRENT_DATE,NOW(),'hold','medium',0,
-                        '{"guardrails_result":{"blocked_by":"market_price_stale","allowed":false,"original_amount_eur":0,"adjusted_amount_eur":0}}'::jsonb,'planned','qa')""",
+                        '{"guardrails_result":{"blocked_by":"market_price_stale","allowed":false,"original_amount_eur":0,"adjusted_amount_eur":0}}'::jsonb,'planned','qa') RETURNING id""",
                 (user_id, bot_id, strategy_id, setup_id))
+            decision_id = cur.fetchone()[0]
             old_snapshot = {"observed_at": OLD_SOURCE.isoformat(), "assets": [{
                 "symbol": "AAPL", "market_snapshot": {"price": float(OLD_PRICE),
                 "quote_currency": "USD", "as_of": OLD_SOURCE.isoformat(),
@@ -119,9 +130,12 @@ def _prepare(namespace: str, user_id: int, bot_id: int) -> None:
             }]}
             cur.execute("""INSERT INTO daily_reports
                 (user_id,report_date,status,price,score_source_snapshot)
-                VALUES (%s,%s,'complete',%s,%s::jsonb)""",
+                VALUES (%s,%s,'complete',%s,%s::jsonb) RETURNING id""",
                 (user_id, OLD_SOURCE.date(), OLD_PRICE, json.dumps(old_snapshot)))
+            report_id = cur.fetchone()[0]
         conn.commit()
+        return {"setup": setup_id, "strategy": strategy_id, "bot": bot_id,
+                "decision": decision_id, "report": report_id}
     except Exception:
         conn.rollback()
         raise RuntimeError("aapl_fixture_prepare_failed") from None
@@ -132,6 +146,7 @@ def _prepare(namespace: str, user_id: int, bot_id: int) -> None:
 def _market_evidence(rows: list, source: dict) -> dict:
     candidates = [item.get("data") for item in rows if isinstance(item, dict)
                   and item.get("scope") == "read_market_snapshot"
+                  and item.get("source") == "market_data"
                   and item.get("status") == "completed" and isinstance(item.get("data"), dict)
                   and item["data"].get("symbol") == "AAPL"]
     if len(candidates) != 1:
@@ -148,35 +163,50 @@ def _market_evidence(rows: list, source: dict) -> dict:
     )}
 
 
-def _owner_evidence(rows: list) -> dict:
+def _owner_evidence(rows: list, ids: dict) -> dict:
     reports = [item.get("data") for item in rows if isinstance(item, dict)
                and item.get("scope") == "read_latest_report"
+               and item.get("source") == "daily_reports"
                and item.get("status") == "completed" and isinstance(item.get("data"), dict)]
     bots = [item.get("data") for item in rows if isinstance(item, dict)
             and item.get("scope") == "read_bot_status"
+            and item.get("source") == "bot_configs"
             and item.get("status") == "completed" and isinstance(item.get("data"), dict)]
     snapshot = (reports[0].get("score_source_snapshot") or {}) if len(reports) == 1 else {}
     assets = snapshot.get("assets") if isinstance(snapshot, dict) else None
     old = assets[0].get("market_snapshot") if isinstance(assets, list) and len(assets) == 1 and isinstance(assets[0], dict) and assets[0].get("symbol") == "AAPL" else None
     try:
-        report_match = bool(old and Decimal(str(old.get("price"))) == OLD_PRICE
+        report_match = bool(old and reports[0].get("id") == ids["report"]
+                            and Decimal(str(old.get("price"))) == OLD_PRICE
                             and old.get("quote_currency") == "USD"
                             and _utc(old.get("as_of")) == OLD_SOURCE)
     except (InvalidOperation, TypeError):
         report_match = False
     decision = bots[0].get("latest_decision") if len(bots) == 1 else None
-    bot_match = bool(bots and bots[0].get("is_live") is False
+    bot_match = bool(bots and bots[0].get("bot_id") == ids["bot"]
+                     and bots[0].get("is_live") is False
                      and isinstance(decision, dict)
+                     and decision.get("decision_id") == ids["decision"]
                      and decision.get("reason_code") == "market_price_stale")
     return {"old_report_match": report_match, "paper_bot_stale_reason": bot_match}
 
 
-def _plan_score_evidence(rows: list) -> bool:
+def _plan_score_evidence(rows: list, ids: dict) -> bool:
     for scope in ("read_active_setup", "read_linked_strategy", "read_asset_scores"):
+        expected_source = {"read_active_setup": "setups", "read_linked_strategy": "strategies",
+                           "read_asset_scores": "daily_scores_and_source_indicators"}[scope]
         candidates = [item.get("data") for item in rows if isinstance(item, dict)
                       and item.get("scope") == scope and item.get("status") == "completed"
+                      and item.get("source") == expected_source
                       and isinstance(item.get("data"), dict)]
         if len(candidates) != 1 or candidates[0].get("symbol") != "AAPL":
+            return False
+        if scope == "read_active_setup" and candidates[0].get("setup_id") != ids["setup"]:
+            return False
+        if scope == "read_linked_strategy" and (
+            candidates[0].get("strategy_id") != ids["strategy"]
+            or candidates[0].get("setup_id") != ids["setup"]
+        ):
             return False
         if scope == "read_asset_scores":
             scores = candidates[0].get("reported_scores")
@@ -187,12 +217,45 @@ def _plan_score_evidence(rows: list) -> bool:
     return True
 
 
-def _answer_moments(answer: str, source_at: datetime) -> dict:
+def _owner_references(evidence: list, ids: dict) -> bool:
+    expected = {"setup": ("setups", ids["setup"]),
+                "strategy": ("strategies", ids["strategy"]),
+                "bot": ("bot_configs", ids["bot"]),
+                "bot_status": ("bot_configs", ids["bot"]),
+                "latest_report": ("daily_reports", ids["report"]),
+                "scores": ("daily_scores_and_source_indicators", None)}
+    seen = set()
+    for item in evidence:
+        kind = getattr(item, "entity_type", None)
+        if kind not in expected:
+            continue
+        source, entity_id = expected[kind]
+        ref_id = getattr(item, "entity_id", None)
+        if (kind in seen or getattr(item, "owned_by_user", None) is not True
+                or getattr(item, "source", None) != source
+                or (entity_id is not None and ref_id is not None
+                    and str(ref_id) != str(entity_id))
+                or (kind in {"setup", "strategy", "bot", "bot_status"}
+                    and ref_id is None)):
+            return False
+        seen.add(kind)
+    return seen == set(expected)
+
+
+def _answer_moments(answer: str, source_at: datetime, source_price: Decimal) -> dict:
     utc_clock = source_at.strftime("%H:%M")
-    amsterdam_clock = source_at.astimezone(ZoneInfo("Europe/Amsterdam")).strftime("%H:%M")
-    current_utc = bool(utc_clock in answer and re.search(r"\bUTC\b", answer, re.I))
-    current_local = bool(amsterdam_clock in answer and re.search(r"\b(?:CET|CEST)\b", answer, re.I))
-    old_clock = bool("19:03" in answer and re.search(r"\bUTC\b", answer, re.I))
+    local = source_at.astimezone(ZoneInfo("Europe/Amsterdam"))
+    amsterdam_clock = local.strftime("%H:%M")
+    sentences = re.split(r"(?<=[.!?])\s+|\n+", answer)
+    current_utc = any(_answer_current_price(sentence, source_price)
+                      and re.search(rf"\b{re.escape(utc_clock)}\s*UTC\b", sentence, re.I)
+                      for sentence in sentences)
+    current_local = any(_answer_current_price(sentence, source_price)
+                        and re.search(rf"\b{re.escape(amsterdam_clock)}\s*{local.tzname()}\b", sentence, re.I)
+                        for sentence in sentences)
+    old_clock = any(OLD_AMOUNT.search(sentence)
+                    and re.search(r"\b19:03\s*UTC\b", sentence, re.I)
+                    for sentence in sentences)
     return {"current_source_time_explained": current_utc or current_local,
             "old_report_time_explained": old_clock}
 
@@ -255,7 +318,7 @@ def _finalize_fixture(namespace: str, user_id: int, bot_id: int, *, passed: bool
         raise RuntimeError("aapl_quarantine_failed") from None
 
 
-async def _turns(user_id: int, source: dict) -> dict:
+async def _turns(user_id: int, source: dict, ids: dict) -> dict:
     prompt = (
         "Lees mijn AAPL-plan en score, de nieuwste AAPL-marktkoers met exact UTC-bronmoment, "
         "het oudere opgeslagen dagrapport met USD 351,19 op 9 november 19:03 UTC, "
@@ -269,6 +332,7 @@ async def _turns(user_id: int, source: dict) -> dict:
     )
     diagnostics = []
     failures = []
+    source_advanced = False
     first_conversation = None
     for label, message, conversation in (("first", prompt, None),
                                          ("repeat", prompt, None),
@@ -298,8 +362,9 @@ async def _turns(user_id: int, source: dict) -> dict:
         scopes = {item.get("scope") for item in rows if isinstance(item, dict)
                   and item.get("status") == "completed"}
         market = _market_evidence(rows, source)
-        owner = _owner_evidence(rows)
-        plan_score = _plan_score_evidence(rows)
+        owner = _owner_evidence(rows, ids)
+        plan_score = _plan_score_evidence(rows, ids)
+        owner_refs = _owner_references(response.evidence or [], ids)
         missing = sorted(REQUIRED_SCOPES - scopes)
         if missing:
             failures.append("required_reads_missing")
@@ -311,10 +376,12 @@ async def _turns(user_id: int, source: dict) -> dict:
             failures.append("paper_bot_reason_mismatch")
         if not plan_score:
             failures.append("plan_score_owner_scope_mismatch")
+        if not owner_refs:
+            failures.append("owner_references_mismatch")
         old_claim = _old_claimed_current(response.content or "")
         if old_claim:
             failures.append("old_quote_claimed_current")
-        moments = _answer_moments(response.content or "", source["at"])
+        moments = _answer_moments(response.content or "", source["at"], source["price"])
         if not all(moments.values()):
             failures.append("source_moments_not_explained")
         current_price_explained = _answer_current_price(response.content or "", source["price"])
@@ -326,15 +393,23 @@ async def _turns(user_id: int, source: dict) -> dict:
             failures.append("transport_parity_failed")
         diagnostics.append({"turn": label, "status": "completed", "market": market,
                             **owner, **moments, "plan_score_owner_scope": plan_score,
+                            "owner_references_match": owner_refs,
                             "current_price_explained": current_price_explained,
                             "transport": transports,
                             "required_reads_complete": not missing,
                             "missing_scopes": missing, "old_quote_claimed_current": old_claim,
                             "same_conversation": (turn.conversation_id == first_conversation)
                             if label == "followup" else None})
+        try:
+            latest = await asyncio.to_thread(_source)
+            if not _same_source(latest, source):
+                source_advanced = True
+        except Exception:
+            source_advanced = True
     if len(diagnostics) != 3 or first_conversation is None or not diagnostics[-1].get("same_conversation"):
         failures.append("conversation_lineage")
-    return {"turn_diagnostics": diagnostics, "failed_checks": sorted(set(failures))}
+    return {"turn_diagnostics": diagnostics, "failed_checks": sorted(set(failures)),
+            "source_advanced": source_advanced}
 
 
 def run(namespace: str) -> dict:
@@ -350,12 +425,17 @@ def run(namespace: str) -> dict:
     passed = False
     try:
         user_id, bot_id, _ = fixture._seed(namespace, int(bound), bot_active=False)
-        _prepare(namespace, user_id, bot_id)
+        ids = _prepare(namespace, user_id, bot_id)
         from backend.celery_task.store_daily_scores_task import build_daily_scores_for_user
         build_daily_scores_for_user(user_id, ["AAPL"])
         before = _business_state(user_id)
         with _guard_live_exchange() as attempts:
-            result = asyncio.run(_turns(user_id, source))
+            result = asyncio.run(_turns(user_id, source, ids))
+        try:
+            if not _same_source(_source(), source):
+                result["source_advanced"] = True
+        except Exception:
+            result["source_advanced"] = True
         after = _business_state(user_id)
         changed = any(after["counts"][name] != before["counts"][name]
                       or after["fingerprints"][name] != before["fingerprints"][name]
@@ -367,7 +447,8 @@ def run(namespace: str) -> dict:
             failures.append("live_attempt")
         if after["counts"]["broker_orders"] != before["counts"]["broker_orders"]:
             failures.append("broker_order_created")
-        result.update({"result": "FAIL" if failures else "PASS",
+        result.update({"result": "INCONCLUSIVE" if result["source_advanced"] else
+                       "FAIL" if failures else "PASS",
                        "failed_checks": sorted(set(failures)),
                        "current_price_usd": float(source["price"]),
                        "old_report_price_usd": float(OLD_PRICE),

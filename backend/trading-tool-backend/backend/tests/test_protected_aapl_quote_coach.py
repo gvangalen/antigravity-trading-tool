@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 import pytest
+from types import SimpleNamespace
 
 from backend.scripts import probe_protected_aapl_quote_coach as probe
 from backend.scripts.run_finn_production_qa import ALLOWED_PROFILES, profile_error_category
@@ -17,47 +18,133 @@ def test_old_quote_is_rejected_only_when_mislabeled_current():
 def test_market_and_owner_evidence_bind_both_distinct_moments():
     source = {"price": Decimal("350.49"),
               "at": datetime(2026, 11, 9, 20, 59, tzinfo=timezone.utc)}
+    ids = {"setup": 2, "strategy": 3, "bot": 4, "decision": 5, "report": 6}
     rows = [
-        {"scope": "read_market_snapshot", "status": "completed", "data": {
+        {"scope": "read_market_snapshot", "status": "completed", "source": "market_data", "data": {
             "symbol": "AAPL", "price": 350.49, "quote_currency": "USD",
             "as_of": "2026-11-09T20:59:00+00:00"}},
-        {"scope": "read_latest_report", "status": "completed", "data": {
+        {"scope": "read_latest_report", "status": "completed", "source": "daily_reports", "data": {
+            "id": 6,
             "score_source_snapshot": {"assets": [{"symbol": "AAPL", "market_snapshot": {
                 "price": 351.19, "quote_currency": "USD",
                 "as_of": "2026-11-09T19:03:00+00:00"}}]}}},
-        {"scope": "read_bot_status", "status": "completed", "data": {
-            "is_live": False, "latest_decision": {"reason_code": "market_price_stale"}}},
+        {"scope": "read_bot_status", "status": "completed", "source": "bot_configs", "data": {
+            "bot_id": 4, "is_live": False,
+            "latest_decision": {"decision_id": 5, "reason_code": "market_price_stale"}}},
     ]
     assert probe._market_evidence(rows, source)["source_match"] is True
-    assert probe._owner_evidence(rows) == {
+    assert probe._owner_evidence(rows, ids) == {
         "old_report_match": True, "paper_bot_stale_reason": True,
     }
     rows[0]["data"]["as_of"] = "2026-11-09T19:03:00+00:00"
     assert probe._market_evidence(rows, source)["source_match"] is False
     rows[1]["data"]["score_source_snapshot"]["assets"][0]["market_snapshot"]["price"] = 350.49
-    assert probe._owner_evidence(rows)["old_report_match"] is False
+    assert probe._owner_evidence(rows, ids)["old_report_match"] is False
+    rows[1]["data"]["id"] = 999
+    assert probe._owner_evidence(rows, ids)["old_report_match"] is False
 
 
 def test_plan_and_score_reads_must_be_aapl_and_materialized():
-    rows = [{"scope": scope, "status": "completed", "data": {
-        "symbol": "AAPL", **({"reported_scores": {"macro_score": 20}} if scope == "read_asset_scores" else {})}}
+    ids = {"setup": 2, "strategy": 3}
+    sources = {"read_active_setup": "setups", "read_linked_strategy": "strategies",
+               "read_asset_scores": "daily_scores_and_source_indicators"}
+    rows = [{"scope": scope, "source": sources[scope], "status": "completed", "data": {
+        "symbol": "AAPL", **({"setup_id": 2} if scope == "read_active_setup" else {}),
+        **({"setup_id": 2, "strategy_id": 3} if scope == "read_linked_strategy" else {}),
+        **({"reported_scores": {"macro_score": 20}} if scope == "read_asset_scores" else {})}}
         for scope in ("read_active_setup", "read_linked_strategy", "read_asset_scores")]
-    assert probe._plan_score_evidence(rows)
+    assert probe._plan_score_evidence(rows, ids)
     rows[-1]["data"]["reported_scores"] = {"macro_score": None}
-    assert not probe._plan_score_evidence(rows)
+    assert not probe._plan_score_evidence(rows, ids)
     rows[-1]["data"]["reported_scores"] = {"macro_score": 20}
     rows[0]["data"]["symbol"] = "ETH"
-    assert not probe._plan_score_evidence(rows)
+    assert not probe._plan_score_evidence(rows, ids)
+    rows[0]["data"]["symbol"] = "AAPL"
+    rows[0]["data"]["setup_id"] = 99
+    assert not probe._plan_score_evidence(rows, ids)
+
+
+def test_owner_references_reject_foreign_duplicate_or_unowned_refs():
+    ids = {"setup": 2, "strategy": 3, "bot": 4, "report": 6}
+    refs = [SimpleNamespace(entity_type=kind, entity_id=str(value), source=source,
+                            owned_by_user=True)
+            for kind, source, value in (("setup", "setups", 2),
+                                        ("strategy", "strategies", 3),
+                                        ("bot", "bot_configs", 4),
+                                        ("bot_status", "bot_configs", 4),
+                                        ("latest_report", "daily_reports", 6),
+                                        ("scores", "daily_scores_and_source_indicators", "AAPL"))]
+    assert probe._owner_references(refs, ids)
+    refs[1].entity_id = "999"
+    assert not probe._owner_references(refs, ids)
+    refs[1].entity_id = "3"
+    refs[1].owned_by_user = False
+    assert not probe._owner_references(refs, ids)
+    refs[1].owned_by_user = True
+    assert not probe._owner_references(refs + [refs[1]], ids)
+    assert not probe._owner_references(refs[:-1], ids)
+
+
+def test_source_selector_matches_product_and_fails_closed_on_null_currency_and_ties(monkeypatch):
+    moment = datetime(2026, 11, 9, 20, 59, tzinfo=timezone.utc)
+    received = []
+    rows = [(Decimal("350.49"), moment, "USD", 11, moment)]
+
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def execute(self, sql):
+            received.append(sql)
+
+        def fetchall(self):
+            return rows
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(probe.fixture, "_connection", lambda: Connection())
+    assert probe._source()["measurement_id"] == 11
+    assert "quote_currency IS NOT NULL" in received[-1]
+    assert "price IS NOT NULL" not in received[-1]
+    assert "ORDER BY source_observed_at DESC,timestamp DESC LIMIT 2" in received[-1]
+    rows = [(None, moment, "USD", 12, moment), (Decimal("350.49"), moment.replace(hour=20, minute=58), "USD", 11, moment)]
+    with pytest.raises(RuntimeError, match="^aapl_source_unavailable$"):
+        probe._source()
+    rows = [(Decimal("350.49"), moment, "EUR", 12, moment)]
+    with pytest.raises(RuntimeError, match="^aapl_source_unavailable$"):
+        probe._source()
+    rows = [(Decimal("350.49"), moment, "USD", 12, moment),
+            (Decimal("350.50"), moment, "USD", 11, moment)]
+    with pytest.raises(RuntimeError, match="^aapl_source_ambiguous$"):
+        probe._source()
+
+
+def test_source_advancement_requires_inconclusive_not_old_quote_failure():
+    first = {"measurement_id": 11, "price": Decimal("350.49"),
+             "at": datetime(2026, 11, 9, 20, 59, tzinfo=timezone.utc)}
+    assert probe._same_source(first, dict(first))
+    assert not probe._same_source(first, {**first, "measurement_id": 12})
+    assert not probe._same_source(first, {**first, "price": Decimal("350.50")})
 
 
 def test_answer_checks_require_current_price_and_distinct_source_moments():
     moment = datetime(2026, 11, 9, 20, 59, tzinfo=timezone.utc)
     answer = "Actuele AAPL-bron: USD 350,49 om 20:59 UTC. Oud rapport: USD 351,19 om 19:03 UTC."
     assert probe._answer_current_price(answer, Decimal("350.48999"))
-    assert all(probe._answer_moments(answer, moment).values())
+    assert all(probe._answer_moments(answer, moment, Decimal("350.49")).values())
     assert not probe._old_claimed_current(answer)
     assert not probe._answer_current_price("USD 351,19 was de actuele koers.", Decimal("350.48999"))
-    assert not all(probe._answer_moments("USD 350,49", moment).values())
+    assert not all(probe._answer_moments("USD 350,49", moment, Decimal("350.49")).values())
+    wrong_zone = "Huidige AAPL-koers USD 350,49 om 20:59 CET. Oud rapport USD 351,19 om 19:03 UTC."
+    assert not probe._answer_moments(wrong_zone, moment, Decimal("350.49"))["current_source_time_explained"]
 
 
 def test_profile_is_protected_and_errors_are_allowlisted():

@@ -2650,8 +2650,9 @@ def main() -> int:
                 report[args.profile] = run_aapl_probe(fixture_namespace or "")
                 report["safety"]["execution_calls"] = report[args.profile]["executions"]
                 report["safety"]["live_trading_calls"] = report[args.profile]["live_calls"]
-                report["outcome"] = "passed" if report[args.profile]["result"] == "PASS" else "failed"
-                report["qa_status"] = "COMPLETED"
+                report["outcome"] = ({"PASS": "passed", "FAIL": "failed",
+                                     "INCONCLUSIVE": "incomplete"}[report[args.profile]["result"]])
+                report["qa_status"] = "INCOMPLETE" if report["outcome"] == "incomplete" else "COMPLETED"
             elif args.profile in {"trader_paper_exit_reconciliation", "trader_source_time_parity"}:
                 if args.manifest_id != "none" or args.manifest_bundle_path:
                     raise ValueError("paper_exit_fixture_manifest_forbidden")
