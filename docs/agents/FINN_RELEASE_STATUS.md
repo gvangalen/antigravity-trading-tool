@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## AAPL-coach: conflicterende actuele koersbron (11 november 2026)
 
-Phase: `LOCAL_GATES_FAILED`; **geen productdeploy of ingelogde live acceptatie**.
+Phase: `LOCAL_GATES_FAILED`; product-PR #967 is een draft:
+**geen productdeploy of ingelogde live acceptatie**.
 Branch `codex/market-quote-conflict-20261110` bouwt voort op QA-only PR #966
 (main `b3d0b7590d518a5024c2b1e027cc436d178022e7`). De voorgaande
 beschermde AAPL-proef op `47258033820efdf838c2a6bb2e69ee83ac16aab3`
@@ -14,17 +15,19 @@ was vóór fixtureseed `INCONCLUSIVE`: twaalf top-AAPL-rijen deelden één
 bronmoment maar verschilden in USD-prijs. De productlezers voor FINN,
 Live-preflight, botwaardering, exact pair en Paper-portefeuille verwerpen nu
 tegenstrijdige nieuwste bronfeiten. Zij lezen de koersvaluta uit dezelfde
-bronrij. De Twelve Data-adapter kiest indien aanwezig `last_update_at` of
+bronrij. Ook FINN's gedeelde assetcontext en coach-feed market-move lezen
+nu dezelfde geverifieerde quote; bij conflict tonen of publiceren zij geen
+oudere koers. De Twelve Data-adapter kiest indien aanwezig `last_update_at` of
 `last_quote_at` vóór het interval-openmoment. Een directe providercontrole
 gaf HTTP 429; beschikbaarheid van die velden in een echte actuele AAPL-respons
 is dus **niet bewezen**. De begrensde broncontrole inspecteert maximaal 4096
 rijen per asset/paar en faalt gesloten bij een volle tie; dit is een tijdelijke
 grens om normale herhalingen buiten beursuren beschikbaar te houden.
 
-Build-evidence op de productdiff: root-backend **4610 passed, 7 skipped**
-(`.local-finn-parity-artifacts/market-quote-conflict-pytest.log`, SHA-256
-`b3887c59034c2bc777b7b9cc61918c27ecfb52e9abe7d2a6dd11c544e4260b43`);
-gerichte regressies **77 passed**. Tijdelijke PostgreSQL 16-controles voerden
+Build-evidence op de laatste productdiff: root-backend **4610 passed, 7 skipped**
+(`.local-finn-parity-artifacts/market-quote-conflict-pytest-final.log`, SHA-256
+`42d3a0e18ae519c102ca7de5d9cf6026c643fe9de8738c845ad89fe00c557a7f`);
+gerichte regressies **85 passed**. Tijdelijke PostgreSQL 16-controles voerden
 legacy- en exacte-paarquery's echt uit; een async exacte-paarquery liet een
 geconflicteerd paar weg. Een geïndexeerde proef met 21 assets en 6000 rijen
 (waarvan 4000 identieke AAPL-herhalingen) duurde 17,6 ms inclusief
@@ -50,8 +53,13 @@ de laatste proef **38/38 cases, 16/16 acties, 9/9 lineage**, HTTP 200 en nul
 Live-bots of verboden uitvoeringen, maar terminal-p95 **18,34 s** en maximum
 **18,61 s** bij grenzen 10/15 s (artifact SHA-256
 `a4629b88ba8ce77bd1e47253053770491f2d4057302ea029e09747fb9407ebfc`).
-De wachtrij was toen snel; de vertraging zat in de FINN-selectiefase.
-Dit is geen groene Build-gate en geen vrijgave voor Live-orders.
+De wachtrij was toen snel; de vertraging zat in de Responses-toolroute:
+onder meer 2,08 s eerste providerantwoord, 5,04 s relevante-actietoets en
+9,55 s tweede providerantwoord bij een botwijziging. Deze runtimeproeven
+zijn gemeten vóór de kleine latere FINN-context/feed-leeswijziging; die
+wijziging is wel met gerichte en volledige backendtests gecontroleerd maar
+heeft nog geen eigen runtimegate. Dit is geen groene Build-gate en geen
+vrijgave voor Live-orders.
 
 ## AAPL-coach: eigenaargebonden rapportvergelijking en koersverschil (10 november 2026)
 

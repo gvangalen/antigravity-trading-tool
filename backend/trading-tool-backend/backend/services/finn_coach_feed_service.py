@@ -516,7 +516,7 @@ class FinnCoachFeedService:
                 created.append(item)
         # A market move is informational and tied to at least one owned plan.
         # It is never interpreted as a plan condition or order eligibility.
-        snapshot = await MarketDataRepository(self.session).get_latest_snapshot(asset)
+        snapshot = await MarketDataRepository(self.session).get_latest_quoted_snapshot(asset)
         changed = float(snapshot.change_24h) if snapshot and snapshot.change_24h is not None else None
         observed = getattr(snapshot, "source_observed_at", None) if snapshot else None
         if (changed is not None and abs(changed) >= 10

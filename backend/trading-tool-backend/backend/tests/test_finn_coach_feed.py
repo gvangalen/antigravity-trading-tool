@@ -529,7 +529,7 @@ def test_missing_score_emits_one_owner_asset_blocker_without_false_match(monkeyp
         def __init__(self, _session):
             pass
 
-        async def get_latest_snapshot(self, _symbol):
+        async def get_latest_quoted_snapshot(self, _symbol):
             return None
 
     monkeypatch.setattr("backend.services.setup_market_match_service.SetupMarketMatchService", MatchService)
