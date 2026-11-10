@@ -143,7 +143,7 @@ def test_source_selector_matches_product_and_fails_closed_on_null_currency_and_t
     assert probe._source()["measurement_id"] == 11
     assert "quote_currency IS NOT NULL" not in received[-1]
     assert "price IS NOT NULL" not in received[-1]
-    assert "ORDER BY source_observed_at DESC,timestamp DESC,id DESC LIMIT 65" in received[-1]
+    assert "ORDER BY source_observed_at DESC,timestamp DESC,id DESC LIMIT 4096" in received[-1]
     rows = [quote(13), quote(12), quote(11)]
     assert probe._source()["measurement_id"] == 13
     rows = [quote(12, None), quote(11, source=moment.replace(minute=58))]
@@ -170,7 +170,12 @@ def test_source_selector_matches_product_and_fails_closed_on_null_currency_and_t
     rows = [quote(12), quote(11, "350.50", stored=moment.replace(minute=58))]
     with pytest.raises(RuntimeError, match="^aapl_source_ambiguous$"):
         probe._source()
-    rows = [quote(100 - index) for index in range(65)]
+    rows = [quote(100 - index) for index in range(66)]
+    assert probe._source()["measurement_id"] == 100
+    rows[-1] = quote(35, "350.50")
+    with pytest.raises(RuntimeError, match="^aapl_source_ambiguous$"):
+        probe._source()
+    rows = [quote(5000 - index) for index in range(4096)]
     with pytest.raises(RuntimeError, match="^aapl_source_ambiguous$"):
         probe._source()
 

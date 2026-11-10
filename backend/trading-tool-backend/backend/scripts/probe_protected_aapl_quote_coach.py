@@ -88,7 +88,7 @@ def _source():
             cur.execute("""SELECT price,source_observed_at,quote_currency,id,timestamp,symbol,price_provider
                            FROM market_data WHERE symbol='AAPL' AND market_id IS NULL
                              AND source_observed_at IS NOT NULL
-                           ORDER BY source_observed_at DESC,timestamp DESC,id DESC LIMIT 65""")
+                           ORDER BY source_observed_at DESC,timestamp DESC,id DESC LIMIT 4096""")
             rows = cur.fetchall()
         row = rows[0] if rows else None
         # Match the product's highest provider-source moment. Storage time and
@@ -103,7 +103,7 @@ def _source():
                      for candidate in tied}
         except (InvalidOperation, TypeError, ValueError):
             raise RuntimeError("aapl_source_ambiguous") from None
-        if len(tied) >= 65 or len(facts) != 1:
+        if len(tied) >= 4096 or len(facts) != 1:
             raise RuntimeError("aapl_source_ambiguous")
         if row[5] != "AAPL" or row[2] != "USD" or Decimal(str(row[0])) <= 0:
             raise RuntimeError("aapl_source_unavailable")
