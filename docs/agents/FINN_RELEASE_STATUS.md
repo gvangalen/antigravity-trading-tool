@@ -6,8 +6,9 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## AAPL-coach: nieuwste koers en bronmoment (10 november 2026)
 
-Phase: `BUILD_VALIDATED_LOCAL_CI_PENDING`. Branch
-`codex/finn-aapl-quote-order-20261110` repareert de Paper-test waarin FINN
+Phase: `PRODUCT_DEPLOYED_STATUS_UPDATE_PENDING`. Branch
+`codex/finn-aapl-quote-order-20261110` is via PR #954 gemerged. Deze reparatie
+betreft de Paper-test waarin FINN
 USD 351,19 van 9 november 19:03 UTC uit een eerdere gespreksbeurt de
 "actuele koerssnapshot" noemde, hoewel de nieuwe scorelezing al USD 350,49
 van 20:59 UTC bevatte. Onafhankelijke read-only QA bevestigde dat de
@@ -31,9 +32,14 @@ slaagde **20/20** (artifact SHA-256
 en de regressie **109/109** zonder failcategorie (artifact SHA-256
 `ca30718b9df8ae2fcec3de3a8f042eb6e520c505c7c60534777e0877ab2ee71d`).
 QA en Security gaven read-only GO voor de gerichte code na regressiehertests.
-Frontendcode is niet gewijzigd. PR-CI, deployidentiteit en onafhankelijke
-ingelogde live QA op de gedeployde SHA staan nog open. Dit is nog geen
-live-acceptatie of vrijgave voor Live-orders.
+Frontendcode is niet gewijzigd. PR-CI `42862919718` en main-CI `42863859580`
+voltooiden succesvol. Auto Deploy `42864713914` voltooide succesvol; op
+10 november 2026 meldden publieke backend-health en frontend-buildinfo beide
+HTTP 200 en SHA `6919d27516204c77696dbda7f78f1698ffe553d1`, gelijk aan
+de toenmalige main-commit. Deze statuswijziging wordt een nieuwe main-SHA;
+QA start pas na de laatste bijbehorende main-CI en Auto Deploy met opnieuw
+geverifieerde publieke SHA-pariteit. Onafhankelijke ingelogde live QA staat
+nog open. Dit is nog geen live-acceptatie of vrijgave voor Live-orders.
 
 ## Vier trader-gates: FINN-accountantwoord en gedateerde indicatormeting (9 november 2026)
 
