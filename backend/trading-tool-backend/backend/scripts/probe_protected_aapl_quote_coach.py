@@ -85,24 +85,27 @@ def _source():
     conn = fixture._connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("""SELECT price,source_observed_at,quote_currency,id,timestamp
+            cur.execute("""SELECT price,source_observed_at,quote_currency,id,timestamp,symbol,price_provider
                            FROM market_data WHERE symbol='AAPL' AND market_id IS NULL
-                             AND quote_currency IS NOT NULL AND source_observed_at IS NOT NULL
+                             AND source_observed_at IS NOT NULL
                            ORDER BY source_observed_at DESC,timestamp DESC,id DESC LIMIT 65""")
             rows = cur.fetchall()
         row = rows[0] if rows else None
-        # The market repository does not break source/timestamp ties by ID.
-        # Identical quote facts are equivalent whichever row it selects; a
-        # different price or currency at that rank is genuinely ambiguous.
+        # Match the product's highest provider-source moment. Storage time and
+        # ID order equivalent facts, but cannot resolve different source facts.
+        if not row or row[0] is None or not row[2] or _utc(row[1]) is None:
+            raise RuntimeError("aapl_source_unavailable")
         tied = [candidate for candidate in rows
-                if row and candidate[1] == row[1] and candidate[4] == row[4]]
-        if (len(tied) == 65 or any(
-            candidate[0] != row[0] or candidate[2] != row[2]
-            for candidate in tied
-        )):
+                if candidate[1] == row[1]]
+        try:
+            facts = {(str(candidate[5] or "").upper(), Decimal(str(candidate[0])),
+                      str(candidate[2] or "").upper(), str(candidate[6] or "").lower())
+                     for candidate in tied}
+        except (InvalidOperation, TypeError, ValueError):
+            raise RuntimeError("aapl_source_ambiguous") from None
+        if len(tied) >= 65 or len(facts) != 1:
             raise RuntimeError("aapl_source_ambiguous")
-        if (not row or row[2] != "USD" or row[0] is None
-                or _utc(row[1]) is None or Decimal(str(row[0])) <= 0):
+        if row[5] != "AAPL" or row[2] != "USD" or Decimal(str(row[0])) <= 0:
             raise RuntimeError("aapl_source_unavailable")
         if _utc(row[1]) <= OLD_SOURCE or abs(Decimal(str(row[0])) - OLD_PRICE) <= Decimal("0.05"):
             raise RuntimeError("aapl_source_not_newer")
