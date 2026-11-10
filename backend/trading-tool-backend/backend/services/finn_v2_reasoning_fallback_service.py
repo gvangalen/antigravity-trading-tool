@@ -1216,7 +1216,7 @@ class FinnV2ReasoningFallbackService:
             advice = (
                 " Advies: wachten; de huidige profiel- of setupbeoordeling bevestigt deze trade niet."
                 if context.get("recommendation") == "wait" else
-                " Advies: voorzichtig beoordelen; de hoeveelheid is gehalveerd."
+                " Advies: voorzichtig beoordelen; het risicobudget is gehalveerd en daaruit is de hoeveelheid berekend."
                 if context.get("recommendation") == "reduced_risk" else
                 " De benchmark past bij je setup, maar dat is geen instapsignaal."
                 if plan.get("level_source") == "market_derived" else ""
