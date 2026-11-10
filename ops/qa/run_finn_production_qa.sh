@@ -17,7 +17,7 @@ allow_fixture_actions="${FINN_QA_ALLOW_FIXTURE_ACTIONS:-false}"
 allow_safe_fixture_execution="${FINN_QA_ALLOW_FIXTURE_EXECUTION:-false}"
 
 [[ "$release_sha" =~ ^[0-9a-f]{40}$ ]] || usage
-[[ "$qa_profile" =~ ^(auth_preflight|watchlist_browser_ui|watchlist_context_audit|trade_review_preflight|manifest_key|targeted_regression|runtime_acceptance|action_contract_acceptance|full_release_acceptance|safety|latency|score2_stale_paper|score2_positive_paper|score2_outside_paper|score2_exact_eur_paper|score2_exact_usdt_paper|trader_pair_score_continuity|trader_account_state_readback|trader_source_time_parity|trader_paper_exit_reconciliation|trader_paper_exit_fixture_audit|trader_pair_fixture_audit|trader_pair_fixture_cleanup|trader_strategy_schema_audit|closed_paper_trade_review|closed_paper_trade_review_chat|auto_paper_trade_history|portfolio_paper_fx|portfolio_paper_fx_schema|typed_entry_paper)$ ]] || usage
+[[ "$qa_profile" =~ ^(auth_preflight|watchlist_browser_ui|watchlist_context_audit|trade_review_preflight|manifest_key|targeted_regression|runtime_acceptance|action_contract_acceptance|full_release_acceptance|safety|latency|score2_stale_paper|score2_positive_paper|score2_outside_paper|score2_exact_eur_paper|score2_exact_usdt_paper|trader_pair_score_continuity|trader_account_state_readback|aapl_paper_quote_coach|trader_source_time_parity|trader_paper_exit_reconciliation|trader_paper_exit_fixture_audit|trader_pair_fixture_audit|trader_pair_fixture_cleanup|trader_strategy_schema_audit|closed_paper_trade_review|closed_paper_trade_review_chat|auto_paper_trade_history|portfolio_paper_fx|portfolio_paper_fx_schema|typed_entry_paper)$ ]] || usage
 [[ "$manifest_id" =~ ^[a-z0-9][a-z0-9._-]{0,80}$ ]] || usage
 [[ "$run_label" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$ ]] || usage
 [[ "$allow_fixture_actions" =~ ^(true|false)$ ]] || usage
@@ -50,6 +50,9 @@ if [[ "$qa_profile" == "trader_pair_score_continuity" && ( "$manifest_id" != "no
   usage
 fi
 if [[ "$qa_profile" == "trader_account_state_readback" && ( "$manifest_id" != "none" || -n "$manifest_bundle_path" || "$allow_fixture_actions" != "true" || "$allow_safe_fixture_execution" != "false" ) ]]; then
+  usage
+fi
+if [[ "$qa_profile" == "aapl_paper_quote_coach" && ( "$manifest_id" != "none" || -n "$manifest_bundle_path" || "$allow_fixture_actions" != "true" || "$allow_safe_fixture_execution" != "false" ) ]]; then
   usage
 fi
 if [[ "$qa_profile" == "trader_paper_exit_reconciliation" && ( "$manifest_id" != "none" || -n "$manifest_bundle_path" || "$allow_fixture_actions" != "true" || "$allow_safe_fixture_execution" != "true" ) ]]; then

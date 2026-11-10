@@ -38,7 +38,7 @@ def _connection():
     return conn
 
 
-def _seed(namespace: str, bound_qa_owner: int) -> tuple[int, int, str]:
+def _seed(namespace: str, bound_qa_owner: int, *, bot_active: bool = True) -> tuple[int, int, str]:
     from backend.domain.finn_dca_plan_contract import split_confirmed_dca_plan
     from backend.utils.auth_utils import hash_password
 
@@ -101,9 +101,9 @@ def _seed(namespace: str, bound_qa_owner: int) -> tuple[int, int, str]:
                     risk_profile,budget_total_eur,budget_daily_limit_eur,
                     budget_min_order_eur,budget_max_order_eur,max_asset_exposure_pct,
                     base_currency,paper_initial_cash_eur,created_at,updated_at)
-                   VALUES (%s,%s,'daily','ETH',%s,'manual',FALSE,TRUE,'balanced',
+                   VALUES (%s,%s,'daily','ETH',%s,'manual',FALSE,%s,'balanced',
                            100,100,1,20,100,'EUR',100,%s,%s) RETURNING id""",
-                (user_id, strategy_id, namespace, now, now),
+                (user_id, strategy_id, namespace, bot_active, now, now),
             )
             bot_id = int(cur.fetchone()[0])
             cur.execute(
@@ -261,7 +261,8 @@ def _age_market_reading(user_id: int) -> None:
         raise RuntimeError("stale_control_score_unexpected")
 
 
-def _cleanup(namespace: str, user_id: int, bot_id: int, *, require_safe_pair_cleanup: bool = False) -> None:
+def _cleanup(namespace: str, user_id: int, bot_id: int, *, require_safe_pair_cleanup: bool = False,
+             allow_planned_decisions: bool = False) -> None:
     conn = _connection()
     try:
         with conn.cursor() as cur:
@@ -283,10 +284,26 @@ def _cleanup(namespace: str, user_id: int, bot_id: int, *, require_safe_pair_cle
                 cur.execute("SELECT COUNT(*) FROM exchange_keys WHERE user_id=%s", (user_id,))
                 if cur.fetchone()[0]:
                     raise RuntimeError("fixture_cleanup_keys_present")
-                for table in ("bot_decisions", "bot_orders", "bot_executions", "bot_ledger"):
+                for table in ("bot_trade_plans", "bot_orders", "bot_executions", "bot_ledger"):
                     cur.execute(f"SELECT COUNT(*) FROM {table} WHERE user_id=%s", (user_id,))
                     if cur.fetchone()[0]:
                         raise RuntimeError("fixture_cleanup_trade_present")
+                if allow_planned_decisions:
+                    cur.execute("""SELECT COUNT(*),COUNT(*) FILTER
+                                   (WHERE bot_id=%s AND status='planned' AND action='hold')
+                                   FROM bot_decisions WHERE user_id=%s""",
+                                (bot_id, user_id))
+                    decision_counts = cur.fetchone()
+                    if decision_counts != (1, 1):
+                        raise RuntimeError("fixture_cleanup_trade_present")
+                    cur.execute("""SELECT COUNT(*) FROM bot_decisions WHERE user_id=%s
+                                   AND (bot_id IS DISTINCT FROM %s OR status IS DISTINCT FROM 'planned'
+                                        OR action IS DISTINCT FROM 'hold')""",
+                                (user_id, bot_id))
+                else:
+                    cur.execute("SELECT COUNT(*) FROM bot_decisions WHERE user_id=%s", (user_id,))
+                if cur.fetchone()[0]:
+                    raise RuntimeError("fixture_cleanup_trade_present")
             cur.execute("UPDATE bot_configs SET is_active=FALSE WHERE id=%s AND user_id=%s AND is_live=FALSE", (bot_id, user_id))
             if cur.rowcount != 1:
                 raise RuntimeError("fixture_cleanup_bot_mismatch")
