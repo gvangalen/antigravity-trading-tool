@@ -161,9 +161,15 @@ def _explicit_create_operation_request(message: str) -> str | None:
     object is not that slot's answer. Questions and negated requests stay in
     the ordinary conversation path.
     """
+    manual_plan_request = bool(re.search(
+        r"\b(?:handmatig(?:e)?|manual|manuell(?:e|er|es)?)\b"
+        r"[^.!?\n]{0,90}\b(?:trade(?:voorstel|plan)?|trading[ -]?plan|orderplan)\b",
+        message, re.I,
+    ))
     conversational_plan_request = bool(re.search(
         r"\b(?:(?:kun|kan)\s+(?:je|jij|u)|(?:could|can)\s+you|kannst\s+du)\b"
-        r"[^?]{0,100}\b(?:(?:trading|trade|handels|beleggings)[-\s]*plan|"
+        r"[^?]{0,100}\b(?:handmatig(?:e)?\s+tradevoorstel|manual\s+trade\s+proposal|"
+        r"(?:trading|trade|handels|beleggings)[-\s]*plan|"
         r"(?:(?:dca|trade|trading)[-\s]*)?setup)\b[^?]{0,60}"
         r"\b(?:maken|make|create|aanmaken|erstellen)\b",
         message, re.I,
@@ -172,7 +178,7 @@ def _explicit_create_operation_request(message: str) -> str | None:
             and not re.search(r"\b(?:hoe|uitleggen|explain|how|wie|niet|geen|"
                               r"not|no|without|zonder|kein(?:e|en|em|er|es)?)\b", message, re.I)
             and not _proposal_explicitly_excluded(message)):
-        return "create_setup"
+        return "create_manual_trade_plan" if manual_plan_request else "create_setup"
     if "?" in message or _proposal_explicitly_excluded(message) or not re.match(
         r"^\s*(?:maak|cre(?:ate|eer)|erstelle|lege\s+an)\b", message, re.I,
     ) or re.match(r"^\s*maak\s+geen\b", message, re.I):
@@ -1034,6 +1040,14 @@ class FinnResponsesFrontDoor:
             )):
                 return True
         if slot_value is None:
+            if (contract.operation_id == "create_manual_trade_plan"
+                    and requested_slot in {"entry_price", "quantity", "stop_loss", "targets"}
+                    and len(message) <= 80 and re.search(r"\d", message)
+                    and not separate_action):
+                # Invalid or ambiguous financial input stays with the active
+                # slot so FINN repeats the question instead of losing the
+                # owner-bound draft to a fresh model intent.
+                return True
             # The user may fill another DCA field before the currently asked
             # slot. Keep a short, unambiguous answer in this owner-bound draft;
             # free tool selection can otherwise abandon the proposal entirely.

@@ -1364,6 +1364,10 @@ class FinnV2ResponseVerifierService:
             )
         elif operation == "save_trade_plan":
             change = TradePlanChange(plan_id=str(candidate.target_id or changes.get("plan_id") or "") or None, changed_fields=dict(changes.get("changed_fields") or changes))
+        elif operation == "create_manual_trade_plan":
+            from backend.schemas.finn_v2_proposal_schema import ManualTradePlanChange
+
+            change = ManualTradePlanChange(plan_fields=dict(changes.get("plan_fields") or {}))
         elif operation in {"activate_paper_bot", "activate_live_bot"}:
             change = BotActivationChange(
                 bot_id=int(candidate.target_id or changes.get("bot_id") or 0),

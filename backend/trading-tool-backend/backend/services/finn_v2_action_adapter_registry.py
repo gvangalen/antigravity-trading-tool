@@ -69,6 +69,7 @@ class FinnV2ActionAdapterRegistry:
             "watchlist_add": self._watchlist_add,
             "watchlist_remove": self._watchlist_remove,
             "save_trade_plan": self._save_trade_plan,
+            "create_manual_trade_plan": self._create_manual_trade_plan,
             "activate_paper_bot": self._activate_paper_bot,
             "activate_live_bot": self._activate_live_bot,
         }
@@ -90,7 +91,18 @@ class FinnV2ActionAdapterRegistry:
 
     async def postcondition_hash(self, operation_type: str, *, user_id: int, payload: dict) -> str:
         observed: dict[str, Any] = {"operation_type": operation_type}
-        if operation_type in {"watchlist_add", "watchlist_remove"}:
+        if operation_type == "create_manual_trade_plan":
+            row = await self.session.execute(text(
+                "SELECT id,plan_json FROM finn_manual_trade_plans "
+                "WHERE user_id=:user_id AND id=:plan_id"
+            ), {"user_id": user_id, "plan_id": payload.get("id")})
+            saved = row.mappings().one_or_none()
+            if (saved is None or saved["plan_json"].get("executable") is not False
+                    or saved["plan_json"].get("asset") != payload.get("asset")
+                    or saved["plan_json"].get("quote_currency") != payload.get("quote_currency")):
+                raise ValueError("manual_trade_plan_postcondition_failed")
+            observed.update({"id": saved["id"], "plan": dict(saved["plan_json"])})
+        elif operation_type in {"watchlist_add", "watchlist_remove"}:
             asset = str(payload.get("asset") or "").strip().upper()
             market_id = payload.get("market_id")
             result = await self.session.execute(
@@ -639,6 +651,18 @@ class FinnV2ActionAdapterRegistry:
         change = payload["change"]
         trade_plan = TradePlanUpsertSchema.parse_obj(change.get("changed_fields") or change)
         return await self.bots.save_trade_plan(int(change.get("plan_id") or payload.get("target", {}).get("target_id") or 0), trade_plan, user_id)
+
+    async def _create_manual_trade_plan(self, user_id: int, payload: dict) -> dict:
+        from backend.services.finn_manual_trade_plan_service import save_manual_trade_plan
+
+        if payload.get("operation_type") != "create_manual_trade_plan":
+            raise ValueError("manual_trade_plan_operation_mismatch")
+        if not payload.get("source_run_id"):
+            raise ValueError("manual_trade_plan_source_run_required")
+        return await save_manual_trade_plan(
+            self.session, user_id=user_id, source_run_id=str(payload["source_run_id"]),
+            fields=dict((payload.get("change") or {}).get("plan_fields") or {}),
+        )
 
     async def _activate_paper_bot(self, user_id: int, payload: dict) -> dict:
         if not self.flags.execute_paper_bot_activation_enabled():

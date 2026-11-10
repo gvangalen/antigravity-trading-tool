@@ -159,6 +159,10 @@ class FinnV2ProposalService:
             raise ValueError("proposal_evidence_hash_mismatch")
 
         await self._validate_target_user_scope(user_id=user_id, proposal_input=proposal_input)
+        if proposal_input.operation_type == "create_manual_trade_plan":
+            from backend.services.finn_manual_trade_plan_service import verified_plan_market
+
+            await verified_plan_market(self.session, proposal_input.change.plan_fields)
 
         row = await self.proposals.create(
             id=f"finn-v2-proposal-{uuid.uuid4().hex}",

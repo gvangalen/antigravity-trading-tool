@@ -812,6 +812,42 @@ async def assistant_v2_get_proposal(
     )
 
 
+@router.get("/assistant/v2/manual-trade-plans")
+async def assistant_v2_list_manual_trade_plans(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Read only the authenticated owner's confirmed, non-executable plans."""
+    from sqlalchemy import text
+
+    rows = await db.execute(text(
+        "SELECT id,plan_json,created_at FROM finn_manual_trade_plans "
+        "WHERE user_id=:user_id ORDER BY created_at DESC,id DESC LIMIT 50"
+    ), {"user_id": current_user["id"]})
+    return {"items": [
+        {"id": row["id"], "plan": dict(row["plan_json"]), "created_at": row["created_at"]}
+        for row in rows.mappings().all()
+    ]}
+
+
+@router.get("/assistant/v2/manual-trade-plans/{plan_id}")
+async def assistant_v2_get_manual_trade_plan(
+    plan_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from sqlalchemy import text
+
+    result = await db.execute(text(
+        "SELECT id,plan_json,created_at FROM finn_manual_trade_plans "
+        "WHERE id=:plan_id AND user_id=:user_id"
+    ), {"plan_id": plan_id, "user_id": current_user["id"]})
+    row = result.mappings().one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Manual trade plan not found")
+    return {"id": row["id"], "plan": dict(row["plan_json"]), "created_at": row["created_at"]}
+
+
 @router.post("/assistant/v2/proposals/{proposal_id}/publish")
 async def assistant_v2_publish_proposal(
     proposal_id: str,

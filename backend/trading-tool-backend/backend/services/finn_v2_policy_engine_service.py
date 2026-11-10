@@ -37,6 +37,7 @@ class FinnV2PolicyEngineService:
         "watchlist_add": ("proposal", ["identity_context"]),
         "watchlist_remove": ("proposal", ["identity_context"]),
         "save_trade_plan": ("proposal", ["identity_context", "plan_context"]),
+        "create_manual_trade_plan": ("proposal", ["identity_context"]),
         "activate_paper_bot": ("paper_action", ["plan_context", "automation_context"]),
         "activate_live_bot": ("high_risk_action", ["identity_context", "market_context", "plan_context", "automation_context"]),
         "portfolio_rebalance": ("high_risk_action", ["identity_context", "portfolio_context"]),

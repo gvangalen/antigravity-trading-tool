@@ -2,7 +2,7 @@
 
 import React, { Suspense, useState, useEffect, useLayoutEffect, useRef } from "react";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
-import { cancelFinnV2Proposal, cancelFinnV2Run, confirmAndExecuteFinnV2Proposal, getAssistantPreferences, getFinnV2Conversations, getFinnV2ConversationDetail, updateAssistantPreferences, assistantChatStream, abortAssistantChatStream, fetchFinnV2Proposal, fetchFinnV2Run, waitForFinnV2TerminalSse } from "@/lib/api/ai";
+import { cancelFinnV2Proposal, cancelFinnV2Run, confirmAndExecuteFinnV2Proposal, getAssistantPreferences, getFinnV2Conversations, getFinnV2ConversationDetail, updateAssistantPreferences, assistantChatStream, abortAssistantChatStream, fetchFinnV2Proposal, fetchFinnV2Run, fetchFinnManualTradePlans, waitForFinnV2TerminalSse } from "@/lib/api/ai";
 import { Send, Shield, Loader2, X, Bot, ListChecks, CheckCircle2, Plus, Search, SlidersHorizontal, History, Maximize2, Minimize2, Square } from "lucide-react";
 import { useAsset } from "@/app/providers/AssetProvider";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -474,9 +474,26 @@ function AIAssistantContent({
   const [showComposerMenu, setShowComposerMenu] = useState(false);
   const [manualCommandRequest, setManualCommandRequest] = useState(null);
   const [showSessionMenu, setShowSessionMenu] = useState(false);
+  const [savedManualTradePlans, setSavedManualTradePlans] = useState({ ownerId: null, items: [] });
   const [chatAssetOverride, setChatAssetOverride] = useState(null);
   const [activeFinnSessionId, setActiveFinnSessionId] = useState(null);
   const [availableFinnSessions, setAvailableFinnSessions] = useState([]);
+
+  const visibleManualTradePlans = savedManualTradePlans.ownerId === user?.id
+    ? savedManualTradePlans.items
+    : [];
+
+  useEffect(() => { setSavedManualTradePlans({ ownerId: null, items: [] }); }, [user?.id]);
+
+  useEffect(() => {
+    if (!isOpen || !showSessionMenu || !user?.id) return;
+    let cancelled = false;
+    setSavedManualTradePlans({ ownerId: null, items: [] });
+    fetchFinnManualTradePlans()
+      .then((response) => { if (!cancelled) setSavedManualTradePlans({ ownerId: user.id, items: Array.isArray(response?.items) ? response.items : [] }); })
+      .catch(() => { if (!cancelled) setSavedManualTradePlans({ ownerId: user.id, items: [] }); });
+    return () => { cancelled = true; };
+  }, [isOpen, showSessionMenu, user?.id]);
 
   const messagesEndRef = useRef(null);
   const scrollRef = useRef(null);
@@ -1247,6 +1264,7 @@ function AIAssistantContent({
                   supplied_inputs: reviewedSetupDraft?.supplied_inputs || projection?.supplied_inputs || {},
                   before_state: immutableProposalState?.before_state || {},
                   requested_state: immutableProposalState?.requested_state || projection?.supplied_inputs?.changed_fields || {},
+                  reviewed_payload_hash: immutableProposalState?.payload_hash || null,
                   target_revision: immutableProposalState?.target_revision || null,
                   snapshot_timestamp: immutableProposalState?.snapshot_timestamp || null,
                   changed_fields: immutableProposalState?.requested_state || projection?.supplied_inputs?.changed_fields || {},
@@ -1800,6 +1818,15 @@ function AIAssistantContent({
           return;
         }
         const reviewedName = action.display_context?.review_target_name;
+        if (action.display_context?.operation_id === "create_manual_trade_plan" && (
+          !action.display_context.reviewed_payload_hash
+          || latestProposal.payload_hash !== action.display_context.reviewed_payload_hash
+          || JSON.stringify(latestProposal.requested_state || {}) !== JSON.stringify(action.display_context.requested_state || {})
+        )) {
+          retireProposalCards(new Set([action.proposal_id]));
+          showSnackbar("Dit handmatige tradeplan is gewijzigd. Bekijk eerst een nieuw voorstel.", "info");
+          return;
+        }
         if (reviewedName && latestProposal.review_target_name !== reviewedName) {
           retireProposalCards(new Set([action.proposal_id]));
           showSnackbar("Dit voorstel verwijst niet meer naar dezelfde naam. Vraag FINN om een nieuw voorstel.", "info");
@@ -1841,7 +1868,7 @@ function AIAssistantContent({
         const operationId = displayContext.operation_id || execution.operation_id || "";
         const suppliedInputs = displayContext.supplied_inputs || {};
         const canonicalEntity = execution.action_result?.canonical_entity || {};
-        const operationLabel = operationId.includes("bot") ? "Paper-bot" : operationId.includes("strategy") ? "Strategie" : operationId.includes("setup") ? "Setup" : operationId.includes("indicator_configuration") ? "Indicator" : operationId.startsWith("watchlist_") ? "Watchlist" : "Actie";
+        const operationLabel = operationId === "create_manual_trade_plan" ? "Handmatig tradeplan" : operationId.includes("bot") ? "Paper-bot" : operationId.includes("strategy") ? "Strategie" : operationId.includes("setup") ? "Setup" : operationId.includes("indicator_configuration") ? "Indicator" : operationId.startsWith("watchlist_") ? "Watchlist" : "Actie";
         const resultName = execution.action_result?.canonical_name
           || canonicalEntity.name
           || suppliedInputs.name
@@ -1852,8 +1879,17 @@ function AIAssistantContent({
         const watchlistAsset = suppliedInputs.asset || execution.action_result?.asset || "De asset";
         const watchlistQuote = suppliedInputs.quote_currency || execution.action_result?.quote_currency;
         const watchlistName = watchlistQuote ? `${watchlistAsset}/${watchlistQuote}` : watchlistAsset;
+        const savedTradePlan = displayContext.requested_state || {};
         const analysisResultText = operationId.startsWith("watchlist_")
           ? `${watchlistName} is ${operationId === "watchlist_remove" ? "uit je watchlist verwijderd" : "aan je watchlist toegevoegd"}.`
+          : operationId === "create_manual_trade_plan"
+            ? at("draftCards.manualTradeSaved", "Tradeplan {asset}/{quote} opgeslagen (plan {id}). Instap {entry}, hoeveelheid {quantity}, stop {stop}, doelen {targets}. Gepland verlies bij stop: {loss} {quote}. Er is geen order geplaatst of bot geactiveerd.", {
+                asset: savedTradePlan.asset || "–", quote: savedTradePlan.quote_currency || "–",
+                id: execution.action_result?.id || "–", entry: savedTradePlan.entry_price || "–",
+                quantity: savedTradePlan.quantity || "–", stop: savedTradePlan.stop_loss || "–",
+                targets: Array.isArray(savedTradePlan.targets) ? savedTradePlan.targets.join(", ") : "–",
+                loss: savedTradePlan.max_loss_quote || "–",
+              })
           : operationId.includes("indicator_configuration")
             ? `${indicatorDisplayName(suppliedInputs.indicator || execution.action_result?.canonical_name)} is ${operationId.startsWith("delete_") ? "verwijderd uit" : operationId.startsWith("update_") ? "bijgewerkt in" : "toegevoegd aan"} ${categoryLabel || "je analyse"}${suppliedInputs.asset ? ` voor ${suppliedInputs.asset}` : ""}.`
             : null;
@@ -2276,6 +2312,43 @@ function AIAssistantContent({
     const isWatchlistAction = ["watchlist_add", "watchlist_remove"].includes(operationId);
     const isIndicatorAction = ["create_indicator_configuration", "update_indicator_configuration", "delete_indicator_configuration"].includes(operationId);
     const suppliedInputs = displayContext.supplied_inputs || {};
+    if (operationId === "create_manual_trade_plan") {
+      const plan = displayContext.requested_state || {};
+      const quote = plan.quote_currency || "";
+      const rows = [
+        [at("draftCards.manualTradeDirection", "Richting"), plan.direction], [at("draftCards.manualTradeEntry", "Limietinstap"), plan.entry_price],
+        [at("draftCards.manualTradeQuantity", "Hoeveelheid"), plan.quantity], [at("draftCards.manualTradeStop", "Stoploss"), plan.stop_loss],
+        [at("draftCards.manualTradeTargets", "Koersdoelen"), Array.isArray(plan.targets) ? plan.targets.join(", ") : ""],
+        [at("draftCards.manualTradeValue", "Positiewaarde"), `${plan.position_value_quote || ""} ${quote}`.trim()],
+        [at("draftCards.manualTradeLoss", "Gepland verlies bij stop (excl. kosten/slip)"), `${plan.max_loss_quote || ""} ${quote}`.trim()],
+        [at("draftCards.manualTradeRiskUnit", "Risico per eenheid"), `${plan.risk_per_unit_quote || ""} ${quote}`.trim()],
+        [at("draftCards.manualTradeRiskPct", "Risico t.o.v. positiewaarde"), `${plan.risk_pct_of_position || ""}%`],
+        [at("draftCards.manualTradeRewardRisk", "Reward/risk per doel"), Array.isArray(plan.reward_risk_by_target) ? plan.reward_risk_by_target.join(" / ") : ""],
+      ];
+      const positive = (value) => Number.isFinite(Number(value)) && Number(value) > 0;
+      const complete = plan.executable === false && Boolean(
+        plan.asset && quote && ["long", "short"].includes(plan.direction) && plan.entry_type === "limit"
+        && positive(plan.entry_price) && positive(plan.quantity) && positive(plan.stop_loss)
+        && Array.isArray(plan.targets) && plan.targets.length > 0 && plan.targets.every(positive)
+        && positive(plan.position_value_quote) && positive(plan.max_loss_quote)
+        && positive(plan.risk_per_unit_quote) && positive(plan.risk_pct_of_position)
+        && Array.isArray(plan.reward_risk_by_target)
+        && plan.reward_risk_by_target.length === plan.targets.length,
+      );
+      return (
+        <div className="mt-4 min-w-0 rounded-2xl border border-blue-200 bg-blue-50/70 p-4 dark:border-blue-900 dark:bg-blue-950/20">
+          <h3 className="text-sm font-bold text-slate-950 dark:text-white">{at("draftCards.manualTradeTitle", "Handmatig tradeplan · {asset}/{quote}", { asset: plan.asset, quote })}</h3>
+          <p className="mt-1 text-xs text-slate-700 dark:text-slate-300">{at("draftCards.manualTradeBody", "Controleer alle niveaus en hoeveelheden. Dit plan plaatst geen order en activeert geen bot.")}</p>
+          <dl className="mt-3 divide-y divide-blue-100 text-xs dark:divide-blue-900/50">
+            {rows.map(([label, value]) => <div key={label} className="flex justify-between gap-3 py-1.5"><dt className="text-slate-600 dark:text-slate-300">{label}</dt><dd className="break-words text-right font-semibold text-slate-950 dark:text-white">{value || "–"}</dd></div>)}
+          </dl>
+          <div className="mt-4 flex gap-2">
+            <button type="button" onClick={() => void handleExecuteAction(actionOnly[0])} disabled={!complete || loading || executingAction || message.confirmationSuspended} className={actionButtonStyles({ variant: "primary", className: "rounded-xl px-4 py-2.5 text-xs" })}>{at("draftCards.manualTradeSave", "Plan opslaan")}</button>
+            <button type="button" onClick={() => void handleCancelDraft(messages.indexOf(message))} disabled={executingAction} className="rounded-xl px-3 py-2 text-xs text-slate-600 dark:text-slate-300">{at("draftCards.cancel", "Annuleren")}</button>
+          </div>
+        </div>
+      );
+    }
     const namedTargetReview = [
       "delete_setup", "delete_strategy", "delete_bot", "deactivate_bot",
       "activate_paper_bot", "activate_live_bot",
@@ -2690,6 +2763,24 @@ function AIAssistantContent({
                   </button>
                 );
               })}
+              {visibleManualTradePlans.length > 0 ? (
+                <div className="mt-3 space-y-2 border-t border-slate-200 pt-3 dark:border-slate-700">
+                  <h3 className="px-1 text-sm font-semibold text-slate-700 dark:text-slate-200">{at("draftCards.savedManualPlans", "Opgeslagen tradeplannen")}</h3>
+                  {visibleManualTradePlans.slice(0, 10).map((record) => {
+                    const plan = record.plan || {};
+                    return <div key={record.id} className="rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                      <div className="font-bold">{plan.asset}/{plan.quote_currency} · {plan.direction}</div>
+                      <div>{at("draftCards.manualTradeSavedLevels", "Instap {entry} · stop {stop} · doelen {targets}", {
+                        entry: plan.entry_price || "–", stop: plan.stop_loss || "–",
+                        targets: Array.isArray(plan.targets) ? plan.targets.join(", ") : "–",
+                      })}</div>
+                      <div>{at("draftCards.manualTradeSavedRisk", "Hoeveelheid {quantity} · verlies bij stop {loss} {quote}", {
+                        quantity: plan.quantity || "–", loss: plan.max_loss_quote || "–", quote: plan.quote_currency || "",
+                      })}</div>
+                    </div>;
+                  })}
+                </div>
+              ) : null}
             </div>
           )}
 

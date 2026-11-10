@@ -738,6 +738,19 @@ class FinnV2Proposal(Base):
     expires_at = Column(DateTime(timezone=True), nullable=False)
 
 
+class FinnManualTradePlan(Base):
+    """An owner-scoped planning record; never an exchange or broker order."""
+
+    __tablename__ = "finn_manual_trade_plans"
+    __table_args__ = (UniqueConstraint("user_id", "source_run_id", name="uq_finn_manual_trade_plan_owner_run"),)
+
+    id = Column(String, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    source_run_id = Column(String, nullable=False)
+    plan_json = Column(JSONB, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+
+
 class FinnV2Confirmation(Base):
     __tablename__ = "finn_v2_confirmations"
 

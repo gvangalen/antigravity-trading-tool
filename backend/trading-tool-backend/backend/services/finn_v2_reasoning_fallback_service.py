@@ -1121,6 +1121,7 @@ class FinnV2ReasoningFallbackService:
             "setup": "setup",
             "strategy": "strategy",
             "bot": "bot",
+            "manual_trade_plan": "manual_trade_plan",
         }.get(contract.domain, "asset")
         changes = self._proposal_changes(
             operation_id=contract.operation_id,
@@ -1208,6 +1209,20 @@ class FinnV2ReasoningFallbackService:
             verb = proposal_copy["watchlist_verbs"][contract.operation_id]
             direct_answer = proposal_copy["watchlist_direct"].format(target=display_target, verb=verb)
             impact_summary = proposal_copy["watchlist_impact"].format(target=display_target, verb=verb)
+        elif contract.operation_id == "create_manual_trade_plan":
+            plan = changes.get("plan_fields") or {}
+            pair = f"{plan.get('asset')}/{plan.get('quote_currency')}"
+            direct_answer = (
+                f"Ik kan een handmatig {plan.get('direction')}-tradeplan voor {pair} opslaan: "
+                f"limietinstap {plan.get('entry_price')}, hoeveelheid {plan.get('quantity')}, "
+                f"stoploss {plan.get('stop_loss')}, doelen {', '.join(map(str, plan.get('targets') or []))}. "
+                f"Berekend verlies bij stop (exclusief kosten en slip): {plan.get('max_loss_quote')} {plan.get('quote_currency')}. "
+                "Dit plan plaatst geen order."
+            )
+            impact_summary = f"Na bevestiging wordt alleen dit niet-uitvoerbare handmatige tradeplan voor {pair} opgeslagen."
+            proposal_copy["next_title"] = "Handmatig plan opslaan"
+            proposal_copy["next_instruction"] = "Controleer instap, omvang, stoploss, doelen en risico. Bevestigen slaat alleen het plan op."
+            proposal_copy["risk"] = "Er wordt geen order geplaatst en geen bot geactiveerd."
         return ReasoningResult(
             reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
             run_id=run_id,
@@ -1256,6 +1271,10 @@ class FinnV2ReasoningFallbackService:
         base = {"proposal_status": "draft", "generation_source": "deterministic_validated"}
         if operation_id == "create_setup":
             return {**base, "setup_fields": fields}
+        if operation_id == "create_manual_trade_plan":
+            from backend.domain.finn_manual_trade_plan_contract import validate_manual_trade_plan
+
+            return {**base, "plan_fields": validate_manual_trade_plan(fields)}
         if operation_id == "create_strategy":
             return {**base, "strategy_fields": fields}
         if operation_id == "create_bot":

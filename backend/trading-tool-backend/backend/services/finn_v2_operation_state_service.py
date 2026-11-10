@@ -160,7 +160,7 @@ class FinnV2OperationStateService:
             decimal_separator = "." if normalized.rfind(".") > normalized.rfind(",") else ","
             thousands_separator = "," if decimal_separator == "." else "."
             normalized = normalized.replace(thousands_separator, "").replace(decimal_separator, ".")
-        elif re.fullmatch(r"\d{1,3}(?:[.,]\d{3})+", normalized):
+        elif re.fullmatch(r"[1-9]\d{0,2}(?:[.,]\d{3})+", normalized):
             normalized = normalized.replace(".", "").replace(",", "")
         else:
             normalized = normalized.replace(",", ".")
@@ -181,7 +181,9 @@ class FinnV2OperationStateService:
         model_tool_inputs: bool = False,
     ) -> FinnV2OperationState:
         existing = self._existing_state(contract, conversation_context or {})
-        collected = self._canonicalize_inputs(dict(existing.collected_inputs)) if existing is not None else {}
+        collected = self._canonicalize_inputs(
+            dict(existing.collected_inputs), manual_trade=contract.operation_id == "create_manual_trade_plan",
+        ) if existing is not None else {}
         inherited = dict(derived_inputs or {})
         prior_plan_scope = collected.get("plan_scope") or inherited.get("plan_scope")
         known_setup_type = str(collected.get("setup_type") or inherited.get("setup_type") or "") or None
@@ -285,7 +287,7 @@ class FinnV2OperationStateService:
                 )
                 if contract.operation_id in {
                     "create_setup", "create_strategy", "create_indicator_configuration",
-                    "update_indicator_configuration",
+                    "update_indicator_configuration", "create_manual_trade_plan",
                 } or not model_tool_inputs
                 else {}
             )
@@ -366,6 +368,10 @@ class FinnV2OperationStateService:
                 message, re.I,
             ):
                 explicit["legacy_market_only"] = True
+        if contract.operation_id == "create_manual_trade_plan":
+            explicit.update(self._manual_trade_inputs(message))
+            if explicit.get("entry_price") is not None and not re.search(r"\b(?:market|marktorder)\b", message, re.I):
+                explicit["entry_type"] = "limit"
         if contract.operation_id == "update_indicator_configuration":
             pair = self._explicit_indicator_action_pair(message)
             if pair is not None:
@@ -471,6 +477,13 @@ class FinnV2OperationStateService:
                 # confirmable Trade plan. These must come from the user's
                 # text or the owner-bound active draft.
                 continue
+            if contract.operation_id == "create_manual_trade_plan" and key in {
+                "quote_currency", "direction", "entry_type", "entry_price",
+                "quantity", "stop_loss", "targets",
+            } and key not in explicit:
+                # An AI candidate cannot choose financial terms for an
+                # immutable, confirmable plan without the user's own values.
+                continue
             if contract.operation_id == "update_indicator_configuration" and key == "quote_currency" and key not in explicit:
                 # Never let a model choose the market for a financial edit.
                 continue
@@ -554,6 +567,31 @@ class FinnV2OperationStateService:
             contract.operation_id == "create_setup" and existing is not None
             and explicit.get("symbol") and explicit["symbol"] != collected.get("symbol")
         )
+        manual_asset_changed = bool(
+            contract.operation_id == "create_manual_trade_plan" and existing is not None
+            and explicit.get("asset") and explicit["asset"] != collected.get("asset")
+        )
+        manual_quote_changed = bool(
+            contract.operation_id == "create_manual_trade_plan" and existing is not None
+            and explicit.get("quote_currency") and collected.get("quote_currency")
+            and explicit["quote_currency"] != collected["quote_currency"]
+        )
+        manual_direction_changed = bool(
+            contract.operation_id == "create_manual_trade_plan" and existing is not None
+            and explicit.get("direction") and collected.get("direction")
+            and explicit["direction"] != collected["direction"]
+        )
+        if manual_asset_changed or manual_quote_changed or manual_direction_changed:
+            for field in ("direction", "entry_type", "entry_price", "quantity", "stop_loss", "targets"):
+                if manual_direction_changed and field in {"direction", "entry_type", "entry_price", "quantity"}:
+                    continue
+                collected.pop(field, None)
+                sources.pop(field, None)
+                provenance.pop(field, None)
+            if manual_asset_changed:
+                collected.pop("quote_currency", None)
+                sources.pop("quote_currency", None)
+                provenance.pop("quote_currency", None)
         pair_changed = bool(
             contract.operation_id == "create_setup" and existing is not None
             and explicit.get("quote_currency") and collected.get("quote_currency")
@@ -602,6 +640,13 @@ class FinnV2OperationStateService:
             sources.pop("quote_currency", None)
             provenance.pop("quote_currency", None)
         collected.update(explicit)
+        if contract.operation_id == "create_manual_trade_plan" and collected.get("asset"):
+            from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
+
+            catalog = DEFAULT_ASSET_CATALOG.get(str(collected["asset"]).upper()) or {}
+            if catalog.get("asset_class") == "stock" and not collected.get("quote_currency"):
+                collected["quote_currency"] = str(catalog.get("quote_currency") or "").upper()
+                sources["quote_currency"] = "catalog_listing"
         sources.update({key: "explicit" for key in explicit})
         next_revision = (existing.state_revision + 1) if existing is not None else 1
         provenance.update({
@@ -823,6 +868,20 @@ class FinnV2OperationStateService:
         collected = collected_inputs or {}
         operation_id = contract.operation_id if contract is not None else None
         language = str(locale or "nl").split("-")[0].lower()
+        if operation_id == "create_manual_trade_plan":
+            asset = str(collected.get("asset") or "").upper()
+            manual_questions = {
+                "asset": ("Voor welke asset wil je het handmatige tradeplan?", "Which asset is this manual trade plan for?", "Für welchen Vermögenswert ist der manuelle Tradeplan?"),
+                "quote_currency": (f"Welke notering kies je voor {asset}: {asset}/EUR of {asset}/USDT?", f"Which {asset} pair do you choose: {asset}/EUR or {asset}/USDT?", f"Welches {asset}-Paar wählst du: {asset}/EUR oder {asset}/USDT?"),
+                "direction": ("Is dit een long- of short-plan?", "Is this a long or short plan?", "Ist dies ein Long- oder Short-Plan?"),
+                "entry_type": ("Wil je een geplande limietinstap?", "Do you want a planned limit entry?", "Möchtest du einen geplanten Limit-Einstieg?"),
+                "entry_price": ("Bij welke koers wil je de limietinstap plannen?", "At which price do you plan the limit entry?", "Bei welchem Kurs planst du den Limit-Einstieg?"),
+                "quantity": (f"Welke hoeveelheid {asset or 'van de asset'} wil je plannen?", f"What quantity of {asset or 'the asset'} do you plan?", f"Welche Menge {asset or 'des Vermögenswerts'} planst du?"),
+                "stop_loss": ("Bij welke koers ligt de stoploss?", "At which price is the stop loss?", "Bei welchem Kurs liegt der Stop-Loss?"),
+                "targets": ("Welke koersdoelen wil je opnemen?", "Which price targets do you want to include?", "Welche Kursziele möchtest du aufnehmen?"),
+            }
+            if field in manual_questions:
+                return manual_questions[field][{"nl": 0, "en": 1, "de": 2}.get(language, 0)]
         if field == "quote_currency" and operation_id == "update_indicator_configuration":
             return {
                 "en": "Which trading pair should this indicator change apply to: EUR or USDT?",
@@ -1073,6 +1132,8 @@ class FinnV2OperationStateService:
             pair = requested_catalog_trading_pair(text)
             if pair is not None:
                 values["symbol"], values["quote_currency"] = pair
+        if contract.operation_id == "create_manual_trade_plan":
+            values.update(self._manual_trade_inputs(text))
         if contract.operation_id in {"watchlist_add", "watchlist_remove"}:
             pair = requested_catalog_trading_pair(text)
             if pair is not None:
@@ -1677,7 +1738,7 @@ class FinnV2OperationStateService:
             return resolve_catalog_symbol_mention(value)
         if field == "quote_currency":
             normalized = value.strip().upper()
-            if normalized in {"EUR", "USDT"}:
+            if normalized in ({"EUR", "USDT", "USD"} if contract.operation_id == "create_manual_trade_plan" else {"EUR", "USDT"}):
                 return normalized
             # A guided answer may restate the selected pair and label its
             # quote. Accept only one unambiguous quote; never guess between
@@ -1737,6 +1798,27 @@ class FinnV2OperationStateService:
             return self._numeric_value(number.group(0)) if number else None
         if field == "execution_mode":
             return self._canonical_execution_mode(value)
+        if contract.operation_id == "create_manual_trade_plan":
+            if field in {"entry_price", "quantity", "stop_loss"}:
+                label = {
+                    "entry_price": r"entry|instap(?:prijs|niveau)?|einstieg(?:spreis)?",
+                    "quantity": r"hoeveelheid|aantal|quantity|qty|stücke?|shares?|coins?",
+                    "stop_loss": r"stop[- ]?loss|stop|invalidatie|invalidation|invalidierung",
+                }[field]
+                clause = self._manual_field_clause(value, label)
+                return self._manual_numeric_value(clause if clause is not None else value.strip().rstrip("."))
+            if field == "targets":
+                clause = self._manual_field_clause(value, r"targets?|koersdoel(?:en)?|doel(?:en)?|take[- ]?profits?|ziele?n?", list_values=True)
+                clause = clause if clause is not None else value.strip().rstrip(".")
+                if re.search(r"\d+,\d{4,}", clause):
+                    return None
+                tokens = re.split(r"\s+(?:en|and|und)\s+|,\s+", clause, flags=re.I)
+                parsed = [self._manual_numeric_value(token) for token in tokens]
+                return parsed if parsed and all(number is not None for number in parsed) else None
+            if field == "direction":
+                return self._manual_trade_inputs(value).get("direction")
+            if field == "entry_type":
+                return "limit" if re.search(r"\b(?:limiet(?:instap|order)?|limit(?:\s+(?:entry|order))?)\b", value, re.I) else None
         if field == "changed_fields":
             changes = self._natural_changed_fields(value, contract=contract)
             return changes or None
@@ -1790,11 +1872,98 @@ class FinnV2OperationStateService:
             raw = raw.replace(".", "")
         elif raw.count(",") > 1:
             raw = raw.replace(",", "")
-        elif re.fullmatch(r"\d{1,3}[.,]\d{3}", raw):
+        elif re.fullmatch(r"[1-9]\d{0,2}[.,]\d{3}", raw):
             raw = raw.replace(".", "").replace(",", "")
         else:
             raw = raw.replace(",", ".")
         return float(raw)
+
+    @classmethod
+    def _manual_numeric_value(cls, value: str) -> str | None:
+        raw = str(value).strip()
+        if len(raw) > 32:
+            return None
+        # A lone 1.234/1,234 could be a decimal or a grouped integer.
+        # Financial size and prices must be clarified rather than guessed.
+        if re.fullmatch(r"[1-9]\d{0,2}[.,]\d{3}", raw):
+            return None
+        if not (re.fullmatch(r"\d{1,12}(?:[.,]\d{1,12})?", raw)
+                or re.fullmatch(r"\d{1,3}(?:\.\d{3})+[,]\d{1,12}", raw)
+                or re.fullmatch(r"\d{1,3}(?:,\d{3})+[.]\d{1,12}", raw)):
+            return None
+        if "." in raw and "," in raw:
+            decimal = "," if raw.rfind(",") > raw.rfind(".") else "."
+            grouping = "." if decimal == "," else ","
+            raw = raw.replace(grouping, "").replace(decimal, ".")
+        else:
+            raw = raw.replace(",", ".")
+        return raw
+
+    @staticmethod
+    def _manual_field_clause(text: str, label: str, *, list_values: bool = False) -> str | None:
+        match = re.search(rf"\b(?:{label})\b\s*(?:is|zijn|are|ist|sind|:|=|op|at|bei|van|of)?\s*", text, re.I)
+        if not match:
+            return None
+        tail = text[match.end():]
+        # Comma plus whitespace separates fields; a comma inside a locale
+        # decimal has no following whitespace. Other field labels do likewise.
+        boundary = ("" if list_values else r",\s+|") + (
+            r"[;!?\n]|\.(?:\s|$)|\s+\b(?:entry|instap|stop|targets?|koersdoel(?:en)?|"
+            r"hoeveelheid|aantal|quantity|qty|risk|risico)\b"
+        )
+        return re.split(
+            boundary,
+            tail, maxsplit=1, flags=re.I,
+        )[0].strip().rstrip(".,").strip()
+
+    @classmethod
+    def _manual_trade_inputs(cls, text: str) -> dict[str, object]:
+        """Only collect levels and size actually named by the owner."""
+        values: dict[str, object] = {}
+        pairs = {(match.group(1).upper(), match.group(2).upper()) for match in re.finditer(
+            r"(?<![A-Za-z0-9])([A-Za-z0-9]{2,10})/(EUR|USDT|USD)(?![A-Za-z0-9])",
+            text, re.I,
+        )}
+        if len(pairs) == 1:
+            asset, quote = next(iter(pairs))
+            if resolve_catalog_symbol_mention(asset):
+                values.update({"asset": asset, "quote_currency": quote})
+        lowered = text.casefold()
+        long_requested = bool(re.search(r"\b(?:long|koop|buy|kopen)\b", lowered))
+        short_requested = bool(re.search(r"\b(?:short|shorten)\b", lowered))
+        if long_requested != short_requested:
+            values["direction"] = "long" if long_requested else "short"
+        if re.search(r"\b(?:limiet(?:instap|order)?|limit(?:\s+(?:entry|order))?)\b", lowered):
+            values["entry_type"] = "limit"
+        for field, label in {
+            "entry_price": r"entry|instap(?:prijs|niveau)?|einstieg(?:spreis)?",
+            "stop_loss": r"stop[- ]?loss|stop|invalidatie|invalidation|invalidierung",
+        }.items():
+            clause = cls._manual_field_clause(text, label)
+            if clause:
+                parsed = cls._manual_numeric_value(clause)
+                if parsed is not None:
+                    values[field] = parsed
+        target_clause = cls._manual_field_clause(
+            text, r"targets?|koersdoel(?:en)?|doel(?:en)?|take[- ]?profits?|ziele?n?",
+            list_values=True,
+        )
+        if target_clause:
+            tokens = re.split(r"\s+(?:en|and|und)\s+|,\s+", target_clause, flags=re.I)
+            # Two adjacent large numbers after one comma are ambiguous with
+            # a decimal and must not silently become one target.
+            parsed_targets = [cls._manual_numeric_value(token) for token in tokens]
+            if (not re.search(r"\d+,\d{4,}", target_clause)
+                    and all(number is not None for number in parsed_targets)):
+                values["targets"] = parsed_targets
+        if values.get("entry_price") is not None and not re.search(r"\b(?:market|marktorder)\b", lowered):
+            values["entry_type"] = "limit"
+        quantity = cls._manual_field_clause(text, r"hoeveelheid|aantal|quantity|qty|stücke?|shares?|coins?")
+        if quantity:
+            parsed = cls._manual_numeric_value(quantity)
+            if parsed is not None:
+                values["quantity"] = parsed
+        return values
 
     @classmethod
     def _strategy_trade_inputs(
@@ -2563,9 +2732,17 @@ class FinnV2OperationStateService:
                 return None
         if field == "price_currency":
             return str(value).strip().upper() if str(value).strip().upper() in {"EUR", "USD", "USDT"} else None
-        if field in {"entry", "stop_loss", "base_amount"}:
+        if field in {"entry", "entry_price", "stop_loss", "base_amount", "quantity"}:
             numeric = FinnV2OperationStateService._typed_numeric_value(value)
             return numeric if isinstance(numeric, (int, float)) and not isinstance(numeric, bool) else None
+        if field == "direction":
+            normalized = str(value or "").strip().lower()
+            return normalized if normalized in {"long", "short"} else None
+        if field == "entry_type":
+            return "limit" if str(value or "").strip().lower() == "limit" else None
+        if field == "quote_currency":
+            normalized = str(value or "").strip().upper()
+            return normalized if normalized in {"EUR", "USDT", "USD"} else None
         if field == "targets":
             if not isinstance(value, (list, tuple)) or not value:
                 return None
@@ -2633,5 +2810,9 @@ class FinnV2OperationStateService:
             return "automatic"
         return None
 
-    def _canonicalize_inputs(self, values: Mapping[str, object]) -> dict[str, object]:
-        return {key: self._canonical_input(key, value) for key, value in values.items()}
+    def _canonicalize_inputs(self, values: Mapping[str, object], *, manual_trade: bool = False) -> dict[str, object]:
+        if not manual_trade:
+            return {key: self._canonical_input(key, value) for key, value in values.items()}
+        financial = {"entry_price", "quantity", "stop_loss", "targets"}
+        return {key: value if key in financial else self._canonical_input(key, value)
+                for key, value in values.items()}

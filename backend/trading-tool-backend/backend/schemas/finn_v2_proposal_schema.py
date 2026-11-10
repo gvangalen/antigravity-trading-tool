@@ -21,6 +21,7 @@ class ProposalTarget(BaseModel):
         "strategy",
         "watchlist",
         "trade_plan",
+        "manual_trade_plan",
         "bot",
         "portfolio",
         "order",
@@ -153,6 +154,21 @@ class TradePlanChange(BaseModel):
         extra = "forbid"
 
 
+class ManualTradePlanChange(BaseModel):
+    plan_fields: Dict[str, Any]
+
+    @validator("plan_fields")
+    def _validate_plan(cls, value: Dict[str, Any]) -> Dict[str, Any]:
+        from backend.domain.finn_manual_trade_plan_contract import validate_manual_trade_plan
+
+        # Derived risk is always recalculated; caller-supplied risk or
+        # executable flags cannot enter the immutable proposal payload.
+        return validate_manual_trade_plan(value)
+
+    class Config:
+        extra = "forbid"
+
+
 class BotActivationChange(BaseModel):
     bot_id: int
     requested_mode: Literal["paper", "live"]
@@ -238,6 +254,7 @@ ProposalChangeUnion = Union[
     StrategyDeleteChange,
     WatchlistChange,
     TradePlanChange,
+    ManualTradePlanChange,
     BotActivationChange,
     BotCreateChange,
     BotChange,
@@ -283,6 +300,7 @@ class ValidatedProposalInput(BaseModel):
             "watchlist_add": WatchlistChange,
             "watchlist_remove": WatchlistChange,
             "save_trade_plan": TradePlanChange,
+            "create_manual_trade_plan": ManualTradePlanChange,
             "activate_paper_bot": BotActivationChange,
             "activate_live_bot": BotActivationChange,
             "portfolio_rebalance": PortfolioRebalanceChange,

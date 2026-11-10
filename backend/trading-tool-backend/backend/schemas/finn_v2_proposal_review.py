@@ -52,7 +52,7 @@ def requested_state_for_review(change: Mapping[str, Any] | None) -> dict[str, An
     strategy = fields.get("strategy_fields")
     if isinstance(setup, dict) and isinstance(strategy, dict) and strategy:
         return {"setup": dict(setup), "strategy": dict(strategy)}
-    for key in ("setup_fields", "strategy_fields", "bot_fields", "target_allocations", "after"):
+    for key in ("setup_fields", "strategy_fields", "bot_fields", "plan_fields", "target_allocations", "after"):
         value = fields.get(key)
         if isinstance(value, dict) and value:
             return dict(value)

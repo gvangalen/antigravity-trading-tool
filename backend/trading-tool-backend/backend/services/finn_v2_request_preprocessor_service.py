@@ -83,6 +83,10 @@ class FinnV2RequestPreprocessorService:
         "auswirkung", "auswirkungen", "folge", "folgen", "konsequenz",
     )
     _ENTITY_TERMS = {
+        "manual_trade_plan": (
+            "handmatig tradevoorstel", "handmatig tradeplan",
+            "manual trade plan", "manual trade proposal", "manueller tradeplan",
+        ),
         "watchlist": ("watchlist", "volglijst", "follow", "gevolgde", "marktenlijst"),
         "indicator_configuration": (
             "indicator",

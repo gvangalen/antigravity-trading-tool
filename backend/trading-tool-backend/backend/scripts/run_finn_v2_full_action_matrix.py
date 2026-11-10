@@ -29,6 +29,7 @@ ACTION_SPECS = (
     ("select_asset", "Selecteer SOL als mijn actieve asset.", "Selecteer een asset als mijn actieve asset.", "SOL."),
     ("watchlist_add", "Voeg ETH/EUR toe aan mijn watchlist.", "Voeg een asset toe aan mijn watchlist.", "ETH/EUR."),
     ("watchlist_remove", "Verwijder mijn oude basisnotering XRP zonder handelspaar uit mijn watchlist.", "Verwijder mijn oude basisnotering uit mijn watchlist.", "XRP zonder handelspaar."),
+    ("create_manual_trade_plan", "Maak een handmatig tradevoorstel voor BTC/EUR, long, entry 70000, hoeveelheid 0.001, stop 65000, targets 80000 en 85000.", "Maak een handmatig tradevoorstel voor BTC/EUR.", "Long, entry 70000, hoeveelheid 0.001, stop 65000, targets 80000 en 85000."),
     ("create_indicator_configuration", "Maak een technische RSI indicatorconfiguratie voor ADA.", "Maak een technische RSI indicatorconfiguratie.", "Voor ADA."),
     ("update_indicator_configuration", "Wijzig alleen de weging van Volume voor BTC/EUR naar laag; laat BTC/USDT ongemoeid.", "Pas de weging van mijn Volume-indicator aan.", "Voor BTC/EUR naar laag; laat BTC/USDT ongemoeid."),
     ("delete_indicator_configuration", "Verwijder mijn technische RSI indicatorconfiguratie voor SOL.", "Verwijder mijn technische RSI indicatorconfiguratie.", "Voor SOL."),
@@ -51,6 +52,11 @@ GUIDED_SLOT_ANSWERS = {
     "select_asset": ("SOL.",),
     "watchlist_add": {"asset": "ETH.", "quote_currency": "ETH/EUR."},
     "watchlist_remove": ("XRP zonder handelspaar.",),
+    "create_manual_trade_plan": {
+        "direction": "Long.", "entry_type": "Limietinstap.", "entry_price": "70000.",
+        "quantity": "0.001", "stop_loss": "65000.",
+        "targets": "80000 en 85000.",
+    },
     "create_indicator_configuration": ("Voor ADA.",),
     "update_indicator_configuration": ("Voor BTC/EUR.", "Zet de weging naar laag; laat BTC/USDT ongemoeid."),
     "delete_indicator_configuration": ("Voor SOL.",),
@@ -509,6 +515,19 @@ def _run_contract(
                 mutation_pace_seconds=mutation_pace_seconds,
             )
             result.update(lifecycle)
+        if operation_id == "create_manual_trade_plan" and result.get("execution_result") == "succeeded":
+            with sync_engine.begin() as connection:
+                saved = connection.execute(text(
+                    "SELECT plan_json FROM finn_manual_trade_plans WHERE user_id=:user_id AND source_run_id=:run_id"
+                ), {"user_id": user_id, "run_id": observed["run_id"]}).scalar_one_or_none()
+            plan = dict(saved or {})
+            result["manual_trade_plan_safe"] = bool(
+                plan.get("executable") is False
+                and plan.get("asset") == "BTC" and plan.get("quote_currency") == "EUR"
+                and plan.get("quantity") == "0.001"
+                and plan.get("targets") == ["80000", "85000"]
+                and plan.get("max_loss_quote") == "5.000"
+            )
         if operation_id == "update_strategy" and result.get("execution_result") == "succeeded":
             continued = run_gate(
                 base_url=base_url, bearer_token=token,
@@ -546,18 +565,19 @@ def _run_contract(
             result.get("attempt_count") == 1,
             observed["polling_sse_contract_projection"],
             lifecycle_ok,
+            (operation_id != "create_manual_trade_plan" or result.get("manual_trade_plan_safe")),
             (operation_id != "update_strategy" or all((
                 result.get("confirmed_strategy_followup", {}).get("status") == "completed",
                 result.get("confirmed_strategy_followup", {}).get("same_conversation"),
                 result.get("confirmed_strategy_followup", {}).get("owner_scoped_strategy_read"),
                 result.get("confirmed_strategy_followup", {}).get("mentions_saved_amount"),
             ))),
-            # Setup and strategy creation require a multi-turn slot-collection
+            # Plan, setup and strategy creation require a multi-turn slot-collection
             # proof in this action matrix. Other actions are fully proven by
             # their natural first turn plus proposal/confirmation/execution;
             # their follow-up is retained as diagnostic evidence and must not
             # turn an already-completed action into a false matrix failure.
-            (operation_id not in {"create_setup", "create_strategy"} or follow_up["passed"]),
+            (operation_id not in {"create_setup", "create_strategy", "create_manual_trade_plan"} or follow_up["passed"]),
         )) else "FAIL"
     except Exception as exc:  # Preserve all cases in the artifact instead of failing fast.
         result["error"] = f"{type(exc).__name__}:{exc}"
@@ -568,6 +588,8 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://127.0.0.1:18000")
     parser.add_argument("--output", required=True)
+    parser.add_argument("--only", choices=[spec[0] for spec in ACTION_SPECS],
+                        help="Run one action contract for a focused local retest.")
     parser.add_argument(
         "--mutation-pace-seconds",
         type=float,
@@ -581,6 +603,7 @@ def main() -> None:
     _wait_for_runtime(base_url)
     output = Path(args.output).expanduser().resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
+    selected_specs = tuple(spec for spec in ACTION_SPECS if not args.only or spec[0] == args.only)
 
     def write_artifact(results: list[dict[str, Any]], *, complete: bool) -> dict[str, Any]:
         with sync_engine.connect() as connection:
@@ -593,7 +616,7 @@ def main() -> None:
         "broker_orders": 0,
         "live_trading_calls": 0,
         "live_bot_count": live_bots,
-        "contracts_total": len(ACTION_SPECS),
+        "contracts_total": len(selected_specs),
         "contracts_passed": sum(item["status"] == "PASS" for item in results),
         "contracts_failed": sum(item["status"] != "PASS" for item in results),
         "results": results,
@@ -602,7 +625,7 @@ def main() -> None:
         return artifact
 
     results: list[dict[str, Any]] = []
-    for spec in ACTION_SPECS:
+    for spec in selected_specs:
         results.append(
             _run_contract(
                 base_url,

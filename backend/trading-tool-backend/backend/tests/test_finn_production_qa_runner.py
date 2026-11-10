@@ -2070,14 +2070,14 @@ def _acceptance_cases(module):
     return non_lineage + [by_operation[operation] for operation in module.NATURAL_LINEAGE_SEQUENCE]
 
 
-def test_action_contract_acceptance_dry_preflight_requires_48_16_and_9():
+def test_action_contract_acceptance_dry_preflight_requires_49_16_and_9():
     module = _module()
     result = module.action_contract_acceptance_preflight(
         _acceptance_cases(module), fixture_namespace="qa-acceptance-a1b2c3d4",
     )
 
-    assert result["active_contracts_recognized"] == 48
-    assert result["contract_cases_recognized"] == 48
+    assert result["active_contracts_recognized"] == 49
+    assert result["contract_cases_recognized"] == 49
     assert result["write_contracts_recognized"] == 16
     assert result["lineage_dependencies_recognized"] == 9
     assert result["product_calls_executed"] == 0

@@ -29,7 +29,8 @@ const FinnOverlayContext = createContext<FinnOverlayValue | null>(null);
 
 export function FinnOverlayProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  return <ScopedFinnOverlayProvider accountKey={String(user?.id ?? 'signed-out')}>{children}</ScopedFinnOverlayProvider>;
+  const accountKey = String(user?.id ?? 'signed-out');
+  return <ScopedFinnOverlayProvider key={accountKey} accountKey={accountKey}>{children}</ScopedFinnOverlayProvider>;
 }
 
 function ScopedFinnOverlayProvider({ children, accountKey }: { children: ReactNode; accountKey: string }) {
@@ -123,6 +124,7 @@ function ScopedFinnOverlayProvider({ children, accountKey }: { children: ReactNo
       >
         <SafeAreaProvider>
           <FinnOverlaySheet
+            key={accountKey}
             prefill={params?.prefill}
             source={params?.source}
             contextMetric={params?.contextMetric}

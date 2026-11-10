@@ -62,6 +62,12 @@ _MODEL_TOOL_INPUT_TYPES: dict[str, tuple[tuple[str, str], ...]] = {
     "select_asset": (("asset", "string"),),
     "watchlist_add": (("asset", "string"), ("quote_currency", "string")),
     "watchlist_remove": (("asset", "string"), ("quote_currency", "string"), ("legacy_market_only", "boolean")),
+    "create_manual_trade_plan": (
+        ("asset", "string"), ("quote_currency", "string"),
+        ("direction", "string"), ("entry_type", "string"),
+        ("entry_price", "number"), ("quantity", "number"),
+        ("stop_loss", "number"), ("targets", "array"),
+    ),
     "create_setup": (
         ("setup_type", "string"), ("timeframe", "string"), ("name", "string"),
         ("symbol", "string"), ("quote_currency", "string"),
@@ -818,6 +824,23 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
             "Ich moechte jede Woche 150 Euro in BTC investieren; welche Angaben fehlen noch?",
         ),
     },
+    "create_manual_trade_plan": {
+        "semantic_description": "Prepare a standalone, non-executable manual trade plan with one exact instrument, long or short direction, limit entry, quantity, stop loss and targets. Ask for any missing user-selected financial term. Confirmation saves only the plan and never places an order, creates a bot, setup or strategy.",
+        "any_entities": ("manual_trade_plan",),
+        "required_discourse_acts": ("operation_request",),
+        "allowed_action_polarities": ("create",),
+        "selection_priority": 90,
+        "selection_focus_entities": ("plan",),
+        "positive_examples": (
+            "Maak een handmatig tradevoorstel voor BTC/EUR met entry, stoploss en targets.",
+            "Prepare a manual trade plan for ETH/USDT with entry, stop and targets.",
+            "Erstelle einen manuellen Tradeplan für AAPL/USD mit Einstieg, Stop und Zielen.",
+        ),
+        "negative_examples": (
+            "Plaats nu een kooporder voor BTC.",
+            "Maak een automatische trade-setup en strategie.",
+        ),
+    },
     "update_setup": {
         "semantic_description": "Prepare a typed, confirmable update to one existing setup. The user must identify or safely resolve the setup and state at least one allowed changed field; an update never creates a new setup.",
         "any_entities": ("setup",),
@@ -1085,6 +1108,7 @@ _CONTRACTS: tuple[OperationContract, ...] = (
     # Score and market-condition details are useful trusted inputs, but must
     # not be invented by FINN.
     OperationContract("create_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("maak setup", "create setup", "setup voor"), action_polarity=ActionPolarity.CREATE, required_inputs=("setup_type", "timeframe", "name", "symbol"), optional_inputs=("quote_currency", "plan_scope", "min_investment", "min_benchmark_score", "max_benchmark_score", "entry_signal", "execution_mode", "entry", "stop_loss", "targets", "risk_profile", "price_currency"), input_allowed_values=(("plan_scope", ("setup_only", "setup_and_strategy")), ("dca_frequency", ("daily", "weekly", "monthly")), ("dca_amount_mode", ("fixed", "score_bands")), ("score_source", ("benchmark_score",))), conditional_required_inputs=(("dca_frequency", "setup_type", "dca"), ("dca_amount_mode", "setup_type", "dca"), ("base_amount", "setup_type", "dca"), ("dca_day", "dca_frequency", "weekly"), ("dca_month_day", "dca_frequency", "monthly"), ("score_source", "dca_amount_mode", "score_bands"), ("low_threshold", "dca_amount_mode", "score_bands"), ("high_threshold", "dca_amount_mode", "score_bands"), ("low_score_percent", "dca_amount_mode", "score_bands"), ("mid_score_percent", "dca_amount_mode", "score_bands"), ("high_score_percent", "dca_amount_mode", "score_bands")), required_scopes=("active_asset",), optional_scopes=("profile", "preferences", "indicator_configuration", "active_setup", "linked_strategy"), model_policy="optional", response_strategy="proposal_draft", policy_class="proposal", proposal_type="create_setup", confirmation_required=True, execution_adapter="create_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_created;strategy_created_only_when_included"),
+    OperationContract("create_manual_trade_plan", FinnV2OperationRegistry.VERSION, "manual_trade_plan", "CREATE_PROPOSAL", ("handmatig tradevoorstel", "handmatig tradeplan", "manual trade plan", "manueller tradeplan"), action_polarity=ActionPolarity.CREATE, required_inputs=("asset", "quote_currency", "direction", "entry_type", "entry_price", "quantity", "stop_loss", "targets"), input_allowed_values=(("direction", ("long", "short")), ("entry_type", ("limit",))), required_scopes=("active_asset",), optional_scopes=("market_snapshot", "portfolio"), model_policy="optional", response_strategy="proposal_draft", policy_class="proposal", proposal_type="create_manual_trade_plan", confirmation_required=True, execution_adapter="create_manual_trade_plan", idempotency_rule="proposal_payload_hash", postcondition="manual_trade_plan_saved_without_order"),
     OperationContract("update_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("wijzig setup", "update setup", "setup andern"), action_polarity=ActionPolarity.UPDATE, required_inputs=("setup_id", "changed_fields"), contextual_reference_inputs=("setup_id",), required_scopes=("active_asset", "active_setup"), proposal_type="update_setup", confirmation_required=True, execution_adapter="update_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_updated_for_user", response_strategy="proposal_draft", policy_class="proposal"),
     OperationContract("delete_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("verwijder setup", "delete setup", "lösche setup"), action_polarity=ActionPolarity.DELETE, required_inputs=("setup_id",), contextual_reference_inputs=("setup_id",), required_scopes=("active_asset", "active_setup"), proposal_type="delete_setup", confirmation_required=True, execution_adapter="delete_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_deleted_for_user", response_strategy="proposal_draft", policy_class="proposal"),
     OperationContract("evaluate_setup", FinnV2OperationRegistry.VERSION, "setup", "EVALUATE", ("beoordeel setup",), required_scopes=("active_asset", "active_setup"), optional_scopes=("indicator_configuration",), model_policy="required", response_strategy="model_reasoning", policy_class="advice"),

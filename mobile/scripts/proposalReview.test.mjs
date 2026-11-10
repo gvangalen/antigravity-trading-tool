@@ -30,3 +30,17 @@ test('manual orders require side, size, type and limit price when relevant', () 
     asset: 'ETH', side: 'sell', order_type: 'limit', quantity: '0.5', limit_price: '3000',
   })), true);
 });
+
+test('manual trade plan review needs complete risk and cannot execute', () => {
+  const plan = {
+    asset: 'BTC', quote_currency: 'EUR', direction: 'long', entry_type: 'limit',
+    entry_price: '70000', quantity: '0.001', stop_loss: '65000',
+    targets: ['80000', '85000'], max_loss_quote: '5',
+    position_value_quote: '70', risk_per_unit_quote: '5000', risk_pct_of_position: '7.14',
+    reward_risk_by_target: ['2', '3'], executable: false,
+  };
+  assert.equal(proposalHasConfirmableReview(proposal('create_manual_trade_plan', plan)), true);
+  assert.equal(proposalHasConfirmableReview(proposal('create_manual_trade_plan', { ...plan, executable: true })), false);
+  assert.equal(proposalHasConfirmableReview(proposal('create_manual_trade_plan', { ...plan, targets: [] })), false);
+  assert.equal(proposalHasConfirmableReview(proposal('create_manual_trade_plan', { ...plan, max_loss_quote: null })), false);
+});
