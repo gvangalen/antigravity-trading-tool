@@ -4,6 +4,39 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## AAPL-coach: gekoppelde Paper-botstatus (10 november 2026)
+
+Phase: `BUILD_CANDIDATE_READY`. Branch `codex/finn-aapl-bot-status-20261110`
+herstelt de resterende fout uit de onafhankelijke AAPL Paper-proef. De eerdere
+koersreparatie werkte in drie live antwoorden: FINN noemde de nieuwere AAPL-koers
+met juist UTC-bronmoment en hield het oudere dagrapport apart. FINN las daarin
+wel de botlijst, maar niet de gekoppelde botbeslissing met
+`market_price_stale`. De samengestelde planlezing haalt nu na setup,
+strategie, score en koers ook de gekoppelde bot en diens laatste beslissing op.
+Een expliciet genoemde bot van een andere strategie wordt met
+`bot_strategy_mismatch` afgewezen; een plan zonder gekoppelde bot blijft
+leesbaar zonder botbesluit te verzinnen. De QA-probe voor deze inhoudstoets is
+onafhankelijk gecorrigeerd in PR #958 en draait pas opnieuw op de definitieve
+publieke SHA.
+
+Gemeten op de productcode: root-backend **4598 passed, 7 skipped**
+(log SHA-256 `3569df9e1dfaa3be5fb9dad1561a885687495f94fda34e08c95b46baca794050`);
+gerichte bot/planregressies **922 passed**; lokale FastAPI/Celery/Responses-
+actiematrix **16/16** (artifact SHA-256
+`7bd257e841a04c8cee35d5c67d9917fab327dd5885b450fb433b4c7440864236`)
+en adapterregressie **26/26**, zonder brokerorders,
+Live-bots, Live-calls of productieverbindingen. Echte-provider ontwikkeling
+**20/20** (artifact SHA-256
+`9ec6a16ece03d7205de4ba9d2507b729ab06c90ceea104ecacdc8928794316fb`)
+en regressie **109/109** (artifact SHA-256
+`db2441fdfc0122d030e95d1bdecaba458101c30a6daceee57b70659714e2e1a5`)
+zonder provider-, schema-, timeout-, parse- of validatiefouten. QA,
+Security en Architecture gaven read-only GO op de code; de QA-probe in PR
+#958 kreeg eveneens Security/Architecture-GO en slaagde in CI. PR-CI, Auto
+Deploy, SHA-pariteit en de onafhankelijke ingelogde Paper-hertest staan nog
+open. Dit is geen live-acceptatie of
+vrijgave voor Live-orders.
+
 ## AAPL-coach: nieuwste koers en bronmoment (10 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_STATUS_UPDATE_PENDING`. Branch
