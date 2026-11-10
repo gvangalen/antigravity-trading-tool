@@ -167,11 +167,22 @@ class FinnResponsesReadExecutor:
             if item.get("scope") in {"read_linked_strategy", "read_market_snapshot"}
             and item.get("status") == "completed" and isinstance(item.get("data"), dict)
         )
+        missing_linked_bot = (
+            call.name == "get_active_plan_and_strategy"
+            and all(item["status"] == "completed" for item in results[:4])
+            and {item["scope"] for item in results[4:]} == {"read_linked_bot", "read_bot_status"}
+            and all(item["status"] == "unavailable" and item["reason"] == "bot_not_resolved"
+                    for item in results[4:])
+        )
         output = {
-            "status": "completed" if all(item["status"] == "completed" for item in results) else "partial",
+            "status": "completed" if missing_linked_bot or all(
+                item["status"] == "completed" for item in results
+            ) else "partial",
             "tool": call.name,
             "results": results,
         }
+        if missing_linked_bot and any(item["status"] == "unavailable" for item in results):
+            output["linked_bot_status"] = "no_bot_linked_to_selected_strategy"
         comparisons = self._current_plan_price_comparisons(self._plan_price_sources)
         if comparisons:
             output["plan_price_comparisons"] = comparisons
@@ -306,7 +317,8 @@ class FinnResponsesReadExecutor:
         if call.name == "get_active_plan_and_strategy":
             output["evidence_boundary"] = (
                 "This reads saved setup and strategy configuration, source-verified "
-                "Score 2.0 components, and a separately dated latest market quote, "
+                "Score 2.0 components, a separately dated latest market quote, "
+                "and the linked bot status with its latest decision when available, "
                 "not an owner-scoped risk evaluation. A price in indicator evidence is "
                 "a historical score measurement; use only read_market_snapshot for the "
                 "latest quoted price, and state its source moment and freshness. "
@@ -335,6 +347,11 @@ class FinnResponsesReadExecutor:
                 "the current market satisfies the rule. If the user asks whether a trade "
                 "is personally suitable now, say which evaluation is still needed."
             )
+            if output.get("linked_bot_status") == "no_bot_linked_to_selected_strategy":
+                output["evidence_boundary"] += (
+                    " The saved plan, score and quote remain available without a linked bot. "
+                    "Do not infer a bot decision or call an absent bot inactive."
+                )
         if call.name in {"get_portfolio_and_exposure", "get_saved_bots"}:
             output["evidence_boundary"] = (
                 "For a saved bot, bots[].operational_status=paused means it is paused; "

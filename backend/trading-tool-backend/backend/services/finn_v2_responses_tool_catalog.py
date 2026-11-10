@@ -103,6 +103,7 @@ class FinnResponsesToolCatalog:
         # that historical indicator measurement for the latest price.
         self.read_tools["get_active_plan_and_strategy"] += (
             "read_asset_scores", "read_market_snapshot",
+            "read_linked_bot", "read_bot_status",
         )
         # A price or configured-indicator read can be used to answer a question
         # about that indicator's score. Carry the same verified Score 2.0 row
@@ -191,8 +192,9 @@ class FinnResponsesToolCatalog:
             if name == "get_active_plan_and_strategy":
                 description += (
                     " Returns one selected saved setup, its linked strategy, the current "
-                    "source-verified Score 2.0 components, and a separately dated latest "
-                    "market quote for that setup's asset, not a list "
+                    "source-verified Score 2.0 components, a separately dated latest "
+                    "market quote, and the linked bot's latest dated decision and safety "
+                    "reason for that setup's asset, not a list "
                     "or a suitability assessment. If the benchmark is unavailable, its "
                     "current match is unknown; do not treat missing components as zero. "
                     "The strategy name is a label: execution_mode and dca_amount_mode, "

@@ -64,6 +64,7 @@ FINN_V2_EXTERNAL_ERROR_CODES: List[str] = [
     "strategy_not_resolved",
     "strategy_ambiguous",
     "bot_not_resolved",
+    "bot_strategy_mismatch",
     "bot_ambiguous",
     "entity_not_found",
     "report_not_found",

@@ -1156,6 +1156,8 @@ class FinnV2EntityResolutionService:
         if explicit_bot_id:
             row = await self.bots.get_bot_config(user_id, explicit_bot_id)
             if row:
+                if strategy and self._coerce_int(row.get("strategy_id")) != self._coerce_int(strategy.get("id")):
+                    raise LookupError("bot_strategy_mismatch")
                 return {"bot": dict(row), "resolution_source": "explicit_bot_id"}
             raise LookupError("entity_not_found")
 
@@ -1164,6 +1166,8 @@ class FinnV2EntityResolutionService:
         if explicit_bot_name:
             matches = [row for row in configs if self._normalized_name(row.get("name")) == explicit_bot_name]
             if len(matches) == 1:
+                if strategy and self._coerce_int(matches[0].get("strategy_id")) != self._coerce_int(strategy.get("id")):
+                    raise LookupError("bot_strategy_mismatch")
                 return {"bot": matches[0], "resolution_source": "explicit_bot_name"}
             if len(matches) > 1:
                 raise LookupError("bot_ambiguous")
