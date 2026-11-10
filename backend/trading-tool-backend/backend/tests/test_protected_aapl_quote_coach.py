@@ -35,6 +35,7 @@ def test_market_and_owner_evidence_bind_both_distinct_moments():
             "latest_decision": {"decision_id": 5, "reason_code": "market_price_stale"}}},
     ]
     assert probe._market_evidence(rows, source)["source_match"] is True
+    assert probe._market_evidence(rows + [dict(rows[0])], source)["source_match"] is True
     assert probe._owner_evidence(rows, ids) == {
         "old_report_match": True, "paper_bot_stale_reason": True,
     }
@@ -47,6 +48,7 @@ def test_market_and_owner_evidence_bind_both_distinct_moments():
     rows[1]["data"]["report_date"] = "2026-11-09"
     assert not probe._owner_evidence(rows + [{**rows[1], "source": "foreign_reports"}], ids)["old_report_match"]
     assert not probe._market_evidence(rows + [{**rows[0], "source": "other"}], source)["source_match"]
+    assert not probe._market_evidence(rows + [{**rows[0], "data": {**rows[0]["data"], "price": 999}}], source)["source_match"]
 
 
 def test_plan_and_score_reads_must_be_aapl_and_materialized():
@@ -59,6 +61,7 @@ def test_plan_and_score_reads_must_be_aapl_and_materialized():
         **({"reported_scores": {"macro_score": 20}} if scope == "read_asset_scores" else {})}}
         for scope in ("read_active_setup", "read_linked_strategy", "read_asset_scores")]
     assert probe._plan_score_evidence(rows, ids)
+    assert probe._plan_score_evidence(rows + [dict(rows[-1])], ids)
     rows[-1]["data"]["reported_scores"] = {"macro_score": None}
     assert not probe._plan_score_evidence(rows, ids)
     rows[-1]["data"]["reported_scores"] = {"macro_score": 20}
@@ -96,6 +99,14 @@ def test_owner_references_reject_foreign_duplicate_or_unowned_refs():
     assert probe._owner_references(refs + [SimpleNamespace(
         entity_type="market_snapshot", entity_id="11", source="market_data", owned_by_user=False,
     )], ids)
+    owner = {"old_report_match": True, "paper_bot_stale_reason": True}
+    assert probe._owner_reference_check([], ids, plan_score=True, owner=owner)
+    assert not probe._owner_reference_check([], ids, plan_score=False, owner=owner)
+    assert not probe._owner_reference_check([], ids, plan_score=True,
+                                            owner={**owner, "old_report_match": False})
+    assert not probe._owner_reference_check(refs + [SimpleNamespace(
+        entity_type="portfolio", entity_id="99", source="bot_portfolios", owned_by_user=False,
+    )], ids, plan_score=True, owner=owner)
 
 
 def test_source_selector_matches_product_and_fails_closed_on_null_currency_and_ties(monkeypatch):
@@ -153,14 +164,24 @@ def test_source_advancement_requires_inconclusive_not_old_quote_failure():
 
 def test_answer_checks_require_current_price_and_distinct_source_moments():
     moment = datetime(2026, 11, 9, 20, 59, tzinfo=timezone.utc)
-    answer = "Actuele AAPL-bron: USD 350,49 om 20:59 UTC. Oud rapport: USD 351,19 om 19:03 UTC."
+    answer = "Actuele AAPL-bron: USD 350,49 op 9 november 2026 om 20:59 UTC. Oud rapport: USD 351,19 op 9 november 2026 om 19:03 UTC."
     assert probe._answer_current_price(answer, Decimal("350.48999"))
     assert all(probe._answer_moments(answer, moment, Decimal("350.49")).values())
     assert not probe._old_claimed_current(answer)
     assert not probe._answer_current_price("USD 351,19 was de actuele koers.", Decimal("350.48999"))
     assert not all(probe._answer_moments("USD 350,49", moment, Decimal("350.49")).values())
-    wrong_zone = "Huidige AAPL-koers USD 350,49 om 20:59 CET. Oud rapport USD 351,19 om 19:03 UTC."
+    seconds = "Nieuwste bron is **USD 350,49**, gemeten op **9 november 2026 om 20:59:00 UTC**. Oud rapport **USD 351,19** op **9 november 2026 om 19:03:00 UTC**."
+    assert all(probe._answer_moments(seconds, moment, Decimal("350.49")).values())
+    wrong_zone = "Huidige AAPL-koers USD 350,49 op 9 november 2026 om 20:59 CET. Oud rapport USD 351,19 op 9 november 2026 om 19:03 UTC."
     assert not probe._answer_moments(wrong_zone, moment, Decimal("350.49"))["current_source_time_explained"]
+    wrong_second = "Huidige AAPL-koers USD 350,49 op 9 november 2026 om 20:59:59 UTC. Oud rapport USD 351,19 op 9 november 2026 om 19:03:00 UTC."
+    assert not probe._answer_moments(wrong_second, moment, Decimal("350.49"))["current_source_time_explained"]
+    wrong_date = "Huidige AAPL-koers USD 350,49 op 8 november 2026 om 20:59:00 UTC. Oud rapport USD 351,19 op 9 november 2026 om 19:03:00 UTC."
+    assert not probe._answer_moments(wrong_date, moment, Decimal("350.49"))["current_source_time_explained"]
+    wrong_old = "Huidige AAPL-koers USD 350,49 op 9 november 2026 om 20:59:00 UTC. Oud rapport USD 351,19 op 8 november 2026 om 19:03:00 UTC."
+    assert not probe._answer_moments(wrong_old, moment, Decimal("350.49"))["old_report_time_explained"]
+    iso = "Nieuwste AAPL-koers USD 350,49 op 2026-11-09 20:59:00 UTC. Oud rapport USD 351,19 op 2026-11-09 19:03:00 UTC."
+    assert all(probe._answer_moments(iso, moment, Decimal("350.49")).values())
 
 
 def test_profile_is_protected_and_errors_are_allowlisted():
