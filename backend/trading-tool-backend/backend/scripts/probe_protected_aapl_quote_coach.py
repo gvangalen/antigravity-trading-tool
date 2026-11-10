@@ -88,10 +88,18 @@ def _source():
             cur.execute("""SELECT price,source_observed_at,quote_currency,id,timestamp
                            FROM market_data WHERE symbol='AAPL' AND market_id IS NULL
                              AND quote_currency IS NOT NULL AND source_observed_at IS NOT NULL
-                           ORDER BY source_observed_at DESC,timestamp DESC LIMIT 2""")
+                           ORDER BY source_observed_at DESC,timestamp DESC,id DESC LIMIT 65""")
             rows = cur.fetchall()
         row = rows[0] if rows else None
-        if len(rows) > 1 and rows[0][1] == rows[1][1] and rows[0][4] == rows[1][4]:
+        # The market repository does not break source/timestamp ties by ID.
+        # Identical quote facts are equivalent whichever row it selects; a
+        # different price or currency at that rank is genuinely ambiguous.
+        tied = [candidate for candidate in rows
+                if row and candidate[1] == row[1] and candidate[4] == row[4]]
+        if (len(tied) == 65 or any(
+            candidate[0] != row[0] or candidate[2] != row[2]
+            for candidate in tied
+        )):
             raise RuntimeError("aapl_source_ambiguous")
         if (not row or row[2] != "USD" or row[0] is None
                 or _utc(row[1]) is None or Decimal(str(row[0])) <= 0):
