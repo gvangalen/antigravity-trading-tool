@@ -3978,6 +3978,8 @@
       "manualTradeBenchmark": "Benchmark score",
       "manualTradeRiskCap": "Stated maximum loss",
       "manualTradeSave": "Save plan",
+      "manualTradeShares": "share",
+      "manualTradeFractionalNote": "This plan uses a fraction of a share. Check whether your broker supports it.",
       "manualTradeExpired": "This proposal has expired. Ask FINN for a new proposal with current data.",
       "manualTradeSaved": "Trade plan {asset}/{quote} saved (plan {id}). Entry {entry}, quantity {quantity}, stop {stop}, targets {targets}. Planned loss at stop: {loss} {quote}. No order was placed or bot started.",
       "savedManualPlans": "Saved trade plans",

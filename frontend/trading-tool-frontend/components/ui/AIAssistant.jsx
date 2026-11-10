@@ -2327,7 +2327,7 @@ function AIAssistantContent({
           [at("draftCards.manualTradeRiskCap", "Opgegeven maximaal verlies"), `${plan.source_evidence?.max_loss_quote || "–"} ${quote}`],
         ] : []),
         [at("draftCards.manualTradeDirection", "Richting"), plan.direction], [at("draftCards.manualTradeEntry", "Limietinstap"), plan.entry_price],
-        [at("draftCards.manualTradeQuantity", "Hoeveelheid"), plan.quantity], [at("draftCards.manualTradeStop", "Stoploss"), plan.stop_loss],
+        [at("draftCards.manualTradeQuantity", "Hoeveelheid"), plan.asset_class === "stock" ? `${plan.quantity} ${at("draftCards.manualTradeShares", "aandeel")}` : plan.quantity], [at("draftCards.manualTradeStop", "Stoploss"), plan.stop_loss],
         [at("draftCards.manualTradeTargets", "Koersdoelen"), Array.isArray(plan.targets) ? plan.targets.join(", ") : ""],
         [at("draftCards.manualTradeValue", "Positiewaarde"), `${plan.position_value_quote || ""} ${quote}`.trim()],
         [at("draftCards.manualTradeLoss", "Gepland verlies bij stop (excl. kosten/slip)"), `${plan.max_loss_quote || ""} ${quote}`.trim()],
@@ -2361,6 +2361,7 @@ function AIAssistantContent({
           <dl className="mt-3 divide-y divide-blue-100 text-xs dark:divide-blue-900/50">
             {rows.map(([label, value]) => <div key={label} className="flex justify-between gap-3 py-1.5"><dt className="text-slate-600 dark:text-slate-300">{label}</dt><dd className="break-words text-right font-semibold text-slate-950 dark:text-white">{value || "–"}</dd></div>)}
           </dl>
+          {plan.asset_class === "stock" && !Number.isInteger(Number(plan.quantity)) ? <p className="mt-2 text-xs text-slate-700 dark:text-slate-300">{at("draftCards.manualTradeFractionalNote", "Dit plan gebruikt een fractie van een aandeel. Controleer of je broker dit ondersteunt.")}</p> : null}
           <div className="mt-4 flex gap-2">
             <button type="button" onClick={() => void handleExecuteAction(actionOnly[0])} disabled={!complete || loading || executingAction || message.confirmationSuspended} className={actionButtonStyles({ variant: "primary", className: "rounded-xl px-4 py-2.5 text-xs" })}>{at("draftCards.manualTradeSave", "Plan opslaan")}</button>
             <button type="button" onClick={() => void handleCancelDraft(messages.indexOf(message))} disabled={executingAction} className="rounded-xl px-3 py-2 text-xs text-slate-600 dark:text-slate-300">{at("draftCards.cancel", "Annuleren")}</button>

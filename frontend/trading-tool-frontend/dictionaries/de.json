@@ -4121,6 +4121,8 @@
       "manualTradeBenchmark": "Benchmark-Score",
       "manualTradeRiskCap": "Angegebener maximaler Verlust",
       "manualTradeSave": "Plan speichern",
+      "manualTradeShares": "Aktie",
+      "manualTradeFractionalNote": "Dieser Plan verwendet einen Bruchteil einer Aktie. Prüfe, ob dein Broker dies unterstützt.",
       "manualTradeExpired": "Dieser Vorschlag ist abgelaufen. Bitte FINN um einen neuen Vorschlag mit aktuellen Daten.",
       "manualTradeSaved": "Handelsplan {asset}/{quote} gespeichert (Plan {id}). Einstieg {entry}, Menge {quantity}, Stop {stop}, Ziele {targets}. Geplanter Verlust am Stop: {loss} {quote}. Es wurde keine Order platziert und kein Bot gestartet.",
       "savedManualPlans": "Gespeicherte Handelspläne",

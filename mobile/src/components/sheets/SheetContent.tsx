@@ -111,8 +111,9 @@ export function FinnV2ProposalReviewSheetContent({
           ['ratios', Array.isArray(manualPlan.reward_risk_by_target) ? manualPlan.reward_risk_by_target.join(' / ') : ''],
         ] as const).map(([key, value]) => <View key={key} style={{ gap: 4 }}>
           <Text style={styles.body}>{translate(language, `finn.manualTrade_${key}`)}</Text>
-          <Text style={styles.title}>{String(value || '–')}{['value', 'loss', 'riskUnit'].includes(key) ? ` ${manualPlan.quote_currency}` : key === 'riskPct' ? '%' : ''}</Text>
+          <Text style={styles.title}>{String(value || '–')}{['value', 'loss', 'riskUnit'].includes(key) ? ` ${manualPlan.quote_currency}` : key === 'riskPct' ? '%' : key === 'quantity' && manualPlan.asset_class === 'stock' ? ` ${translate(language, 'finn.manualTradeShares')}` : ''}</Text>
         </View>)}
+        {manualPlan.asset_class === 'stock' && !Number.isInteger(Number(manualPlan.quantity)) ? <Text style={styles.body}>{translate(language, 'finn.manualTradeFractionalNote')}</Text> : null}
         {manualPlan.level_source === 'market_derived' ? <>
           <Text style={styles.body}>{translate(language, 'finn.manualTradeSetup')}: {manualSourceEvidence?.owner_context?.setup_name || '–'}</Text>
           <Text style={styles.body}>{translate(language, 'finn.manualTradeBenchmark')}: {manualSourceEvidence?.owner_context?.benchmark_score ? `${manualSourceEvidence.owner_context.benchmark_score}/100` : '–'}</Text>

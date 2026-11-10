@@ -4079,6 +4079,8 @@
       "manualTradeBenchmark": "Benchmarkscore",
       "manualTradeRiskCap": "Opgegeven maximaal verlies",
       "manualTradeSave": "Plan opslaan",
+      "manualTradeShares": "aandeel",
+      "manualTradeFractionalNote": "Dit plan gebruikt een fractie van een aandeel. Controleer of je broker dit ondersteunt.",
       "manualTradeExpired": "Dit voorstel is verlopen. Vraag FINN om een nieuw voorstel met actuele gegevens.",
       "manualTradeSaved": "Tradeplan {asset}/{quote} opgeslagen (plan {id}). Instap {entry}, hoeveelheid {quantity}, stop {stop}, doelen {targets}. Gepland verlies bij stop: {loss} {quote}. Er is geen order geplaatst of bot geactiveerd.",
       "savedManualPlans": "Opgeslagen tradeplannen",
