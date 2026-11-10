@@ -284,7 +284,7 @@ def _cleanup(namespace: str, user_id: int, bot_id: int, *, require_safe_pair_cle
                 cur.execute("SELECT COUNT(*) FROM exchange_keys WHERE user_id=%s", (user_id,))
                 if cur.fetchone()[0]:
                     raise RuntimeError("fixture_cleanup_keys_present")
-                for table in ("bot_orders", "bot_executions", "bot_ledger"):
+                for table in ("bot_trade_plans", "bot_orders", "bot_executions", "bot_ledger"):
                     cur.execute(f"SELECT COUNT(*) FROM {table} WHERE user_id=%s", (user_id,))
                     if cur.fetchone()[0]:
                         raise RuntimeError("fixture_cleanup_trade_present")

@@ -351,6 +351,8 @@ def run(namespace: str) -> dict:
             failures.append("broker_order_created")
         result.update({"result": "FAIL" if failures else "PASS",
                        "failed_checks": sorted(set(failures)),
+                       "current_price_usd": float(source["price"]),
+                       "old_report_price_usd": float(OLD_PRICE),
                        "current_source_utc": source["at"].isoformat(),
                        "old_report_source_utc": OLD_SOURCE.isoformat(),
                        "proposals": after["counts"]["finn_v2_proposals"] - before["counts"]["finn_v2_proposals"],

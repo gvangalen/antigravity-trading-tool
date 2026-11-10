@@ -51,7 +51,8 @@ an older dated report price, and a saved `market_price_stale` Paper decision.
 The probe compares the current market-source time and price to the latest
 provider-dated AAPL row, rejects an old-quote-as-current answer, checks the
 two source moments, and compares terminal polling and SSE content. Its artifact
-contains only fixed check codes, booleans and the two source instants; it does
+contains only fixed check codes, booleans, public AAPL USD quote values and the
+two source instants; it does
 not export child IDs, answer text, prompts, or tokens. PASS cleans the child
 under owner, bot, key and trade guards; any failure quarantines it disabled.
 The historical report and bot decision are controlled fixture evidence, so
