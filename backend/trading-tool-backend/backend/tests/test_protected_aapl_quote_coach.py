@@ -19,13 +19,14 @@ def test_old_quote_is_rejected_only_when_mislabeled_current():
 def test_market_and_owner_evidence_bind_both_distinct_moments():
     source = {"price": Decimal("350.49"),
               "at": datetime(2026, 11, 9, 20, 59, tzinfo=timezone.utc)}
-    ids = {"setup": 2, "strategy": 3, "bot": 4, "decision": 5, "report": 6}
+    ids = {"setup": 2, "strategy": 3, "bot": 4, "decision": 5,
+           "report_date": "2026-11-09"}
     rows = [
         {"scope": "read_market_snapshot", "status": "completed", "source": "market_data", "data": {
             "symbol": "AAPL", "price": 350.49, "quote_currency": "USD",
             "as_of": "2026-11-09T20:59:00+00:00"}},
         {"scope": "read_latest_report", "status": "completed", "source": "daily_reports", "data": {
-            "id": 6,
+            "report_date": "2026-11-09",
             "score_source_snapshot": {"assets": [{"symbol": "AAPL", "market_snapshot": {
                 "price": 351.19, "quote_currency": "USD",
                 "as_of": "2026-11-09T19:03:00+00:00"}}]}}},
@@ -41,9 +42,9 @@ def test_market_and_owner_evidence_bind_both_distinct_moments():
     assert probe._market_evidence(rows, source)["source_match"] is False
     rows[1]["data"]["score_source_snapshot"]["assets"][0]["market_snapshot"]["price"] = 350.49
     assert probe._owner_evidence(rows, ids)["old_report_match"] is False
-    rows[1]["data"]["id"] = 999
+    rows[1]["data"]["report_date"] = "2026-11-08"
     assert probe._owner_evidence(rows, ids)["old_report_match"] is False
-    rows[1]["data"]["id"] = 6
+    rows[1]["data"]["report_date"] = "2026-11-09"
     assert not probe._owner_evidence(rows + [{**rows[1], "source": "foreign_reports"}], ids)["old_report_match"]
     assert not probe._market_evidence(rows + [{**rows[0], "source": "other"}], source)["source_match"]
 
@@ -71,7 +72,7 @@ def test_plan_and_score_reads_must_be_aapl_and_materialized():
 
 
 def test_owner_references_reject_foreign_duplicate_or_unowned_refs():
-    ids = {"setup": 2, "strategy": 3, "bot": 4, "report": 6}
+    ids = {"setup": 2, "strategy": 3, "bot": 4, "report_date": "2026-11-09"}
     refs = [SimpleNamespace(entity_type=kind, entity_id=str(value), source=source,
                             owned_by_user=True)
             for kind, source, value in (("setup", "setups", 2),
@@ -204,3 +205,35 @@ def test_quarantine_failure_does_not_expose_driver_error(monkeypatch):
     monkeypatch.setattr(probe.fixture, "_quarantine", fail_quarantine)
     with pytest.raises(RuntimeError, match="^aapl_quarantine_failed$"):
         probe._finalize_fixture("qa-1-1-abcdef12-abcdef12", 2, 3, passed=False)
+
+
+def test_prepare_failure_reports_only_fixed_stage_and_class(monkeypatch):
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def execute(self, *_args):
+            raise RuntimeError("secret SQL and owner value")
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def rollback(self):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(probe.fixture, "_connection", lambda: Connection())
+    with pytest.raises(RuntimeError, match="^aapl_prepare_identity_runtimeerror_failed$"):
+        probe._prepare("qa-1-1-abcdef12-abcdef12", 2, 3)
+    assert profile_error_category(
+        "aapl_paper_quote_coach", RuntimeError("aapl_prepare_identity_runtimeerror_failed")
+    ) == "aapl_prepare_identity_runtimeerror_failed"
+    assert profile_error_category(
+        "aapl_paper_quote_coach", RuntimeError("aapl_prepare_identity_secret_failed")
+    ) == "aapl_probe_runtime_error"

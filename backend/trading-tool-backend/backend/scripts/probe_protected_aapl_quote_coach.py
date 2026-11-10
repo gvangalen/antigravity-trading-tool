@@ -32,6 +32,18 @@ SAFE_FAILURES = frozenset({
     "aapl_baseline_failed", "aapl_turn_failed", "aapl_safety_failed",
     "aapl_cleanup_failed", "aapl_quarantine_failed",
 })
+PREPARE_STAGES = frozenset({
+    "identity", "bot_lookup", "symbol_update", "indicator_class",
+    "disable_bot", "lineage", "decision", "report", "commit",
+})
+PREPARE_KINDS = frozenset({
+    "runtimeerror", "operationalerror", "programmingerror", "dataerror",
+    "integrityerror", "interfaceerror", "typeerror", "valueerror", "other",
+})
+SAFE_FAILURES |= frozenset(
+    f"aapl_prepare_{stage}_{kind}_failed"
+    for stage in PREPARE_STAGES for kind in PREPARE_KINDS
+)
 SAFETY_FAILURES = frozenset({
     "unexpected_action", "unexpected_business_write", "live_attempt",
     "broker_order_created",
@@ -106,27 +118,34 @@ def _result(failures: list[str], *, source_advanced: bool) -> str:
 def _prepare(namespace: str, user_id: int, bot_id: int) -> dict:
     """Convert only the new child fixture from ETH to AAPL and save old evidence."""
     conn = fixture._connection()
+    step = "identity"
     try:
         with conn.cursor() as cur:
             cur.execute("SELECT ai_preferences,is_active FROM users WHERE id=%s FOR UPDATE", (user_id,))
             row = cur.fetchone()
             if not row or row[1] is not False or (row[0] or {}).get("qa_fixture") != fixture.FIXTURE_MARKER or (row[0] or {}).get("qa_namespace") != namespace:
                 raise RuntimeError("aapl_fixture_prepare_failed")
+            step = "bot_lookup"
             cur.execute("SELECT id,is_live FROM bot_configs WHERE user_id=%s FOR UPDATE", (user_id,))
             if cur.fetchall() != [(bot_id, False)]:
                 raise RuntimeError("aapl_fixture_prepare_failed")
+            step = "symbol_update"
             for table in ("setups", "strategies", "bot_configs", "bot_portfolios",
                           "user_indicator_configs", "macro_data", "technical_indicators",
                           "market_data_indicators"):
                 cur.execute(f"UPDATE {table} SET symbol='AAPL' WHERE user_id=%s AND symbol='ETH'", (user_id,))
+            step = "indicator_class"
             cur.execute("UPDATE user_indicator_configs SET asset_class='stock' WHERE user_id=%s", (user_id,))
+            step = "disable_bot"
             cur.execute("UPDATE bot_configs SET is_active=FALSE WHERE user_id=%s AND id=%s AND is_live=FALSE", (user_id, bot_id))
             if cur.rowcount != 1:
                 raise RuntimeError("aapl_fixture_prepare_failed")
+            step = "lineage"
             cur.execute("SELECT strategy_id FROM bot_configs WHERE user_id=%s AND id=%s", (user_id, bot_id))
             strategy_id = cur.fetchone()[0]
             cur.execute("SELECT setup_id FROM strategies WHERE user_id=%s AND id=%s", (user_id, strategy_id))
             setup_id = cur.fetchone()[0]
+            step = "decision"
             cur.execute("""INSERT INTO bot_decisions
                 (user_id,bot_id,strategy_id,setup_id,symbol,decision_date,decision_ts,
                  action,confidence,amount_eur,scores_json,status,executed_by)
@@ -140,17 +159,21 @@ def _prepare(namespace: str, user_id: int, bot_id: int) -> dict:
                 "source_observed_at_utc": OLD_SOURCE.isoformat()},
                 "reported_scores": {"market_score": 52.7},
             }]}
+            step = "report"
             cur.execute("""INSERT INTO daily_reports
-                (user_id,report_date,status,price,score_source_snapshot)
-                VALUES (%s,%s,'complete',%s,%s::jsonb) RETURNING id""",
+                (user_id,report_date,price,score_source_snapshot)
+                VALUES (%s,%s,%s,%s::jsonb) RETURNING report_date""",
                 (user_id, OLD_SOURCE.date(), OLD_PRICE, json.dumps(old_snapshot)))
-            report_id = cur.fetchone()[0]
+            report_date = cur.fetchone()[0].isoformat()
+        step = "commit"
         conn.commit()
         return {"setup": setup_id, "strategy": strategy_id, "bot": bot_id,
-                "decision": decision_id, "report": report_id}
-    except Exception:
+                "decision": decision_id, "report_date": report_date}
+    except Exception as error:
         conn.rollback()
-        raise RuntimeError("aapl_fixture_prepare_failed") from None
+        kind = type(error).__name__.lower()
+        kind = kind if kind in PREPARE_KINDS else "other"
+        raise RuntimeError(f"aapl_prepare_{step}_{kind}_failed") from None
     finally:
         conn.close()
 
@@ -194,7 +217,7 @@ def _owner_evidence(rows: list, ids: dict) -> dict:
     assets = snapshot.get("assets") if isinstance(snapshot, dict) else None
     old = assets[0].get("market_snapshot") if isinstance(assets, list) and len(assets) == 1 and isinstance(assets[0], dict) and assets[0].get("symbol") == "AAPL" else None
     try:
-        report_match = bool(old and reports[0].get("id") == ids["report"]
+        report_match = bool(old and str(reports[0].get("report_date")) == ids["report_date"]
                             and Decimal(str(old.get("price"))) == OLD_PRICE
                             and old.get("quote_currency") == "USD"
                             and _utc(old.get("as_of")) == OLD_SOURCE)
@@ -243,7 +266,7 @@ def _owner_references(evidence: list, ids: dict) -> bool:
                 "strategy": ("strategies", ids["strategy"]),
                 "bot": ("bot_configs", ids["bot"]),
                 "bot_status": ("bot_configs", ids["bot"]),
-                "latest_report": ("daily_reports", ids["report"]),
+                "latest_report": ("daily_reports", None),
                 "scores": ("daily_scores_and_source_indicators", None)}
     seen = set()
     for item in evidence:
