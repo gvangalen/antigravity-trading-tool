@@ -370,6 +370,20 @@ class FinnV2OperationStateService:
                 explicit["legacy_market_only"] = True
         if contract.operation_id == "create_manual_trade_plan":
             explicit.update(self._manual_trade_inputs(message))
+            if any(field in explicit for field in ("entry_price", "quantity", "stop_loss", "targets")):
+                explicit["proposal_mode"] = "user_stated"
+            if "risk_budget_quote" in explicit:
+                chosen_quote = str(explicit.get("quote_currency") or collected.get("quote_currency") or "").upper()
+                if not chosen_quote:
+                    from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
+
+                    listing = DEFAULT_ASSET_CATALOG.get(str(explicit.get("asset") or collected.get("asset") or "").upper()) or {}
+                    if listing.get("asset_class") == "stock":
+                        chosen_quote = str(listing.get("quote_currency") or "").upper()
+                budget_clause = self._manual_field_clause(message, r"max(?:imaal|imum)?\s+verlies|risk\s+budget|maximum\s+loss|risicobedrag")
+                if not chosen_quote or self._manual_budget_value(budget_clause if budget_clause is not None else message,
+                                             quote_currency=chosen_quote or None) is None:
+                    explicit.pop("risk_budget_quote", None)
             if explicit.get("entry_price") is not None and not re.search(r"\b(?:market|marktorder)\b", message, re.I):
                 explicit["entry_type"] = "limit"
         if contract.operation_id == "update_indicator_configuration":
@@ -479,7 +493,8 @@ class FinnV2OperationStateService:
                 continue
             if contract.operation_id == "create_manual_trade_plan" and key in {
                 "quote_currency", "direction", "entry_type", "entry_price",
-                "quantity", "stop_loss", "targets",
+                "quantity", "stop_loss", "targets", "proposal_mode", "risk_budget_quote",
+                "level_source", "source_evidence",
             } and key not in explicit:
                 # An AI candidate cannot choose financial terms for an
                 # immutable, confirmable plan without the user's own values.
@@ -583,11 +598,18 @@ class FinnV2OperationStateService:
         )
         if manual_asset_changed or manual_quote_changed or manual_direction_changed:
             for field in ("direction", "entry_type", "entry_price", "quantity", "stop_loss", "targets"):
+                if field == "direction" and not manual_direction_changed:
+                    continue
                 if manual_direction_changed and field in {"direction", "entry_type", "entry_price", "quantity"}:
                     continue
                 collected.pop(field, None)
                 sources.pop(field, None)
                 provenance.pop(field, None)
+            if manual_asset_changed or manual_quote_changed:
+                for field in ("risk_budget_quote", "level_source", "source_evidence"):
+                    collected.pop(field, None)
+                    sources.pop(field, None)
+                    provenance.pop(field, None)
             if manual_asset_changed:
                 collected.pop("quote_currency", None)
                 sources.pop("quote_currency", None)
@@ -662,6 +684,15 @@ class FinnV2OperationStateService:
                     sources["category"] = "default"
                     provenance["category"] = {"source": "default", "state_revision": next_revision}
         for key, value in (derived_inputs or {}).items():
+            if (contract.operation_id == "create_manual_trade_plan"
+                    and collected.get("proposal_mode") == "market_suggested"
+                    and key in {"entry_type", "entry_price", "quantity", "stop_loss", "targets",
+                                "level_source", "source_evidence"}
+                    and key in accepted_inputs and not self._is_missing(value)):
+                collected[key] = value
+                sources[key] = "market_derived"
+                provenance[key] = {"source": "market_derived", "state_revision": next_revision}
+                continue
             if (
                 contract.operation_id == "create_strategy"
                 and (derived_inputs or {}).get("setup_id")
@@ -879,6 +910,7 @@ class FinnV2OperationStateService:
                 "quantity": (f"Welke hoeveelheid {asset or 'van de asset'} wil je plannen?", f"What quantity of {asset or 'the asset'} do you plan?", f"Welche Menge {asset or 'des Vermögenswerts'} planst du?"),
                 "stop_loss": ("Bij welke koers ligt de stoploss?", "At which price is the stop loss?", "Bei welchem Kurs liegt der Stop-Loss?"),
                 "targets": ("Welke koersdoelen wil je opnemen?", "Which price targets do you want to include?", "Welche Kursziele möchtest du aufnehmen?"),
+                "risk_budget_quote": ("Wat is je maximale geplande verlies voor deze trade, in de gekozen koersvaluta?", "What is your maximum planned loss for this trade in the selected quote currency?", "Wie hoch ist dein maximal geplanter Verlust für diesen Trade in der gewählten Kurswährung?"),
             }
             if field in manual_questions:
                 return manual_questions[field][{"nl": 0, "en": 1, "de": 2}.get(language, 0)]
@@ -1799,6 +1831,9 @@ class FinnV2OperationStateService:
         if field == "execution_mode":
             return self._canonical_execution_mode(value)
         if contract.operation_id == "create_manual_trade_plan":
+            if field == "risk_budget_quote":
+                clause = self._manual_field_clause(value, r"max(?:imaal|imum)?\s+verlies|risk\s+budget|maximum\s+loss|risicobedrag")
+                return self._manual_budget_value(clause if clause is not None else value)
             if field in {"entry_price", "quantity", "stop_loss"}:
                 label = {
                     "entry_price": r"entry|instap(?:prijs|niveau)?|einstieg(?:spreis)?",
@@ -1899,6 +1934,21 @@ class FinnV2OperationStateService:
             raw = raw.replace(",", ".")
         return raw
 
+    @classmethod
+    def _manual_budget_value(cls, value: str, *, quote_currency: str | None = None) -> str | None:
+        raw = str(value).strip().rstrip(".")
+        match = re.fullmatch(
+            r"(?:(€|\$)\s*)?(\d[\d.,]*)(?:\s*(EUR|USDT|USD|€|\$))?",
+            raw, re.I,
+        )
+        if not match:
+            return None
+        units = [{"€": "EUR", "$": "USD"}.get(unit.upper(), unit.upper())
+                 for unit in (match.group(1), match.group(3)) if unit]
+        if len(set(units)) > 1 or (quote_currency and units and units[0] != quote_currency.upper()):
+            return None
+        return cls._manual_numeric_value(match.group(2))
+
     @staticmethod
     def _manual_field_clause(text: str, label: str, *, list_values: bool = False) -> str | None:
         match = re.search(rf"\b(?:{label})\b\s*(?:is|zijn|are|ist|sind|:|=|op|at|bei|van|of)?\s*", text, re.I)
@@ -1929,6 +1979,11 @@ class FinnV2OperationStateService:
             if resolve_catalog_symbol_mention(asset):
                 values.update({"asset": asset, "quote_currency": quote})
         lowered = text.casefold()
+        budget = cls._manual_field_clause(text, r"max(?:imaal|imum)?\s+verlies|risk\s+budget|maximum\s+loss|risicobedrag")
+        if budget:
+            parsed_budget = cls._manual_budget_value(budget)
+            if parsed_budget is not None:
+                values["risk_budget_quote"] = parsed_budget
         long_requested = bool(re.search(r"\b(?:long|koop|buy|kopen)\b", lowered))
         short_requested = bool(re.search(r"\b(?:short|shorten)\b", lowered))
         if long_requested != short_requested:
@@ -1963,6 +2018,12 @@ class FinnV2OperationStateService:
             parsed = cls._manual_numeric_value(quantity)
             if parsed is not None:
                 values["quantity"] = parsed
+        if (not re.search(r"\bhandmatig(?:e)?\s+tradevoorstel\b", lowered)
+                and not any(field in values for field in ("entry_price", "quantity", "stop_loss", "targets"))
+                and re.search(r"\b(?:stel\s+(?:een\s+)?(?:trade|plan)\s+voor|(?:trade)?voorstel|suggest|propose|schlage\s+vor|"
+                              r"zet\b[^.!?\n]{0,60}\btrade\b[^.!?\n]{0,40}\bklaar|"
+                              r"\btrade\b[^.!?\n]{0,70}\bklaarzetten|prepare\b[^.!?\n]{0,60}\btrade)\b", lowered)):
+            values["proposal_mode"] = "market_suggested"
         return values
 
     @classmethod
@@ -2813,6 +2874,6 @@ class FinnV2OperationStateService:
     def _canonicalize_inputs(self, values: Mapping[str, object], *, manual_trade: bool = False) -> dict[str, object]:
         if not manual_trade:
             return {key: self._canonical_input(key, value) for key, value in values.items()}
-        financial = {"entry_price", "quantity", "stop_loss", "targets"}
+        financial = {"entry_price", "quantity", "stop_loss", "targets", "risk_budget_quote"}
         return {key: value if key in financial else self._canonical_input(key, value)
                 for key, value in values.items()}

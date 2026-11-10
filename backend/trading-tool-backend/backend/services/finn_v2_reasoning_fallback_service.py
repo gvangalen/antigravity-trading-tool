@@ -1212,12 +1212,21 @@ class FinnV2ReasoningFallbackService:
         elif contract.operation_id == "create_manual_trade_plan":
             plan = changes.get("plan_fields") or {}
             pair = f"{plan.get('asset')}/{plan.get('quote_currency')}"
+            context = (plan.get("source_evidence") or {}).get("owner_context") or {}
+            advice = (
+                " Advies: wachten; de huidige profiel- of setupbeoordeling bevestigt deze trade niet."
+                if context.get("recommendation") == "wait" else
+                " Advies: voorzichtig beoordelen; de hoeveelheid is gehalveerd."
+                if context.get("recommendation") == "reduced_risk" else
+                " De benchmark past bij je setup, maar dat is geen instapsignaal."
+                if plan.get("level_source") == "market_derived" else ""
+            )
             direct_answer = (
                 f"Ik kan een handmatig {plan.get('direction')}-tradeplan voor {pair} opslaan: "
                 f"limietinstap {plan.get('entry_price')}, hoeveelheid {plan.get('quantity')}, "
                 f"stoploss {plan.get('stop_loss')}, doelen {', '.join(map(str, plan.get('targets') or []))}. "
                 f"Berekend verlies bij stop (exclusief kosten en slip): {plan.get('max_loss_quote')} {plan.get('quote_currency')}. "
-                "Dit plan plaatst geen order."
+                f"Dit plan plaatst geen order.{advice}"
             )
             impact_summary = f"Na bevestiging wordt alleen dit niet-uitvoerbare handmatige tradeplan voor {pair} opgeslagen."
             proposal_copy["next_title"] = "Handmatig plan opslaan"
@@ -1274,6 +1283,8 @@ class FinnV2ReasoningFallbackService:
         if operation_id == "create_manual_trade_plan":
             from backend.domain.finn_manual_trade_plan_contract import validate_manual_trade_plan
 
+            fields.pop("proposal_mode", None)
+            fields.pop("risk_budget_quote", None)
             return {**base, "plan_fields": validate_manual_trade_plan(fields)}
         if operation_id == "create_strategy":
             return {**base, "strategy_fields": fields}

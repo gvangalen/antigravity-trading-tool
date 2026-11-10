@@ -69,6 +69,7 @@ export function FinnV2ProposalReviewSheetContent({
   }
   const fields = Object.entries(proposal.requested_state || {});
   const manualPlan = proposal.operation_type === 'create_manual_trade_plan' ? proposal.requested_state : null;
+  const manualSourceEvidence = manualPlan?.source_evidence as { source_observed_at?: string; max_loss_quote?: string; owner_context?: { recommendation?: string; setup_name?: string; benchmark_score?: string } } | undefined;
   const namedTargetAction = ['delete_setup', 'delete_strategy', 'delete_bot', 'deactivate_bot', 'activate_paper_bot', 'activate_live_bot']
     .includes(proposal.operation_type);
   const visibleFields = manualPlan || namedTargetAction ? []
@@ -92,7 +93,14 @@ export function FinnV2ProposalReviewSheetContent({
       <StatusChip compact label={translate(language, 'finn.proposalReview')} tone="warning" />
       <Text style={styles.title}>{String(name)}</Text>
       {manualPlan ? <>
-        <Text style={styles.body}>{translate(language, 'finn.manualTradeNoOrder')}</Text>
+        <Text style={styles.body}>{manualPlan.level_source === 'market_derived'
+          ? translate(language, 'finn.manualTradeMarketSource', { time: manualSourceEvidence?.source_observed_at || '–' })
+          : translate(language, 'finn.manualTradeNoOrder')}</Text>
+        {manualPlan.level_source === 'market_derived' ? <Text style={styles.body}>{translate(language,
+          manualSourceEvidence?.owner_context?.recommendation === 'wait' ? 'finn.manualTradeAdviceWait'
+            : manualSourceEvidence?.owner_context?.recommendation === 'reduced_risk' ? 'finn.manualTradeAdviceReduced'
+              : 'finn.manualTradeAdviceReview')}
+        </Text> : null}
         {([
           ['direction', manualPlan.direction], ['entry', manualPlan.entry_price],
           ['quantity', manualPlan.quantity], ['stop', manualPlan.stop_loss],
@@ -105,6 +113,11 @@ export function FinnV2ProposalReviewSheetContent({
           <Text style={styles.body}>{translate(language, `finn.manualTrade_${key}`)}</Text>
           <Text style={styles.title}>{String(value || '–')}{['value', 'loss', 'riskUnit'].includes(key) ? ` ${manualPlan.quote_currency}` : key === 'riskPct' ? '%' : ''}</Text>
         </View>)}
+        {manualPlan.level_source === 'market_derived' ? <>
+          <Text style={styles.body}>{translate(language, 'finn.manualTradeSetup')}: {manualSourceEvidence?.owner_context?.setup_name || '–'}</Text>
+          <Text style={styles.body}>{translate(language, 'finn.manualTradeBenchmark')}: {manualSourceEvidence?.owner_context?.benchmark_score ? `${manualSourceEvidence.owner_context.benchmark_score}/100` : '–'}</Text>
+          <Text style={styles.body}>{translate(language, 'finn.manualTradeRiskCap')}: {manualSourceEvidence?.max_loss_quote || '–'} {String(manualPlan.quote_currency || '')}</Text>
+        </> : null}
       </> : null}
       {proposal.review_target_name && namedTargetAction
         ? <Text style={styles.body}>{translate(language, 'finn.proposalEffect', {

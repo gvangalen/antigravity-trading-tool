@@ -1817,6 +1817,11 @@ function AIAssistantContent({
           showSnackbar("Dit voorstel is niet meer bevestigbaar.", "info");
           return;
         }
+        if (latestProposal.expires_at && Date.parse(latestProposal.expires_at) <= Date.now()) {
+          retireProposalCards(new Set([action.proposal_id]));
+          showSnackbar(at("draftCards.manualTradeExpired", "Dit voorstel is verlopen. Vraag FINN om een nieuw voorstel met actuele gegevens."), "info");
+          return;
+        }
         const reviewedName = action.display_context?.review_target_name;
         if (action.display_context?.operation_id === "create_manual_trade_plan" && (
           !action.display_context.reviewed_payload_hash
@@ -2316,6 +2321,11 @@ function AIAssistantContent({
       const plan = displayContext.requested_state || {};
       const quote = plan.quote_currency || "";
       const rows = [
+        ...(plan.level_source === "market_derived" ? [
+          [at("draftCards.manualTradeSetup", "Gebruikte setup"), plan.source_evidence?.owner_context?.setup_name || "–"],
+          [at("draftCards.manualTradeBenchmark", "Benchmarkscore"), plan.source_evidence?.owner_context?.benchmark_score ? `${plan.source_evidence.owner_context.benchmark_score}/100` : "–"],
+          [at("draftCards.manualTradeRiskCap", "Opgegeven maximaal verlies"), `${plan.source_evidence?.max_loss_quote || "–"} ${quote}`],
+        ] : []),
         [at("draftCards.manualTradeDirection", "Richting"), plan.direction], [at("draftCards.manualTradeEntry", "Limietinstap"), plan.entry_price],
         [at("draftCards.manualTradeQuantity", "Hoeveelheid"), plan.quantity], [at("draftCards.manualTradeStop", "Stoploss"), plan.stop_loss],
         [at("draftCards.manualTradeTargets", "Koersdoelen"), Array.isArray(plan.targets) ? plan.targets.join(", ") : ""],
@@ -2338,7 +2348,16 @@ function AIAssistantContent({
       return (
         <div className="mt-4 min-w-0 rounded-2xl border border-blue-200 bg-blue-50/70 p-4 dark:border-blue-900 dark:bg-blue-950/20">
           <h3 className="text-sm font-bold text-slate-950 dark:text-white">{at("draftCards.manualTradeTitle", "Handmatig tradeplan · {asset}/{quote}", { asset: plan.asset, quote })}</h3>
-          <p className="mt-1 text-xs text-slate-700 dark:text-slate-300">{at("draftCards.manualTradeBody", "Controleer alle niveaus en hoeveelheden. Dit plan plaatst geen order en activeert geen bot.")}</p>
+          <p className="mt-1 text-xs text-slate-700 dark:text-slate-300">{plan.level_source === "market_derived"
+            ? at("draftCards.manualTradeMarketBody", "FINN berekende deze niveaus uit afgeronde dagkoersen tot {time}. Controleer het voorstel; dit plan plaatst geen order.", { time: plan.source_evidence?.source_observed_at || "–" })
+            : at("draftCards.manualTradeBody", "Deze niveaus en hoeveelheden komen uit jouw input. Dit plan plaatst geen order en activeert geen bot.")}</p>
+          {plan.level_source === "market_derived" ? <p className="mt-2 text-xs font-semibold text-slate-800 dark:text-slate-100">{
+            plan.source_evidence?.owner_context?.recommendation === "wait"
+              ? at("draftCards.manualTradeAdviceWait", "Advies: wachten. De profiel- of setupbeoordeling geeft nu geen bevestigde match. Je kunt dit scenario als plan bewaren; er wordt niets uitgevoerd.")
+              : plan.source_evidence?.owner_context?.recommendation === "reduced_risk"
+                ? at("draftCards.manualTradeAdviceReduced", "Advies: voorzichtig beoordelen. FINN halveerde het opgegeven maximale verlies als risicobudget en berekende daaruit de hoeveelheid.")
+                : at("draftCards.manualTradeAdviceReview", "Advies: beoordeel dit plan. De actuele benchmark past bij je opgeslagen setup; dat is op zichzelf geen instapsignaal.")
+          }</p> : null}
           <dl className="mt-3 divide-y divide-blue-100 text-xs dark:divide-blue-900/50">
             {rows.map(([label, value]) => <div key={label} className="flex justify-between gap-3 py-1.5"><dt className="text-slate-600 dark:text-slate-300">{label}</dt><dd className="break-words text-right font-semibold text-slate-950 dark:text-white">{value || "–"}</dd></div>)}
           </dl>

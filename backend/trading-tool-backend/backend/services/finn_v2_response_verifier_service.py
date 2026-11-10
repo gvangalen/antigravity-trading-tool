@@ -1387,6 +1387,20 @@ class FinnV2ResponseVerifierService:
             )
         else:
             return None
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        if operation == "create_manual_trade_plan" and change.plan_fields.get("level_source") == "market_derived":
+            from backend.services.finn_manual_trade_suggestion_service import ATTESTATION_LIFETIME
+
+            issued = change.plan_fields["source_evidence"].get("issued_at")
+            if not isinstance(issued, str):
+                return None
+            try:
+                attestation_deadline = datetime.fromisoformat(issued).astimezone(timezone.utc) + ATTESTATION_LIFETIME
+            except ValueError:
+                return None
+            expires_at = min(expires_at, attestation_deadline - timedelta(seconds=30))
+            if expires_at <= datetime.now(timezone.utc):
+                return None
         return ValidatedProposalInput(
             operation_type=operation,
             target=target,
@@ -1402,7 +1416,7 @@ class FinnV2ResponseVerifierService:
                 target=target,
                 change=change,
             ),
-            expires_at=datetime.now(timezone.utc) + timedelta(minutes=15),
+            expires_at=expires_at,
         )
 
     def _evaluate_claim_support(self, text: str, evidence: list[Any], claim_type: str) -> tuple[str, list[str], bool]:

@@ -143,6 +143,49 @@ def _proposal_explicitly_excluded(message: str) -> bool:
     ))
 
 
+def _explicit_manual_trade_suggestion_request(message: str) -> bool:
+    if _proposal_explicitly_excluded(message):
+        return False
+    if re.search(r"\bhandmatig(?:e)?\s+tradevoorstel\b", message, re.I):
+        return False
+    if re.search(r"\b(?:trade[-\s]*setup|tradesetup|strategie|strategy|bot)\b", message, re.I):
+        return False
+    if "?" in message and not re.match(
+        r"^\s*(?:(?:kan|kun)\s+(?:je|jij|u)|(?:can|could)\s+you|kannst\s+du)\b",
+        message, re.I,
+    ):
+        return False
+    return bool(re.search(
+        r"\b(?:stel|maak|zet|klaarzetten|prepare|create|propose|suggest|erstelle)\b"
+        r"[^.!?\n]{0,100}\b(?:trade|tradeplan|tradevoorstel|trading\s+plan|handelsplan)\b"
+        r"|\b(?:trade|tradeplan|tradevoorstel)\b[^.!?\n]{0,70}\b(?:voor|klaar|klaarzetten|suggest|propose)\b",
+        message, re.I,
+    )) and bool(re.search(r"\b(?:voorstel|voor|klaar|klaarzetten|suggest|propose|prepare|bereken)\b", message, re.I))
+
+
+def _manual_trade_wait_text(reason: str, locale: str) -> str:
+    language = str(locale or "nl").split("-")[0].lower()
+    if reason == "manual_trade_risk_budget_too_small":
+        return {
+            "en": "Your maximum planned loss is too small to calculate a meaningful quantity at these levels. You can ask again with a higher loss limit.",
+            "de": "Dein maximal geplanter Verlust ist bei diesen Kursniveaus zu gering für eine sinnvolle Menge. Du kannst mit einer höheren Verlustgrenze erneut fragen.",
+        }.get(language, "Je maximale geplande verlies is bij deze koersniveaus te klein voor een zinvolle hoeveelheid. Je kunt opnieuw vragen met een hogere verliesgrens.")
+    if reason in {"manual_trade_setup_outside_conditions", "manual_trade_setup_not_confirmed"}:
+        return {
+            "en": "Your current benchmark is outside the saved setup conditions. I would wait instead of preparing a trade card.",
+            "de": "Der aktuelle Benchmark liegt außerhalb der gespeicherten Setup-Bedingungen. Ich würde warten statt eine Trade-Karte vorzubereiten.",
+        }.get(language, "De actuele benchmark valt buiten je opgeslagen setupvoorwaarden. Ik zou wachten in plaats van een tradecard klaar te zetten.")
+    if reason == "manual_trade_setup_ambiguous":
+        return {
+            "en": "You have several trade setups for this market. Which one should I use?",
+            "de": "Du hast mehrere Trade-Setups für diesen Markt. Welches soll ich verwenden?",
+        }.get(language, "Je hebt meerdere tradesetups voor dit handelspaar. Welke wil je gebruiken?")
+    return {
+        "en": "I cannot prepare a reliable trade card yet. Check that your trader profile, a daily trade setup, and current benchmark and market evidence are available for this exact market.",
+        "de": "Ich kann noch keine verlässliche Trade-Karte vorbereiten. Prüfe Traderprofil, Tages-Setup sowie aktuelle Benchmark- und Marktdaten für dieses genaue Paar.",
+    }.get(language, "Ik kan nog geen betrouwbaar tradevoorstel klaarzetten. Controleer je traderprofiel, een dagsetup en actuele benchmark- en marktbronnen voor dit exacte handelspaar.")
+
+
 def _is_read_only_coach_turn(
     *, polarity: str | None, imperative_operation: str | None,
     explicit_closed_review_read: bool = False,
@@ -671,6 +714,69 @@ class FinnResponsesFrontDoor:
         )
         self.proposals = FinnResponsesProposalSelection()
         self.relevance_guard = FinnResponsesToolRelevanceGuard(client)
+
+    async def _complete_manual_trade_suggestion(self, analysis: RequestAnalysisResult) -> RequestAnalysisResult:
+        plan = analysis.request_plan
+        if plan.operation_id != "create_manual_trade_plan" or plan.clarification_required:
+            return analysis
+        state = dict(plan.operation_state or {})
+        inputs = dict(state.get("collected_inputs") or {})
+        if inputs.get("proposal_mode") != "market_suggested":
+            return analysis
+        from backend.services.finn_manual_trade_suggestion_service import ManualTradeWait
+
+        session_factory = getattr(self.reads, "session_factory", None)
+        if session_factory is None:
+            raise ManualTradeWait("manual_trade_source_unavailable")
+        from backend.services.finn_manual_trade_suggestion_service import suggest_manual_trade_plan
+
+        try:
+            async with session_factory() as session:
+                suggested = await suggest_manual_trade_plan(
+                    session, asset=str(inputs["asset"]),
+                    quote_currency=str(inputs["quote_currency"]),
+                    direction=str(inputs["direction"]),
+                    max_loss_quote=inputs["risk_budget_quote"],
+                    user_id=self.user_id,
+                )
+        except ValueError as exc:
+            if isinstance(exc, ManualTradeWait):
+                raise
+            if str(exc) == "manual_trade_risk_budget_too_small":
+                raise ManualTradeWait(str(exc)) from exc
+            raise ManualTradeWait("manual_trade_source_unavailable") from exc
+        complete = analysis.copy(deep=True)
+        state = dict(complete.request_plan.operation_state or {})
+        collected = dict(state.get("collected_inputs") or {})
+        collected.update(suggested)
+        state["collected_inputs"] = collected
+        sources = dict(state.get("input_sources") or {})
+        provenance = dict(state.get("input_provenance") or {})
+        for key in suggested:
+            sources[key] = "market_derived"
+            provenance[key] = {"source": "market_derived", "state_revision": state.get("state_revision", 1)}
+        state["input_sources"] = sources
+        state["input_provenance"] = provenance
+        complete.request_plan.operation_state = state
+        from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+
+        contract = FinnV2OperationRegistry().require_supported("create_manual_trade_plan")
+        complete.request_plan.referenced_entities = {
+            key: value for key, value in collected.items() if key in contract.input_fields
+        }
+        return complete
+
+    def _manual_trade_wait_result(self, reason: str, previous_response: dict[str, Any] | None,
+                                  locale: str) -> FinnResponsesFrontDoorResult:
+        return FinnResponsesFrontDoorResult(
+            FinnResponsesResult(
+                text=_manual_trade_wait_text(reason, locale),
+                response_id=f"manual-trade-wait-{self.run_id}",
+                tool_trace=({"name": "manual_trade_setup_evaluation", "status": "completed",
+                             "result": {"decision": "wait", "reason": reason}},),
+                response_id_reusable=False,
+            ), None, previous_response, locale=locale,
+        )
 
     async def _workspace_bot_plan_selector(
         self, *, workspace_hints: Mapping[str, object], message: str,
@@ -1555,6 +1661,10 @@ class FinnResponsesFrontDoor:
                         ) if pending_operation == "create_strategy" else {}
                     ),
                 )
+                try:
+                    selected = await self._complete_manual_trade_suggestion(selected)
+                except ValueError as exc:
+                    return self._manual_trade_wait_result(str(exc), previous_response, locale)
                 return FinnResponsesFrontDoorResult(
                     FinnResponsesResult(
                         text={
@@ -1573,6 +1683,31 @@ class FinnResponsesFrontDoor:
                     ),
                     selected, previous_response, locale=locale,
                 )
+        if _explicit_manual_trade_suggestion_request(message):
+            contract = self.proposals.registry.require_supported("create_manual_trade_plan")
+            stated_assets = mentioned_catalog_symbols(message)
+            stated_asset = next(iter(stated_assets)) if len(stated_assets) == 1 else None
+            selected = self.proposals.from_call(
+                call=FinnResponsesToolCall(
+                    name=catalog.proposal_tool_for_operation(contract.operation_id),
+                    operation_id=contract.operation_id, inputs={}, read_tools=(),
+                    required_inputs=contract.required_inputs, missing_inputs=(), draft_intent="new",
+                ),
+                message=message, conversation_context=conversation_context,
+                verified_asset=stated_asset or verified_asset,
+            )
+            try:
+                selected = await self._complete_manual_trade_suggestion(selected)
+            except ValueError as exc:
+                return self._manual_trade_wait_result(str(exc), previous_response, locale)
+            return FinnResponsesFrontDoorResult(
+                FinnResponsesResult(
+                    text="Ik bereid het handmatige tradevoorstel voor op basis van afgeronde dagkoersen.",
+                    response_id=f"manual-trade-suggestion-{self.run_id}",
+                    tool_trace=(),
+                    response_id_reusable=False,
+                ), selected, previous_response, locale=locale,
+            )
         guard = getattr(self, "relevance_guard", None)
         previous_kind = str((previous_response or {}).get("terminal_kind") or "")
         request_facts = FinnV2RequestPreprocessorService().preprocess(message=message)
@@ -3719,6 +3854,10 @@ class FinnResponsesFrontDoor:
                     ) if call.operation_id == "create_strategy" else {}
                 ),
             )
+            try:
+                analysis = await self._complete_manual_trade_suggestion(analysis)
+            except ValueError as exc:
+                return {"status": "unavailable", "reason": str(exc)}
             state = analysis.request_plan.operation_state
             if (
                 not pending_operation

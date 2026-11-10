@@ -34,7 +34,7 @@ def validate_manual_trade_plan(fields: dict[str, Any]) -> dict[str, Any]:
     """Validate user-selected terms and calculate risk without market guesses."""
     allowed = {
         "asset", "quote_currency", "direction", "entry_type", "entry_price",
-        "quantity", "stop_loss", "targets",
+        "quantity", "stop_loss", "targets", "source_evidence",
     }
     derived = {
         "asset_class", "venue", "position_value_quote", "risk_per_unit_quote",
@@ -47,10 +47,30 @@ def validate_manual_trade_plan(fields: dict[str, Any]) -> dict[str, Any]:
     catalog = DEFAULT_ASSET_CATALOG.get(asset)
     if not catalog:
         raise ValueError("manual_trade_asset_not_in_catalog")
+    asset_class = str(catalog.get("asset_class") or "").lower()
+    level_source = str(fields.get("level_source") or "user_stated")
+    source_evidence = fields.get("source_evidence")
+    if level_source == "market_derived":
+        evidence_keys = {"method_version", "market_id", "candle_ids", "candles_sha256",
+                         "source_observed_at", "max_loss_quote", "atr_quote"}
+        stock_source_keys = {"provider", "provider_symbol"}
+        optional_evidence = {"owner_context", "issued_at", "attestation"}
+        if (not isinstance(source_evidence, dict)
+                or not (evidence_keys | stock_source_keys) <= set(source_evidence)
+                or set(source_evidence).difference(evidence_keys | stock_source_keys | optional_evidence)
+                or ("issued_at" in source_evidence) != ("attestation" in source_evidence)
+                or ("attestation" in source_evidence and not re.fullmatch(
+                    r"[0-9a-f]{64}", str(source_evidence["attestation"])))
+                or not isinstance(source_evidence.get("candle_ids"), list)
+                or len(source_evidence["candle_ids"]) != 15
+                or not isinstance(source_evidence.get("candles_sha256"), str)
+                or not re.fullmatch(r"[0-9a-f]{64}", source_evidence["candles_sha256"])):
+            raise ValueError("manual_trade_source_evidence_invalid")
+    elif level_source != "user_stated" or source_evidence is not None:
+        raise ValueError("manual_trade_source_evidence_invalid")
     quote = str(fields.get("quote_currency") or "").strip().upper()
     if not quote:
         raise ValueError("manual_trade_quote_required")
-    asset_class = str(catalog.get("asset_class") or "").lower()
     if asset_class == "stock":
         if quote != str(catalog.get("quote_currency") or "").upper():
             raise ValueError("manual_trade_quote_not_in_catalog")
@@ -111,10 +131,12 @@ def validate_manual_trade_plan(fields: dict[str, Any]) -> dict[str, Any]:
         "max_loss_quote": str(maximum_loss),
         "risk_pct_of_position": str(risk_pct),
         "reward_risk_by_target": [str(value) for value in ratios],
-        "level_source": "user_stated",
+        "level_source": level_source,
         "risk_assumption": "price_only_excludes_fees_slippage_and_gaps",
         "executable": False,
     }
+    if source_evidence is not None:
+        result["source_evidence"] = source_evidence
     # Re-parsing a sealed proposal is safe, but a caller cannot choose its
     # computed risk, venue, or execution status independently of the terms.
     if any(fields[key] != result[key] for key in derived if key in fields):

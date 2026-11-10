@@ -33,6 +33,10 @@ async def save_manual_trade_plan(
     session: Any, *, user_id: int, source_run_id: str, fields: dict[str, Any],
 ) -> dict[str, Any]:
     plan = validate_manual_trade_plan(fields)
+    if plan["level_source"] == "market_derived":
+        from backend.services.finn_manual_trade_suggestion_service import verify_suggested_manual_trade_plan
+
+        await verify_suggested_manual_trade_plan(session, plan, user_id=user_id)
     market_id = await verified_plan_market(session, plan)
     stored = {**plan, "market_id": market_id}
     proposed_id = f"finn-manual-trade-plan-{uuid.uuid4().hex}"
