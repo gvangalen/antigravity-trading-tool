@@ -50,6 +50,7 @@ def test_owner_score_repair_uses_stored_pair_sources_only(monkeypatch):
     result = asyncio.run(market_task._repair_exact_market_owner_scores(7, 23))
 
     assert "w.user_id = :user_id" in calls[0][1]
+    assert "w.market_id IS NULL AND a.quote_currency = tm.quote_currency" in calls[0][1]
     assert calls[0][2] == {"user_id": 7, "market_id": 23}
     assert calls[1:4] == [
         ("materialize", 23, {7}, True), ("rollback",), ("score", 7, 23),

@@ -170,7 +170,11 @@ async def _sync_exact_market_snapshots(market_id: int | None = None) -> dict:
               AND (CAST(:market_id AS INTEGER) IS NULL OR tm.id = CAST(:market_id AS INTEGER))
               AND (EXISTS (SELECT 1 FROM user_indicator_configs c WHERE c.market_id = tm.id)
                    OR EXISTS (SELECT 1 FROM watchlists w WHERE w.market_id = tm.id)
-                   OR EXISTS (SELECT 1 FROM setups s WHERE s.market_id = tm.id))
+                   OR EXISTS (SELECT 1 FROM setups s WHERE s.market_id = tm.id)
+                   OR EXISTS (SELECT 1 FROM watchlists w
+                              JOIN asset_catalog a ON a.symbol = tm.asset_symbol
+                              WHERE w.symbol = tm.asset_symbol AND w.market_id IS NULL
+                                AND a.quote_currency = tm.quote_currency))
             ORDER BY tm.id, tm.asset_symbol, tm.quote_currency, tm.venue,
                      tm.provider, tm.provider_symbol, tm.tradingview_symbol,
                      tm.source_verified_at
@@ -264,6 +268,10 @@ async def _repair_exact_market_owner_scores(user_id: int, market_id: int) -> dic
             WHERE tm.id = :market_id AND tm.is_active = TRUE
               AND (EXISTS (SELECT 1 FROM watchlists w
                            WHERE w.user_id = :user_id AND w.market_id = tm.id)
+                   OR EXISTS (SELECT 1 FROM watchlists w
+                              JOIN asset_catalog a ON a.symbol = tm.asset_symbol
+                              WHERE w.user_id = :user_id AND w.symbol = tm.asset_symbol
+                                AND w.market_id IS NULL AND a.quote_currency = tm.quote_currency)
                    OR EXISTS (SELECT 1 FROM setups s
                               WHERE s.user_id = :user_id AND s.market_id = tm.id)
                    OR EXISTS (SELECT 1 FROM user_indicator_configs c

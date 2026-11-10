@@ -21,6 +21,22 @@ class _Session:
         self.rollbacks += 1
 
 
+def test_default_quote_legacy_watchlist_is_pair_interest():
+    class Result:
+        def scalar(self):
+            return True
+
+    class Session:
+        async def execute(self, statement, params):
+            sql = str(statement)
+            assert "w.market_id IS NULL" in sql
+            assert "a.quote_currency=tm.quote_currency" in sql
+            assert params == {"user_id": 70, "market_id": 2}
+            return Result()
+
+    assert asyncio.run(asset_catalog_api._owner_tracks_exact_market(Session(), 70, 2))
+
+
 @pytest.mark.parametrize("asset_class", ["stock", "etf"])
 def test_trading_market_choices_return_explicit_non_crypto_class(monkeypatch, asset_class):
     class Catalog:

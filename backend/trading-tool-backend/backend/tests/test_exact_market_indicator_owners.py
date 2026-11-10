@@ -30,10 +30,12 @@ def test_watched_pair_inherits_owner_indicators_without_setup():
             return Result([SimpleNamespace(user_id=7, symbol="BTC", category="market",
                                            indicator="price", market_id=None, enabled=True)])
 
-    market = SimpleNamespace(id=73, asset_symbol="BTC")
+    market = SimpleNamespace(id=73, asset_symbol="BTC", quote_currency="USDT")
     owners = asyncio.run(ExactMarketIndicatorService(Session())._configured_owners(market))
 
     assert "watchlists WHERE market_id" in statements[0]
+    assert "w.market_id IS NULL" in statements[0]
+    assert "a.quote_currency = :quote_currency" in statements[0]
     assert owners == {7: {"market": {"price"}, "technical": set()}}
 
 

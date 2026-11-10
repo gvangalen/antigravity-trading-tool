@@ -36,6 +36,12 @@ async def _owner_tracks_exact_market(session: AsyncSession, user_id: int, market
             SELECT 1 FROM setups WHERE user_id=:user_id AND market_id=:market_id
             UNION ALL
             SELECT 1 FROM user_indicator_configs WHERE user_id=:user_id AND market_id=:market_id
+            UNION ALL
+            SELECT 1 FROM watchlists w
+            JOIN trading_markets tm ON tm.id=:market_id
+            JOIN asset_catalog a ON a.symbol=tm.asset_symbol
+            WHERE w.user_id=:user_id AND w.symbol=tm.asset_symbol
+              AND w.market_id IS NULL AND a.quote_currency=tm.quote_currency
         )
     """), {"user_id": user_id, "market_id": market_id})
     return bool(result.scalar())
