@@ -83,3 +83,47 @@ def test_bot_resolution_does_not_fall_back_to_unlinked_single_bot_when_strategy_
         assert str(exc) == "bot_not_resolved"
     else:
         raise AssertionError("Expected bot_not_resolved when no bot is linked to the selected strategy")
+
+
+def test_explicit_bot_must_belong_to_selected_strategy(monkeypatch):
+    service = FinnV2EntityResolutionService(session=object())
+    bots = [
+        {"id": 164, "name": "AAPL Paper", "strategy_id": 303},
+        {"id": 165, "name": "BTC Paper", "strategy_id": 404},
+    ]
+    monkeypatch.setattr(service.bots, "get_bot_config", lambda user_id, bot_id: asyncio.sleep(
+        0, result=next((bot for bot in bots if user_id == 7 and bot["id"] == bot_id), None),
+    ))
+    monkeypatch.setattr(service.bots, "get_bot_configs", lambda user_id: asyncio.sleep(
+        0, result=bots if user_id == 7 else [],
+    ))
+
+    for selector in ({"bot_id": 165}, {"bot_name": "BTC Paper"}):
+        try:
+            asyncio.run(service.resolve_bot(user_id=7, selector=selector, strategy={"id": 303}))
+        except LookupError as exc:
+            assert str(exc) == "bot_strategy_mismatch"
+        else:
+            raise AssertionError("Unrelated bot must not appear as linked to the AAPL strategy")
+
+    for selector in ({"bot_id": 164}, {"bot_name": "AAPL Paper"}):
+        result = asyncio.run(service.resolve_bot(user_id=7, selector=selector, strategy={"id": 303}))
+        assert result["bot"]["id"] == 164
+
+    monkeypatch.setattr(service.setups, "get_user_setups", lambda user_id: asyncio.sleep(
+        0, result=[{"id": 11, "name": "AAPL Setup", "symbol": "AAPL"}] if user_id == 7 else [],
+    ))
+    monkeypatch.setattr(service.strategies, "query_strategies", lambda user_id, _filters: asyncio.sleep(
+        0, result=[{"id": 303, "name": "AAPL Strategy", "setup_id": 11}] if user_id == 7 else [],
+    ))
+    enriched = asyncio.run(service.enrich_tool_selector_from_message(
+        user_id=7, selector={"asset": "AAPL", "setup_id": 11, "strategy_id": 303},
+        message="Lees AAPL Setup en BTC Paper",
+    ))
+    assert enriched["bot_id"] == 165
+    try:
+        asyncio.run(service.resolve_bot(user_id=7, selector=enriched, strategy={"id": 303}))
+    except LookupError as exc:
+        assert str(exc) == "bot_strategy_mismatch"
+    else:
+        raise AssertionError("Mentioned bot from another strategy must not become linked bot")

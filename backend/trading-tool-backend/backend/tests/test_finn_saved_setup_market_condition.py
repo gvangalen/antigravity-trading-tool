@@ -176,9 +176,11 @@ def test_saved_friday_dca_survives_new_session_and_owner_scoped_finn_read():
             inputs={"setup_id": saved_id},
         )
         plan = await executor(plan_tool)
-        setup_evidence, strategy_evidence, score_evidence, quote_evidence = (
-            item["data"] for item in plan["results"]
-        )
+        by_scope = {item["scope"]: item["data"] for item in plan["results"]}
+        setup_evidence = by_scope["read_active_setup"]
+        strategy_evidence = by_scope["read_linked_strategy"]
+        score_evidence = by_scope["read_asset_scores"]
+        quote_evidence = by_scope["read_market_snapshot"]
         assert setup_evidence["saved_market_condition"]["key"] == "pressure"
         assert setup_evidence.get("base_amount") is None
         assert strategy_evidence["base_amount"] == 100

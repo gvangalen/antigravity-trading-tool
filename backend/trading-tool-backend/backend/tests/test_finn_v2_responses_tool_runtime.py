@@ -4615,6 +4615,14 @@ def test_indicator_and_price_reads_include_verified_scores_separately():
     assert catalog.validate("get_current_technical_snapshot", {}).read_tools == ("read_technical_snapshot",)
 
 
+def test_plan_read_includes_linked_paper_bot_decision_after_setup_and_strategy():
+    call = FinnResponsesToolCatalog().validate("get_active_plan_and_strategy", {"asset": "AAPL"})
+    assert call.read_tools == (
+        "read_active_setup", "read_linked_strategy", "read_asset_scores",
+        "read_market_snapshot", "read_linked_bot", "read_bot_status",
+    )
+
+
 def test_indicator_read_options_come_from_existing_macro_catalog():
     evidence = FinnResponsesReadExecutor._macro_catalog_evidence()
     assert evidence["scope"] == "available_macro_indicator_catalog"
@@ -10802,9 +10810,12 @@ def test_read_executor_uses_server_owner_and_does_not_invent_as_of():
 
         async def execute_tool(self, **kwargs):
             self.calls.append(kwargs)
+            data = ({"latest_decision": {"reason_code": "market_price_stale",
+                                         "decision_at": "2026-11-10T18:45:00Z"}}
+                    if kwargs["tool_name"] == "read_bot_status" else {"name": "Plan"})
             return SimpleNamespace(
                 success=True, availability="available", freshness_status="unknown",
-                source="internal", asset="AAPL", result={"name": "Plan"}, error_codes=[],
+                source="internal", asset="AAPL", result=data, error_codes=[],
             )
 
     executor = object.__new__(FinnResponsesReadExecutor)
@@ -10813,10 +10824,67 @@ def test_read_executor_uses_server_owner_and_does_not_invent_as_of():
     executor.reads = FakeReads()
     call = FinnResponsesToolCatalog().validate("get_active_plan_and_strategy", {"asset": "AAPL"})
     result = asyncio.run(executor(call))
-    assert len(result["results"]) == 4
+    assert [item["scope"] for item in result["results"]] == list(call.read_tools)
     assert result["results"][0]["as_of"] is None
     assert "separately dated latest market quote" in result["evidence_boundary"]
+    assert result["results"][-1]["data"]["latest_decision"]["reason_code"] == "market_price_stale"
     assert all(kwargs["user_id"] == 44 and kwargs["run_id"] == "run-1" for kwargs in executor.reads.calls)
+
+
+def test_plan_without_linked_bot_keeps_plan_and_market_readable():
+    class Reads:
+        async def execute_tool(self, **kwargs):
+            no_bot = kwargs["tool_name"] in {"read_linked_bot", "read_bot_status"}
+            return SimpleNamespace(
+                success=not no_bot,
+                availability="unavailable" if no_bot else "available",
+                freshness_status="unknown", source="owner_database", asset="AAPL",
+                result=None if no_bot else {"symbol": "AAPL"},
+                error_codes=["bot_not_resolved"] if no_bot else [],
+            )
+
+    executor = FinnResponsesReadExecutor(session=object(), user_id=44, run_id="no-bot")
+    executor.reads = Reads()
+    result = asyncio.run(executor(FinnResponsesToolCatalog().validate(
+        "get_active_plan_and_strategy", {"asset": "AAPL"},
+    )))
+    assert result["status"] == "completed"
+    assert result["linked_bot_status"] == "no_bot_linked_to_selected_strategy"
+    assert all(item["status"] == "completed" for item in result["results"][:4])
+    assert all(item["status"] == "unavailable" for item in result["results"][4:])
+    assert "Do not infer a bot decision" in result["evidence_boundary"]
+
+
+def test_plan_bot_mismatch_or_inconsistent_bot_reads_remain_partial():
+    class Reads:
+        def __init__(self, *, linked_bot_available, reason):
+            self.linked_bot_available = linked_bot_available
+            self.reason = reason
+
+        async def execute_tool(self, **kwargs):
+            name = kwargs["tool_name"]
+            unavailable = name == "read_bot_status" or (
+                name == "read_linked_bot" and not self.linked_bot_available
+            )
+            return SimpleNamespace(
+                success=not unavailable,
+                availability="unavailable" if unavailable else "available",
+                freshness_status="unknown", source="owner_database", asset="AAPL",
+                result=None if unavailable else {"symbol": "AAPL"},
+                error_codes=[self.reason] if unavailable else [],
+            )
+
+    for linked_bot_available, reason in (
+        (True, "bot_not_resolved"),
+        (False, "bot_strategy_mismatch"),
+    ):
+        executor = FinnResponsesReadExecutor(session=object(), user_id=44, run_id="mismatch")
+        executor.reads = Reads(linked_bot_available=linked_bot_available, reason=reason)
+        result = asyncio.run(executor(FinnResponsesToolCatalog().validate(
+            "get_active_plan_and_strategy", {"asset": "AAPL"},
+        )))
+        assert result["status"] == "partial"
+        assert "linked_bot_status" not in result
 
 
 def test_linked_strategy_collection_read_includes_typed_level_geometry():
@@ -11294,7 +11362,7 @@ def test_read_executor_closes_each_database_session_before_provider_resumes(monk
     call = FinnResponsesToolCatalog().validate("get_active_plan_and_strategy", {"asset": "BTC"})
     result = asyncio.run(executor(call))
     assert opened == []
-    assert len(result["results"]) == 4
+    assert [item["scope"] for item in result["results"]] == list(call.read_tools)
     assert all(item["as_of"] for item in result["results"])
 
 

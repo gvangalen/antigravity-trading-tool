@@ -200,6 +200,7 @@ class FinnV2OrchestratorOutcomeService:
             "setup_not_resolved": ("missing_setup", "Welke setup bedoel je precies?", "setup"),
             "strategy_not_resolved": ("missing_strategy", "Welke strategie bedoel je precies?", "strategy"),
             "bot_not_resolved": ("missing_bot", "Welke bot bedoel je precies?", "bot"),
+            "bot_strategy_mismatch": ("missing_bot", "Deze bot hoort niet bij de gekozen strategie. Welke bot bedoel je?", "bot"),
         }
         for issue in issues:
             if issue.code not in mapping:
