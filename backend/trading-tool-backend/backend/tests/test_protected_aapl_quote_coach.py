@@ -76,3 +76,29 @@ def test_probe_rejects_unprotected_invocation(monkeypatch):
     monkeypatch.delenv("FINN_QA_ALLOW_AAPL_QUOTE_FIXTURE", raising=False)
     with pytest.raises(RuntimeError, match="aapl_fixture_not_authorized"):
         probe.run("qa-123456-1-abcdef12-abcdef12")
+
+
+def test_cleanup_failure_quarantines_inactive_child_and_fails_closed(monkeypatch):
+    calls = []
+
+    def fail_cleanup(*_args, **_kwargs):
+        calls.append("cleanup")
+        raise RuntimeError("private database detail")
+
+    def quarantine(*_args, **_kwargs):
+        calls.append("quarantine")
+
+    monkeypatch.setattr(probe.fixture, "_cleanup", fail_cleanup)
+    monkeypatch.setattr(probe.fixture, "_quarantine", quarantine)
+    with pytest.raises(RuntimeError, match="^aapl_cleanup_failed$"):
+        probe._finalize_fixture("qa-1-1-abcdef12-abcdef12", 2, 3, passed=True)
+    assert calls == ["cleanup", "quarantine"]
+
+
+def test_quarantine_failure_does_not_expose_driver_error(monkeypatch):
+    def fail_quarantine(*_args, **_kwargs):
+        raise RuntimeError("secret owner details")
+
+    monkeypatch.setattr(probe.fixture, "_quarantine", fail_quarantine)
+    with pytest.raises(RuntimeError, match="^aapl_quarantine_failed$"):
+        probe._finalize_fixture("qa-1-1-abcdef12-abcdef12", 2, 3, passed=False)

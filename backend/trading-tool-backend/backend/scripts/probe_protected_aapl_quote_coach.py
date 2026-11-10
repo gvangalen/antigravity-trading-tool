@@ -237,6 +237,24 @@ def _transport_parity(user_id: int, run_id: str, expected: str) -> dict:
     return {"polling": polling, "sse": streaming}
 
 
+def _finalize_fixture(namespace: str, user_id: int, bot_id: int, *, passed: bool) -> None:
+    if passed:
+        try:
+            fixture._cleanup(namespace, user_id, bot_id, require_safe_pair_cleanup=True,
+                             allow_planned_decisions=True)
+            return
+        except Exception:
+            try:
+                fixture._quarantine(namespace, user_id, bot_id)
+            except Exception:
+                raise RuntimeError("aapl_quarantine_failed") from None
+            raise RuntimeError("aapl_cleanup_failed") from None
+    try:
+        fixture._quarantine(namespace, user_id, bot_id)
+    except Exception:
+        raise RuntimeError("aapl_quarantine_failed") from None
+
+
 async def _turns(user_id: int, source: dict) -> dict:
     prompt = (
         "Lees mijn AAPL-plan en score, de nieuwste AAPL-marktkoers met exact UTC-bronmoment, "
@@ -363,8 +381,4 @@ def run(namespace: str) -> dict:
         return result
     finally:
         if user_id is not None and bot_id is not None:
-            if passed:
-                fixture._cleanup(namespace, user_id, bot_id, require_safe_pair_cleanup=True,
-                                 allow_planned_decisions=True)
-            else:
-                fixture._quarantine(namespace, user_id, bot_id)
+            _finalize_fixture(namespace, user_id, bot_id, passed=passed)
