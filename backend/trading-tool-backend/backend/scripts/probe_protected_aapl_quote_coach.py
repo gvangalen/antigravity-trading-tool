@@ -10,7 +10,7 @@ import asyncio
 import json
 import os
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from zoneinfo import ZoneInfo
 
@@ -54,6 +54,14 @@ REQUIRED_SCOPES = frozenset({
 })
 CURRENT_MARKER = re.compile(r"\b(?:actuele|huidige|nieuwste|laatste|current|latest)\b.{0,70}\b(?:koers\w*|prijs\w*|quote\w*|snapshot)\b", re.I)
 OLD_AMOUNT = re.compile(r"(?:USD\s*351[,.]19|351[,.]19\s*USD|\$\s*351[,.]19)", re.I)
+MONTHS = ("januari", "februari", "maart", "april", "mei", "juni", "juli",
+          "augustus", "september", "oktober", "november", "december")
+DATE_PATTERN = re.compile(
+    r"\b(?P<iso>20\d{2}-\d{2}-\d{2})\b|"
+    r"\b(?P<day>\d{1,2})\s+(?P<month>" + "|".join(MONTHS)
+    + r")\s+(?P<year>20\d{2})\b", re.I,
+)
+CLOCK_PATTERN = re.compile(r"\b(?P<hour>\d{1,2}):(?P<minute>\d{2})(?::(?P<second>\d{2}))?\s*(?P<zone>UTC|CET|CEST)\b", re.I)
 
 
 def _utc(value):
@@ -297,21 +305,39 @@ def _owner_reference_check(evidence: list, ids: dict, *, plan_score: bool,
 
 
 def _answer_moments(answer: str, source_at: datetime, source_price: Decimal) -> dict:
-    utc_clock = source_at.strftime("%H:%M")
     local = source_at.astimezone(ZoneInfo("Europe/Amsterdam"))
-    amsterdam_clock = local.strftime("%H:%M")
-    sentences = re.split(r"(?<=[.!?])\s+|\n+", answer)
+    sentences = re.split(r"(?<=[.!?])\s+|[;\n]+", answer)
     current_utc = any(_answer_current_price(sentence, source_price)
-                      and re.search(rf"\b{re.escape(utc_clock)}(?::\d{{2}})?\s*UTC\b", sentence, re.I)
+                      and _dated_clock_matches(sentence, source_at, "UTC")
                       for sentence in sentences)
     current_local = any(_answer_current_price(sentence, source_price)
-                        and re.search(rf"\b{re.escape(amsterdam_clock)}(?::\d{{2}})?\s*{local.tzname()}\b", sentence, re.I)
+                        and _dated_clock_matches(sentence, local, local.tzname())
                         for sentence in sentences)
     old_clock = any(OLD_AMOUNT.search(sentence)
-                    and re.search(r"\b19:03(?::\d{2})?\s*UTC\b", sentence, re.I)
+                    and _dated_clock_matches(sentence, OLD_SOURCE, "UTC")
                     for sentence in sentences)
     return {"current_source_time_explained": current_utc or current_local,
             "old_report_time_explained": old_clock}
+
+
+def _dated_clock_matches(sentence: str, expected: datetime, zone: str) -> bool:
+    dates = []
+    for match in DATE_PATTERN.finditer(sentence):
+        try:
+            dates.append(date.fromisoformat(match.group("iso")) if match.group("iso") else
+                         date(int(match.group("year")), MONTHS.index(match.group("month").lower()) + 1,
+                              int(match.group("day"))))
+        except ValueError:
+            return False
+    clocks = list(CLOCK_PATTERN.finditer(sentence))
+    if dates != [expected.date()] or len(clocks) != 1:
+        return False
+    clock = clocks[0]
+    return (clock.group("zone").upper() == zone
+            and int(clock.group("hour")) == expected.hour
+            and int(clock.group("minute")) == expected.minute
+            and (clock.group("second") is None
+                 or int(clock.group("second")) == expected.second))
 
 
 def _answer_current_price(answer: str, price: Decimal) -> bool:

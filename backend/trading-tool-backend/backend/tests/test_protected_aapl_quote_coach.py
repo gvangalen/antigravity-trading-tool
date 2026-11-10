@@ -164,16 +164,24 @@ def test_source_advancement_requires_inconclusive_not_old_quote_failure():
 
 def test_answer_checks_require_current_price_and_distinct_source_moments():
     moment = datetime(2026, 11, 9, 20, 59, tzinfo=timezone.utc)
-    answer = "Actuele AAPL-bron: USD 350,49 om 20:59 UTC. Oud rapport: USD 351,19 om 19:03 UTC."
+    answer = "Actuele AAPL-bron: USD 350,49 op 9 november 2026 om 20:59 UTC. Oud rapport: USD 351,19 op 9 november 2026 om 19:03 UTC."
     assert probe._answer_current_price(answer, Decimal("350.48999"))
     assert all(probe._answer_moments(answer, moment, Decimal("350.49")).values())
     assert not probe._old_claimed_current(answer)
     assert not probe._answer_current_price("USD 351,19 was de actuele koers.", Decimal("350.48999"))
     assert not all(probe._answer_moments("USD 350,49", moment, Decimal("350.49")).values())
-    seconds = "Nieuwste bron is **USD 350,49**, gemeten op **9 november om 20:59:00 UTC**. Oud rapport **USD 351,19** om **19:03:00 UTC**."
+    seconds = "Nieuwste bron is **USD 350,49**, gemeten op **9 november 2026 om 20:59:00 UTC**. Oud rapport **USD 351,19** op **9 november 2026 om 19:03:00 UTC**."
     assert all(probe._answer_moments(seconds, moment, Decimal("350.49")).values())
-    wrong_zone = "Huidige AAPL-koers USD 350,49 om 20:59 CET. Oud rapport USD 351,19 om 19:03 UTC."
+    wrong_zone = "Huidige AAPL-koers USD 350,49 op 9 november 2026 om 20:59 CET. Oud rapport USD 351,19 op 9 november 2026 om 19:03 UTC."
     assert not probe._answer_moments(wrong_zone, moment, Decimal("350.49"))["current_source_time_explained"]
+    wrong_second = "Huidige AAPL-koers USD 350,49 op 9 november 2026 om 20:59:59 UTC. Oud rapport USD 351,19 op 9 november 2026 om 19:03:00 UTC."
+    assert not probe._answer_moments(wrong_second, moment, Decimal("350.49"))["current_source_time_explained"]
+    wrong_date = "Huidige AAPL-koers USD 350,49 op 8 november 2026 om 20:59:00 UTC. Oud rapport USD 351,19 op 9 november 2026 om 19:03:00 UTC."
+    assert not probe._answer_moments(wrong_date, moment, Decimal("350.49"))["current_source_time_explained"]
+    wrong_old = "Huidige AAPL-koers USD 350,49 op 9 november 2026 om 20:59:00 UTC. Oud rapport USD 351,19 op 8 november 2026 om 19:03:00 UTC."
+    assert not probe._answer_moments(wrong_old, moment, Decimal("350.49"))["old_report_time_explained"]
+    iso = "Nieuwste AAPL-koers USD 350,49 op 2026-11-09 20:59:00 UTC. Oud rapport USD 351,19 op 2026-11-09 19:03:00 UTC."
+    assert all(probe._answer_moments(iso, moment, Decimal("350.49")).values())
 
 
 def test_profile_is_protected_and_errors_are_allowlisted():
