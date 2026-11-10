@@ -138,7 +138,11 @@ def test_source_selector_matches_product_and_fails_closed_on_null_currency_and_t
     assert probe._source()["measurement_id"] == 11
     assert "quote_currency IS NOT NULL" in received[-1]
     assert "price IS NOT NULL" not in received[-1]
-    assert "ORDER BY source_observed_at DESC,timestamp DESC LIMIT 2" in received[-1]
+    assert "ORDER BY source_observed_at DESC,timestamp DESC,id DESC LIMIT 65" in received[-1]
+    rows = [(Decimal("350.49"), moment, "USD", 13, moment),
+            (Decimal("350.49"), moment, "USD", 12, moment),
+            (Decimal("350.49"), moment, "USD", 11, moment)]
+    assert probe._source()["measurement_id"] == 13
     rows = [(None, moment, "USD", 12, moment), (Decimal("350.49"), moment.replace(hour=20, minute=58), "USD", 11, moment)]
     with pytest.raises(RuntimeError, match="^aapl_source_unavailable$"):
         probe._source()
@@ -147,6 +151,14 @@ def test_source_selector_matches_product_and_fails_closed_on_null_currency_and_t
         probe._source()
     rows = [(Decimal("350.49"), moment, "USD", 12, moment),
             (Decimal("350.50"), moment, "USD", 11, moment)]
+    with pytest.raises(RuntimeError, match="^aapl_source_ambiguous$"):
+        probe._source()
+    rows = [(Decimal("350.49"), moment, "USD", 12, moment),
+            (Decimal("350.49"), moment, "EUR", 11, moment)]
+    with pytest.raises(RuntimeError, match="^aapl_source_ambiguous$"):
+        probe._source()
+    rows = [(Decimal("350.49"), moment, "USD", 100 - index, moment)
+            for index in range(65)]
     with pytest.raises(RuntimeError, match="^aapl_source_ambiguous$"):
         probe._source()
 
