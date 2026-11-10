@@ -1,5 +1,6 @@
 import asyncio
 import json
+from datetime import datetime
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -13637,6 +13638,50 @@ def test_bot_decision_question_binds_persisted_history_even_for_portfolio_tool()
     ) == selected
     assert FinnResponsesFrontDoor._bind_bot_decision_evidence(
         selected, message="Wijzig mijn botbesluit", read_only=False,
+    ) == selected
+
+
+def test_explicit_report_comparison_binds_owner_report_read(monkeypatch):
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 11, 10, 12, 0, tzinfo=tz)
+
+    monkeypatch.setattr("backend.services.finn_v2_responses_front_door.datetime", FixedDateTime)
+    selected = FinnResponsesToolCatalog().validate(
+        "get_active_plan_and_strategy", {"asset": "AAPL"},
+    )
+    bound = FinnResponsesFrontDoor._bind_explicit_report_evidence(
+        selected, message="Vergelijk de actuele AAPL-koers met het oudere opgeslagen dagrapport "
+        "op 9 november 19:03 UTC.",
+        read_only=True,
+    )
+    assert "read_latest_report" in bound.read_tools
+    assert bound.inputs == {"asset": "AAPL", "report_date": "2026-11-09"}
+    assert FinnResponsesFrontDoor._bind_explicit_report_evidence(
+        selected, message="Vergelijk AAPL met het dagrapport van gisteren.", read_only=True,
+    ).inputs["report_date"] == "2026-11-09"
+    assert FinnResponsesFrontDoor._bind_explicit_report_evidence(
+        selected, message="Vergelijk de AAPL-koers van 10 november met mijn "
+        "dagrapport van 9 november.", read_only=True,
+    ).inputs["report_date"] == "2026-11-09"
+    assert FinnResponsesFrontDoor._bind_explicit_report_evidence(
+        selected, message="Vergelijk de AAPL-koers van 10 november met mijn "
+        "dagrapport van gisteren.", read_only=True,
+    ).inputs["report_date"] == "2026-11-09"
+    assert FinnResponsesFrontDoor._bind_explicit_report_evidence(
+        selected, message="Vergelijk mijn oudere dagrapport met de actuele "
+        "AAPL-koers van 10 november.", read_only=True,
+    ).inputs["report_date_unresolved"] is True
+    assert FinnResponsesFrontDoor._bind_explicit_report_evidence(
+        selected, message="Vergelijk het 9 november dagrapport met de "
+        "AAPL-koers van 10 november.", read_only=True,
+    ).inputs["report_date"] == "2026-11-09"
+    assert FinnResponsesFrontDoor._bind_explicit_report_evidence(
+        selected, message="Wat is mijn plan voor AAPL?", read_only=True,
+    ) == selected
+    assert FinnResponsesFrontDoor._bind_explicit_report_evidence(
+        selected, message="Wijzig het rapport", read_only=False,
     ) == selected
 
 

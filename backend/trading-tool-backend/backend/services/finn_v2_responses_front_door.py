@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from dataclasses import replace
+from datetime import date, datetime, timedelta
 import json
 import logging
 import os
 import re
 from time import monotonic
 from typing import Any, Mapping
+from zoneinfo import ZoneInfo
 
 from backend.services.asset_catalog_service import (
     DEFAULT_ASSET_CATALOG, mentioned_catalog_symbols, requested_catalog_trading_pair,
@@ -805,6 +807,68 @@ class FinnResponsesFrontDoor:
             *call.read_tools, "read_review_history", "read_portfolio",
             *(('read_bot_status',) if account_bundle or FinnResponsesFrontDoor._asks_about_account_state_bundle(message) else ()),
         ))))
+
+    @staticmethod
+    def _bind_explicit_report_evidence(
+        call: FinnResponsesToolCall, *, message: str, read_only: bool,
+    ) -> FinnResponsesToolCall:
+        """Read the owner's saved report when its facts are explicitly compared."""
+        report_mention = re.search(r"\b(?:dagrapport|ochtendrapport|rapport|report)\b", message, re.I)
+        if not read_only or not call.read_tools or not report_mention:
+            return call
+        # A message may also date the *market quote*. Stop at the transition
+        # to that clause; an undated report must not inherit the quote date.
+        report_clause = message[report_mention.end():]
+        clause_end = re.search(
+            r";|\n|[!?]|\.\s+[A-ZÀ-Ö]|"
+            r"\b(?:met|tegen|versus|en)\s+(?:(?:de|het)\s+)?"
+            r"(?:(?:actuele|huidige|nieuwste|laatste)\s+)?"
+            r"(?:[A-Z]{2,6}[-\s]+)?(?:koers|prijs)\b",
+            report_clause, re.I,
+        )
+        if clause_end:
+            report_clause = report_clause[:clause_end.start()]
+        today = datetime.now(ZoneInfo("Europe/Amsterdam")).date()
+        requested_date: date | None = None
+        date_pattern = (
+            r"\b(\d{1,2})\s+(januari|februari|maart|april|mei|juni|juli|augustus|"
+            r"september|oktober|november|december)\s*(20\d{2})?\b"
+        )
+        explicit = re.search(date_pattern, report_clause, re.I)
+        if not explicit:
+            # "het 9 november dagrapport" names the report before the noun.
+            # Do not borrow a quote date separated by "met mijn" or similar.
+            explicit = re.search(
+                date_pattern + r"\s*(?:(?:oude|oudere|opgeslagen)\s*){0,2}$",
+                message[:report_mention.start()], re.I,
+            )
+        if explicit:
+            months = {name: number for number, name in enumerate((
+                "januari", "februari", "maart", "april", "mei", "juni", "juli",
+                "augustus", "september", "oktober", "november", "december",
+            ), 1)}
+            try:
+                requested_date = date(int(explicit.group(3) or today.year),
+                                      months[explicit.group(2).lower()], int(explicit.group(1)))
+                if not explicit.group(3) and requested_date > today:
+                    requested_date = requested_date.replace(year=today.year - 1)
+            except ValueError:
+                requested_date = None
+        elif re.search(r"\b(?:gisteren|yesterday)\b", report_clause, re.I):
+            requested_date = today - timedelta(days=1)
+        unresolved_old_report = (
+            requested_date is None
+            and bool(re.search(r"\b(?:oud|oude|ouder|oudere|vorig|vorige|older|previous)\b",
+                               message[max(0, report_mention.start() - 40):report_mention.end()], re.I))
+        )
+        return replace(
+            call,
+            inputs={**{key: value for key, value in call.inputs.items()
+                       if key not in {"report_date", "report_date_unresolved"}},
+                    **({"report_date": requested_date.isoformat()} if requested_date else {}),
+                    **({"report_date_unresolved": True} if unresolved_old_report else {})},
+            read_tools=tuple(dict.fromkeys((*call.read_tools, "read_latest_report"))),
+        )
 
     @staticmethod
     def _focus_portfolio_on_open_bot(read_result: dict[str, Any], bot_id: int | None) -> dict[str, Any]:
@@ -2909,6 +2973,9 @@ class FinnResponsesFrontDoor:
                     call, message=message, read_only=is_read_only_turn and not pending_operation,
                     account_bundle=account_state_bundle,
                 )
+                call = self._bind_explicit_report_evidence(
+                    call, message=message, read_only=is_read_only_turn and not pending_operation,
+                )
                 # The collection adapter may clear global filters for a
                 # multi-setup comparison, but a later owner-scoped read of
                 # two named rows is a narrower request than the inventory.
@@ -3043,6 +3110,12 @@ class FinnResponsesFrontDoor:
                         workspace_hints=workspace_hints, message=message,
                         mentioned_assets=mentioned_assets,
                     )
+                # Workspace resolution may replace call.inputs. Rebind the
+                # report date after that step so an explicit historical
+                # comparison cannot silently fall back to today's report.
+                call = self._bind_explicit_report_evidence(
+                    call, message=message, read_only=is_read_only_turn and not pending_operation,
+                )
                 if call.name == "get_current_asset_scores" and mentioned_assets and len(score_scopes) > 1:
                     score_reads = [await self.reads(replace(
                         call, inputs={

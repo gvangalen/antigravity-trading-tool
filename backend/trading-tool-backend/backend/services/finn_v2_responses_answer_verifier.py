@@ -80,8 +80,8 @@ class FinnResponsesAnswerVerifier:
         # dated report prices and saved entry/stop levels free to be discussed.
         price_word = r"(?:koers\w*|prijs\w*|quote\w*|price\w*|snapshot|noteert)"
         marker = re.compile(
-            rf"\b(?:actuele|huidige|nieuwste|laatste|current|latest)\b.{{0,70}}\b{price_word}\b"
-            rf"|\b{price_word}\b.{{0,50}}\b(?:nu|momenteel|actueel|current)\b",
+            rf"\b(?:actuele|huidige|nieuwste|laatste|current|latest)\b[^;.!?\n]{{0,70}}\b{price_word}\b"
+            rf"|\b{price_word}\b[^;.!?\n]{{0,50}}\b(?:nu|momenteel|actueel|current)\b",
             re.I,
         )
         amount = re.compile(
@@ -113,6 +113,9 @@ class FinnResponsesAnswerVerifier:
                 if not claims:
                     continue
                 claim = claims[0]
+                relative = re.match(
+                    r"\s*(lager|hoger|lower|higher)\b", sentence[claim.end():], re.I,
+                )
                 # A second price in the same sentence may belong to an older
                 # report. Its date must not be checked against this market quote.
                 # Preserve a source date before this marker. If an older
@@ -140,6 +143,7 @@ class FinnResponsesAnswerVerifier:
                 # quote in that report. Check only the current-price clause, so
                 # an older report elsewhere in the sentence cannot hide it.
                 if (re.search(r"\b(?:ochtendrapport|dagrapport|rapport|historisch\w*|vorige)\b", claim_context, re.I)
+                        and not relative
                         and not re.search(r"\b(?:actuele|huidige|current|nu|momenteel)\b", claim_context, re.I)):
                     continue
                 if re.search(r"\b(?:onbekend|ontbreekt|niet beschikbaar|unknown|unavailable)\b",
@@ -170,12 +174,41 @@ class FinnResponsesAnswerVerifier:
                     candidates.add(raw.replace(separator, ""))
                 else:
                     candidates.add(raw)
-                try:
-                    if all(abs(Decimal(value) - Decimal(str(data["price"]))) > Decimal("0.05")
-                           for value in candidates):
+                if relative:
+                    # A stated change must agree with both owner-read report
+                    # price and the latest market quote. Without either source
+                    # it cannot be treated as a verified comparison.
+                    report_facts = {
+                        (str((report.get("data") or {}).get("report_date")),
+                         str((report.get("data") or {}).get("id")),
+                         str(asset.get("market_snapshot", {}).get("price")))
+                        for report in evidence
+                        if report.get("scope") == "read_latest_report"
+                        and report.get("status") == "completed"
+                        for asset in ((report.get("data") or {}).get("score_source_snapshot") or {}).get("assets", [])
+                        if isinstance(asset, dict)
+                        and str(asset.get("symbol") or "").upper() == str(data.get("symbol") or "").upper()
+                        and isinstance(asset.get("market_snapshot"), dict)
+                        and str(asset["market_snapshot"].get("quote_currency") or "").upper() == unit
+                    }
+                    if len(report_facts) != 1:
                         return False
-                except InvalidOperation:
-                    return False
+                    try:
+                        delta = Decimal(str(data["price"])) - Decimal(next(iter(report_facts))[2])
+                        stated_direction = relative.group(1).lower()
+                        if ((delta >= 0) if stated_direction in {"lager", "lower"} else (delta <= 0)):
+                            return False
+                        if all(abs(abs(delta) - Decimal(value)) > Decimal("0.05") for value in candidates):
+                            return False
+                    except (InvalidOperation, TypeError, ValueError):
+                        return False
+                else:
+                    try:
+                        if all(abs(Decimal(value) - Decimal(str(data["price"]))) > Decimal("0.05")
+                               for value in candidates):
+                            return False
+                    except InvalidOperation:
+                        return False
                 dated = [(date_match, False) for date_match in dated_moment.finditer(claim_context)] + [
                     (date_match, True) for date_match in iso_moment.finditer(claim_context)
                 ]

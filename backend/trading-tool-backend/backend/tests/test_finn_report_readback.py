@@ -3,10 +3,39 @@
 import asyncio
 import json
 from datetime import date, datetime, timezone
+import pytest
 
 from backend.services.finn_v2_reasoning_context_service import FinnV2ReasoningContextService
 from backend.services.finn_v2_tool_adapters.report_tool_adapter import ReportToolAdapter
 from backend.services.finn_v2_tool_adapters.score_tool_adapter import ScoreToolAdapter
+
+
+def test_dated_report_read_uses_owner_date_and_rejects_other_asset():
+    adapter = ReportToolAdapter(session=None)
+    yesterday = {"report_date": date(2026, 11, 9), "score_source_snapshot": {
+        "assets": [{"symbol": "AAPL", "market_snapshot": {
+            "price": 351.19, "quote_currency": "USD",
+        }}],
+    }}
+
+    class Reports:
+        async def get_latest_report(self, user_id, table_name):
+            raise AssertionError("must not silently use today's report")
+
+        async def get_report_by_date(self, user_id, table_name, report_date):
+            assert (user_id, table_name, report_date) == (7, "daily_reports", date(2026, 11, 9))
+            return yesterday
+
+    adapter.repository = Reports()
+    result = asyncio.run(adapter.execute(
+        user_id=7, asset="AAPL", selector={"report_date": "2026-11-09"},
+    ))
+    assert result["data"].report_date == date(2026, 11, 9)
+    assert result["data"].score_source_snapshot["assets"][0]["symbol"] == "AAPL"
+    with pytest.raises(LookupError, match="report_asset_not_found"):
+        asyncio.run(adapter.execute(
+            user_id=7, asset="BTC", selector={"report_date": "2026-11-09"},
+        ))
 
 
 def test_latest_report_read_exposes_saved_scores_and_source_moments():
