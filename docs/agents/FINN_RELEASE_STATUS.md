@@ -4,10 +4,41 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## AAPL-coach: nieuwste koers en bronmoment (10 november 2026)
+
+Phase: `BUILD_VALIDATED_LOCAL_CI_PENDING`. Branch
+`codex/finn-aapl-quote-order-20261110` repareert de Paper-test waarin FINN
+USD 351,19 van 9 november 19:03 UTC uit een eerdere gespreksbeurt de
+"actuele koerssnapshot" noemde, hoewel de nieuwe scorelezing al USD 350,49
+van 20:59 UTC bevatte. Onafhankelijke read-only QA bevestigde dat de
+`get_active_plan_and_strategy`-beurt geen `read_market_snapshot` uitvoerde.
+Die samengestelde planlezing haalt nu een afzonderlijk gedateerde, aan de
+eigenaar en het exacte handelspaar gebonden marktkoers op. De antwoordcontrole
+laat een eerdere gesprekskoers niet meer als actuele koers door en toetst
+expliciete actuele/laatste koersbedragen aan symbool, quotevaluta, waarde,
+bronmoment en actualiteitsstatus. Historische rapportkoersen blijven als
+gedateerde historie bespreekbaar. CET/CEST-bronmomenten worden via Amsterdam
+omgezet en niet-bestaande lokale zomertijdmomenten afgewezen.
+
+Gemeten op de finale productdiff: root-backend **4582 passed, 7 skipped**
+(log SHA-256 `424ad806fd860ebc16b682eb8180881c03fda463699be86ddaf7a67655939697`).
+De geïsoleerde lokale FastAPI/Celery/Responses-actiematrix slaagde **16/16**
+met nul echte orders (artifact SHA-256
+`c7373624eeba43261ffa05fa7c57d8c6bb4f0dec9f43e1131dbf602d0437ea22`);
+de adapterregressie slaagde **26/26**. De echte-provider selectorontwikkeling
+slaagde **20/20** (artifact SHA-256
+`2d27c8303d4f477deed134ac6974b1dc85e016753c6c75ae7b85e3382bc4d21f`)
+en de regressie **109/109** zonder failcategorie (artifact SHA-256
+`ca30718b9df8ae2fcec3de3a8f042eb6e520c505c7c60534777e0877ab2ee71d`).
+QA en Security gaven read-only GO voor de gerichte code na regressiehertests.
+Frontendcode is niet gewijzigd. PR-CI, deployidentiteit en onafhankelijke
+ingelogde live QA op de gedeployde SHA staan nog open. Dit is nog geen
+live-acceptatie of vrijgave voor Live-orders.
+
 ## Vier trader-gates: FINN-accountantwoord en gedateerde indicatormeting (9 november 2026)
 
-Phase: `BUILD_VALIDATED_LOCAL_CI_PENDING`. Branch `codex/trader-four-gates-followup`
-bundelt de nog niet gedeployde productreparaties voor Gate 1 en Gate 3. Voor een
+Phase: `HISTORICAL_MERGED` (PR #922). Branch `codex/trader-four-gates-followup`
+bundelde de productreparaties voor Gate 1 en Gate 3. Voor een
 samengestelde Nederlandstalige Paper-accountvraag projecteert FINN de zeven
 gevraagde feiten uit coherente eigenaargebonden setup-, strategie-, bot- en
 portfoliobronnen. De laatste beslissingstijd komt rechtstreeks uit de

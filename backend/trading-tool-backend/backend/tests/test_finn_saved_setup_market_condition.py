@@ -176,7 +176,7 @@ def test_saved_friday_dca_survives_new_session_and_owner_scoped_finn_read():
             inputs={"setup_id": saved_id},
         )
         plan = await executor(plan_tool)
-        setup_evidence, strategy_evidence, score_evidence = (
+        setup_evidence, strategy_evidence, score_evidence, quote_evidence = (
             item["data"] for item in plan["results"]
         )
         assert setup_evidence["saved_market_condition"]["key"] == "pressure"
@@ -184,6 +184,7 @@ def test_saved_friday_dca_survives_new_session_and_owner_scoped_finn_read():
         assert strategy_evidence["base_amount"] == 100
         assert strategy_evidence.get("saved_market_condition") is None
         assert score_evidence["benchmark_score"] is None
+        assert quote_evidence["symbol"] == "BTC"
         assert "saved setup and strategy configuration" in plan["evidence_boundary"]
         assert "null component is unknown" in plan["evidence_boundary"]
 

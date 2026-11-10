@@ -129,10 +129,12 @@ class FinnResponsesReadExecutor:
             if read_tool == "read_market_snapshot" and isinstance(data, dict):
                 # Preserve the exact provider instant for freshness checks in
                 # the tool service; format only the model-facing evidence.
+                source_instant = data.get("source_observed_at") or data.get("as_of") or as_of
                 data = {
                     **data,
                     "as_of": display_source_moment(data.get("as_of")),
                     "source_observed_at": display_source_moment(data.get("source_observed_at")),
+                    "source_observed_at_utc": str(source_instant) if source_instant else None,
                 }
                 as_of = display_source_moment(as_of)
             if read_tool == "read_active_setup" and self._facts_only_local_experiment():
@@ -303,8 +305,11 @@ class FinnResponsesReadExecutor:
                 )
         if call.name == "get_active_plan_and_strategy":
             output["evidence_boundary"] = (
-                "This reads saved setup and strategy configuration plus source-verified "
-                "Score 2.0 components, not a market quote or owner-scoped risk evaluation. "
+                "This reads saved setup and strategy configuration, source-verified "
+                "Score 2.0 components, and a separately dated latest market quote, "
+                "not an owner-scoped risk evaluation. A price in indicator evidence is "
+                "a historical score measurement; use only read_market_snapshot for the "
+                "latest quoted price, and state its source moment and freshness. "
                 "A numeric dca_day is a stored weekday code, "
                 "not a user-facing day; use dca_day_name and translate it into the answer language. "
                 "A chart timeframe, DCA frequency, and broad profile goal do not record the "

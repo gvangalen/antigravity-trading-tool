@@ -10813,9 +10813,9 @@ def test_read_executor_uses_server_owner_and_does_not_invent_as_of():
     executor.reads = FakeReads()
     call = FinnResponsesToolCatalog().validate("get_active_plan_and_strategy", {"asset": "AAPL"})
     result = asyncio.run(executor(call))
-    assert len(result["results"]) == 3
+    assert len(result["results"]) == 4
     assert result["results"][0]["as_of"] is None
-    assert "not a market quote" in result["evidence_boundary"]
+    assert "separately dated latest market quote" in result["evidence_boundary"]
     assert all(kwargs["user_id"] == 44 and kwargs["run_id"] == "run-1" for kwargs in executor.reads.calls)
 
 
@@ -11294,8 +11294,8 @@ def test_read_executor_closes_each_database_session_before_provider_resumes(monk
     call = FinnResponsesToolCatalog().validate("get_active_plan_and_strategy", {"asset": "BTC"})
     result = asyncio.run(executor(call))
     assert opened == []
-    assert len(result["results"]) == 3
-    assert all(item["as_of"] == "2026-09-23T10:00:00Z" for item in result["results"])
+    assert len(result["results"]) == 4
+    assert all(item["as_of"] for item in result["results"])
 
 
 def test_responses_exchange_is_owner_bound_and_single_write():

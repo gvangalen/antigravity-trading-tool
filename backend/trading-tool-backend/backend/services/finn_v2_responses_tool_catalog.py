@@ -97,7 +97,13 @@ class FinnResponsesToolCatalog:
             name: tuple(scope_bindings[scope] for scope in scopes)
             for name, scopes in _READ_SCOPES.items()
         }
-        self.read_tools["get_active_plan_and_strategy"] += ("read_asset_scores",)
+        # The score's price indicator can be older than the latest quote.
+        # Keep a separately dated market read beside plan and score evidence
+        # so a coach comparing the plan with today's market cannot mistake
+        # that historical indicator measurement for the latest price.
+        self.read_tools["get_active_plan_and_strategy"] += (
+            "read_asset_scores", "read_market_snapshot",
+        )
         # A price or configured-indicator read can be used to answer a question
         # about that indicator's score. Carry the same verified Score 2.0 row
         # that Analyse uses instead of leaving the model to infer absence.
@@ -184,8 +190,9 @@ class FinnResponsesToolCatalog:
                 )
             if name == "get_active_plan_and_strategy":
                 description += (
-                    " Returns one selected saved setup, its linked strategy, and the current "
-                    "source-verified Score 2.0 components for that setup's asset, not a list "
+                    " Returns one selected saved setup, its linked strategy, the current "
+                    "source-verified Score 2.0 components, and a separately dated latest "
+                    "market quote for that setup's asset, not a list "
                     "or a suitability assessment. If the benchmark is unavailable, its "
                     "current match is unknown; do not treat missing components as zero. "
                     "The strategy name is a label: execution_mode and dca_amount_mode, "
