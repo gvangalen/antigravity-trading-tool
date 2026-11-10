@@ -96,91 +96,134 @@ class FinnResponsesAnswerVerifier:
         dated_moment = re.compile(
             r"\b(?P<day>\d{1,2})\s+(?P<month>januari|februari|maart|april|mei|juni|"
             r"juli|augustus|september|oktober|november|december)\s*"
-            r"(?P<year>20\d{2})?\s*,?\s*(?P<hour>\d{1,2}):(?P<minute>\d{2})\s*"
+            r"(?P<year>20\d{2})?\s*,?\s*(?:om\s+)?(?P<hour>\d{1,2}):(?P<minute>\d{2})"
+            r"(?::(?P<second>\d{2}))?\s*"
+            r"(?P<zone>UTC|CET|CEST)\b", re.I,
+        )
+        iso_moment = re.compile(
+            r"\b(?P<year>20\d{2})-(?P<month>\d{2})-(?P<day>\d{2})"
+            r"[ T](?P<hour>\d{1,2}):(?P<minute>\d{2})(?::(?P<second>\d{2}))?\s*"
             r"(?P<zone>UTC|CET|CEST)\b", re.I,
         )
         for sentence in re.split(r"(?<=[.!?])\s+(?=[A-ZÀ-Ö])|\n+", answer):
-            match = marker.search(sentence)
-            if not match or re.search(r"\bgeen\s+actuele\s+koers\b", sentence, re.I):
+            if re.search(r"\bgeen\s+actuele\s+koers\b", sentence, re.I):
                 continue
-            # A dated report quote is historical even if it was the last
-            # quote in that report. It must not be compared with today's read.
-            if (re.search(r"\b(?:ochtendrapport|dagrapport|rapport|historisch\w*|vorige)\b", sentence, re.I)
-                    and not re.search(r"\b(?:actuele|huidige|current|nu|momenteel)\b", sentence, re.I)):
-                continue
-            claims = list(amount.finditer(sentence, match.end()))
-            if not claims:
-                continue
-            claim = claims[0]
-            if re.search(r"\b(?:onbekend|ontbreekt|niet beschikbaar|unknown|unavailable)\b",
-                         sentence[match.end():claim.start()], re.I):
-                continue
-            unit = (claim.group(1) or claim.group(3) or claim.group(6) or "").upper()
-            unit = "USD" if unit in {"US$", "$", "DOLLAR"} else "EUR" if unit in {"€", "EURO"} else unit
-            symbols = mentioned_catalog_symbols(sentence)
-            matching_rows = [row for row in quote_rows
-                             if (not symbols or str(row[1].get("symbol") or "").upper() in symbols)
-                             and str(row[1].get("quote_currency") or "").upper() == unit]
-            current = max(matching_rows, key=lambda row: row[0]) if matching_rows else None
-            if current is None:
-                return False
-            observed, data, item = current
-            if re.search(r"\b(?:actuele|huidige|current|nu|momenteel)\b", sentence, re.I) and item.get("freshness") != "fresh":
-                return False
-            if unit != str(data.get("quote_currency") or "").upper():
-                return False
-            raw = (claim.group(2) or claim.group(4) or claim.group(5)).rstrip(".,")
-            candidates = set()
-            if "," in raw and "." in raw:
-                separator = "," if raw.rfind(",") > raw.rfind(".") else "."
-                candidates.add(raw.replace("." if separator == "," else ",", "").replace(separator, "."))
-            elif "," in raw or "." in raw:
-                separator = "," if "," in raw else "."
-                candidates.add(raw.replace(separator, "."))
-                candidates.add(raw.replace(separator, ""))
-            else:
-                candidates.add(raw)
-            try:
-                if all(abs(Decimal(value) - Decimal(str(data["price"]))) > Decimal("0.05")
-                       for value in candidates):
+            for match in marker.finditer(sentence):
+                claims = list(amount.finditer(sentence, match.end()))
+                if not claims:
+                    continue
+                claim = claims[0]
+                # A second price in the same sentence may belong to an older
+                # report. Its date must not be checked against this market quote.
+                # Preserve a source date before this marker. If an older
+                # amount came first, begin after that amount and the last
+                # clause divider; never discard the current source date.
+                earlier = list(amount.finditer(sentence[:match.start()]))
+                claim_start = earlier[-1].end() if earlier else 0
+                if earlier:
+                    prefix = sentence[claim_start:match.start()]
+                    dividers = list(re.finditer(r";|\b(?:terwijl|maar|whereas)\b", prefix, re.I))
+                    if dividers:
+                        claim_start += dividers[-1].end()
+                claim_end = claims[1].start() if len(claims) > 1 else len(sentence)
+                boundary = re.search(
+                    r";|\b(?:terwijl|maar|whereas)\b|"
+                    r"\b(?:en|and)\s+(?:(?:in|uit)\s+)?(?:het|the)?\s*"
+                    r"(?:oude|oudere|vorige|older|previous)\s+"
+                    r"(?:dagrapport|ochtendrapport|rapport|report)\b",
+                    sentence[claim.end():claim_end], re.I,
+                )
+                if boundary:
+                    claim_end = claim.end() + boundary.start()
+                claim_context = sentence[claim_start:claim_end]
+                # A dated report quote is historical even if it was the last
+                # quote in that report. Check only the current-price clause, so
+                # an older report elsewhere in the sentence cannot hide it.
+                if (re.search(r"\b(?:ochtendrapport|dagrapport|rapport|historisch\w*|vorige)\b", claim_context, re.I)
+                        and not re.search(r"\b(?:actuele|huidige|current|nu|momenteel)\b", claim_context, re.I)):
+                    continue
+                if re.search(r"\b(?:onbekend|ontbreekt|niet beschikbaar|unknown|unavailable)\b",
+                             sentence[match.end():claim.start()], re.I):
+                    continue
+                unit = (claim.group(1) or claim.group(3) or claim.group(6) or "").upper()
+                unit = "USD" if unit in {"US$", "$", "DOLLAR"} else "EUR" if unit in {"€", "EURO"} else unit
+                symbols = mentioned_catalog_symbols(sentence)
+                matching_rows = [row for row in quote_rows
+                                 if (not symbols or str(row[1].get("symbol") or "").upper() in symbols)
+                                 and str(row[1].get("quote_currency") or "").upper() == unit]
+                current = max(matching_rows, key=lambda row: row[0]) if matching_rows else None
+                if current is None:
                     return False
-            except InvalidOperation:
-                return False
-            dated = list(dated_moment.finditer(sentence))
-            if item.get("freshness") != "fresh" and len(dated) != 1:
-                return False
-            for stated in dated:
+                observed, data, item = current
+                if re.search(r"\b(?:actuele|huidige|current|nu|momenteel)\b", sentence, re.I) and item.get("freshness") != "fresh":
+                    return False
+                if unit != str(data.get("quote_currency") or "").upper():
+                    return False
+                raw = (claim.group(2) or claim.group(4) or claim.group(5)).rstrip(".,")
+                candidates = set()
+                if "," in raw and "." in raw:
+                    separator = "," if raw.rfind(",") > raw.rfind(".") else "."
+                    candidates.add(raw.replace("." if separator == "," else ",", "").replace(separator, "."))
+                elif "," in raw or "." in raw:
+                    separator = "," if "," in raw else "."
+                    candidates.add(raw.replace(separator, "."))
+                    candidates.add(raw.replace(separator, ""))
+                else:
+                    candidates.add(raw)
                 try:
-                    values = stated.groupdict()
-                    day = int(values["day"])
-                    month = months[values["month"].lower()]
-                    year = int(values["year"] or observed.year)
-                    hour, minute = int(values["hour"]), int(values["minute"])
-                    zone = values["zone"].upper()
-                    if zone == "UTC":
-                        claimed = datetime(year, month, day, hour, minute, tzinfo=timezone.utc)
-                    else:
-                        amsterdam = ZoneInfo("Europe/Amsterdam")
-                        possible = [datetime(year, month, day, hour, minute,
-                                             tzinfo=amsterdam, fold=fold)
-                                    for fold in (0, 1)]
-                        matching_zone = next((value for value in possible
-                                              if value.tzname() == zone
-                                              and value.astimezone(timezone.utc).astimezone(amsterdam).replace(
-                                                  tzinfo=None) == value.replace(tzinfo=None)), None)
-                        if matching_zone is None:
+                    if all(abs(Decimal(value) - Decimal(str(data["price"]))) > Decimal("0.05")
+                           for value in candidates):
+                        return False
+                except InvalidOperation:
+                    return False
+                dated = [(date_match, False) for date_match in dated_moment.finditer(claim_context)] + [
+                    (date_match, True) for date_match in iso_moment.finditer(claim_context)
+                ]
+                if item.get("freshness") != "fresh" and len(dated) != 1:
+                    return False
+                for stated, iso in dated:
+                    try:
+                        values = stated.groupdict()
+                        day = int(values["day"])
+                        month = int(values["month"]) if iso else months[values["month"].lower()]
+                        year = int(values["year"] or observed.year)
+                        hour, minute = int(values["hour"]), int(values["minute"])
+                        second = int(values["second"]) if values.get("second") is not None else 0
+                        zone = values["zone"].upper()
+                        if zone == "UTC":
+                            claimed = datetime(year, month, day, hour, minute, second, tzinfo=timezone.utc)
+                        else:
+                            amsterdam = ZoneInfo("Europe/Amsterdam")
+                            possible = [datetime(year, month, day, hour, minute, second,
+                                                 tzinfo=amsterdam, fold=fold)
+                                        for fold in (0, 1)]
+                            matching_zone = next((value for value in possible
+                                                  if value.tzname() == zone
+                                                  and value.astimezone(timezone.utc).astimezone(amsterdam).replace(
+                                                      tzinfo=None) == value.replace(tzinfo=None)), None)
+                            if matching_zone is None:
+                                return False
+                            claimed = matching_zone.astimezone(timezone.utc)
+                    except ValueError:
+                        return False
+                    expected = observed.replace(microsecond=0)
+                    if values.get("second") is None:
+                        expected = expected.replace(second=0)
+                    if claimed != expected:
+                        return False
+                if not dated:
+                    # A fresh quote may be stated with just a UTC clock; a stale
+                    # quote needs the full dated source moment above.
+                    clocks = re.findall(
+                        r"(?<![\d:])(\d{1,2}):(\d{2})(?::(\d{2}))?\s*UTC\b",
+                        claim_context, re.I,
+                    )
+                    if clocks:
+                        hour, minute, second = clocks[0]
+                        if (int(hour), int(minute)) != (observed.hour, observed.minute):
                             return False
-                        claimed = matching_zone.astimezone(timezone.utc)
-                except ValueError:
-                    return False
-                if claimed != observed.replace(second=0, microsecond=0):
-                    return False
-            if not dated:
-                # A fresh quote may be stated with just a UTC clock; a stale
-                # quote needs the full dated source moment above.
-                clocks = re.findall(r"\b(\d{1,2}):(\d{2})\s*UTC\b", sentence, re.I)
-                if clocks and (int(clocks[0][0]), int(clocks[0][1])) != (observed.hour, observed.minute):
-                    return False
+                        if second and int(second) != observed.second:
+                            return False
         return True
 
     @staticmethod

@@ -4,6 +4,42 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## AAPL-coach: exacte bronmomenten met seconden (10 november 2026)
+
+Phase: `BUILD_CANDIDATE_READY`. Branch `codex/finn-quote-seconds-20261110`
+herstelt de onafhankelijke Paper-afwijzing op live SHA
+`3256d02ce6fa49bb480d0d1d1c2f562f2bd86f41`. QA-preflight
+`42889269931` slaagde; de beschermde contentrun `42889449641` was
+`NOT_ACCEPTED` (artifact SHA-256
+`ad8ccef6dece377658cd926853dc9b3b16ae2b17df53275d095b560a5ff5b105`).
+De eerste en vervolgvraag gebruikten de juiste nieuwe AAPL/USD-koers en het
+oude rapport, maar de productverifier las `19:48:00 UTC` verkeerd als
+`48:00 UTC` en wees beide antwoorden af. De herhaalvraag las de gekoppelde
+Paper-botreden `market_price_stale` goed, maar liet bij het oude
+rapportbronmoment het jaar weg. Er waren nul Live-calls, brokerorders,
+executies of voorstellen; de QA-fixture bleef inactief in quarantaine.
+
+De verifier leest nu ISO- en Nederlandse bronmomenten met expliciete seconden,
+datum en UTC/CET/CEST-zone, controleert alle actuele koersclaims ook wanneer
+een oud rapport in dezelfde zin staat, en voorkomt dat een oude rapportprijs
+de actuele claim verbergt. FINN krijgt daarnaast de instructie om bij
+bronvergelijking ook het volledige jaartal te noemen. Gerichte regressies
+**923/923** en de volledige root-backendtest **4600 passed, 7 skipped**
+(log SHA-256 `e4e9ac4d4300cf014e7de89df5068cbb3c87b9a20d21014a8cbdafc0cec27ec6`)
+slagen. De geïsoleerde FastAPI/Celery/Responses-actiematrix slaagde
+**16/16** (artifact SHA-256
+`e36e57c54591d8c19d6d567b07745a728fafce159c85c2fc31b63800aa34a3fc`)
+zonder Live-calls, brokerorders of productieverbindingen; de adaptertests
+slaagden **26/26**. Echte-provider ontwikkeling slaagde **20/20** (artifact
+SHA-256 `51a2c41009d9902b37c7660cd156f571e689474f99cc71c9c2976b9a24eac879`)
+zonder provider-, schema-, timeout-, parse- of validatiefouten. QA, Security
+en Architecture gaven read-only GO voor de finale code. Echte-provider
+regressie slaagde **109/109** (artifact SHA-256
+`3486573e8b3084e98bc7900f8c40bc3b9d32975a9a709aac60cb586557a42e5b`)
+met nul provider-, schema-, timeout-, parse- of validatiefouten.
+CI, deploy en onafhankelijke ingelogde hertest staan nog open.
+Geen live-acceptatie of vrijgave voor Live-orders.
+
 ## AAPL-coach: gekoppelde Paper-botstatus (10 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_STATUS_UPDATE_PENDING`. Branch `codex/finn-aapl-bot-status-20261110`
