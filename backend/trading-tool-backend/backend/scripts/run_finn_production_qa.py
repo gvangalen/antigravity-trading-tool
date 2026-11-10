@@ -46,6 +46,7 @@ ALLOWED_PROFILES = {
     "score2_exact_eur_paper",
     "trader_pair_score_continuity",
     "trader_account_state_readback",
+    "aapl_paper_quote_coach",
     "trader_source_time_parity",
     "trader_paper_exit_reconciliation",
     "trader_paper_exit_fixture_audit",
@@ -189,6 +190,10 @@ def profile_error_category(profile: str, error: Exception) -> str:
         code = str(error)
         return (code if code in SAFE_PORTFOLIO_PAPER_FX_SCHEMA_ERRORS
                 else "portfolio_paper_fx_schema_runtime_error")
+    if profile == "aapl_paper_quote_coach":
+        from backend.scripts.probe_protected_aapl_quote_coach import SAFE_FAILURES
+        code = str(error)
+        return code if code in SAFE_FAILURES else "aapl_probe_runtime_error"
     if profile == "trader_pair_score_continuity":
         code = str(error)
         from backend.scripts.probe_protected_account_answer import (
@@ -2628,6 +2633,24 @@ def main() -> int:
                 report["outcome"] = (
                     "passed" if report[args.profile]["result"] == "PASS" else "failed"
                 )
+                report["qa_status"] = "COMPLETED"
+            elif args.profile == "aapl_paper_quote_coach":
+                if args.manifest_id != "none" or args.manifest_bundle_path:
+                    raise ValueError("aapl_fixture_manifest_forbidden")
+                if os.getenv("FINN_QA_ALLOW_AAPL_QUOTE_FIXTURE") != "1":
+                    raise ValueError("aapl_fixture_not_authorized")
+                report["protected_profile_attempted"] = True
+                report["qa_status"] = "INCOMPLETE"
+                report["outcome"] = "incomplete"
+                report["safety"]["read_only_profile"] = False
+                report["safety"]["execution_calls"] = None
+                report["safety"]["live_trading_calls"] = None
+                from backend.scripts.probe_protected_aapl_quote_coach import run as run_aapl_probe
+
+                report[args.profile] = run_aapl_probe(fixture_namespace or "")
+                report["safety"]["execution_calls"] = report[args.profile]["executions"]
+                report["safety"]["live_trading_calls"] = report[args.profile]["live_calls"]
+                report["outcome"] = "passed" if report[args.profile]["result"] == "PASS" else "failed"
                 report["qa_status"] = "COMPLETED"
             elif args.profile in {"trader_paper_exit_reconciliation", "trader_source_time_parity"}:
                 if args.manifest_id != "none" or args.manifest_bundle_path:

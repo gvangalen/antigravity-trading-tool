@@ -41,6 +41,23 @@ disabled. The source-time profile runs the Paper-exit contract as its fixture
 and additionally checks four-source quote identity and deployed browser times;
 its PASS cannot be inferred from the Paper-exit profile alone.
 
+`aapl_paper_quote_coach` is a separate, one-shot protected Paper QA profile.
+It requires `manifest_id=none`, `allow_fixture_actions=true`, and
+`allow_safe_fixture_execution=false`. It creates one inactive, uncredentialed
+child under the bound QA owner, never writes shared AAPL market data, and
+checks the actual owner-bound FINN read tools across a first, fresh repeat,
+and same-conversation follow-up turn. The child has an AAPL plan and score,
+an older dated report price, and a saved `market_price_stale` Paper decision.
+The probe compares the current market-source time and price to the latest
+provider-dated AAPL row, rejects an old-quote-as-current answer, checks the
+two source moments, and compares terminal polling and SSE content. Its artifact
+contains only fixed check codes, booleans and the two source instants; it does
+not export child IDs, answer text, prompts, or tokens. PASS cleans the child
+under owner, bot, key and trade guards; any failure quarantines it disabled.
+The historical report and bot decision are controlled fixture evidence, so
+this profile verifies FINN's handling of their age and safety reason, not the
+original user's private report or a live Paper executor decision.
+
 `trader_pair_fixture_audit` is a read-only follow-up for one failed or
 incomplete `trader_pair_score_continuity` run. It requires `manifest_id=none`,
 both fixture flags `false`, and `run_label=audit-<workflow-id>-<attempt>-<sha8>`.
