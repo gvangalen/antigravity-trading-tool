@@ -32,6 +32,10 @@ SAFE_FAILURES = frozenset({
     "aapl_baseline_failed", "aapl_turn_failed", "aapl_safety_failed",
     "aapl_cleanup_failed", "aapl_quarantine_failed",
 })
+SAFETY_FAILURES = frozenset({
+    "unexpected_action", "unexpected_business_write", "live_attempt",
+    "broker_order_created",
+})
 REQUIRED_SCOPES = frozenset({
     "read_active_setup", "read_linked_strategy", "read_asset_scores",
     "read_market_snapshot", "read_latest_report", "read_bot_status",
@@ -91,6 +95,14 @@ def _same_source(first: dict, second: dict) -> bool:
             and first["price"] == second["price"])
 
 
+def _result(failures: list[str], *, source_advanced: bool) -> str:
+    if SAFETY_FAILURES.intersection(failures):
+        return "FAIL"
+    if source_advanced:
+        return "INCONCLUSIVE"
+    return "FAIL" if failures else "PASS"
+
+
 def _prepare(namespace: str, user_id: int, bot_id: int) -> dict:
     """Convert only the new child fixture from ETH to AAPL and save old evidence."""
     conn = fixture._connection()
@@ -144,14 +156,14 @@ def _prepare(namespace: str, user_id: int, bot_id: int) -> dict:
 
 
 def _market_evidence(rows: list, source: dict) -> dict:
-    candidates = [item.get("data") for item in rows if isinstance(item, dict)
-                  and item.get("scope") == "read_market_snapshot"
-                  and item.get("source") == "market_data"
-                  and item.get("status") == "completed" and isinstance(item.get("data"), dict)
-                  and item["data"].get("symbol") == "AAPL"]
-    if len(candidates) != 1:
+    candidates = [item for item in rows if isinstance(item, dict)
+                  and item.get("scope") == "read_market_snapshot"]
+    if (len(candidates) != 1 or candidates[0].get("source") != "market_data"
+            or candidates[0].get("status") != "completed"
+            or not isinstance(candidates[0].get("data"), dict)
+            or candidates[0]["data"].get("symbol") != "AAPL"):
         return {"market_read": "missing_or_ambiguous", "source_match": False}
-    data = candidates[0]
+    data = candidates[0]["data"]
     try:
         price_match = abs(Decimal(str(data.get("price"))) - source["price"]) <= Decimal("0.05")
     except (InvalidOperation, TypeError):
@@ -164,14 +176,20 @@ def _market_evidence(rows: list, source: dict) -> dict:
 
 
 def _owner_evidence(rows: list, ids: dict) -> dict:
-    reports = [item.get("data") for item in rows if isinstance(item, dict)
-               and item.get("scope") == "read_latest_report"
-               and item.get("source") == "daily_reports"
-               and item.get("status") == "completed" and isinstance(item.get("data"), dict)]
-    bots = [item.get("data") for item in rows if isinstance(item, dict)
-            and item.get("scope") == "read_bot_status"
-            and item.get("source") == "bot_configs"
-            and item.get("status") == "completed" and isinstance(item.get("data"), dict)]
+    report_rows = [item for item in rows if isinstance(item, dict)
+                   and item.get("scope") == "read_latest_report"]
+    bot_rows = [item for item in rows if isinstance(item, dict)
+                and item.get("scope") == "read_bot_status"]
+    reports = [report_rows[0]["data"]] if (
+        len(report_rows) == 1 and report_rows[0].get("source") == "daily_reports"
+        and report_rows[0].get("status") == "completed"
+        and isinstance(report_rows[0].get("data"), dict)
+    ) else []
+    bots = [bot_rows[0]["data"]] if (
+        len(bot_rows) == 1 and bot_rows[0].get("source") == "bot_configs"
+        and bot_rows[0].get("status") == "completed"
+        and isinstance(bot_rows[0].get("data"), dict)
+    ) else []
     snapshot = (reports[0].get("score_source_snapshot") or {}) if len(reports) == 1 else {}
     assets = snapshot.get("assets") if isinstance(snapshot, dict) else None
     old = assets[0].get("market_snapshot") if isinstance(assets, list) and len(assets) == 1 and isinstance(assets[0], dict) and assets[0].get("symbol") == "AAPL" else None
@@ -195,21 +213,24 @@ def _plan_score_evidence(rows: list, ids: dict) -> bool:
     for scope in ("read_active_setup", "read_linked_strategy", "read_asset_scores"):
         expected_source = {"read_active_setup": "setups", "read_linked_strategy": "strategies",
                            "read_asset_scores": "daily_scores_and_source_indicators"}[scope]
-        candidates = [item.get("data") for item in rows if isinstance(item, dict)
-                      and item.get("scope") == scope and item.get("status") == "completed"
-                      and item.get("source") == expected_source
-                      and isinstance(item.get("data"), dict)]
-        if len(candidates) != 1 or candidates[0].get("symbol") != "AAPL":
+        candidates = [item for item in rows if isinstance(item, dict)
+                      and item.get("scope") == scope]
+        if (len(candidates) != 1 or candidates[0].get("status") != "completed"
+                or candidates[0].get("source") != expected_source
+                or not isinstance(candidates[0].get("data"), dict)):
             return False
-        if scope == "read_active_setup" and candidates[0].get("setup_id") != ids["setup"]:
+        data = candidates[0]["data"]
+        if data.get("symbol") != "AAPL":
+            return False
+        if scope == "read_active_setup" and data.get("setup_id") != ids["setup"]:
             return False
         if scope == "read_linked_strategy" and (
-            candidates[0].get("strategy_id") != ids["strategy"]
-            or candidates[0].get("setup_id") != ids["setup"]
+            data.get("strategy_id") != ids["strategy"]
+            or data.get("setup_id") != ids["setup"]
         ):
             return False
         if scope == "read_asset_scores":
-            scores = candidates[0].get("reported_scores")
+            scores = data.get("reported_scores")
             if not isinstance(scores, dict) or not any(
                 value is not None for value in scores.values()
             ):
@@ -227,6 +248,10 @@ def _owner_references(evidence: list, ids: dict) -> bool:
     seen = set()
     for item in evidence:
         kind = getattr(item, "entity_type", None)
+        if kind == "market_snapshot" and getattr(item, "source", None) == "market_data":
+            continue
+        if getattr(item, "owned_by_user", None) is not True:
+            return False
         if kind not in expected:
             continue
         source, entity_id = expected[kind]
@@ -447,8 +472,7 @@ def run(namespace: str) -> dict:
             failures.append("live_attempt")
         if after["counts"]["broker_orders"] != before["counts"]["broker_orders"]:
             failures.append("broker_order_created")
-        result.update({"result": "INCONCLUSIVE" if result["source_advanced"] else
-                       "FAIL" if failures else "PASS",
+        result.update({"result": _result(failures, source_advanced=result["source_advanced"]),
                        "failed_checks": sorted(set(failures)),
                        "current_price_usd": float(source["price"]),
                        "old_report_price_usd": float(OLD_PRICE),

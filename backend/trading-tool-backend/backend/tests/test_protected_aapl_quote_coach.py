@@ -42,6 +42,9 @@ def test_market_and_owner_evidence_bind_both_distinct_moments():
     assert probe._owner_evidence(rows, ids)["old_report_match"] is False
     rows[1]["data"]["id"] = 999
     assert probe._owner_evidence(rows, ids)["old_report_match"] is False
+    rows[1]["data"]["id"] = 6
+    assert not probe._owner_evidence(rows + [{**rows[1], "source": "foreign_reports"}], ids)["old_report_match"]
+    assert not probe._market_evidence(rows + [{**rows[0], "source": "other"}], source)["source_match"]
 
 
 def test_plan_and_score_reads_must_be_aapl_and_materialized():
@@ -62,6 +65,8 @@ def test_plan_and_score_reads_must_be_aapl_and_materialized():
     rows[0]["data"]["symbol"] = "AAPL"
     rows[0]["data"]["setup_id"] = 99
     assert not probe._plan_score_evidence(rows, ids)
+    rows[0]["data"]["setup_id"] = 2
+    assert not probe._plan_score_evidence(rows + [{**rows[0], "source": "foreign_setups"}], ids)
 
 
 def test_owner_references_reject_foreign_duplicate_or_unowned_refs():
@@ -83,6 +88,12 @@ def test_owner_references_reject_foreign_duplicate_or_unowned_refs():
     refs[1].owned_by_user = True
     assert not probe._owner_references(refs + [refs[1]], ids)
     assert not probe._owner_references(refs[:-1], ids)
+    assert not probe._owner_references(refs + [SimpleNamespace(
+        entity_type="portfolio", entity_id="99", source="bot_portfolios", owned_by_user=False,
+    )], ids)
+    assert probe._owner_references(refs + [SimpleNamespace(
+        entity_type="market_snapshot", entity_id="11", source="market_data", owned_by_user=False,
+    )], ids)
 
 
 def test_source_selector_matches_product_and_fails_closed_on_null_currency_and_ties(monkeypatch):
@@ -133,6 +144,9 @@ def test_source_advancement_requires_inconclusive_not_old_quote_failure():
     assert probe._same_source(first, dict(first))
     assert not probe._same_source(first, {**first, "measurement_id": 12})
     assert not probe._same_source(first, {**first, "price": Decimal("350.50")})
+    assert probe._result(["market_source_mismatch"], source_advanced=True) == "INCONCLUSIVE"
+    assert probe._result(["live_attempt"], source_advanced=True) == "FAIL"
+    assert probe._result(["unexpected_business_write"], source_advanced=True) == "FAIL"
 
 
 def test_answer_checks_require_current_price_and_distinct_source_moments():
