@@ -1559,6 +1559,16 @@ def _minimal_read_answer(
             if isinstance(item, dict)
         )
     text = prepared.response.text.strip()
+    if not FinnResponsesAnswerVerifier._latest_quote_claim_supported(text, tuple(
+        item for call in prepared.response.tool_trace
+        for item in (call.get("result") or {}).get("results") or []
+        if isinstance(item, dict)
+    )):
+        return FinnResponsesVerifiedAnswer(
+            "unavailable", "Ik kan dit nog niet onderbouwen met betrouwbare koersgegevens.",
+            "latest_quote_conflicts_with_source", evidence,
+            rejection_details={"fact_mismatch": "latest_market_quote"},
+        )
     if not FinnResponsesAnswerVerifier._saved_entity_type_supported(
         text, evidence, user_message=message,
     ):

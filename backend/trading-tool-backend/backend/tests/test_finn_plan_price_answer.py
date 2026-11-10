@@ -85,6 +85,167 @@ def test_broad_plan_review_does_not_become_a_fixed_template():
     assert answer.text == draft
 
 
+def test_plan_read_includes_a_separate_latest_quote():
+    from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCatalog
+
+    call = FinnResponsesToolCatalog().validate("get_active_plan_and_strategy", {"asset": "AAPL"})
+    assert "read_asset_scores" in call.read_tools
+    assert "read_market_snapshot" in call.read_tools
+
+
+def test_previous_aapl_quote_cannot_be_called_current_after_newer_measurement():
+    trace = list(_trace(with_market=False))
+    trace[0]["result"]["results"].append({
+        "scope": "read_market_snapshot", "status": "completed", "source": "market_data",
+        "freshness": "stale", "as_of": "2026-11-09T20:59:00+00:00",
+        "data": {"symbol": "AAPL", "price": 350.48999, "quote_currency": "USD",
+                 "as_of": "2026-11-09T20:59:00+00:00"},
+    })
+    previous = {"tool_trace": _trace(), "answer": "De koers was USD 351,19 om 19:03 UTC."}
+    wrong = (
+        "De actuele koerssnapshot die ik kan verifiëren is USD 351,19 van 9 november 19:03 UTC. "
+        "De benchmark gebruikte USD 350,49 van 9 november 20:59 UTC."
+    )
+    rejected = _verify("Wat is de laatste AAPL-koers?", wrong, tuple(trace), previous_response=previous)
+    assert rejected.status == "unavailable"
+    assert rejected.reason == "latest_quote_conflicts_with_source"
+    evidence = tuple(trace[0]["result"]["results"])
+    assert FinnResponsesAnswerVerifier._latest_quote_claim_supported(
+        "De laatste beschikbare AAPL-koersmeting is USD 350,49 van 9 november 20:59 UTC.",
+        evidence,
+    )
+
+
+def test_latest_quote_claim_requires_current_turn_market_evidence():
+    answer = _verify(
+        "Wat is de laatste AAPL-koers?",
+        "De laatste AAPL-koers is USD 351,19 van 9 november 19:03 UTC.",
+        _trace(with_market=False),
+    )
+    assert answer.reason == "latest_quote_conflicts_with_source"
+
+
+def test_latest_quote_accepts_dutch_thousands_separator_for_crypto():
+    evidence = ({
+        "scope": "read_market_snapshot", "status": "completed", "freshness": "fresh",
+        "data": {"symbol": "BTC", "price": 75894, "quote_currency": "USDT",
+                 "as_of": "2026-11-10T15:00:00+00:00"},
+    },)
+    assert FinnResponsesAnswerVerifier._latest_quote_claim_supported(
+        "De actuele BTC-koers is USDT 75.894 van 10 november 15:00 UTC.", evidence,
+    )
+
+
+def test_latest_quote_matches_exact_currency_when_two_pairs_are_read():
+    evidence = tuple({
+        "scope": "read_market_snapshot", "status": "completed", "freshness": "fresh",
+        "data": {"symbol": "BTC", "price": price, "quote_currency": quote,
+                 "as_of": moment},
+    } for price, quote, moment in (
+        (66000, "EUR", "2026-11-10T10:00:00+00:00"),
+        (74000, "USDT", "2026-11-10T10:01:00+00:00"),
+    ))
+    assert FinnResponsesAnswerVerifier._latest_quote_claim_supported(
+        "De actuele BTC/EUR-koers is €66.000 van 10:00 UTC.", evidence,
+    )
+    assert FinnResponsesAnswerVerifier._latest_quote_claim_supported(
+        "De actuele BTC/USDT-koers is USDT 74.000 van 10:01 UTC.", evidence,
+    )
+
+
+def test_historical_report_quote_and_unknown_current_quote_do_not_become_current_claims():
+    evidence = ({
+        "scope": "read_market_snapshot", "status": "completed", "freshness": "stale",
+        "data": {"symbol": "AAPL", "price": 350.49, "quote_currency": "USD",
+                 "as_of": "2026-11-09T20:59:00+00:00"},
+    },)
+    assert FinnResponsesAnswerVerifier._latest_quote_claim_supported(
+        "De laatste koers in het ochtendrapport was USD 351,19 van 9 november 19:03 UTC.", evidence,
+    )
+    assert FinnResponsesAnswerVerifier._latest_quote_claim_supported(
+        "De huidige AAPL-koers is onbekend; mijn stop is USD 300.", evidence,
+    )
+
+
+def test_current_quote_aliases_and_currency_after_amount_require_fresh_evidence():
+    stale = ({
+        "scope": "read_market_snapshot", "status": "completed", "freshness": "stale",
+        "data": {"symbol": "AAPL", "price": 351.19, "quote_currency": "USD",
+                 "as_of": "2026-11-09T19:03:00+00:00"},
+    },)
+    for claim in (
+        "AAPL noteert momenteel USD 351,19.",
+        "De koers van AAPL is nu USD 351,19.",
+        "De laatste koers van AAPL is USD 351,19.",
+    ):
+        assert not FinnResponsesAnswerVerifier._latest_quote_claim_supported(claim, stale)
+    assert not FinnResponsesAnswerVerifier._latest_quote_claim_supported(
+        "De actuele AAPL-koers is 351,19 USD.", (),
+    )
+
+
+def test_three_decimal_crypto_quote_is_not_mistaken_for_thousands():
+    evidence = ({
+        "scope": "read_market_snapshot", "status": "completed", "freshness": "fresh",
+        "data": {"symbol": "ADA", "price": 0.123, "quote_currency": "USDT",
+                 "as_of": "2026-11-10T10:00:00+00:00"},
+    },)
+    assert FinnResponsesAnswerVerifier._latest_quote_claim_supported(
+        "De actuele ADA-koers is USDT 0.123 van 10:00 UTC.", evidence,
+    )
+
+
+def test_stale_latest_quote_requires_its_exact_dated_source_moment():
+    stale = ({
+        "scope": "read_market_snapshot", "status": "completed", "freshness": "stale",
+        "data": {"symbol": "AAPL", "price": 351.19, "quote_currency": "USD",
+                 "as_of": "2026-11-09T19:03:00+00:00"},
+    },)
+    for claim in (
+        "Om 10:00 UTC is de laatste AAPL-koers USD 351,19.",
+        "De laatste AAPL-koers om 10:00 UTC is USD 351,19.",
+        "De laatste AAPL-koers is USD 351,19 van 8 november 19:03 UTC.",
+        "De laatste AAPL-koers is USD 351,19 van 9 november 20:03 UTC.",
+        "De laatste AAPL-koers is USD 351,19 van 9 november 20:03 CEST.",
+    ):
+        assert not FinnResponsesAnswerVerifier._latest_quote_claim_supported(claim, stale)
+    assert FinnResponsesAnswerVerifier._latest_quote_claim_supported(
+        "De laatste beschikbare AAPL-koers is USD 351,19 van 9 november 19:03 UTC.", stale,
+    )
+    assert FinnResponsesAnswerVerifier._latest_quote_claim_supported(
+        "De laatste beschikbare AAPL-koers is USD 351,19 van 9 november 20:03 CET.", stale,
+    )
+
+
+def test_nonexistent_amsterdam_dst_clock_cannot_be_a_source_moment():
+    stale = ({
+        "scope": "read_market_snapshot", "status": "completed", "freshness": "stale",
+        "data": {"symbol": "AAPL", "price": 351.19, "quote_currency": "USD",
+                 "as_of": "2026-03-29T01:30:00+00:00"},
+    },)
+    assert not FinnResponsesAnswerVerifier._latest_quote_claim_supported(
+        "De laatste AAPL-koers is USD 351,19 van 29 maart 2026 02:30 CET.", stale,
+    )
+    assert FinnResponsesAnswerVerifier._latest_quote_claim_supported(
+        "De laatste AAPL-koers is USD 351,19 van 29 maart 2026 03:30 CEST.", stale,
+    )
+
+
+def test_minimal_read_cannot_relabel_previous_turn_price_as_current():
+    old_trace = _trace()
+    prepared = SimpleNamespace(
+        response=SimpleNamespace(
+            text="De actuele AAPL-koerssnapshot is USD 346,61.",
+            tool_trace=_trace(with_market=False), uses_previous_response=True,
+        ),
+        previous_response={"terminal_status": "completed", "tool_trace": old_trace,
+                           "turn_contract": {"targets": [{"evidence": {"symbol": "AAPL"}}]}},
+    )
+    answer = _minimal_read_answer(message="Wat is nu de actuele AAPL-koers?", prepared=prepared)
+    assert answer.status == "unavailable"
+    assert answer.reason == "latest_quote_conflicts_with_source"
+
+
 def test_price_followup_without_new_quote_can_discuss_saved_plan():
     trace = _trace()
     draft = (

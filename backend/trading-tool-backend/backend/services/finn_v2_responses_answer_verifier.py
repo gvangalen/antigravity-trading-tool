@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from decimal import Decimal, InvalidOperation
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from difflib import SequenceMatcher
 import asyncio
 import json
@@ -54,6 +56,132 @@ class FinnResponsesAnswerVerifier:
     def __init__(self, semantic: FinnV2SemanticVerifierService | None = None, client: Any = None) -> None:
         self.semantic = semantic or FinnV2SemanticVerifierService()
         self.client = client
+
+    @staticmethod
+    def _latest_quote_claim_supported(answer: str, evidence: tuple[dict[str, Any], ...]) -> bool:
+        """A prior turn or an indicator measurement is never the latest quote."""
+        quote_rows = []
+        for item in evidence:
+            if item.get("scope") != "read_market_snapshot" or item.get("status") != "completed":
+                continue
+            data = item.get("data") or {}
+            if not isinstance(data, dict) or data.get("price") is None:
+                continue
+            observed = (data.get("source_observed_at_utc") or data.get("as_of")
+                        or data.get("source_observed_at") or item.get("as_of"))
+            try:
+                moment = datetime.fromisoformat(str(observed).replace("Z", "+00:00"))
+                if moment.tzinfo is None:
+                    moment = moment.replace(tzinfo=timezone.utc)
+            except (TypeError, ValueError):
+                continue
+            quote_rows.append((moment.astimezone(timezone.utc), data, item))
+        # The marker and the amount must be in the same sentence. This leaves
+        # dated report prices and saved entry/stop levels free to be discussed.
+        price_word = r"(?:koers\w*|prijs\w*|quote\w*|price\w*|snapshot|noteert)"
+        marker = re.compile(
+            rf"\b(?:actuele|huidige|nieuwste|laatste|current|latest)\b.{{0,70}}\b{price_word}\b"
+            rf"|\b{price_word}\b.{{0,50}}\b(?:nu|momenteel|actueel|current)\b",
+            re.I,
+        )
+        amount = re.compile(
+            r"\b(USD|USDT|EUR|US\$|dollar|euro)\s*(\d[\d.,]*)"
+            r"|([$€])\s*(\d[\d.,]*)"
+            r"|(\d[\d.,]*)\s*(USD|USDT|EUR|dollar|euro)\b", re.I,
+        )
+        months = {name: number for number, name in enumerate((
+            "januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus",
+            "september", "oktober", "november", "december",
+        ), 1)}
+        dated_moment = re.compile(
+            r"\b(?P<day>\d{1,2})\s+(?P<month>januari|februari|maart|april|mei|juni|"
+            r"juli|augustus|september|oktober|november|december)\s*"
+            r"(?P<year>20\d{2})?\s*,?\s*(?P<hour>\d{1,2}):(?P<minute>\d{2})\s*"
+            r"(?P<zone>UTC|CET|CEST)\b", re.I,
+        )
+        for sentence in re.split(r"(?<=[.!?])\s+(?=[A-ZÀ-Ö])|\n+", answer):
+            match = marker.search(sentence)
+            if not match or re.search(r"\bgeen\s+actuele\s+koers\b", sentence, re.I):
+                continue
+            # A dated report quote is historical even if it was the last
+            # quote in that report. It must not be compared with today's read.
+            if (re.search(r"\b(?:ochtendrapport|dagrapport|rapport|historisch\w*|vorige)\b", sentence, re.I)
+                    and not re.search(r"\b(?:actuele|huidige|current|nu|momenteel)\b", sentence, re.I)):
+                continue
+            claims = list(amount.finditer(sentence, match.end()))
+            if not claims:
+                continue
+            claim = claims[0]
+            if re.search(r"\b(?:onbekend|ontbreekt|niet beschikbaar|unknown|unavailable)\b",
+                         sentence[match.end():claim.start()], re.I):
+                continue
+            unit = (claim.group(1) or claim.group(3) or claim.group(6) or "").upper()
+            unit = "USD" if unit in {"US$", "$", "DOLLAR"} else "EUR" if unit in {"€", "EURO"} else unit
+            symbols = mentioned_catalog_symbols(sentence)
+            matching_rows = [row for row in quote_rows
+                             if (not symbols or str(row[1].get("symbol") or "").upper() in symbols)
+                             and str(row[1].get("quote_currency") or "").upper() == unit]
+            current = max(matching_rows, key=lambda row: row[0]) if matching_rows else None
+            if current is None:
+                return False
+            observed, data, item = current
+            if re.search(r"\b(?:actuele|huidige|current|nu|momenteel)\b", sentence, re.I) and item.get("freshness") != "fresh":
+                return False
+            if unit != str(data.get("quote_currency") or "").upper():
+                return False
+            raw = (claim.group(2) or claim.group(4) or claim.group(5)).rstrip(".,")
+            candidates = set()
+            if "," in raw and "." in raw:
+                separator = "," if raw.rfind(",") > raw.rfind(".") else "."
+                candidates.add(raw.replace("." if separator == "," else ",", "").replace(separator, "."))
+            elif "," in raw or "." in raw:
+                separator = "," if "," in raw else "."
+                candidates.add(raw.replace(separator, "."))
+                candidates.add(raw.replace(separator, ""))
+            else:
+                candidates.add(raw)
+            try:
+                if all(abs(Decimal(value) - Decimal(str(data["price"]))) > Decimal("0.05")
+                       for value in candidates):
+                    return False
+            except InvalidOperation:
+                return False
+            dated = list(dated_moment.finditer(sentence))
+            if item.get("freshness") != "fresh" and len(dated) != 1:
+                return False
+            for stated in dated:
+                try:
+                    values = stated.groupdict()
+                    day = int(values["day"])
+                    month = months[values["month"].lower()]
+                    year = int(values["year"] or observed.year)
+                    hour, minute = int(values["hour"]), int(values["minute"])
+                    zone = values["zone"].upper()
+                    if zone == "UTC":
+                        claimed = datetime(year, month, day, hour, minute, tzinfo=timezone.utc)
+                    else:
+                        amsterdam = ZoneInfo("Europe/Amsterdam")
+                        possible = [datetime(year, month, day, hour, minute,
+                                             tzinfo=amsterdam, fold=fold)
+                                    for fold in (0, 1)]
+                        matching_zone = next((value for value in possible
+                                              if value.tzname() == zone
+                                              and value.astimezone(timezone.utc).astimezone(amsterdam).replace(
+                                                  tzinfo=None) == value.replace(tzinfo=None)), None)
+                        if matching_zone is None:
+                            return False
+                        claimed = matching_zone.astimezone(timezone.utc)
+                except ValueError:
+                    return False
+                if claimed != observed.replace(second=0, microsecond=0):
+                    return False
+            if not dated:
+                # A fresh quote may be stated with just a UTC clock; a stale
+                # quote needs the full dated source moment above.
+                clocks = re.findall(r"\b(\d{1,2}):(\d{2})\s*UTC\b", sentence, re.I)
+                if clocks and (int(clocks[0][0]), int(clocks[0][1])) != (observed.hour, observed.minute):
+                    return False
+        return True
 
     @staticmethod
     def _price_relation_claim_supported(
@@ -2844,6 +2972,13 @@ class FinnResponsesAnswerVerifier:
             for item in (call.get("result", {}).get("results") or [])
             if isinstance(item, dict)
         )
+        if result.answer_kind == "free_text" and not self._latest_quote_claim_supported(result.text, evidence):
+            return FinnResponsesVerifiedAnswer(
+                "unavailable",
+                self._fallback_copy("responses_evidence_not_verified", message=message, locale=locale),
+                "latest_quote_conflicts_with_source", evidence,
+                rejection_details={"fact_mismatch": "latest_market_quote"},
+            )
         if (
             result.answer_kind == "free_text"
             and not self._price_relation_claim_supported(result.text, evidence)
