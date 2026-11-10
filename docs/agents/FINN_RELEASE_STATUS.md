@@ -4,6 +4,48 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## AAPL-coach: eigenaargebonden rapportvergelijking en koersverschil (10 november 2026)
+
+Phase: `PRODUCT_DEPLOYED_STATUS_UPDATE_PENDING`. Branch `codex/finn-report-read-delta-20261110`
+herstelt de onafhankelijke Paper-afwijzing op live SHA
+`317582f5b6e2b866a55aa495af3fc156a4466044`. QA-preflight
+`42899233747` slaagde; contentrun `42899388028` was `NOT_ACCEPTED`
+(artifact SHA-256 `766fc075258399df4d9bd33f554b036ecb5e98ec03e44b4282431899d77466a3`).
+De eerste beurt noemde de actuele AAPL/USD-koers correct, maar de verifier
+las `USD 1,74 lager` als een absolute actuele koers. Eerste en herhaalbeurt
+lazen het gevraagde opgeslagen rapport niet eigenaargebonden; de herhaalbeurt
+liet het jaartal weg. De vervolgbeurt slaagde. De beschermde Paper-kindfixture
+bleef inactief; er waren nul Live-calls, brokerorders, executies of voorstellen.
+
+Een expliciete rapportvergelijking bindt nu een rapportread op eigenaar,
+gevraagde datum en exact asset. `9 november` zonder jaar wordt bij de
+rapportclausule geïnterpreteerd; een datum van de actuele koers kan niet
+per ongeluk de rapportdatum worden. Een ongedateerd ouder rapport faalt
+gesloten met `report_date_required`. De verifier controleert een relatieve
+koersverandering tegen zowel de actuele bronkoers als de prijs in het
+opgeslagen rapport, inclusief richting, bedrag en bronmoment. Identieke
+herhaalde rapportreads worden genormaliseerd; conflicterende feiten worden
+afgewezen. Gerichte regressies **927/927** en volledige root-backendtest
+**4602 passed, 7 skipped** (log SHA-256
+`0541e46b0ae55fdd4f231946e559b883140c6fc1a9f5b277c22699e1974f6eed`)
+slagen. De lokale geïsoleerde FastAPI/Celery/Responses-actiematrix slaagde
+**16/16** (artifact SHA-256
+`7e3b9f1f1a8f6b8298740b565f8f2d80dc750dd61f61ec8a69e06b72793151bc`)
+zonder Live-calls, brokerorders of productieverbindingen; adaptertests
+**26/26**. QA, Security en Architecture gaven read-only GO op de finale
+diff. Echte-provider ontwikkeling **20/20** (artifact SHA-256
+`8effc4520bde52d91441cd3caf2f43bf5b45e2ad1ea62ab63aed4c31525135c9`)
+en regressie **109/109** (artifact SHA-256
+`206fff58d4008dbc15e04b7c1cff619d9f61c739d3b0bef7cd3540dcd347e959`)
+slaagden zonder provider-, schema-, timeout-, parse- of validatiefouten.
+Product-PR #963 is gemerged als SHA
+`c3c05db9b58499125d07559d9db478151a4f151c`; PR-CI `42903768329`,
+main-CI `42904709870` en Auto Deploy `42905502259` slaagden. Publieke
+backend-health en frontend-buildinfo gaven op 10 november HTTP 200 met beide
+de product-SHA. Deze statuswijziging creëert nog een nieuwe main-SHA;
+ingelogde onafhankelijke Paper-QA start pas na de laatste main-CI, Auto
+Deploy en hernieuwde publieke SHA-pariteit. Geen acceptatie voor Live-orders.
+
 ## AAPL-coach: exacte bronmomenten met seconden (10 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_STATUS_UPDATE_PENDING`. Branch `codex/finn-quote-seconds-20261110`
