@@ -112,7 +112,12 @@ def test_owner_references_reject_foreign_duplicate_or_unowned_refs():
 def test_source_selector_matches_product_and_fails_closed_on_null_currency_and_ties(monkeypatch):
     moment = datetime(2026, 11, 9, 20, 59, tzinfo=timezone.utc)
     received = []
-    rows = [(Decimal("350.49"), moment, "USD", 11, moment)]
+    def quote(row_id, price="350.49", *, source=moment, stored=moment,
+              currency="USD", symbol="AAPL", provider="twelve_data"):
+        return (Decimal(price) if price is not None else None, source, currency,
+                row_id, stored, symbol, provider)
+
+    rows = [quote(11)]
 
     class Cursor:
         def __enter__(self):
@@ -136,29 +141,41 @@ def test_source_selector_matches_product_and_fails_closed_on_null_currency_and_t
 
     monkeypatch.setattr(probe.fixture, "_connection", lambda: Connection())
     assert probe._source()["measurement_id"] == 11
-    assert "quote_currency IS NOT NULL" in received[-1]
+    assert "quote_currency IS NOT NULL" not in received[-1]
     assert "price IS NOT NULL" not in received[-1]
-    assert "ORDER BY source_observed_at DESC,timestamp DESC,id DESC LIMIT 65" in received[-1]
-    rows = [(Decimal("350.49"), moment, "USD", 13, moment),
-            (Decimal("350.49"), moment, "USD", 12, moment),
-            (Decimal("350.49"), moment, "USD", 11, moment)]
+    assert "ORDER BY source_observed_at DESC,timestamp DESC,id DESC LIMIT 4096" in received[-1]
+    rows = [quote(13), quote(12), quote(11)]
     assert probe._source()["measurement_id"] == 13
-    rows = [(None, moment, "USD", 12, moment), (Decimal("350.49"), moment.replace(hour=20, minute=58), "USD", 11, moment)]
+    rows = [quote(12, None), quote(11, source=moment.replace(minute=58))]
     with pytest.raises(RuntimeError, match="^aapl_source_unavailable$"):
         probe._source()
-    rows = [(Decimal("350.49"), moment, "EUR", 12, moment)]
+    rows = [quote(12, currency=None), quote(11, source=moment.replace(minute=58))]
     with pytest.raises(RuntimeError, match="^aapl_source_unavailable$"):
         probe._source()
-    rows = [(Decimal("350.49"), moment, "USD", 12, moment),
-            (Decimal("350.50"), moment, "USD", 11, moment)]
+    rows = [quote(12, currency="EUR")]
+    with pytest.raises(RuntimeError, match="^aapl_source_unavailable$"):
+        probe._source()
+    rows = [quote(12), quote(11, "350.50")]
     with pytest.raises(RuntimeError, match="^aapl_source_ambiguous$"):
         probe._source()
-    rows = [(Decimal("350.49"), moment, "USD", 12, moment),
-            (Decimal("350.49"), moment, "EUR", 11, moment)]
+    rows = [quote(12), quote(11, currency="EUR")]
     with pytest.raises(RuntimeError, match="^aapl_source_ambiguous$"):
         probe._source()
-    rows = [(Decimal("350.49"), moment, "USD", 100 - index, moment)
-            for index in range(65)]
+    rows = [quote(12), quote(11, provider="other")]
+    with pytest.raises(RuntimeError, match="^aapl_source_ambiguous$"):
+        probe._source()
+    rows = [quote(12), quote(11, symbol="OTHER")]
+    with pytest.raises(RuntimeError, match="^aapl_source_ambiguous$"):
+        probe._source()
+    rows = [quote(12), quote(11, "350.50", stored=moment.replace(minute=58))]
+    with pytest.raises(RuntimeError, match="^aapl_source_ambiguous$"):
+        probe._source()
+    rows = [quote(100 - index) for index in range(66)]
+    assert probe._source()["measurement_id"] == 100
+    rows[-1] = quote(35, "350.50")
+    with pytest.raises(RuntimeError, match="^aapl_source_ambiguous$"):
+        probe._source()
+    rows = [quote(5000 - index) for index in range(4096)]
     with pytest.raises(RuntimeError, match="^aapl_source_ambiguous$"):
         probe._source()
 
