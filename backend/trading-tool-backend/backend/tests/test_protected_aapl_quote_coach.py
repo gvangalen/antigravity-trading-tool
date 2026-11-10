@@ -12,6 +12,7 @@ def test_old_quote_is_rejected_only_when_mislabeled_current():
     assert probe._old_claimed_current("De actuele AAPL-koerssnapshot is USD 351,19.")
     assert not probe._old_claimed_current("Het historische rapport noemde USD 351,19 om 19:03 UTC.")
     assert not probe._old_claimed_current("USD 351,19 is niet actueel; het is de oude rapportkoers.")
+    assert not probe._old_claimed_current("Oud rapport: USD 351,19; de actuele koers is USD 350,49.")
     assert probe._old_claimed_current("De oude rapportkoers USD 351,19 is ook de actuele koerssnapshot.")
 
 

@@ -54,7 +54,7 @@ def _utc(value):
 
 def _old_claimed_current(answer: str) -> bool:
     """A historical quote may be mentioned, but not as the present quote."""
-    for sentence in re.split(r"(?<=[.!?])\s+|\n+", answer):
+    for sentence in re.split(r"(?<=[.!?])\s+|[;\n]+", answer):
         if CURRENT_MARKER.search(sentence) and OLD_AMOUNT.search(sentence):
             if not re.search(r"\b(?:niet|geen)\s+(?:de\s+)?(?:actuele|huidige|nieuwste|laatste)\b", sentence, re.I):
                 return True
