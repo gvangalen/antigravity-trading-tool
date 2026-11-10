@@ -49,7 +49,8 @@ class IndicatorHistoryBootstrap:
             )
         )).scalars().all()
         existing_days = {stamp.date() for stamp in existing if stamp}
-        if len(existing_days) >= required_days:
+        latest_completed_day = today - timedelta(days=1)
+        if len(existing_days) >= required_days and latest_completed_day in existing_days:
             return {"inserted": 0, "status": "ready", "observed_days": len(existing_days),
                     "market_id": market.id}
 
@@ -93,7 +94,8 @@ class IndicatorHistoryBootstrap:
         if inserted:
             await self.session.commit()
         return {"inserted": inserted,
-                "status": "ready" if len(existing_days) >= required_days else "insufficient_history",
+                "status": ("ready" if len(existing_days) >= required_days
+                           and latest_completed_day in existing_days else "insufficient_history"),
                 "observed_days": len(existing_days), "market_id": market.id}
 
     async def market_coverage(self, symbol: str) -> dict[str, int]:

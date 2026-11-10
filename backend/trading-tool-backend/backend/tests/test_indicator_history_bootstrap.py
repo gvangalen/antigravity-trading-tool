@@ -226,6 +226,65 @@ def test_exact_market_backfill_keeps_quote_history_separate(monkeypatch):
                for row in session.rows if row.market_id == market.id)
 
 
+@pytest.mark.parametrize("provider_has_yesterday", [True, False])
+def test_exact_market_history_refills_missing_latest_completed_day(monkeypatch,
+                                                                    provider_has_yesterday):
+    from backend.services import indicator_history_bootstrap as module
+    from backend.services.trading_market_service import TradingMarket
+
+    market = TradingMarket(9, "SOL", "USDT", "BINANCE", "binance", "SOLUSDT",
+                           "BINANCE:SOLUSDT", datetime.now(timezone.utc))
+    fetched = []
+
+    class AssetCatalog:
+        async def get_asset(self, _symbol):
+            return {"symbol": "SOL", "display_name": "Solana", "asset_class": "crypto",
+                    "provider": "binance", "primary_provider": "binance"}
+
+    class Provider:
+        async def fetch_candles(self, asset, _timeframe, *, limit):
+            fetched.append((asset.provider_symbol, limit))
+            if not provider_has_yesterday:
+                return []
+            return [SimpleNamespace(
+                period_start=datetime.combine(_day(1), time.min, timezone.utc),
+                is_final=True, close=100, volume=1000, open=99, high=101, low=98,
+                provider_symbol="SOLUSDT", provider="binance", symbol="SOL",
+            )]
+
+    class Session:
+        def __init__(self):
+            self.rows = [SimpleNamespace(source_observed_at=datetime.combine(
+                _day(offset), time(23, 59, 59))) for offset in range(2, 222)]
+
+        async def execute(self, _query):
+            return _Result([row.source_observed_at for row in self.rows])
+
+        def add(self, row):
+            self.rows.append(row)
+
+        async def rollback(self):
+            pass
+
+        async def commit(self):
+            pass
+
+    monkeypatch.setattr(module, "AssetCatalogService", lambda _session: AssetCatalog())
+    monkeypatch.setattr(module, "MarketDataProviderRegistry", lambda: SimpleNamespace(
+        resolve_for_asset=lambda _asset: Provider(),
+    ))
+    session = Session()
+
+    result = asyncio.run(IndicatorHistoryBootstrap(session).bootstrap_exact_market(
+        market, required_days=220))
+
+    assert fetched == [("SOLUSDT", 240)]
+    assert result == {"inserted": int(provider_has_yesterday),
+                      "status": "ready" if provider_has_yesterday else "insufficient_history",
+                      "observed_days": 220 + int(provider_has_yesterday), "market_id": 9}
+    assert any(row.source_observed_at.date() == _day(1) for row in session.rows) == provider_has_yesterday
+
+
 def test_rsi_backfill_continues_after_price_has_five_days(monkeypatch):
     from backend.services import indicator_history_bootstrap as module
 
