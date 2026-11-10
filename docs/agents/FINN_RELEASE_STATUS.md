@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## AAPL-coach: exacte bronmomenten met seconden (10 november 2026)
 
-Phase: `BUILD_CANDIDATE_READY`. Branch `codex/finn-quote-seconds-20261110`
+Phase: `PRODUCT_DEPLOYED_STATUS_UPDATE_PENDING`. Branch `codex/finn-quote-seconds-20261110`
 herstelt de onafhankelijke Paper-afwijzing op live SHA
 `3256d02ce6fa49bb480d0d1d1c2f562f2bd86f41`. QA-preflight
 `42889269931` slaagde; de beschermde contentrun `42889449641` was
@@ -37,8 +37,14 @@ en Architecture gaven read-only GO voor de finale code. Echte-provider
 regressie slaagde **109/109** (artifact SHA-256
 `3486573e8b3084e98bc7900f8c40bc3b9d32975a9a709aac60cb586557a42e5b`)
 met nul provider-, schema-, timeout-, parse- of validatiefouten.
-CI, deploy en onafhankelijke ingelogde hertest staan nog open.
-Geen live-acceptatie of vrijgave voor Live-orders.
+PR #961 is gemerged als product-SHA
+`756ca9d69e8f6fbb1504e14bfe169259c5b8185d`. PR-CI `42895034705`, main-CI
+`42895876687` en Auto Deploy `42896775472` slaagden. Publieke
+backend-health en frontend-buildinfo gaven op 10 november 2026 HTTP 200
+en beide deze product-SHA. Deze statuswijziging creëert een nieuwe main-SHA;
+de onafhankelijke ingelogde Paper-hertest start pas na de laatste main-CI,
+Auto Deploy en hernieuwde publieke SHA-pariteit. Geen live-acceptatie
+of vrijgave voor Live-orders.
 
 ## AAPL-coach: gekoppelde Paper-botstatus (10 november 2026)
 
