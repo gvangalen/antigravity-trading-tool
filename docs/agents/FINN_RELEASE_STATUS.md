@@ -4,6 +4,41 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## AAPL: afgeronde minuutmeting voor conflicterende quotes (11 november 2026)
+
+Phase: `LOCAL_RECOVERY_CANDIDATE`; nog niet gedeployed of onafhankelijk op
+productie geaccepteerd. De vorige productmerge `36e237ae274c00bfdd43d02f3afc5d37fe0f7c50`
+had groene main-CI en Auto Deploy; publiek backend health en frontend build-info
+gaven beide HTTP 200 en die SHA. De onafhankelijke beschermde AAPL-preflight
+slaagde op die SHA, maar de contentproef stopte vóór fixtureseed met
+`aapl_source_ambiguous`. In de nieuwste AAPL-bronminuut van 10 november 20:59
+UTC stonden na de deploy 81 rijen met twee prijzen. Ook een nieuwe ingest
+behield hetzelfde provider-minuutmoment, zodat wachten/refreshen dit conflict
+niet ophief. Geen Paper- of Live-order werd geplaatst.
+
+Branch `codex/aapl-source-recovery-20261111` laat alleen de geplande, vooraf
+transactioneel vrijgegeven Twelve Data-ingestie zo'n conflict herstellen met
+de afgeronde `/time_series`-minuutkaars voor exact die UTC-minuut. De provider
+moet hetzelfde symbool en dezelfde valuta bevestigen; de minuut moet voorbij
+zijn. De definitieve koers krijgt het minuut-eindmoment, het gemeten
+minuutvolume en een opnieuw berekende verandering vanaf de vorige slotkoers.
+Interactieve ingestie opent geen tweede databaseverbinding en schrijft geen
+nieuwe tegenstrijdige quote voor hetzelfde bronmoment. De lezer blijft
+fail-closed bij een volle topgrens of tegenstrijdige feiten. De QA-only
+verifierwijziging voor dezelfde quote/candle-voorrang is in PR #968 gemerged
+op main `541e0b5f55eff94a676a7f1139be1f5f786425f5`.
+
+Gerichte productregressies (inclusief exacte BTC-paren): **44 passed**;
+QA-only verifierregressies: **12 passed**. Volledige lokale backend-suite op
+de productcommit: **4618 passed, 7 skipped, 43 warnings** (log-SHA-256
+`7b44c91e78467835c90b4d472a430e0abf86ab364208e9b044a7cac5e324fd58`).
+Security en Architecture gaven GO na herreview; QA-codecheck gaf GO op de
+productdelta en de verifier is afzonderlijk beoordeeld. Echte providerrespons,
+product-CI, deploy en beschermde AAPL Paper-proef zijn nog open. De eerder
+gemeten FINN-latency boven de 10 s p95-grens blijft
+een afzonderlijke rode releasegate; deze herstelbatch geeft geen Live-orders
+vrij.
+
 ## AAPL-coach: conflicterende actuele koersbron (11 november 2026)
 
 Phase: `USER_DIRECTED_PAPER_QA_DEPLOYMENT_PENDING`; product-PR #967 is

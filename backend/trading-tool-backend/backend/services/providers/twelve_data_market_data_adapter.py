@@ -134,6 +134,69 @@ class TwelveDataMarketDataAdapter:
             raw_payload=payload,
         )
 
+    async def fetch_final_minute_snapshot(
+        self, asset: AssetRecord, quote: PriceSnapshotDTO,
+    ) -> PriceSnapshotDTO:
+        """Resolve a conflicting quote minute against its completed provider candle.
+
+        A /quote timestamp identifies the opening of a mutable minute bar.  Its
+        close may change while that timestamp stays fixed.  Only a completed
+        /time_series bar for that exact minute can supersede conflicting quote
+        rows; receipt time is never substituted for provider time.
+        """
+        if not self.api_key:
+            raise ValueError("twelve_data_not_configured")
+        if quote.observed_at is None:
+            raise ValueError("twelve_data_snapshot_missing_time")
+        observed = quote.observed_at.astimezone(timezone.utc)
+        minute_open = observed.replace(second=0, microsecond=0)
+        minute_end = minute_open + timedelta(minutes=1)
+        if datetime.now(timezone.utc) < minute_end + timedelta(minutes=1):
+            raise ValueError("twelve_data_minute_not_final")
+        provider_symbol = asset.provider_symbol or asset.symbol
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(
+                    f"{self.base_url}/time_series",
+                    params=self._params(symbol=provider_symbol, interval="1min",
+                                        timezone="UTC", order="DESC",
+                                        start_date=minute_open.strftime("%Y-%m-%dT%H:%M:%S"),
+                                        end_date=minute_end.strftime("%Y-%m-%dT%H:%M:%S")),
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except httpx.HTTPError as exc:
+            self._raise_safe_transport_error(exc)
+        if payload.get("status") == "error" or payload.get("code"):
+            raise ValueError("twelve_data_final_candle_unavailable")
+        meta = payload.get("meta") or {}
+        if (str(meta.get("symbol") or "").upper() != provider_symbol.upper()
+                or str(meta.get("currency") or "").upper() != str(asset.quote_currency or "").upper()):
+            raise ValueError("twelve_data_final_candle_identity_mismatch")
+        matches = [value for value in (payload.get("values") or [])
+                   if _parse_datetime(value.get("datetime"), "UTC") == minute_open]
+        if len(matches) != 1:
+            raise ValueError("twelve_data_final_candle_missing")
+        price = _float_or_none(matches[0].get("close"))
+        if price is None or not 0 < price < float("inf"):
+            raise ValueError("twelve_data_final_candle_missing_price")
+        previous_close = quote.previous_close
+        if previous_close is not None and previous_close > 0:
+            change_percent = (price - previous_close) / previous_close * 100
+        elif quote.price == price:
+            change_percent = quote.change_percent
+        else:
+            change_percent = None
+        return PriceSnapshotDTO(
+            symbol=asset.symbol, provider=self.provider_name,
+            provider_symbol=provider_symbol, price=price,
+            previous_close=previous_close, change_percent=change_percent,
+            volume=_float_or_none(matches[0].get("volume")),
+            currency=meta["currency"], exchange=meta.get("exchange") or asset.exchange,
+            observed_at=minute_end, is_delayed=asset.is_delayed,
+            raw_payload={"meta": meta, "value": matches[0]},
+        )
+
     async def fetch_candles(
         self,
         asset: AssetRecord,
