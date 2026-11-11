@@ -14,6 +14,11 @@ def test_old_quote_is_rejected_only_when_mislabeled_current():
     assert not probe._old_claimed_current("USD 351,19 is niet actueel; het is de oude rapportkoers.")
     assert not probe._old_claimed_current("Oud rapport: USD 351,19; de actuele koers is USD 350,49.")
     assert probe._old_claimed_current("De oude rapportkoers USD 351,19 is ook de actuele koerssnapshot.")
+    assert not probe._old_claimed_current("USD 351,19 is niet bevestigd als actuele koers.")
+    assert not probe._old_claimed_current("USD 351,19 is **niet bevestigd als actuele koers**.")
+    assert not probe._old_claimed_current("USD 351,19 is niet opnieuw bevestigd als de huidige AAPL-koers.")
+    assert probe._old_claimed_current("USD 351,19 is niet oud maar wel de actuele AAPL-koers.")
+    assert probe._old_claimed_current("USD 351,19 is niet bevestigd als actuele koers, maar is wel de huidige AAPL-koers.")
 
 
 def test_market_and_owner_evidence_bind_both_distinct_moments():

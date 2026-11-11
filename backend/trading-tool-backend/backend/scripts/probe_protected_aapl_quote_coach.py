@@ -52,7 +52,7 @@ REQUIRED_SCOPES = frozenset({
     "read_active_setup", "read_linked_strategy", "read_asset_scores",
     "read_market_snapshot", "read_latest_report", "read_bot_status",
 })
-CURRENT_MARKER = re.compile(r"\b(?:actuele|huidige|nieuwste|laatste|current|latest)\b.{0,70}\b(?:koers\w*|prijs\w*|quote\w*|snapshot)\b", re.I)
+CURRENT_MARKER = re.compile(r"\b(?:actuele|huidige|nieuwste|laatste|current|latest)\b.{0,70}?\b(?:koers\w*|prijs\w*|quote\w*|snapshot)\b", re.I)
 OLD_AMOUNT = re.compile(r"(?:USD\s*351[,.]19|351[,.]19\s*USD|\$\s*351[,.]19)", re.I)
 MONTHS = ("januari", "februari", "maart", "april", "mei", "juni", "juli",
           "augustus", "september", "oktober", "november", "december")
@@ -75,8 +75,19 @@ def _utc(value):
 def _old_claimed_current(answer: str) -> bool:
     """A historical quote may be mentioned, but not as the present quote."""
     for sentence in re.split(r"(?<=[.!?])\s+|[;\n]+", answer):
-        if CURRENT_MARKER.search(sentence) and OLD_AMOUNT.search(sentence):
-            if not re.search(r"\b(?:niet|geen)\s+(?:de\s+)?(?:actuele|huidige|nieuwste|laatste)\b", sentence, re.I):
+        if not OLD_AMOUNT.search(sentence):
+            continue
+        for marker in CURRENT_MARKER.finditer(sentence):
+            # Negation can qualify the current-price label through a short
+            # phrase such as "niet bevestigd als actuele koers". Scope it to
+            # this marker so a later positive claim still fails the gate.
+            prefix = sentence[:marker.start()]
+            negated = re.search(
+                r"\b(?:niet|geen|not|no)\b"
+                r"(?:\s+(?!(?:maar|echter|but|however)\b)\w+){0,6}\s*$",
+                prefix, re.I,
+            )
+            if not negated:
                 return True
     return False
 
