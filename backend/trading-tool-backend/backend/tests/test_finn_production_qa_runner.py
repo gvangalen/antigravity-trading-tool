@@ -171,6 +171,93 @@ def test_manual_trade_source_audit_is_owner_bound_read_only_and_redacted(monkeyp
     assert "private_fixture_name" not in json.dumps(redacted_report)
 
 
+def test_manual_trade_fixture_preflight_detects_linked_trade_setups_without_writes(monkeypatch):
+    module = _module()
+    from backend.infrastructure import database
+    from backend.services import finn_manual_trade_suggestion_service
+
+    monkeypatch.setenv("FINN_QA_USER_ID", "42")
+
+    baseline = {"pairs": [
+            {"asset": "BTC", "quote_currency": "EUR", "plan_derivation_status": "available"},
+            {"asset": "ETH", "quote_currency": "USDT", "plan_derivation_status": "available"},
+            {"asset": "AAPL", "quote_currency": "USD", "plan_derivation_status": "available"},
+        ], "owner_scope_verified": True, "exchange_keys": 0,
+        "broker_orders": 0, "live_bots": 0, "saved_plans": 0}
+    async def source_audit():
+        return baseline
+
+    refs = [{"schema_name": "public", "table_name": "strategies",
+             "column_name": "setup_id", "referenced_column": "id",
+             "child_column_count": 1, "parent_column_count": 1}]
+    loose_refs = [{"schema_name": "public", "table_name": "finn_product_events",
+                   "column_name": "setup_id", "column_type": "int4"}]
+
+    class Result:
+        def __init__(self, value):
+            self.value = value
+
+        def mappings(self):
+            return self
+
+        def all(self):
+            return self.value
+
+        def scalars(self):
+            return self
+
+        def scalar_one(self):
+            return self.value
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            pass
+
+        async def rollback(self):
+            pass
+
+        async def execute(self, statement, params):
+            sql = str(statement).strip()
+            assert sql.upper().startswith("SELECT")
+            if "FROM pg_constraint" in sql:
+                return Result(refs)
+            if "FROM pg_attribute attr" in sql:
+                return Result(loose_refs)
+            if "FROM setups s" in sql:
+                return Result([10, 11] if params["asset"] == "BTC" else [])
+            if "FROM finn_v2_proposals" in sql:
+                return Result(0)
+            assert ('"public"."strategies"' in sql
+                    or '"public"."finn_product_events"' in sql)
+            return Result('"public"."finn_product_events"' in sql)
+
+    async def candles(_session, *, asset, quote_currency):
+        return (None if asset == "AAPL" else 7, [{}] * 15)
+
+    monkeypatch.setattr(module, "_manual_trade_source_audit", source_audit)
+    monkeypatch.setattr(database, "async_session_factory", Session)
+    monkeypatch.setattr(finn_manual_trade_suggestion_service, "_source_candles", candles)
+    report = asyncio.run(module._manual_trade_fixture_preflight())
+    assert report["writes_performed"] == 0
+    assert report["owner_safe"] is True
+    assert report["preliminary_prepare_conditions_met"] is False
+    assert report["write_authorized"] is False
+    assert report["pairs"][0]["trade_setup_count"] == 2
+    assert report["pairs"][0]["trade_setup_linked"] is True
+    assert report["preliminary_prepare_conditions_met"] is False  # non-FK event blocks
+    assert report["pairs"][1]["trade_setup_linked"] is False
+    assert "42" not in json.dumps(report)
+    baseline["broker_orders"] = 1
+    assert asyncio.run(module._manual_trade_fixture_preflight())["preliminary_prepare_conditions_met"] is False
+    baseline["broker_orders"] = 0
+    refs[0]["child_column_count"] = 2
+    with pytest.raises(RuntimeError, match="schema_unverified"):
+        asyncio.run(module._manual_trade_fixture_preflight())
+
+
 def test_readback_terms_are_checked_without_persisting_the_answer():
     module = _module()
     terminal = {"response": {"content": "De opgeslagen QA-strategie gebruikt SMA34 op BTC/EUR."}}
