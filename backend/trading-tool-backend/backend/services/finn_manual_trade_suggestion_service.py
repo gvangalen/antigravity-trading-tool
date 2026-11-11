@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal, ROUND_DOWN
+from decimal import Decimal, ROUND_DOWN, ROUND_HALF_EVEN, localcontext
 import hashlib
 import hmac
 import json
+import re
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -16,7 +17,7 @@ from backend.domain.finn_manual_trade_plan_contract import _positive_decimal, va
 from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
 
 
-METHOD_VERSION = "daily_tr_14_stop_1_5r_targets_1r_2r_v1"
+METHOD_VERSION = "daily_tr_14_stop_1_5r_targets_1r_2r_source_precision_v2"
 ATTESTATION_LIFETIME = timedelta(minutes=10)
 NEAR_MISS_POINTS = 3
 REDUCED_RISK_FACTOR = Decimal("0.5")
@@ -124,20 +125,24 @@ def _as_utc(value: datetime) -> datetime:
 
 
 def _candle_decimal(value: Any, field: str) -> Decimal:
-    """Strip DB NUMERIC padding without rounding a provider price."""
-    if isinstance(value, Decimal):
-        if not value.is_finite():
+    """Keep bounded provider precision exact until levels are calculated."""
+    if isinstance(value, str):
+        if len(value) > 112 or not re.fullmatch(r"(?:0|[1-9]\d{0,11})(?:\.\d{1,96})?", value):
             raise ValueError(f"{field}_invalid")
-        parts = value.as_tuple()
-        digits = list(parts.digits)
-        exponent = parts.exponent
-        while exponent < 0 and len(digits) > 1 and digits[-1] == 0:
-            digits.pop()
-            exponent += 1
-        if exponent < -12 or len(digits) + exponent - 1 > 11:
-            raise ValueError(f"{field}_invalid")
-        value = format(Decimal((parts.sign, tuple(digits), exponent)), "f")
-    return _positive_decimal(value, field)
+        value = Decimal(value)
+    if not isinstance(value, Decimal) or not value.is_finite():
+        raise ValueError(f"{field}_invalid")
+    parts = value.as_tuple()
+    if len(parts.digits) > 96 or not -96 <= parts.exponent <= 11 or value <= 0:
+        raise ValueError(f"{field}_invalid")
+    digits = list(parts.digits)
+    exponent = parts.exponent
+    while exponent < 0 and len(digits) > 1 and digits[-1] == 0:
+        digits.pop()
+        exponent += 1
+    if exponent < -48 or value.adjusted() >= 12:
+        raise ValueError(f"{field}_invalid")
+    return Decimal((parts.sign, tuple(digits), exponent))
 
 
 def _attestation_digest(plan: dict[str, Any], user_id: int) -> str:
@@ -228,28 +233,33 @@ def derive_suggested_plan(
             "observed_at": _as_utc(row["source_observed_at"]).isoformat(),
             "open": str(open_price), "high": str(high), "low": str(low), "close": str(close),
         })
-    true_ranges = [
-        max(high - low, abs(high - values[index - 1][2]), abs(low - values[index - 1][2]))
-        for index, (high, low, _) in enumerate(values) if index > 0
-    ]
-    atr = sum(true_ranges) / Decimal(14)
-    entry = values[-1][2]
     price_step = Decimal("0.01") if asset_class == "stock" else Decimal("0.00000001")
     unit_step = Decimal("0.0001") if asset_class == "stock" else Decimal("0.00000001")
-    risk_unit = (atr * Decimal("1.5")).quantize(price_step)
-    if risk_unit <= 0 or (direction == "long" and risk_unit >= entry):
-        raise ValueError("manual_trade_volatility_unusable")
-    quantity = (effective_budget / risk_unit).quantize(unit_step, rounding=ROUND_DOWN)
-    if quantity <= 0:
-        raise ValueError("manual_trade_risk_budget_too_small")
-    sign = Decimal(1) if direction == "long" else Decimal(-1)
-    stop = entry - sign * risk_unit
-    targets = [entry + sign * risk_unit * multiplier for multiplier in (Decimal(1), Decimal(2))]
+    with localcontext() as calculation:
+        calculation.prec = 80
+        calculation.rounding = ROUND_HALF_EVEN
+        true_ranges = [
+            max(high - low, abs(high - values[index - 1][2]), abs(low - values[index - 1][2]))
+            for index, (high, low, _) in enumerate(values) if index > 0
+        ]
+        atr = sum(true_ranges) / Decimal(14)
+        entry = values[-1][2].quantize(price_step)
+        risk_unit = (atr * Decimal("1.5")).quantize(price_step)
+        if entry <= 0 or risk_unit <= 0 or (direction == "long" and risk_unit >= entry):
+            raise ValueError("manual_trade_volatility_unusable")
+        quantity = (effective_budget / risk_unit).quantize(unit_step, rounding=ROUND_DOWN)
+        if quantity <= 0:
+            raise ValueError("manual_trade_risk_budget_too_small")
+        sign = Decimal(1) if direction == "long" else Decimal(-1)
+        stop = entry - sign * risk_unit
+        targets = [entry + sign * risk_unit * multiplier for multiplier in (Decimal(1), Decimal(2))]
     plan = validate_manual_trade_plan({
         "asset": symbol, "quote_currency": quote, "direction": direction,
         "entry_type": "limit", "entry_price": str(entry), "quantity": str(quantity),
         "stop_loss": str(stop), "targets": [str(value) for value in targets],
     })
+    if Decimal(plan["max_loss_quote"]) > effective_budget:
+        raise ValueError("manual_trade_risk_budget_exceeded")
     plan["level_source"] = "market_derived"
     plan["source_evidence"] = {
         "method_version": METHOD_VERSION, "market_id": market_id,
@@ -314,7 +324,10 @@ async def _source_candles(session: Any, *, asset: str, quote_currency: str) -> t
                             and candle.period_start.astimezone(exchange_zone).date() < today),
                            key=lambda candle: candle.period_start)
         rows = [{"id": int(candle.period_start.astimezone(exchange_zone).strftime("%Y%m%d")),
-                 "open": candle.open, "high": candle.high, "low": candle.low, "price": candle.close,
+                 "open": candle.raw_payload.get("open"),
+                 "high": candle.raw_payload.get("high"),
+                 "low": candle.raw_payload.get("low"),
+                 "price": candle.raw_payload.get("close"),
                  "source_observed_at": candle.period_start}
                 for candle in completed[-15:]]
     else:

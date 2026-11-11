@@ -173,14 +173,15 @@ def test_crypto_database_numeric_padding_does_not_invalidate_verified_candles(as
     assert from_database == original
     assert from_database["executable"] is False
     padded[0]["price"] = Decimal("100.0000000000001")
-    with pytest.raises(ValueError, match="candle_close_invalid"):
-        derive_suggested_plan(
-            asset=asset, quote_currency=quote, direction="long",
-            max_loss_quote="20", candles=padded, market_id=market_id,
-        )
+    changed_source = derive_suggested_plan(
+        asset=asset, quote_currency=quote, direction="long",
+        max_loss_quote="20", candles=padded, market_id=market_id,
+    )
+    assert changed_source["source_evidence"]["candles_sha256"] != original["source_evidence"]["candles_sha256"]
+    assert changed_source["entry_price"] == original["entry_price"]
 
 
-def test_candle_padding_never_rounds_nonzero_high_precision_source_digits():
+def test_candle_source_precision_is_exact_and_bounded():
     from backend.services.finn_manual_trade_suggestion_service import _candle_decimal
 
     assert _candle_decimal(Decimal("123456789012.000000000000000000"), "candle_close") == Decimal("123456789012")
@@ -189,10 +190,83 @@ def test_candle_padding_never_rounds_nonzero_high_precision_source_digits():
         "123456789012.123456789012000001",
         "999999999999.000000000000000001",
     ):
+        assert _candle_decimal(Decimal(value), "candle_close") == Decimal(value)
+    for value in (
+        "1234567890123", "0." + "0" * 48 + "1",
+        "1E-100000", "1E+100000", "NaN", "Infinity", "-1", "0",
+    ):
         with pytest.raises(ValueError, match="candle_close_invalid"):
             _candle_decimal(Decimal(value), "candle_close")
+    for value in (1.1, True, "1e-3", "1" * 10000):
+        with pytest.raises(ValueError, match="candle_close_invalid"):
+            _candle_decimal(value, "candle_close")
+    assert _candle_decimal(Decimal("1." + "0" * 47 + "1"), "candle_close") == Decimal("1." + "0" * 47 + "1")
     with pytest.raises(ValueError, match="candle_close_invalid"):
         _candle_decimal(Decimal("0.000000000000000000"), "candle_close")
+
+
+@pytest.mark.parametrize("asset,quote,market_id,direction", [
+    ("BTC", "EUR", 42, "long"), ("ETH", "USDT", 43, "short"),
+])
+def test_high_precision_crypto_source_has_exact_hash_and_tick_bounded_risk(asset, quote, market_id, direction):
+    from backend.services.finn_manual_trade_suggestion_service import METHOD_VERSION
+
+    rows = _completed_candles()
+    for row in rows:
+        row.update({
+            "open": Decimal("100.123456789012345678"),
+            "high": Decimal("102.123456789012345678"),
+            "low": Decimal("98.123456789012345678"),
+            "price": Decimal("100.123456789012345678"),
+        })
+    context = {"recommendation": "reduced_risk", "risk_factor": "0.5"}
+    plan = derive_suggested_plan(
+        asset=asset, quote_currency=quote, direction=direction,
+        max_loss_quote="20", candles=rows, market_id=market_id, context=context,
+    )
+    assert plan["entry_price"] == "100.12345679"
+    assert all(-Decimal(value).as_tuple().exponent <= 8
+               for value in (plan["entry_price"], plan["stop_loss"], *plan["targets"]))
+    assert -Decimal(plan["quantity"]).as_tuple().exponent <= 8
+    assert Decimal(plan["max_loss_quote"]) <= Decimal("10")
+    assert plan["executable"] is False
+    assert plan["source_evidence"]["method_version"] == METHOD_VERSION
+    assert validate_manual_trade_plan(plan) == plan
+    assert ManualTradePlanChange.parse_obj({"plan_fields": plan}).plan_fields == plan
+
+    changed = [{**row} for row in rows]
+    changed[0]["open"] = Decimal("100.123456789012345679")
+    changed_plan = derive_suggested_plan(
+        asset=asset, quote_currency=quote, direction=direction,
+        max_loss_quote="20", candles=changed, market_id=market_id, context=context,
+    )
+    assert changed_plan["entry_price"] == plan["entry_price"]
+    assert changed_plan["source_evidence"]["candles_sha256"] != plan["source_evidence"]["candles_sha256"]
+
+
+def test_old_source_method_and_changed_high_precision_candle_fail_confirmation(monkeypatch):
+    from backend.services import finn_manual_trade_suggestion_service as service
+
+    rows = _completed_candles()
+    rows[-1]["price"] = Decimal("100.000000000000000001")
+    plan = derive_suggested_plan(
+        asset="BTC", quote_currency="EUR", direction="long",
+        max_loss_quote="20", candles=rows, market_id=42,
+    )
+    old = {**plan, "source_evidence": {**plan["source_evidence"],
+                                      "method_version": "daily_tr_14_stop_1_5r_targets_1r_2r_v1"}}
+    with pytest.raises(ValueError, match="manual_trade_source_version_invalid"):
+        asyncio.run(verify_suggested_manual_trade_plan(object(), old))
+
+    async def source(_session, *, asset, quote_currency):
+        assert (asset, quote_currency) == ("BTC", "EUR")
+        return 42, rows
+
+    monkeypatch.setattr(service, "_source_candles", source)
+    asyncio.run(verify_suggested_manual_trade_plan(object(), plan))
+    rows[-1]["price"] = Decimal("100.000000000000000002")
+    with pytest.raises(ValueError, match="manual_trade_source_changed"):
+        asyncio.run(verify_suggested_manual_trade_plan(object(), plan))
 
 
 def test_market_suggestion_rejects_stale_or_missing_evidence():
@@ -218,19 +292,22 @@ def test_stock_source_uses_catalog_provider_and_completed_exchange_days(monkeypa
         symbol="AAPL", provider="twelve_data", provider_symbol="AAPL", timeframe="1day",
         open=100, high=102, low=98, close=100,
         period_start=datetime.combine(day, datetime.min.time(), ny),
-        raw_payload={"_source_meta": {"symbol": "AAPL", "currency": "USD", "exchange": "NASDAQ"}},
+        raw_payload={"open": "100.00", "high": "102.00", "low": "98.00", "close": "100.00",
+                     "_source_meta": {"symbol": "AAPL", "currency": "USD", "exchange": "NASDAQ"}},
     ) for day in old]
     records.append(OHLCVCandleDTO(
         symbol="AAPL", provider="twelve_data", provider_symbol="AAPL", timeframe="1day",
         open=100, high=102, low=98, close=100,
         period_start=datetime.combine(today, datetime.min.time(), ny),
-        raw_payload={"_source_meta": {"symbol": "AAPL", "currency": "USD", "exchange": "NASDAQ"}},
+        raw_payload={"open": "100.00", "high": "102.00", "low": "98.00", "close": "100.00",
+                     "_source_meta": {"symbol": "AAPL", "currency": "USD", "exchange": "NASDAQ"}},
     ))
     records.append(OHLCVCandleDTO(
         symbol="AAPL", provider="other", provider_symbol="AAPL", timeframe="1day",
         open=100, high=102, low=98, close=100,
         period_start=datetime.combine(today - timedelta(days=1), datetime.min.time(), ny),
-        raw_payload={"_source_meta": {"symbol": "AAPL", "currency": "USD", "exchange": "NASDAQ"}},
+        raw_payload={"open": "100.00", "high": "102.00", "low": "98.00", "close": "100.00",
+                     "_source_meta": {"symbol": "AAPL", "currency": "USD", "exchange": "NASDAQ"}},
     ))
 
     class Provider:
@@ -252,6 +329,15 @@ def test_stock_source_uses_catalog_provider_and_completed_exchange_days(monkeypa
                                  max_loss_quote="20", candles=candles, market_id=None)
     assert plan["source_evidence"]["provider"] == "twelve_data"
     assert plan["source_evidence"]["provider_symbol"] == "AAPL"
+    original_hash = plan["source_evidence"]["candles_sha256"]
+    records[-3].raw_payload["close"] = "100.000000000000000001"
+    _, changed_candles = asyncio.run(service._source_candles(
+        object(), asset="AAPL", quote_currency="USD",
+    ))
+    changed_plan = derive_suggested_plan(asset="AAPL", quote_currency="USD", direction="long",
+                                         max_loss_quote="20", candles=changed_candles, market_id=None)
+    assert changed_plan["entry_price"] == plan["entry_price"]
+    assert changed_plan["source_evidence"]["candles_sha256"] != original_hash
     for record in records[:3]:
         record.raw_payload["_source_meta"]["currency"] = "EUR"
     records[-1].raw_payload["_source_meta"]["exchange"] = "OTHER"

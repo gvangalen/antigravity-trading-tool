@@ -2800,7 +2800,9 @@ def audit_watchlist_context(run_label: str) -> dict[str, bool]:
 
 _MANUAL_TRADE_CANDLE_FIELDS = ("open", "high", "low", "price")
 _MANUAL_TRADE_CANDLE_CATEGORIES = (
-    "nonfinite", "nonpositive", "meaningful_fractional_precision_gt_12",
+    "nonfinite", "raw_numeric_limit_exceeded", "nonpositive",
+    "meaningful_fractional_precision_gt_12",
+    "meaningful_fractional_precision_gt_48",
     "integer_digits_gt_12", "type_unexpected",
 )
 
@@ -2811,9 +2813,11 @@ def _manual_trade_candle_category(value: Any) -> str | None:
         return "type_unexpected"
     if not value.is_finite():
         return "nonfinite"
+    parts = value.as_tuple()
+    if len(parts.digits) > 96 or not -96 <= parts.exponent <= 11:
+        return "raw_numeric_limit_exceeded"
     if value <= 0:
         return "nonpositive"
-    parts = value.as_tuple()
     if value.adjusted() >= 12:
         return "integer_digits_gt_12"
     digits = list(parts.digits)
@@ -2821,6 +2825,8 @@ def _manual_trade_candle_category(value: Any) -> str | None:
     while exponent < 0 and len(digits) > 1 and digits[-1] == 0:
         digits.pop()
         exponent += 1
+    if exponent < -48:
+        return "meaningful_fractional_precision_gt_48"
     if exponent < -12:
         return "meaningful_fractional_precision_gt_12"
     return None
@@ -2869,6 +2875,7 @@ async def _manual_trade_source_audit() -> Dict[str, Any]:
         "manual_trade_candles_gap", "manual_trade_candles_stale",
         "manual_trade_candle_geometry_invalid", "manual_trade_volatility_unusable",
         "manual_trade_risk_budget_too_small", "manual_trade_asset_or_quote_unavailable",
+        "manual_trade_risk_budget_exceeded",
         "candle_open_invalid", "candle_high_invalid", "candle_low_invalid",
         "candle_close_invalid",
     }

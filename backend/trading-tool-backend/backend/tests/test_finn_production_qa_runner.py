@@ -35,6 +35,8 @@ def test_manual_trade_candle_diagnostics_are_bounded_and_redacted():
     module = _module()
     samples = (
         Decimal("NaN"), Decimal("-1"), Decimal("1.0000000000001"),
+        Decimal("1." + "0" * 48 + "1"),
+        Decimal("1." + "0" * 96),
         Decimal("1234567890123"), "private price value",
         Decimal("1.200000000000000000"), Decimal("1.234567890123"),
     )
@@ -45,11 +47,13 @@ def test_manual_trade_candle_diagnostics_are_bounded_and_redacted():
     assert set(result["fields"]) == {"open", "high", "low", "price"}
     open_counts = result["fields"]["open"]
     assert open_counts == {
-        "nonfinite": 1, "nonpositive": 1,
+        "nonfinite": 1, "raw_numeric_limit_exceeded": 1,
+        "nonpositive": 1,
         "meaningful_fractional_precision_gt_12": 1,
+        "meaningful_fractional_precision_gt_48": 1,
         "integer_digits_gt_12": 1, "type_unexpected": 1,
     }
-    assert result["fields"]["price"]["type_unexpected"] == 9
+    assert result["fields"]["price"]["type_unexpected"] == 7
     assert "private price value" not in json.dumps(result)
     assert all(0 <= count <= 15 for field in result["fields"].values()
                for count in field.values())

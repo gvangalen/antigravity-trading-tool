@@ -4,6 +4,50 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN handmatig tradevoorstel: exacte bronprecisie en gequantiseerde planlevels (11 november 2026)
+
+Phase: `LOCAL_SOURCE_PRECISION_CANDIDATE`; de laatste volledig gedeployde
+diagnose-SHA is `c4558385bb7180f2301f3eab18ed8cb86322c953` met groene
+main-CI `43048060058`, Auto Deploy `43048807476`, en publieke backend/frontend
+HTTP 200 op exact die SHA. Onafhankelijke beschermde read-only diagnose
+`43049269491` (geschoond artifact `13868048222`) bevestigde dat BTC/EUR en
+ETH/USDT op `candle_open_invalid` blijven steken door **meer dan twaalf
+betekenisvolle fractiedecimalen** in de exacte crypto-NUMERIC-bron. Van 15
+kaarsen waren voor BTC/EUR respectievelijk open/high/low/close 15/14/13/14
+getroffen en voor ETH/USDT 15/10/10/15. De andere vier oorspronkelijke
+categorieën waren nul; AAPL/USD kon een plan berekenen. Er waren nul writes,
+plannen, orders, Live bots en exchange keys. Profiel, setup- en score-fixture
+zijn nog niet geschreven.
+
+De v2-bronparser accepteert exacte, begrensde Decimal- of decimale
+providertekstwaarden zonder floatconversie: maximaal 12 integercijfers,
+48 betekenisvolle fractiedecimalen, 96 ruwe coëfficiëntcijfers en een ruwe
+exponent van -96 tot 11. Slechts de afgeleide kaartprijzen worden expliciet
+half-even op de bestaande crypto- of aandelenprijsstap afgerond. De hoeveelheid
+gaat omlaag op de eenheidstap; het werkelijk gevalideerde verlies wordt daarna
+nogmaals aan het effectieve risicobudget getoetst. De exact geselecteerde
+bronwaarden blijven in de fingerprint; een nieuwe methodeversie maakt oude
+voorstellen ongeldig. Aandelen gebruiken de bewaarde originele TwelveData-
+OHLC-teksten na de bestaande bron- en metadatafilter. De beschermde audit
+rapporteert nu ook uitsluitend begrensde aantallen voor >48 betekenisvolle
+fractiedecimalen en ruwe NUMERIC-grensoverschrijding; geen prijs of ID.
+
+Gerichte producttests: **37 passed**; gerichte audit-runner: **2 passed**;
+definitieve root-backend: **4669 passed, 7 skipped**; adaptertests: **26/26**.
+De lokale worker-actiecontractmatrix slaagde **17/17**, met nul brokerorders,
+Live calls, Live bots of productieverbindingen; matrix-artifact SHA-256
+`3ec0d4113e208f4491dc20c48f2eaea66196ef9e433e3c3cd2704ec34cca6fee`.
+De echte-provider developmentset slaagde **20/20** zonder provider-, schema-,
+parse-, timeout- of validatiefouten; artifact SHA-256
+`d8ab44b421b0edcbe2331589c4cb93cf0b2d63f37ef7871873e43260c117c2f5`.
+Echte-provider regressie: **109/109**, eveneens nul provider-, schema-, parse-,
+timeout- of validatiefouten; artifact SHA-256
+`91342e831df59e2a4b4b6ce0882f901b677b0e2fa59cdd9df41e033d8830bf8d`.
+Onafhankelijke QA, Security en Architecture gaven GO voor de lokale patch en
+de extra diagnostische categorieën. CI,
+Auto Deploy en beschermde live bronherproef zijn nog open. De live audit moet
+alle drie planberekeningen als beschikbaar bevestigen vóór fixturewrites.
+
 ## FINN handmatig tradevoorstel: begrensde crypto-brondiagnose (11 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_QA_PENDING`. De diagnose is gemerged via PR
