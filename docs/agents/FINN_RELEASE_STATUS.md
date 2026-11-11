@@ -4,6 +4,42 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN handmatig tradevoorstel: expliciete tradesetupkeuze (11 november 2026)
+
+Phase: `PRODUCT_RELEASE_CANDIDATE_QA_PENDING`. PR
+[#989](https://github.com/gvangalen/antigravity-trading-tool/pull/989) bevat de
+generieke keuze voor meerdere owner- en exact-marktgebonden tradesetups.
+FINN bewaart een begeleid concept, toont maximaal 200 klikbare setupopties,
+hercontroleert de gekozen setup bij voorstel en bevestiging, en bewaart de ID
+alleen in de ondertekende broncontext van het niet-uitvoerbare plan.
+Marktcorrectie wist de oude opties; annulering sluit het concept zonder write.
+De bestaande twee gekoppelde BTC/EUR-setups van de beschermde QA-owner hoeven
+daarvoor niet gewijzigd te worden.
+
+De definitieve lokale backend-suite gaf **4679 passed, 7 skipped**. Gerichte
+frontdoor-/contractregressies, frontend build/typecheck/taal- en commandtests,
+mobile typecheck/lint, en de onafhankelijke QA- en Security-codechecks waren
+groen. De echte providerontwikkeling gaf **20/20** en regressie **109/109**,
+beide met nul provider-, schema-, parse-, timeout- en validatiefouten. De
+lokale worker-actiematrix gaf **17/17**, adaptertests **26/26**, met nul
+brokerorders, Live bots, Live calls en productieverbindingen (artifact SHA-256
+`ac587e44bf38990dd36c97b4e31b5887651c198ba9046e5eb9c05341b062302c`).
+De vijf PR-CI-jobs op de code- en exportcommit waren groen (run `43077689072`);
+deze statuscommit vereist een nieuwe groene CI. Auto Deploy moet vóór
+beschermde QA slagen; daarna verifieert Build uitsluitend de
+publieke backend- en frontend-SHA-pariteit en bereikbaarheid.
+
+De laatste onafhankelijke beschermde read-only preflight op de voorafgaande
+live code was run `43070693415` (geschoond artifact `13878131736`):
+BTC/EUR had twee gekoppelde dagtradesetups; ETH/USDT en AAPL/USD hadden geen
+tradesetup. Alle drie de exacte koersbronnen konden een plan berekenen, maar
+het QA-ownerprofiel en de geverifieerde scores ontbraken. Er waren nul
+brokerorders, Live bots, exchange keys, opgeslagen plannen, pending proposals
+en fixturewrites. De volledige positieve kaart-, bevestig-/opslag- en replay-QA
+blijft daarom open. Alleen de gebonden `FINN_QA_USER_ID` mag voor een
+beschermde vervolgtest worden gebruikt; profilerings-, setup- en scorefixture
+vragen een afzonderlijk veilig prepare-/cleanup-pad met echte bronmetingen.
+
 ## FINN handmatig tradevoorstel: exacte bronprecisie en gequantiseerde planlevels (11 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_QA_PENDING`. De precisiefix is via PR
