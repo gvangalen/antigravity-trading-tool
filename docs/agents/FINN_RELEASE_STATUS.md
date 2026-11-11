@@ -4,6 +4,45 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN handmatig tradevoorstel: begrensde crypto-brondiagnose (11 november 2026)
+
+Phase: `LOCAL_DIAGNOSTIC_CANDIDATE`. Na groene main-CI `43037412651` en Auto
+Deploy `43038218280` meldden publieke backend health en frontend build-info
+beide HTTP 200 op `09ac4c55f402f783c0c97eaff961c408777ffd98`.
+Onafhankelijke beschermde read-only QA-audit `43038665602` (geschoond artifact
+`13864760675`) bevestigde voor BTC/EUR en ETH/USDT minstens 15 afgeronde
+kaarsen, maar beide planberekeningen faalden met `candle_open_invalid`.
+AAPL/USD berekende wel een plan. Alle drie missen nog QA-ownerprofiel en
+geverifieerde score; BTC/EUR heeft minstens twee dagsetup-kandidaten.
+De audit rapporteerde nul writes, plannen, brokerorders, Live bots en
+exchange keys. Er zijn geen fixturewrites gedaan en de positieve
+kaart-/opslagacceptatie is nog open.
+
+De nieuwe read-only uitbreiding classificeert uitsluitend de al door de
+exacte-marktbron geselecteerde maximaal 15 crypto-OHLC-waarden in vijf vaste
+categorieën: niet-eindig, niet-positief, meer dan twaalf betekenisvolle
+fractiedecimalen, meer dan twaalf integercijfers of onverwacht type. Zij
+publiceert alleen aantallen 0–15 per veld, zonder prijs, rij-ID, concreet type
+of uitzonderingstekst. Gerichte QA-runnertests: **2 passed**; root-backend:
+**4666 passed, 7 skipped**; adapterregressie: **26/26**. De echte-provider
+developmentset: **20/20**, zonder provider-, schema-, parse-, timeout- of
+validatiefouten; artifact SHA-256
+`706b065770fae79157bbf4ef16cf4bd79846055a88e1f6005b71647541b0c31d`.
+Echte-provider regressie: **109/109**, eveneens nul provider-, schema-, parse-,
+timeout- of validatiefouten; artifact SHA-256
+`d67549ed0601618314947057233d389f379f0e2a32acf1a2395769d129575525`.
+Onafhankelijke QA, Security en Architecture gaven GO voor deze begrensde
+diagnostiek. De verplichte lokale worker-actiecontractmatrix slaagde **17/17**
+met nul brokerorders, Live calls, Live bots of productieverbindingen;
+matrix-artifact SHA-256
+`9f88a591dff3857434ac087824d65084ca1847b9cb3468cc744a54ae9ac0efd2`.
+De aanvullende parity-run bewees tweemaal **16/16**
+actiecontracten, **9/9** lineagegevallen en nul Live bots/ongewenste
+uitvoeringen, maar faalde zijn terminal-latencygrens (p95 respectievelijk
+32,14 s en 30,12 s); deze aanvullende prestatiegate is open en wordt niet als
+groen gerapporteerd. CI, Auto Deploy en
+beschermde live classificatie zijn nog open.
+
 ## FINN handmatig tradevoorstel: crypto NUMERIC-bronprecisie (11 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_QA_PENDING`; de bronfix is gemerged via PR

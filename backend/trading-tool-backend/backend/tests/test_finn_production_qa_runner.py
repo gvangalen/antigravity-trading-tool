@@ -10,6 +10,7 @@ import ssl
 import sys
 import types
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -28,6 +29,30 @@ def _module():
     assert spec and spec.loader
     spec.loader.exec_module(module)
     return module
+
+
+def test_manual_trade_candle_diagnostics_are_bounded_and_redacted():
+    module = _module()
+    samples = (
+        Decimal("NaN"), Decimal("-1"), Decimal("1.0000000000001"),
+        Decimal("1234567890123"), "private price value",
+        Decimal("1.200000000000000000"), Decimal("1.234567890123"),
+    )
+    rows = [{field: value for field in ("open", "high", "low", "price")}
+            for value in samples] + [{"open": Decimal("1")}] * 20
+    result = module._manual_trade_candle_diagnostics(rows)
+    assert result["total_count"] == 15
+    assert set(result["fields"]) == {"open", "high", "low", "price"}
+    open_counts = result["fields"]["open"]
+    assert open_counts == {
+        "nonfinite": 1, "nonpositive": 1,
+        "meaningful_fractional_precision_gt_12": 1,
+        "integer_digits_gt_12": 1, "type_unexpected": 1,
+    }
+    assert result["fields"]["price"]["type_unexpected"] == 9
+    assert "private price value" not in json.dumps(result)
+    assert all(0 <= count <= 15 for field in result["fields"].values()
+               for count in field.values())
 
 
 def test_manual_trade_source_audit_is_owner_bound_read_only_and_redacted(monkeypatch):
@@ -103,6 +128,11 @@ def test_manual_trade_source_audit_is_owner_bound_read_only_and_redacted(monkeyp
     assert len(report["pairs"]) == 3
     assert all(pair["candle_source_status"] == "available" for pair in report["pairs"])
     assert all(pair["plan_derivation_status"] == "available" for pair in report["pairs"])
+    assert all(pair["crypto_candle_diagnostics"]["total_count"] == 15
+               for pair in report["pairs"][:2])
+    assert all(pair["crypto_candle_diagnostics"]["fields"]["open"]["type_unexpected"] == 15
+               for pair in report["pairs"][:2])
+    assert report["pairs"][2]["crypto_candle_diagnostics"] is None
     assert all(pair["benchmark_available"] for pair in report["pairs"])
     assert all(pair["owner_recommendation"] == "review" for pair in report["pairs"])
     assert "42" not in json.dumps(report)
