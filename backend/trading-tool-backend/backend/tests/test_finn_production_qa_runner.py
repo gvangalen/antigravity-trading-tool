@@ -227,12 +227,17 @@ def test_manual_trade_fixture_preflight_detects_linked_trade_setups_without_writ
             if "FROM pg_attribute attr" in sql:
                 return Result(loose_refs)
             if "FROM setups s" in sql:
-                return Result([10, 11] if params["asset"] == "BTC" else [])
+                return Result([
+                    {"id": 10, "timeframe": "1D", "min_benchmark_score": 40,
+                     "max_benchmark_score": 70},
+                    {"id": 11, "timeframe": "4H", "min_benchmark_score": None,
+                     "max_benchmark_score": None},
+                ] if params["asset"] == "BTC" else [])
             if "FROM finn_v2_proposals" in sql:
                 return Result(0)
             assert ('"public"."strategies"' in sql
                     or '"public"."finn_product_events"' in sql)
-            return Result('"public"."finn_product_events"' in sql)
+            return Result([10] if '"public"."finn_product_events"' in sql else [])
 
     async def candles(_session, *, asset, quote_currency):
         return (None if asset == "AAPL" else 7, [{}] * 15)
@@ -247,6 +252,9 @@ def test_manual_trade_fixture_preflight_detects_linked_trade_setups_without_writ
     assert report["write_authorized"] is False
     assert report["pairs"][0]["trade_setup_count"] == 2
     assert report["pairs"][0]["trade_setup_linked"] is True
+    assert report["pairs"][0]["linked_trade_setup_count"] == 1
+    assert report["pairs"][0]["unlinked_trade_setup_count"] == 1
+    assert report["pairs"][0]["linked_daily_benchmark_band_present_count"] == 1
     assert report["preliminary_prepare_conditions_met"] is False  # non-FK event blocks
     assert report["pairs"][1]["trade_setup_linked"] is False
     assert "42" not in json.dumps(report)
