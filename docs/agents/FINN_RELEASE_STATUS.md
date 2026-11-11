@@ -6,8 +6,15 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN handmatig tradevoorstel: crypto NUMERIC-bronprecisie (11 november 2026)
 
-Phase: `LOCAL_SOURCE_REPAIR_CANDIDATE`; de laatste volledig gedeployde
-QA-audit-SHA is `14725ca3237472cb7f4447d587e7f9f9427b57a9` met groene
+Phase: `PRODUCT_DEPLOYED_QA_PENDING`; de bronfix is gemerged via PR
+[#981](https://github.com/gvangalen/antigravity-trading-tool/pull/981) als
+`263c18ca3aa94d5673aa1b604f7d36b6c9d391b8`. De PR-CI was vijfmaal groen
+(run `43034494193`); main-CI `43035281400` en Auto Deploy `43036001662`
+slaagden. Publieke `/api/health` en `/build-info.json` gaven beide HTTP 200 en
+exact die merge-SHA. Deze statusaanvulling creëert zelf een nieuwe main-SHA;
+de laatste main-CI, Auto Deploy en publieke SHA-pariteit moeten vóór beschermde
+QA opnieuw worden gecontroleerd. De voorafgaande volledig gedeployde
+QA-audit-SHA was `14725ca3237472cb7f4447d587e7f9f9427b57a9` met groene
 main-CI `43029500214`, Auto Deploy `43030319779`, en publieke backend/frontend
 HTTP 200 op dezelfde SHA. Onafhankelijke beschermde read-only bronaudit
 `43030765449` (geschoond artifact `13861163109`) bevestigde nul writes,
@@ -40,7 +47,7 @@ productieverbindingen (matrix-artifact SHA-256
 Echte-provider regressie: **109/109**, eveneens nul provider-, schema-, parse-,
 timeout- of validatiefouten; artifact SHA-256
 `9679bae8feeba20eb877655077e5fd2224b9500a91d51e157b5fabb816492b07`.
-CI, Auto Deploy en live herproef zijn nog open.
+De nieuwe beschermde live bronherproef is nog open.
 Profiel/setup/score-fixturevoorbereiding en volledige
 kaart-/opslagacceptatie blijven open; er zijn daarvoor nog geen productie-
 fixturewrites uitgevoerd.
