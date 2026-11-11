@@ -6,8 +6,11 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## AAPL-coach: conflicterende actuele koersbron (11 november 2026)
 
-Phase: `LOCAL_GATES_FAILED`; product-PR #967 is een draft:
-**geen productdeploy of ingelogde live acceptatie**.
+Phase: `USER_DIRECTED_PAPER_QA_DEPLOYMENT_PENDING`; product-PR #967 is
+functioneel gevalideerd. Op 11 november heeft de gebruiker expliciet gevraagd
+de code ondanks de rode FINN-latencygate te deployen om ingelogd op productie
+in Paper-modus te testen. Dit is **geen vrijgave voor Live-orders** en nog
+geen onafhankelijke runtimeacceptatie.
 Branch `codex/market-quote-conflict-20261110` bouwt voort op QA-only PR #966
 (main `b3d0b7590d518a5024c2b1e027cc436d178022e7`). De voorgaande
 beschermde AAPL-proef op `47258033820efdf838c2a6bb2e69ee83ac16aab3`
@@ -58,8 +61,9 @@ onder meer 2,08 s eerste providerantwoord, 5,04 s relevante-actietoets en
 9,55 s tweede providerantwoord bij een botwijziging. Deze runtimeproeven
 zijn gemeten vóór de kleine latere FINN-context/feed-leeswijziging; die
 wijziging is wel met gerichte en volledige backendtests gecontroleerd maar
-heeft nog geen eigen runtimegate. Dit is geen groene Build-gate en geen
-vrijgave voor Live-orders.
+heeft nog geen eigen runtimegate. Dit is geen groene Build-gate. De gebruiker
+heeft een begrensde productiedeploy voor Paper-QA gevraagd; het latencygebrek
+blijft open en moet in de uiteindelijke QA- en releasebeoordeling staan.
 
 ## AAPL-coach: eigenaargebonden rapportvergelijking en koersverschil (10 november 2026)
 
