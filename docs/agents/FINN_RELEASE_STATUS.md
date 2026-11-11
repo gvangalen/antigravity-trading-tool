@@ -125,6 +125,15 @@ beide zonder provider-, schema-, parse-, timeout- of validatiefouten. Security
 en Architecture beoordeelden de getypeerde wachtgrens; Security gaf na
 tegenproeven ook GO op de QA-runnercontrole.
 
+PR #977 had vijf groene CI-jobs op head
+`8386ba43919b87f34468b2ec2f0645cfcda21b2a` (run `43017465762`) en is
+gemerged als `7995cff6cbd6d6687a04e6f0d06da931f8de85b4`. Main-CI
+`43018301120` en Auto Deploy `43019048775` slaagden. Publieke
+`/api/health` en `/build-info.json` gaven beide HTTP 200 en exact die
+merge-SHA. Deze statusaanvulling creëert zelf een nieuwe main-SHA; de laatste
+main-CI, Auto Deploy en publieke SHA-pariteit moeten vóór de beschermde
+wacht-herproef opnieuw worden gecontroleerd.
+
 ## AAPL Paper-coach: gedateerd rapport en laatste koers (11 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_QA_PENDING`; nog niet onafhankelijk op de laatste
