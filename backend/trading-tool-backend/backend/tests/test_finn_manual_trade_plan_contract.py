@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
@@ -150,6 +151,48 @@ def test_market_suggestion_is_pair_bound_risk_capped_and_non_executable(asset, q
     if asset == "AAPL":
         assert "." in plan["quantity"]
     assert validate_manual_trade_plan(plan) == plan
+
+
+@pytest.mark.parametrize("asset,quote,market_id", [
+    ("BTC", "EUR", 42), ("ETH", "USDT", 43),
+])
+def test_crypto_database_numeric_padding_does_not_invalidate_verified_candles(asset, quote, market_id):
+    plain = _completed_candles(price="100")
+    padded = [{**row, **{
+        key: Decimal(str(row[key])).quantize(Decimal("0.000000000000000000"))
+        for key in ("open", "high", "low", "price")
+    }} for row in plain]
+    original = derive_suggested_plan(
+        asset=asset, quote_currency=quote, direction="long",
+        max_loss_quote="20", candles=plain, market_id=market_id,
+    )
+    from_database = derive_suggested_plan(
+        asset=asset, quote_currency=quote, direction="long",
+        max_loss_quote="20", candles=padded, market_id=market_id,
+    )
+    assert from_database == original
+    assert from_database["executable"] is False
+    padded[0]["price"] = Decimal("100.0000000000001")
+    with pytest.raises(ValueError, match="candle_close_invalid"):
+        derive_suggested_plan(
+            asset=asset, quote_currency=quote, direction="long",
+            max_loss_quote="20", candles=padded, market_id=market_id,
+        )
+
+
+def test_candle_padding_never_rounds_nonzero_high_precision_source_digits():
+    from backend.services.finn_manual_trade_suggestion_service import _candle_decimal
+
+    assert _candle_decimal(Decimal("123456789012.000000000000000000"), "candle_close") == Decimal("123456789012")
+    for value in (
+        "123456789012.000000000000000001",
+        "123456789012.123456789012000001",
+        "999999999999.000000000000000001",
+    ):
+        with pytest.raises(ValueError, match="candle_close_invalid"):
+            _candle_decimal(Decimal(value), "candle_close")
+    with pytest.raises(ValueError, match="candle_close_invalid"):
+        _candle_decimal(Decimal("0.000000000000000000"), "candle_close")
 
 
 def test_market_suggestion_rejects_stale_or_missing_evidence():

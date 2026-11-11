@@ -122,6 +122,12 @@ def test_manual_trade_source_audit_is_owner_bound_read_only_and_redacted(monkeyp
     assert all(pair["candle_source_status"] == "available" for pair in sizing_report["pairs"])
     assert all(pair["plan_derivation_status"] == "manual_trade_risk_budget_too_small"
                for pair in sizing_report["pairs"])
+    def malformed_candle(**_):
+        raise ValueError("candle_open_invalid")
+    monkeypatch.setattr(finn_manual_trade_suggestion_service, "derive_suggested_plan", malformed_candle)
+    malformed_report = asyncio.run(module._manual_trade_source_audit())
+    assert all(pair["plan_derivation_status"] == "candle_open_invalid"
+               for pair in malformed_report["pairs"])
     async def unsafe_source(_session, *, asset, quote_currency):
         raise ValueError("manual_trade_private_fixture_name")
     monkeypatch.setattr(finn_manual_trade_suggestion_service, "_source_candles", unsafe_source)
