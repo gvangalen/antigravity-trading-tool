@@ -105,6 +105,7 @@ class FinnResponsesAnswerVerifier:
             r"[ T](?P<hour>\d{1,2}):(?P<minute>\d{2})(?::(?P<second>\d{2}))?\s*"
             r"(?P<zone>UTC|CET|CEST)\b", re.I,
         )
+        validated_stale_quotes: set[tuple[str, str, str, datetime]] = set()
         for sentence in re.split(r"(?<=[.!?])\s+(?=[A-ZÀ-Ö])|\n+", answer):
             if re.search(r"\bgeen\s+actuele\s+koers\b", sentence, re.I):
                 continue
@@ -124,8 +125,11 @@ class FinnResponsesAnswerVerifier:
                 earlier = list(amount.finditer(sentence[:match.start()]))
                 claim_start = earlier[-1].end() if earlier else 0
                 if earlier:
-                    prefix = sentence[claim_start:match.start()]
-                    dividers = list(re.finditer(r";|\b(?:terwijl|maar|whereas)\b", prefix, re.I))
+                    prefix = sentence[claim_start:claim.start()]
+                    dividers = list(re.finditer(
+                        r";|:\s+(?=[A-Za-zÀ-ÖØ-öø-ÿ])|\b(?:terwijl|maar|whereas)\b",
+                        prefix, re.I,
+                    ))
                     if dividers:
                         claim_start += dividers[-1].end()
                 claim_end = claims[1].start() if len(claims) > 1 else len(sentence)
@@ -212,7 +216,10 @@ class FinnResponsesAnswerVerifier:
                 dated = [(date_match, False) for date_match in dated_moment.finditer(claim_context)] + [
                     (date_match, True) for date_match in iso_moment.finditer(claim_context)
                 ]
-                if item.get("freshness") != "fresh" and len(dated) != 1:
+                quote_key = (str(data.get("symbol") or "").upper(), unit,
+                             str(data["price"]), observed)
+                if (item.get("freshness") != "fresh" and len(dated) != 1
+                        and not (not dated and quote_key in validated_stale_quotes)):
                     return False
                 for stated, iso in dated:
                     try:
@@ -244,6 +251,8 @@ class FinnResponsesAnswerVerifier:
                         expected = expected.replace(second=0)
                     if claimed != expected:
                         return False
+                if item.get("freshness") != "fresh" and dated:
+                    validated_stale_quotes.add(quote_key)
                 if not dated:
                     # A fresh quote may be stated with just a UTC clock; a stale
                     # quote needs the full dated source moment above.

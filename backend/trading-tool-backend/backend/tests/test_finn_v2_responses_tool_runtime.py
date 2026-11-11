@@ -13673,6 +13673,55 @@ def test_explicit_report_comparison_binds_owner_report_read(monkeypatch):
         selected, message="Vergelijk mijn oudere dagrapport met de actuele "
         "AAPL-koers van 10 november.", read_only=True,
     ).inputs["report_date_unresolved"] is True
+    prior_report = {
+        "owner_user_id": 7,
+        "tool_trace": [{"result": {"results": [{
+            "scope": "read_latest_report", "status": "completed",
+            "asset": "AAPL", "data": {"report_date": "2026-11-09"},
+        }]}}],
+    }
+    rebound = FinnResponsesFrontDoor._bind_explicit_report_evidence(
+        selected,
+        message="Eerder noemden we een oudere koers. Controleer opnieuw het oud rapport en de AAPL-marktbron.",
+        read_only=True, previous_response=prior_report, owner_user_id=7,
+    )
+    assert rebound.inputs["report_date"] == "2026-11-09"
+    assert "report_date_unresolved" not in rebound.inputs
+    assert FinnResponsesFrontDoor._bind_explicit_report_evidence(
+        selected, message="Controleer opnieuw het oud rapport en de AAPL-marktbron.",
+        read_only=True, previous_response=prior_report, owner_user_id=8,
+    ).inputs["report_date_unresolved"] is True
+    assert FinnResponsesFrontDoor._bind_explicit_report_evidence(
+        selected, message="Controleer opnieuw het oud rapport en de AAPL-marktbron.",
+        read_only=True, previous_response={**prior_report, "owner_user_id": None},
+    ).inputs["report_date_unresolved"] is True
+    other_asset_report = {**prior_report, "tool_trace": [{"result": {"results": [{
+        "scope": "read_latest_report", "status": "completed", "asset": "BTC",
+        "data": {"report_date": "2026-11-09"},
+    }]}}]}
+    assert FinnResponsesFrontDoor._bind_explicit_report_evidence(
+        selected, message="Controleer opnieuw het oud rapport en de AAPL-marktbron.",
+        read_only=True, previous_response=other_asset_report, owner_user_id=7,
+    ).inputs["report_date_unresolved"] is True
+    ambiguous_reports = {**prior_report, "tool_trace": [{"result": {"results": [
+        {"scope": "read_latest_report", "status": "completed", "asset": "AAPL",
+         "data": {"id": 1, "report_date": "2026-11-09"}},
+        {"scope": "read_latest_report", "status": "completed", "asset": "AAPL",
+         "data": {"id": 2, "report_date": "2026-11-09"}},
+    ]}}]}
+    assert FinnResponsesFrontDoor._bind_explicit_report_evidence(
+        selected, message="Controleer opnieuw het oud rapport en de AAPL-marktbron.",
+        read_only=True, previous_response=ambiguous_reports, owner_user_id=7,
+    ).inputs["report_date_unresolved"] is True
+    snapshot_scoped_report = {**prior_report, "tool_trace": [{"result": {"results": [{
+        "scope": "read_latest_report", "status": "completed",
+        "data": {"id": 3, "report_date": "2026-11-09",
+                 "score_source_snapshot": {"assets": [{"symbol": "AAPL"}]}},
+    }]}}]}
+    assert FinnResponsesFrontDoor._bind_explicit_report_evidence(
+        selected, message="Controleer opnieuw het oud rapport en de AAPL-marktbron.",
+        read_only=True, previous_response=snapshot_scoped_report, owner_user_id=7,
+    ).inputs["report_date"] == "2026-11-09"
     assert FinnResponsesFrontDoor._bind_explicit_report_evidence(
         selected, message="Vergelijk het 9 november dagrapport met de "
         "AAPL-koers van 10 november.", read_only=True,
@@ -13683,6 +13732,48 @@ def test_explicit_report_comparison_binds_owner_report_read(monkeypatch):
     assert FinnResponsesFrontDoor._bind_explicit_report_evidence(
         selected, message="Wijzig het rapport", read_only=False,
     ) == selected
+
+
+def test_aapl_paper_comparison_reads_dated_report_on_first_turn():
+    question = (
+        "Lees mijn AAPL-plan en score, de nieuwste AAPL-marktkoers met exact UTC-bronmoment, "
+        "het oudere opgeslagen dagrapport met USD 351,19 op 9 november 19:03 UTC, "
+        "en de Paper-botstatus met market_price_stale. Welke koers is nu de nieuwste bron? "
+        "Bespreek alleen; wijzig niets en plaats geen order."
+    )
+    fake = FakeResponses(
+        response("aapl-read", calls=[tool_call(
+            "call-aapl", "get_active_plan_and_strategy", {"asset": "AAPL"},
+        )]),
+        response("aapl-answer", text="Ik heb de gedateerde bronnen gecontroleerd."),
+    )
+    selected_calls = []
+
+    class FakeRead:
+        session_factory = None
+
+        async def __call__(self, call):
+            selected_calls.append(call)
+            return {"status": "completed", "results": [
+                {"scope": scope, "status": "completed", "asset": "AAPL", "data": (
+                    {"report_date": "2026-11-09"} if scope == "read_latest_report" else {}
+                )}
+                for scope in call.read_tools
+            ]}
+
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="aapl-report-first-read", model_led_coach=True,
+    )
+    front.reads = FakeRead()
+    asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="AAPL",
+        workspace_hints={"page": "/asset", "symbol": "AAPL"},
+    ))
+    assert selected_calls[0].name == "get_active_plan_and_strategy"
+    assert "read_latest_report" in selected_calls[0].read_tools
+    assert selected_calls[0].inputs["report_date"] == "2026-11-09"
 
 
 def test_combined_account_question_requires_owner_reads_on_first_turn(monkeypatch):
@@ -13823,6 +13914,37 @@ def test_account_followup_uses_owner_verified_prior_runtime_projection():
     assert _trusted_cursor_previous_response(
         contract, cursor, user_id=7, conversation_id="conv-other", locale="nl",
     ) is None
+
+
+def test_subjectless_owner_cursor_binds_prior_aapl_report():
+    cursor = {"run_id": "prior", "response_id": "resp-prior", "locale": "nl"}
+    contract = SimpleNamespace(
+        run_id="prior", user_id=7, conversation_id="conv-7",
+        state_json={
+            "terminal_status": "completed",
+            "responses_exchange": {
+                "response_id": "resp-prior",
+                "tool_trace": [{"result": {"results": [{
+                    "scope": "read_latest_report", "status": "completed", "asset": "AAPL",
+                    "data": {"report_date": "2026-11-09", "id": 42},
+                }]}}],
+            },
+        },
+    )
+    prior = _trusted_cursor_previous_response(
+        contract, cursor, user_id=7, conversation_id="conv-7", locale="nl",
+    )
+    assert prior["owner_user_id"] == 7
+    assert "verified_setup_subject" not in prior
+    call = FinnResponsesToolCatalog().validate(
+        "get_active_plan_and_strategy", {"asset": "AAPL"},
+    )
+    rebound = FinnResponsesFrontDoor._bind_explicit_report_evidence(
+        call, message="Controleer opnieuw het oud rapport en de AAPL-marktbron.",
+        read_only=True, previous_response=prior, owner_user_id=7,
+    )
+    assert rebound.inputs["report_date"] == "2026-11-09"
+    assert "read_latest_report" in rebound.read_tools
 
 
 def test_same_account_facts_followup_reads_one_complete_bundle():

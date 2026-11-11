@@ -4,6 +4,36 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## AAPL Paper-coach: gedateerd rapport en laatste koers (11 november 2026)
+
+Phase: `LOCAL_PRODUCT_CANDIDATE`; nog niet onafhankelijk op de volgende
+productie-SHA geaccepteerd. De vorige AAPL-bronreparatie is op main
+`aa19b60f84f50c197d30886d7437ed6efe6dc3d0` gedeployed. Backend-health
+en frontend-buildinfo gaven HTTP 200 met dezelfde SHA. De beschermde
+AAPL-preflight slaagde, maar contentrun `42971909400` was `NOT_ACCEPTED`.
+De eerste modelreactie noemde de juiste laatste AAPL-koers en het juiste
+oudere rapport, maar de productverifier koppelde de historische rapportdatum
+ten onrechte aan een latere verwijzing naar de laatste koers. De eerste
+beurt las het expliciet genoemde rapport niet: de negatieve instructie
+`wijzig niets en plaats geen order` werd als wijzigverzoek geclassificeerd.
+De vervolgbeurt kon daardoor het ongedateerde `oud rapport` niet aan een
+eerder gelezen rapport koppelen. Er waren nul acties of orders.
+
+De productkandidaat herkent de afzonderlijke koersclausules bij verificatie
+en accepteert een herhaalde ongedateerde oude koers alleen als diezelfde
+koers eerder met het juiste bronmoment is geverifieerd. Een geselecteerde
+alleen-lezen tool bindt een expliciet gevraagd rapport, ook bij de genoemde
+negatieve instructie. Een ongedateerde vervolgverwijzing gebruikt uitsluitend
+één eerder succesvol gelezen rapport van dezelfde eigenaar en asset; bij
+meerdere of niet-passende rapporten blijft de datum onopgelost. De
+read-only herstelroute mag één begrensde poging doen na een conflict tussen
+laatste koers en bron. Gerichte tests: **928 passed**; volledige backendtest
+vóór de laatste kleine rapportbindingaanpassing: **4619 passed, 7 skipped**.
+Definitieve volledige tests, onafhankelijke reviews, product-CI, Auto Deploy,
+SHA-pariteit en beschermde Paper-contentproef zijn nog open. De al gemeten
+FINN-latency boven de releasegrens blijft apart rood. Dit geeft geen
+Live-orders vrij.
+
 ## AAPL: afgeronde minuutmeting voor conflicterende quotes (11 november 2026)
 
 Phase: `LOCAL_RECOVERY_CANDIDATE`; nog niet gedeployed of onafhankelijk op

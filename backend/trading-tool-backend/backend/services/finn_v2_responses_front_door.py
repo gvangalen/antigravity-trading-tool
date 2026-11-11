@@ -811,6 +811,8 @@ class FinnResponsesFrontDoor:
     @staticmethod
     def _bind_explicit_report_evidence(
         call: FinnResponsesToolCall, *, message: str, read_only: bool,
+        previous_response: Mapping[str, Any] | None = None,
+        owner_user_id: int | None = None,
     ) -> FinnResponsesToolCall:
         """Read the owner's saved report when its facts are explicitly compared."""
         report_mention = re.search(r"\b(?:dagrapport|ochtendrapport|rapport|report)\b", message, re.I)
@@ -830,6 +832,7 @@ class FinnResponsesFrontDoor:
             report_clause = report_clause[:clause_end.start()]
         today = datetime.now(ZoneInfo("Europe/Amsterdam")).date()
         requested_date: date | None = None
+        prior_report_type: str | None = None
         date_pattern = (
             r"\b(\d{1,2})\s+(januari|februari|maart|april|mei|juni|juli|augustus|"
             r"september|oktober|november|december)\s*(20\d{2})?\b"
@@ -861,11 +864,58 @@ class FinnResponsesFrontDoor:
             and bool(re.search(r"\b(?:oud|oude|ouder|oudere|vorig|vorige|older|previous)\b",
                                message[max(0, report_mention.start() - 40):report_mention.end()], re.I))
         )
+        if (unresolved_old_report and owner_user_id is not None
+                and (previous_response or {}).get("owner_user_id") == owner_user_id):
+            requested_assets = {str(asset).upper() for asset in mentioned_catalog_symbols(message)} or ({
+                str(call.inputs["asset"]).upper()
+            } if call.inputs.get("asset") else set())
+            def report_matches_asset(item: Mapping[str, Any]) -> bool:
+                if not requested_assets:
+                    return True
+                data = item.get("data") or {}
+                scoped = item.get("asset") or data.get("symbol")
+                if scoped:
+                    return requested_assets <= {str(scoped).upper()}
+                snapshot = data.get("score_source_snapshot") or {}
+                if not isinstance(snapshot, dict):
+                    return False
+                assets = {
+                    str(row.get("symbol") or "").upper()
+                    for row in snapshot.get("assets") or [] if isinstance(row, dict)
+                }
+                return requested_assets <= assets
+            prior_reports = {
+                (
+                    str((item.get("data") or {}).get("report_type") or item.get("source") or "daily_reports"),
+                    str((item.get("data") or {}).get("report_date")),
+                    ("id", str(item["data"]["id"])) if item["data"].get("id") is not None
+                    else ("data", json.dumps(item["data"], sort_keys=True, default=str)),
+                )
+                for prior_call in (previous_response or {}).get("tool_trace") or []
+                for item in (prior_call.get("result") or {}).get("results") or []
+                if isinstance(item, dict) and item.get("scope") == "read_latest_report"
+                and item.get("status") == "completed"
+                and isinstance(item.get("data"), dict)
+                and (item["data"].get("report_date"))
+                and report_matches_asset(item)
+                and (report_mention.group(0).lower() not in {"dagrapport", "ochtendrapport"}
+                     or str(item["data"].get("report_type") or item.get("source") or "daily_reports")
+                     == "daily_reports")
+            }
+            if len(prior_reports) == 1:
+                try:
+                    prior_report_type, prior_date, _ = next(iter(prior_reports))
+                    requested_date = date.fromisoformat(prior_date)
+                    unresolved_old_report = False
+                except ValueError:
+                    prior_report_type = None
+                    pass
         return replace(
             call,
             inputs={**{key: value for key, value in call.inputs.items()
                        if key not in {"report_date", "report_date_unresolved"}},
                     **({"report_date": requested_date.isoformat()} if requested_date else {}),
+                    **({"report_type": prior_report_type} if prior_report_type else {}),
                     **({"report_date_unresolved": True} if unresolved_old_report else {})},
             read_tools=tuple(dict.fromkeys((*call.read_tools, "read_latest_report"))),
         )
@@ -2974,7 +3024,8 @@ class FinnResponsesFrontDoor:
                     account_bundle=account_state_bundle,
                 )
                 call = self._bind_explicit_report_evidence(
-                    call, message=message, read_only=is_read_only_turn and not pending_operation,
+                    call, message=message, read_only=call.operation_id is None and not pending_operation,
+                    previous_response=previous_response, owner_user_id=self.user_id,
                 )
                 # The collection adapter may clear global filters for a
                 # multi-setup comparison, but a later owner-scoped read of
@@ -3114,7 +3165,8 @@ class FinnResponsesFrontDoor:
                 # report date after that step so an explicit historical
                 # comparison cannot silently fall back to today's report.
                 call = self._bind_explicit_report_evidence(
-                    call, message=message, read_only=is_read_only_turn and not pending_operation,
+                    call, message=message, read_only=call.operation_id is None and not pending_operation,
+                    previous_response=previous_response, owner_user_id=self.user_id,
                 )
                 if call.name == "get_current_asset_scores" and mentioned_assets and len(score_scopes) > 1:
                     score_reads = [await self.reads(replace(

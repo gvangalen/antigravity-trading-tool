@@ -226,6 +226,25 @@ def test_latest_aapl_quote_with_iso_date_and_seconds_matches_full_source_moment(
         assert not FinnResponsesAnswerVerifier._latest_quote_claim_supported(wrong, evidence)
 
 
+def test_historical_report_first_with_colon_keeps_current_quote_date():
+    evidence = ({
+        "scope": "read_market_snapshot", "status": "completed", "freshness": "stale",
+        "data": {"symbol": "AAPL", "price": 348.63, "quote_currency": "USD",
+                 "source_observed_at_utc": "2026-11-10T21:00:00+00:00"},
+    },)
+    answer = (
+        "De nieuwste AAPL-koers die ik kan verifiëren is USD 348,63, "
+        "bronmoment 10 november 2026 21:00 UTC. Die koers is als verouderd "
+        "gemarkeerd; ik kan niet zeggen dat dit de actuele marktprijs is. "
+        "Het oudere dagrapport van USD 351,19 op 9 november 19:03 UTC is niet "
+        "de nieuwste bron: de koers van USD 348,63 is later gemeten."
+    )
+    assert FinnResponsesAnswerVerifier._latest_quote_claim_supported(answer, evidence)
+    assert not FinnResponsesAnswerVerifier._latest_quote_claim_supported(
+        answer.replace("de koers van USD 348,63", "de koers van USD 999,00"), evidence,
+    )
+
+
 def test_stale_latest_quote_accepts_exact_iso_source_moment_with_seconds():
     evidence = ({
         "scope": "read_market_snapshot", "status": "completed", "freshness": "stale",
