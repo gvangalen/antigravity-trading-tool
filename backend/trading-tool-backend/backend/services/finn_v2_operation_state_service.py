@@ -606,7 +606,7 @@ class FinnV2OperationStateService:
                 sources.pop(field, None)
                 provenance.pop(field, None)
             if manual_asset_changed or manual_quote_changed:
-                for field in ("risk_budget_quote", "level_source", "source_evidence"):
+                for field in ("risk_budget_quote", "level_source", "source_evidence", "setup_id"):
                     collected.pop(field, None)
                     sources.pop(field, None)
                     provenance.pop(field, None)
@@ -637,6 +637,8 @@ class FinnV2OperationStateService:
                 "score_source", "low_threshold", "high_threshold",
                 "low_score_percent", "mid_score_percent", "high_score_percent",
             }
+            if contract.operation_id == "create_manual_trade_plan":
+                invalidated.add("setup_id")
             if collected.get("setup_type") == "dca" and not type_changed:
                 # An asset correction in a DCA draft keeps the schedule and
                 # amount the user already chose. Trade entry levels and
@@ -858,6 +860,8 @@ class FinnV2OperationStateService:
             resolved_entities=resolved_entities,
             target_entities=target_entities,
             target_choice_required=bool(existing.target_choice_required) if existing is not None else False,
+            setup_options=(list(existing.setup_options) if existing is not None
+                           and not (manual_asset_changed or manual_quote_changed) else []),
             missing_required_inputs=missing,
             next_missing_input=missing[0] if missing else None,
             status="collecting" if missing else "complete",

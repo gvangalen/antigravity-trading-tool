@@ -3921,7 +3921,14 @@ class FinnV2RunService:
         mode = interaction_mode or "UNAVAILABLE"
         verifier_status = "not_run"
         if dict(setup_draft or {}).get("draft_status") == "cancelled":
-            content = "Het strategievoorstel is geannuleerd. Er is niets gewijzigd."
+            if dict(setup_draft or {}).get("operation_id") == "create_manual_trade_plan":
+                content = {
+                    "nl": "Het tradevoorstel is geannuleerd. Er is niets gewijzigd.",
+                    "en": "The trade proposal was cancelled. Nothing was changed.",
+                    "de": "Der Tradevorschlag wurde abgebrochen. Es wurde nichts geändert.",
+                }[normalize_locale(locale) or "nl"]
+            else:
+                content = "Het strategievoorstel is geannuleerd. Er is niets gewijzigd."
             mode = "CLARIFICATION"
             verifier_status = "registry_grounded"
         elif normalize_interaction_mode(interaction_mode) == "CAPABILITY" and terminal_status == "completed":

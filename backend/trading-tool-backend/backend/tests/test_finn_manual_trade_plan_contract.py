@@ -35,6 +35,13 @@ def test_long_short_and_stock_are_typed_and_risk_is_recomputed():
     assert long["level_source"] == "user_stated"
     assert ManualTradePlanChange.parse_obj({"plan_fields": long}).plan_fields == long
 
+    from backend.services.finn_v2_reasoning_fallback_service import FinnV2ReasoningFallbackService
+    user_stated = FinnV2ReasoningFallbackService._proposal_changes(
+        operation_id="create_manual_trade_plan",
+        supplied_inputs={**terms(), "setup_id": 6}, evidence_by_tool={},
+    )
+    assert "setup_id" not in user_stated["plan_fields"]
+
     short = validate_manual_trade_plan(terms(
         asset="ETH", quote_currency="USDT", direction="short",
         entry_price="3000", stop_loss="3300", quantity="2", targets=["2400", "2700"],
@@ -558,6 +565,146 @@ def test_owner_context_adapts_risk_and_classifies_wait(monkeypatch):
     unavailable = evaluate()
     assert unavailable["recommendation"] == "wait"
     assert unavailable["reason"] == "manual_trade_benchmark_unavailable"
+
+
+def test_multiple_exact_market_setups_require_owner_choice(monkeypatch):
+    from backend.services import finn_manual_trade_suggestion_service as service
+    from backend.infrastructure.repositories import setup_repository, user_repository
+    from backend.services import setup_market_match_service
+
+    setups = [
+        {"id": 5, "name": "Daily Base", "symbol": "BTC", "market_id": 42,
+         "quote_currency": "EUR", "setup_type": "trade", "timeframe": "1d"},
+        {"id": 6, "name": "Daily Swing", "symbol": "BTC", "market_id": 42,
+         "quote_currency": "EUR", "setup_type": "trade", "timeframe": "1d"},
+        {"id": 7, "name": "Other Pair", "symbol": "BTC", "market_id": 43,
+         "quote_currency": "USDT", "setup_type": "trade", "timeframe": "1d"},
+    ]
+
+    class UserRepo:
+        def __init__(self, _session):
+            pass
+        async def get_by_id(self, _user_id):
+            return SimpleNamespace(ai_preferences={"risk_profile": "balanced", "primary_timeframes": ["1d"]})
+
+    class SetupRepo:
+        def __init__(self, _session):
+            pass
+        async def get_all_setups(self, _user_id):
+            return setups
+
+    class MatchService:
+        def __init__(self, _session):
+            pass
+        async def for_asset(self, _user_id, _asset, **kwargs):
+            assert [row["id"] for row in kwargs["setups"]] == [6]
+            return {"source_status": "available", "benchmark_score": 68,
+                    "as_of": "2026-11-10", "matches": [{"status": "matches"}]}
+
+    monkeypatch.setattr(user_repository, "UserRepository", UserRepo)
+    monkeypatch.setattr(setup_repository, "SetupRepository", SetupRepo)
+    monkeypatch.setattr(setup_market_match_service, "SetupMarketMatchService", MatchService)
+    context = lambda selected=None: asyncio.run(service._owner_trade_context(
+        object(), user_id=17, asset="BTC", quote_currency="EUR", market_id=42,
+        selected_setup_id=selected,
+    ))
+    ambiguous = context()
+    assert ambiguous["reason"] == "manual_trade_setup_ambiguous"
+    assert [item["id"] for item in ambiguous["setup_options"]] == [5, 6]
+    assert context(6)["setup_id"] == 6
+    assert context(7)["reason"] == "manual_trade_setup_selection_invalid"
+
+
+def test_multiple_setup_choice_stays_in_guided_trade_draft(monkeypatch):
+    selector = FinnResponsesProposalSelection()
+    contract = FinnV2OperationRegistry().require_supported("create_manual_trade_plan")
+    analysis = selector.from_call(
+        call=FinnResponsesToolCall(
+            name="create_manual_trade_plan_proposal", operation_id="create_manual_trade_plan",
+            inputs={}, read_tools=(), required_inputs=contract.required_inputs,
+            missing_inputs=(), draft_intent="new",
+        ),
+        message="Zet een trade voor BTC/EUR klaar, long, maximaal verlies 20 EUR",
+        conversation_context={}, verified_asset="BTC",
+    )
+    frontdoor = FinnResponsesFrontDoor.__new__(FinnResponsesFrontDoor)
+    frontdoor.run_id = "test-run"
+    choice = frontdoor._manual_trade_setup_choice_result(
+        analysis, [{"id": 5, "name": "Daily Base"}, {"id": 6, "name": "Daily Swing"}],
+        None, "nl",
+    )
+    plan = choice.proposal_analysis.request_plan
+    assert plan.clarification_required
+    assert plan.missing_information == ["setup_id"]
+    assert plan.operation_state["next_missing_input"] == "setup_id"
+    assert len(plan.operation_state["setup_options"]) == 2
+    assert plan.operation_state["collected_inputs"]["risk_budget_quote"] == "20"
+
+    resumed = selector.from_call(
+        call=FinnResponsesToolCall(
+            name="create_manual_trade_plan_proposal", operation_id="create_manual_trade_plan",
+            inputs={"setup_id": 6}, read_tools=(), required_inputs=contract.required_inputs,
+            missing_inputs=("setup_id",), draft_intent="new",
+        ),
+        message="setup 6",
+        conversation_context={"active_guided_operation": plan.operation_state},
+        verified_asset="BTC", verified_target_inputs={"setup_id": 6},
+    )
+    resumed_state = resumed.request_plan.operation_state
+    assert not resumed.request_plan.clarification_required
+    assert resumed_state["collected_inputs"]["setup_id"] == 6
+    assert resumed_state["input_sources"]["setup_id"] == "verified_owner_target"
+    assert resumed_state["collected_inputs"]["risk_budget_quote"] == "20"
+
+    from backend.services import finn_manual_trade_suggestion_service as service
+
+    async def suggested(_session, **kwargs):
+        assert kwargs["selected_setup_id"] == 6
+        return service.derive_suggested_plan(
+            asset="BTC", quote_currency="EUR", direction="long", max_loss_quote="20",
+            candles=_completed_candles(), market_id=42,
+            context={"setup_id": 6, "risk_factor": "1", "recommendation": "review"},
+        )
+
+    class Factory:
+        async def __aenter__(self):
+            return object()
+        async def __aexit__(self, *_args):
+            return None
+
+    monkeypatch.setattr(service, "suggest_manual_trade_plan", suggested)
+    frontdoor.user_id = 17
+    frontdoor.reads = SimpleNamespace(session_factory=Factory)
+    complete = asyncio.run(frontdoor._complete_manual_trade_suggestion(resumed))
+    complete_inputs = complete.request_plan.operation_state["collected_inputs"]
+    assert "setup_id" not in complete_inputs
+    assert "setup_id" not in complete.request_plan.referenced_entities
+    assert complete_inputs["source_evidence"]["owner_context"]["setup_id"] == 6
+    from backend.services.finn_v2_reasoning_fallback_service import FinnV2ReasoningFallbackService
+
+    proposal = FinnV2ReasoningFallbackService._proposal_changes(
+        operation_id="create_manual_trade_plan", supplied_inputs=complete_inputs,
+        evidence_by_tool={},
+    )
+    assert proposal["plan_fields"]["source_evidence"]["owner_context"]["setup_id"] == 6
+    assert proposal["plan_fields"]["executable"] is False
+
+
+def test_manual_trade_setup_options_reach_terminal_projection():
+    from backend.domain.finn_v2_runtime_contract import record_guided_draft, terminal_projection
+
+    options = [{"id": 5, "name": "Daily Base"}, {"id": 6, "name": "Daily Swing"}]
+    state = record_guided_draft(
+        {"initial_operation_id": "create_manual_trade_plan",
+         "final_operation_id": "create_manual_trade_plan",
+         "identity": {"run_id": "run-1", "conversation_id": "conversation-1"}},
+        guided_state={"collected_inputs": {"asset": "BTC", "quote_currency": "EUR"},
+                      "missing_required_inputs": ["setup_id"],
+                      "next_missing_input": "setup_id", "setup_options": options},
+    )
+    projection = terminal_projection(state, status="clarification_required", mode="CREATE_PROPOSAL", response={})
+    assert projection["action_draft"]["setup_options"] == options
+    assert projection["action_draft"]["requested_slot"] == "setup_id"
 
 
 def test_unverified_owner_context_cannot_become_confirmable_trade_card(monkeypatch):

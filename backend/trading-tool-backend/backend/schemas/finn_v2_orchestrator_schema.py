@@ -144,6 +144,7 @@ class FinnV2OperationState(BaseModel):
     # A bot draft whose target was only inferred from conversation wording
     # cannot become confirmable until a later explicit owner-scoped choice.
     target_choice_required: bool = False
+    setup_options: List[Dict[str, object]] = Field(default_factory=list)
     missing_required_inputs: List[str] = Field(default_factory=list)
     next_missing_input: Optional[str] = None
     open_proposal_id: Optional[str] = None

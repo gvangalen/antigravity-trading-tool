@@ -26,9 +26,9 @@ export function draftChoices(envelope: AssistantEnvelope, language = 'nl'): Draf
   const field = String(envelope.state?.next_missing_input || envelope.state?.missing_slots?.[0] || envelope.next_question || '').split('.').pop();
   const optionField = ({ setup_id: 'setup_options', strategy_id: 'strategy_options', indicator: 'indicator_options' } as const)[field as 'setup_id' | 'strategy_id' | 'indicator'];
   const options = optionField ? envelope.state?.[optionField] : null;
-  if (Array.isArray(options) && options.length > 0 && options.length <= 3) {
+  if (Array.isArray(options) && options.length > 0) {
     const kind = field === 'setup_id' ? 'setup' : field === 'strategy_id' ? 'strategy' : null;
-    return options.map((option) => ({
+    return options.slice(0, 200).map((option) => ({
       label: option.name || option.display_name || String(option.id),
       reply: kind ? `${kind} ${option.id}` : String(option.name || option.display_name || ''),
     })).filter((choice) => choice.reply);

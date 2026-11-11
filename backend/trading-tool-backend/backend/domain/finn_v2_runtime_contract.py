@@ -610,7 +610,8 @@ def record_setup_draft(state: Dict[str, Any], *, guided_state: Dict[str, Any]) -
     state["guided_state"] = guided
     state["setup_draft"] = {
         "operation_id": "create_setup",
-        "draft_status": "complete" if not missing else "collecting",
+        "draft_status": ("cancelled" if guided.get("status") == "cancelled"
+                         else "complete" if not missing else "collecting"),
         "supplied_inputs": supplied,
         "missing_inputs": missing,
         "requested_slot": guided.get("next_missing_input"),
@@ -637,6 +638,7 @@ def record_guided_draft(state: Dict[str, Any], *, guided_state: Dict[str, Any]) 
         "update_strategy",
         "delete_strategy",
         "create_bot",
+        "create_manual_trade_plan",
         "update_bot",
         "deactivate_bot",
         "delete_bot",
@@ -655,7 +657,8 @@ def record_guided_draft(state: Dict[str, Any], *, guided_state: Dict[str, Any]) 
     missing = list(guided.get("missing_required_inputs") or state.get("missing_inputs") or [])
     state["action_draft"] = {
         "operation_id": operation_id,
-        "draft_status": "complete" if not missing else "collecting",
+        "draft_status": ("cancelled" if guided.get("status") == "cancelled"
+                         else "complete" if not missing else "collecting"),
         "supplied_inputs": supplied,
         "missing_inputs": missing,
         "requested_slot": guided.get("next_missing_input"),
@@ -663,6 +666,7 @@ def record_guided_draft(state: Dict[str, Any], *, guided_state: Dict[str, Any]) 
         "conversation_id": (state.get("identity") or {}).get("conversation_id"),
         "run_id": (state.get("identity") or {}).get("run_id"),
         "draft_revision": guided.get("state_revision"),
+        "setup_options": list(guided.get("setup_options") or []) if operation_id == "create_manual_trade_plan" else [],
     }
     state.setdefault("transition_log", []).append(
         {"type": "action_draft", "operation_id": operation_id, "status": state["action_draft"]["draft_status"]}

@@ -27,8 +27,17 @@ class ManualTradeWait(ValueError):
     """A verified context says to wait instead of publishing a trade card."""
 
 
+class ManualTradeSetupChoice(ManualTradeWait):
+    """Several owner-scoped setups match the exact market."""
+
+    def __init__(self, options: list[dict[str, Any]]) -> None:
+        super().__init__("manual_trade_setup_ambiguous")
+        self.options = options
+
+
 async def _owner_trade_context(session: Any, *, user_id: int, asset: str,
-                               quote_currency: str, market_id: int | None) -> dict[str, Any]:
+                               quote_currency: str, market_id: int | None,
+                               selected_setup_id: int | None = None) -> dict[str, Any]:
     from backend.infrastructure.repositories.setup_repository import SetupRepository
     from backend.infrastructure.repositories.user_repository import UserRepository
     from backend.services.setup_market_match_service import SetupMarketMatchService
@@ -66,8 +75,17 @@ async def _owner_trade_context(session: Any, *, user_id: int, asset: str,
                   and str(row.get("setup_type") or "").lower() == "trade"]
     if not candidates:
         return wait("manual_trade_setup_missing")
-    if len(candidates) != 1:
-        return wait("manual_trade_setup_ambiguous")
+    if selected_setup_id is not None:
+        candidates = [row for row in candidates if int(row["id"]) == selected_setup_id]
+        if len(candidates) != 1:
+            return wait("manual_trade_setup_selection_invalid")
+    elif len(candidates) != 1:
+        result = wait("manual_trade_setup_ambiguous")
+        result["setup_options"] = [
+            {"id": int(row["id"]), "name": str(row.get("name") or "").strip()[:80]}
+            for row in candidates[:200]
+        ]
+        return result
     setup = candidates[0]
     timeframe = str(setup.get("timeframe") or "").lower()
     if timeframe not in {"1d", "1day"}:
@@ -338,16 +356,21 @@ async def _source_candles(session: Any, *, asset: str, quote_currency: str) -> t
 
 async def suggest_manual_trade_plan(session: Any, *, asset: str, quote_currency: str,
                                     direction: str, max_loss_quote: Any,
-                                    user_id: int | None = None) -> dict[str, Any]:
+                                    user_id: int | None = None,
+                                    selected_setup_id: int | None = None) -> dict[str, Any]:
     market_id, candles = await _source_candles(session, asset=asset, quote_currency=quote_currency)
     context = (await _owner_trade_context(session, user_id=user_id, asset=asset.upper(),
-                                          quote_currency=quote_currency.upper(), market_id=market_id)
+                                          quote_currency=quote_currency.upper(), market_id=market_id,
+                                          **({"selected_setup_id": selected_setup_id}
+                                             if selected_setup_id is not None else {}))
                if user_id is not None else None)
     if (context is not None and context.get("recommendation") == "wait"
             and context.get("reason") != "manual_trade_setup_outside_conditions"):
         # A measured score mismatch still has verified levels and can show a
         # non-executable card with wait advice. Missing or conflicting source
         # evidence cannot support a confirmable proposal.
+        if context.get("reason") == "manual_trade_setup_ambiguous":
+            raise ManualTradeSetupChoice(list(context.get("setup_options") or []))
         raise ManualTradeWait(str(context.get("reason") or "manual_trade_context_unavailable"))
     plan = derive_suggested_plan(asset=asset, quote_currency=quote_currency,
                                  direction=direction, max_loss_quote=max_loss_quote,
@@ -362,10 +385,12 @@ async def verify_suggested_manual_trade_plan(session: Any, plan: dict[str, Any],
         raise ValueError("manual_trade_source_version_invalid")
     if user_id is not None:
         _verify_attestation(plan, user_id)
+        chosen_setup = (evidence.get("owner_context") or {}).get("setup_id")
         context = await _owner_trade_context(
             session, user_id=user_id, asset=str(plan.get("asset") or "").upper(),
             quote_currency=str(plan.get("quote_currency") or "").upper(),
             market_id=evidence.get("market_id"),
+            **({"selected_setup_id": int(chosen_setup)} if chosen_setup is not None else {}),
         )
         if (context.get("recommendation") == "wait"
                 and context.get("reason") != "manual_trade_setup_outside_conditions"):
@@ -379,10 +404,13 @@ async def verify_suggested_manual_trade_plan(session: Any, plan: dict[str, Any],
     market_id, candles = await _source_candles(
         session, asset=plan.get("asset"), quote_currency=plan.get("quote_currency"),
     )
+    chosen_setup = (evidence.get("owner_context") or {}).get("setup_id")
     context = (await _owner_trade_context(session, user_id=user_id,
                                           asset=str(plan.get("asset") or "").upper(),
                                           quote_currency=str(plan.get("quote_currency") or "").upper(),
-                                          market_id=market_id)
+                                          market_id=market_id,
+                                          **({"selected_setup_id": int(chosen_setup)}
+                                             if chosen_setup is not None else {}))
                if user_id is not None else None)
     expected = derive_suggested_plan(
         asset=plan.get("asset"), quote_currency=plan.get("quote_currency"),

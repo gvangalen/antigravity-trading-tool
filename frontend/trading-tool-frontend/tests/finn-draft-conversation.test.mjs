@@ -41,14 +41,12 @@ test('multiple linked objects preserve the owner-scoped ID in the reply', () => 
   ]);
 });
 
-test('a large owner-scoped set offers three visible choices and keeps free typing available', () => {
+test('a large owner-scoped set keeps every offered setup clickable', () => {
   const options = Array.from({ length: 7 }, (_, index) => ({ id: index + 1, name: `ETH plan ${index + 1}` }));
   const message = { actionDraft: { missing_inputs: ['setup_id'] }, state: { setup_options: options } };
-  assert.deepEqual(draftQuestionChoices(message), [
-    { label: 'ETH plan 1', reply: 'setup 1' },
-    { label: 'ETH plan 2', reply: 'setup 2' },
-    { label: 'ETH plan 3', reply: 'setup 3' },
-  ]);
+  assert.deepEqual(draftQuestionChoices(message), options.map((option) => ({
+    label: option.name, reply: `setup ${option.id}`,
+  })));
 });
 
 test('other structured questions offer a small set of relevant choices', () => {
