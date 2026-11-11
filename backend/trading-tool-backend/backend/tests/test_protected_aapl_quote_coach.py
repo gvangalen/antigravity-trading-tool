@@ -113,9 +113,9 @@ def test_source_selector_matches_product_and_fails_closed_on_null_currency_and_t
     moment = datetime(2026, 11, 9, 20, 59, tzinfo=timezone.utc)
     received = []
     def quote(row_id, price="350.49", *, source=moment, stored=moment,
-              currency="USD", symbol="AAPL", provider="twelve_data"):
+              currency="USD", symbol="AAPL", provider="twelve_data", final=False):
         return (Decimal(price) if price is not None else None, source, currency,
-                row_id, stored, symbol, provider)
+                row_id, stored, symbol, provider, final)
 
     rows = [quote(11)]
 
@@ -170,12 +170,28 @@ def test_source_selector_matches_product_and_fails_closed_on_null_currency_and_t
     rows = [quote(12), quote(11, "350.50", stored=moment.replace(minute=58))]
     with pytest.raises(RuntimeError, match="^aapl_source_ambiguous$"):
         probe._source()
+    # A mutable quote at a candle's end belongs to the next minute. The
+    # product chooses that quote even when the completed prior candle has a
+    # later storage ID or a different close.
+    rows = [quote(13, "350.81", final=True), quote(12, "350.82")]
+    assert probe._source()["measurement_id"] == 12
+    rows = [quote(13, "350.81", final=True), quote(12, "350.82"), quote(11, "350.83")]
+    with pytest.raises(RuntimeError, match="^aapl_source_ambiguous$"):
+        probe._source()
+    rows = [quote(13, "350.81", final=True), quote(12, "350.82", final=True)]
+    with pytest.raises(RuntimeError, match="^aapl_source_ambiguous$"):
+        probe._source()
     rows = [quote(100 - index) for index in range(66)]
     assert probe._source()["measurement_id"] == 100
     rows[-1] = quote(35, "350.50")
     with pytest.raises(RuntimeError, match="^aapl_source_ambiguous$"):
         probe._source()
     rows = [quote(5000 - index) for index in range(4096)]
+    with pytest.raises(RuntimeError, match="^aapl_source_ambiguous$"):
+        probe._source()
+    # The cap applies to the complete highest instant, before candles are
+    # filtered. A sole quote cannot hide the 4096th candidate.
+    rows = [quote(5000 - index, final=True) for index in range(4095)] + [quote(1)]
     with pytest.raises(RuntimeError, match="^aapl_source_ambiguous$"):
         probe._source()
 
