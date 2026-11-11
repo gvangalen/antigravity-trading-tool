@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN handmatig tradevoorstel: beschermde scorebron-diagnose (11 november 2026)
 
-Phase: `RELEASE_CANDIDATE_CI_PENDING`. De generieke setupkeuze van PR #989 is op
+Phase: `PRODUCT_DEPLOYED_QA_PENDING`. De generieke setupkeuze van PR #989 is op
 `a1095cb622b582f1631376a6a24ce6f03acc905d` automatisch gedeployed:
 main-CI `43079782875` en Auto Deploy `43080536205` waren groen; publieke
 backend health en frontend build-info gaven HTTP 200 met die exacte SHA.
@@ -32,7 +32,15 @@ met nul brokerorders, Live bots, Live calls of productieverbindingen
 Echte providerregressie: **109/109**, eveneens nul provider-/schema-/timeout-/
 parse-/validatiefouten (artifact SHA-256
 `fbadeb5a599f56d9a95d17533b2ec706a1beaaa401e979f8e35bfa8eb63b1640`).
-CI, deploy en nieuwe beschermde live audit zijn nog open.
+De alleen-lezen scorebron-diagnose is via PR
+[#990](https://github.com/gvangalen/antigravity-trading-tool/pull/990)
+gemerged als `ec29544ba1d1bf1e33dd9ed3fc2be456efa1e85e`. De vijf PR-CI-jobs
+(run `43084233973`), vijf main-CI-jobs (run `43085137738`) en Auto Deploy
+(run `43085872917`) slaagden. Publieke backend health en frontend build-info
+gaven beide HTTP 200 en exact die SHA. Deze statuscommit creëert zelf een
+nieuwe main-SHA; de laatste CI, Auto Deploy en publieke SHA-pariteit worden
+vóór beschermde QA opnieuw gecontroleerd. De nieuwe beschermde live audit en
+volledige kaart-/opslag-QA zijn nog open.
 
 ## FINN handmatig tradevoorstel: expliciete tradesetupkeuze (11 november 2026)
 
