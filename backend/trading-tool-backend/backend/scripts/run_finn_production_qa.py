@@ -2798,6 +2798,50 @@ def audit_watchlist_context(run_label: str) -> dict[str, bool]:
     return asyncio.run(read())
 
 
+_MANUAL_TRADE_CANDLE_FIELDS = ("open", "high", "low", "price")
+_MANUAL_TRADE_CANDLE_CATEGORIES = (
+    "nonfinite", "nonpositive", "meaningful_fractional_precision_gt_12",
+    "integer_digits_gt_12", "type_unexpected",
+)
+
+
+def _manual_trade_candle_category(value: Any) -> str | None:
+    """Classify a DB NUMERIC value without publishing its price or type."""
+    if not isinstance(value, Decimal):
+        return "type_unexpected"
+    if not value.is_finite():
+        return "nonfinite"
+    if value <= 0:
+        return "nonpositive"
+    parts = value.as_tuple()
+    if value.adjusted() >= 12:
+        return "integer_digits_gt_12"
+    digits = list(parts.digits)
+    exponent = parts.exponent
+    while exponent < 0 and len(digits) > 1 and digits[-1] == 0:
+        digits.pop()
+        exponent += 1
+    if exponent < -12:
+        return "meaningful_fractional_precision_gt_12"
+    return None
+
+
+def _manual_trade_candle_diagnostics(candles: list[dict[str, Any]]) -> dict[str, Any]:
+    """Return bounded counts for the exact 15 selected market candles only."""
+    selected = candles[:15]
+    return {
+        "total_count": len(selected),
+        "fields": {
+            field: {
+                category: sum(_manual_trade_candle_category(row.get(field)) == category
+                              for row in selected)
+                for category in _MANUAL_TRADE_CANDLE_CATEGORIES
+            }
+            for field in _MANUAL_TRADE_CANDLE_FIELDS
+        },
+    }
+
+
 async def _manual_trade_source_audit() -> Dict[str, Any]:
     """Inspect the QA owner's real sources without creating fixture evidence."""
     from sqlalchemy import text as sql_text
@@ -2928,6 +2972,10 @@ async def _manual_trade_source_audit() -> Dict[str, Any]:
                 "candle_count_sufficient": len(candles) >= 15,
                 "candle_source_status": candle_source,
                 "plan_derivation_status": plan_derivation,
+                "crypto_candle_diagnostics": (
+                    _manual_trade_candle_diagnostics(candles)
+                    if market_id is not None and candle_source == "available" else None
+                ),
                 "profile_present": any(profile.values()),
                 "daily_trade_setup_candidate_count": min(int(setup_count), 2),
                 "score_source_status": score_status,
