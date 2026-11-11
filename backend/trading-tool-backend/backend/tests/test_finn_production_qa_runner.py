@@ -69,6 +69,7 @@ def test_manual_trade_source_audit_is_owner_bound_read_only_and_redacted(monkeyp
 
     monkeypatch.setenv("FINN_QA_USER_ID", "42")
     statements = []
+    missing_categories = set()
 
     class Result:
         def __init__(self, row):
@@ -84,6 +85,12 @@ def test_manual_trade_source_audit_is_owner_bound_read_only_and_redacted(monkeyp
             return self.row
 
         def scalar_one(self):
+            return self.row
+
+        def scalars(self):
+            return self
+
+        def all(self):
             return self.row
 
     class Session:
@@ -107,6 +114,15 @@ def test_manual_trade_source_audit_is_owner_bound_read_only_and_redacted(monkeyp
                                                   "trader_types": ["swing_trader"]}})
             if "AS keys" in sql:
                 return Result({"keys": 0, "orders": 0, "live_bots": 0, "plans": 0})
+            if "FROM user_indicator_configs c" in sql:
+                return Result([] if params["category"] in missing_categories else ["rsi"])
+            if any(f"FROM {table}" in sql for table in (
+                "macro_data", "technical_indicators", "market_data_indicators",
+            )):
+                assert "symbol=:asset" in sql
+                if params["market_id"] is not None and "FROM macro_data" not in sql:
+                    assert "market_id=:market_id" in sql
+                return Result([("rsi", Decimal("50"), datetime.now(timezone.utc))])
             return Result(1)
 
     async def source(_session, *, asset, quote_currency):
@@ -138,13 +154,22 @@ def test_manual_trade_source_audit_is_owner_bound_read_only_and_redacted(monkeyp
                for pair in report["pairs"][:2])
     assert report["pairs"][2]["crypto_candle_diagnostics"] is None
     assert all(pair["benchmark_available"] for pair in report["pairs"])
+    assert all(all(item["fresh_configured_readings_present"] and item["fresh_reading_count"] == 1
+                   for item in pair["score_inputs"].values()) for pair in report["pairs"])
     assert all(pair["owner_recommendation"] == "review" for pair in report["pairs"])
     assert "42" not in json.dumps(report)
-    assert len(statements) == 6
+    assert len(statements) == 24
     setup_queries = [sql for sql, _ in statements if "FROM setups s" in sql]
     assert len(setup_queries) == 3
     assert all("lower(s.timeframe) IN ('1d','1day')" in sql for sql in setup_queries)
     assert all(pair["daily_trade_setup_candidate_count"] == 1 for pair in report["pairs"])
+    missing_categories.add("technical")
+    missing_report = asyncio.run(module._manual_trade_source_audit())
+    assert all(pair["score_inputs"]["technical"] == {
+        "configured_count": 0, "available_reading_count": 0,
+        "fresh_reading_count": 0, "fresh_configured_readings_present": False,
+    } for pair in missing_report["pairs"])
+    missing_categories.clear()
     assert "manual_trade_source_audit" in module.ALLOWED_PROFILES
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
     assert "manual_trade_source_audit" in workflow

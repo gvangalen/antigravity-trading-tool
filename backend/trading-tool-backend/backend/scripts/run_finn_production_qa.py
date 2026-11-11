@@ -2869,6 +2869,7 @@ async def _manual_trade_source_audit() -> Dict[str, Any]:
     )
     from backend.services.setup_market_match_service import SetupMarketMatchService
     from backend.services.trader_profile_service import normalize_trader_profile_preferences
+    from backend.utils.scoring_utils import normalize_indicator_name, score_source_is_fresh
 
     bound = os.getenv("FINN_QA_USER_ID", "")
     if not bound.isdecimal() or int(bound) <= 0:
@@ -2957,6 +2958,53 @@ async def _manual_trade_source_audit() -> Dict[str, Any]:
                   AND lower(s.timeframe) IN ('1d','1day')
             """), {"owner": owner, "asset": asset, "quote": quote,
                    "market_id": market_id})).scalar_one()
+            score_inputs = {}
+            for category, table, name_column in (
+                ("macro", "macro_data", "name"),
+                ("technical", "technical_indicators", "indicator"),
+                ("market", "market_data_indicators", "name"),
+            ):
+                config_scope = ("AND (c.market_id=:market_id OR "
+                                "(c.market_id IS NULL AND NOT EXISTS ("
+                                "SELECT 1 FROM user_market_benchmark_weights w "
+                                "WHERE w.user_id=c.user_id AND w.market_id=:market_id "
+                                "AND w.indicators_isolated=TRUE)))"
+                                if market_id is not None else "AND c.market_id IS NULL")
+                configs = (await session.execute(sql_text(f"""
+                    SELECT indicator FROM (
+                      SELECT DISTINCT ON (lower(c.indicator)) c.indicator, c.enabled
+                      FROM user_indicator_configs c
+                      WHERE c.user_id=:owner AND c.symbol=:asset
+                        AND c.category=:category {config_scope}
+                      ORDER BY lower(c.indicator), c.market_id DESC NULLS LAST
+                    ) effective WHERE enabled=TRUE
+                """), {"owner": owner, "asset": asset, "category": category,
+                       "market_id": market_id})).scalars().all()
+                names = {normalize_indicator_name(str(name)) for name in configs}
+                observation_scope = ("AND symbol=:asset" if category == "macro"
+                                     else "AND symbol=:asset AND market_id=:market_id"
+                                     if market_id is not None
+                                     else "AND symbol=:asset AND market_id IS NULL")
+                readings = (await session.execute(sql_text(f"""
+                    SELECT DISTINCT ON ({name_column}) {name_column}, value, source_observed_at
+                    FROM {table}
+                    WHERE user_id=:owner {observation_scope}
+                    ORDER BY {name_column}, source_observed_at DESC NULLS LAST,
+                             timestamp DESC NULLS LAST
+                """), {"owner": owner, "asset": asset,
+                       "market_id": market_id})).all()
+                available = {normalize_indicator_name(str(name)) for name, value, _ in readings
+                             if value is not None} & names
+                fresh = {normalize_indicator_name(str(name)) for name, value, observed_at in readings
+                         if value is not None and score_source_is_fresh(
+                             category, str(name), observed_at, symbol=asset,
+                         )} & names
+                score_inputs[category] = {
+                    "configured_count": min(len(names), 200),
+                    "available_reading_count": min(len(available), 200),
+                    "fresh_reading_count": min(len(fresh), 200),
+                    "fresh_configured_readings_present": bool(names) and names == fresh,
+                }
             try:
                 if (market_id is None
                         and (DEFAULT_ASSET_CATALOG.get(asset) or {}).get("asset_class") == "crypto"):
@@ -2996,6 +3044,7 @@ async def _manual_trade_source_audit() -> Dict[str, Any]:
                 "profile_present": any(profile.values()),
                 "daily_trade_setup_candidate_count": min(int(setup_count), 2),
                 "score_source_status": score_status,
+                "score_inputs": score_inputs,
                 "benchmark_available": benchmark_available,
                 "owner_recommendation": recommendation,
                 "owner_wait_reason": reason,
