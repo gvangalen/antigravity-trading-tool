@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN handmatig tradevoorstel (11 november 2026)
 
-Phase: `LOCAL_GREEN_CI_PENDING`; branch
+Phase: `PRODUCT_DEPLOYED_QA_PENDING`; branch
 `codex/finn-manual-trade-proposal-20261110`, gebaseerd op main
 `841d45c0a7164be0d768e8fb76cda4d4ca1ae3ba`. De gebruiker heeft
 deployment gevraagd nadat de andere agent zijn werk afrondde. De voorgaande
@@ -35,8 +35,14 @@ parse-, timeout- of validatiefouten (artifact SHA-256
 De echte-provider regressieset slaagde **109/109**, eveneens zonder provider-,
 schema-, parse-, timeout- of validatiefouten (artifact SHA-256
 `0607347cd07ab5db7a32ef9cf7e5ce17ec63096a7462eaafc4d89b50a9a39fe7`).
-De gegenereerde frontend-export is in de kandidaat gecommit. PR-CI, Auto
-Deploy en publieke SHA-pariteit zijn nog open.
+De gegenereerde frontend-export is in de kandidaat gecommit. PR #973 had vijf
+groene CI-jobs op head `0c1902b9b6131c3a38e1b0cfad77ae5201b1dbb7` en
+is gemerged als `e5200abb6c7af2af1c2deee9a2e674a0d36e9f10`.
+Main-CI `42991308633` en Auto Deploy `42992044713` slaagden. Publieke
+`/api/health` en `/build-info.json` gaven beide HTTP 200 en exact die
+merge-SHA. Deze statusaanvulling creëert zelf een nieuwe main-SHA; de laatste
+main-CI, Auto Deploy en publieke SHA-pariteit moeten vóór ingelogde QA opnieuw
+worden gecontroleerd.
 Onafhankelijke lokale QA, Security en Architecture gaven GO op de productdiff
 vóór deze rebase; ingelogde productie-QA van de nieuwe kandidaat is niet
 uitgevoerd en blijft van de QA-agent.
