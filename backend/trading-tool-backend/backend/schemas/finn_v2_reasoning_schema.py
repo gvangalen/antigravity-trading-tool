@@ -46,6 +46,7 @@ class ProposalOperationType(str, Enum):
     WATCHLIST_ADD = "watchlist_add"
     WATCHLIST_REMOVE = "watchlist_remove"
     SAVE_TRADE_PLAN = "save_trade_plan"
+    CREATE_MANUAL_TRADE_PLAN = "create_manual_trade_plan"
     ACTIVATE_PAPER_BOT = "activate_paper_bot"
     ACTIVATE_LIVE_BOT = "activate_live_bot"
     PORTFOLIO_REBALANCE = "portfolio_rebalance"

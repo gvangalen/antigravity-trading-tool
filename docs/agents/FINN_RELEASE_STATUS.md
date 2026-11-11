@@ -4,6 +4,43 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN handmatig tradevoorstel (11 november 2026)
+
+Phase: `LOCAL_GREEN_CI_PENDING`; branch
+`codex/finn-manual-trade-proposal-20261110`, gebaseerd op main
+`841d45c0a7164be0d768e8fb76cda4d4ca1ae3ba`. De gebruiker heeft
+deployment gevraagd nadat de andere agent zijn werk afrondde. De voorgaande
+AAPL-sectie bevat nog geen vastgelegd onafhankelijk QA-verdict; deze vermelding
+claimt geen acceptatie daarvan.
+
+FINN kan een volledig, niet-uitvoerbaar handmatig tradeplan voor een exact
+asset/paar voorstellen met entry, stop, targets en positieomvang. Profiel,
+opgeslagen setup, benchmark en verifieerbare afgeronde koersdata bepalen het
+advies `review`, `reduced_risk` of `wait`. Ook bij `wait` blijft het plan als
+kaart zichtbaar en uitsluitend als plan op te slaan; er wordt geen order of
+bot gestart. Zonder genoemd risicobudget vraagt FINN dit eerst. De bron- en
+eigenaargebonden attestatie verloopt na tien minuten en wordt bij bevestiging
+opnieuw gecontroleerd.
+
+Op deze rebased branch: root-backend **4649 passed, 7 skipped**; frontend
+typecheck, i18n-lint en tests, command/proposal-tests, productiebuild en
+high-audit groen; mobile typecheck, lint zonder fouten, chat-tests en
+web/iOS/Android-bundels groen. De lokale FastAPI/Celery/Responses-matrix
+slaagde **17/17** actiecontracten en **26/26** adaptertests, met nul
+brokerorders, Live-bots en productieverbindingen (artifact SHA-256
+`f751a393498ad8d929782179d4fcc74be94cd73b9ee9b6164a82b425159d3e20`).
+De echte-provider ontwikkelset slaagde **20/20**, zonder provider-, schema-,
+parse-, timeout- of validatiefouten (artifact SHA-256
+`20b1ab0c83966bb32770524da7186f4243f0c8be932c65aec00179bface1eca2`).
+De echte-provider regressieset slaagde **109/109**, eveneens zonder provider-,
+schema-, parse-, timeout- of validatiefouten (artifact SHA-256
+`0607347cd07ab5db7a32ef9cf7e5ce17ec63096a7462eaafc4d89b50a9a39fe7`).
+De gegenereerde frontend-export is in de kandidaat gecommit. PR-CI, Auto
+Deploy en publieke SHA-pariteit zijn nog open.
+Onafhankelijke lokale QA, Security en Architecture gaven GO op de productdiff
+vóór deze rebase; ingelogde productie-QA van de nieuwe kandidaat is niet
+uitgevoerd en blijft van de QA-agent.
+
 ## AAPL Paper-coach: gedateerd rapport en laatste koers (11 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_QA_PENDING`; nog niet onafhankelijk op de laatste

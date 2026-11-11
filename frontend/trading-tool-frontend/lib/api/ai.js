@@ -35,6 +35,11 @@ export const fetchFinnV2Proposal = (proposalId) => {
   });
 };
 
+export const fetchFinnManualTradePlans = () => fetchAuth(
+  '/api/assistant/v2/manual-trade-plans',
+  { method: 'GET', signal: AbortSignal.timeout(8000) },
+);
+
 // A V2 proposal is visible before this function is called. One explicit UI
 // confirmation then uses only the V2 publish/confirm/execute contract, never
 // the legacy assistant-action mutation endpoint.

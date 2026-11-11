@@ -244,7 +244,7 @@ class TwelveDataMarketDataAdapter:
                     close=float(item["close"]),
                     volume=_float_or_none(item.get("volume")),
                     period_start=period_start,
-                    raw_payload=item,
+                    raw_payload={**item, "_source_meta": payload.get("meta") or {}},
                 )
             )
         return candles

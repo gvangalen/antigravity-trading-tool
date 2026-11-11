@@ -621,6 +621,12 @@ class FinnV2OperationClassificationService:
             return None
         if "bot" in facts.explicit_entities and facts.action_polarity == "activate":
             return None
+        if re.search(
+            r"\b(?:handmatig(?:e)?|manual|manuell(?:e|er|es)?)\b"
+            r"[^.!?\n]{0,90}\b(?:trade(?:voorstel|plan)?|trading[ -]?plan|orderplan)\b",
+            text,
+        ) and not re.search(r"\b(?:plaats|voer\s+uit|execute|place)\b", text):
+            return "create_manual_trade_plan"
         # A new trader's request for a trading plan starts the same typed
         # setup draft as an explicit setup request. The contract then asks for
         # missing slots and retains them across subsequent turns.

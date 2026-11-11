@@ -8,6 +8,8 @@ class FinnV2RiskClassificationService:
         if requested_operation:
             return requested_operation
         normalized = str(message or "").casefold()
+        if "handmatig" in normalized and ("tradevoorstel" in normalized or "tradeplan" in normalized):
+            return "create_manual_trade_plan"
         if "watchlist" in normalized or "volglijst" in normalized:
             if any(token in normalized for token in ("verwijder", "haal", "remove")):
                 return "watchlist_remove"

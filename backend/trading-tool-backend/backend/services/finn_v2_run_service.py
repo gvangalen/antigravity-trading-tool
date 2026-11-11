@@ -3127,6 +3127,9 @@ class FinnV2RunService:
                 "not a request to evaluate the setup or find an existing strategy. "
                 "Choose exactly one proposal operation per user turn. If the user asks for a separate "
                 "new object, do not revise or update an older draft as a second action. "
+                "A handmatig/manual trade plan uses create_manual_trade_plan. It saves only a "
+                "non-executable plan after confirmation; never route it to manual_order, "
+                "create_setup, or create_strategy, and never claim an order was placed. "
                 "Otherwise, understand the user's language and "
                 "choose zero or more FINN read tools. Personal judgments about the user's plan, risk, "
                 "portfolio or market conditions require relevant read tools; use zero tools only for "
@@ -3579,7 +3582,7 @@ class FinnV2RunService:
         guided_operation = str(guided_state.get("operation_id") or "")
         is_guided_clarification = (
             phase_outcome.terminal_status == "clarification_required"
-            and guided_operation in {"create_setup", "create_strategy", "create_bot"}
+            and guided_operation in {"create_setup", "create_strategy", "create_bot", "create_manual_trade_plan"}
             and bool(guided_state.get("missing_required_inputs"))
         )
         # A guided clarification intentionally has no tools, reasoning or
@@ -3935,7 +3938,7 @@ class FinnV2RunService:
             content = str(clarification.get("question") or "").strip()
             draft = dict(setup_draft or {})
             if (not content or normalize_locale(locale) in {"en", "de"}) and draft.get("operation_id") in {
-                "create_setup", "create_strategy", "create_bot"
+                "create_setup", "create_strategy", "create_bot", "create_manual_trade_plan"
             }:
                 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
                 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry

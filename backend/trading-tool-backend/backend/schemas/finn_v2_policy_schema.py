@@ -36,6 +36,7 @@ OperationType = Literal[
     "watchlist_add",
     "watchlist_remove",
     "save_trade_plan",
+    "create_manual_trade_plan",
     "add_watchlist_asset",
     "activate_paper_bot",
     "activate_live_bot",

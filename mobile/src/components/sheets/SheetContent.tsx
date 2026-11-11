@@ -68,9 +68,11 @@ export function FinnV2ProposalReviewSheetContent({
     </Text></View>;
   }
   const fields = Object.entries(proposal.requested_state || {});
+  const manualPlan = proposal.operation_type === 'create_manual_trade_plan' ? proposal.requested_state : null;
+  const manualSourceEvidence = manualPlan?.source_evidence as { source_observed_at?: string; max_loss_quote?: string; owner_context?: { recommendation?: string; setup_name?: string; benchmark_score?: string } } | undefined;
   const namedTargetAction = ['delete_setup', 'delete_strategy', 'delete_bot', 'deactivate_bot', 'activate_paper_bot', 'activate_live_bot']
     .includes(proposal.operation_type);
-  const visibleFields = namedTargetAction ? []
+  const visibleFields = manualPlan || namedTargetAction ? []
     : proposal.operation_type === 'manual_order'
       ? fields.filter(([key]) => ['asset', 'side', 'order_type', 'quantity', 'notional', 'limit_price'].includes(key))
       : fields;
@@ -90,6 +92,34 @@ export function FinnV2ProposalReviewSheetContent({
     <View style={styles.block}>
       <StatusChip compact label={translate(language, 'finn.proposalReview')} tone="warning" />
       <Text style={styles.title}>{String(name)}</Text>
+      {manualPlan ? <>
+        <Text style={styles.body}>{manualPlan.level_source === 'market_derived'
+          ? translate(language, 'finn.manualTradeMarketSource', { time: manualSourceEvidence?.source_observed_at || '–' })
+          : translate(language, 'finn.manualTradeNoOrder')}</Text>
+        {manualPlan.level_source === 'market_derived' ? <Text style={styles.body}>{translate(language,
+          manualSourceEvidence?.owner_context?.recommendation === 'wait' ? 'finn.manualTradeAdviceWait'
+            : manualSourceEvidence?.owner_context?.recommendation === 'reduced_risk' ? 'finn.manualTradeAdviceReduced'
+              : 'finn.manualTradeAdviceReview')}
+        </Text> : null}
+        {([
+          ['direction', manualPlan.direction], ['entry', manualPlan.entry_price],
+          ['quantity', manualPlan.quantity], ['stop', manualPlan.stop_loss],
+          ['targets', Array.isArray(manualPlan.targets) ? manualPlan.targets.join(', ') : ''],
+          ['value', manualPlan.position_value_quote], ['loss', manualPlan.max_loss_quote],
+          ['riskUnit', manualPlan.risk_per_unit_quote],
+          ['riskPct', manualPlan.risk_pct_of_position],
+          ['ratios', Array.isArray(manualPlan.reward_risk_by_target) ? manualPlan.reward_risk_by_target.join(' / ') : ''],
+        ] as const).map(([key, value]) => <View key={key} style={{ gap: 4 }}>
+          <Text style={styles.body}>{translate(language, `finn.manualTrade_${key}`)}</Text>
+          <Text style={styles.title}>{String(value || '–')}{['value', 'loss', 'riskUnit'].includes(key) ? ` ${manualPlan.quote_currency}` : key === 'riskPct' ? '%' : key === 'quantity' && manualPlan.asset_class === 'stock' ? ` ${translate(language, 'finn.manualTradeShares')}` : ''}</Text>
+        </View>)}
+        {manualPlan.asset_class === 'stock' && !Number.isInteger(Number(manualPlan.quantity)) ? <Text style={styles.body}>{translate(language, 'finn.manualTradeFractionalNote')}</Text> : null}
+        {manualPlan.level_source === 'market_derived' ? <>
+          <Text style={styles.body}>{translate(language, 'finn.manualTradeSetup')}: {manualSourceEvidence?.owner_context?.setup_name || '–'}</Text>
+          <Text style={styles.body}>{translate(language, 'finn.manualTradeBenchmark')}: {manualSourceEvidence?.owner_context?.benchmark_score ? `${manualSourceEvidence.owner_context.benchmark_score}/100` : '–'}</Text>
+          <Text style={styles.body}>{translate(language, 'finn.manualTradeRiskCap')}: {manualSourceEvidence?.max_loss_quote || '–'} {String(manualPlan.quote_currency || '')}</Text>
+        </> : null}
+      </> : null}
       {proposal.review_target_name && namedTargetAction
         ? <Text style={styles.body}>{translate(language, 'finn.proposalEffect', {
           action: translate(language, proposal.operation_type === 'delete_setup' || proposal.operation_type === 'delete_strategy' || proposal.operation_type === 'delete_bot'
@@ -117,11 +147,11 @@ export function FinnV2ProposalReviewSheetContent({
             ? translate(language, value === 'limit' ? 'finn.proposalLimit' : 'finn.proposalMarket')
             : typeof value === 'object' ? JSON.stringify(value) : String(value)}</Text>
       </View>)}
-      <Text style={styles.body}>{translate(language, 'finn.proposalReviewBody')}</Text>
+      {!manualPlan ? <Text style={styles.body}>{translate(language, 'finn.proposalReviewBody')}</Text> : null}
       {!reviewReady ? <Text style={styles.errorText}>{translate(language, 'finn.proposalDetailsMissing')}</Text> : null}
       {reviewReady && !active ? <Text style={styles.errorText}>{translate(language, 'finn.proposalExpired')}</Text> : null}
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
-      <AppButton label={translate(language, 'finn.proposalConfirm')} disabled={!active || saving} onPress={onConfirm} />
+      <AppButton label={translate(language, manualPlan ? 'finn.manualTradeSave' : 'finn.proposalConfirm')} disabled={!active || saving} onPress={onConfirm} />
       {saving ? <ActivityIndicator color={theme.colors.accent} /> : null}
     </View>
   );

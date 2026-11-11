@@ -37,6 +37,7 @@ SAFE_FIXTURE_EXECUTION_OPERATION_TYPES = frozenset({
     "deactivate_bot",
     "watchlist_add",
     "watchlist_remove",
+    "create_manual_trade_plan",
 })
 
 

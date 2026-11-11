@@ -18,6 +18,8 @@ import { useIntelligenceContext } from '../../contexts/ActiveIntelligenceContext
 import { preferenceColors, useAppPreferences } from '../../preferences/AppPreferencesProvider';
 import { mapAssistantEnvelopeToFeedItems } from '../../services/assistantEnvelopeMapper';
 import { assistantApi } from '../../services/tradamindApi';
+import type { FinnManualTradePlanRecord, FinnV2ProposalSummary } from '../../services/tradamindApi';
+import { FinnV2ProposalReviewSheetContent } from '../sheets/SheetContent';
 import type { AssistantFeedItem } from '../../types/assistant';
 import { triggerHaptic } from '../../utils/haptics';
 
@@ -53,14 +55,28 @@ export function FinnOverlaySheet({ contextMetric, feedItemId, onClose, prefill, 
   const [sending, setSending] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [showSavedPlans, setShowSavedPlans] = useState(false);
+  const [savedPlans, setSavedPlans] = useState<FinnManualTradePlanRecord[]>([]);
+  const [manualPlanProposal, setManualPlanProposal] = useState<FinnV2ProposalSummary | null>(null);
+  const [proposalSaving, setProposalSaving] = useState(false);
+  const [proposalError, setProposalError] = useState<string | null>(null);
   const [pendingFeedItemId, setPendingFeedItemId] = useState(feedItemId);
   const requestSequence = useRef(0);
   const activeRequest = useRef<AbortController | null>(null);
   const copy = language === 'nl'
-    ? { placeholder: 'Vraag FINN wat dit betekent voor jouw plan...', addAsset: 'Asset toevoegen', addIndicator: 'Indicator toevoegen', addAssetPrompt: 'Help me een asset toe te voegen.', addIndicatorPrompt: 'Help me een indicator toe te voegen.', newConversation: 'Nieuw gesprek', error: 'FINN kon je vraag niet beantwoorden', retry: 'Opnieuw', working: 'FINN verwerkt je vraag...', stopped: 'Antwoord gestopt.', starters: ['Controleer mijn plan', 'Wat vraagt mijn aandacht?', 'Leg mijn score uit'], prompts: ['Controleer mijn huidige plan.', 'Wat vraagt nu mijn aandacht op basis van mijn plannen?', 'Leg de huidige score voor deze asset uit.'] }
+    ? { placeholder: 'Vraag FINN wat dit betekent voor jouw plan...', addAsset: 'Asset toevoegen', addIndicator: 'Indicator toevoegen', addAssetPrompt: 'Help me een asset toe te voegen.', addIndicatorPrompt: 'Help me een indicator toe te voegen.', newConversation: 'Nieuw gesprek', savedPlans: 'Tradeplannen', emptyPlans: 'Nog geen opgeslagen tradeplannen.', noOrder: 'Alleen een plan; geen order.', error: 'FINN kon je vraag niet beantwoorden', retry: 'Opnieuw', working: 'FINN verwerkt je vraag...', stopped: 'Antwoord gestopt.', starters: ['Controleer mijn plan', 'Wat vraagt mijn aandacht?', 'Leg mijn score uit'], prompts: ['Controleer mijn huidige plan.', 'Wat vraagt nu mijn aandacht op basis van mijn plannen?', 'Leg de huidige score voor deze asset uit.'] }
     : language === 'de'
-      ? { placeholder: 'Frag FINN, was das für deinen Plan bedeutet...', addAsset: 'Asset hinzufügen', addIndicator: 'Indikator hinzufügen', addAssetPrompt: 'Hilf mir, ein Asset hinzuzufügen.', addIndicatorPrompt: 'Hilf mir, einen Indikator hinzuzufügen.', newConversation: 'Neues Gespräch', error: 'FINN konnte deine Frage nicht beantworten', retry: 'Erneut versuchen', working: 'FINN verarbeitet deine Frage...', stopped: 'Antwort gestoppt.', starters: ['Meinen Plan prüfen', 'Was braucht Aufmerksamkeit?', 'Meinen Score erklären'], prompts: ['Prüfe meinen aktuellen Plan.', 'Was braucht jetzt meine Aufmerksamkeit in meinen Plänen?', 'Erkläre den aktuellen Score für dieses Asset.'] }
-      : { placeholder: 'Ask FINN what this means for your plan...', addAsset: 'Add asset', addIndicator: 'Add indicator', addAssetPrompt: 'Help me add an asset.', addIndicatorPrompt: 'Help me add an indicator.', newConversation: 'New conversation', error: 'FINN could not answer your question', retry: 'Retry', working: 'FINN is working on your question...', stopped: 'Response stopped.', starters: ['Review my plan', 'What needs my attention?', 'Explain my score'], prompts: ['Review my current plan.', 'What needs my attention in my plans now?', 'Explain the current score for this asset.'] };
+      ? { placeholder: 'Frag FINN, was das für deinen Plan bedeutet...', addAsset: 'Asset hinzufügen', addIndicator: 'Indikator hinzufügen', addAssetPrompt: 'Hilf mir, ein Asset hinzuzufügen.', addIndicatorPrompt: 'Hilf mir, einen Indikator hinzuzufügen.', newConversation: 'Neues Gespräch', savedPlans: 'Handelspläne', emptyPlans: 'Noch keine gespeicherten Handelspläne.', noOrder: 'Nur ein Plan; keine Order.', error: 'FINN konnte deine Frage nicht beantworten', retry: 'Erneut versuchen', working: 'FINN verarbeitet deine Frage...', stopped: 'Antwort gestoppt.', starters: ['Meinen Plan prüfen', 'Was braucht Aufmerksamkeit?', 'Meinen Score erklären'], prompts: ['Prüfe meinen aktuellen Plan.', 'Was braucht jetzt meine Aufmerksamkeit in meinen Plänen?', 'Erkläre den aktuellen Score für dieses Asset.'] }
+      : { placeholder: 'Ask FINN what this means for your plan...', addAsset: 'Add asset', addIndicator: 'Add indicator', addAssetPrompt: 'Help me add an asset.', addIndicatorPrompt: 'Help me add an indicator.', newConversation: 'New conversation', savedPlans: 'Trade plans', emptyPlans: 'No saved trade plans yet.', noOrder: 'Plan only; no order.', error: 'FINN could not answer your question', retry: 'Retry', working: 'FINN is working on your question...', stopped: 'Response stopped.', starters: ['Review my plan', 'What needs my attention?', 'Explain my score'], prompts: ['Review my current plan.', 'What needs my attention in my plans now?', 'Explain the current score for this asset.'] };
+
+  useEffect(() => {
+    if (!showSavedPlans) return;
+    let cancelled = false;
+    assistantApi.manualTradePlans()
+      .then((result) => { if (!cancelled) setSavedPlans(Array.isArray(result.items) ? result.items : []); })
+      .catch(() => { if (!cancelled) setSavedPlans([]); });
+    return () => { cancelled = true; };
+  }, [showSavedPlans]);
 
   useEffect(() => {
     setPendingFeedItemId(feedItemId);
@@ -110,7 +126,7 @@ export function FinnOverlaySheet({ contextMetric, feedItemId, onClose, prefill, 
 
   async function handleSend(prompt?: string, retry = false) {
     const trimmed = (prompt ?? query).trim();
-    if (!trimmed || sending) return;
+    if (!trimmed || sending || proposalSaving) return;
     const requestId = ++requestSequence.current;
     const controller = new AbortController();
     activeRequest.current = controller;
@@ -118,6 +134,8 @@ export function FinnOverlaySheet({ contextMetric, feedItemId, onClose, prefill, 
     await triggerHaptic('selection');
     setSending(true);
     setChatError(null);
+    setManualPlanProposal(null);
+    setProposalError(null);
     setMenuOpen(false);
     setMessages((current) => [
       ...(retry ? current.slice(0, -1) : current),
@@ -138,6 +156,18 @@ export function FinnOverlaySheet({ contextMetric, feedItemId, onClose, prefill, 
       if (requestId !== requestSequence.current) return;
       const mapped = mapAssistantEnvelopeToFeedItems(envelope).filter((item) => item.type === 'message');
       setMessages((current) => [...current, ...mapped]);
+      const proposalAction = envelope.actions?.find((action) => action.type === 'v2_proposal' && action.requires_confirmation);
+      const proposalId = proposalAction?.type === 'v2_proposal' ? proposalAction.proposal_id : null;
+      if (proposalId) {
+        try {
+          const review = await assistantApi.v2Proposal(proposalId);
+          if (requestId === requestSequence.current && review.operation_type === 'create_manual_trade_plan') {
+            setManualPlanProposal(review);
+          }
+        } catch {
+          if (requestId === requestSequence.current) setProposalError(translate(language, 'finn.proposalDetailsMissing'));
+        }
+      }
       if (envelope.session_id) setSessionId(envelope.session_id);
       setPendingFeedItemId(undefined);
     } catch (error) {
@@ -156,6 +186,34 @@ export function FinnOverlaySheet({ contextMetric, feedItemId, onClose, prefill, 
     setSending(false);
     setChatError(null);
     setMessages((current) => [...current, { id: `stopped-${Date.now()}`, role: 'assistant', text: copy.stopped, type: 'message' }]);
+  }
+
+  async function confirmManualPlan() {
+    if (!manualPlanProposal || proposalSaving) return;
+    setProposalSaving(true);
+    setProposalError(null);
+    try {
+      const current = await assistantApi.v2Proposal(manualPlanProposal.proposal_id);
+      if (current.payload_hash !== manualPlanProposal.payload_hash || !current.payload_hash) {
+        throw new Error('proposal_changed_since_review');
+      }
+      const result = await assistantApi.confirmAndExecuteV2Proposal(
+        current.proposal_id, current.review_target_name, current.payload_hash,
+      );
+      if (!['succeeded', 'already_executed'].includes(result.status)) {
+        throw new Error(result.error_codes?.join(', ') || result.status);
+      }
+      setManualPlanProposal(null);
+      setMessages((items) => [...items, { id: `plan-saved-${Date.now()}`, role: 'assistant', type: 'message', text: translate(language, 'finn.manualTradeSaved') }]);
+      if (showSavedPlans) {
+        const list = await assistantApi.manualTradePlans();
+        setSavedPlans(Array.isArray(list.items) ? list.items : []);
+      }
+    } catch (error) {
+      setProposalError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setProposalSaving(false);
+    }
   }
 
   function applyQuickAction(kind: 'asset' | 'indicator') {
@@ -182,13 +240,20 @@ export function FinnOverlaySheet({ contextMetric, feedItemId, onClose, prefill, 
                 </View>
               </View>
               <View style={styles.headerActions}>
-                <Pressable accessibilityLabel={copy.newConversation} onPress={() => {
+                <Pressable accessibilityLabel={copy.savedPlans} onPress={() => setShowSavedPlans((current) => !current)} style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}>
+                  <Feather color={colors.text} name={showSavedPlans ? 'message-circle' : 'list'} size={21} />
+                </Pressable>
+                <Pressable accessibilityLabel={copy.newConversation} disabled={proposalSaving} onPress={() => {
                   requestSequence.current += 1;
                   activeRequest.current?.abort();
                   activeRequest.current = null;
                   setSending(false);
                   setChatError(null);
                   setPendingFeedItemId(undefined);
+                  setManualPlanProposal(null);
+                  setProposalError(null);
+                  setShowSavedPlans(false);
+                  setSavedPlans([]);
                   onNewConversation();
                 }} style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}>
                   <Feather color={colors.text} name="plus" size={22} />
@@ -219,7 +284,21 @@ export function FinnOverlaySheet({ contextMetric, feedItemId, onClose, prefill, 
                 </View>
               ) : null}
 
-              <ScrollView
+              {showSavedPlans ? <ScrollView style={styles.messages} contentContainerStyle={styles.feed}>
+                <Text style={[styles.headerTitle, { color: colors.text }]}>{copy.savedPlans}</Text>
+                {savedPlans.length === 0 ? <Text style={[styles.messageText, { color: colors.textMuted }]}>{copy.emptyPlans}</Text> : null}
+                {savedPlans.slice(0, 10).map((record) => {
+                  const plan = record.plan;
+                  const targets = Array.isArray(plan.targets) ? plan.targets.join(', ') : '–';
+                  return <View key={record.id} style={[styles.message, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
+                    <Text style={[styles.headerTitle, { color: colors.text }]}>{String(plan.asset)}/{String(plan.quote_currency)} · {String(plan.direction)}</Text>
+                    <Text style={[styles.messageText, { color: colors.text }]}>{translate(language, 'finn.manualTrade_entry')}: {String(plan.entry_price)} · {translate(language, 'finn.manualTrade_quantity')}: {String(plan.quantity)}</Text>
+                    <Text style={[styles.messageText, { color: colors.text }]}>{translate(language, 'finn.manualTrade_stop')}: {String(plan.stop_loss)} · {translate(language, 'finn.manualTrade_targets')}: {targets}</Text>
+                    <Text style={[styles.messageText, { color: colors.text }]}>{translate(language, 'finn.manualTrade_loss')}: {String(plan.max_loss_quote)} {String(plan.quote_currency)}</Text>
+                    <Text style={[styles.messageText, { color: colors.textMuted }]}>{copy.noOrder}</Text>
+                  </View>;
+                })}
+              </ScrollView> : <ScrollView
                   style={styles.messages}
                   contentContainerStyle={styles.feed}
                   keyboardShouldPersistTaps="handled"
@@ -251,7 +330,11 @@ export function FinnOverlaySheet({ contextMetric, feedItemId, onClose, prefill, 
                       </View>
                     );
                   })}
-                </ScrollView>
+                  {manualPlanProposal ? <FinnV2ProposalReviewSheetContent
+                    proposal={manualPlanProposal} error={proposalError} onConfirm={confirmManualPlan}
+                    saving={proposalSaving} language={language}
+                  /> : null}
+                </ScrollView>}
 
               {sending ? <Text style={[styles.progress, { color: colors.textMuted }]}>{copy.working}</Text> : null}
 

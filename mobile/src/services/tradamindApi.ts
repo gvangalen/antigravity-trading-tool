@@ -311,6 +311,7 @@ export type AssistantAnalyticsPayload = {
 
 export type FinnV2ProposalSummary = {
   proposal_id: string;
+  payload_hash?: string;
   status: string;
   operation_type: string;
   target: Record<string, unknown>;
@@ -319,6 +320,12 @@ export type FinnV2ProposalSummary = {
   review_target_name?: string | null;
   expires_at: string;
   confirmation_required: boolean;
+};
+
+export type FinnManualTradePlanRecord = {
+  id: string;
+  created_at: string;
+  plan: Record<string, unknown>;
 };
 
 export type FinnV2ExecutionResult = {
@@ -335,6 +342,9 @@ export type IntelligenceWeightsPayload = {
 };
 
 export const assistantApi = {
+  manualTradePlans() {
+    return apiClient.get<{ items: FinnManualTradePlanRecord[] }>('/api/assistant/v2/manual-trade-plans');
+  },
   preferences() {
     return apiClient.get<AssistantPreferencesResponse>('/api/assistant/preferences');
   },
@@ -390,9 +400,12 @@ export const assistantApi = {
     return apiClient.get<FinnV2ProposalSummary>(`/api/assistant/v2/proposals/${encodeURIComponent(proposalId)}`);
   },
 
-  async confirmAndExecuteV2Proposal(proposalId: string, expectedReviewTargetName?: string | null) {
+  async confirmAndExecuteV2Proposal(proposalId: string, expectedReviewTargetName?: string | null, expectedReviewPayloadHash?: string | null) {
     const path = `/api/assistant/v2/proposals/${encodeURIComponent(proposalId)}`;
     const publication = await apiClient.post<{ confirmation_token: string; payload_hash: string }>(`${path}/publish`, {});
+    if (expectedReviewPayloadHash && publication.payload_hash !== expectedReviewPayloadHash) {
+      throw new Error('proposal_changed_since_review');
+    }
     const payload = {
       idempotency_key: `v2-mobile-${proposalId}`,
       confirmation_token: publication.confirmation_token,

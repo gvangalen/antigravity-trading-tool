@@ -17,7 +17,7 @@ credentials. `FINN_LOCAL_SAFE_ADAPTERS=1` is required for local fixture action
 tests. It enables only the existing non-financial database adapters for the
 isolated local fixture; broker orders and live bot activation remain disabled.
 
-`matrix` runs all 16 current action contracts through real FastAPI, Celery,
+`matrix` runs all 17 current action contracts through real FastAPI, Celery,
 PostgreSQL, Redis and Responses calls. It verifies proposal, confirmation,
 execution, owner scope, idempotent replay and guided follow-up using only
 synthetic local users. The canonical action-adapter registry test follows the

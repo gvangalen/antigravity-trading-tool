@@ -27,6 +27,7 @@ _READ_SCOPES: dict[str, tuple[str, ...]] = {
 }
 
 _PROPOSAL_OPERATIONS: dict[str, tuple[str, ...]] = {
+    "create_manual_trade_plan_proposal": ("create_manual_trade_plan",),
     "create_or_update_trade_plan_proposal": (
         "create_setup", "update_setup", "delete_setup",
         "create_strategy", "update_strategy", "delete_strategy",
