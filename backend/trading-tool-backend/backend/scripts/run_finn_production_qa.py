@@ -3084,7 +3084,8 @@ async def _manual_trade_fixture_preflight() -> Dict[str, Any]:
                 session, asset=asset, quote_currency=quote,
             )
             candidates = (await session.execute(sql_text("""
-                SELECT s.id FROM setups s
+                SELECT s.id, s.timeframe, s.min_benchmark_score, s.max_benchmark_score
+                FROM setups s
                 LEFT JOIN trading_markets tm ON tm.id=s.market_id
                 WHERE s.user_id=:owner AND upper(s.symbol)=:asset
                   AND ((CAST(:market_id AS BIGINT) IS NULL AND s.market_id IS NULL)
@@ -3093,10 +3094,11 @@ async def _manual_trade_fixture_preflight() -> Dict[str, Any]:
                        OR (CAST(:market_id AS BIGINT) IS NULL AND s.market_id IS NULL))
                   AND lower(s.setup_type)='trade'
             """), {"owner": owner, "asset": asset, "quote": quote,
-                   "market_id": market_id})).scalars().all()
+                   "market_id": market_id})).mappings().all()
             if len(candidates) > 200:
                 raise RuntimeError("manual_trade_fixture_preflight_setup_count_unbounded")
-            linked = False
+            candidate_ids = [int(candidate["id"]) for candidate in candidates]
+            linked_ids: set[int] = set()
             for schema_name, table_name, column_name in references:
                 if not candidates:
                     break
@@ -3105,15 +3107,26 @@ async def _manual_trade_fixture_preflight() -> Dict[str, Any]:
                 table = f'{ident(schema_name)}.{ident(table_name)}'
                 column = ident(column_name)
                 query = sql_text(
-                    f"SELECT EXISTS(SELECT 1 FROM {table} WHERE {column} = ANY(CAST(:ids AS integer[])))"
+                    f"SELECT DISTINCT {column} FROM {table} WHERE {column} = ANY(CAST(:ids AS integer[]))"
                 )
-                if (await session.execute(query, {"ids": candidates})).scalar_one():
-                    linked = True
-                    break
+                linked_ids.update(int(value) for value in (
+                    await session.execute(query, {"ids": candidate_ids})
+                ).scalars().all())
+            linked_candidates = [candidate for candidate in candidates
+                                 if int(candidate["id"]) in linked_ids]
+            linked_daily_configured = sum(
+                str(candidate.get("timeframe") or "").lower() in {"1d", "1day"}
+                and (candidate.get("min_benchmark_score") is not None
+                     or candidate.get("max_benchmark_score") is not None)
+                for candidate in linked_candidates
+            )
             pairs.append({
                 "asset": asset, "quote_currency": quote,
                 "trade_setup_count": min(len(candidates), 200),
-                "trade_setup_linked": linked,
+                "trade_setup_linked": bool(linked_ids),
+                "linked_trade_setup_count": min(len(linked_candidates), 200),
+                "unlinked_trade_setup_count": min(len(candidates) - len(linked_candidates), 200),
+                "linked_daily_benchmark_band_present_count": min(linked_daily_configured, 200),
                 "source_ready": item["plan_derivation_status"] == "available",
             })
         pending = (await session.execute(sql_text("""
