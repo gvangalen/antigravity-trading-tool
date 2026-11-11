@@ -72,8 +72,11 @@ productieverbindingen (artifact SHA-256
 De echte-provider ontwikkelset slaagde **20/20** zonder provider-, schema-,
 parse-, timeout- of validatiefouten (artifact SHA-256
 `216d3de0a5ce7ed447b9a00a10acaabf280234f12aead74bafafb77ebeff1f7f`).
-De echte-provider regressieset, PR-CI, Auto Deploy en publieke SHA-pariteit
-van deze runnerfix zijn nog open; de QA-agent start tot dan geen inhoudsproef.
+De echte-provider regressieset slaagde **109/109**, eveneens zonder
+provider-, schema-, parse-, timeout- of validatiefouten (artifact SHA-256
+`75d18b658ba33934332c7f2d6c697cf80e06eb0790b6a27d7be21192dfaf9e94`).
+PR-CI, Auto Deploy en publieke SHA-pariteit van deze runnerfix zijn nog open;
+de QA-agent start tot dan geen inhoudsproef.
 
 ## AAPL Paper-coach: gedateerd rapport en laatste koers (11 november 2026)
 
