@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 import httpx
 
-from backend.schemas.market_provider_schema import AssetRecord
+from backend.schemas.market_provider_schema import AssetRecord, PriceSnapshotDTO
 from backend.services.providers.twelve_data_market_data_adapter import TwelveDataMarketDataAdapter, _parse_datetime
 from backend.services.providers.twelve_data_response_cache import TwelveDataResponseCache
 from backend.services.providers.twelve_data_technical_indicator_adapter import TwelveDataTechnicalIndicatorAdapter
@@ -156,6 +156,97 @@ def test_provider_update_accepts_explicit_utc_text():
     assert _parse_provider_update("2026-11-10T20:48:42Z") == datetime(
         2026, 11, 10, 20, 48, 42, tzinfo=timezone.utc,
     )
+
+
+def test_twelve_data_conflicting_quote_is_replaced_only_by_matching_final_candle(monkeypatch):
+    interval_open = datetime(2026, 11, 10, 20, 59, tzinfo=timezone.utc)
+
+    class _Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {
+                "meta": {"symbol": "AAPL", "currency": "USD", "exchange": "NASDAQ"},
+                "values": [{"datetime": "2026-11-10 20:59:00", "close": "350.81", "volume": "12345"}],
+            }
+
+    class _Client:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def get(self, url, params):
+            assert url.endswith("/time_series")
+            assert params["symbol"] == "AAPL"
+            assert params["interval"] == "1min"
+            assert params["timezone"] == "UTC"
+            assert params["start_date"] == "2026-11-10T20:59:00"
+            assert params["end_date"] == "2026-11-10T21:00:00"
+            return _Response()
+
+    monkeypatch.setattr(
+        "backend.services.providers.twelve_data_market_data_adapter.httpx.AsyncClient", _Client,
+    )
+    asset = AssetRecord(symbol="AAPL", display_name="Apple Inc.", asset_class="stock",
+                        provider="twelve_data", quote_currency="USD", provider_symbol="AAPL")
+    quote = PriceSnapshotDTO(symbol="AAPL", provider="twelve_data", provider_symbol="AAPL",
+                             price=350.80, previous_close=350, currency="USD", observed_at=interval_open)
+    snapshot = asyncio.run(TwelveDataMarketDataAdapter(api_key="test-key")
+                           .fetch_final_minute_snapshot(asset, quote))
+    assert snapshot.price == 350.81
+    assert snapshot.observed_at == interval_open + timedelta(minutes=1)
+    assert snapshot.change_percent == pytest.approx((350.81 - 350) / 350 * 100)
+    assert snapshot.volume == 12345
+
+
+def test_twelve_data_final_candle_rejects_wrong_currency(monkeypatch):
+    class _Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"meta": {"symbol": "AAPL", "currency": "EUR"},
+                    "values": [{"datetime": "2026-11-10 20:59:00", "close": "350.81"}]}
+
+    class _Client:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def get(self, *_args, **_kwargs):
+            return _Response()
+
+    monkeypatch.setattr(
+        "backend.services.providers.twelve_data_market_data_adapter.httpx.AsyncClient", _Client,
+    )
+    asset = AssetRecord(symbol="AAPL", display_name="Apple Inc.", asset_class="stock",
+                        provider="twelve_data", quote_currency="USD", provider_symbol="AAPL")
+    quote = PriceSnapshotDTO(symbol="AAPL", provider="twelve_data", provider_symbol="AAPL",
+                             price=350.80, currency="USD",
+                             observed_at=datetime(2026, 11, 10, 20, 59, tzinfo=timezone.utc))
+    with pytest.raises(ValueError, match="twelve_data_final_candle_identity_mismatch"):
+        asyncio.run(TwelveDataMarketDataAdapter(api_key="test-key").fetch_final_minute_snapshot(asset, quote))
+
+
+def test_twelve_data_does_not_reconcile_an_open_minute():
+    asset = AssetRecord(symbol="AAPL", display_name="Apple Inc.", asset_class="stock",
+                        provider="twelve_data", quote_currency="USD", provider_symbol="AAPL")
+    quote = PriceSnapshotDTO(symbol="AAPL", provider="twelve_data", provider_symbol="AAPL",
+                             price=350.80, currency="USD", observed_at=datetime.now(timezone.utc))
+    with pytest.raises(ValueError, match="twelve_data_minute_not_final"):
+        asyncio.run(TwelveDataMarketDataAdapter(api_key="test-key")
+                    .fetch_final_minute_snapshot(asset, quote))
 
 
 def test_twelve_data_exchange_time_conversion_tracks_daylight_saving():

@@ -28,11 +28,19 @@ class MarketDataRepository:
         if first.price is None or not first.quote_currency or not first.source_observed_at:
             return None
         tied = [row for row in rows if row.source_observed_at == first.source_observed_at]
+        # The SQL limit may conceal another fact at this same source instant.
+        if len(tied) >= 4096:
+            return None
+        # A completed candle's end can equal the opening instant of the next
+        # mutable quote minute.  In that case the newer quote is the current
+        # evidence, while the candle remains the final fact for the prior bar.
+        quotes = [row for row in tied if not getattr(row, "is_final_candle", False)]
+        if quotes:
+            tied = quotes
+            first = quotes[0]
         # Reads are bounded; a full bound of tied rows may hide another fact.
         # Repeated closed-market ingests can share one source moment for days,
         # so this exceptional bound must be well above a normal weekend.
-        if len(tied) >= 4096:
-            return None
         try:
             facts = {(str(row.symbol or "").upper(), Decimal(str(row.price)),
                       str(row.quote_currency or "").upper(),
