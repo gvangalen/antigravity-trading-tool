@@ -2741,6 +2741,12 @@ class FinnV2RunService:
                 )
                 if preceding_run is not None and preceding_run.conversation_id == conversation_id:
                     previous_response["user_message"] = preceding_run.message
+                    # A completed, owner-verified prior turn can supply a
+                    # previously read report even when it had no setup subject.
+                    # The report itself is still re-read through the owner's
+                    # current read contract with its exact asset and date.
+                    if previous_response.get("terminal_status") == "completed":
+                        previous_response["owner_user_id"] = user_id
                 preceding_contract = await orchestrator.runtime_contracts.get_for_run(
                     run_id=str(previous_response["run_id"]),
                 )
@@ -2751,7 +2757,6 @@ class FinnV2RunService:
                     and subject.get("owner_id") == user_id
                     and isinstance(subject.get("setup_id"), int)
                 ):
-                    previous_response["owner_user_id"] = user_id
                     previous_response["verified_setup_subject"] = subject
                 ancestor_run_id = preceding_state.get("conversation_reference")
                 for _ in range(3):
@@ -5348,6 +5353,7 @@ class FinnV2RunService:
                                     "saved_action_claim_unverified", "trading_outcome_claim_unverified",
                                     "user_condition_bypass_blocked", "saved_entity_type_unverified",
                                     "turn_contract_mismatch", "price_relation_conflicts_with_source",
+                                    "latest_quote_conflicts_with_source",
                                 }
                                 and cls._read_only_repair_eligible(prepared.response.tool_trace)
                                 and cls._read_repair_has_budget(remaining, explain_limit=explain_limit)

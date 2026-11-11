@@ -4,6 +4,49 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## AAPL Paper-coach: gedateerd rapport en laatste koers (11 november 2026)
+
+Phase: `LOCAL_VALIDATED_CANDIDATE`; nog niet onafhankelijk op de volgende
+productie-SHA geaccepteerd. De vorige AAPL-bronreparatie is op main
+`aa19b60f84f50c197d30886d7437ed6efe6dc3d0` gedeployed. Backend-health
+en frontend-buildinfo gaven HTTP 200 met dezelfde SHA. De beschermde
+AAPL-preflight slaagde, maar contentrun `42971909400` was `NOT_ACCEPTED`.
+De eerste modelreactie noemde de juiste laatste AAPL-koers en het juiste
+oudere rapport, maar de productverifier koppelde de historische rapportdatum
+ten onrechte aan een latere verwijzing naar de laatste koers. De eerste
+beurt las het expliciet genoemde rapport niet: de negatieve instructie
+`wijzig niets en plaats geen order` werd als wijzigverzoek geclassificeerd.
+De vervolgbeurt kon daardoor het ongedateerde `oud rapport` niet aan een
+eerder gelezen rapport koppelen. Er waren nul acties of orders.
+
+De productkandidaat herkent de afzonderlijke koersclausules bij verificatie
+en accepteert een herhaalde ongedateerde oude koers alleen als diezelfde
+koers eerder met het juiste bronmoment is geverifieerd. Een geselecteerde
+alleen-lezen tool bindt een expliciet gevraagd rapport, ook bij de genoemde
+negatieve instructie. Een ongedateerde vervolgverwijzing gebruikt uitsluitend
+één eerder succesvol gelezen rapport van dezelfde eigenaar en asset; bij
+meerdere of niet-passende rapporten blijft de datum onopgelost. De
+read-only herstelroute mag één begrensde poging doen na een conflict tussen
+laatste koers en bron. Gerichte tests: **928 passed**; definitieve volledige
+backendtest: **4621 passed, 7 skipped** (log SHA-256
+`22dbf5c7d0b6a2c9bdca302df1cd75ce92b99f4e3400bd5d72e22bb6ad92c392`).
+De echte-provider ontwikkelset slaagde **20/20** (artifact SHA-256
+`2e5ceaacf8b12f3bca1d2b45db3714bb3290eea831950bc4c459c183aab291cc`),
+de regressieset **109/109** (artifact SHA-256
+`20f08a5a1d66cf0dd6a26e79449163b22066a5d65114fe632f88a5fef87e8240`),
+beide zonder provider-, schema-, timeout-, parse- of validatiefout. De
+geïsoleerde lokale FastAPI/Celery/Responses-matrix slaagde **38/38**,
+waaronder **16/16** actiecontracten en **9/9** lineagecontroles, met nul
+Live-bots of verboden uitvoeringen (artifact SHA-256
+`f3ae9965d0b97bda8297d148d79e9214f8d6c99082adbf9d7f11aa7ba1e2396b`).
+Terminal-p95 was **8,23 s** en maximum **12,65 s**, onder de grenzen van
+10 en 15 s. Daarmee is de eerdere lokale rode latencygate in deze proef
+groen; ingelogde productieacceptatie is nog open. Onafhankelijke code-QA,
+Security en Architecture gaven GO. PR #971 had vijf groene CI-checks vóór
+deze statusaanvulling; de definitieve kandidaat-CI, Auto Deploy,
+publieke SHA-pariteit en beschermde Paper-contentproef zijn nog open. Dit
+geeft geen Live-orders vrij.
+
 ## AAPL: afgeronde minuutmeting voor conflicterende quotes (11 november 2026)
 
 Phase: `LOCAL_RECOVERY_CANDIDATE`; nog niet gedeployed of onafhankelijk op
