@@ -4,6 +4,67 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## AAPL-coach: conflicterende actuele koersbron (11 november 2026)
+
+Phase: `USER_DIRECTED_PAPER_QA_DEPLOYMENT_PENDING`; product-PR #967 is
+functioneel gevalideerd. Op 11 november heeft de gebruiker expliciet gevraagd
+de code ondanks de rode FINN-latencygate te deployen om ingelogd op productie
+in Paper-modus te testen. Dit is **geen vrijgave voor Live-orders** en nog
+geen onafhankelijke runtimeacceptatie.
+Branch `codex/market-quote-conflict-20261110` bouwt voort op QA-only PR #966
+(main `b3d0b7590d518a5024c2b1e027cc436d178022e7`). De voorgaande
+beschermde AAPL-proef op `47258033820efdf838c2a6bb2e69ee83ac16aab3`
+was vóór fixtureseed `INCONCLUSIVE`: twaalf top-AAPL-rijen deelden één
+bronmoment maar verschilden in USD-prijs. De productlezers voor FINN,
+Live-preflight, botwaardering, exact pair en Paper-portefeuille verwerpen nu
+tegenstrijdige nieuwste bronfeiten. Zij lezen de koersvaluta uit dezelfde
+bronrij. Ook FINN's gedeelde assetcontext en coach-feed market-move lezen
+nu dezelfde geverifieerde quote; bij conflict tonen of publiceren zij geen
+oudere koers. De Twelve Data-adapter kiest indien aanwezig `last_update_at` of
+`last_quote_at` vóór het interval-openmoment. Een directe providercontrole
+gaf HTTP 429; beschikbaarheid van die velden in een echte actuele AAPL-respons
+is dus **niet bewezen**. De begrensde broncontrole inspecteert maximaal 4096
+rijen per asset/paar en faalt gesloten bij een volle tie; dit is een tijdelijke
+grens om normale herhalingen buiten beursuren beschikbaar te houden.
+
+Build-evidence op de laatste productdiff: root-backend **4610 passed, 7 skipped**
+(`.local-finn-parity-artifacts/market-quote-conflict-pytest-final.log`, SHA-256
+`42d3a0e18ae519c102ca7de5d9cf6026c643fe9de8738c845ad89fe00c557a7f`);
+gerichte regressies **85 passed**. Tijdelijke PostgreSQL 16-controles voerden
+legacy- en exacte-paarquery's echt uit; een async exacte-paarquery liet een
+geconflicteerd paar weg. Een geïndexeerde proef met 21 assets en 6000 rijen
+(waarvan 4000 identieke AAPL-herhalingen) duurde 17,6 ms inclusief
+Python-verificatie. De echte Responses-selectorontwikkeling slaagde **20/20**
+(SHA-256 `4505e1719eb6c4c8b1540a76008f41904dd4bc1e3abb5c91284db9ee50197d49`)
+en de regressie **109/109** (SHA-256
+`2adc86204f9bc50a9b1abd4ace7ae7ddc9f5ea061a7713d9a47b6b54ad88c264`),
+zonder provider-, schema-, timeout-, parse- of validatiefouten. Onafhankelijke
+QA-, Security- en Architecture-codereviews gaven GO voor de productdiff;
+de QA-only bronselectorreparatie is apart gemerged in PR #966.
+
+De verplichte geïsoleerde worker-runtimegate blijft rood. De eerste complete
+proef had **38/38 cases, 16/16 acties, 9/9 lineage** en nul verboden
+uitvoeringen, maar terminal-p95 10,82 s boven de grens van 10 s
+(artifact SHA-256 `8de169067592ae5d83090187b0124e0073ac1e0e979b0c9f8cf776e757451798`).
+De tweede proef had zes afhankelijke actiemissers na een setupselectie
+(SHA-256 `f8a447fd5f406d1783f8cd9f6dd77e3ef372fa131e7b8add3954adefe57d4828`).
+Een derde proef haalde alle inhoudelijke cases, maar een lokale prefork-worker
+werd herhaaldelijk met SIGKILL vervangen en veroorzaakte 56 s wachtrijvertraging
+(SHA-256 `a191d80e2bf6429f7d77a25dfe0d11dd4dca8def975a52e6bd220b5cb8ed5216`).
+Na volledige verwijdering van de synthetische parity-stack en herbouw haalde
+de laatste proef **38/38 cases, 16/16 acties, 9/9 lineage**, HTTP 200 en nul
+Live-bots of verboden uitvoeringen, maar terminal-p95 **18,34 s** en maximum
+**18,61 s** bij grenzen 10/15 s (artifact SHA-256
+`a4629b88ba8ce77bd1e47253053770491f2d4057302ea029e09747fb9407ebfc`).
+De wachtrij was toen snel; de vertraging zat in de Responses-toolroute:
+onder meer 2,08 s eerste providerantwoord, 5,04 s relevante-actietoets en
+9,55 s tweede providerantwoord bij een botwijziging. Deze runtimeproeven
+zijn gemeten vóór de kleine latere FINN-context/feed-leeswijziging; die
+wijziging is wel met gerichte en volledige backendtests gecontroleerd maar
+heeft nog geen eigen runtimegate. Dit is geen groene Build-gate. De gebruiker
+heeft een begrensde productiedeploy voor Paper-QA gevraagd; het latencygebrek
+blijft open en moet in de uiteindelijke QA- en releasebeoordeling staan.
+
 ## AAPL-coach: eigenaargebonden rapportvergelijking en koersverschil (10 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_STATUS_UPDATE_PENDING`. Branch `codex/finn-report-read-delta-20261110`

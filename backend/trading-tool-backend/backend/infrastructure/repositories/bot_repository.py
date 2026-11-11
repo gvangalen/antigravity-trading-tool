@@ -6,6 +6,7 @@ from decimal import Decimal
 import json
 
 from backend.services.platform_metrics import increment_execution_safety_counter
+from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
 
 class BotRepository:
     def __init__(self, session: AsyncSession):
@@ -803,23 +804,15 @@ class BotRepository:
         return float(row[0] or 0)
 
     async def get_market_price_snapshot(self, symbol: str) -> Optional[dict]:
-        query = text("""
-            SELECT m.price, m.timestamp, a.quote_currency
-            FROM market_data m
-            LEFT JOIN asset_catalog a ON a.symbol = m.symbol
-            WHERE m.symbol=:symbol
-              AND m.market_id IS NULL
-            ORDER BY m.timestamp DESC
-            LIMIT 1
-        """)
-        result = await self.session.execute(query, {"symbol": symbol})
-        row = result.fetchone()
+        # Live preflight uses the provider moment and the quote unit from the
+        # same verified row. A conflicting top-instant quote is unavailable.
+        row = await MarketDataRepository(self.session).get_latest_quoted_snapshot(symbol)
         if not row:
             return None
         return {
-            "price": float(row[0]) if row[0] is not None else None,
-            "timestamp": row[1],
-            "quote_currency": str(row[2] or "").upper(),
+            "price": float(row.price) if row.price is not None else None,
+            "timestamp": row.source_observed_at,
+            "quote_currency": str(row.quote_currency or "").upper(),
         }
 
     async def get_market_price(self, symbol: str) -> Optional[float]:
@@ -866,39 +859,25 @@ class BotRepository:
         normalized = sorted({str(symbol or "").upper() for symbol in symbols if str(symbol or "").strip()})
         if not normalized:
             return {}
-        result = await self.session.execute(text("""
-            SELECT DISTINCT ON (symbol) symbol, price, source_observed_at,
-                   quote_currency
-            FROM market_data
-            WHERE symbol=ANY(:symbols) AND price IS NOT NULL AND price>0
-                  AND market_id IS NULL
-                  AND source_observed_at IS NOT NULL
-                  AND quote_currency IS NOT NULL
-            ORDER BY symbol, source_observed_at DESC, timestamp DESC
-        """), {"symbols": normalized})
-        return {str(row._mapping["symbol"]).upper(): {
-            "price": float(row._mapping["price"]),
-            "observed_at": row._mapping["source_observed_at"],
-            "quote_currency": str(row._mapping["quote_currency"]).upper(),
-        } for row in result.fetchall()}
+        rows = await MarketDataRepository(self.session).get_latest_quoted_snapshots(normalized)
+        return {str(row.symbol).upper(): {
+            "price": float(row.price),
+            "observed_at": row.source_observed_at,
+            "quote_currency": str(row.quote_currency).upper(),
+        } for row in rows if row.price is not None and float(row.price) > 0}
 
     async def get_valuatable_exact_market_prices(self, market_ids: List[int]) -> Dict[int, dict]:
         """Keep each pair bot's valuation on its saved, verified venue and quote."""
         ids = sorted({int(value) for value in market_ids if value is not None})
         if not ids:
             return {}
-        result = await self.session.execute(text("""
-            SELECT DISTINCT ON (m.market_id) m.market_id, m.symbol, m.price,
-                   m.source_observed_at, tm.quote_currency
-            FROM market_data m
-            JOIN trading_markets tm ON tm.id=m.market_id
-            WHERE m.market_id=ANY(:market_ids) AND m.price IS NOT NULL
-              AND m.price>0 AND m.source_observed_at IS NOT NULL
-              AND m.symbol=tm.asset_symbol
-              AND m.quote_currency=tm.quote_currency AND tm.is_active=TRUE
-            ORDER BY m.market_id, m.source_observed_at DESC, m.timestamp DESC
-        """), {"market_ids": ids})
-        return {int(row._mapping["market_id"]): dict(row._mapping) for row in result.fetchall()}
+        rows = await MarketDataRepository(self.session).get_latest_exact_market_snapshots(ids)
+        return {market_id: {
+            "market_id": market_id, "symbol": row.symbol, "price": row.price,
+            "source_observed_at": row.source_observed_at,
+            "quote_currency": row.quote_currency,
+        } for market_id, row in rows.items()
+                if row.price is not None and float(row.price) > 0}
 
     async def get_asset_quote_currencies(self, symbols: List[str]) -> Dict[str, str]:
         normalized = sorted({str(symbol or "").upper() for symbol in symbols if str(symbol or "").strip()})

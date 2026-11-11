@@ -42,6 +42,22 @@ def _parse_epoch(value: Any) -> datetime | None:
         return None
 
 
+def _parse_provider_update(value: Any) -> datetime | None:
+    """Twelve Data may return update moments as Unix seconds or UTC text."""
+    epoch = _parse_epoch(value)
+    if epoch is not None:
+        return epoch
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 class TwelveDataMarketDataAdapter:
     provider_name = "twelve_data"
     base_url = "https://api.twelvedata.com"
@@ -87,9 +103,12 @@ class TwelveDataMarketDataAdapter:
         if price is None:
             raise ValueError("twelve_data_snapshot_missing_price")
 
-        # /quote returns exchange-local datetime for equities. Its Unix
-        # timestamp identifies the same bar unambiguously across timezones.
-        observed_at = _parse_epoch(payload.get("timestamp")) or _parse_datetime(
+        # /quote.timestamp is the interval opening, which can stay fixed
+        # while the close price changes inside that minute. Prefer the
+        # provider's actual last quote/update instant when supplied.
+        observed_at = (_parse_provider_update(payload.get("last_update_at"))
+                       or _parse_provider_update(payload.get("last_quote_at"))
+                       or _parse_epoch(payload.get("timestamp"))) or _parse_datetime(
             payload.get("datetime"), asset.timezone
         )
         if observed_at is None:

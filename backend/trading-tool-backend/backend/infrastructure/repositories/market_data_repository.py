@@ -1,8 +1,9 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import String, and_, column, desc, delete, func, true, values
+from sqlalchemy import Integer, String, and_, column, desc, delete, func, true, values
 from typing import List, Optional, Sequence
 import datetime
+from decimal import Decimal, InvalidOperation
 
 from backend.infrastructure.models import (
     MarketData, MarketDataIndicator, Indicator, MarketIndicatorRule,
@@ -12,6 +13,33 @@ from backend.infrastructure.models import (
 class MarketDataRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
+
+    @staticmethod
+    def _verified_top_quote(rows: Sequence[MarketData]) -> Optional[MarketData]:
+        """A same-instant provider conflict cannot establish a latest price."""
+        if not rows:
+            return None
+        rows = sorted(rows, key=lambda row: (
+            row.source_observed_at or datetime.datetime.min,
+            row.timestamp or datetime.datetime.min,
+            row.id or 0,
+        ), reverse=True)
+        first = rows[0]
+        if first.price is None or not first.quote_currency or not first.source_observed_at:
+            return None
+        tied = [row for row in rows if row.source_observed_at == first.source_observed_at]
+        # Reads are bounded; a full bound of tied rows may hide another fact.
+        # Repeated closed-market ingests can share one source moment for days,
+        # so this exceptional bound must be well above a normal weekend.
+        if len(tied) >= 4096:
+            return None
+        try:
+            facts = {(str(row.symbol or "").upper(), Decimal(str(row.price)),
+                      str(row.quote_currency or "").upper(),
+                      str(row.price_provider or "").lower()) for row in tied}
+        except (InvalidOperation, TypeError, ValueError):
+            return None
+        return first if len(facts) == 1 else None
 
     # =========================================================
     # GLOBAAL: Market Data (BTC prijs etc)
@@ -34,23 +62,27 @@ class MarketDataRepository:
         if type(market_id) is not int or market_id <= 0:
             raise ValueError("exact_market_id_required")
         stmt = (
-            select(MarketData)
+            select(MarketData, TradingMarket.asset_symbol, TradingMarket.quote_currency)
             .join(TradingMarket, TradingMarket.id == MarketData.market_id)
             .where(MarketData.market_id == market_id)
             .where(TradingMarket.id == market_id)
             .where(TradingMarket.is_active.is_(True))
             .where(TradingMarket.venue == "BINANCE")
-            .where(MarketData.symbol == TradingMarket.asset_symbol)
-            .where(MarketData.quote_currency == TradingMarket.quote_currency)
-            .where(MarketData.price.is_not(None))
             .where(MarketData.source_observed_at.is_not(None))
-            .where(MarketData.quote_currency.is_not(None))
             .order_by(MarketData.source_observed_at.desc(), MarketData.timestamp.desc(),
                       MarketData.id.desc())
-            .limit(1)
+            .limit(4096)
         )
         result = await self.session.execute(stmt)
-        return result.scalars().first()
+        candidates = result.all()
+        verified = self._verified_top_quote([candidate[0] for candidate in candidates])
+        if verified is None or not candidates:
+            return None
+        expected_symbol, expected_quote = candidates[0][1:3]
+        if (str(verified.symbol).upper() != str(expected_symbol).upper()
+                or str(verified.quote_currency).upper() != str(expected_quote).upper()):
+            return None
+        return verified
 
     async def get_latest_quoted_snapshot(self, symbol: str) -> Optional[MarketData]:
         """Use a provider-dated row with its own unit for factual price reads."""
@@ -58,12 +90,52 @@ class MarketDataRepository:
             select(MarketData)
             .where(MarketData.symbol == symbol.upper(), MarketData.market_id.is_(None))
             .where(MarketData.source_observed_at.is_not(None))
-            .where(MarketData.quote_currency.is_not(None))
-            .order_by(MarketData.source_observed_at.desc(), MarketData.timestamp.desc())
-            .limit(1)
+            .order_by(MarketData.source_observed_at.desc(), MarketData.timestamp.desc(),
+                      MarketData.id.desc())
+            .limit(4096)
         )
         result = await self.session.execute(stmt)
-        return result.scalars().first()
+        return self._verified_top_quote(result.scalars().all())
+
+    async def get_latest_exact_market_snapshots(self, market_ids: Sequence[int]) -> dict[int, MarketData]:
+        """Read exact quotes in one bounded, provider-verified database roundtrip."""
+        ids = list(dict.fromkeys(int(value) for value in market_ids))
+        if not ids:
+            return {}
+        requested = values(column("market_id", Integer), name="requested").data(
+            [(market_id,) for market_id in ids]
+        ).alias("requested")
+        latest = (
+            select(MarketData.id)
+            .where(MarketData.market_id == requested.c.market_id)
+            .where(MarketData.source_observed_at.is_not(None))
+            .order_by(MarketData.source_observed_at.desc(), MarketData.timestamp.desc(),
+                      MarketData.id.desc())
+            .limit(4096)
+            .correlate(requested)
+            .lateral()
+        )
+        stmt = (
+            select(MarketData, TradingMarket.asset_symbol, TradingMarket.quote_currency)
+            .select_from(requested)
+            .join(TradingMarket, TradingMarket.id == requested.c.market_id)
+            .join(latest, true())
+            .join(MarketData, MarketData.id == latest.c.id)
+            .where(TradingMarket.is_active.is_(True), TradingMarket.venue == "BINANCE")
+        )
+        result = await self.session.execute(stmt)
+        candidates = result.all()
+        verified = {}
+        for market_id in ids:
+            scoped = [candidate for candidate in candidates if candidate[0].market_id == market_id]
+            row = self._verified_top_quote([candidate[0] for candidate in scoped])
+            if row is None or not scoped:
+                continue
+            expected_symbol, expected_quote = scoped[0][1:3]
+            if (str(row.symbol).upper() == str(expected_symbol).upper()
+                    and str(row.quote_currency).upper() == str(expected_quote).upper()):
+                verified[market_id] = row
+        return verified
 
     async def get_latest_quoted_snapshots(self, symbols: Sequence[str]) -> Sequence[MarketData]:
         """Return the same provider-dated quote used by FINN for each asset."""
@@ -78,9 +150,9 @@ class MarketDataRepository:
             .where(MarketData.symbol == requested.c.symbol)
             .where(MarketData.market_id.is_(None))
             .where(MarketData.source_observed_at.is_not(None))
-            .where(MarketData.quote_currency.is_not(None))
-            .order_by(MarketData.source_observed_at.desc(), MarketData.timestamp.desc())
-            .limit(1)
+            .order_by(MarketData.source_observed_at.desc(), MarketData.timestamp.desc(),
+                      MarketData.id.desc())
+            .limit(4096)
             .correlate(requested)
             .lateral()
         )
@@ -91,7 +163,11 @@ class MarketDataRepository:
             .join(MarketData, MarketData.id == latest.c.id)
         )
         result = await self.session.execute(stmt)
-        return result.scalars().all()
+        rows = result.scalars().all()
+        return [verified for symbol in normalized
+                if (verified := self._verified_top_quote(
+                    [row for row in rows if str(row.symbol).upper() == symbol]
+                )) is not None]
 
     async def get_latest_snapshots(self, symbols: Sequence[str]) -> Sequence[MarketData]:
         normalized = list(dict.fromkeys(str(symbol).upper() for symbol in symbols if symbol))

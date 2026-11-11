@@ -11,6 +11,7 @@ from backend.domain.finn_dca_plan_contract import benchmark_score, normalize_ben
 from backend.services.pair_benchmark_service import benchmark_weights
 from backend.domain.setup_market_match import rank_matches
 from backend.infrastructure.repositories.setup_repository import SetupRepository
+from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
 from backend.utils.scoring_utils import (
     normalize_indicator_name, score_snapshot_diagnosis, score_source_is_fresh,
 )
@@ -155,21 +156,13 @@ class SetupMarketMatchService:
         )
         quote_mismatch = False
         if category == "market" and market_id is not None and "change_24h" in configured_names:
-            quote_result = await self.session.execute(text("""
-                SELECT change_24h, source_observed_at
-                FROM market_data
-                WHERE market_id = :market_id AND quote_currency IS NOT NULL
-                  AND source_observed_at IS NOT NULL
-                ORDER BY source_observed_at DESC, timestamp DESC
-                LIMIT 1
-            """), {"market_id": market_id})
-            quote = quote_result.first()
+            quote = await MarketDataRepository(self.session).get_latest_exact_market_snapshot(market_id)
             change_row = next((item for item in observations
                                if normalize_indicator_name(str(item[0])) == "change_24h"), None)
             try:
                 quote_mismatch = (quote is None or change_row is None
-                                  or quote[1] != change_row[2]
-                                  or not math.isclose(float(quote[0]), float(change_row[1]),
+                                  or quote.source_observed_at != change_row[2]
+                                  or not math.isclose(float(quote.change_24h), float(change_row[1]),
                                                       rel_tol=1e-12))
             except (TypeError, ValueError):
                 quote_mismatch = True

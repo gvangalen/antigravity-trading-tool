@@ -150,7 +150,7 @@ def test_shared_context_reads_twenty_owner_assets_without_turning_missing_scores
     service.setups.get_all_setups = AsyncMock(return_value=[])
     service.strategies.query_strategies = AsyncMock(return_value=[])
     service.bots.get_bot_configs = AsyncMock(return_value=[])
-    service.market_data.get_latest_snapshot = AsyncMock(return_value=None)
+    service.market_data.get_latest_quoted_snapshot = AsyncMock(return_value=None)
     service.benchmark_for_asset = AsyncMock(side_effect=lambda user_id, asset, **_: {
         "symbol": asset, "source_status": "missing_scores", "benchmark_score": None,
         "reported_scores": {"market_score": None, "macro_score": None, "technical_score": None},
@@ -167,6 +167,7 @@ def test_shared_context_reads_twenty_owner_assets_without_turning_missing_scores
     assert all(item["benchmark"]["benchmark_score"] is None for item in snapshot["assets"])
     assert all(item["indicator_lookup_status"] == "available" for item in snapshot["assets"])
     assert service.benchmark_for_asset.await_count == 20
+    assert service.market_data.get_latest_quoted_snapshot.await_count == 20
 
 
 def test_shared_context_keeps_failed_indicator_lookup_unknown():
@@ -179,7 +180,7 @@ def test_shared_context_keeps_failed_indicator_lookup_unknown():
     service.setups.get_all_setups = AsyncMock(return_value=[])
     service.strategies.query_strategies = AsyncMock(return_value=[])
     service.bots.get_bot_configs = AsyncMock(return_value=[])
-    service.market_data.get_latest_snapshot = AsyncMock(return_value=None)
+    service.market_data.get_latest_quoted_snapshot = AsyncMock(return_value=None)
     service.benchmark_for_asset = AsyncMock(return_value={
         "source_status": "missing_scores", "benchmark_score": None, "matches": [],
     })
@@ -268,7 +269,7 @@ def test_shared_context_serializes_real_indicator_schema_without_losing_configur
     service.setups.get_all_setups = AsyncMock(return_value=[])
     service.strategies.query_strategies = AsyncMock(return_value=[])
     service.bots.get_bot_configs = AsyncMock(return_value=[])
-    service.market_data.get_latest_snapshot = AsyncMock(return_value=SimpleNamespace(
+    service.market_data.get_latest_quoted_snapshot = AsyncMock(return_value=SimpleNamespace(
         id=456, market_id=None,
         source_observed_at=datetime.now(timezone.utc), price=61234.5,
         change_24h=1.2, volume=12345,
@@ -293,7 +294,7 @@ def test_shared_context_serializes_real_indicator_schema_without_losing_configur
     assert reports._report_facts(snapshot)["assets"][0]["market_snapshot"]["source_ref"] == (
         asset["market_snapshot"]["source_ref"])
 
-    service.market_data.get_latest_snapshot.return_value.source_observed_at = (
+    service.market_data.get_latest_quoted_snapshot.return_value.source_observed_at = (
         datetime.now(timezone.utc) - timedelta(days=10)
     )
     stale = asyncio.run(service.for_user(7, symbol="ETH"))

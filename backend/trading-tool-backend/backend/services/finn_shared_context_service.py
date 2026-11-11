@@ -88,7 +88,7 @@ class FinnSharedContextService:
                 benchmark, self.matches.last_source_row,
             )
             price_row = (await self.market_data.get_latest_exact_market_snapshot(market_id)
-                         if market_id is not None else await self.market_data.get_latest_snapshot(asset))
+                         if market_id is not None else await self.market_data.get_latest_quoted_snapshot(asset))
             if market_id is not None and price_row is not None:
                 market = await PairIndicatorConfigService(self.session).market(market_id)
                 if (market is None or market.asset_symbol != asset or
