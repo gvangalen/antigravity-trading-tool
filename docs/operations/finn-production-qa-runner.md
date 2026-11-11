@@ -140,6 +140,11 @@ analysis, user isolation or the full trade-review acceptance matrix.
 fixture-action flags off. It binds the marked, uncredentialed QA owner and
 checks BTC/EUR, ETH/USDT and AAPL/USD for 15 usable completed daily candles,
 daily trade setup candidates, trader profile and a verified benchmark score.
+It also reports bounded active configuration, available reading and fresh
+reading counts for macro, technical and market inputs in each exact market.
+These counts show whether missing configuration or readings explain a missing
+score. They cannot prove that scoring rules and history are sufficient; they
+do not authorize writing or synthesizing score evidence.
 The source check separates candle availability from plan derivation at the QA
 budget of 20 quote units, and uses the same owner-context decision as the
 product. The separate score status checks score freshness;

@@ -4,6 +4,36 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN handmatig tradevoorstel: beschermde scorebron-diagnose (11 november 2026)
+
+Phase: `RELEASE_CANDIDATE_CI_PENDING`. De generieke setupkeuze van PR #989 is op
+`a1095cb622b582f1631376a6a24ce6f03acc905d` automatisch gedeployed:
+main-CI `43079782875` en Auto Deploy `43080536205` waren groen; publieke
+backend health en frontend build-info gaven HTTP 200 met die exacte SHA.
+Onafhankelijke beschermde, alleen-lezen QA-preflight `43081148151` bevestigde
+voor BTC/EUR, ETH/USDT en AAPL/USD een beschikbare planberekening, maar geen
+profiel of geverifieerde dagscore. BTC/EUR heeft twee gekoppelde tradesetups;
+ETH/USDT en AAPL/USD geen. Nul exchange keys, brokerorders, Live bots,
+opgeslagen plannen, pending proposals of fixturewrites. Het onafhankelijke
+eindoordeel voor de volledige kaart-/bevestig-/opslagmatrix is
+`INCOMPLETE / NOT_ACCEPTED`: de positieve cases zijn nog niet uitgevoerd.
+
+De nieuwe alleen-lezen `manual_trade_source_audit` rapporteert per exact paar
+en scorecategorie uitsluitend begrensde aantallen actieve configuraties,
+beschikbare en verse metingen. Hiermee kan QA bepalen of de vaste QA-owner
+score-input mist of dat de scoreopbouw nader onderzocht moet worden. De audit
+schrijft niets en maakt geen scores aan. Lokale runner-tests: **122 passed**;
+volledige backend-suite: **4679 passed, 7 skipped**; echte providerontwikkeling:
+**20/20**, nul provider-/schema-/timeout-/parse-/validatiefouten. Onafhankelijke
+QA- en Security-codechecks: GO na herstel van de exacte symbool- en
+marktfilter. Lokale worker-actiematrix: **17/17** en adaptertests **26/26**,
+met nul brokerorders, Live bots, Live calls of productieverbindingen
+(artifact SHA-256 `cc3f4a2268b66a87e450a69608bfb9251728aba647b0c10ec0e6652b04b04af5`).
+Echte providerregressie: **109/109**, eveneens nul provider-/schema-/timeout-/
+parse-/validatiefouten (artifact SHA-256
+`fbadeb5a599f56d9a95d17533b2ec706a1beaaa401e979f8e35bfa8eb63b1640`).
+CI, deploy en nieuwe beschermde live audit zijn nog open.
+
 ## FINN handmatig tradevoorstel: expliciete tradesetupkeuze (11 november 2026)
 
 Phase: `PRODUCT_RELEASE_CANDIDATE_QA_PENDING`. PR
