@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## AAPL Paper-coach: gedateerd rapport en laatste koers (11 november 2026)
 
-Phase: `LOCAL_VALIDATED_CANDIDATE`; nog niet onafhankelijk op de volgende
+Phase: `PRODUCT_DEPLOYED_QA_PENDING`; nog niet onafhankelijk op de laatste
 productie-SHA geaccepteerd. De vorige AAPL-bronreparatie is op main
 `aa19b60f84f50c197d30886d7437ed6efe6dc3d0` gedeployed. Backend-health
 en frontend-buildinfo gaven HTTP 200 met dezelfde SHA. De beschermde
@@ -42,10 +42,14 @@ Live-bots of verboden uitvoeringen (artifact SHA-256
 Terminal-p95 was **8,23 s** en maximum **12,65 s**, onder de grenzen van
 10 en 15 s. Daarmee is de eerdere lokale rode latencygate in deze proef
 groen; ingelogde productieacceptatie is nog open. Onafhankelijke code-QA,
-Security en Architecture gaven GO. PR #971 had vijf groene CI-checks vóór
-deze statusaanvulling; de definitieve kandidaat-CI, Auto Deploy,
-publieke SHA-pariteit en beschermde Paper-contentproef zijn nog open. Dit
-geeft geen Live-orders vrij.
+Security en Architecture gaven GO. PR #971 had vijf groene CI-checks en is
+gemerged als `6b072a95fdeb825d83d7ab8432fabe7d30491f28`. Main-CI
+`42976554589` en Auto Deploy `42977129076` slaagden. Publieke backend-health
+en frontend-buildinfo gaven beide HTTP 200 met precies die merge-SHA;
+`origin/main` wees op dezelfde commit. Deze statusaanvulling creëert zelf een
+nieuwe main-SHA. De laatste main-CI, Auto Deploy en publieke SHA-pariteit
+moeten daarom vóór de beschermde Paper-contentproef opnieuw worden
+gecontroleerd. Dit geeft geen Live-orders vrij.
 
 ## AAPL: afgeronde minuutmeting voor conflicterende quotes (11 november 2026)
 
