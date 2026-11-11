@@ -85,25 +85,31 @@ def _source():
     conn = fixture._connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("""SELECT price,source_observed_at,quote_currency,id,timestamp,symbol,price_provider
+            cur.execute("""SELECT price,source_observed_at,quote_currency,id,timestamp,symbol,price_provider,is_final_candle
                            FROM market_data WHERE symbol='AAPL' AND market_id IS NULL
                              AND source_observed_at IS NOT NULL
                            ORDER BY source_observed_at DESC,timestamp DESC,id DESC LIMIT 4096""")
             rows = cur.fetchall()
         row = rows[0] if rows else None
-        # Match the product's highest provider-source moment. Storage time and
-        # ID order equivalent facts, but cannot resolve different source facts.
+        # Match the product's highest provider-source moment. Bound the whole
+        # instant before choosing mutable quotes over prior completed candles.
         if not row or row[0] is None or not row[2] or _utc(row[1]) is None:
             raise RuntimeError("aapl_source_unavailable")
         tied = [candidate for candidate in rows
                 if candidate[1] == row[1]]
+        if len(tied) >= 4096:
+            raise RuntimeError("aapl_source_ambiguous")
+        quotes = [candidate for candidate in tied if not candidate[7]]
+        if quotes:
+            tied = quotes
+            row = quotes[0]
         try:
             facts = {(str(candidate[5] or "").upper(), Decimal(str(candidate[0])),
                       str(candidate[2] or "").upper(), str(candidate[6] or "").lower())
                      for candidate in tied}
         except (InvalidOperation, TypeError, ValueError):
             raise RuntimeError("aapl_source_ambiguous") from None
-        if len(tied) >= 4096 or len(facts) != 1:
+        if len(facts) != 1:
             raise RuntimeError("aapl_source_ambiguous")
         if row[5] != "AAPL" or row[2] != "USD" or Decimal(str(row[0])) <= 0:
             raise RuntimeError("aapl_source_unavailable")
