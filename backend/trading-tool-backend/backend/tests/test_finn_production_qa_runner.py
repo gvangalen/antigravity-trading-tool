@@ -1870,7 +1870,7 @@ def test_safe_projection_excludes_response_content_and_preserves_contract_metada
     assert projection["runtime_trace"]["initial_operation_id"] == "capability"
     assert projection["runtime_trace"]["contract_id"] == "contract-1"
     assert projection["runtime_trace"]["contract_revision"] == 4
-    assert projection["runtime_trace"]["supplied_inputs"] == {"asset": "BTC"}
+    assert projection["runtime_trace"]["supplied_inputs"] == ["asset"]
     assert projection["runtime_trace"]["required_inputs"] == ["asset"]
     assert projection["runtime_trace"]["action_polarity"] == "add"
     assert projection["runtime_trace"]["immediate_bot_pair_guard_reason"] == "unsupported_utterance"
@@ -2906,3 +2906,227 @@ def test_resume_skips_checkpointed_cases_and_restores_their_conversation(monkeyp
     create_calls = [call for call in calls if call.get("method") == "POST"]
     assert len(create_calls) == 1
     assert create_calls[0]["payload"]["conversation_id"] == "conversation-live"
+
+
+def _qa_manual_trade_plan():
+    from backend.domain.finn_manual_trade_plan_contract import validate_manual_trade_plan
+
+    plan = validate_manual_trade_plan({
+        "asset": "BTC", "quote_currency": "EUR", "direction": "long", "entry_type": "limit",
+        "entry_price": "100", "quantity": "0.1", "stop_loss": "90", "targets": ["110", "120"],
+    })
+    plan["level_source"] = "market_derived"
+    plan["source_evidence"] = {
+        "method_version": "atr14_v1", "market_id": 17, "candle_ids": list(range(15)),
+        "candles_sha256": "a" * 64, "source_observed_at": "2026-11-10T00:00:00+00:00",
+        "max_loss_quote": "20", "atr_quote": "1", "provider": "binance", "provider_symbol": "BTCEUR",
+        "issued_at": "2026-11-11T00:00:00+00:00", "attestation": "b" * 64,
+        "owner_context": {
+            "profile_hash": "c" * 64, "setup_id": None, "benchmark_score": "",
+            "setup_match_status": "unavailable", "risk_factor": "0.5", "recommendation": "wait",
+        },
+    }
+    return plan
+
+
+def test_manual_trade_plan_evidence_checks_card_budget_source_and_execution_safety():
+    module = _module()
+    plan = _qa_manual_trade_plan()
+    expected = {"asset": "BTC", "quote_currency": "EUR", "max_loss_quote": "20", "recommendation": "wait"}
+
+    checked = module.manual_trade_plan_evidence(plan, expected)
+    assert checked["passed"] is True
+    assert checked["recommendation"] == "wait"
+    assert all(checked["checks"].values())
+    assert "source_evidence" not in checked
+
+    unsafe = {**plan, "executable": True}
+    assert module.manual_trade_plan_evidence(unsafe, expected)["passed"] is False
+    wrong_pair = {**plan, "quote_currency": "USDT"}
+    assert module.manual_trade_plan_evidence(wrong_pair, expected)["checks"]["quote_matches"] is False
+
+
+def test_manual_trade_projection_never_exports_guided_plan_values():
+    module = _module()
+    projected = module.safe_projection({
+        "status": "completed", "response": {"content": "private", "proposal_id": "proposal-1"},
+        "runtime_trace": {
+            "initial_operation_id": "create_manual_trade_plan",
+            "final_operation_id": "capability",
+            "canonical_target": {"private": "plan"},
+            "supplied_inputs": {
+                "asset": "BTC", "risk_budget_quote": 20,
+                "source_evidence": {"attestation": "secret", "owner_context": {"setup_name": "private"}},
+            },
+        },
+    })
+    trace = projected["runtime_trace"]
+    assert trace["supplied_inputs"] == ["asset", "risk_budget_quote", "source_evidence"]
+    assert trace["canonical_target"] is None
+    assert "secret" not in str(projected)
+    assert "private" not in str(projected)
+    incomplete = module.safe_projection({"runtime_trace": {
+        "supplied_inputs": {"source_evidence": {"attestation": "secret"}},
+        "canonical_target": {"private": "plan"},
+    }})
+    assert incomplete["runtime_trace"]["supplied_inputs"] == ["source_evidence"]
+    assert incomplete["runtime_trace"]["canonical_target"] is None
+    assert "secret" not in str(incomplete)
+
+
+def test_manual_trade_fixture_rejects_invalid_card_before_publish(monkeypatch):
+    module = _module()
+    calls = []
+    bad_plan = {**_qa_manual_trade_plan(), "executable": True}
+    monkeypatch.setattr(module, "request_json", lambda **kwargs: (
+        calls.append(kwargs) or (200, {
+            "proposal_id": "proposal-1", "operation_type": "create_manual_trade_plan",
+            "requested_state": bad_plan,
+        }, 1.0, None)
+    ))
+    result = module._run_fixture_action(
+        base_url="https://example.test", token="token",
+        case={"fixture_action": "safe_execution", "expected_operation_id": "create_manual_trade_plan",
+              "expected_manual_trade": {"asset": "BTC", "quote_currency": "EUR", "max_loss_quote": "20"}},
+        terminal={"run_id": "run-1", "response": {"proposal_id": "proposal-1"}},
+    )
+    assert result["outcome"] == "proposal_evidence_failed"
+    assert result["error_category"] == "manual_trade_proposal_invalid"
+    assert len(calls) == 1
+
+
+def test_manual_trade_saved_evidence_is_owner_run_bound_and_redacted(monkeypatch):
+    module = _module()
+    plan = _qa_manual_trade_plan()
+    expected = {"asset": "BTC", "quote_currency": "EUR", "max_loss_quote": "20"}
+    saved = {**plan, "market_id": 17}
+
+    class Result:
+        def __init__(self, params):
+            self.params = params
+
+        def mappings(self):
+            return self
+
+        def all(self):
+            return [{"plan_json": saved}]
+
+        def one_or_none(self):
+            return {"asset_symbol": "BTC", "quote_currency": "EUR", "venue": "BINANCE",
+                    "provider": "binance", "provider_symbol": "BTCEUR", "is_active": True}
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def execute(self, _statement, params):
+            assert params in ({"user_id": 42, "run_id": "run-1"}, {"market_id": 17})
+            return Result(params)
+
+    from backend.infrastructure import database
+    monkeypatch.setattr(database, "async_session_factory", lambda: Session())
+    monkeypatch.setenv("FINN_QA_USER_ID", "42")
+    checked = module.manual_trade_saved_evidence(
+        source_run_id="run-1", proposal_plan=plan, expected=expected,
+    )
+    assert checked["unique_for_run"] is True
+    assert checked["same_as_proposal"] is True
+    assert checked["exact_market_matches_catalog"] is True
+    assert checked["plan"]["passed"] is True
+    assert "plan_json" not in checked
+
+
+def test_manual_trade_safe_execution_proves_single_saved_plan_and_replay(monkeypatch):
+    module = _module()
+    plan = _qa_manual_trade_plan()
+    expected = {"asset": "BTC", "quote_currency": "EUR", "max_loss_quote": "20"}
+    responses = iter([
+        (200, {"proposal_id": "proposal-1", "operation_type": "create_manual_trade_plan",
+               "requested_state": plan}, 1.0, None),
+        (200, {"confirmation_token": "secret", "payload_hash": "hash"}, 1.0, None),
+        (200, {"status": "confirmed"}, 1.0, None),
+        (200, {"status": "succeeded", "operation_type": "create_manual_trade_plan"}, 1.0, None),
+        (200, {"status": "already_executed", "operation_type": "create_manual_trade_plan"}, 1.0, None),
+    ])
+    monkeypatch.setattr(module, "request_json", lambda **_kwargs: next(responses))
+    before = {"owner_scoped": True, "row_count": 0, "state_sha256": "before",
+              "owner_domain_state_sha256": "before-all", "broker_order_count": 0, "live_bot_count": 0}
+    after = {"owner_scoped": True, "row_count": 1, "state_sha256": "after",
+             "owner_domain_state_sha256": "after-all", "broker_order_count": 0, "live_bot_count": 0}
+    snapshots = iter([before, before, before, after, after])
+    monkeypatch.setattr(module, "owner_scoped_database_snapshot", lambda **_kwargs: next(snapshots))
+    saved = {"matching_run_count": 1, "unique_for_run": True, "same_as_proposal": True,
+             "exact_market_matches_catalog": True,
+             "plan": module.manual_trade_plan_evidence({**plan, "market_id": 17}, expected)}
+    monkeypatch.setattr(module, "manual_trade_saved_evidence", lambda **_kwargs: saved)
+
+    result = module._run_fixture_action(
+        base_url="https://example.test", token="token",
+        case={"fixture_action": "safe_execution", "expected_operation_id": "create_manual_trade_plan",
+              "expected_manual_trade": expected, "idempotency_replay": True,
+              "client_context": {"fixture_namespace": "qa-acceptance-a1b2c3d4"}},
+        terminal={"run_id": "run-1", "response": {"proposal_id": "proposal-1"}},
+        database_before_run=before,
+    )
+    assert result["outcome"] == "executed"
+    assert result["manual_trade_proposal_evidence"]["passed"] is True
+    assert result["manual_trade_saved_evidence"]["plan"]["passed"] is True
+    assert result["manual_trade_replay_unchanged"] is True
+    assert result["no_write_before_confirmation"] is True
+    assert result["no_duplicate_effect"] is True
+    assert result["safety_database_unchanged"] == {"broker_orders": True, "live_bots": True}
+
+
+def test_manual_trade_read_only_clarification_keeps_owner_database_unchanged(monkeypatch):
+    module = _module()
+    terminal = {"run_id": "run-1", "conversation_id": "conversation-1", "status": "completed",
+                "response": {"mode": "guided"},
+                "runtime_trace": {"initial_operation_id": "create_manual_trade_plan",
+                                  "final_operation_id": "create_manual_trade_plan",
+                                  "missing_inputs": ["risk_budget_quote"]}}
+    responses = iter([
+        (200, {"run_id": "run-1", "conversation_id": "conversation-1", "status": "pending"}, 1.0, None),
+        (200, terminal, 1.0, None),
+    ])
+    monkeypatch.setattr(module, "request_json", lambda **_kwargs: next(responses))
+    monkeypatch.setattr(module, "request_sse_terminal", lambda **_kwargs: (terminal, None))
+    baseline = {"owner_scoped": True, "row_count": 0, "state_sha256": "same",
+                "owner_domain_state_sha256": "same-all", "broker_order_count": 0, "live_bot_count": 0}
+    monkeypatch.setattr(module, "owner_scoped_database_snapshot", lambda **_kwargs: baseline)
+
+    results = module.run_cases(
+        base_url="https://example.test", token="token", fixture_namespace="qa-acceptance-a1b2c3d4",
+        cases=[{"case_id": "missing-budget", "message": "Maak een BTC/EUR tradeplan",
+                "fixture_action": "read_only", "expected_operation_id": "create_manual_trade_plan",
+                "expected_manual_trade": {"asset": "BTC", "quote_currency": "EUR",
+                                          "risk_budget_requested": True}}],
+    )
+    assert len(results) == 1
+    assert results[0]["manual_trade_clarification_evidence"]["passed"] is True
+    assert results[0]["manual_trade_read_only_evidence"]["unchanged"] is True
+    assert results[0]["failure_classification"] is None
+
+
+def test_manual_trade_manifest_requires_scoped_typed_expectation(tmp_path, monkeypatch):
+    module = _module()
+    monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_ACTIONS", "1")
+    monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_EXECUTION", "1")
+    manifest = tmp_path / "manual.json"
+    case = {"case_id": "btc-save", "message": "Maak een BTC/EUR tradeplan met 20 euro risico",
+            "fixture_action": "safe_execution", "expected_operation_id": "create_manual_trade_plan"}
+    manifest.write_text(json.dumps({"cases": [case]}), encoding="utf-8")
+    with pytest.raises(ValueError, match="manifest_manual_trade_expectation_required"):
+        list(module.load_manifest(
+            manifest_root=tmp_path, manifest_id="manual", fixture_namespace="qa-34510823510-f8cbd9c1-a1b2c3d4",
+        ))
+
+    case["expected_manual_trade"] = {"asset": "BTC", "quote_currency": "EUR", "max_loss_quote": "20"}
+    manifest.write_text(json.dumps({"cases": [case]}), encoding="utf-8")
+    with pytest.raises(ValueError, match="fixture_namespace_required"):
+        list(module.load_manifest(manifest_root=tmp_path, manifest_id="manual"))
+    assert list(module.load_manifest(
+        manifest_root=tmp_path, manifest_id="manual", fixture_namespace="qa-34510823510-f8cbd9c1-a1b2c3d4",
+    ))[0]["expected_manual_trade"]["asset"] == "BTC"

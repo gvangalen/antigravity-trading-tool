@@ -47,6 +47,28 @@ Onafhankelijke lokale QA, Security en Architecture gaven GO op de productdiff
 vóór deze rebase; ingelogde productie-QA van de nieuwe kandidaat is niet
 uitgevoerd en blijft van de QA-agent.
 
+QA-vervolg: PR #974 merge `b3d5752620528f8fa4176824052b17f180072263`
+had groene main-CI `42993206472` en Auto Deploy `42993881362`.
+`origin/main`, publieke backend-health en frontend-buildinfo gaven diezelfde
+SHA; beide routes HTTP 200. De beschermde auth-preflight `43005252131` was
+groen en bevestigde fixture-authenticatie, maar bevatte geen productcase of
+fixture-write. De QA-agent vond daarna dat de bestaande generieke runner het
+nieuwe plan kon opslaan, maar nog geen voldoende getypeerd kaart-, planrij-,
+no-write- en replaybewijs publiceerde. Er is daarom geen live
+manual-trade-acceptatieverdict op deze SHA.
+
+Branch `codex/finn-manual-trade-qa-runner-20261111` voegt uitsluitend
+QA-runnerbewijs en tests toe: een eigenaar/run-gebonden planrijcontrole,
+exacte markt/provider-identiteit, voor/na databasefingerprints, brokerorder-
+en Live-bot-tellers, kaart- en risicocontroles en redactie van alle aangeleverde
+inputwaarden in het beschermde rapport. De strikte registry-brede
+action-contract-corpus blijft apart. Gerichte runnertests **117 passed**;
+root-backend **4655 passed, 7 skipped**. De nieuwe snapshot-SQL is uitgevoerd
+tegen lokale PostgreSQL 16. Security en Architecture gaven GO op deze
+QA-runnerdelta. De lokale worker-actiecontractmatrix, echte-provider
+regressieset, PR-CI, Auto Deploy en publieke SHA-pariteit van deze runnerfix
+zijn nog open; de QA-agent start tot dan geen inhoudsproef.
+
 ## AAPL Paper-coach: gedateerd rapport en laatste koers (11 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_QA_PENDING`; nog niet onafhankelijk op de laatste

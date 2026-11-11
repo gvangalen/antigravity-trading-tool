@@ -22,6 +22,7 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, Optional, Tuple
 
@@ -576,6 +577,12 @@ ACTION_CONTRACT_ACCEPTANCE_WRITE_OPERATIONS = frozenset({
     "delete_bot",
     "deactivate_bot",
 })
+# The strict registry-wide acceptance corpus above has its own case count.
+# A targeted runtime profile still needs database evidence for this new safe
+# write, without silently changing that separate corpus.
+DATABASE_EVIDENCE_WRITE_OPERATIONS = ACTION_CONTRACT_ACCEPTANCE_WRITE_OPERATIONS | {
+    "create_manual_trade_plan",
+}
 ACCEPTANCE_EXPECTATION_FIELDS = frozenset({
     "expected_operation_id",
     "expected_action_polarity",
@@ -788,6 +795,7 @@ _DATABASE_SCOPE_BY_OPERATION = {
     "update_bot": ("bot_configs", "bot"),
     "delete_bot": ("bot_configs", "bot"),
     "deactivate_bot": ("bot_configs", "bot"),
+    "create_manual_trade_plan": ("finn_manual_trade_plans", "manual_trade_plan"),
 }
 
 
@@ -844,20 +852,23 @@ async def _load_owner_scoped_database_snapshot(
                 ORDER BY st.id
             """), params)).mappings().all()
         domain_rows = (await session.execute(text("""
-            SELECT 'setups' AS domain, id, to_jsonb(t) - ARRAY['user_id', 'created_at', 'updated_at', 'last_run'] AS state
+            SELECT 'setups' AS domain, id::text AS id, to_jsonb(t) - ARRAY['user_id', 'created_at', 'updated_at', 'last_run'] AS state
             FROM setups AS t WHERE user_id = :user_id
             UNION ALL
-            SELECT 'strategies' AS domain, id, to_jsonb(t) - ARRAY['user_id', 'created_at', 'updated_at', 'last_run'] AS state
+            SELECT 'strategies' AS domain, id::text AS id, to_jsonb(t) - ARRAY['user_id', 'created_at', 'updated_at', 'last_run'] AS state
             FROM strategies AS t WHERE user_id = :user_id
             UNION ALL
-            SELECT 'bot_configs' AS domain, id, to_jsonb(t) - ARRAY['user_id', 'created_at', 'updated_at', 'last_run'] AS state
+            SELECT 'bot_configs' AS domain, id::text AS id, to_jsonb(t) - ARRAY['user_id', 'created_at', 'updated_at', 'last_run'] AS state
             FROM bot_configs AS t WHERE user_id = :user_id
             UNION ALL
-            SELECT 'watchlists' AS domain, id, to_jsonb(t) - ARRAY['user_id', 'created_at', 'updated_at', 'last_run'] AS state
+            SELECT 'watchlists' AS domain, id::text AS id, to_jsonb(t) - ARRAY['user_id', 'created_at', 'updated_at', 'last_run'] AS state
             FROM watchlists AS t WHERE user_id = :user_id
             UNION ALL
-            SELECT 'user_indicator_configs' AS domain, id, to_jsonb(t) - ARRAY['user_id', 'created_at', 'updated_at', 'last_run'] AS state
+            SELECT 'user_indicator_configs' AS domain, id::text AS id, to_jsonb(t) - ARRAY['user_id', 'created_at', 'updated_at', 'last_run'] AS state
             FROM user_indicator_configs AS t WHERE user_id = :user_id
+            UNION ALL
+            SELECT 'finn_manual_trade_plans' AS domain, id, to_jsonb(t) - ARRAY['user_id', 'created_at'] AS state
+            FROM finn_manual_trade_plans AS t WHERE user_id = :user_id
             ORDER BY domain, id
         """), {"user_id": user_id})).mappings().all()
         user_state = (await session.execute(text("""
@@ -872,7 +883,7 @@ async def _load_owner_scoped_database_snapshot(
             {"user_id": user_id},
         )).scalar_one())
     normalized = [
-        {"id": int(row["id"]), "state": row["state"]}
+        {"id": str(row["id"]) if table == "finn_manual_trade_plans" else int(row["id"]), "state": row["state"]}
         for row in rows
     ]
     digest = hashlib.sha256(
@@ -880,7 +891,7 @@ async def _load_owner_scoped_database_snapshot(
     ).hexdigest()
     domain_digest = hashlib.sha256(json.dumps({
         "rows": [
-            {"domain": row["domain"], "id": int(row["id"]), "state": row["state"]}
+            {"domain": row["domain"], "id": str(row["id"]), "state": row["state"]}
             for row in domain_rows
         ],
         "ai_preferences": user_state,
@@ -889,7 +900,7 @@ async def _load_owner_scoped_database_snapshot(
         "scope": scope,
         "owner_scoped": True,
         "row_count": len(normalized),
-        "entity_ids": [row["id"] for row in normalized],
+        "entity_ids": [] if table == "finn_manual_trade_plans" else [row["id"] for row in normalized],
         "linked_strategy_evidence": linked_strategy_evidence(
             linked_strategy_rows, rows, expected_linked_strategy,
         ) if operation_id == "create_setup" else None,
@@ -955,6 +966,132 @@ def same_owner_database_state(before: Dict[str, Any], after: Dict[str, Any]) -> 
         and before.get("broker_order_count") == after.get("broker_order_count")
         and before.get("live_bot_count") == after.get("live_bot_count")
     )
+
+
+def manual_trade_plan_evidence(plan: Any, expected: Mapping[str, Any]) -> Dict[str, Any]:
+    """Return only typed checks of a proposal or saved non-executable plan."""
+    from backend.domain.finn_manual_trade_plan_contract import validate_manual_trade_plan
+    from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
+
+    fields = dict(plan) if isinstance(plan, dict) else {}
+    saved_market_id = fields.pop("market_id", None)
+    try:
+        validated = validate_manual_trade_plan(fields)
+    except (TypeError, ValueError):
+        validated = None
+    source = fields.get("source_evidence") if isinstance(fields.get("source_evidence"), dict) else {}
+    context = source.get("owner_context") if isinstance(source.get("owner_context"), dict) else {}
+    recommendation = context.get("recommendation")
+    if recommendation not in {"review", "reduced_risk", "wait"}:
+        recommendation = "unknown"
+    try:
+        budget = Decimal(str(expected["max_loss_quote"]))
+        source_budget = Decimal(str(source["max_loss_quote"]))
+        factor = Decimal(str(context["risk_factor"]))
+        actual_loss = Decimal(str(fields["max_loss_quote"]))
+        budget_valid = budget > 0 and source_budget == budget and actual_loss <= budget * factor
+        factor_valid = factor == (Decimal("1") if recommendation == "review" else Decimal("0.5"))
+    except (KeyError, InvalidOperation, TypeError, ValueError):
+        budget_valid = factor_valid = False
+    asset = str(expected.get("asset") or "").upper()
+    quote = str(expected.get("quote_currency") or "").upper()
+    catalog = DEFAULT_ASSET_CATALOG.get(asset) or {}
+    market_id = source.get("market_id")
+    market_valid = (
+        (isinstance(market_id, int) and market_id > 0 and
+         (saved_market_id is None or saved_market_id == market_id))
+        if fields.get("asset_class") == "crypto" else
+        (market_id is None and saved_market_id is None)
+    )
+    checks = {
+        "asset_matches": bool(asset) and fields.get("asset") == asset,
+        "quote_matches": bool(quote) and fields.get("quote_currency") == quote,
+        "exact_market_valid": market_valid,
+        "terms_and_risk_math_valid": validated is not None,
+        "two_targets_present": isinstance(fields.get("targets"), list) and len(fields["targets"]) == 2,
+        "risk_within_budget": budget_valid,
+        "risk_factor_matches_advice": factor_valid,
+        "source_attestation_present": (
+            fields.get("level_source") == "market_derived"
+            and isinstance(source.get("candle_ids"), list) and len(source["candle_ids"]) == 15
+            and bool(re.fullmatch(r"[0-9a-f]{64}", str(source.get("candles_sha256") or "")))
+            and bool(re.fullmatch(r"[0-9a-f]{64}", str(source.get("attestation") or "")))
+            and bool(source.get("issued_at")) and bool(source.get("source_observed_at"))
+            and bool(source.get("provider")) and bool(source.get("provider_symbol"))
+        ),
+        "provider_matches_catalog": (
+            str(source.get("provider") or "").lower() == str(catalog.get("primary_provider") or "").lower()
+            and str(source.get("provider_symbol") or "").upper() == (
+                f"{asset}{quote}" if fields.get("asset_class") == "crypto"
+                else str(catalog.get("provider_symbol") or "").upper()
+            )
+        ),
+        "owner_context_recorded": (
+            bool(re.fullmatch(r"[0-9a-f]{64}", str(context.get("profile_hash") or "")))
+            and all(key in context for key in ("setup_id", "benchmark_score", "setup_match_status", "recommendation"))
+            and recommendation != "unknown"
+        ),
+        "recommendation_matches": (
+            expected.get("recommendation") is None or recommendation == expected["recommendation"]
+        ),
+        "not_executable": fields.get("executable") is False,
+    }
+    return {"checks": checks, "recommendation": recommendation, "passed": all(checks.values())}
+
+
+async def _load_manual_trade_saved_evidence(
+    *, source_run_id: str, proposal_plan: Mapping[str, Any], expected: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """Read only the protected owner's plan for this run; emit no plan JSON or ID."""
+    from sqlalchemy import text
+    from backend.infrastructure.database import async_session_factory
+
+    raw_user_id = os.environ.get("FINN_QA_USER_ID", "")
+    if not raw_user_id.isdigit() or not source_run_id:
+        raise ValueError("fixture_binding_invalid")
+    async with async_session_factory() as session:
+        rows = (await session.execute(text(
+            "SELECT plan_json FROM finn_manual_trade_plans "
+            "WHERE user_id=:user_id AND source_run_id=:run_id"
+        ), {"user_id": int(raw_user_id), "run_id": source_run_id})).mappings().all()
+        market_row = None
+        if len(rows) == 1:
+            candidate = dict(rows[0]["plan_json"] or {})
+            market_id = (candidate.get("source_evidence") or {}).get("market_id")
+            if candidate.get("asset_class") == "crypto" and isinstance(market_id, int):
+                market_row = (await session.execute(text(
+                    "SELECT asset_symbol,quote_currency,venue,provider,provider_symbol,is_active "
+                    "FROM trading_markets WHERE id=:market_id"
+                ), {"market_id": market_id})).mappings().one_or_none()
+    plan = dict(rows[0]["plan_json"] or {}) if len(rows) == 1 else {}
+    comparable = dict(plan)
+    comparable.pop("market_id", None)
+    return {
+        "matching_run_count": len(rows),
+        "unique_for_run": len(rows) == 1,
+        "same_as_proposal": len(rows) == 1 and comparable == dict(proposal_plan),
+        "exact_market_matches_catalog": (
+            bool(market_row)
+            and market_row["asset_symbol"] == str(expected.get("asset") or "").upper()
+            and market_row["quote_currency"] == str(expected.get("quote_currency") or "").upper()
+            and market_row["venue"] == plan.get("venue")
+            and market_row["provider"] == (plan.get("source_evidence") or {}).get("provider")
+            and market_row["provider_symbol"] == (plan.get("source_evidence") or {}).get("provider_symbol")
+            and market_row["is_active"] is True
+        ) if plan.get("asset_class") == "crypto" else plan.get("market_id") is None,
+        "plan": manual_trade_plan_evidence(plan, expected),
+    }
+
+
+def manual_trade_saved_evidence(
+    *, source_run_id: str, proposal_plan: Mapping[str, Any], expected: Mapping[str, Any],
+) -> Dict[str, Any]:
+    try:
+        return _shared_database_loop().run_until_complete(_load_manual_trade_saved_evidence(
+            source_run_id=source_run_id, proposal_plan=proposal_plan, expected=expected,
+        ))
+    except Exception as error:
+        return {"status": "unavailable", "error_category": classify_internal_issue(error)}
 
 
 def redact(value: Any) -> Any:
@@ -1190,13 +1327,33 @@ def safe_projection(envelope: Dict[str, Any]) -> Dict[str, Any]:
         for key in ("mode", "proposal_id", "confirmation_required", "verifier_status")
         if key in response
     }
+    safe_trace = {key: trace.get(key) for key in allowed if key in trace}
+    # Every action can carry owner data in guided collected_inputs, including
+    # malformed traces without an operation ID. Only input names are evidence.
+    supplied = trace.get("supplied_inputs")
+    names = supplied.keys() if isinstance(supplied, dict) else supplied if isinstance(supplied, list) else []
+    safe_trace["supplied_inputs"] = sorted({
+        name for name in names
+        if isinstance(name, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", name)
+    })
+    if not isinstance(trace.get("canonical_target"), (str, int)):
+        safe_trace["canonical_target"] = None
+    if "create_manual_trade_plan" in {
+        trace.get("initial_operation_id"), trace.get("final_operation_id"),
+    }:
+        target = trace.get("canonical_target")
+        safe_trace["canonical_target"] = (
+            target if isinstance(target, str)
+            and re.fullmatch(r"[A-Z0-9]{1,12}(?:/[A-Z0-9]{1,12})?", target)
+            else None
+        )
     return {
         "run_id": envelope.get("run_id"),
         "conversation_id": envelope.get("conversation_id"),
         "status": envelope.get("status"),
         "mode": envelope.get("mode"),
         "response": safe_response,
-        "runtime_trace": {key: trace.get(key) for key in allowed if key in trace},
+        "runtime_trace": safe_trace,
     }
 
 
@@ -1269,6 +1426,31 @@ def load_manifest(
             or not all(isinstance(item, str) and 1 <= len(item) <= 100 for item in expected_answer_terms)
         ):
             raise ValueError("manifest_expected_answer_terms_invalid")
+        manual_expected = case.get("expected_manual_trade")
+        if case.get("expected_operation_id") == "create_manual_trade_plan" and action_mode != "read_only" and manual_expected is None:
+            raise ValueError("manifest_manual_trade_expectation_required")
+        if manual_expected is not None:
+            if (case.get("expected_operation_id") != "create_manual_trade_plan"
+                    or not fixture_namespace
+                    or not isinstance(manual_expected, dict)
+                    or set(manual_expected).difference({"asset", "quote_currency", "max_loss_quote", "recommendation", "risk_budget_requested"})
+                    or not isinstance(manual_expected.get("asset"), str)
+                    or not isinstance(manual_expected.get("quote_currency"), str)
+                    or not re.fullmatch(r"[A-Z0-9]+", manual_expected["asset"])
+                    or not re.fullmatch(r"[A-Z0-9]+", manual_expected["quote_currency"])
+                    or ("recommendation" in manual_expected and manual_expected["recommendation"] not in {"review", "reduced_risk", "wait"})
+                    or ("risk_budget_requested" in manual_expected and not isinstance(manual_expected["risk_budget_requested"], bool))):
+                raise ValueError("manifest_expected_manual_trade_invalid")
+            if manual_expected.get("risk_budget_requested") is True:
+                if action_mode != "read_only" or "max_loss_quote" in manual_expected:
+                    raise ValueError("manifest_expected_manual_trade_invalid")
+            elif (action_mode != "read_only" or "max_loss_quote" in manual_expected):
+                try:
+                    valid_budget = Decimal(str(manual_expected["max_loss_quote"])) > 0
+                except (KeyError, InvalidOperation, TypeError, ValueError):
+                    valid_budget = False
+                if not valid_budget:
+                    raise ValueError("manifest_expected_manual_trade_invalid")
         expected_linked = case.get("expected_linked_strategy")
         if expected_linked is not None and (
             action_mode != "safe_execution" or case.get("expected_operation_id") != "create_setup"
@@ -1894,10 +2076,10 @@ def _run_fixture_action(
     operation_id = str(case.get("expected_operation_id") or "")
     context = case.get("client_context") if isinstance(case.get("client_context"), dict) else {}
     fixture_namespace = str(context.get("fixture_namespace") or "")
-    database_evidence_required = operation_id in ACTION_CONTRACT_ACCEPTANCE_WRITE_OPERATIONS
+    database_evidence_required = operation_id in DATABASE_EVIDENCE_WRITE_OPERATIONS
 
     def database_snapshot() -> Dict[str, Any]:
-        if operation_id not in ACTION_CONTRACT_ACCEPTANCE_WRITE_OPERATIONS:
+        if operation_id not in DATABASE_EVIDENCE_WRITE_OPERATIONS:
             return {"status": "not_applicable"}
         return owner_scoped_database_snapshot(
             operation_id=operation_id,
@@ -1959,6 +2141,15 @@ def _run_fixture_action(
                     "requires_step_up_auth", "payload_hash", "confirmation_required")
         if key in proposal
     }
+    proposal_plan: Dict[str, Any] = {}
+    if operation_id == "create_manual_trade_plan":
+        proposal_plan = proposal.get("requested_state") if isinstance(proposal.get("requested_state"), dict) else {}
+        evidence = manual_trade_plan_evidence(proposal_plan, case.get("expected_manual_trade") or {})
+        result["manual_trade_proposal_evidence"] = evidence
+        if (proposal.get("operation_type") != operation_id or not evidence["passed"]):
+            result["error_category"] = "manual_trade_proposal_invalid"
+            result["outcome"] = "proposal_evidence_failed"
+            return result
     if database_evidence_required:
         if "database_before_confirmation" not in result:
             result["database_before_confirmation"] = database_snapshot()
@@ -2041,6 +2232,17 @@ def _run_fixture_action(
         linked_evidence = result["database_after_execution"].get("linked_strategy_evidence") or {}
         if case.get("expected_linked_strategy") and linked_evidence.get("passed") is not True:
             result["error_category"] = "linked_strategy_postcondition_failed"
+    if operation_id == "create_manual_trade_plan":
+        saved = manual_trade_saved_evidence(
+            source_run_id=str(terminal.get("run_id") or ""), proposal_plan=proposal_plan,
+            expected=case.get("expected_manual_trade") or {},
+        )
+        result["manual_trade_saved_evidence"] = saved
+        if saved.get("status") == "unavailable":
+            result["error_category"] = "database_evidence_unavailable"
+        elif not (saved["unique_for_run"] and saved["same_as_proposal"]
+                  and saved["exact_market_matches_catalog"] and saved["plan"]["passed"]):
+            result["error_category"] = "manual_trade_saved_plan_invalid"
     if case.get("idempotency_replay") is True:
         replay_status, _replayed, replay_latency, replay_error = request_json(
             url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}/execute",
@@ -2054,6 +2256,17 @@ def _run_fixture_action(
             result["error_category"] = replay_error or "idempotency_replay_failed"
         if database_evidence_required:
             result["database_after_replay"] = database_snapshot()
+        if operation_id == "create_manual_trade_plan":
+            replay_saved = manual_trade_saved_evidence(
+                source_run_id=str(terminal.get("run_id") or ""), proposal_plan=proposal_plan,
+                expected=case.get("expected_manual_trade") or {},
+            )
+            result["manual_trade_replay_unchanged"] = (
+                replay_saved.get("status") != "unavailable"
+                and replay_saved == result.get("manual_trade_saved_evidence")
+            )
+            if not result["manual_trade_replay_unchanged"]:
+                result["error_category"] = result.get("error_category") or "manual_trade_replay_changed_plan"
         if replay_execution_status != "already_executed":
             result["error_category"] = result.get("error_category") or "idempotency_replay_not_already_executed"
         if database_evidence_required:
@@ -2165,9 +2378,17 @@ def run_cases(
             case = materialize_fixture_namespace(case, namespace=fixture_namespace)
         database_before_run = None
         operation_id = str(case.get("expected_operation_id") or "")
-        if (case.get("fixture_action", "read_only") != "read_only"
-                and operation_id in ACTION_CONTRACT_ACCEPTANCE_WRITE_OPERATIONS
-                and fixture_namespace):
+        manual_read_only = (
+            operation_id == "create_manual_trade_plan"
+            and case.get("fixture_action", "read_only") == "read_only"
+            and isinstance(case.get("expected_manual_trade"), dict)
+        )
+        needs_database_evidence = (
+            (case.get("fixture_action", "read_only") != "read_only"
+             and operation_id in DATABASE_EVIDENCE_WRITE_OPERATIONS)
+            or manual_read_only
+        )
+        if needs_database_evidence and fixture_namespace:
             database_before_run = owner_scoped_database_snapshot(
                 operation_id=operation_id, fixture_namespace=fixture_namespace,
             )
@@ -2251,7 +2472,9 @@ def run_cases(
             results[result_index] = result
             if checkpoint:
                 checkpoint(results, planned_count=len(case_list))
-            if case.get("fixture_action", "read_only") != "read_only":
+            if case.get("fixture_action", "read_only") != "read_only" or (
+                manual_read_only and result["fixture_action"].get("no_write_after_attempt") is False
+            ):
                 return stop_after_write_failure(index + 1)
             continue
         # Both public Build matrices and the protected QA runner use the same
@@ -2338,13 +2561,36 @@ def run_cases(
             if terminal.get("status") in TERMINAL_STATUSES and not result.get("error_category")
             else {"mode": case.get("fixture_action", "read_only"), "outcome": "not_run", "error_category": None}
         )
+        if manual_read_only and database_before_run is not None:
+            database_after_read = owner_scoped_database_snapshot(
+                operation_id=operation_id, fixture_namespace=fixture_namespace,
+            )
+            result["manual_trade_read_only_evidence"] = {
+                "database_before": database_before_run,
+                "database_after": database_after_read,
+                "unchanged": same_owner_database_state(database_before_run, database_after_read),
+            }
+            if not result["manual_trade_read_only_evidence"]["unchanged"]:
+                result["fixture_action"]["error_category"] = "manual_trade_read_only_write_detected"
+        if (case.get("expected_manual_trade") or {}).get("risk_budget_requested") is True:
+            trace = projection.get("runtime_trace") or {}
+            missing = trace.get("missing_inputs") or []
+            requested = "risk_budget_quote" in missing
+            no_proposal = not _proposal_id(terminal)
+            result["manual_trade_clarification_evidence"] = {
+                "risk_budget_requested": requested,
+                "no_proposal": no_proposal,
+                "passed": requested and no_proposal,
+            }
+            if not requested or not no_proposal:
+                result["fixture_action"]["error_category"] = "manual_trade_clarification_invalid"
         if result["fixture_action"]["outcome"] in {"not_run", "case_timeout"}:
             check_aborted_write_attempt(result)
         result["failure_classification"] = classify_case_failure(result)
         results[result_index] = result
         if checkpoint:
             checkpoint(results, planned_count=len(case_list))
-        if case.get("fixture_action", "read_only") != "read_only" and classify_case_failure(result):
+        if (case.get("fixture_action", "read_only") != "read_only" or manual_read_only) and classify_case_failure(result):
             return stop_after_write_failure(index + 1)
     return results
 
