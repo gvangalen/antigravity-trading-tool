@@ -34,6 +34,7 @@ ALLOWED_PROFILES = {
     "watchlist_browser_ui",
     "watchlist_context_audit",
     "manual_trade_source_audit",
+    "manual_trade_fixture_preflight",
     "trade_review_preflight",
     "manifest_key",
     "targeted_regression",
@@ -178,6 +179,15 @@ def safe_portfolio_paper_fx_diagnostic(error: Exception) -> Dict[str, Any] | Non
 
 def profile_error_category(profile: str, error: Exception) -> str:
     """The published QA error category must not contain private fixture text."""
+    if profile == "manual_trade_fixture_preflight":
+        code = str(error)
+        return (code if code in {
+            "fixture_binding_invalid", "fixture_binding_owner_mismatch", "fixture_owner_unsafe",
+            "manual_trade_fixture_preflight_schema_unverified",
+            "manual_trade_fixture_preflight_setup_count_unbounded",
+            "manual_trade_source_audit_manifest_forbidden",
+            "manual_trade_source_audit_writes_forbidden",
+        } else "manual_trade_fixture_preflight_runtime_error")
     if profile == "manual_trade_source_audit":
         code = str(error)
         return (code if code in {
@@ -3005,6 +3015,134 @@ def manual_trade_source_audit() -> Dict[str, Any]:
     return _shared_database_loop().run_until_complete(_manual_trade_source_audit())
 
 
+async def _manual_trade_fixture_preflight() -> Dict[str, Any]:
+    """Read-only mutation safety check for the bound QA owner's trade sources.
+
+    The incoming foreign keys are discovered from PostgreSQL, so a newly added
+    setup dependency cannot silently become eligible for temporary changes.
+    No identifiers, source values, or private database errors reach the report.
+    """
+    from sqlalchemy import text as sql_text
+
+    from backend.infrastructure.database import async_session_factory
+    from backend.services.finn_manual_trade_suggestion_service import _source_candles
+
+    source = await _manual_trade_source_audit()
+    bound = os.getenv("FINN_QA_USER_ID", "")
+    if not bound.isdecimal() or int(bound) <= 0:
+        raise RuntimeError("fixture_binding_invalid")
+    owner = int(bound)
+    async with async_session_factory() as session:
+        refs = (await session.execute(sql_text("""
+            SELECT ns.nspname AS schema_name, child.relname AS table_name,
+                   attr.attname AS column_name,
+                   parent_attr.attname AS referenced_column,
+                   array_length(fk.conkey,1) AS child_column_count,
+                   array_length(fk.confkey,1) AS parent_column_count
+            FROM pg_constraint fk
+            JOIN pg_class parent ON parent.oid=fk.confrelid
+            JOIN pg_class child ON child.oid=fk.conrelid
+            JOIN pg_namespace ns ON ns.oid=child.relnamespace
+            JOIN pg_attribute attr ON attr.attrelid=child.oid
+                                  AND attr.attnum=fk.conkey[1]
+            JOIN pg_attribute parent_attr ON parent_attr.attrelid=parent.oid
+                                         AND parent_attr.attnum=fk.confkey[1]
+            WHERE fk.contype='f' AND parent.oid='setups'::regclass
+        """), {})).mappings().all()
+        if (not refs or any(ref["child_column_count"] != 1
+                            or ref["parent_column_count"] != 1
+                            or ref["referenced_column"] != "id" for ref in refs)):
+            raise RuntimeError("manual_trade_fixture_preflight_schema_unverified")
+        # Some owner-scoped product tables keep setup_id without a declared FK.
+        # Include every public integer column with that name, so telemetry and
+        # future tables cannot be missed by FK-only introspection.
+        loose_refs = (await session.execute(sql_text("""
+            SELECT ns.nspname AS schema_name, child.relname AS table_name,
+                   attr.attname AS column_name, typ.typname AS column_type
+            FROM pg_attribute attr
+            JOIN pg_class child ON child.oid=attr.attrelid
+            JOIN pg_namespace ns ON ns.oid=child.relnamespace
+            JOIN pg_type typ ON typ.oid=attr.atttypid
+            WHERE attr.attname='setup_id' AND attr.attnum>0
+              AND attr.attisdropped=FALSE AND ns.nspname='public'
+              AND child.relkind IN ('r','p')
+        """), {})).mappings().all()
+        if any(ref["column_type"] not in {"int2", "int4", "int8"}
+               for ref in loose_refs):
+            raise RuntimeError("manual_trade_fixture_preflight_schema_unverified")
+        references = {
+            (ref["schema_name"], ref["table_name"], ref["column_name"])
+            for ref in refs + loose_refs
+        }
+        pairs = []
+        for item in source["pairs"]:
+            asset = item["asset"]
+            quote = item["quote_currency"]
+            if asset == "AAPL":
+                await session.rollback()
+            market_id, _ = await _source_candles(
+                session, asset=asset, quote_currency=quote,
+            )
+            candidates = (await session.execute(sql_text("""
+                SELECT s.id FROM setups s
+                LEFT JOIN trading_markets tm ON tm.id=s.market_id
+                WHERE s.user_id=:owner AND upper(s.symbol)=:asset
+                  AND ((CAST(:market_id AS BIGINT) IS NULL AND s.market_id IS NULL)
+                       OR s.market_id=:market_id)
+                  AND (upper(tm.quote_currency)=:quote
+                       OR (CAST(:market_id AS BIGINT) IS NULL AND s.market_id IS NULL))
+                  AND lower(s.setup_type)='trade'
+            """), {"owner": owner, "asset": asset, "quote": quote,
+                   "market_id": market_id})).scalars().all()
+            if len(candidates) > 200:
+                raise RuntimeError("manual_trade_fixture_preflight_setup_count_unbounded")
+            linked = False
+            for schema_name, table_name, column_name in references:
+                if not candidates:
+                    break
+                def ident(value: str) -> str:
+                    return '"' + value.replace('"', '""') + '"'
+                table = f'{ident(schema_name)}.{ident(table_name)}'
+                column = ident(column_name)
+                query = sql_text(
+                    f"SELECT EXISTS(SELECT 1 FROM {table} WHERE {column} = ANY(CAST(:ids AS integer[])))"
+                )
+                if (await session.execute(query, {"ids": candidates})).scalar_one():
+                    linked = True
+                    break
+            pairs.append({
+                "asset": asset, "quote_currency": quote,
+                "trade_setup_count": min(len(candidates), 200),
+                "trade_setup_linked": linked,
+                "source_ready": item["plan_derivation_status"] == "available",
+            })
+        pending = (await session.execute(sql_text("""
+            SELECT count(*) FROM finn_v2_proposals
+            WHERE user_id=:owner AND status IN ('draft','pending_confirmation','confirmed')
+              AND expires_at>CURRENT_TIMESTAMP
+        """), {"owner": owner})).scalar_one()
+        await session.rollback()
+    owner_safe = (source["exchange_keys"] == 0 and source["broker_orders"] == 0
+                  and source["live_bots"] == 0 and source["saved_plans"] == 0
+                  and int(pending) == 0)
+    return {
+        "pairs": pairs,
+        "source_audit": source,
+        "owner_scope_verified": source["owner_scope_verified"],
+        "owner_safe": owner_safe,
+        "pending_proposals": min(int(pending), 2),
+        "preliminary_prepare_conditions_met": owner_safe and all(
+            pair["source_ready"] and not pair["trade_setup_linked"] for pair in pairs
+        ),
+        "write_authorized": False,
+        "writes_performed": 0,
+    }
+
+
+def manual_trade_fixture_preflight() -> Dict[str, Any]:
+    return _shared_database_loop().run_until_complete(_manual_trade_fixture_preflight())
+
+
 def main() -> int:
     args = parse_args()
     if not re.fullmatch(r"[0-9a-f]{40}", args.release_sha):
@@ -3089,6 +3227,15 @@ def main() -> int:
                         or os.getenv("FINN_QA_ALLOW_FIXTURE_EXECUTION") == "1"):
                     raise ValueError("manual_trade_source_audit_writes_forbidden")
                 report["manual_trade_source_audit"] = manual_trade_source_audit()
+                report["outcome"] = "passed"
+                report["qa_status"] = "COMPLETED"
+            elif args.profile == "manual_trade_fixture_preflight":
+                if args.manifest_id != "none" or args.manifest_bundle_path:
+                    raise ValueError("manual_trade_source_audit_manifest_forbidden")
+                if (os.getenv("FINN_QA_ALLOW_FIXTURE_ACTIONS") == "1"
+                        or os.getenv("FINN_QA_ALLOW_FIXTURE_EXECUTION") == "1"):
+                    raise ValueError("manual_trade_source_audit_writes_forbidden")
+                report["manual_trade_fixture_preflight"] = manual_trade_fixture_preflight()
                 report["outcome"] = "passed"
                 report["qa_status"] = "COMPLETED"
             elif args.profile == "trade_review_preflight":
