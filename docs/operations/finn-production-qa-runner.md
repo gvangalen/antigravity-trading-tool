@@ -155,6 +155,16 @@ counts; no prices, owner IDs, preferences or score values. It writes nothing.
 A passing audit means the source inspection completed, not that the proposed
 trade or positive live QA passed. Missing prerequisites remain explicit.
 
+`manual_trade_fixture_prepare` is a separate protected owner-scoped write
+profile. It takes no manifest, requires fixture actions enabled and safe
+execution disabled, and keeps a private phase journal on the host. It adds
+only marked QA profile/setup/configuration data, refreshes genuine source
+measurements, builds scores and requires all three exact targets to have
+fresh verified macro, technical and market evidence. The sanitized report
+contains counts and booleans; it never includes owner IDs, prices, source
+values or tokens. A failed source stage leaves marked fixture data for an
+idempotent retry or separately authorized recovery, not automatic deletion.
+
 ## QA-Owned Manifest Intake
 
 QA first runs `manifest_key` and reads the public key from its sanitized

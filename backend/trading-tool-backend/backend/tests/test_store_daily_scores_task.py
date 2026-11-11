@@ -3,6 +3,48 @@ import threading
 from types import SimpleNamespace
 
 
+def test_owner_only_score_rebuild_can_skip_downstream_feed(monkeypatch):
+    from backend.celery_task import store_daily_scores_task as task_module
+
+    saved = []
+    feed = []
+
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def execute(self, sql, params):
+            if "INSERT INTO daily_scores" in sql:
+                saved.append(params)
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def commit(self):
+            pass
+
+        def rollback(self):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(task_module, "get_db_connection", Connection)
+    monkeypatch.setattr(task_module, "generate_scores_db", lambda *_args, **_kwargs: {
+        "scores": {"signal": {"score": 50, "weight": 1}}, "total_score": 50,
+    })
+    monkeypatch.setattr(task_module.reconcile_coach_feed_score, "delay",
+                        lambda *_args: feed.append(True))
+
+    task_module.build_daily_scores_for_user(42, ["AAPL"], publish_feed=False)
+    assert len(saved) == 1
+    assert feed == []
+
+
 def test_indicator_change_rebuilds_only_its_asset(monkeypatch):
     from backend.celery_task import store_daily_scores_task as task_module
     from backend.celery_task.celery_app import celery_app

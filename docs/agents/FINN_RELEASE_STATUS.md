@@ -4,6 +4,44 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN handmatig tradevoorstel: gebonden QA-fixturevoorbereiding (11 november 2026)
+
+Phase: `RELEASE_CANDIDATE_AWAITING_CI`. De beschermde `manual_trade_fixture_prepare` route
+is een aparte owner-gebonden write met expliciete fixture-autorisatie,
+`manifest_id=none` en uitvoering uitgeschakeld. Ze laat de twee bestaande
+gekoppelde BTC-setups, strategieën en bots ongemoeid; hun gezamenlijke staat
+wordt vóór en na de configuratie gehasht. De route maakt een gemarkeerd
+traderprofiel, drie gemarkeerde setups en negen indicatorconfiguraties,
+ververst uitsluitend echte bronmetingen en berekent geverifieerde scores.
+Uit die scores volgen gecontroleerde QA-banden voor BTC `review`, ETH
+`reduced_risk` en AAPL `wait`. Geen prijs, scorewaarde of eigenaar-ID komt in
+het openbare rapport. Bestaande niet-gekoppelde AAPL-metingen stoppen de run;
+een retry mag alleen de exact gekoppelde meting hergebruiken. De fasejournal
+is privé op de host.
+De AAPL-meting en configkoppeling worden atomair gecommit; een lokale
+onderbreking na `flush` liet nul metingen en geen koppeling achter.
+
+In de geïsoleerde lokale PostgreSQL-proef gaf een schone QA-gebruiker bij
+eerste uitvoering **1 profiel, 3 setups, 9 configuraties** en op herhaling
+**0/0/0**. De echte provider-/scoreketen verifieerde alle drie exacte assets
+en de adviestakken `review`, `reduced_risk` (risicofactor `0.5`) en `wait`
+wegens geverifieerde setupmismatch. Een opzettelijk gewijzigde QA-setup werd
+geweigerd zonder nieuwe rijen; een ongekoppelde AAPL-meting stopte een retry.
+Gerichte backendtests: **27 passed** op de AAPL-transactie en prepare-route,
+eerder **61 passed** op de bredere marktdata-/hardeningselectie. Onafhankelijke
+Security-, Architecture- en QA-codechecks: GO voor uitsluitend de begrensde
+prepare-write. De lokale worker-actiematrix slaagde **17/17**, adaptertests
+**26/26**, met nul brokerorders, Live-bots, Live-calls of
+productieverbindingen (artifact SHA-256
+`bedfdb13ffb48d365fa3b66f005bc184f2084278502290624236fb359d1f90fa`).
+Echte providerontwikkeling: **20/20** en regressie: **109/109**, beide met
+nul provider-, schema-, parse-, timeout- en validatiefouten (regressie-artifact
+SHA-256 `028812e55e5aca2d5436174fac7773e8397881fc8b8a9537b3a86f4463d6813c`).
+De volledige backend-herhaling na de atomische AAPL-correctie slaagde
+**4693 passed, 7 skipped**. CI, Auto Deploy en publieke
+SHA-pariteit zijn open. Er is nog
+geen beschermde productiewrite en geen volledige live kaart-/opslag-QA.
+
 ## FINN handmatig tradevoorstel: beschermde scorebron-diagnose (11 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_QA_PENDING`. De generieke setupkeuze van PR #989 is op

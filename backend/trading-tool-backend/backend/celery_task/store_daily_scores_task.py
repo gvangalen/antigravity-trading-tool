@@ -82,7 +82,8 @@ def _release_rule_based_scores_lease(client) -> None:
 # =========================================================
 # 1️⃣ BUILD DAILY SCORES (RULE-BASED) — PER USER
 # =========================================================
-def build_daily_scores_for_user(user_id: int, symbols: list[str] | None = None):
+def build_daily_scores_for_user(user_id: int, symbols: list[str] | None = None,
+                                *, publish_feed: bool = True):
     """
     Bouwt daily_scores voor de assets in de watchlist van de user.
     """
@@ -204,7 +205,7 @@ def build_daily_scores_for_user(user_id: int, symbols: list[str] | None = None):
 
     # The feed is a downstream observer. A broker failure must never roll
     # back a correctly persisted score or create an item from a partial run.
-    for symbol in saved_symbols:
+    for symbol in saved_symbols if publish_feed else ():
         try:
             reconcile_coach_feed_score.delay(user_id, symbol)
         except Exception:

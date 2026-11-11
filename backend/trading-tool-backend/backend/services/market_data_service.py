@@ -553,17 +553,21 @@ class MarketDataService:
         persist_preference: bool = True,
         refresh_existing: bool = False,
         prefer_live_snapshot: bool = False,
+        commit: bool = True,
     ) -> MarketDataIndicatorResponse:
         symbol = symbol.upper() if symbol else "BTC"
         indicator_name = raw_name.strip()
         if not indicator_name:
             raise HTTPException(400, "❌ Indicator mag niet leeg zijn.")
 
+        # Resolve the catalog before the owner session checks existing rows.
+        # The catalog lookup uses an isolated session, which must not compete
+        # with the owner transaction on single-connection workers.
+        asset_scope = await self._get_asset_scope(symbol)
         exists = await self.repository.check_indicator_exists(indicator_name, user_id, symbol=symbol)
         if exists and not refresh_existing:
             raise HTTPException(409, f"Indicator '{indicator_name}' is al toegevoegd voor {symbol}.")
 
-        asset_scope = await self._get_asset_scope(symbol)
         if persist_preference:
             await self.preference_repository.ensure_user_config(
                 user_id,
@@ -583,8 +587,7 @@ class MarketDataService:
                 # its pre-migration row.
                 snapshot = None
             if not snapshot:
-                asset_meta = await self._get_asset_scope(symbol)
-                asset = AssetRecord(**asset_meta)
+                asset = AssetRecord(**asset_scope)
                 provider = self.provider_registry.resolve_for_asset(asset)
                 live_snapshot = await provider.fetch_latest_snapshot(asset)
                 source_observed_at = live_snapshot.observed_at
@@ -672,11 +675,16 @@ class MarketDataService:
                                 else source_observed_at),
         )
         saved_record = await self.repository.add_market_data_indicator(new_record)
-        await self.session.commit()
-        await self.session.refresh(saved_record)
+        if commit:
+            await self.session.commit()
+            await self.session.refresh(saved_record)
+        else:
+            # Protected owner-scoped flows can bind the reading to their
+            # configuration and commit both rows in one transaction.
+            await self.session.flush()
 
         # A missing scoring rule must not silently complete onboarding.
-        if not missing_rule:
+        if commit and not missing_rule:
             from backend.services.onboarding_service import mark_step_completed
             await mark_step_completed(int(user_id), "market", self.session)
 
