@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN handmatig tradevoorstel: gebonden QA-fixturevoorbereiding (11 november 2026)
 
-Phase: `RELEASE_CANDIDATE_AWAITING_CI`. De beschermde `manual_trade_fixture_prepare` route
+Phase: `PRODUCT_DEPLOYED_QA_PENDING`. De beschermde `manual_trade_fixture_prepare` route
 is een aparte owner-gebonden write met expliciete fixture-autorisatie,
 `manifest_id=none` en uitvoering uitgeschakeld. Ze laat de twee bestaande
 gekoppelde BTC-setups, strategieën en bots ongemoeid; hun gezamenlijke staat
@@ -38,9 +38,17 @@ Echte providerontwikkeling: **20/20** en regressie: **109/109**, beide met
 nul provider-, schema-, parse-, timeout- en validatiefouten (regressie-artifact
 SHA-256 `028812e55e5aca2d5436174fac7773e8397881fc8b8a9537b3a86f4463d6813c`).
 De volledige backend-herhaling na de atomische AAPL-correctie slaagde
-**4693 passed, 7 skipped**. CI, Auto Deploy en publieke
-SHA-pariteit zijn open. Er is nog
-geen beschermde productiewrite en geen volledige live kaart-/opslag-QA.
+**4693 passed, 7 skipped**. PR
+[#992](https://github.com/gvangalen/antigravity-trading-tool/pull/992)
+is gemerged als `40127273f0e6812b60965db97433381a429e7c57`.
+De vijf PR-CI-jobs (run `43108363281`), vijf main-CI-jobs
+(run `43109213766`) en Auto Deploy (run `43109853018`) slaagden.
+Publieke `https://tradamind.com/api/health` en
+`https://tradamind.com/build-info.json` gaven beide HTTP 200 en exact die
+SHA. Deze statuscommit creëert een nieuwe main-SHA; de laatste bijbehorende
+CI, Auto Deploy en publieke SHA-pariteit worden vóór beschermde QA opnieuw
+gecontroleerd. Er is nog geen beschermde productiewrite en geen volledige
+live kaart-/opslag-QA.
 
 ## FINN handmatig tradevoorstel: beschermde scorebron-diagnose (11 november 2026)
 
