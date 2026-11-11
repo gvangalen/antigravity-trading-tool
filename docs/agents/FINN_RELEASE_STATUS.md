@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN handmatig tradevoorstel: beschermde bronaudit (11 november 2026)
 
-Phase: `LOCAL_AUDIT_CANDIDATE`; de productversie staat nog op de live SHA
+Phase: `DEPLOYED_AUDIT_QA_PENDING`; de eerdere productversie stond op live SHA
 `d31645852c10b16eca7402835a720085ba94cf45`. De onafhankelijke
 beschermde QA-run `43021750636` bevestigde de getypeerde wachtuitkomst voor
 BTC/EUR; de alleen-lezen vervolgdiagnose `43022303699` bevestigde dezelfde
@@ -35,7 +35,15 @@ of validatiefouten; artifact SHA-256
 Echte-provider regressie: **109/109**, eveneens nul provider-, schema-, parse-,
 timeout- of validatiefouten; artifact SHA-256
 `6a5f8d53031a4730677c030d6a0d7d5e93a22c8273547bcb0ecf6406d27c805a`.
-CI, Auto Deploy en beschermde live bronaudit zijn nog open.
+PR [#979](https://github.com/gvangalen/antigravity-trading-tool/pull/979)
+had vijf groene CI-jobs op head
+`123f73ab5a7b5ef6acd6df39a7717ddc98da5fc4` (run `43026869172`) en
+is gemerged als `1e7fe0a27c6ba5684faaabf3d7a501cd8e283ff4`.
+Main-CI `43027573438` en Auto Deploy `43028362314` slaagden. Publieke
+`/api/health` en `/build-info.json` gaven beide HTTP 200 en exact die
+merge-SHA. Deze statusaanvulling creëert zelf een nieuwe main-SHA; de laatste
+main-CI, Auto Deploy en publieke SHA-pariteit moeten vóór beschermde QA opnieuw
+worden gecontroleerd. De beschermde live bronaudit is nog open.
 Onafhankelijke QA, Security en Architecture gaven GO voor deze diagnostische,
 alleen-lezen runnerwijziging; de positieve live matrix blijft uitdrukkelijk open.
 
