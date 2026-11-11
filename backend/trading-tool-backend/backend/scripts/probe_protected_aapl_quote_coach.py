@@ -83,8 +83,11 @@ def _old_claimed_current(answer: str) -> bool:
             # this marker so a later positive claim still fails the gate.
             prefix = sentence[:marker.start()]
             negated = re.search(
-                r"\b(?:niet|geen|not|no)\b"
-                r"(?:\s+(?!(?:maar|echter|but|however)\b)\w+){0,6}\s*$",
+                r"\b(?:niet|geen|not|no)\s+"
+                r"(?:(?:opnieuw|again)\s+)?"
+                r"(?:(?:bevestigd|geverifieerd|aangemerkt|beschouwd|gemarkeerd|genoemd|"
+                r"confirmed|verified|described)\s+(?:als|as)\s+)?"
+                r"(?:(?:de|the)\s+)?$",
                 prefix, re.I,
             )
             if not negated:

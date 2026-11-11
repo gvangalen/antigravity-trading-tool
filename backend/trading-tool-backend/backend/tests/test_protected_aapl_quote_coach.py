@@ -18,6 +18,8 @@ def test_old_quote_is_rejected_only_when_mislabeled_current():
     assert not probe._old_claimed_current("USD 351,19 is **niet bevestigd als actuele koers**.")
     assert not probe._old_claimed_current("USD 351,19 is niet opnieuw bevestigd als de huidige AAPL-koers.")
     assert probe._old_claimed_current("USD 351,19 is niet oud maar wel de actuele AAPL-koers.")
+    assert probe._old_claimed_current("USD 351,19 is niet oud en is de actuele koers.")
+    assert probe._old_claimed_current("USD 351,19 is niet alleen de actuele koers, maar ook een rapportwaarde.")
     assert probe._old_claimed_current("USD 351,19 is niet bevestigd als actuele koers, maar is wel de huidige AAPL-koers.")
 
 
