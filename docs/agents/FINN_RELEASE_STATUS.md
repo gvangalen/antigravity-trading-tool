@@ -75,8 +75,14 @@ parse-, timeout- of validatiefouten (artifact SHA-256
 De echte-provider regressieset slaagde **109/109**, eveneens zonder
 provider-, schema-, parse-, timeout- of validatiefouten (artifact SHA-256
 `75d18b658ba33934332c7f2d6c697cf80e06eb0790b6a27d7be21192dfaf9e94`).
-PR-CI, Auto Deploy en publieke SHA-pariteit van deze runnerfix zijn nog open;
-de QA-agent start tot dan geen inhoudsproef.
+PR #975 had vijf groene CI-jobs op head
+`48269a5ce7fa7b0db25f2fdec6ad0bec21a3910e` (run `43008445934`) en is
+gemerged als `790e5ea9d41382d238a1ed6a67216c7225e14544`.
+Main-CI `43009160268` en Auto Deploy `43009853835` slaagden; publieke
+backend-health en frontend-buildinfo gaven beide HTTP 200 en precies die
+merge-SHA. Deze statusaanvulling creëert weer een nieuwe main-SHA. De laatste
+main-CI, Auto Deploy en publieke SHA-pariteit moeten vóór de beschermde
+inhoudsproef op die definitieve SHA worden gecontroleerd.
 
 ## AAPL Paper-coach: gedateerd rapport en laatste koers (11 november 2026)
 
