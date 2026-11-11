@@ -2590,7 +2590,11 @@ def run_cases(
         results[result_index] = result
         if checkpoint:
             checkpoint(results, planned_count=len(case_list))
-        if (case.get("fixture_action", "read_only") != "read_only" or manual_read_only) and classify_case_failure(result):
+        unsafe_manual_read = (
+            manual_read_only
+            and (result.get("manual_trade_read_only_evidence") or {}).get("unchanged") is False
+        )
+        if (case.get("fixture_action", "read_only") != "read_only" or unsafe_manual_read) and classify_case_failure(result):
             return stop_after_write_failure(index + 1)
     return results
 

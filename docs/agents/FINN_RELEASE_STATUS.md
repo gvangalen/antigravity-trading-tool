@@ -62,12 +62,18 @@ QA-runnerbewijs en tests toe: een eigenaar/run-gebonden planrijcontrole,
 exacte markt/provider-identiteit, voor/na databasefingerprints, brokerorder-
 en Live-bot-tellers, kaart- en risicocontroles en redactie van alle aangeleverde
 inputwaarden in het beschermde rapport. De strikte registry-brede
-action-contract-corpus blijft apart. Gerichte runnertests **117 passed**;
+action-contract-corpus blijft apart. Gerichte runnertests **118 passed**;
 root-backend **4655 passed, 7 skipped**. De nieuwe snapshot-SQL is uitgevoerd
 tegen lokale PostgreSQL 16. Security en Architecture gaven GO op deze
-QA-runnerdelta. De lokale worker-actiecontractmatrix, echte-provider
-regressieset, PR-CI, Auto Deploy en publieke SHA-pariteit van deze runnerfix
-zijn nog open; de QA-agent start tot dan geen inhoudsproef.
+QA-runnerdelta. De lokale FastAPI/Celery/Responses-matrix slaagde **17/17**
+actiecontracten en **26/26** adaptertests met nul brokerorders, Live-bots of
+productieverbindingen (artifact SHA-256
+`0f6123539aa80f0d66f34e63b97b6935170e814fd9012ba0a2107a823ad1ecf3`).
+De echte-provider ontwikkelset slaagde **20/20** zonder provider-, schema-,
+parse-, timeout- of validatiefouten (artifact SHA-256
+`216d3de0a5ce7ed447b9a00a10acaabf280234f12aead74bafafb77ebeff1f7f`).
+De echte-provider regressieset, PR-CI, Auto Deploy en publieke SHA-pariteit
+van deze runnerfix zijn nog open; de QA-agent start tot dan geen inhoudsproef.
 
 ## AAPL Paper-coach: gedateerd rapport en laatste koers (11 november 2026)
 

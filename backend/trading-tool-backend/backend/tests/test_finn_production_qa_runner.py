@@ -3110,6 +3110,42 @@ def test_manual_trade_read_only_clarification_keeps_owner_database_unchanged(mon
     assert results[0]["failure_classification"] is None
 
 
+def test_manual_trade_read_only_content_failure_does_not_hide_later_cases(monkeypatch):
+    from types import SimpleNamespace
+
+    module = _module()
+    created = iter([
+        {"run_id": "run-1", "conversation_id": "conversation-1", "status": "pending"},
+        {"run_id": "run-2", "conversation_id": "conversation-2", "status": "pending"},
+    ])
+    monkeypatch.setattr(module, "request_json", lambda **_kwargs: (200, next(created), 1.0, None))
+    terminals = iter([
+        {"run_id": "run-1", "status": "completed", "response": {},
+         "runtime_trace": {"initial_operation_id": "create_manual_trade_plan", "missing_inputs": []}},
+        {"run_id": "run-2", "status": "completed", "response": {},
+         "runtime_trace": {"initial_operation_id": "create_manual_trade_plan", "missing_inputs": ["risk_budget_quote"]}},
+    ])
+    monkeypatch.setattr(module, "observe_terminal", lambda **_kwargs: (
+        lambda terminal: SimpleNamespace(terminal=terminal, sse_terminal=terminal,
+                                         sse_error=None, fallback_poll_error=None, snapshot_error=None)
+    )(next(terminals)))
+    baseline = {"owner_scoped": True, "row_count": 0, "state_sha256": "same",
+                "owner_domain_state_sha256": "same-all", "broker_order_count": 0, "live_bot_count": 0}
+    monkeypatch.setattr(module, "owner_scoped_database_snapshot", lambda **_kwargs: baseline)
+    cases = [
+        {"case_id": f"clarify-{index}", "message": "Maak een BTC/EUR tradeplan",
+         "expected_operation_id": "create_manual_trade_plan", "fixture_action": "read_only",
+         "expected_manual_trade": {"asset": "BTC", "quote_currency": "EUR", "risk_budget_requested": True}}
+        for index in (1, 2)
+    ]
+
+    results = module.run_cases(base_url="https://example.test", token="token", cases=cases,
+                               fixture_namespace="qa-acceptance-a1b2c3d4")
+    assert [item["case_id"] for item in results] == ["clarify-1", "clarify-2"]
+    assert results[0]["failure_classification"] == "product"
+    assert results[1]["failure_classification"] is None
+
+
 def test_manual_trade_manifest_requires_scoped_typed_expectation(tmp_path, monkeypatch):
     module = _module()
     monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_ACTIONS", "1")
