@@ -206,6 +206,21 @@ evidence while the runner exits normally so the complete matrix artifact is
 uploaded; malformed runner configuration and pre-case infrastructure failures
 still fail the workflow.
 
+For targeted `create_manual_trade_plan` cases, QA may add an
+`expected_manual_trade` object with uppercase `asset`, `quote_currency` and,
+for proposal/confirmation/safe-execution cases, a positive `max_loss_quote`.
+`recommendation` may be `review`, `reduced_risk` or `wait` when the protected
+fixture makes that branch predictable. A read-only clarification case may use
+`risk_budget_requested: true` without a budget; the runner then requires a
+typed missing risk budget, no proposal, and an unchanged owner-scoped database.
+For a saved plan, the runner checks the complete limit entry, stop, quantity,
+two targets, risk arithmetic, source-attestation presence, recorded trader
+context, non-executable status, exact market/provider, one owner-and-run-bound
+plan row, unchanged broker-order/Live-bot counts and idempotent replay. The
+artifact contains only check results, row counts and fingerprints; the product
+verifier, not this QA projection, checks the attestation cryptographically.
+`supplied_inputs` in all protected reports contains field names only.
+
 The report also separates case failures into `product`, `infrastructure`, and
 `runner` totals. Transport failures cannot be counted as selector or action
 contract failures.
