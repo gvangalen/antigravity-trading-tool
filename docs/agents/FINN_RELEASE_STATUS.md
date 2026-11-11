@@ -6,9 +6,17 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN handmatig tradevoorstel: begrensde crypto-brondiagnose (11 november 2026)
 
-Phase: `LOCAL_DIAGNOSTIC_CANDIDATE`. Na groene main-CI `43037412651` en Auto
-Deploy `43038218280` meldden publieke backend health en frontend build-info
-beide HTTP 200 op `09ac4c55f402f783c0c97eaff961c408777ffd98`.
+Phase: `PRODUCT_DEPLOYED_QA_PENDING`. De diagnose is gemerged via PR
+[#983](https://github.com/gvangalen/antigravity-trading-tool/pull/983) als
+`99fa9345efcb0054202c9c3a7b5e1aa11f9d76d6`; de vijf PR-CI-jobs
+(run `43044605182`), main-CI `43045622456` en Auto Deploy `43046510781`
+slaagden. Publieke backend health en frontend build-info gaven beide HTTP 200
+en exact die merge-SHA. Deze statusaanvulling creëert zelf een nieuwe main-SHA;
+de laatste main-CI, Auto Deploy en publieke SHA-pariteit moeten vóór beschermde
+QA opnieuw worden gecontroleerd. De voorafgaande audit-SHA
+`09ac4c55f402f783c0c97eaff961c408777ffd98` had groene main-CI
+`43037412651`, Auto Deploy `43038218280`, en publieke backend/frontend
+HTTP 200 op dezelfde SHA.
 Onafhankelijke beschermde read-only QA-audit `43038665602` (geschoond artifact
 `13864760675`) bevestigde voor BTC/EUR en ETH/USDT minstens 15 afgeronde
 kaarsen, maar beide planberekeningen faalden met `candle_open_invalid`.
