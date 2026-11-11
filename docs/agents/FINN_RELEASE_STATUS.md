@@ -6,8 +6,15 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN handmatig tradevoorstel: exacte bronprecisie en gequantiseerde planlevels (11 november 2026)
 
-Phase: `LOCAL_SOURCE_PRECISION_CANDIDATE`; de laatste volledig gedeployde
-diagnose-SHA is `c4558385bb7180f2301f3eab18ed8cb86322c953` met groene
+Phase: `PRODUCT_DEPLOYED_QA_PENDING`. De precisiefix is via PR
+[#985](https://github.com/gvangalen/antigravity-trading-tool/pull/985) gemerged
+als `bc08b64d88d983d39740bac646c49ac8690b6daf`. De vijf PR-CI-jobs
+(run `43054485399`), main-CI `43055381269` en Auto Deploy `43056203625`
+slaagden. Publieke backend health en frontend build-info gaven beide HTTP 200
+en exact die merge-SHA. Deze statusaanvulling creëert zelf een nieuwe main-SHA;
+de laatste main-CI, Auto Deploy en publieke SHA-pariteit moeten vóór beschermde
+QA opnieuw worden gecontroleerd. De voorafgaande volledig gedeployde
+diagnose-SHA was `c4558385bb7180f2301f3eab18ed8cb86322c953` met groene
 main-CI `43048060058`, Auto Deploy `43048807476`, en publieke backend/frontend
 HTTP 200 op exact die SHA. Onafhankelijke beschermde read-only diagnose
 `43049269491` (geschoond artifact `13868048222`) bevestigde dat BTC/EUR en
@@ -44,8 +51,8 @@ Echte-provider regressie: **109/109**, eveneens nul provider-, schema-, parse-,
 timeout- of validatiefouten; artifact SHA-256
 `91342e831df59e2a4b4b6ce0882f901b677b0e2fa59cdd9df41e033d8830bf8d`.
 Onafhankelijke QA, Security en Architecture gaven GO voor de lokale patch en
-de extra diagnostische categorieën. CI,
-Auto Deploy en beschermde live bronherproef zijn nog open. De live audit moet
+de extra diagnostische categorieën. De beschermde live bronherproef is nog
+open. De live audit moet
 alle drie planberekeningen als beschikbaar bevestigen vóór fixturewrites.
 
 ## FINN handmatig tradevoorstel: begrensde crypto-brondiagnose (11 november 2026)
