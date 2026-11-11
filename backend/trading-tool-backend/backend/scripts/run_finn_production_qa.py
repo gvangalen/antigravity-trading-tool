@@ -33,6 +33,7 @@ ALLOWED_PROFILES = {
     "auth_preflight",
     "watchlist_browser_ui",
     "watchlist_context_audit",
+    "manual_trade_source_audit",
     "trade_review_preflight",
     "manifest_key",
     "targeted_regression",
@@ -177,6 +178,13 @@ def safe_portfolio_paper_fx_diagnostic(error: Exception) -> Dict[str, Any] | Non
 
 def profile_error_category(profile: str, error: Exception) -> str:
     """The published QA error category must not contain private fixture text."""
+    if profile == "manual_trade_source_audit":
+        code = str(error)
+        return (code if code in {
+            "fixture_binding_invalid", "fixture_binding_owner_mismatch", "fixture_owner_unsafe",
+            "manual_trade_source_audit_manifest_forbidden",
+            "manual_trade_source_audit_writes_forbidden",
+        } else "manual_trade_source_audit_runtime_error")
     if profile == "closed_paper_trade_review_chat":
         return safe_closed_paper_chat_error(error)
     if profile == "closed_paper_trade_review":
@@ -2790,6 +2798,156 @@ def audit_watchlist_context(run_label: str) -> dict[str, bool]:
     return asyncio.run(read())
 
 
+async def _manual_trade_source_audit() -> Dict[str, Any]:
+    """Inspect the QA owner's real sources without creating fixture evidence."""
+    from sqlalchemy import text as sql_text
+
+    from backend.infrastructure.database import async_session_factory
+    from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
+    from backend.services.finn_manual_trade_suggestion_service import (
+        _owner_trade_context, _source_candles, derive_suggested_plan,
+    )
+    from backend.services.setup_market_match_service import SetupMarketMatchService
+    from backend.services.trader_profile_service import normalize_trader_profile_preferences
+
+    bound = os.getenv("FINN_QA_USER_ID", "")
+    if not bound.isdecimal() or int(bound) <= 0:
+        raise RuntimeError("fixture_binding_invalid")
+    owner = int(bound)
+    pairs = (("BTC", "EUR"), ("ETH", "USDT"), ("AAPL", "USD"))
+    safe_source_status = {
+        "available", "missing_scores", "invalid_weights", "stale_sources", "unverified_scores",
+    }
+    safe_plan_errors = {
+        "manual_trade_asset_not_in_catalog", "manual_trade_quote_not_in_catalog",
+        "manual_trade_exact_market_unavailable", "manual_trade_direction_required",
+        "manual_trade_candles_insufficient", "manual_trade_candles_duplicate_day",
+        "manual_trade_candles_gap", "manual_trade_candles_stale",
+        "manual_trade_candle_geometry_invalid", "manual_trade_volatility_unusable",
+        "manual_trade_risk_budget_too_small", "manual_trade_asset_or_quote_unavailable",
+    }
+    safe_context_reasons = {
+        "manual_trade_profile_unavailable", "manual_trade_profile_missing",
+        "manual_trade_setup_missing", "manual_trade_setup_ambiguous",
+        "manual_trade_timeframe_source_unavailable", "manual_trade_profile_timeframe_conflict",
+        "manual_trade_benchmark_unavailable", "manual_trade_setup_outside_conditions",
+        "manual_trade_setup_not_confirmed",
+    }
+    async with async_session_factory() as session:
+        owner_row = (await session.execute(sql_text(
+            "SELECT role,is_active,ai_preferences FROM users WHERE id=:owner"
+        ), {"owner": owner})).mappings().one_or_none()
+        if (owner_row is None or owner_row["role"] != "user" or owner_row["is_active"] is not True
+                or not isinstance(owner_row["ai_preferences"], dict)
+                or owner_row["ai_preferences"].get("qa_fixture") != "finn_production_qa_v1"):
+            raise RuntimeError("fixture_binding_owner_mismatch")
+        safety = (await session.execute(sql_text("""
+            SELECT
+              (SELECT count(*) FROM exchange_keys WHERE user_id=:owner) AS keys,
+              (SELECT count(*) FROM bot_orders WHERE user_id=:owner) AS orders,
+              (SELECT count(*) FROM bot_configs WHERE user_id=:owner AND COALESCE(is_live,false)) AS live_bots,
+              (SELECT count(*) FROM finn_manual_trade_plans WHERE user_id=:owner) AS plans
+        """), {"owner": owner})).mappings().one()
+        if int(safety["keys"]) or int(safety["live_bots"]):
+            raise RuntimeError("fixture_owner_unsafe")
+        profile = normalize_trader_profile_preferences(owner_row["ai_preferences"])
+        results = []
+        for asset, quote in pairs:
+            candle_source = "available"
+            plan_derivation = "not_attempted"
+            market_id = None
+            candles = []
+            if (DEFAULT_ASSET_CATALOG.get(asset) or {}).get("asset_class") == "stock":
+                # The stock provider performs an external fetch. Release the
+                # read transaction before that network request.
+                await session.rollback()
+            try:
+                market_id, candles = await _source_candles(
+                    session, asset=asset, quote_currency=quote,
+                )
+            except Exception as error:
+                code = str(error)
+                candle_source = (code if isinstance(error, ValueError)
+                                 and code in safe_plan_errors
+                                 else "source_unavailable")
+            if candle_source == "available":
+                try:
+                    derive_suggested_plan(
+                        asset=asset, quote_currency=quote, direction="long",
+                        max_loss_quote="20", candles=candles, market_id=market_id,
+                    )
+                    plan_derivation = "available"
+                except Exception as error:
+                    code = str(error)
+                    plan_derivation = (code if isinstance(error, ValueError)
+                                       and code in safe_plan_errors
+                                       else "plan_unavailable")
+            setup_count = (await session.execute(sql_text("""
+                SELECT count(*) FROM setups s
+                LEFT JOIN trading_markets tm ON tm.id=s.market_id
+                WHERE s.user_id=:owner AND upper(s.symbol)=:asset
+                  AND ((CAST(:market_id AS BIGINT) IS NULL AND s.market_id IS NULL)
+                       OR s.market_id=:market_id)
+                  AND (upper(tm.quote_currency)=:quote
+                       OR (CAST(:market_id AS BIGINT) IS NULL AND s.market_id IS NULL))
+                  AND lower(s.setup_type)='trade'
+                  AND lower(s.timeframe) IN ('1d','1day')
+            """), {"owner": owner, "asset": asset, "quote": quote,
+                   "market_id": market_id})).scalar_one()
+            try:
+                if (market_id is None
+                        and (DEFAULT_ASSET_CATALOG.get(asset) or {}).get("asset_class") == "crypto"):
+                    raise ValueError("manual_trade_exact_market_unavailable")
+                assessment = await SetupMarketMatchService(session).for_asset(
+                    owner, asset, setups=[], market_id=market_id,
+                )
+                score_status = assessment.get("source_status")
+                score_status = score_status if score_status in safe_source_status else "unavailable"
+                benchmark_available = assessment.get("benchmark_score") is not None
+            except Exception:
+                score_status = "unavailable"
+                benchmark_available = False
+            try:
+                owner_context = await _owner_trade_context(
+                    session, user_id=owner, asset=asset,
+                    quote_currency=quote, market_id=market_id,
+                ) if candle_source == "available" else None
+                recommendation = (owner_context or {}).get("recommendation")
+                recommendation = recommendation if recommendation in {
+                    "review", "reduced_risk", "wait",
+                } else "unavailable"
+                reason = (owner_context or {}).get("reason")
+                reason = reason if reason in safe_context_reasons else None
+            except Exception:
+                recommendation = "unavailable"
+                reason = None
+            results.append({
+                "asset": asset, "quote_currency": quote,
+                "candle_count_sufficient": len(candles) >= 15,
+                "candle_source_status": candle_source,
+                "plan_derivation_status": plan_derivation,
+                "profile_present": any(profile.values()),
+                "daily_trade_setup_candidate_count": min(int(setup_count), 2),
+                "score_source_status": score_status,
+                "benchmark_available": benchmark_available,
+                "owner_recommendation": recommendation,
+                "owner_wait_reason": reason,
+            })
+        return {
+            "pairs": results,
+            "owner_scope_verified": True,
+            "exchange_keys": int(safety["keys"]),
+            "broker_orders": int(safety["orders"]),
+            "live_bots": int(safety["live_bots"]),
+            "saved_plans": int(safety["plans"]),
+            "writes_performed": 0,
+        }
+
+
+def manual_trade_source_audit() -> Dict[str, Any]:
+    return _shared_database_loop().run_until_complete(_manual_trade_source_audit())
+
+
 def main() -> int:
     args = parse_args()
     if not re.fullmatch(r"[0-9a-f]{40}", args.release_sha):
@@ -2865,6 +3023,15 @@ def main() -> int:
                         or os.getenv("FINN_QA_ALLOW_FIXTURE_EXECUTION") == "1"):
                     raise ValueError("watchlist_context_audit_writes_forbidden")
                 report["watchlist_context_audit"] = audit_watchlist_context(args.run_label)
+                report["outcome"] = "passed"
+                report["qa_status"] = "COMPLETED"
+            elif args.profile == "manual_trade_source_audit":
+                if args.manifest_id != "none" or args.manifest_bundle_path:
+                    raise ValueError("manual_trade_source_audit_manifest_forbidden")
+                if (os.getenv("FINN_QA_ALLOW_FIXTURE_ACTIONS") == "1"
+                        or os.getenv("FINN_QA_ALLOW_FIXTURE_EXECUTION") == "1"):
+                    raise ValueError("manual_trade_source_audit_writes_forbidden")
+                report["manual_trade_source_audit"] = manual_trade_source_audit()
                 report["outcome"] = "passed"
                 report["qa_status"] = "COMPLETED"
             elif args.profile == "trade_review_preflight":

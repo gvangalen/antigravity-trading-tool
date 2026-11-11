@@ -4,6 +4,41 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN handmatig tradevoorstel: beschermde bronaudit (11 november 2026)
+
+Phase: `LOCAL_AUDIT_CANDIDATE`; de productversie staat nog op de live SHA
+`d31645852c10b16eca7402835a720085ba94cf45`. De onafhankelijke
+beschermde QA-run `43021750636` bevestigde de getypeerde wachtuitkomst voor
+BTC/EUR; de alleen-lezen vervolgdiagnose `43022303699` bevestigde dezelfde
+profielwachtgrens voor ETH/USDT en AAPL/USD. Beide rapporteerden nul plannen,
+orders en Live bots. Zij konden geen positieve kaart en opslag accepteren,
+omdat het afgeschermde QA-account geen traderprofiel heeft. De gebruiker gaf nu akkoord
+om de ontbrekende voorwaarden voor uitsluitend `FINN_QA_USER_ID` veilig voor
+te bereiden; gewone gebruikers, brokerorders en Live bots blijven buiten scope.
+
+De nieuwe `manual_trade_source_audit` is een alleen-lezen beschermde profielrun
+zonder manifest of fixtureflags. Hij toetst voor deze drie expliciete QA-paren
+de echte afgeronde dagkaarsen, planberekening met het QA-risicobudget, de
+QA-owner, dagsetup-kandidaten, scorebron en de werkelijke
+`_owner_trade_context`-aanbeveling. Het rapport bevat geen prijzen, scorewaarden,
+account-ID of voorkeuren. Pas het live auditresultaat bepaalt welke beperkte
+fixturevoorbereiding nodig en veilig is. Deze audit is geen positieve
+kaart-/opslagacceptatie.
+
+Lokale QA-runnertests: **120 passed**. Root-backend: **4662 passed, 7 skipped**.
+De lokale worker-actiecontractmatrix: **17/17**, adaptertests: **26/26**;
+nul brokerorders, Live bots, Live calls en productieverbindingen. Matrix-artifact
+SHA-256 `a3bd157e81f1227092ea1c5bf3291b6ea440cadcf39544b5258c8f207ce6202d`.
+Echte-provider development: **20/20**, nul provider-, schema-, parse-, timeout-
+of validatiefouten; artifact SHA-256
+`c336d15d608be2340429123f156d16ce6ecdd2606c153f1014931f464195aab9`.
+Echte-provider regressie: **109/109**, eveneens nul provider-, schema-, parse-,
+timeout- of validatiefouten; artifact SHA-256
+`6a5f8d53031a4730677c030d6a0d7d5e93a22c8273547bcb0ecf6406d27c805a`.
+CI, Auto Deploy en beschermde live bronaudit zijn nog open.
+Onafhankelijke QA, Security en Architecture gaven GO voor deze diagnostische,
+alleen-lezen runnerwijziging; de positieve live matrix blijft uitdrukkelijk open.
+
 ## FINN handmatig tradevoorstel (11 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_QA_PENDING`; branch

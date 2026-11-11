@@ -136,6 +136,20 @@ passing result proves rollout access and basic read-route availability on the
 exact live SHA; it does not prove a closed trade, exchange sync, screenshot,
 analysis, user isolation or the full trade-review acceptance matrix.
 
+`manual_trade_source_audit` requires `manifest_id=none`, no bundle and both
+fixture-action flags off. It binds the marked, uncredentialed QA owner and
+checks BTC/EUR, ETH/USDT and AAPL/USD for 15 usable completed daily candles,
+daily trade setup candidates, trader profile and a verified benchmark score.
+The source check separates candle availability from plan derivation at the QA
+budget of 20 quote units, and uses the same owner-context decision as the
+product. The separate score status checks score freshness;
+`owner_recommendation` and its bounded wait reason are authoritative for
+card eligibility. The setup count is only a daily candidate count.
+The report contains only fixed pair names, bounded status codes, booleans and
+counts; no prices, owner IDs, preferences or score values. It writes nothing.
+A passing audit means the source inspection completed, not that the proposed
+trade or positive live QA passed. Missing prerequisites remain explicit.
+
 ## QA-Owned Manifest Intake
 
 QA first runs `manifest_key` and reads the public key from its sanitized
