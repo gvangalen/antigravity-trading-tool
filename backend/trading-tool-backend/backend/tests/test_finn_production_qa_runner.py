@@ -30,6 +30,107 @@ def _module():
     return module
 
 
+def test_manual_trade_source_audit_is_owner_bound_read_only_and_redacted(monkeypatch):
+    module = _module()
+    assert module.profile_error_category(
+        "manual_trade_source_audit", ValueError("private database detail")
+    ) == "manual_trade_source_audit_runtime_error"
+    from backend.infrastructure import database
+    from backend.services import finn_manual_trade_suggestion_service, setup_market_match_service
+
+    monkeypatch.setenv("FINN_QA_USER_ID", "42")
+    statements = []
+
+    class Result:
+        def __init__(self, row):
+            self.row = row
+
+        def mappings(self):
+            return self
+
+        def one_or_none(self):
+            return self.row
+
+        def one(self):
+            return self.row
+
+        def scalar_one(self):
+            return self.row
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+        async def rollback(self):
+            statements.append(("ROLLBACK_READ_TRANSACTION", {}))
+
+        async def execute(self, statement, params):
+            sql = str(statement).strip()
+            statements.append((sql, params))
+            assert sql.upper().startswith("SELECT")
+            assert params["owner"] == 42
+            if "FROM users" in sql:
+                return Result({"role": "user", "is_active": True,
+                               "ai_preferences": {"qa_fixture": "finn_production_qa_v1",
+                                                  "trader_types": ["swing_trader"]}})
+            if "AS keys" in sql:
+                return Result({"keys": 0, "orders": 0, "live_bots": 0, "plans": 0})
+            return Result(1)
+
+    async def source(_session, *, asset, quote_currency):
+        assert (asset, quote_currency) in {("BTC", "EUR"), ("ETH", "USDT"), ("AAPL", "USD")}
+        return (None if asset == "AAPL" else 7, [{}] * 15)
+
+    async def assessment(_self, _owner, _asset, *, setups, market_id):
+        assert setups == []
+        return {"source_status": "available", "benchmark_score": 60}
+
+    async def context(_session, *, user_id, asset, quote_currency, market_id):
+        assert user_id == 42
+        return {"recommendation": "review", "reason": ""}
+
+    monkeypatch.setattr(database, "async_session_factory", Session)
+    monkeypatch.setattr(finn_manual_trade_suggestion_service, "_source_candles", source)
+    monkeypatch.setattr(finn_manual_trade_suggestion_service, "derive_suggested_plan", lambda **_: {})
+    monkeypatch.setattr(finn_manual_trade_suggestion_service, "_owner_trade_context", context)
+    monkeypatch.setattr(setup_market_match_service.SetupMarketMatchService, "for_asset", assessment)
+    report = asyncio.run(module._manual_trade_source_audit())
+    assert report["writes_performed"] == 0
+    assert report["owner_scope_verified"] is True
+    assert len(report["pairs"]) == 3
+    assert all(pair["candle_source_status"] == "available" for pair in report["pairs"])
+    assert all(pair["plan_derivation_status"] == "available" for pair in report["pairs"])
+    assert all(pair["benchmark_available"] for pair in report["pairs"])
+    assert all(pair["owner_recommendation"] == "review" for pair in report["pairs"])
+    assert "42" not in json.dumps(report)
+    assert len(statements) == 6
+    setup_queries = [sql for sql, _ in statements if "FROM setups s" in sql]
+    assert len(setup_queries) == 3
+    assert all("lower(s.timeframe) IN ('1d','1day')" in sql for sql in setup_queries)
+    assert all(pair["daily_trade_setup_candidate_count"] == 1 for pair in report["pairs"])
+    assert "manual_trade_source_audit" in module.ALLOWED_PROFILES
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    assert "manual_trade_source_audit" in workflow
+    assert "Manual trade source audit is read-only" in workflow
+    def too_small(**_):
+        raise ValueError("manual_trade_risk_budget_too_small")
+    monkeypatch.setattr(finn_manual_trade_suggestion_service, "derive_suggested_plan", too_small)
+    sizing_report = asyncio.run(module._manual_trade_source_audit())
+    assert all(pair["candle_source_status"] == "available" for pair in sizing_report["pairs"])
+    assert all(pair["plan_derivation_status"] == "manual_trade_risk_budget_too_small"
+               for pair in sizing_report["pairs"])
+    async def unsafe_source(_session, *, asset, quote_currency):
+        raise ValueError("manual_trade_private_fixture_name")
+    monkeypatch.setattr(finn_manual_trade_suggestion_service, "_source_candles", unsafe_source)
+    redacted_report = asyncio.run(module._manual_trade_source_audit())
+    assert all(pair["candle_source_status"] == "source_unavailable"
+               for pair in redacted_report["pairs"])
+    assert "private_fixture_name" not in json.dumps(redacted_report)
+
+
 def test_readback_terms_are_checked_without_persisting_the_answer():
     module = _module()
     terminal = {"response": {"content": "De opgeslagen QA-strategie gebruikt SMA34 op BTC/EUR."}}
