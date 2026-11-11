@@ -9705,6 +9705,73 @@ def test_owner_scoped_clarification_choice_binds_the_pending_setup_target(
     assert state["collected_inputs"]["changed_fields"] == {"timeframe": "1D"}
 
 
+@pytest.mark.parametrize("message,expected_asset,expected_slot", [
+    ("setup 6", "BTC", None),
+    ("ETH/USDT", "ETH", "risk_budget_quote"),
+])
+def test_manual_trade_setup_choice_or_market_correction_keeps_owner_draft(
+    message, expected_asset, expected_slot,
+):
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.client = SimpleNamespace(responses=FakeResponses())
+    front.user_id = 21
+    front.run_id = "run-manual-setup-choice"
+    front.proposals = FinnResponsesProposalSelection()
+    contract = front.proposals.registry.require_supported("create_manual_trade_plan")
+    initial = front.proposals.states.resolve(
+        contract=contract,
+        message="Zet een trade voor BTC/EUR klaar, long, maximaal verlies 20 EUR",
+        explicit_asset="BTC", conversation_context={},
+    ).dict()
+    initial.update({
+        "missing_required_inputs": ["setup_id"], "next_missing_input": "setup_id",
+        "status": "collecting", "setup_options": [
+            {"id": 5, "name": "Daily Base"}, {"id": 6, "name": "Daily Swing"},
+        ],
+    })
+
+    async def complete(analysis):
+        return analysis
+
+    front._complete_manual_trade_suggestion = complete
+    result = asyncio.run(front.run(
+        message=message, instructions="unused", verified_asset="BTC",
+        conversation_context={"active_guided_operation": initial},
+    ))
+    state = result.proposal_analysis.request_plan.operation_state
+    assert state["collected_inputs"]["asset"] == expected_asset
+    assert state["next_missing_input"] == expected_slot
+    if expected_slot is None:
+        assert state["collected_inputs"]["setup_id"] == 6
+        assert state["input_sources"]["setup_id"] == "verified_owner_target"
+    else:
+        assert state["setup_options"] == []
+        assert "setup_id" not in state["collected_inputs"]
+
+
+def test_manual_trade_setup_choice_can_be_cancelled():
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.client = SimpleNamespace(responses=FakeResponses())
+    front.user_id = 21
+    front.run_id = "run-manual-setup-cancel"
+    front.proposals = FinnResponsesProposalSelection()
+    contract = front.proposals.registry.require_supported("create_manual_trade_plan")
+    initial = front.proposals.states.resolve(
+        contract=contract,
+        message="Zet een trade voor BTC/EUR klaar, long, maximaal verlies 20 EUR",
+        explicit_asset="BTC", conversation_context={},
+    ).dict()
+    initial.update({"missing_required_inputs": ["setup_id"], "next_missing_input": "setup_id",
+                    "status": "collecting", "setup_options": [
+                        {"id": 5, "name": "Daily Base"}, {"id": 6, "name": "Daily Swing"},
+                    ]})
+    result = asyncio.run(front.run(
+        message="annuleer", instructions="unused", verified_asset="BTC",
+        conversation_context={"active_guided_operation": initial},
+    ))
+    assert result.proposal_analysis.request_plan.operation_state["status"] == "cancelled"
+
+
 def test_zero_saved_setups_rejects_update_without_false_target_question(monkeypatch):
     class Resolver:
         def __init__(self, _session):

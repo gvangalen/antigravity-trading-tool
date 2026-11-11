@@ -1285,6 +1285,7 @@ class FinnV2ReasoningFallbackService:
 
             fields.pop("proposal_mode", None)
             fields.pop("risk_budget_quote", None)
+            fields.pop("setup_id", None)
             return {**base, "plan_fields": validate_manual_trade_plan(fields)}
         if operation_id == "create_strategy":
             return {**base, "strategy_fields": fields}

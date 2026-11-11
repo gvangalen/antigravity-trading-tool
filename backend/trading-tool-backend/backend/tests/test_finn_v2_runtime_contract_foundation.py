@@ -1604,6 +1604,23 @@ def test_cancelled_guided_draft_uses_natural_terminal_copy():
     assert response["content"] == "Het strategievoorstel is geannuleerd. Er is niets gewijzigd."
 
 
+@pytest.mark.parametrize("locale,phrase", [
+    ("nl", "Het tradevoorstel is geannuleerd."),
+    ("en", "The trade proposal was cancelled."),
+    ("de", "Der Tradevorschlag wurde abgebrochen."),
+])
+def test_cancelled_manual_trade_draft_has_localized_terminal_copy(locale, phrase):
+    response = FinnV2RunService(session=object())._terminal_placeholder_response(
+        interaction_mode="CREATE_PROPOSAL", terminal_status="clarification_required",
+        orchestrator={}, verifier={}, reasoning={}, delivery_envelope={},
+        setup_draft={"operation_id": "create_manual_trade_plan", "draft_status": "cancelled"},
+        locale=locale,
+    )
+    assert response["mode"] == "CLARIFICATION"
+    assert response["verifier_status"] == "registry_grounded"
+    assert phrase in response["content"]
+
+
 def test_collecting_strategy_and_bot_drafts_use_contract_questions_not_internal_keys():
     run_service = FinnV2RunService(session=object())
 

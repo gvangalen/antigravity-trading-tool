@@ -1111,6 +1111,7 @@ function AIAssistantContent({
       const setupDraft = projection?.setup_draft || null;
       const draftOperations = [
         "create_strategy", "create_bot",
+        "create_manual_trade_plan",
         "watchlist_add", "watchlist_remove",
         "create_indicator_configuration", "update_indicator_configuration", "delete_indicator_configuration",
       ];
@@ -1221,6 +1222,7 @@ function AIAssistantContent({
                 clarification: projection?.clarification || null,
                 setup_draft: reviewedSetupDraft,
                 action_draft: visibleActionDraft,
+                setup_options: visibleActionDraft?.setup_options || [],
               },
               setupDraft: reviewedSetupDraft,
               proposalRequestedState: immutableProposalState?.requested_state || null,
@@ -2189,7 +2191,7 @@ function AIAssistantContent({
       : draftQuestionChoices(message, locale);
     const copy = draftConversationCopy(locale);
     return (
-      <div className="mt-3 space-y-2" aria-label={choices.length ? copy.hint : copy.freeTextHint}>
+      <div className={`mt-3 space-y-2 ${choices.length > 5 ? "max-h-72 overflow-y-auto" : ""}`} aria-label={choices.length ? copy.hint : copy.freeTextHint}>
         {choices.map((choice) => (
           <button
             key={`${messageIndex}-${choice.reply}`}

@@ -24,7 +24,7 @@ export function draftQuestionChoices(message, locale = 'nl') {
   const options = optionField ? message?.state?.[optionField] : null;
   if (Array.isArray(options) && options.length > 0) {
     const kind = field === 'setup_id' ? 'setup' : field === 'strategy_id' ? 'strategy' : null;
-    return options.slice(0, 3).map((option) => ({
+    return options.slice(0, 200).map((option) => ({
       label: option.name || option.display_name || String(option.id || ''),
       reply: kind && option.id ? `${kind} ${option.id}` : String(option.name || ''),
     })).filter((option) => option.label && option.reply);

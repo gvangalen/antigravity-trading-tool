@@ -46,6 +46,7 @@ from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResol
 from backend.services import finn_v2_entity_resolution_service as entity_resolution_module
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
 from backend.services.finn_v2_operation_classification_service import FinnV2OperationClassificationService
+from backend.services.finn_manual_trade_suggestion_service import ManualTradeSetupChoice
 from backend.services.watchlist_conversation_service import ambiguous_asset_change_scope, asks_for_watchlist_inventory, replacement_mentions
 from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
 from backend.services.finn_v2_account_bundle_answer import render_account_bundle_answer
@@ -758,6 +759,11 @@ class FinnResponsesFrontDoor:
                     direction=str(inputs["direction"]),
                     max_loss_quote=inputs["risk_budget_quote"],
                     user_id=self.user_id,
+                    selected_setup_id=(
+                        int(inputs["setup_id"])
+                        if dict(state.get("input_sources") or {}).get("setup_id") == "verified_owner_target"
+                        and inputs.get("setup_id") is not None else None
+                    ),
                 )
         except ValueError as exc:
             if isinstance(exc, ManualTradeWait):
@@ -769,12 +775,17 @@ class FinnResponsesFrontDoor:
         state = dict(complete.request_plan.operation_state or {})
         collected = dict(state.get("collected_inputs") or {})
         collected.update(suggested)
+        # The selector belongs to the guided exchange. The saved plan carries
+        # its signed owner_context, while plan_fields has no setup_id field.
+        collected.pop("setup_id", None)
         state["collected_inputs"] = collected
         sources = dict(state.get("input_sources") or {})
         provenance = dict(state.get("input_provenance") or {})
         for key in suggested:
             sources[key] = "market_derived"
             provenance[key] = {"source": "market_derived", "state_revision": state.get("state_revision", 1)}
+        sources.pop("setup_id", None)
+        provenance.pop("setup_id", None)
         state["input_sources"] = sources
         state["input_provenance"] = provenance
         complete.request_plan.operation_state = state
@@ -785,6 +796,27 @@ class FinnResponsesFrontDoor:
             key: value for key, value in collected.items() if key in contract.input_fields
         }
         return complete
+
+    def _manual_trade_setup_choice_result(
+        self, analysis: RequestAnalysisResult, options: list[dict[str, Any]],
+        previous_response: dict[str, Any] | None, locale: str,
+    ) -> FinnResponsesFrontDoorResult:
+        selected = analysis.copy(deep=True)
+        state = dict(selected.request_plan.operation_state or {})
+        state["missing_required_inputs"] = ["setup_id"]
+        state["next_missing_input"] = "setup_id"
+        state["status"] = "collecting"
+        state["setup_options"] = options
+        selected.request_plan.operation_state = state
+        selected.request_plan.missing_information = ["setup_id"]
+        selected.request_plan.clarification_required = True
+        return FinnResponsesFrontDoorResult(
+            FinnResponsesResult(
+                text=_manual_trade_wait_text("manual_trade_setup_ambiguous", locale),
+                response_id=f"manual-trade-setup-choice-{self.run_id}",
+                tool_trace=(), response_id_reusable=False,
+            ), selected, previous_response, locale=locale,
+        )
 
     def _manual_trade_wait_result(self, reason: str, previous_response: dict[str, Any] | None,
                                   locale: str) -> FinnResponsesFrontDoorResult:
@@ -1544,6 +1576,102 @@ class FinnResponsesFrontDoor:
         )
         requested_slot = str(guided_state.get("next_missing_input") or "")
         pending_clarification = dict(conversation_context.get("responses_clarification") or {})
+        if (pending_operation == "create_manual_trade_plan" and requested_slot == "setup_id"
+                and FinnV2OperationStateService.is_cancel_intent(message)):
+            contract = self.proposals.registry.require_supported(pending_operation)
+            selected = self.proposals.from_call(
+                call=FinnResponsesToolCall(
+                    name=catalog.proposal_tool_for_operation(pending_operation),
+                    operation_id=pending_operation, inputs={}, read_tools=(),
+                    required_inputs=contract.required_inputs, missing_inputs=("setup_id",),
+                    draft_intent="new",
+                ),
+                message=message, conversation_context=conversation_context,
+                verified_asset=str((guided_state.get("collected_inputs") or {}).get("asset") or ""),
+            )
+            cancelled = self.proposals.states.cancel(
+                operation_id=pending_operation, conversation_context=conversation_context,
+            )
+            if cancelled is not None:
+                selected.request_plan.operation_state = cancelled.dict()
+                selected.request_plan.missing_information = []
+                selected.request_plan.clarification_required = True
+                return FinnResponsesFrontDoorResult(
+                    FinnResponsesResult(
+                        text={"en": "The trade proposal was cancelled. Nothing was changed.",
+                              "de": "Der Tradevorschlag wurde abgebrochen. Es wurde nichts geändert."}.get(
+                                  str(locale or "nl").split("-")[0].lower(),
+                                  "Het tradevoorstel is geannuleerd. Er is niets gewijzigd."),
+                        response_id=f"manual-trade-setup-cancelled-{self.run_id}",
+                        tool_trace=(), response_id_reusable=False,
+                    ), selected, previous_response, locale=locale,
+                )
+        if (pending_operation == "create_manual_trade_plan" and requested_slot == "setup_id"
+                and not FinnV2OperationStateService.is_cancel_intent(message)):
+            options = list(guided_state.get("setup_options") or [])
+            match = re.fullmatch(r"\s*setup\s+(\d{1,18})\s*", message, re.I)
+            chosen = int(match.group(1)) if match else None
+            allowed = {int(item["id"]) for item in options if str(item.get("id") or "").isdecimal()}
+            if chosen is None:
+                named = [int(item["id"]) for item in options
+                         if str(item.get("name") or "").strip().casefold() == message.strip().casefold()
+                         and str(item.get("id") or "").isdecimal()]
+                chosen = named[0] if len(named) == 1 else None
+            contract = self.proposals.registry.require_supported(pending_operation)
+            selected = self.proposals.from_call(
+                call=FinnResponsesToolCall(
+                    name=catalog.proposal_tool_for_operation(pending_operation),
+                    operation_id=pending_operation,
+                    inputs={"setup_id": chosen} if chosen in allowed else {},
+                    read_tools=(), required_inputs=contract.required_inputs,
+                    missing_inputs=tuple(guided_state.get("missing_required_inputs") or ()),
+                    draft_intent="new",
+                ),
+                message=message, conversation_context=conversation_context,
+                verified_asset=str((guided_state.get("collected_inputs") or {}).get("asset") or ""),
+                verified_target_inputs={"setup_id": chosen} if chosen in allowed else {},
+            )
+            if chosen not in allowed:
+                old_inputs = dict(guided_state.get("collected_inputs") or {})
+                new_inputs = dict(selected.request_plan.operation_state.get("collected_inputs") or {})
+                changed_market = any(new_inputs.get(field) != old_inputs.get(field)
+                                     for field in ("asset", "quote_currency"))
+                if changed_market:
+                    return FinnResponsesFrontDoorResult(
+                        FinnResponsesResult(
+                            text={"en": "I have updated the market in your trade draft.",
+                                  "de": "Ich habe den Markt in deinem Tradeentwurf geändert."}.get(
+                                      str(locale or "nl").split("-")[0].lower(),
+                                      "Ik heb de markt in je tradeconcept aangepast."),
+                            response_id=f"manual-trade-market-corrected-{self.run_id}",
+                            tool_trace=(), response_id_reusable=False,
+                        ), selected, previous_response, locale=locale,
+                    )
+                if re.fullmatch(r"\s*setup\s+\S+\s*", message, re.I):
+                    return self._manual_trade_setup_choice_result(
+                        selected, options, previous_response, locale,
+                    )
+                # A question, cancellation or separate request uses the
+                # normal guided continuation and intent routing below.
+            else:
+                try:
+                    selected = await self._complete_manual_trade_suggestion(selected)
+                except ManualTradeSetupChoice as exc:
+                    return self._manual_trade_setup_choice_result(
+                        selected, exc.options, previous_response, locale,
+                    )
+                except ValueError as exc:
+                    return self._manual_trade_wait_result(str(exc), previous_response, locale)
+                return FinnResponsesFrontDoorResult(
+                    FinnResponsesResult(
+                        text={"en": "I have applied your setup choice to the trade proposal.",
+                              "de": "Ich habe deine Setup-Auswahl für den Tradevorschlag übernommen."}.get(
+                                  str(locale or "nl").split("-")[0].lower(),
+                                  "Ik heb je setupkeuze in het tradevoorstel verwerkt."),
+                        response_id=f"manual-trade-setup-selected-{self.run_id}",
+                        tool_trace=(), response_id_reusable=False,
+                    ), selected, previous_response, locale=locale,
+                )
         choice_entity = {"setup_id": "setup", "strategy_id": "strategy", "bot_id": "bot"}.get(requested_slot)
         if (
             pending_operation and pending_operation != "create_bot" and choice_entity
@@ -1684,6 +1812,10 @@ class FinnResponsesFrontDoor:
                 )
                 try:
                     selected = await self._complete_manual_trade_suggestion(selected)
+                except ManualTradeSetupChoice as exc:
+                    return self._manual_trade_setup_choice_result(
+                        selected, exc.options, previous_response, locale,
+                    )
                 except ValueError as exc:
                     return self._manual_trade_wait_result(str(exc), previous_response, locale)
                 return FinnResponsesFrontDoorResult(
@@ -1719,6 +1851,10 @@ class FinnResponsesFrontDoor:
             )
             try:
                 selected = await self._complete_manual_trade_suggestion(selected)
+            except ManualTradeSetupChoice as exc:
+                return self._manual_trade_setup_choice_result(
+                    selected, exc.options, previous_response, locale,
+                )
             except ValueError as exc:
                 return self._manual_trade_wait_result(str(exc), previous_response, locale)
             return FinnResponsesFrontDoorResult(
