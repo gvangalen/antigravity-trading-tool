@@ -313,6 +313,12 @@ async def suggest_manual_trade_plan(session: Any, *, asset: str, quote_currency:
     context = (await _owner_trade_context(session, user_id=user_id, asset=asset.upper(),
                                           quote_currency=quote_currency.upper(), market_id=market_id)
                if user_id is not None else None)
+    if (context is not None and context.get("recommendation") == "wait"
+            and context.get("reason") != "manual_trade_setup_outside_conditions"):
+        # A measured score mismatch still has verified levels and can show a
+        # non-executable card with wait advice. Missing or conflicting source
+        # evidence cannot support a confirmable proposal.
+        raise ManualTradeWait(str(context.get("reason") or "manual_trade_context_unavailable"))
     plan = derive_suggested_plan(asset=asset, quote_currency=quote_currency,
                                  direction=direction, max_loss_quote=max_loss_quote,
                                  candles=candles, market_id=market_id, context=context)
@@ -331,6 +337,9 @@ async def verify_suggested_manual_trade_plan(session: Any, plan: dict[str, Any],
             quote_currency=str(plan.get("quote_currency") or "").upper(),
             market_id=evidence.get("market_id"),
         )
+        if (context.get("recommendation") == "wait"
+                and context.get("reason") != "manual_trade_setup_outside_conditions"):
+            raise ManualTradeWait(str(context.get("reason") or "manual_trade_context_unavailable"))
         if context != evidence.get("owner_context"):
             raise ValueError("manual_trade_owner_context_changed")
         # A signed provider response remains valid for a short review window.

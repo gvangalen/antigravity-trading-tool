@@ -180,6 +180,26 @@ def _manual_trade_wait_text(reason: str, locale: str) -> str:
             "en": "You have several trade setups for this market. Which one should I use?",
             "de": "Du hast mehrere Trade-Setups für diesen Markt. Welches soll ich verwenden?",
         }.get(language, "Je hebt meerdere tradesetups voor dit handelspaar. Welke wil je gebruiken?")
+    if reason == "manual_trade_profile_missing":
+        return {
+            "en": "I need your trader profile before I can size a trade proposal. Set your preferences and ask me again.",
+            "de": "Für die Positionsgröße brauche ich zuerst dein Traderprofil. Lege deine Präferenzen fest und frage mich erneut.",
+        }.get(language, "Ik heb je traderprofiel nodig om een positieomvang voor te stellen. Stel je voorkeuren in en vraag het opnieuw.")
+    if reason == "manual_trade_setup_missing":
+        return {
+            "en": "I cannot find a daily trade setup for this exact market in your account. Add one before requesting a proposal.",
+            "de": "Ich finde in deinem Konto kein Tages-Trade-Setup für diesen genauen Markt. Lege eines an, bevor du einen Vorschlag anforderst.",
+        }.get(language, "Ik vind in je account geen dagsetup voor dit exacte handelspaar. Voeg die toe voordat je om een voorstel vraagt.")
+    if reason == "manual_trade_benchmark_unavailable":
+        return {
+            "en": "I cannot verify the current benchmark against your setup, so I recommend waiting. Try again when that assessment is available.",
+            "de": "Ich kann den aktuellen Benchmark nicht mit deinem Setup abgleichen und empfehle daher zu warten. Versuche es erneut, wenn die Bewertung verfügbar ist.",
+        }.get(language, "Ik kan de actuele benchmark niet met je setup vergelijken en raad aan te wachten. Probeer het opnieuw zodra die beoordeling beschikbaar is.")
+    if reason == "manual_trade_source_unavailable":
+        return {
+            "en": "I cannot verify the current market evidence needed for this market. I recommend waiting and trying again when that evidence is available.",
+            "de": "Ich kann die nötigen aktuellen Marktdaten für diesen Markt nicht prüfen. Ich empfehle zu warten und es später erneut zu versuchen.",
+        }.get(language, "Ik kan de benodigde actuele marktgegevens voor dit handelspaar niet verifiëren. Ik raad aan te wachten en het later opnieuw te proberen.")
     return {
         "en": "I cannot prepare a reliable trade card yet. Check that your trader profile, a daily trade setup, and current benchmark and market evidence are available for this exact market.",
         "de": "Ich kann noch keine verlässliche Trade-Karte vorbereiten. Prüfe Traderprofil, Tages-Setup sowie aktuelle Benchmark- und Marktdaten für dieses genaue Paar.",
@@ -774,6 +794,7 @@ class FinnResponsesFrontDoor:
                 response_id=f"manual-trade-wait-{self.run_id}",
                 tool_trace=({"name": "manual_trade_setup_evaluation", "status": "completed",
                              "result": {"decision": "wait", "reason": reason}},),
+                answer_kind="manual_trade_wait",
                 response_id_reusable=False,
             ), None, previous_response, locale=locale,
         )

@@ -223,7 +223,8 @@ def test_stock_source_uses_catalog_provider_and_completed_exchange_days(monkeypa
 def test_signed_stock_candidate_verifies_owner_without_refetching_provider(monkeypatch):
     from backend.services import finn_manual_trade_suggestion_service as service
 
-    context = {"recommendation": "wait", "risk_factor": "0.5", "reason": "setup_missing"}
+    context = {"recommendation": "wait", "risk_factor": "0.5",
+               "reason": "manual_trade_setup_outside_conditions"}
     plan = derive_suggested_plan(asset="AAPL", quote_currency="USD", direction="long",
                                  max_loss_quote="20", candles=_completed_candles(),
                                  market_id=None, context=context)
@@ -371,7 +372,7 @@ def test_user_supplied_levels_switch_guided_suggestion_to_user_stated_plan():
     assert not second.missing_required_inputs
 
 
-def test_owner_context_adapts_risk_and_keeps_wait_card(monkeypatch):
+def test_owner_context_adapts_risk_and_classifies_wait(monkeypatch):
     from backend.services import finn_manual_trade_suggestion_service as service
     from backend.infrastructure.repositories import setup_repository, user_repository
     from backend.services import setup_market_match_service
@@ -428,6 +429,70 @@ def test_owner_context_adapts_risk_and_keeps_wait_card(monkeypatch):
     unavailable = evaluate()
     assert unavailable["recommendation"] == "wait"
     assert unavailable["reason"] == "manual_trade_benchmark_unavailable"
+
+
+def test_unverified_owner_context_cannot_become_confirmable_trade_card(monkeypatch):
+    from backend.services import finn_manual_trade_suggestion_service as service
+
+    async def source(_session, *, asset, quote_currency):
+        assert (asset, quote_currency) == ("ETH", "USDT")
+        return 42, _completed_candles()
+
+    async def owner(_session, *, user_id, asset, quote_currency, market_id):
+        assert (user_id, asset, quote_currency, market_id) == (17, "ETH", "USDT", 42)
+        return {"recommendation": "wait", "reason": "manual_trade_benchmark_unavailable",
+                "risk_factor": "0.5"}
+
+    monkeypatch.setattr(service, "_source_candles", source)
+    monkeypatch.setattr(service, "_owner_trade_context", owner)
+    with pytest.raises(service.ManualTradeWait, match="manual_trade_benchmark_unavailable"):
+        asyncio.run(service.suggest_manual_trade_plan(
+            object(), asset="ETH", quote_currency="USDT", direction="long",
+            max_loss_quote="20", user_id=17,
+        ))
+
+
+def test_verified_score_mismatch_keeps_card_with_wait_advice(monkeypatch):
+    from backend.services import finn_manual_trade_suggestion_service as service
+
+    async def source(_session, *, asset, quote_currency):
+        assert (asset, quote_currency) == ("ETH", "USDT")
+        return 42, _completed_candles()
+
+    async def owner(_session, *, user_id, asset, quote_currency, market_id):
+        assert (user_id, asset, quote_currency, market_id) == (17, "ETH", "USDT", 42)
+        return {"recommendation": "wait", "reason": "manual_trade_setup_outside_conditions",
+                "risk_factor": "0.5"}
+
+    monkeypatch.setattr(service, "_source_candles", source)
+    monkeypatch.setattr(service, "_owner_trade_context", owner)
+    plan = asyncio.run(service.suggest_manual_trade_plan(
+        object(), asset="ETH", quote_currency="USDT", direction="long",
+        max_loss_quote="20", user_id=17,
+    ))
+    assert plan["source_evidence"]["owner_context"]["recommendation"] == "wait"
+    assert plan["executable"] is False
+    assert float(plan["max_loss_quote"]) <= 10
+
+
+def test_previously_signed_unverified_wait_card_cannot_be_saved(monkeypatch):
+    from backend.services import finn_manual_trade_suggestion_service as service
+
+    context = {"recommendation": "wait", "reason": "manual_trade_benchmark_unavailable",
+               "risk_factor": "0.5"}
+    plan = derive_suggested_plan(
+        asset="AAPL", quote_currency="USD", direction="long", max_loss_quote="20",
+        candles=_completed_candles(), market_id=None, context=context,
+    )
+    signed = service._attest_plan(plan, 17)
+
+    async def owner(_session, *, user_id, asset, quote_currency, market_id):
+        assert (user_id, asset, quote_currency, market_id) == (17, "AAPL", "USD", None)
+        return context
+
+    monkeypatch.setattr(service, "_owner_trade_context", owner)
+    with pytest.raises(service.ManualTradeWait, match="manual_trade_benchmark_unavailable"):
+        asyncio.run(service.verify_suggested_manual_trade_plan(object(), signed, user_id=17))
 
 
 def test_adapter_saves_only_one_non_executable_owner_plan():

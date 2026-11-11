@@ -16,9 +16,10 @@ claimt geen acceptatie daarvan.
 FINN kan een volledig, niet-uitvoerbaar handmatig tradeplan voor een exact
 asset/paar voorstellen met entry, stop, targets en positieomvang. Profiel,
 opgeslagen setup, benchmark en verifieerbare afgeronde koersdata bepalen het
-advies `review`, `reduced_risk` of `wait`. Ook bij `wait` blijft het plan als
-kaart zichtbaar en uitsluitend als plan op te slaan; er wordt geen order of
-bot gestart. Zonder genoemd risicobudget vraagt FINN dit eerst. De bron- en
+advies `review`, `reduced_risk` of `wait`. Een geverifieerde scoreafwijking
+kan een kaart met lager risico en wachtadvies opleveren; ontbrekend of
+tegenstrijdig bronbewijs geeft wachtadvies zonder bevestigbare kaart. Er wordt
+geen order of bot gestart. Zonder genoemd risicobudget vraagt FINN dit eerst. De bron- en
 eigenaargebonden attestatie verloopt na tien minuten en wordt bij bevestiging
 opnieuw gecontroleerd.
 
@@ -83,6 +84,46 @@ backend-health en frontend-buildinfo gaven beide HTTP 200 en precies die
 merge-SHA. Deze statusaanvulling creëert weer een nieuwe main-SHA. De laatste
 main-CI, Auto Deploy en publieke SHA-pariteit moeten vóór de beschermde
 inhoudsproef op die definitieve SHA worden gecontroleerd.
+
+De definitieve release `b04fcee6a56b255ecc61b8ba6474989f8a07dd77`
+had groene main-CI `43011014917` en Auto Deploy `43011655937`; backend en
+frontend meldden beide HTTP 200 en exact die SHA. Beschermde QA-preflight
+`43012032291` en manifestcontrole `43012152826` slaagden. De eerste
+inhoudsrun `43012301209` is **NOT_ACCEPTED/INCOMPLETE**: de budgetvraag voor
+BTC/EUR werkte, maar het vervolg `Maximaal verlies 20 EUR.` eindigde als
+`unavailable/no_evidence_available` zonder voorstel. De runner stopte veilig
+vóór opslag; ETH/USDT en AAPL/USD bleven ongetest. De alleen-lezen nacontrole
+`43012800359` bevestigde nul planrijen, brokerorders en Live-bots vóór en na.
+
+De lokale reproductie van die twee beurten liet zien dat het budgetslot wél
+bindt. Wanneer actuele marktbronnen ontbreken, gaf de server een getypeerd
+wachtbesluit, maar de algemene antwoordverificatie verving dit door de
+onduidelijke foutmelding. Branch
+`codex/finn-manual-trade-guided-budget-20261111` bewaart het serverbesluit en
+toont een concrete wachtreden zonder kaart. Onvoldoende of tegenstrijdige
+eigenaar-/benchmarkcontext wordt ook bij een eerder ondertekende kaart vóór
+opslag geweigerd; een aantoonbare scoreafwijking behoudt de kaart met
+lager risico en wachtadvies. De QA-runner krijgt een afzonderlijke,
+alleen-lezen getypeerde wachtverwachting met eigenaargebonden
+geen-schrijfcontrole. Beschermde QA heeft een eigen wacht-herproef voorbereid;
+de positieve kaart-/opslagmatrix blijft onveranderd en vergt daadwerkelijk
+beschikbare live bronvoorwaarden.
+
+Lokale exacte tweebeurt-reproductie via FastAPI, Celery en PostgreSQL gaf na
+de reparatie een budgetverduidelijking gevolgd door `completed` met een
+getypeerd wachtbesluit, geen voorstel en een concrete bronuitleg. Gerichte
+trade-/QA-runnertests: **150 passed**; definitieve root-backend:
+**4661 passed, 7 skipped**. De volledige lokale actiecontractmatrix
+slaagde **17/17** met **26/26** adaptertests, nul brokerorders, Live-bots,
+Live-tradingcalls of productieverbindingen (artifact SHA-256
+`d1c333b4c51f3eddf3aad0fb2acf7cdfe59b4a3448e5faab71f641deb2c7570f`).
+De echte-provider ontwikkelset slaagde **20/20** (SHA-256
+`88cf1e44c4bdcdc5a66b8555c5681f11df7031098886eef5e1b8de20789ab9c2`)
+en de regressieset **109/109** (SHA-256
+`552fb38ace33060753c1a1e1f1273274bdd76614a8166f40b7026e4ccc4245d2`),
+beide zonder provider-, schema-, parse-, timeout- of validatiefouten. Security
+en Architecture beoordeelden de getypeerde wachtgrens; Security gaf na
+tegenproeven ook GO op de QA-runnercontrole.
 
 ## AAPL Paper-coach: gedateerd rapport en laatste koers (11 november 2026)
 
