@@ -123,6 +123,23 @@ def _as_utc(value: datetime) -> datetime:
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
 
 
+def _candle_decimal(value: Any, field: str) -> Decimal:
+    """Strip DB NUMERIC padding without rounding a provider price."""
+    if isinstance(value, Decimal):
+        if not value.is_finite():
+            raise ValueError(f"{field}_invalid")
+        parts = value.as_tuple()
+        digits = list(parts.digits)
+        exponent = parts.exponent
+        while exponent < 0 and len(digits) > 1 and digits[-1] == 0:
+            digits.pop()
+            exponent += 1
+        if exponent < -12 or len(digits) + exponent - 1 > 11:
+            raise ValueError(f"{field}_invalid")
+        value = format(Decimal((parts.sign, tuple(digits), exponent)), "f")
+    return _positive_decimal(value, field)
+
+
 def _attestation_digest(plan: dict[str, Any], user_id: int) -> str:
     from backend.utils.auth_utils import SECRET_KEY
 
@@ -199,10 +216,10 @@ def derive_suggested_plan(
     values = []
     candle_fingerprint_rows = []
     for row in ordered:
-        open_price = _positive_decimal(row["open"], "candle_open")
-        high = _positive_decimal(row["high"], "candle_high")
-        low = _positive_decimal(row["low"], "candle_low")
-        close = _positive_decimal(row["price"], "candle_close")
+        open_price = _candle_decimal(row["open"], "candle_open")
+        high = _candle_decimal(row["high"], "candle_high")
+        low = _candle_decimal(row["low"], "candle_low")
+        close = _candle_decimal(row["price"], "candle_close")
         if not low <= open_price <= high or not low <= close <= high:
             raise ValueError("manual_trade_candle_geometry_invalid")
         values.append((high, low, close))

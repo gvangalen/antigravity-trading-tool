@@ -2825,6 +2825,8 @@ async def _manual_trade_source_audit() -> Dict[str, Any]:
         "manual_trade_candles_gap", "manual_trade_candles_stale",
         "manual_trade_candle_geometry_invalid", "manual_trade_volatility_unusable",
         "manual_trade_risk_budget_too_small", "manual_trade_asset_or_quote_unavailable",
+        "candle_open_invalid", "candle_high_invalid", "candle_low_invalid",
+        "candle_close_invalid",
     }
     safe_context_reasons = {
         "manual_trade_profile_unavailable", "manual_trade_profile_missing",

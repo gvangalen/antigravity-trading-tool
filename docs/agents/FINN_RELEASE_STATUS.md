@@ -4,6 +4,47 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN handmatig tradevoorstel: crypto NUMERIC-bronprecisie (11 november 2026)
+
+Phase: `LOCAL_SOURCE_REPAIR_CANDIDATE`; de laatste volledig gedeployde
+QA-audit-SHA is `14725ca3237472cb7f4447d587e7f9f9427b57a9` met groene
+main-CI `43029500214`, Auto Deploy `43030319779`, en publieke backend/frontend
+HTTP 200 op dezelfde SHA. Onafhankelijke beschermde read-only bronaudit
+`43030765449` (geschoond artifact `13861163109`) bevestigde nul writes,
+brokerorders, Live bots en exchange keys. Voor BTC/EUR en ETH/USDT waren
+minstens 15 dagkaarsen beschikbaar maar de planberekening eindigde
+`plan_unavailable`; AAPL/USD berekende wel een plan. Op de QA-owner ontbreekt
+het traderprofiel; BTC/EUR heeft minstens twee dagsetup-kandidaten, ETH/USDT en
+AAPL/USD geen, en alle drie missen verifieerbare scorebronnen. Deze audit
+accepteerde geen positieve kaart of opslag.
+
+Een lokale reproductie met PostgreSQL-achtige `NUMERIC`-kaarswaarden toonde
+dat uitsluitend opgeslagen nul-padding na 12 decimalen de strikte
+prijsvalidator liet stoppen met `candle_open_invalid`. De reparatie verwijdert
+alleen exacte eindnullen via de Decimal-coëfficiënt en exponent, zonder
+afronding; niet-nul extra precisie blijft ongeldig. BTC/EUR- en ETH/USDT-
+regressies bewijzen dat padded en ongepadded bronnen hetzelfde plan en dezelfde
+fingerprint opleveren. QA, Security en Architecture vonden aanvankelijk een
+afrondingsfout in een eerste versie; na hun tegenproeven is die verwijderd en
+gaven alle drie GO voor de huidige patch. De QA-bronaudit publiceert nu ook
+vier vaste `candle_*_invalid`-codes voor een veilige live herdiagnose.
+
+Gerichte trade-/runnerregressies: **154 passed**; definitieve root-backend:
+**4665 passed, 7 skipped**. De echte-provider developmentset: **20/20** zonder
+provider-, schema-, parse-, timeout- of validatiefouten; artifact SHA-256
+`6922fedaea1bd344aaf6f0b12748229c72cfffff7623401a9db0f276ccdb8674`.
+De lokale worker-actiecontractmatrix slaagde **17/17** en de adaptertests
+**26/26**, met nul brokerorders, Live bots, Live calls en
+productieverbindingen (matrix-artifact SHA-256
+`768c9e2a3f392a084e32e40c019f3cf3756c9ca28bb9fd7ee1d904f05bc29427`).
+Echte-provider regressie: **109/109**, eveneens nul provider-, schema-, parse-,
+timeout- of validatiefouten; artifact SHA-256
+`9679bae8feeba20eb877655077e5fd2224b9500a91d51e157b5fabb816492b07`.
+CI, Auto Deploy en live herproef zijn nog open.
+Profiel/setup/score-fixturevoorbereiding en volledige
+kaart-/opslagacceptatie blijven open; er zijn daarvoor nog geen productie-
+fixturewrites uitgevoerd.
+
 ## FINN handmatig tradevoorstel: beschermde bronaudit (11 november 2026)
 
 Phase: `DEPLOYED_AUDIT_QA_PENDING`; de eerdere productversie stond op live SHA
