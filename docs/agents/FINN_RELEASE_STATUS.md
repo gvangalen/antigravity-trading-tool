@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN handmatig tradevoorstel (11 november 2026)
 
-Phase: `LOCAL_VALIDATED_DEPLOY_REQUESTED`; branch
+Phase: `LOCAL_GREEN_CI_PENDING`; branch
 `codex/finn-manual-trade-proposal-20261110`, gebaseerd op main
 `841d45c0a7164be0d768e8fb76cda4d4ca1ae3ba`. De gebruiker heeft
 deployment gevraagd nadat de andere agent zijn werk afrondde. De voorgaande
@@ -32,7 +32,11 @@ brokerorders, Live-bots en productieverbindingen (artifact SHA-256
 De echte-provider ontwikkelset slaagde **20/20**, zonder provider-, schema-,
 parse-, timeout- of validatiefouten (artifact SHA-256
 `20b1ab0c83966bb32770524da7186f4243f0c8be932c65aec00179bface1eca2`).
-De regressieset, PR-CI, Auto Deploy en publieke SHA-pariteit zijn nog open.
+De echte-provider regressieset slaagde **109/109**, eveneens zonder provider-,
+schema-, parse-, timeout- of validatiefouten (artifact SHA-256
+`0607347cd07ab5db7a32ef9cf7e5ce17ec63096a7462eaafc4d89b50a9a39fe7`).
+De gegenereerde frontend-export is in de kandidaat gecommit. PR-CI, Auto
+Deploy en publieke SHA-pariteit zijn nog open.
 Onafhankelijke lokale QA, Security en Architecture gaven GO op de productdiff
 vóór deze rebase; ingelogde productie-QA van de nieuwe kandidaat is niet
 uitgevoerd en blijft van de QA-agent.
