@@ -32,6 +32,36 @@ Changing either binding is an operational change: update the server-side
 secret, verify the account, and record the change in the deployment handoff.
 Do not infer a replacement from the users table.
 
+### Bound manual-trade proposal fixture
+
+The separately authorized `manual_trade_fixture_prepare` protected QA profile
+may add only owner-scoped data to the existing marked `FINN_QA_USER_ID`. It
+never changes the server binding or creates another login. It sets a marked
+daily swing-trader profile, adds clearly named QA trade setups for BTC/EUR,
+ETH/USDT and AAPL/USD, and configures one catalog-backed macro, technical and
+market indicator per target. The two pre-existing linked BTC/EUR setup rows
+and their links remain unchanged. The new BTC setup has a broad 0–100 band
+for a review card. After genuine scores are built, the marked ETH setup gets
+a near-miss band for reduced risk and the marked AAPL setup gets an
+out-of-range band for wait advice. These bands come from verified scores and
+are checked on retry. They do not establish whether the original BTC setups
+match the market.
+
+Preparation uses real dated provider or exact-market sources and canonical
+score builders. It requires a protected run on the exact deployed SHA,
+`manifest_id=none`, `allow_fixture_actions=true`, and
+`allow_safe_fixture_execution=false`. No broker order or Live bot is allowed.
+The host keeps a private 0600 phase journal. A retry accepts only identical
+marked profile, setup and configuration rows, and stops on drift or missing
+source evidence. This fixture is persistent so saved QA plans and failed
+evidence are not erased automatically. Independent QA must select the named
+setup explicitly and verify the original BTC setups' selection paths separately.
+The stock market reading is inserted only when none exists; the marked
+indicator configuration records its exact reading ID. A retry reuses only
+that linked reading and refuses an unlinked or additional AAPL reading.
+Provider helpers may also mark the owner's market and technical onboarding
+steps complete. The fixture never changes another user's onboarding state.
+
 ### Inactive synthetic score probe owner
 
 The user-authorized `score2_stale_paper` protected QA profile may create one

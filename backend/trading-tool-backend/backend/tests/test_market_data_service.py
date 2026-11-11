@@ -217,6 +217,33 @@ def test_add_market_indicator_saves_measurement_without_inventing_score(monkeypa
     session.commit.assert_awaited_once()
 
 
+def test_add_market_indicator_can_defer_commit_for_atomic_owner_link(monkeypatch):
+    session = AsyncMock()
+    service = MarketDataService(session)
+    service._get_asset_scope = AsyncMock(return_value={"asset_class": "stock"})
+    service.repository.check_indicator_exists = AsyncMock(return_value=False)
+
+    def persisted(row):
+        row.id = 29
+        return row
+
+    service.repository.add_market_data_indicator = AsyncMock(side_effect=persisted)
+    monkeypatch.setattr(
+        "backend.services.market_data_service.sync_score_indicator",
+        lambda *_args, **_kwargs: {"score": None, "source_status": "insufficient_indicator_history"},
+    )
+
+    result = asyncio.run(service.add_user_market_indicator(
+        7, "change_24h", 1.2, symbol="AAPL", persist_preference=False,
+        commit=False,
+    ))
+
+    assert result.id == 29
+    session.flush.assert_awaited_once()
+    session.commit.assert_not_awaited()
+    session.refresh.assert_not_awaited()
+
+
 def test_duplicate_market_indicator_does_not_touch_configuration():
     service = MarketDataService(AsyncMock())
     service.repository.check_indicator_exists = AsyncMock(return_value=True)
@@ -228,7 +255,9 @@ def test_duplicate_market_indicator_does_not_touch_configuration():
 
     assert error.value.status_code == 409
     service.preference_repository.ensure_user_config.assert_not_awaited()
-    service._get_asset_scope.assert_not_awaited()
+    # Catalog lookup happens before the owner-row check so an isolated
+    # lookup cannot deadlock a single-connection worker transaction.
+    service._get_asset_scope.assert_awaited_once_with("BTC")
 
 
 def test_market_preference_sync_refreshes_existing_evidence_from_the_live_provider():

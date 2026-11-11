@@ -35,6 +35,7 @@ ALLOWED_PROFILES = {
     "watchlist_context_audit",
     "manual_trade_source_audit",
     "manual_trade_fixture_preflight",
+    "manual_trade_fixture_prepare",
     "trade_review_preflight",
     "manifest_key",
     "targeted_regression",
@@ -179,6 +180,29 @@ def safe_portfolio_paper_fx_diagnostic(error: Exception) -> Dict[str, Any] | Non
 
 def profile_error_category(profile: str, error: Exception) -> str:
     """The published QA error category must not contain private fixture text."""
+    if profile == "manual_trade_fixture_prepare":
+        code = str(error)
+        return (code if code in {
+            "manual_trade_fixture_not_authorized",
+            "manual_trade_fixture_namespace_invalid",
+            "manual_trade_fixture_owner_invalid",
+            "manual_trade_fixture_owner_unsafe",
+            "manual_trade_btc_setup_baseline_changed",
+            "manual_trade_btc_setup_changed",
+            "manual_trade_target_setup_ambiguous",
+            "manual_trade_target_setup_drift",
+            "manual_trade_indicator_config_drift",
+            "manual_trade_pair_weights_drift",
+            "manual_trade_other_pair_evidence_present",
+            "manual_trade_scoring_rules_unavailable",
+            "manual_trade_macro_history_unavailable",
+            "manual_trade_macro_source_unavailable",
+            "manual_trade_technical_source_unavailable",
+            "manual_trade_pair_sources_unavailable",
+            "manual_trade_pair_scores_incomplete",
+            "manual_trade_verified_score_unavailable",
+            "manual_trade_qa_setup_not_matched",
+        } else "manual_trade_fixture_prepare_runtime_error")
     if profile == "manual_trade_fixture_preflight":
         code = str(error)
         return (code if code in {
@@ -3298,6 +3322,26 @@ def main() -> int:
                         or os.getenv("FINN_QA_ALLOW_FIXTURE_EXECUTION") == "1"):
                     raise ValueError("manual_trade_source_audit_writes_forbidden")
                 report["manual_trade_fixture_preflight"] = manual_trade_fixture_preflight()
+                report["outcome"] = "passed"
+                report["qa_status"] = "COMPLETED"
+            elif args.profile == "manual_trade_fixture_prepare":
+                if args.manifest_id != "none" or args.manifest_bundle_path:
+                    raise ValueError("manual_trade_fixture_prepare_manifest_forbidden")
+                if (os.getenv("FINN_QA_ALLOW_FIXTURE_ACTIONS") != "1"
+                        or os.getenv("FINN_QA_ALLOW_FIXTURE_EXECUTION") == "1"
+                        or os.getenv("FINN_QA_ALLOW_MANUAL_TRADE_PREPARE") != "1"):
+                    raise ValueError("manual_trade_fixture_not_authorized")
+                from backend.scripts.probe_protected_manual_trade_fixture_prepare import run as prepare_manual_trade
+
+                report["safety"]["read_only_profile"] = False
+                report["protected_profile_attempted"] = True
+                report["qa_status"] = "INCOMPLETE"
+                report["manual_trade_fixture_prepare"] = _shared_database_loop().run_until_complete(
+                    prepare_manual_trade(
+                        journal_path=report_path.with_suffix(".journal.json"),
+                        release_sha=args.release_sha,
+                        fixture_namespace=fixture_namespace or "",
+                    ))
                 report["outcome"] = "passed"
                 report["qa_status"] = "COMPLETED"
             elif args.profile == "trade_review_preflight":
