@@ -3109,7 +3109,6 @@ def test_manual_trade_read_only_clarification_keeps_owner_database_unchanged(mon
     assert results[0]["manual_trade_read_only_evidence"]["unchanged"] is True
     assert results[0]["failure_classification"] is None
 
-
 def test_manual_trade_read_only_content_failure_does_not_hide_later_cases(monkeypatch):
     from types import SimpleNamespace
 
@@ -3144,6 +3143,58 @@ def test_manual_trade_read_only_content_failure_does_not_hide_later_cases(monkey
     assert [item["case_id"] for item in results] == ["clarify-1", "clarify-2"]
     assert results[0]["failure_classification"] == "product"
     assert results[1]["failure_classification"] is None
+
+
+def test_manual_trade_typed_wait_is_read_only_acceptance_not_missing_operation(monkeypatch):
+    from types import SimpleNamespace
+
+    module = _module()
+    created = {"run_id": "run-1", "conversation_id": "conversation-1", "status": "pending"}
+    terminal = {"run_id": "run-1", "conversation_id": "conversation-1", "status": "completed",
+                "response": {"mode": "READ", "content": "Ik raad aan te wachten op marktgegevens.",
+                             "proposal_id": None}, "runtime_trace": {}}
+    monkeypatch.setattr(module, "request_json", lambda **_kwargs: (200, created, 1.0, None))
+    monkeypatch.setattr(module, "observe_terminal", lambda **_kwargs: SimpleNamespace(
+        terminal=terminal, sse_terminal=terminal, sse_error=None,
+        fallback_poll_error=None, snapshot_error=None,
+    ))
+    baseline = {"owner_scoped": True, "row_count": 0, "state_sha256": "same",
+                "owner_domain_state_sha256": "same-all", "broker_order_count": 0,
+                "live_bot_count": 0}
+    monkeypatch.setattr(module, "owner_scoped_database_snapshot", lambda **_kwargs: baseline)
+    monkeypatch.setattr(module, "manual_trade_wait_evidence", lambda _run_id: {
+        "status": "available", "typed_wait": True,
+        "reason_class": "manual_trade_source_unavailable", "passed": True,
+    })
+    case = {"case_id": "wait", "message": "Maximaal verlies 20 EUR.",
+            "fixture_action": "read_only", "expected_operation_id": "create_manual_trade_plan",
+            "expected_manual_trade": {"asset": "BTC", "quote_currency": "EUR"},
+            "expected_manual_trade_wait": True,
+            "expected_answer_terms": ["wachten", "marktgegevens"]}
+    results = module.run_cases(base_url="https://example.test", token="token", cases=[case],
+                               fixture_namespace="qa-acceptance-a1b2c3d4")
+    assert results[0]["operation_matches"] is True
+    assert results[0]["manual_trade_wait_evidence"]["passed"] is True
+    assert results[0]["manual_trade_read_only_evidence"]["unchanged"] is True
+    assert results[0]["failure_classification"] is None
+
+    terminal["runtime_trace"] = {"initial_operation_id": "create_bot"}
+    wrong_operation = module.run_cases(
+        base_url="https://example.test", token="token", cases=[case],
+        fixture_namespace="qa-acceptance-a1b2c3d4",
+    )[0]
+    assert wrong_operation["manual_trade_wait_evidence"]["expected_operation"] is False
+    assert wrong_operation["failure_classification"] == "product"
+
+    terminal["runtime_trace"] = {}
+    terminal["mode"] = "READ"
+    terminal["response"]["mode"] = "ACTION_PROPOSAL"
+    wrong_mode = module.run_cases(
+        base_url="https://example.test", token="token", cases=[case],
+        fixture_namespace="qa-acceptance-a1b2c3d4",
+    )[0]
+    assert wrong_mode["manual_trade_wait_evidence"]["read_mode"] is False
+    assert wrong_mode["failure_classification"] == "product"
 
 
 def test_manual_trade_manifest_requires_scoped_typed_expectation(tmp_path, monkeypatch):

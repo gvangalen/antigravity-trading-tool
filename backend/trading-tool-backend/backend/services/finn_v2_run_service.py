@@ -5291,10 +5291,12 @@ class FinnV2RunService:
                                 len(prepared.response.tool_trace),
                                 extra={"run_id": run_id},
                             )
-                            if prepared.response.answer_kind == "unsupported_execution":
-                                # This is a server-owned refusal for an explicit
-                                # unsupported execution request. It contains no
-                                # factual claim that needs read evidence.
+                            if prepared.response.answer_kind in {
+                                "unsupported_execution", "manual_trade_wait",
+                            }:
+                                # These are server-owned, typed policy decisions.
+                                # Rewriting a verified wait into a generic
+                                # no-evidence failure hides the actual reason.
                                 answer = FinnResponsesVerifiedAnswer(
                                     "completed", prepared.response.text, None, (),
                                 )

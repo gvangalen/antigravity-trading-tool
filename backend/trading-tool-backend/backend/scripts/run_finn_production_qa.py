@@ -1094,6 +1094,51 @@ def manual_trade_saved_evidence(
         return {"status": "unavailable", "error_category": classify_internal_issue(error)}
 
 
+async def _load_manual_trade_wait_evidence(run_id: str) -> Dict[str, Any]:
+    """Check a server-owned wait on the QA owner without exporting its text."""
+    from sqlalchemy import select
+
+    from backend.infrastructure.database import async_session_factory
+    from backend.infrastructure.models import FinnV2Run, FinnV2RuntimeContract
+
+    raw_user_id = os.environ.get("FINN_QA_USER_ID", "")
+    if not raw_user_id.isdigit():
+        return {"status": "fixture_binding_invalid", "passed": False}
+    async with async_session_factory() as session:
+        row = (await session.execute(
+            select(FinnV2Run, FinnV2RuntimeContract)
+            .join(FinnV2RuntimeContract, FinnV2RuntimeContract.run_id == FinnV2Run.id)
+            .where(FinnV2Run.id == run_id, FinnV2Run.user_id == int(raw_user_id),
+                   FinnV2RuntimeContract.user_id == int(raw_user_id))
+        )).first()
+    if row is None:
+        return {"status": "owner_run_missing", "passed": False}
+    state = dict(row[1].state_json or {})
+    exchange = dict(state.get("responses_exchange") or {})
+    trace = list(exchange.get("tool_trace") or [])
+    typed = (
+        exchange.get("answer_kind") == "manual_trade_wait"
+        and len(trace) == 1
+        and trace[0].get("name") == "manual_trade_setup_evaluation"
+        and trace[0].get("status") == "completed"
+        and dict(trace[0].get("result") or {}).get("decision") == "wait"
+    )
+    reason = str(dict(trace[0].get("result") or {}).get("reason") or "") if trace else ""
+    return {
+        "status": "available", "typed_wait": typed,
+        "reason_class": reason if re.fullmatch(r"manual_trade_[a-z_]{1,64}", reason) else None,
+        "passed": typed and bool(re.fullmatch(r"manual_trade_[a-z_]{1,64}", reason)),
+    }
+
+
+def manual_trade_wait_evidence(run_id: str) -> Dict[str, Any]:
+    try:
+        return _shared_database_loop().run_until_complete(_load_manual_trade_wait_evidence(run_id))
+    except Exception as error:
+        return {"status": "unavailable", "error_category": classify_internal_issue(error),
+                "passed": False}
+
+
 def redact(value: Any) -> Any:
     """Remove credentials and private fixture identity from persisted reports."""
     if isinstance(value, dict):
@@ -1427,6 +1472,16 @@ def load_manifest(
         ):
             raise ValueError("manifest_expected_answer_terms_invalid")
         manual_expected = case.get("expected_manual_trade")
+        manual_wait = case.get("expected_manual_trade_wait")
+        if manual_wait is not None and (
+            manual_wait is not True
+            or action_mode != "read_only"
+            or case.get("expected_operation_id") != "create_manual_trade_plan"
+            or not isinstance(manual_expected, dict)
+            or manual_expected.get("risk_budget_requested") is True
+            or not expected_answer_terms
+        ):
+            raise ValueError("manifest_expected_manual_trade_wait_invalid")
         if case.get("expected_operation_id") == "create_manual_trade_plan" and action_mode != "read_only" and manual_expected is None:
             raise ValueError("manifest_manual_trade_expectation_required")
         if manual_expected is not None:
@@ -1770,6 +1825,9 @@ def classify_case_failure(case_result: Dict[str, Any]) -> Optional[str]:
         return "product"
     answer_evidence = case_result.get("answer_evidence")
     if isinstance(answer_evidence, dict) and answer_evidence.get("passed") is False:
+        return "product"
+    manual_wait = case_result.get("manual_trade_wait_evidence")
+    if isinstance(manual_wait, dict) and manual_wait.get("passed") is False:
         return "product"
     return None
 
@@ -2543,7 +2601,26 @@ def run_cases(
                     token=token,
                     run_id=run_id,
                 )
+        manual_wait_expected = case.get("expected_manual_trade_wait") is True
         result["operation_matches"] = case.get("expected_operation_id") is None or actual == case["expected_operation_id"]
+        if manual_wait_expected:
+            wait_evidence = manual_trade_wait_evidence(run_id)
+            no_proposal = not _proposal_id(terminal)
+            completed = terminal.get("status") == "completed"
+            expected_operation = actual in {None, "create_manual_trade_plan"}
+            read_mode = (
+                (projection.get("response") or {}).get("mode") == "READ"
+                and projection.get("mode") in {None, "READ"}
+            )
+            result["manual_trade_wait_evidence"] = {
+                **wait_evidence, "no_proposal": no_proposal, "completed": completed,
+                "expected_operation": expected_operation, "read_mode": read_mode,
+                "passed": bool(wait_evidence.get("passed") and no_proposal and completed
+                               and expected_operation and read_mode),
+            }
+            # A typed server wait deliberately has no selected proposal
+            # operation. It is still bound to the owner-scoped draft above.
+            result["operation_matches"] = result["manual_trade_wait_evidence"]["passed"]
         if ACCEPTANCE_EXPECTATION_FIELDS.issubset(case):
             result["contract_evidence"] = contract_expectation_result(case, projection)
         # A timed-out lifecycle never progresses into a proposal/confirmation

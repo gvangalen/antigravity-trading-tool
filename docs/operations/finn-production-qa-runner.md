@@ -213,6 +213,14 @@ for proposal/confirmation/safe-execution cases, a positive `max_loss_quote`.
 fixture makes that branch predictable. A read-only clarification case may use
 `risk_budget_requested: true` without a budget; the runner then requires a
 typed missing risk budget, no proposal, and an unchanged owner-scoped database.
+For a source-limited follow-up, a read-only case may set
+`expected_manual_trade_wait: true` together with `expected_manual_trade`
+(`asset` and `quote_currency`) and `expected_answer_terms`. The runner reads
+the owner-bound sealed run contract and requires its server-owned
+`manual_trade_wait` decision, a typed wait reason, a completed response, no
+proposal, matching visible answer terms, polling/SSE parity, and an unchanged
+owner-scoped database. This expected wait does not satisfy the separate
+positive card and save cases.
 For a saved plan, the runner checks the complete limit entry, stop, quantity,
 two targets, risk arithmetic, source-attestation presence, recorded trader
 context, non-executable status, exact market/provider, one owner-and-run-bound
