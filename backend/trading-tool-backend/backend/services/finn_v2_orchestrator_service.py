@@ -112,6 +112,40 @@ class FinnV2OrchestratorService:
             "missing_required_inputs": missing_inputs,
             "next_missing_input": missing_inputs[0] if missing_inputs else None,
         }
+        if guided_state.get("operation_id") == operation_state["operation_id"]:
+            # A provider-backed prerequisite may be discovered after the
+            # registry fields are complete. Preserve that run-scoped choice,
+            # while newer contract inputs (including verified entity IDs)
+            # remain authoritative over the saved guided projection.
+            from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
+
+            collected = {**dict(guided_state.get("collected_inputs") or {}),
+                         **operation_state["collected_inputs"]}
+            contextual_missing = [
+                field for field in guided_state.get("missing_required_inputs") or []
+                if field not in missing_inputs
+                and FinnV2OperationStateService._is_missing(collected.get(field))
+            ]
+            all_missing = [*missing_inputs, *contextual_missing]
+            operation_state.update({
+                "collected_inputs": collected,
+                "missing_required_inputs": all_missing,
+                "next_missing_input": (
+                    guided_state.get("next_missing_input")
+                    if guided_state.get("next_missing_input") in all_missing
+                    else all_missing[0] if all_missing else None
+                ),
+                "status": (
+                    guided_state.get("status") if all_missing
+                    else "complete" if guided_state.get("status") == "collecting"
+                    else guided_state.get("status")
+                ),
+                "input_sources": dict(guided_state.get("input_sources") or {}),
+                "setup_options": (
+                    list(guided_state.get("setup_options") or [])
+                    if "setup_id" in all_missing else []
+                ),
+            })
         reference_kind = str(execution_view.get("conversation_reference_kind") or "")
         lineage_state = dict(execution_view.get("lineage_state") or {})
         if reference_kind == "previous_verified_response":

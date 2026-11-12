@@ -6,7 +6,42 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN handmatig tradevoorstel: tijdelijk geïsoleerde QA-matrix (12 november 2026)
 
-Phase: `PRODUCT_DEPLOYED_QA_DIAGNOSIS_PENDING`. De eerste productrelease was
+Nieuwe productreparatie in voorbereiding: de onafhankelijke diagnose van de
+eerste volledige matrix haalde het oorspronkelijke, eenmalige kindrapport
+terug (diagnoserun `43200357575`, artifact SHA-256
+`91a1ba550cf8d9cc452add1ea4382497a66a7abf59d5af831645252977a3dcf7`).
+De eerste twee budgetvragen slaagden; de derde beurt, "Maximaal verlies 20
+EUR.", eindigde ten onrechte als `failed`, zonder voorstel of getypeerde
+setupkeuze. De beschermde cleanup (`43200571132`, artifact SHA-256
+`84420f3f38786b967f4277b8dbbb732a7c15e8b3c81abb40d66ea50d99046e4a`)
+verwijderde het tijdelijke kind en bevestigde een onveranderde parent. De
+resterende drie cases zijn nog niet uitgevoerd: verdict **NOT_ACCEPTED /
+INCOMPLETE**. Dezelfde tweebeurtige flow reproduceerde lokaal via echte
+FastAPI/Celery als `orchestrator_failed`: de actuele, door de front door
+geverifieerde setupkeuze stond wel in het runcontract, maar de redeneercontext
+gebruikte de initiële analyse en valideerde daardoor een onvolledig tradeplan.
+De reparatie bindt de execution view aan de actuele runstaat, houdt een open
+setupkeuze als verduidelijking en bewaart de terminale status als
+`clarification_required`. Een lokale vierbeurtige API/workerherhaling geeft
+na het budget twee setupopties zonder voorstel, beantwoordt een losse leesvraag
+als `READ`, herkent daarna de aangeklikte setup en adviseert wegens ontbrekend
+benchmarkbewijs veilig wachten; er zijn **0** tradeplannen opgeslagen. De
+nieuwe BTC/ETH-regressies en betrokken testset zijn groen. De actuele volledige
+backendgate gaf **4720 passed, 7 skipped**, de workeractiematrix **17/17**,
+frontend commandtests **56/56**, typecheck en build groen. De echte provider
+gaf **20/20** development en **109/109** regression, zonder provider-, schema-,
+parse-, validatie- of timeoutfout. SHA-256 van backendlog, laatste
+actiematrix, provider-development en provider-regression: respectievelijk
+`cc5f38c74c9206207d1b6200ef1ee916d5d8e36979cbd5b1adfa3d7b1a40ed65`,
+`72e6fead5cc3879c10f66cd258c6696e548764f21fc5d2b3fe929f74cdabcb57`,
+`32b662577f5fa0a6a08b428483c1f13ad239a78befba65acac5b0c383876e672`,
+`7d314d086d1beb07c39b83c15134d0ea22f6caf6cf4d6565536ecb84e4ee59ff`.
+Onafhankelijke QA, Security en Architecture beoordeelden de code; QA zag geen
+aantoonbare codeblokker en Security/Architecture gaven GO. De verplichte
+PR-/main-CI, Auto Deploy, publieke SHA-controle en volledige onafhankelijke
+live matrix volgen nog.
+
+Phase: `PRODUCT_REPAIR_LOCAL_VALIDATION`. De eerste productrelease was
 `d24c90f7da54b77073cd6a98217e925b92ddbfde`. PR
 [#998](https://github.com/gvangalen/antigravity-trading-tool/pull/998)
 had vijf groene PR-CI-jobs (run `43182417071`) en is gemerged als

@@ -52,6 +52,36 @@ def test_deterministic_proposal_copy_respects_full_request_locale(locale, operat
     assert "Er is nog niets" not in result.main_observation
 
 
+@pytest.mark.parametrize("asset", ["BTC", "ETH"])
+def test_verified_setup_choice_after_budget_remains_clarification(asset):
+    context = ReasoningContextPackage(
+        run_id=f"setup-choice-{asset}", user_id=7,
+        user_message="Maximaal verlies 20 EUR.", locale="nl-NL",
+        interaction_mode="CREATE_PROPOSAL", orchestrator_result_id="o1",
+        snapshot_id="s1", validation_id="v1", policy_decision_id="p1",
+        evidence_set_hash="hash",
+        policy=ReasoningPolicyContext(
+            policy_class="proposal", allowed=True, proposal_allowed=True,
+            confirmation_required=True, step_up_required=False,
+            execution_allowed=False, operation_type="create_manual_trade_plan",
+        ),
+        request_plan={"operation_id": "create_manual_trade_plan", "operation_state": {
+            "collected_inputs": {"asset": asset, "quote_currency": "EUR", "direction": "long",
+                                 "proposal_mode": "market_suggested", "risk_budget_quote": "20"},
+            "missing_required_inputs": ["setup_id"], "next_missing_input": "setup_id",
+            "setup_options": [{"id": 5, "name": f"{asset} Daily"},
+                              {"id": 6, "name": f"{asset} Swing"}],
+        }},
+    )
+    result = FinnV2ReasoningFallbackService().grounded_proposal_draft(
+        run_id=context.run_id, user_id=context.user_id, context=context,
+        model="deterministic", error_codes=[],
+    )
+    assert result.mode == "CLARIFICATION"
+    assert result.proposal_candidate is None
+    assert "setup" in result.direct_answer.lower()
+
+
 def test_reasoning_proposal_candidate_must_match_allowed_operation():
     service = FinnV2ReasoningService(session=object())
     context = ReasoningContextPackage(
