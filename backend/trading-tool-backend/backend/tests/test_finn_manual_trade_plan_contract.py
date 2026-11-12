@@ -705,6 +705,17 @@ def test_manual_trade_setup_options_reach_terminal_projection():
     projection = terminal_projection(state, status="clarification_required", mode="CREATE_PROPOSAL", response={})
     assert projection["action_draft"]["setup_options"] == options
     assert projection["action_draft"]["requested_slot"] == "setup_id"
+    assert projection["missing_inputs"] == ["setup_id"]
+    assert projection["required_inputs"]
+
+    # A verified choice wins over an older collecting draft. An unrelated
+    # read turn must likewise keep its own terminal contract.
+    selected = {**state, "supplied_inputs": {"asset": "BTC", "quote_currency": "EUR", "setup_id": 5}}
+    assert terminal_projection(
+        selected, status="clarification_required", mode="CREATE_PROPOSAL", response={},
+    )["missing_inputs"] == []
+    read_turn = {**state, "final_operation_id": "read_active_setup"}
+    assert terminal_projection(read_turn, status="completed", mode="READ", response={})["missing_inputs"] == []
 
 
 def test_unverified_owner_context_cannot_become_confirmable_trade_card(monkeypatch):

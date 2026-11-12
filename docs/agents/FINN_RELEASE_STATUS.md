@@ -6,6 +6,42 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN handmatig tradevoorstel: tijdelijk geïsoleerde QA-matrix (12 november 2026)
 
+Onafhankelijke live QA op `fcc47d2c929768223fe0dce0611f85c3249ba4fa`
+is **NOT_ACCEPTED / INCOMPLETE**. Matrixrun `43210906424`, artifact SHA-256
+`c314c346b1de5558f7d2fd3403f3d54a6a130192103b291e4a807058c436a729`:
+zes gepland, drie uitgevoerd, één productfout, drie niet uitgevoerd. De twee
+budgetverduidelijkingen slaagden. Op het vervolg "Maximaal verlies 20 EUR."
+antwoordde FINN met een setupvraag en terminale `clarification_required`,
+maar de publieke `runtime_trace.missing_inputs` was `[]` terwijl de
+rungebonden `action_draft.missing_inputs` `['setup_id']` bevatte. De gerichte
+reparatie projecteert die actuele, nog niet geverifieerde keuze ook in het
+publieke typed missing veld. Lokale FastAPI/Celery-vierbeurtenproef bevestigt
+nu `['setup_id']` op beide plekken; een tussentijdse READ blijft `completed`
+met lege missing velden. `required_inputs` blijft het registryschema;
+`missing_inputs` in de publieke projectie omvat ook een geverifieerde
+contextuele setupkeuze voor die run. Bestaande opgeslagen projecties veranderen
+niet. De echte benchmarkkaartcases zijn nog niet getest.
+QA-diagnose `43211249823`, artifact SHA-256
+`cde8c5f4fb323377875a87fd032dab319bb63a244e6b36723e349e0022541b5b`,
+vond geen onveilige childrijen; cleanup `43211374881`, artifact SHA-256
+`c4992abab77f9182da51fc22b8780479f20ad5466922b4d795197b74e36314a9`,
+verwijderde het tijdelijke kind en liet de parent ongewijzigd. Er waren nul
+confirm-, execute- of Live-calls. De workflow zelf eindigde `success`, maar
+het gesaniteerde rapport bevatte `outcome=failed`; het rapport bepaalt het
+inhoudelijke verdict. De volledige onafhankelijke matrix moet na een nieuwe
+geverifieerde release worden herhaald.
+
+Lokale reparatievalidatie: volledige backendset **4720 passed, 7 skipped**
+(log SHA-256 `7851366808ff9cc9d3627ddd0d23d3de9ec3f8e80bee35d7abf6f28f5f67fbc9`),
+eigenaargebonden FastAPI/Celery-actiematrix **17/17** (artifact SHA-256
+`a6ea16136125f15ff3c6675e418e4ef01ae300555533738c3523c9f6657d72f4`),
+echte provider development **20/20** en regression **109/109** (SHA-256
+`281589e407b3d25ad635f13d108e88cf8ef3ef470b5ab9864e64de8ba6212a76`
+en `4ae20f96d11e2a34a56d8e0b42055ae9b962425edb78cdbde896a9a7b627b171`),
+zonder provider-, schema-, parse-, validatie- of timeoutfouten. Frontend
+commandtests **56/56**, typecheck en build slaagden. Onafhankelijke
+codebeoordeling: QA, Security en Architecture GO voor de beperkte projectie.
+
 Nieuwe productreparatie in voorbereiding: de onafhankelijke diagnose van de
 eerste volledige matrix haalde het oorspronkelijke, eenmalige kindrapport
 terug (diagnoserun `43200357575`, artifact SHA-256
@@ -51,7 +87,7 @@ had vijf groene PR-CI-jobs (`43207096989`) en is gemerged als
 creëert een volgende main-SHA; de laatste CI, Auto Deploy en publieke
 SHA-pariteit worden vóór onafhankelijke beschermde QA gecontroleerd.
 
-Phase: `PRODUCT_DEPLOYED_QA_HANDOFF_PENDING_FINAL_SHA`. De eerste productrelease was
+Phase: `PRODUCT_REPAIR_LOCAL_VALIDATION`. De eerste productrelease was
 `d24c90f7da54b77073cd6a98217e925b92ddbfde`. PR
 [#998](https://github.com/gvangalen/antigravity-trading-tool/pull/998)
 had vijf groene PR-CI-jobs (run `43182417071`) en is gemerged als
