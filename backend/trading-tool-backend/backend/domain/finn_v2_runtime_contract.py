@@ -898,6 +898,17 @@ def terminal_projection(
     except (KeyError, TypeError, ValueError):
         # Historical projections remain readable without invented timings.
         timings_ms = {}
+    projected_missing = list(state.get("missing_inputs") or [])
+    action_draft = dict(state.get("action_draft") or {})
+    if (status == "clarification_required"
+            and action_draft.get("operation_id") == operation_id
+            and action_draft.get("draft_status") == "collecting"):
+        supplied = dict(state.get("supplied_inputs") or {})
+        for field in action_draft.get("missing_inputs") or []:
+            value = supplied.get(field)
+            if (field not in projected_missing
+                    and (value is None or value == "" or value == [] or value == {})):
+                projected_missing.append(field)
     return {
         "version": FINN_PUBLIC_PROJECTION_VERSION,
         "projection_version": RUNTIME_CONTRACT_VERSION,
@@ -930,7 +941,7 @@ def terminal_projection(
         "conversation_reference": state.get("conversation_reference"),
         "conversation_reference_kind": state.get("conversation_reference_kind"),
         "supplied_inputs": dict(state.get("supplied_inputs") or {}),
-        "missing_inputs": list(state.get("missing_inputs") or []),
+        "missing_inputs": projected_missing,
         "clarification": {
             "question": (state.get("responses_clarification") or {}).get("question"),
             "reason": (state.get("responses_clarification") or {}).get("reason"),
