@@ -73,6 +73,7 @@ def replacement_mentions(text: str, catalog: Mapping[str, Mapping[str, Any]]) ->
         return None
 
     directions: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    extra_command = False
     for sentence in re.finditer(r"[^.;!?]+", value):
         for clause in re.split(r"(?=\b(?:vervang|replace|ersetze)\b)", sentence.group(), flags=re.I):
             clause_mentions = asset_mentions(clause, catalog)
@@ -94,13 +95,21 @@ def replacement_mentions(text: str, catalog: Mapping[str, Mapping[str, Any]]) ->
                 parsed = direction(clause, pair)
                 if parsed:
                     directions.append(parsed)
+                elif re.search(r"\b(?:vervang|replace|ersetze|verwijder|haal|remove|stop|voeg|add|volg|follow)\b", clause, re.I):
+                    extra_command = True
+            elif len(clause_mentions) == 1 and re.search(
+                r"\b(?:vervang|replace|ersetze|verwijder|haal|remove|stop|voeg|add|volg|follow)\b",
+                clause, re.I,
+            ):
+                extra_command = True
+    has_directed_clause = bool(directions)
     if not directions:
         if len(mentions) != 2:
             return None
         parsed = direction(value, mentions)
         if parsed:
             directions.append(parsed)
-    if not directions:
+    if not directions or (has_directed_clause and extra_command):
         return None
     source, target = directions[0]
     for other_source, other_target in directions[1:]:

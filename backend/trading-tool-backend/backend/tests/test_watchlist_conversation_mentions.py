@@ -60,6 +60,8 @@ def test_repeated_asset_names_keep_a_consistent_directed_replacement():
     assert replacement_mentions("BTC/EUR staat al in mijn watchlist. Vervang Apple door Bitcoin.", CATALOG)["target"]["quote_currency"] is None
     assert replacement_mentions("Vervang Apple door BTC/EUR. Vervang Apple door BTC/USDT.", CATALOG) is None
     assert replacement_mentions("Vervang Apple door Bitcoin. Volg ook Ether.", CATALOG) is None
+    assert replacement_mentions("Vervang Apple door Bitcoin in mijn watchlist. Verwijder Bitcoin uit mijn watchlist.", CATALOG) is None
+    assert replacement_mentions("Vervang Apple door Bitcoin in mijn watchlist. Voeg BTC/EUR toe aan mijn watchlist.", CATALOG) is None
 
 
 def test_responses_front_door_routes_replacements_through_action_contract():

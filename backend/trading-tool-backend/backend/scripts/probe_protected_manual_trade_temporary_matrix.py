@@ -489,15 +489,17 @@ def run(args, report: dict[str, Any]) -> dict[str, Any]:
                     report["temporary_qa_child_deleted"] = True
             if not report.get("temporary_qa_child_deleted"):
                 report["temporary_qa_child_quarantined"] = True
+        parent_changed = False
         if parent_hash is not None:
             report["temporary_qa_parent_unchanged"] = _db(
                 _parent_unchanged(parent, parent_hash))
-            if not report["temporary_qa_parent_unchanged"]:
-                raise RuntimeError("temporary_qa_parent_changed")
+            parent_changed = not report["temporary_qa_parent_unchanged"]
         state["phase"] = ("finished" if report.get("temporary_qa_child_deleted")
                           else "quarantined")
         _journal(journal_path, state)
         report["temporary_qa_final_phase"] = state["phase"]
+        if parent_changed:
+            raise RuntimeError("temporary_qa_parent_changed")
     if report.get("matrix_outcome") != "passed":
         raise RuntimeError("temporary_qa_matrix_failed")
     if not all(report.get(key) is True for key in (
@@ -588,14 +590,37 @@ def diagnose_quarantined(run_label: str) -> dict[str, Any]:
     if (journal.get("kind") != FINN_TEMP_QA_KIND
             or journal.get("namespace") != namespace
             or journal.get("parent") != parent
-            or journal.get("phase") != "quarantined"
             or not re.fullmatch(r"[0-9a-f]{40}", str(journal.get("release_sha", "")))
             or namespace.split("-")[3] != str(journal.get("release_sha", ""))[:8]):
+        raise RuntimeError("temporary_qa_diagnose_journal_binding_changed")
+    if journal.get("phase") == "matrix_complete":
+        # Older runner revisions raised on a changed parent before recording
+        # quarantine. Accept only the exact failed, revoked child checkpoint.
+        prior_report_path = report_base.with_suffix(".json")
+        if (not prior_report_path.is_file() or prior_report_path.is_symlink()
+                or prior_report_path.stat().st_uid != os.getuid()
+                or prior_report_path.stat().st_mode & 0o077
+                or prior_report_path.stat().st_size > 8 * 1024 * 1024):
+            raise RuntimeError("temporary_qa_diagnose_journal_binding_changed")
+        prior_report = json.loads(prior_report_path.read_text(encoding="utf-8"))
+        if (not isinstance(prior_report, dict)
+                or prior_report.get("workflow_run_id") != f"{run_id}-{attempt}"
+                or prior_report.get("target_sha") != journal["release_sha"]
+                or prior_report.get("temporary_qa_failure_phase") != "matrix_complete"
+                or prior_report.get("temporary_qa_parent_unchanged") is not False
+                or prior_report.get("temporary_qa_child_present") is not True
+                or prior_report.get("temporary_qa_child_quarantined") is not True
+                or prior_report.get("temporary_qa_token_revoked") is not True
+                or not state["child_quiescent"]):
+            raise RuntimeError("temporary_qa_diagnose_journal_binding_changed")
+        state["prior_parent_changed"] = True
+    elif journal.get("phase") != "quarantined":
         raise RuntimeError("temporary_qa_diagnose_journal_binding_changed")
     state["prior_target_sha"] = journal["release_sha"]
     child_report_path = report_base.with_suffix(".child-report.json")
     state["original_child_report_available"] = child_report_path.is_file()
     if state["original_child_report_available"]:
+        from backend.scripts import run_finn_production_qa as qa
         if (child_report_path.is_symlink()
                 or child_report_path.stat().st_uid != os.getuid()
                 or child_report_path.stat().st_mode & 0o077
@@ -649,6 +674,14 @@ def diagnose_quarantined(run_label: str) -> dict[str, Any]:
             read_only = read_only if isinstance(read_only, dict) else {}
             terminal = item.get("terminal")
             terminal = terminal if isinstance(terminal, dict) else {}
+            run_id = item.get("run_id")
+            wait_diagnostic = (
+                qa.manual_trade_wait_evidence(run_id, owner_id=child)
+                if (isinstance(run_id, str)
+                    and re.fullmatch(r"finn-v2-run-[0-9a-f]{32}", run_id)
+                    and dict(terminal.get("response") or {}).get("mode") == "READ")
+                else {}
+            )
             return {
                 "case_status": fixed_code(item.get("case_status"),
                                           {"completed", "failed", "not_run",
@@ -679,6 +712,18 @@ def diagnose_quarantined(run_label: str) -> dict[str, Any]:
                 "manual_trade_read_only_unchanged": safe_bool(read_only.get("unchanged")),
                 "manual_trade_replay_unchanged": safe_bool(
                     action.get("manual_trade_replay_unchanged")),
+                "unexpected_manual_trade_wait_typed": safe_bool(
+                    wait_diagnostic.get("typed_wait")),
+                "unexpected_manual_trade_wait_reason_class": fixed_code(
+                    wait_diagnostic.get("reason_class"), {
+                        "manual_trade_risk_budget_too_small", "manual_trade_setup_outside_conditions",
+                        "manual_trade_setup_not_confirmed", "manual_trade_setup_ambiguous",
+                        "manual_trade_profile_missing", "manual_trade_setup_missing",
+                        "manual_trade_benchmark_unavailable", "manual_trade_source_unavailable",
+                        "manual_trade_profile_unavailable", "manual_trade_setup_selection_invalid",
+                        "manual_trade_timeframe_source_unavailable", "manual_trade_profile_timeframe_conflict",
+                        "manual_trade_context_unavailable",
+                    }) if wait_diagnostic.get("typed_wait") is True else None,
             }
         cases = child_report.get("cases", [])
         if not isinstance(cases, list) or len(cases) > 100:
