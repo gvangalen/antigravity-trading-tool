@@ -106,7 +106,16 @@ def test_successful_matrix_revokes_before_exact_cleanup(monkeypatch, tmp_path):
                 "not_run_count": 0, "incomplete": False}))
             return 0
 
-    monkeypatch.setattr(temporary.subprocess, "Popen", lambda *_args, **_kwargs: Process())
+    def start_child(command, **kwargs):
+        environment = kwargs["env"]
+        assert environment["FINN_QA_USER_ID"] == "42"
+        assert environment["FINN_QA_TEMP_CHILD_RUN"] == "1"
+        assert environment["FINN_QA_FIXTURE_NAMESPACE"] == args.fixture_namespace
+        assert command[command.index("--fixture-namespace") + 1] == args.fixture_namespace
+        assert kwargs["pass_fds"] == (9,)
+        return Process()
+
+    monkeypatch.setattr(temporary.subprocess, "Popen", start_child)
     report = {}
     assert temporary.run(args, report)["cleanup_verified"] is True
     assert events == ["revoke", "delete"]

@@ -405,6 +405,7 @@ def run(args, report: dict[str, Any]) -> dict[str, Any]:
         child_env = os.environ.copy()
         child_env["FINN_QA_USER_ID"] = str(child)
         child_env["FINN_QA_TEMP_CHILD_RUN"] = "1"
+        child_env["FINN_QA_FIXTURE_NAMESPACE"] = namespace
         command = [sys.executable, str(Path(__file__).with_name("run_finn_production_qa.py")),
                    "--release-sha", args.release_sha, "--profile", "targeted_regression",
                    "--manifest-id", args.manifest_id, "--run-label", args.run_label,
