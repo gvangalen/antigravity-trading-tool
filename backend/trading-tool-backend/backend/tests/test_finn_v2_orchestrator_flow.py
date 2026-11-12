@@ -37,6 +37,34 @@ def test_contract_operation_state_view_uses_only_persisted_action_inputs():
     }
 
 
+@pytest.mark.parametrize("asset", ["BTC", "ETH"])
+def test_contract_operation_state_view_keeps_verified_setup_choice(asset):
+    guided = {
+        "operation_id": "create_manual_trade_plan", "status": "collecting",
+        "collected_inputs": {"asset": asset, "quote_currency": "EUR",
+                             "direction": "long", "risk_budget_quote": "20"},
+        "missing_required_inputs": ["setup_id"], "next_missing_input": "setup_id",
+        "setup_options": [{"id": 5, "name": f"{asset} Daily"},
+                          {"id": 6, "name": f"{asset} Swing"}],
+    }
+    state = FinnV2OrchestratorService._contract_operation_state_view({
+        "operation_id": "create_manual_trade_plan", "action_contract": {"version": "v1"},
+        "supplied_inputs": guided["collected_inputs"], "missing_inputs": [],
+        "guided_state": guided,
+    })
+    assert state["missing_required_inputs"] == ["setup_id"]
+    assert state["next_missing_input"] == "setup_id"
+    assert state["setup_options"] == guided["setup_options"]
+    verified = FinnV2OrchestratorService._contract_operation_state_view({
+        "operation_id": "create_manual_trade_plan", "action_contract": {"version": "v1"},
+        "supplied_inputs": {**guided["collected_inputs"], "setup_id": 6},
+        "missing_inputs": [], "guided_state": guided,
+    })
+    assert verified["collected_inputs"]["setup_id"] == 6
+    assert verified["missing_required_inputs"] == []
+    assert verified["setup_options"] == []
+
+
 def test_contract_operation_state_view_preserves_cancelled_guided_transition():
     cancelled = {
         "operation_id": "create_strategy",

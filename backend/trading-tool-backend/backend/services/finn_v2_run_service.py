@@ -3641,6 +3641,11 @@ class FinnV2RunService:
             "missing_inputs": list(guided_state.get("missing_required_inputs") or []),
             "requested_slot": guided_state.get("next_missing_input"),
         }
+        current_action_draft = (
+            guided_draft.get("operation_id") == contract_state.get("final_operation_id")
+            and (contract_state.get("requested_mode") or contract_state.get("final_mode"))
+            in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}
+        )
         # The request locale is authoritative for a visible turn. Some fast
         # clarification paths do not have a prepared Responses exchange, so
         # they cannot rely on its locale alone.
@@ -3665,9 +3670,8 @@ class FinnV2RunService:
             raise ValueError("invalid_lifecycle_phase_outcome")
         action_needs_input = (
             next_status == "completed"
-            and (contract_state.get("final_mode") or contract_state.get("requested_mode"))
-            in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}
-            and bool(contract_state.get("missing_inputs"))
+            and current_action_draft
+            and bool(contract_state.get("missing_inputs") or guided_draft.get("missing_inputs"))
             and not verified.get("proposal_id")
         )
         if action_needs_input:
@@ -3749,6 +3753,13 @@ class FinnV2RunService:
                 "next_step": verified.get("next_step"),
                 "reasoning_provenance": verified.get("reasoning_provenance") or {},
             }
+        if (next_status == "completed" and current_action_draft
+                and guided_draft.get("missing_inputs")
+                and response_json.get("mode") == "CLARIFICATION"
+                and guided_draft.get("draft_status") != "cancelled"
+                and not response_json.get("proposal_id")):
+            next_status = "clarification_required"
+            action_needs_input = True
         # During a guided proposal the persisted slot is the question the UI
         # renders choices for. A free-form model clarification can refer to a
         # different slot or even invent earlier answers, so keep the visible

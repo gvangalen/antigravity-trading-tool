@@ -1058,6 +1058,18 @@ class FinnV2ReasoningFallbackService:
             for field in contract.required_inputs_for(proposed_fields)
             if FinnV2OperationStateService._is_missing(proposed_fields.get(field))
         ]
+        # The front door may discover an owner-scoped choice only after all
+        # registry fields are present (for example, several matching setups).
+        # Keep that verified choice as a clarification instead of validating
+        # the still incomplete proposal as a final trade plan.
+        missing.extend(
+            field for field in operation_state.get("missing_required_inputs") or []
+            if contract.operation_id == "create_manual_trade_plan"
+            and field == "setup_id"
+            and bool(operation_state.get("setup_options"))
+            and field not in missing
+            and FinnV2OperationStateService._is_missing(proposed_fields.get(field))
+        )
         if missing:
             next_field = operation_state.get("next_missing_input") or missing[0]
             if next_field not in missing:
