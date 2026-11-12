@@ -4,6 +4,43 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN watchlistvervanging en klikbare setupkeuze (12 november 2026)
+
+Phase: `PRODUCT_CANDIDATE_READY`. Onafhankelijke browsertest op live SHA
+`b34be20facd36613da8ea6b69ef887aaed45a917` was voor deze scope
+**NOT_ACCEPTED**: een natuurlijke, herhaalde Apple→Bitcoin-vervangzin vroeg
+opnieuw naar reeds genoemde assets, en een handmatig BTC/EUR-tradeverzoek
+toonde bij twee bestaande dagsetups geen klikbare setupkeuze. Wel geslaagd:
+onduidelijke aandeelzin vroeg Watchlist/Portfolio, BTC vroeg klikbaar EUR/USDT,
+Apple werd eenmaal toegevoegd ondanks een herhaling, en de expliciete
+AAPL→BTC/EUR-route bood twee afzonderlijk te bevestigen wijzigingen. Na de
+test zijn Apple en beide tijdelijke ongekoppelde setups op uitdrukkelijke
+toestemming verwijderd. De oorspronkelijke watchlist, het bestaande DCA-plan
+en de gepauzeerde Paper-bot zijn gecontroleerd intact; geen tradeplan, order
+of Live-actie is bevestigd.
+
+De kandidaat repareert catalogusgestuurde, herhaalde vervangvermeldingen,
+weigert tegenstrijdige of ontkende vervangingen, bindt een expliciete quote
+alleen aan de gerichte bestemming, en geeft getypeerde eigenaargebonden
+setupopties met `setup <id>` voorrang boven afgeknotte naamkeuzes. Het
+frontend-commandtestscript voert deze regressie voortaan mee. Onafhankelijke
+lokale QA- en Security-codebeoordeling: beide **GO**; fysieke browseracceptatie
+volgt pas na deployment. Gemeten lokale gates op de definitieve code:
+backend **4722 passed, 7 skipped** (log SHA-256
+`8a4cbecbc892600a17421cc28261d718136fadb0e262a679b1c5149989edee42`),
+FastAPI/Celery-actiematrix **17/17** (artifact SHA-256
+`eb8b60fbc80e7a1c9a3d74a30616d40b630ab9362819282e0ba478fa1eace247`),
+action-adaptertests **26/26**, frontend-commandtests **67/67**,
+setup-tests **20/20**, typecheck, i18n-tests/lint, build en high audit groen.
+Echte provider development **20/20** en regression **109/109**, beide met
+100% operation-, entiteit-, doelasset-, polariteit-, referentie-,
+verduidelijkings- en missing-input-accuracy en zonder provider-, schema-,
+parse-, validatie- of timeoutfout (artifact SHA-256 respectievelijk
+`67ff14a755b7236694009f6c74a1a92dff479db6f99c63e7c7069ff7d684710a`
+en `0262f5564a4d1b1d696704bfd864592c1bca844dc408c4045fd3aa59aa7f0dcb`).
+PR-CI, main-CI, Auto Deploy, publieke SHA-pariteit en onafhankelijke live
+hertest zijn nog niet voltooid.
+
 ## FINN handmatig tradevoorstel: tijdelijk geïsoleerde QA-matrix (12 november 2026)
 
 Onafhankelijke live QA op `fcc47d2c929768223fe0dce0611f85c3249ba4fa`

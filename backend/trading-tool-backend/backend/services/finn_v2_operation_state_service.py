@@ -360,9 +360,19 @@ class FinnV2OperationStateService:
                 # Never let the old setup-only scope silently discard it.
                 explicit["plan_scope"] = "setup_and_strategy"
         if contract.operation_id in {"watchlist_add", "watchlist_remove"}:
-            pair = requested_catalog_trading_pair(message)
-            if pair is not None:
-                explicit["asset"], explicit["quote_currency"] = pair
+            from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
+            from backend.services.watchlist_conversation_service import replacement_mentions
+
+            replacement = replacement_mentions(message, DEFAULT_ASSET_CATALOG) if contract.operation_id == "watchlist_add" else None
+            if replacement:
+                target = replacement["target"]
+                explicit["asset"] = target["symbol"]
+                if target["quote_currency"]:
+                    explicit["quote_currency"] = target["quote_currency"]
+            else:
+                pair = requested_catalog_trading_pair(message)
+                if pair is not None:
+                    explicit["asset"], explicit["quote_currency"] = pair
             if contract.operation_id == "watchlist_remove" and re.search(
                 r"\b(?:oude\s+basisnotering|zonder\s+handelspaar|legacy\s+base\s+listing)\b",
                 message, re.I,
@@ -1171,9 +1181,19 @@ class FinnV2OperationStateService:
         if contract.operation_id == "create_manual_trade_plan":
             values.update(self._manual_trade_inputs(text))
         if contract.operation_id in {"watchlist_add", "watchlist_remove"}:
-            pair = requested_catalog_trading_pair(text)
-            if pair is not None:
-                values["asset"], values["quote_currency"] = pair
+            from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
+            from backend.services.watchlist_conversation_service import replacement_mentions
+
+            replacement = replacement_mentions(text, DEFAULT_ASSET_CATALOG) if contract.operation_id == "watchlist_add" else None
+            if replacement:
+                target = replacement["target"]
+                values["asset"] = target["symbol"]
+                if target["quote_currency"]:
+                    values["quote_currency"] = target["quote_currency"]
+            else:
+                pair = requested_catalog_trading_pair(text)
+                if pair is not None:
+                    values["asset"], values["quote_currency"] = pair
             if contract.operation_id == "watchlist_remove" and re.search(
                 r"\b(?:oude\s+basisnotering|zonder\s+handelspaar|legacy\s+base\s+listing)\b",
                 text, re.I,

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { clarificationQuestionChoices, draftQuestionChoices, hasConfirmableDraft, isCollectingDraft, isOpenClarification } from '../lib/finnDraftConversation.mjs';
+import { clarificationQuestionChoices, conversationQuestionChoices, draftQuestionChoices, hasConfirmableDraft, isCollectingDraft, isOpenClarification } from '../lib/finnDraftConversation.mjs';
 
 test('incomplete setup uses a question instead of a confirmable card', () => {
   const message = { setupDraft: { missing_inputs: ['dca_frequency'], supplied_inputs: { symbol: 'BTC' } }, state: {} };
@@ -88,4 +88,31 @@ test('ambiguous owner-scoped saved objects can be selected by name', () => {
   assert.deepEqual(clarificationQuestionChoices({ state: {
     ...message.state, clarification: { question: 'Welke setup bedoel je?', choices: [] },
   } }), []);
+});
+
+test('collecting setup choices stay clickable when clarification has no choices', () => {
+  const message = { actionDraft: { missing_inputs: ['setup_id'], draft_status: 'collecting' }, state: {
+    run_status: 'clarification_required',
+    clarification: { question: 'Welke bestaande setup bedoel je?', choices: [] },
+    setup_options: [{ id: 5, name: 'Daily Base' }, { id: 6, name: 'Daily Swing' }],
+  } };
+  assert.deepEqual(conversationQuestionChoices(message), [
+    { label: 'Daily Base', reply: 'setup 5' },
+    { label: 'Daily Swing', reply: 'setup 6' },
+  ]);
+  assert.deepEqual(conversationQuestionChoices({ state: {
+    run_status: 'clarification_required', clarification: { question: 'Vertel meer', choices: [] },
+  } }), []);
+});
+
+test('typed owner setup options take precedence over truncated name clarifications', () => {
+  const options = Array.from({ length: 4 }, (_, index) => ({ id: index + 1, name: `BTC plan ${index + 1}` }));
+  const message = { actionDraft: { missing_inputs: ['setup_id'], draft_status: 'collecting' }, state: {
+    run_status: 'clarification_required',
+    clarification: { question: 'Welke setup?', choices: options.slice(0, 3).map((option) => option.name) },
+    setup_options: options,
+  } };
+  assert.deepEqual(conversationQuestionChoices(message), options.map((option) => ({
+    label: option.name, reply: `setup ${option.id}`,
+  })));
 });

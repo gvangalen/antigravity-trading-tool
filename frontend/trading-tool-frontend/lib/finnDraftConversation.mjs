@@ -58,6 +58,17 @@ export function clarificationQuestionChoices(message) {
   return choices.map((name) => ({ label: name, reply: name }));
 }
 
+export function conversationQuestionChoices(message, locale = 'nl') {
+  const field = draftMissingField(message);
+  const optionField = { setup_id: 'setup_options', strategy_id: 'strategy_options', indicator: 'indicator_options' }[field];
+  if (isCollectingDraft(message) && Array.isArray(message?.state?.[optionField]) && message.state[optionField].length) {
+    return draftQuestionChoices(message, locale);
+  }
+  const clarificationChoices = clarificationQuestionChoices(message);
+  if (clarificationChoices.length || !isCollectingDraft(message)) return clarificationChoices;
+  return draftQuestionChoices(message, locale);
+}
+
 export function hasConfirmableDraft(message) {
   const proposal = (message?.actions || []).some((action) => action?.type === 'v2_proposal' && action?.proposal_id);
   const draft = message?.setupDraft || message?.actionDraft || message?.state?.setup_draft || message?.state?.action_draft;
