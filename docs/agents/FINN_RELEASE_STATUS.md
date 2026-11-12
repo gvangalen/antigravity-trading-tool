@@ -6,7 +6,22 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN handmatig tradevoorstel: tijdelijk geïsoleerde QA-matrix (12 november 2026)
 
-Phase: `CANDIDATE_LOCAL_VALIDATION`. De laatste publiek geverifieerde
+Phase: `DEPLOY_REPAIR_IN_PROGRESS`. PR
+[#998](https://github.com/gvangalen/antigravity-trading-tool/pull/998)
+had vijf groene PR-CI-jobs (run `43182417071`) en is gemerged als
+`8d27ac999394f109cd10c266780a84808cee997c`. De vijf main-CI-jobs
+(run `43183260012`) slaagden. Auto Deploy `43183986605` faalde op de
+nieuwe FK-migratie: de productiecatalogus bevat al een niet-cascaderende
+`macro_data.user_id`-foreign key. De automatische rollback naar
+`a0129feb9d0b27f024944ad8e8cc965f5ecbd5bb` slaagde volgens de deploylog;
+de kandidaat is niet live geaccepteerd. De compatibiliteitsreparatie behoudt
+bestaande FK-acties en verwijdert rijen van uitsluitend het tijdelijke kind
+onder `FOR UPDATE` op diens owner voordat de owner wordt verwijderd. Een
+lokale Postgres-proef met een bestaande `ON DELETE SET NULL`-FK bevestigde
+dat de migratie idempotent doorloopt; een tweede proef verwijderde onder die
+FK-vorm een echt tijdelijk kind en diens `macro_data`-rij volledig. De gerichte
+auth/lifecycle/owner-tests na de reparatie gaven **20/20** en de migratieplangate
+slaagde. De laatste publiek geverifieerde
 diagnoserelease is `a0129feb9d0b27f024944ad8e8cc965f5ecbd5bb` (PR #996 en
 status-PR #997); de laatste vijf main-CI-jobs (`43171919163`) en Auto Deploy
 (`43172580098`) slaagden en backend/frontend gaven HTTP 200 met exact die SHA.
@@ -31,8 +46,9 @@ een onveranderde hash van de oorspronkelijke QA-eigenaar. Onzekere runs worden
 ingetrokken en in quarantaine gehouden; QA heeft een apart exact-namespace
 cleanup-profiel na diagnose. Een child-proces houdt de QA-lock ook bij een
 afgebroken wrapper vast. De server-side QA-secretbinding wordt niet gewijzigd.
-Zeven owner-gebonden indicator-/regel-/logtabellen krijgen idempotente
-`ON DELETE CASCADE NOT VALID`-foreign keys. Daarmee blijven historische
+Zeven owner-gebonden indicator-/regel-/logtabellen krijgen waar nog nodig
+idempotente `ON DELETE CASCADE NOT VALID`-foreign keys. Bestaande foreign
+keys blijven intact en verhinderen eveneens late writes. Daarmee blijven historische
 weesrijen en globale NULL-rijen ongemoeid, terwijl een late child-write na
 verwijdering door PostgreSQL wordt geweigerd. Algemene achtergrondselecties
 slaan de gemarkeerde tijdelijke QA-eigenaar over; de expliciete prepare-route

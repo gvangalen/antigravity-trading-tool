@@ -10,7 +10,6 @@ DECLARE
     table_name text;
     column_number smallint;
     existing_count integer;
-    existing_all_cascade boolean;
 BEGIN
     FOREACH table_name IN ARRAY ARRAY[
         'market_data_indicators', 'macro_data', 'technical_indicators',
@@ -26,16 +25,15 @@ BEGIN
             RAISE EXCEPTION 'qa owner guard schema mismatch: %', table_name;
         END IF;
 
-        SELECT count(*), bool_and(c.confdeltype = 'c')
-          INTO existing_count, existing_all_cascade
+        SELECT count(*) INTO existing_count
         FROM pg_constraint c
         WHERE c.contype = 'f'
           AND c.conrelid = to_regclass('public.' || table_name)
           AND c.confrelid = 'users'::regclass
           AND c.conkey = ARRAY[column_number]::smallint[];
-        IF existing_count > 0 AND existing_all_cascade IS NOT TRUE THEN
-            RAISE EXCEPTION 'qa owner guard conflicting foreign key: %', table_name;
-        END IF;
+        -- Existing foreign keys, including SET NULL or RESTRICT, already
+        -- reject late writes after owner deletion. Cleanup deletes this
+        -- child's rows under a parent FOR UPDATE lock before deletion.
         IF existing_count = 0 THEN
             EXECUTE format(
                 'ALTER TABLE public.%I ADD CONSTRAINT %I '

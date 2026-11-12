@@ -232,8 +232,11 @@ async def _delete_child(child: int, namespace: str) -> None:
             raise RuntimeError("temporary_qa_user_fk_graph_unavailable")
         if any(row["key_columns"] != 1 for row in fk_rows):
             raise RuntimeError("temporary_qa_composite_user_fk_unverified")
-        fk_map = {(row["schema_name"], row["table_name"], row["column_name"]):
-                  row["delete_action"] for row in fk_rows}
+        fk_map = {}
+        for fk in fk_rows:
+            identity = (fk["schema_name"], fk["table_name"], fk["column_name"])
+            if fk["delete_action"] != "c" or identity not in fk_map:
+                fk_map[identity] = fk["delete_action"]
         owner_columns = (await session.execute(text("""
             SELECT n.nspname AS schema_name,t.relname AS table_name,
                    a.attname AS column_name
@@ -269,11 +272,12 @@ async def _delete_child(child: int, namespace: str) -> None:
                 if identity[1] not in LOOSE_CHILD_TABLES:
                     raise RuntimeError("temporary_qa_unowned_child_column")
                 loose.append((table, column))
-            elif identity[1] == "ai_usage_logs":
+            elif identity[1] == "ai_usage_logs" or action != "c":
+                # The locked user row blocks new FK references until this
+                # transaction commits. Delete exact child rows before a
+                # legacy SET NULL/RESTRICT/NO ACTION FK can act on them.
                 await session.execute(text(f"DELETE FROM {table} WHERE {column}=:child"),
                                       {"child": child})
-            elif action != "c":
-                raise RuntimeError("temporary_qa_non_cascade_child_fk")
         for fk in fk_rows:
             if fk["schema_name"] != "public":
                 raise RuntimeError("temporary_qa_external_user_fk_unverified")

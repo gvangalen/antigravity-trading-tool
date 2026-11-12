@@ -88,8 +88,10 @@ inactive for QA diagnosis. The separately protected
 `manual_trade_temporary_cleanup` profile can remove only that exact marked,
 quiescent child after QA diagnosis; it does not accept a manifest or execute a
 trade. Seven nullable owner columns in indicator, rule and log tables receive
-`ON DELETE CASCADE NOT VALID` foreign keys: historical orphan rows remain, new
-owner writes must reference an existing user, and late writes after child
+`ON DELETE CASCADE NOT VALID` foreign keys only where none exists. Existing
+foreign-key delete actions stay intact; cleanup deletes this child's rows under
+an owner `FOR UPDATE` lock before deleting it. Historical orphan rows remain,
+new owner writes must reference an existing user, and late writes after child
 deletion fail. Global scoring and market sweeps skip this QA marker; explicit
 owner-scoped source preparation remains available. Neither profile authorizes
 changes to ordinary users or Live trading.
