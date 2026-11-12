@@ -24,6 +24,11 @@ def _float_or_none(value: Any) -> float | None:
         return None
 
 
+def _safe_provider_error_code(value: Any) -> str:
+    code = str(value or "")
+    return code if code.isascii() and code.isdecimal() and len(code) <= 3 else "provider_error"
+
+
 def _parse_datetime(value: str | None, source_timezone: str = "UTC") -> datetime | None:
     if not value:
         return None
@@ -96,7 +101,7 @@ class TwelveDataMarketDataAdapter:
             self._raise_safe_transport_error(exc)
 
         if payload.get("status") == "error" or payload.get("code"):
-            code = str(payload.get("code") or "provider_error")
+            code = _safe_provider_error_code(payload.get("code"))
             raise ValueError(f"twelve_data_unavailable:{code}")
         TwelveDataResponseCache.put("/quote", payload, **request_params)
         price = _float_or_none(payload.get("close")) or _float_or_none(payload.get("price"))
@@ -226,6 +231,11 @@ class TwelveDataMarketDataAdapter:
         except httpx.HTTPError as exc:
             self._raise_safe_transport_error(exc)
 
+        if not isinstance(payload, dict):
+            raise ValueError("twelve_data_unavailable:invalid_response")
+        if payload.get("status") == "error" or payload.get("code"):
+            code = _safe_provider_error_code(payload.get("code"))
+            raise ValueError(f"twelve_data_unavailable:{code}")
         values = payload.get("values") or []
         candles: list[OHLCVCandleDTO] = []
         for item in values:

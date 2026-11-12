@@ -294,7 +294,7 @@ def test_stock_source_uses_catalog_provider_and_completed_exchange_days(monkeypa
     ny = ZoneInfo("America/New_York")
     today = datetime.now(ny).date()
     old = [today - timedelta(days=offset) for offset in range(24, 0, -1)
-           if (today - timedelta(days=offset)).weekday() < 5]
+           if (today - timedelta(days=offset)).weekday() < 5][-15:]
     records = [OHLCVCandleDTO(
         symbol="AAPL", provider="twelve_data", provider_symbol="AAPL", timeframe="1day",
         open=100, high=102, low=98, close=100,
