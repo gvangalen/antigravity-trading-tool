@@ -36,6 +36,8 @@ ALLOWED_PROFILES = {
     "manual_trade_source_audit",
     "manual_trade_fixture_preflight",
     "manual_trade_fixture_prepare",
+    "manual_trade_temporary_matrix",
+    "manual_trade_temporary_cleanup",
     "trade_review_preflight",
     "manifest_key",
     "targeted_regression",
@@ -217,6 +219,30 @@ def safe_manual_trade_failure_diagnostic(profile: str, error: Exception) -> Dict
 
 def profile_error_category(profile: str, error: Exception) -> str:
     """The published QA error category must not contain private fixture text."""
+    if profile in {"manual_trade_temporary_matrix", "manual_trade_temporary_cleanup"}:
+        code = str(error)
+        allowed = {
+            "temporary_qa_not_authorized", "temporary_qa_cleanup_not_authorized",
+            "temporary_qa_journal_invalid", "temporary_qa_journal_binding_changed",
+            "temporary_qa_parent_invalid", "temporary_qa_parent_binding_invalid",
+            "temporary_qa_parent_changed", "temporary_qa_child_collision",
+            "temporary_qa_child_binding_changed", "temporary_qa_child_missing",
+            "temporary_qa_prior_attempt_interrupted", "temporary_qa_matrix_timeout",
+            "temporary_qa_matrix_failed", "temporary_qa_host_lock_missing",
+            "temporary_qa_lease_changed", "temporary_qa_revocation_not_enforced",
+            "temporary_qa_child_not_quiescent", "temporary_qa_cleanup_unverified",
+            "temporary_qa_unexpected_child_rows", "temporary_qa_user_fk_graph_unavailable",
+            "temporary_qa_owner_columns_unavailable",
+            "temporary_qa_composite_user_fk_unverified",
+            "temporary_qa_other_user_fk_unverified",
+            "temporary_qa_external_user_fk_unverified",
+            "temporary_qa_unowned_child_column", "temporary_qa_non_cascade_child_fk",
+            "temporary_qa_child_rows_remain", "temporary_qa_delete_cas_failed",
+            "temporary_qa_delete_binding_changed", "temporary_qa_revoke_cas_failed",
+            "temporary_qa_manifest_count_invalid", "temporary_qa_manifest_operation_invalid",
+            "temporary_qa_manifest_action_invalid",
+        }
+        return code if code in allowed else "temporary_qa_runtime_error"
     if profile == "manual_trade_fixture_prepare":
         code = str(error)
         return (code if code in {
@@ -1353,7 +1379,10 @@ def issue_fixture_token(*, issuer: Path) -> str:
     user_id = os.environ.get("FINN_QA_USER_ID", "")
     if not user_id.isdecimal() or int(user_id) <= 0:
         raise RuntimeError("fixture_binding_invalid")
-    result = subprocess.run([sys.executable, str(issuer), "--user-id", user_id, "--minutes", "5"], check=False, capture_output=True, text=True, env=os.environ.copy())
+    command = [sys.executable, str(issuer), "--user-id", user_id]
+    if os.environ.get("FINN_QA_TEMP_CHILD_RUN") == "1":
+        command.extend(["--minutes", "40"])
+    result = subprocess.run(command, check=False, capture_output=True, text=True, env=os.environ.copy())
     if result.returncode != 0:
         raise RuntimeError("token_issuance_failed")
     try:
@@ -3343,6 +3372,26 @@ def main() -> int:
         report["release_identity"] = release_identity(release_sha=args.release_sha, checkout=checkout, release_marker=Path(args.release_marker), base_url=args.base_url.rstrip("/"))
         if not report["release_identity"]["matches"]:
             report["error_category"] = "release_mismatch"
+        elif args.profile == "manual_trade_temporary_cleanup":
+            from backend.scripts.probe_protected_manual_trade_temporary_matrix import cleanup_quarantined
+
+            if args.manifest_id != "none" or args.manifest_bundle_path:
+                raise ValueError("temporary_qa_cleanup_manifest_forbidden")
+            report["protected_profile_attempted"] = True
+            report["safety"]["read_only_profile"] = False
+            report["qa_status"] = "INCOMPLETE"
+            report["manual_trade_temporary_cleanup"] = cleanup_quarantined(args.run_label)
+            report["outcome"] = "passed"
+            report["qa_status"] = "COMPLETED"
+        elif args.profile == "manual_trade_temporary_matrix":
+            from backend.scripts.probe_protected_manual_trade_temporary_matrix import run as run_temporary_matrix
+
+            report["protected_profile_attempted"] = True
+            report["safety"]["read_only_profile"] = False
+            report["qa_status"] = "INCOMPLETE"
+            report["manual_trade_temporary_matrix"] = run_temporary_matrix(args, report)
+            report["outcome"] = "passed"
+            report["qa_status"] = "COMPLETED"
         elif args.profile == "manifest_key":
             crypto_script = Path(args.manifest_crypto_script or checkout / "ops" / "qa" / "finn_qa_manifest_bundle.py")
             report["manifest_public_key"] = manifest_public_key(

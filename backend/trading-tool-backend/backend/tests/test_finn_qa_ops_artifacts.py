@@ -9,7 +9,8 @@ PLAYBOOK = REPO_ROOT / "docs" / "operations" / "finn-qa-rerun-playbook.md"
 def test_qa_token_script_exists_and_mentions_authorization_header():
     source = TOKEN_SCRIPT.read_text(encoding="utf-8")
     assert "authorization_header" in source
-    assert "create_access_token" in source
+    assert "create_token" in source
+    assert "timedelta(minutes=args.minutes)" in source
     assert "--email" in source
 
 

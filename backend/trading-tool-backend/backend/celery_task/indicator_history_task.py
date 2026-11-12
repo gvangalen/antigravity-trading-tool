@@ -5,7 +5,7 @@ import time
 from collections import defaultdict
 
 from celery import shared_task
-from sqlalchemy import select
+from sqlalchemy import select, text
 from requests import HTTPError
 
 from backend.infrastructure.database import async_session_factory, run_celery_coroutine
@@ -42,6 +42,10 @@ async def _bootstrap_indicator_histories(
         )
         if user_id is not None:
             query = query.where(UserIndicatorConfig.user_id == int(user_id))
+        else:
+            query = query.where(text(
+                "NOT EXISTS (SELECT 1 FROM users u WHERE u.id=user_indicator_configs.user_id "
+                "AND u.ai_preferences->>'qa_fixture'='manual_trade_temporary_v1')"))
         if symbol is not None:
             query = query.where(UserIndicatorConfig.symbol == str(symbol).upper())
         if category is not None:
