@@ -42,6 +42,16 @@ zonder provider-, schema-, parse-, validatie- of timeoutfouten. Frontend
 commandtests **56/56**, typecheck en build slaagden. Onafhankelijke
 codebeoordeling: QA, Security en Architecture GO voor de beperkte projectie.
 
+PR [#1007](https://github.com/gvangalen/antigravity-trading-tool/pull/1007)
+had vijf groene PR-CI-jobs (`43213340124`) en is gemerged als
+`6ce470c1a0d93b78ce342770576f74cdbf53f03a`. De vijf main-CI-jobs
+(`43214144852`) en Auto Deploy (`43214872898`) slaagden. Publieke
+`https://tradamind.com/api/health` en
+`https://tradamind.com/build-info.json` gaven HTTP 200 met exact die SHA.
+Deze statuswijziging creëert opnieuw een main-SHA; Build wacht de laatste
+main-CI, Auto Deploy en publieke backend/frontend-SHA-pariteit af voordat
+onafhankelijke QA de volledige zes-case matrix herhaalt.
+
 Nieuwe productreparatie in voorbereiding: de onafhankelijke diagnose van de
 eerste volledige matrix haalde het oorspronkelijke, eenmalige kindrapport
 terug (diagnoserun `43200357575`, artifact SHA-256
@@ -87,7 +97,7 @@ had vijf groene PR-CI-jobs (`43207096989`) en is gemerged als
 creëert een volgende main-SHA; de laatste CI, Auto Deploy en publieke
 SHA-pariteit worden vóór onafhankelijke beschermde QA gecontroleerd.
 
-Phase: `PRODUCT_REPAIR_LOCAL_VALIDATION`. De eerste productrelease was
+Phase: `PRODUCT_DEPLOYED_QA_HANDOFF_PENDING_FINAL_SHA`. De eerste productrelease was
 `d24c90f7da54b77073cd6a98217e925b92ddbfde`. PR
 [#998](https://github.com/gvangalen/antigravity-trading-tool/pull/998)
 had vijf groene PR-CI-jobs (run `43182417071`) en is gemerged als
