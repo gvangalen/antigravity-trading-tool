@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN handmatig tradevoorstel: niet-doelmarkt bewijsdiagnose (12 november 2026)
 
-Phase: `RELEASE_CANDIDATE_AWAITING_CI`. De diagnostische bronrelease is via
+Phase: `PRODUCT_DEPLOYED_QA_PENDING`. De diagnostische bronrelease is via
 PR [#994](https://github.com/gvangalen/antigravity-trading-tool/pull/994) en
 status-PR [#995](https://github.com/gvangalen/antigravity-trading-tool/pull/995)
 op `aa6099c1839190f064c518a5fb9a772fbcc4494f` uitgekomen. De laatste vijf
@@ -42,7 +42,16 @@ en regressie **109/109** (SHA-256
 `f5dadbc8685314022a101ae2041d7fd00194c02e387b552e25f5e00f7c492e35`),
 beide met nul provider-, schema-, parse-, timeout- en validatiefouten.
 Onafhankelijke QA- en Security-codechecks gaven GO voor uitsluitend deze
-read-only diagnose. CI, Auto Deploy en publieke SHA-pariteit zijn nog open.
+read-only diagnose. PR
+[#996](https://github.com/gvangalen/antigravity-trading-tool/pull/996)
+is met vijf groene PR-CI-jobs (run `43169727178`) gemerged als
+`c46e87ed2a4399ca23b0ed4b7f17e939a3fa481a`. De vijf main-CI-jobs
+(run `43170414732`) en Auto Deploy (run `43171043797`) slaagden. Publieke
+`https://tradamind.com/api/health` en `https://tradamind.com/build-info.json`
+gaven beide HTTP 200 en exact die SHA. Deze statuscommit maakt een nieuwe
+main-SHA; de laatste CI, Auto Deploy en publieke SHA-pariteit worden vóór
+beschermde QA opnieuw gecontroleerd. De read-only live diagnose en de volledige
+kaart-/opslagmatrix zijn nog open.
 
 ## FINN handmatig tradevoorstel: gebonden QA-fixturevoorbereiding (11 november 2026)
 
