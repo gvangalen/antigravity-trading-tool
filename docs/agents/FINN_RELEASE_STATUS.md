@@ -41,7 +41,17 @@ aantoonbare codeblokker en Security/Architecture gaven GO. De verplichte
 PR-/main-CI, Auto Deploy, publieke SHA-controle en volledige onafhankelijke
 live matrix volgen nog.
 
-Phase: `PRODUCT_REPAIR_LOCAL_VALIDATION`. De eerste productrelease was
+PR [#1005](https://github.com/gvangalen/antigravity-trading-tool/pull/1005)
+had vijf groene PR-CI-jobs (`43207096989`) en is gemerged als
+`e03e89f8cc2e578c65cdc3e71cd86b9f156c97a0`. De vijf main-CI-jobs
+(`43207903721`) en Auto Deploy (`43208607577`) slaagden. Publieke
+`https://tradamind.com/api/health` en
+`https://tradamind.com/build-info.json` gaven beide HTTP 200 en exact
+`e03e89f8cc2e578c65cdc3e71cd86b9f156c97a0`. Deze statuswijziging
+creëert een volgende main-SHA; de laatste CI, Auto Deploy en publieke
+SHA-pariteit worden vóór onafhankelijke beschermde QA gecontroleerd.
+
+Phase: `PRODUCT_DEPLOYED_QA_HANDOFF_PENDING_FINAL_SHA`. De eerste productrelease was
 `d24c90f7da54b77073cd6a98217e925b92ddbfde`. PR
 [#998](https://github.com/gvangalen/antigravity-trading-tool/pull/998)
 had vijf groene PR-CI-jobs (run `43182417071`) en is gemerged als
