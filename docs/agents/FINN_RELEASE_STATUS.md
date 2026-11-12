@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN handmatig tradevoorstel: tijdelijk geïsoleerde QA-matrix (12 november 2026)
 
-Phase: `DEPLOY_REPAIR_IN_PROGRESS`. PR
+Phase: `PRODUCT_DEPLOYED_QA_PENDING`. De productrelease is
+`d24c90f7da54b77073cd6a98217e925b92ddbfde`. PR
 [#998](https://github.com/gvangalen/antigravity-trading-tool/pull/998)
 had vijf groene PR-CI-jobs (run `43182417071`) en is gemerged als
 `8d27ac999394f109cd10c266780a84808cee997c`. De vijf main-CI-jobs
@@ -15,19 +16,23 @@ nieuwe FK-migratie: de productiecatalogus bevat al een niet-cascaderende
 `macro_data.user_id`-foreign key. De automatische rollback naar
 `a0129feb9d0b27f024944ad8e8cc965f5ecbd5bb` slaagde volgens de deploylog;
 publieke backend health en frontend build-info gaven daarna HTTP 200 met exact
-die rollback-SHA.
-de kandidaat is niet live geaccepteerd. De compatibiliteitsreparatie behoudt
+die rollback-SHA. De compatibiliteitsreparatie behoudt
 bestaande FK-acties en verwijdert rijen van uitsluitend het tijdelijke kind
 onder `FOR UPDATE` op diens owner voordat de owner wordt verwijderd. Een
 lokale Postgres-proef met een bestaande `ON DELETE SET NULL`-FK bevestigde
 dat de migratie idempotent doorloopt; een tweede proef verwijderde onder die
 FK-vorm een echt tijdelijk kind en diens `macro_data`-rij volledig. De gerichte
 auth/lifecycle/owner-tests na de reparatie gaven **20/20** en de migratieplangate
-slaagde. De laatste publiek geverifieerde
-diagnoserelease is `a0129feb9d0b27f024944ad8e8cc965f5ecbd5bb` (PR #996 en
-status-PR #997); de laatste vijf main-CI-jobs (`43171919163`) en Auto Deploy
-(`43172580098`) slaagden en backend/frontend gaven HTTP 200 met exact die SHA.
-Onafhankelijke read-only QA bevestigde auth (`43172865270`) en drie beschikbare
+slaagde. PR [#999](https://github.com/gvangalen/antigravity-trading-tool/pull/999)
+had vijf groene PR-CI-jobs (`43185144628`) en is gemerged als de productrelease.
+De vijf main-CI-jobs (`43185946855`) en Auto Deploy (`43186669447`) slaagden;
+publieke backend health en frontend build-info gaven HTTP 200 en exact
+`d24c90f7da54b77073cd6a98217e925b92ddbfde`. Deze statuswijziging creëert
+een nieuwe main-SHA; de laatste CI, Auto Deploy en publieke SHA-pariteit worden
+vóór onafhankelijke QA opnieuw gecontroleerd.
+
+Op de vorige diagnostische SHA `a0129feb9d0b27f024944ad8e8cc965f5ecbd5bb`
+bevestigde onafhankelijke read-only QA auth (`43172865270`) en drie beschikbare
 planbronnen (`43172966374`, artifact SHA-256
 `c64f9e183a16ad144e7e0f19f09752739c1880c1bd7534361934fd9191f9642d`).
 De BTC/EUR-doelmarkt heeft geen andere-marktconfiguratie, maar wel een
