@@ -37,6 +37,7 @@ ALLOWED_PROFILES = {
     "manual_trade_fixture_preflight",
     "manual_trade_fixture_prepare",
     "manual_trade_temporary_matrix",
+    "manual_trade_temporary_diagnose",
     "manual_trade_temporary_cleanup",
     "trade_review_preflight",
     "manifest_key",
@@ -219,7 +220,8 @@ def safe_manual_trade_failure_diagnostic(profile: str, error: Exception) -> Dict
 
 def profile_error_category(profile: str, error: Exception) -> str:
     """The published QA error category must not contain private fixture text."""
-    if profile in {"manual_trade_temporary_matrix", "manual_trade_temporary_cleanup"}:
+    if profile in {"manual_trade_temporary_matrix", "manual_trade_temporary_diagnose",
+                   "manual_trade_temporary_cleanup"}:
         code = str(error)
         allowed = {
             "temporary_qa_not_authorized", "temporary_qa_cleanup_not_authorized",
@@ -241,6 +243,11 @@ def profile_error_category(profile: str, error: Exception) -> str:
             "temporary_qa_delete_binding_changed", "temporary_qa_revoke_cas_failed",
             "temporary_qa_manifest_count_invalid", "temporary_qa_manifest_operation_invalid",
             "temporary_qa_manifest_action_invalid",
+            "temporary_qa_diagnose_not_authorized",
+            "temporary_qa_diagnose_binding_changed",
+            "temporary_qa_diagnose_journal_unavailable",
+            "temporary_qa_diagnose_journal_binding_changed",
+            "temporary_qa_diagnose_report_invalid",
         }
         return code if code in allowed else "temporary_qa_runtime_error"
     if profile == "manual_trade_fixture_prepare":
@@ -3372,6 +3379,15 @@ def main() -> int:
         report["release_identity"] = release_identity(release_sha=args.release_sha, checkout=checkout, release_marker=Path(args.release_marker), base_url=args.base_url.rstrip("/"))
         if not report["release_identity"]["matches"]:
             report["error_category"] = "release_mismatch"
+        elif args.profile == "manual_trade_temporary_diagnose":
+            from backend.scripts.probe_protected_manual_trade_temporary_matrix import diagnose_quarantined
+
+            if args.manifest_id != "none" or args.manifest_bundle_path:
+                raise ValueError("temporary_qa_diagnose_not_authorized")
+            report["protected_profile_attempted"] = True
+            report["manual_trade_temporary_diagnose"] = diagnose_quarantined(args.run_label)
+            report["outcome"] = "passed"
+            report["qa_status"] = "COMPLETED"
         elif args.profile == "manual_trade_temporary_cleanup":
             from backend.scripts.probe_protected_manual_trade_temporary_matrix import cleanup_quarantined
 

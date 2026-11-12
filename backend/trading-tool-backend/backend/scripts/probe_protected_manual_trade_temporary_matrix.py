@@ -39,6 +39,7 @@ LOOSE_CHILD_TABLES = {"market_data_indicators", "macro_data",
                       "technical_indicators", "market_indicator_rules",
                       "macro_indicator_rules", "technical_indicator_rules",
                       "system_logs"}
+QA_STATE_ROOT = Path("/tmp")
 
 
 def _db(awaitable):
@@ -449,8 +450,10 @@ def run(args, report: dict[str, Any]) -> dict[str, Any]:
         state["phase"] = "matrix_complete"
         _journal(journal_path, state)
     finally:
+        report["temporary_qa_failure_phase"] = state["phase"]
         if child is None:
             child = _db(_find_child(parent, namespace))
+        report["temporary_qa_child_present"] = child is not None
         if child is not None:
             cleanup_ready = (
                 state["phase"] == "matrix_complete"
@@ -494,6 +497,7 @@ def run(args, report: dict[str, Any]) -> dict[str, Any]:
         state["phase"] = ("finished" if report.get("temporary_qa_child_deleted")
                           else "quarantined")
         _journal(journal_path, state)
+        report["temporary_qa_final_phase"] = state["phase"]
     if report.get("matrix_outcome") != "passed":
         raise RuntimeError("temporary_qa_matrix_failed")
     if not all(report.get(key) is True for key in (
@@ -502,6 +506,215 @@ def run(args, report: dict[str, Any]) -> dict[str, Any]:
             "temporary_qa_child_deleted", "temporary_qa_parent_unchanged")):
         raise RuntimeError("temporary_qa_cleanup_unverified")
     return {"matrix_passed": True, "cleanup_verified": True}
+
+
+def diagnose_quarantined(run_label: str) -> dict[str, Any]:
+    """Summarize one old protected attempt without publishing its case text."""
+    match = re.fullmatch(
+        r"diagnose-(qa-([0-9]+)-([0-9]+)-[0-9a-f]{8}-[0-9a-f]{8})",
+        run_label,
+    )
+    parent_raw = os.getenv("FINN_QA_USER_ID", "")
+    if (match is None or not parent_raw.isdecimal() or int(parent_raw) <= 0
+            or os.getenv("FINN_QA_ALLOW_FIXTURE_ACTIONS") == "1"
+            or os.getenv("FINN_QA_ALLOW_FIXTURE_EXECUTION") == "1"):
+        raise RuntimeError("temporary_qa_diagnose_not_authorized")
+    try:
+        os.fstat(9)
+    except OSError as error:
+        raise RuntimeError("temporary_qa_host_lock_missing") from error
+    namespace, run_id, attempt = match.groups()
+    parent = int(parent_raw)
+    child = _db(_find_child(parent, namespace))
+    if child is None:
+        raise RuntimeError("temporary_qa_child_missing")
+
+    async def child_state() -> dict[str, bool]:
+        async with async_session_factory() as session:
+            parent_row = (await session.execute(text(
+                "SELECT role,is_active,ai_preferences FROM users WHERE id=:owner"
+            ), {"owner": parent})).mappings().one_or_none()
+            row = (await session.execute(text(
+                "SELECT role,is_active,ai_preferences FROM users WHERE id=:owner"
+            ), {"owner": child})).mappings().one_or_none()
+            unsafe = (await session.execute(text("""
+                SELECT
+                  (SELECT count(*) FROM exchange_keys WHERE user_id=:owner) AS keys,
+                  (SELECT count(*) FROM bot_orders WHERE user_id=:owner) AS orders,
+                  (SELECT count(*) FROM bot_configs WHERE user_id=:owner) AS bots,
+                  (SELECT count(*) FROM strategies WHERE user_id=:owner) AS strategies,
+                  (SELECT count(*) FROM finn_manual_trade_plans
+                     WHERE user_id=:owner AND plan_json->>'executable' IS DISTINCT FROM 'false')
+                     AS executable_plans
+            """), {"owner": child})).mappings().one()
+            await session.rollback()
+        parent_prefs = parent_row["ai_preferences"] if parent_row else None
+        child_prefs = row["ai_preferences"] if row else None
+        lease = child_prefs.get("finn_temp_qa") if isinstance(child_prefs, dict) else None
+        return {
+            "parent_marker_valid": bool(parent_row and parent_row["role"] == "user"
+                                        and parent_row["is_active"] is True
+                                        and isinstance(parent_prefs, dict)
+                                        and parent_prefs.get("qa_fixture") == PARENT_MARKER),
+            "child_revoked": bool(row and row["role"] == "user"
+                                  and row["is_active"] is False
+                                  and isinstance(child_prefs, dict)
+                                  and child_prefs.get("qa_fixture") == FINN_TEMP_QA_KIND
+                                  and isinstance(lease, dict)
+                                  and lease.get("namespace") == namespace
+                                  and lease.get("parent") == parent
+                                  and lease.get("status") == "revoked"),
+            "unsafe_child_rows_present": any(int(value) for value in unsafe.values()),
+        }
+
+    state = _db(child_state())
+    state["child_quiescent"] = _db(_child_quiescent(child))
+    if not state["parent_marker_valid"] or not state["child_revoked"]:
+        raise RuntimeError("temporary_qa_diagnose_binding_changed")
+    old_dir = QA_STATE_ROOT / f"finn-production-qa-{run_id}-{attempt}"
+    if (old_dir.is_symlink() or not old_dir.is_dir()
+            or old_dir.parent.resolve() != QA_STATE_ROOT.resolve()
+            or old_dir.stat().st_uid != os.getuid()
+            or old_dir.stat().st_mode & 0o077):
+        raise RuntimeError("temporary_qa_diagnose_journal_unavailable")
+    report_base = old_dir / f"finn-production-qa-{run_id}-{attempt}"
+    journal_path = report_base.with_suffix(".temp-journal.json")
+    if (not journal_path.is_file() or journal_path.is_symlink()
+            or journal_path.stat().st_uid != os.getuid()
+            or journal_path.stat().st_mode & 0o077
+            or journal_path.stat().st_size > 16384):
+        raise RuntimeError("temporary_qa_diagnose_journal_unavailable")
+    journal = json.loads(journal_path.read_text(encoding="utf-8"))
+    if (journal.get("kind") != FINN_TEMP_QA_KIND
+            or journal.get("namespace") != namespace
+            or journal.get("parent") != parent
+            or journal.get("phase") != "quarantined"
+            or not re.fullmatch(r"[0-9a-f]{40}", str(journal.get("release_sha", "")))
+            or namespace.split("-")[3] != str(journal.get("release_sha", ""))[:8]):
+        raise RuntimeError("temporary_qa_diagnose_journal_binding_changed")
+    state["prior_target_sha"] = journal["release_sha"]
+    child_report_path = report_base.with_suffix(".child-report.json")
+    state["original_child_report_available"] = child_report_path.is_file()
+    if state["original_child_report_available"]:
+        if (child_report_path.is_symlink()
+                or child_report_path.stat().st_uid != os.getuid()
+                or child_report_path.stat().st_mode & 0o077
+                or child_report_path.stat().st_size > 8 * 1024 * 1024):
+            raise RuntimeError("temporary_qa_diagnose_report_invalid")
+        raw = child_report_path.read_bytes()
+        child_report = json.loads(raw)
+        if not isinstance(child_report, dict):
+            raise RuntimeError("temporary_qa_diagnose_report_invalid")
+        if (child_report.get("workflow_run_id") != f"{run_id}-{attempt}"
+                or child_report.get("target_sha") != journal["release_sha"]):
+            raise RuntimeError("temporary_qa_diagnose_report_invalid")
+        def fixed_code(value: Any, allowed: set[str]) -> str | None:
+            return value if isinstance(value, str) and value in allowed else None
+        error_codes = {
+            "auth", "release_mismatch", "runner_internal", "runner_interrupted",
+            "timeout", "transport", "http", "provider", "schema", "validation",
+            "fixture", "safety", "budget", "polling", "sse",
+            "case_timeout", "server_http_response", "database_evidence_unavailable",
+            "manual_trade_clarification_invalid", "manual_trade_proposal_invalid",
+            "manual_trade_saved_plan_invalid", "manual_trade_replay_changed_plan",
+            "manual_trade_read_only_write_detected", "proposal_read_failed",
+            "proposal_publish_failed", "proposal_execute_failed",
+            "idempotency_replay_failed", "idempotency_replay_not_already_executed",
+            "missing_inputs_unexpected", "proposal_missing", "proposal_confirm_failed",
+            "confirmation_material_missing",
+            "write_during_publish_or_database_evidence_unavailable",
+            "write_before_confirmation_or_database_evidence_unavailable",
+            "idempotency_replay_changed_database",
+        }
+        def safe_count(value: Any) -> int | None:
+            return value if type(value) is int and 0 <= value <= 100000 else None
+        def safe_http(value: Any) -> int | None:
+            return value if type(value) is int and 100 <= value <= 599 else None
+        def safe_bool(value: Any) -> bool | None:
+            return value if type(value) is bool else None
+        def case_summary(item: dict[str, Any]) -> dict[str, Any]:
+            action = item.get("fixture_action")
+            action = action if isinstance(action, dict) else {}
+            proposal = action.get("manual_trade_proposal_evidence")
+            proposal = proposal if isinstance(proposal, dict) else {}
+            saved = action.get("manual_trade_saved_evidence")
+            saved = saved if isinstance(saved, dict) else {}
+            saved_plan = saved.get("plan")
+            saved_plan = saved_plan if isinstance(saved_plan, dict) else {}
+            wait = item.get("manual_trade_wait_evidence")
+            wait = wait if isinstance(wait, dict) else {}
+            clarification = item.get("manual_trade_clarification_evidence")
+            clarification = clarification if isinstance(clarification, dict) else {}
+            read_only = item.get("manual_trade_read_only_evidence")
+            read_only = read_only if isinstance(read_only, dict) else {}
+            terminal = item.get("terminal")
+            terminal = terminal if isinstance(terminal, dict) else {}
+            return {
+                "case_status": fixed_code(item.get("case_status"),
+                                          {"completed", "failed", "not_run",
+                                           "in_progress", "skipped"}),
+                "failure_classification": fixed_code(
+                    item.get("failure_classification"),
+                    {"product", "runner", "infrastructure"}),
+                "error_present": item.get("error_category") is not None,
+                "error_category": fixed_code(item.get("error_category"), error_codes),
+                "create_http_status": safe_http(item.get("create_http_status")),
+                "terminal_status": fixed_code(terminal.get("status"),
+                                              {"completed", "failed", "cancelled"}),
+                "polling_sse_equal": safe_bool(item.get("polling_sse_equal")),
+                "operation_matches": safe_bool(item.get("operation_matches")),
+                "fixture_action_outcome": fixed_code(action.get("outcome"), {
+                    "not_run", "not_applicable", "case_timeout", "proposal_created",
+                    "proposal_evidence_failed", "proposal_missing", "missing_inputs",
+                    "confirmed", "executed", "run_write_detected",
+                    "proposal_write_detected", "publish_write_detected",
+                }),
+                "fixture_action_error_present": action.get("error_category") is not None,
+                "fixture_action_error_category": fixed_code(
+                    action.get("error_category"), error_codes),
+                "manual_trade_proposal_passed": safe_bool(proposal.get("passed")),
+                "manual_trade_saved_plan_passed": safe_bool(saved_plan.get("passed")),
+                "manual_trade_wait_passed": safe_bool(wait.get("passed")),
+                "manual_trade_clarification_passed": safe_bool(clarification.get("passed")),
+                "manual_trade_read_only_unchanged": safe_bool(read_only.get("unchanged")),
+                "manual_trade_replay_unchanged": safe_bool(
+                    action.get("manual_trade_replay_unchanged")),
+            }
+        cases = child_report.get("cases", [])
+        if not isinstance(cases, list) or len(cases) > 100:
+            raise RuntimeError("temporary_qa_diagnose_report_invalid")
+        state["original_child_report_sha256"] = hashlib.sha256(raw).hexdigest()
+        auth = child_report.get("auth_preflight")
+        auth = auth if isinstance(auth, dict) else {}
+        failures = child_report.get("failure_summary")
+        failures = failures if isinstance(failures, dict) else {}
+        state["original_child_report_summary"] = {
+            "outcome": fixed_code(child_report.get("outcome"),
+                                  {"passed", "failed", "incomplete", "blocked"}),
+            "qa_status": fixed_code(child_report.get("qa_status"),
+                                    {"COMPLETED", "INCOMPLETE", "NOT_STARTED",
+                                     "COMPLETED_WITH_FAILURES"}),
+            "error_category": fixed_code(child_report.get("error_category"), error_codes),
+            "planned_count": safe_count(child_report.get("planned_count")),
+            "attempted_count": safe_count(child_report.get("attempted_count")),
+            "completed_count": safe_count(child_report.get("completed_count")),
+            "failed_count": safe_count(child_report.get("failed_count")),
+            "not_run_count": safe_count(child_report.get("not_run_count")),
+            "auth_preflight": {
+                "http_status": safe_http(auth.get("http_status")),
+                "fixture_authenticated": safe_bool(auth.get("fixture_authenticated")),
+                "error_present": auth.get("error_category") is not None,
+                "error_category": fixed_code(auth.get("error_category"), error_codes),
+            },
+            "failure_summary": {
+                key: safe_count(failures.get(key))
+                for key in ("product", "runner", "infrastructure")
+            },
+            "case_statuses": [
+                case_summary(item) for item in cases if isinstance(item, dict)
+            ],
+        }
+    return state
 
 
 def cleanup_quarantined(run_label: str) -> dict[str, bool]:

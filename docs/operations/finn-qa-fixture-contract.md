@@ -85,7 +85,10 @@ an unchanged hash of the original QA owner's rows. The private journal binds
 the run namespace and SHA; crash/retry revokes and quarantines a child instead
 of replaying matrix writes. Failed or uncertain matrices keep the child
 inactive for QA diagnosis. The separately protected
-`manual_trade_temporary_cleanup` profile can remove only that exact marked,
+`manual_trade_temporary_diagnose` profile reads only the exact prior namespace,
+quarantined child state and a sanitized summary of its private child checkpoint.
+The workflow never auto-restarts these one-shot temporary profiles.
+`manual_trade_temporary_cleanup` can remove only that exact marked,
 quiescent child after QA diagnosis; it does not accept a manifest or execute a
 trade. Seven nullable owner columns in indicator, rule and log tables receive
 `ON DELETE CASCADE NOT VALID` foreign keys only where none exists. Existing
