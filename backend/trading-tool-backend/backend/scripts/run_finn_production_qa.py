@@ -3028,6 +3028,23 @@ async def _manual_trade_source_audit() -> Dict[str, Any]:
                   AND lower(s.timeframe) IN ('1d','1day')
             """), {"owner": owner, "asset": asset, "quote": quote,
                    "market_id": market_id})).scalar_one()
+            non_target_market_evidence = None
+            if (market_id is not None
+                    and (DEFAULT_ASSET_CATALOG.get(asset) or {}).get("asset_class") == "crypto"):
+                other = (await session.execute(sql_text("""
+                    SELECT
+                      EXISTS(SELECT 1 FROM user_indicator_configs
+                             WHERE user_id=:owner AND symbol=:asset
+                               AND market_id IS DISTINCT FROM :market_id) AS configs_present,
+                      EXISTS(SELECT 1 FROM daily_scores
+                             WHERE user_id=:owner AND symbol=:asset
+                               AND market_id IS DISTINCT FROM :market_id) AS scores_present
+                """), {"owner": owner, "asset": asset,
+                       "market_id": market_id})).mappings().one()
+                non_target_market_evidence = {
+                    "configs_present": bool(other["configs_present"]),
+                    "scores_present": bool(other["scores_present"]),
+                }
             score_inputs = {}
             for category, table, name_column in (
                 ("macro", "macro_data", "name"),
@@ -3113,6 +3130,7 @@ async def _manual_trade_source_audit() -> Dict[str, Any]:
                 ),
                 "profile_present": any(profile.values()),
                 "daily_trade_setup_candidate_count": min(int(setup_count), 2),
+                "non_target_market_evidence": non_target_market_evidence,
                 "score_source_status": score_status,
                 "score_inputs": score_inputs,
                 "benchmark_available": benchmark_available,

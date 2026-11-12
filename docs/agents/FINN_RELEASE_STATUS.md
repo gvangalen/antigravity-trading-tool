@@ -4,6 +4,46 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN handmatig tradevoorstel: niet-doelmarkt bewijsdiagnose (12 november 2026)
+
+Phase: `RELEASE_CANDIDATE_AWAITING_CI`. De diagnostische bronrelease is via
+PR [#994](https://github.com/gvangalen/antigravity-trading-tool/pull/994) en
+status-PR [#995](https://github.com/gvangalen/antigravity-trading-tool/pull/995)
+op `aa6099c1839190f064c518a5fb9a772fbcc4494f` uitgekomen. De laatste vijf
+main-CI-jobs (run `43166143754`) en Auto Deploy (run `43166747961`) slaagden;
+publieke backend health en frontend build-info gaven HTTP 200 met exact die SHA.
+Onafhankelijke QA bevestigde de identiteit en beschermde auth (run
+`43167021761`), een beschikbare echte bron en planberekening voor BTC/EUR,
+ETH/USDT en AAPL/USD (read-only audit `43167132866`), en een veilige owner
+zonder pending proposals of uitvoeringsdata (read-only preflight `43167270982`).
+De geautoriseerde prepare-run `43167413908` stopte vóór commit op
+`manual_trade_other_pair_evidence_present`: voor BTC of ETH bestaat al een
+configuratie of dagscore buiten de doelmarkt, mogelijk ongescopeerd. Read-only nacontrole
+`43167578171` zag geen nieuwe profiel-, setup-, configuratie- of scoredata,
+geen plannen, orders of Live-bots. QA-verdict voor de volledige matrix op deze
+SHA: `NOT_ACCEPTED / INCOMPLETE`; er is geen kaart-/opslagtest uitgevoerd.
+
+De nieuwe kandidaat voegt uitsluitend in de beschermde read-only bron-audit
+per exact crypto-doelpaar twee booleans toe: of configuraties en dagscoren
+buiten de doelmarkt bestaan, inclusief ongescopeerde rijen. Ze geeft geen IDs,
+waarden, aantallen of andere paarnaam vrij en verandert de fail-closed
+prepare-check niet. Gerichte
+runnerregressie: **122 passed**. De uitkomst van de beperkte live audit bepaalt
+of bronhergebruik zonder wijziging van bestaande andere-quote data mogelijk is
+of dat de eerder geautoriseerde tijdelijke QA-gebruiker veilig moet worden
+geïsoleerd. De volledige lokale backend-suite gaf **4699 passed, 7 skipped**
+(log SHA-256 `e9d0c11f9a1e5b5faa17c6a8e29ef1eb1b586dfbb4aa3f328a8f58750141213b`).
+De geïsoleerde worker-actiematrix gaf **17/17** en adaptertests **26/26**,
+met nul brokerorders, Live-bots, Live-calls of productieverbindingen
+(artifact SHA-256 `fac14800310683f1088902249a8b22d0a3e86be401b8b7c39f1fb3446b1304ed`).
+Echte providerontwikkeling gaf **20/20** (SHA-256
+`d4a95a38b7ad335234cb8d624b80b964802f99b565c9db7884e412fc9c3cff8d`)
+en regressie **109/109** (SHA-256
+`f5dadbc8685314022a101ae2041d7fd00194c02e387b552e25f5e00f7c492e35`),
+beide met nul provider-, schema-, parse-, timeout- en validatiefouten.
+Onafhankelijke QA- en Security-codechecks gaven GO voor uitsluitend deze
+read-only diagnose. CI, Auto Deploy en publieke SHA-pariteit zijn nog open.
+
 ## FINN handmatig tradevoorstel: gebonden QA-fixturevoorbereiding (11 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_QA_PENDING`. De beschermde `manual_trade_fixture_prepare` route
