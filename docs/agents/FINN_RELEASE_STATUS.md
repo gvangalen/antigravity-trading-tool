@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN trade-QA broncontrole en watchlistantwoord (12 november 2026)
 
-Phase: `LOCAL_VALIDATION`. Onafhankelijke browser-QA op live
+Phase: `DEPLOYED_PENDING_FINAL_SHA`. Onafhankelijke browser-QA op live
 `19ded33629f36e2e77d390379a287a49612b4c50` accepteerde de gerichte
 watchlist-kernflow: de natuurlijke Apple→Bitcoin-zin, expliciete vervanging,
 klikbare BTC- en ETH-paren, verduidelijking van de dubbelzinnige aandeelzin,
@@ -55,8 +55,16 @@ SHA-256 `67d56e59bea4b5a76c4b09466e2ce7c6a703f6ea6016b7e160c833ee73a3bd06`),
 verduidelijkings- en missing-input-accuracy en nul provider-, schema-,
 parse-, validatie- of timeoutfouten. Echte provider-regressie **109/109**
 (artifact SHA-256 `95ee07e5d9476c5a1cc688a071bed6d3491b2c6fd2e51a9b290dd24bc4662c22`)
-had dezelfde 100% accuracies en nul foutpercentages. CI en deployment zijn
-nog in afwachting.
+had dezelfde 100% accuracies en nul foutpercentages.
+
+Product-PR [#1013](https://github.com/gvangalen/antigravity-trading-tool/pull/1013)
+had vijf groene PR-CI-jobs (run `43286641388`) en is gemerged als
+`8e3e987a994a1f7f7fc1ac123da680270f4ebcc9`. De vijf main-CI-jobs
+(run `43287581312`) en Auto Deploy (run `43288516244`) slaagden. Publieke
+backend-health en frontend-buildinfo gaven beide HTTP 200 en exact deze SHA.
+Deze statuswijziging creëert een volgende main-SHA; Build wacht de laatste
+main-CI, Auto Deploy en publieke SHA-pariteit af vóór de onafhankelijke
+beschermde matrix.
 
 ## FINN watchlist parser en beschermde trade-QA diagnose (12 november 2026)
 
