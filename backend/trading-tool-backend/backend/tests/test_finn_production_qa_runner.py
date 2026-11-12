@@ -114,6 +114,10 @@ def test_manual_trade_source_audit_is_owner_bound_read_only_and_redacted(monkeyp
                                                   "trader_types": ["swing_trader"]}})
             if "AS keys" in sql:
                 return Result({"keys": 0, "orders": 0, "live_bots": 0, "plans": 0})
+            if "AS configs_present" in sql and "AS scores_present" in sql:
+                assert "market_id IS DISTINCT FROM :market_id" in sql
+                return Result({"configs_present": params["asset"] == "BTC",
+                               "scores_present": params["asset"] == "ETH"})
             if "FROM user_indicator_configs c" in sql:
                 return Result([] if params["category"] in missing_categories else ["rsi"])
             if any(f"FROM {table}" in sql for table in (
@@ -153,12 +157,19 @@ def test_manual_trade_source_audit_is_owner_bound_read_only_and_redacted(monkeyp
     assert all(pair["crypto_candle_diagnostics"]["fields"]["open"]["type_unexpected"] == 15
                for pair in report["pairs"][:2])
     assert report["pairs"][2]["crypto_candle_diagnostics"] is None
+    assert report["pairs"][0]["non_target_market_evidence"] == {
+        "configs_present": True, "scores_present": False,
+    }
+    assert report["pairs"][1]["non_target_market_evidence"] == {
+        "configs_present": False, "scores_present": True,
+    }
+    assert report["pairs"][2]["non_target_market_evidence"] is None
     assert all(pair["benchmark_available"] for pair in report["pairs"])
     assert all(all(item["fresh_configured_readings_present"] and item["fresh_reading_count"] == 1
                    for item in pair["score_inputs"].values()) for pair in report["pairs"])
     assert all(pair["owner_recommendation"] == "review" for pair in report["pairs"])
     assert "42" not in json.dumps(report)
-    assert len(statements) == 24
+    assert len(statements) == 26
     setup_queries = [sql for sql, _ in statements if "FROM setups s" in sql]
     assert len(setup_queries) == 3
     assert all("lower(s.timeframe) IN ('1d','1day')" in sql for sql in setup_queries)
