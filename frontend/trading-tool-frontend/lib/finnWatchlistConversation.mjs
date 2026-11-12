@@ -3,6 +3,67 @@ const ADD = /\b(?:voeg|toevoegen|toegevoegd|add|follow|volg)\b/i;
 const REMOVE = /\b(?:verwijder|haal|stop|remove|unfollow)\b|niet\s+meer\s+volgen/i;
 const REPLACE = /\b(?:vervang|vervangen|replace|instead of)\b|in\s+plaats\s+van|niet\s+meer(?:\s+\w+){0,3}\s+volgen/i;
 
+function directedReplacement(value, assets) {
+  if (new Set(assets.map((asset) => asset.symbol)).size !== 2) return null;
+  const direction = (fragment, pair) => {
+    const [first, second] = pair;
+    const marker = /\b(?:in\s+plaats\s+van|instead\s+of|anstatt)\b/i.exec(fragment);
+    if (marker && first.end <= marker.index && second.start >= marker.index + marker[0].length) return [second, first];
+    if (marker && marker.index + marker[0].length <= first.start) return [first, second];
+    if (/\b(?:vervang|replace|ersetze)\b/i.test(fragment) && /\b(?:door|with|durch)\b/i.test(fragment)) {
+      return /\b(?:niet|not|nicht)\b/i.test(fragment) ? null : [first, second];
+    }
+    if ((REMOVE.test(fragment) && ADD.test(fragment)) || /niet\s+meer\s+volgen.*\b(?:volg|follow)\b/i.test(fragment)) {
+      return [first, second];
+    }
+    return null;
+  };
+
+  const directions = [];
+  let extraCommand = false;
+  for (const sentence of value.matchAll(/[^.;!?]+/g)) {
+    const starts = [0];
+    for (const command of sentence[0].matchAll(/\b(?:vervang|replace|ersetze)\b/gi)) {
+      if (command.index > 0) starts.push(command.index);
+    }
+    starts.push(sentence[0].length);
+    for (let index = 0; index < starts.length - 1; index += 1) {
+      const from = sentence.index + starts[index];
+      const to = sentence.index + starts[index + 1];
+      const fragment = value.slice(from, to);
+      const pair = assets.filter((asset) => asset.start >= from && asset.end <= to)
+        .map((asset) => ({ ...asset, start: asset.start - from, end: asset.end - from }));
+      if (pair.length > 2) return null;
+      if (pair.length === 2 && pair[0].symbol === pair[1].symbol && /\b(?:vervang|replace|ersetze)\b/i.test(fragment)) return null;
+      if (pair.length === 2 && /\b(?:vervang|replace|ersetze)\b/i.test(fragment) && /\b(?:niet|not|nicht)\b/i.test(fragment)) return null;
+      if (pair.length === 2 && pair[0].symbol !== pair[1].symbol) {
+        const parsed = direction(fragment, pair);
+        if (parsed) directions.push(parsed);
+        else if (ADD.test(fragment) || REMOVE.test(fragment) || REPLACE.test(fragment)) extraCommand = true;
+      } else if (pair.length === 1 && (ADD.test(fragment) || REMOVE.test(fragment) || REPLACE.test(fragment))) {
+        extraCommand = true;
+      }
+    }
+  }
+  const hasDirectedClause = directions.length > 0;
+  if (!directions.length && assets.length === 2) {
+    const parsed = direction(value, assets);
+    if (parsed) directions.push(parsed);
+  }
+  if (!directions.length || (hasDirectedClause && extraCommand)) return null;
+  const [source, target] = directions[0].map((asset) => ({ ...asset }));
+  for (const [nextSource, nextTarget] of directions.slice(1)) {
+    if (source.symbol !== nextSource.symbol || target.symbol !== nextTarget.symbol) return null;
+    for (const [current, next] of [[source, nextSource], [target, nextTarget]]) {
+      if (next.quote_currency) {
+        if (current.quote_currency && current.quote_currency !== next.quote_currency) return null;
+        current.quote_currency = next.quote_currency;
+      }
+    }
+  }
+  return { source, target };
+}
+
 const COPY = {
   nl: { scope: 'Bedoel je je watchlist of je portfolio?', watchlist: 'Watchlist', portfolio: 'Portfolio',
     scopeAction: 'Wat wil je in je watchlist doen?',
@@ -49,19 +110,9 @@ export function watchlistIntent(text, mentions, ownedRows = []) {
   const replacing = REPLACE.test(value) || (hasAdd && hasRemove);
   if (!hasAdd && !hasRemove && !replacing) return null;
   if (replacing) {
-    if (assets.length !== 2 || assets[0].symbol === assets[1].symbol) return { kind: 'clarify_assets' };
-    const marker = value.toLowerCase().indexOf('in plaats van');
-    let source;
-    let target;
-    if (marker >= 0 && assets[0].end <= marker && assets[1].start > marker) {
-      [target, source] = assets;
-    } else if (marker >= 0 && marker < assets[0].start) {
-      [source, target] = assets;
-    } else if (/\b(?:vervang|replace)\b/i.test(value) || (hasAdd && hasRemove) || /niet\s+meer(?:\s+\w+){0,3}\s+volgen/i.test(value)) {
-      [source, target] = assets;
-    } else {
-      return { kind: 'clarify_assets' };
-    }
+    const replacement = directedReplacement(value, assets);
+    if (!replacement) return { kind: 'clarify_assets' };
+    const { source, target } = replacement;
     if (!ownedRows.some((row) => row.symbol === source.symbol)) return { kind: 'source_missing', source };
     return { kind: 'replace', source, target };
   }

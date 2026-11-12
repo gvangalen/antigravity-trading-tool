@@ -1207,14 +1207,14 @@ def manual_trade_saved_evidence(
         return {"status": "unavailable", "error_category": classify_internal_issue(error)}
 
 
-async def _load_manual_trade_wait_evidence(run_id: str) -> Dict[str, Any]:
+async def _load_manual_trade_wait_evidence(run_id: str, *, owner_id: int | None = None) -> Dict[str, Any]:
     """Check a server-owned wait on the QA owner without exporting its text."""
     from sqlalchemy import select
 
     from backend.infrastructure.database import async_session_factory
     from backend.infrastructure.models import FinnV2Run, FinnV2RuntimeContract
 
-    raw_user_id = os.environ.get("FINN_QA_USER_ID", "")
+    raw_user_id = str(owner_id) if owner_id is not None else os.environ.get("FINN_QA_USER_ID", "")
     if not raw_user_id.isdigit():
         return {"status": "fixture_binding_invalid", "passed": False}
     async with async_session_factory() as session:
@@ -1244,9 +1244,10 @@ async def _load_manual_trade_wait_evidence(run_id: str) -> Dict[str, Any]:
     }
 
 
-def manual_trade_wait_evidence(run_id: str) -> Dict[str, Any]:
+def manual_trade_wait_evidence(run_id: str, *, owner_id: int | None = None) -> Dict[str, Any]:
     try:
-        return _shared_database_loop().run_until_complete(_load_manual_trade_wait_evidence(run_id))
+        return _shared_database_loop().run_until_complete(
+            _load_manual_trade_wait_evidence(run_id, owner_id=owner_id))
     except Exception as error:
         return {"status": "unavailable", "error_category": classify_internal_issue(error),
                 "passed": False}
@@ -2737,6 +2738,11 @@ def run_cases(
             # A typed server wait deliberately has no selected proposal
             # operation. It is still bound to the owner-scoped draft above.
             result["operation_matches"] = result["manual_trade_wait_evidence"]["passed"]
+        elif (case.get("expected_operation_id") == "create_manual_trade_plan"
+              and actual is None and (projection.get("response") or {}).get("mode") == "READ"):
+            # A proposal request answered as READ may be a typed wait. Keep
+            # only its bounded server reason, without the answer or fixture.
+            result["unexpected_manual_trade_wait_evidence"] = manual_trade_wait_evidence(run_id)
         if ACCEPTANCE_EXPECTATION_FIELDS.issubset(case):
             result["contract_evidence"] = contract_expectation_result(case, projection)
         # A timed-out lifecycle never progresses into a proposal/confirmation

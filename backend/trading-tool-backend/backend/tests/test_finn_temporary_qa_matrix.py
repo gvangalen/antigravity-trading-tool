@@ -141,6 +141,29 @@ def test_failed_matrix_quarantines_child_without_deleting_evidence(monkeypatch, 
     assert report.get("temporary_qa_child_deleted") is not True
 
 
+def test_parent_change_records_quarantine_before_failing(monkeypatch, tmp_path):
+    args = _prepare(monkeypatch, tmp_path)
+
+    async def changed(*_args):
+        return False
+
+    monkeypatch.setattr(temporary, "_parent_unchanged", changed)
+
+    class Process:
+        def wait(self, timeout):
+            return 1
+
+    monkeypatch.setattr(temporary.subprocess, "Popen", lambda *_args, **_kwargs: Process())
+    report = {}
+    with pytest.raises(RuntimeError, match="temporary_qa_parent_changed"):
+        temporary.run(args, report)
+    journal = json.loads(Path(args.report_path).with_suffix(".temp-journal.json").read_text())
+    assert journal["phase"] == "quarantined"
+    assert report["temporary_qa_parent_unchanged"] is False
+    assert report["temporary_qa_child_quarantined"] is True
+    assert report["temporary_qa_token_revoked"] is True
+
+
 def test_interrupted_matrix_does_not_replay_and_revokes(monkeypatch, tmp_path):
     args = _prepare(monkeypatch, tmp_path)
     journal = Path(args.report_path).with_suffix(".temp-journal.json")
@@ -178,7 +201,8 @@ def test_temporary_database_phases_share_one_event_loop():
     assert temporary._db(loop_identity()) == temporary._db(loop_identity())
 
 
-def test_quarantined_diagnosis_reads_only_bound_prior_checkpoint(monkeypatch, tmp_path):
+@pytest.mark.parametrize("legacy_parent_change", [False, True])
+def test_quarantined_diagnosis_reads_only_bound_prior_checkpoint(monkeypatch, tmp_path, legacy_parent_change):
     import asyncio
     import os
     from contextlib import asynccontextmanager
@@ -191,8 +215,19 @@ def test_quarantined_diagnosis_reads_only_bound_prior_checkpoint(monkeypatch, tm
     journal.write_text(json.dumps({"kind": temporary.FINN_TEMP_QA_KIND,
                                    "namespace": namespace, "parent": 7,
                                    "release_sha": "aabbccdd" + "a" * 32,
-                                   "phase": "quarantined"}))
+                                   "phase": "matrix_complete" if legacy_parent_change else "quarantined"}))
     journal.chmod(0o600)
+    prior_report = old_dir / "finn-production-qa-123-1.json"
+    if legacy_parent_change:
+        prior_report.write_text(json.dumps({
+            "workflow_run_id": "123-1", "target_sha": "aabbccdd" + "a" * 32,
+            "temporary_qa_failure_phase": "matrix_complete",
+            "temporary_qa_parent_unchanged": False,
+            "temporary_qa_child_present": True,
+            "temporary_qa_child_quarantined": True,
+            "temporary_qa_token_revoked": True,
+        }))
+        prior_report.chmod(0o600)
     child_report = old_dir / "finn-production-qa-123-1.child-report.json"
     child_report.write_text(json.dumps({"workflow_run_id": "123-1",
                                         "target_sha": "aabbccdd" + "a" * 32,
@@ -206,6 +241,8 @@ def test_quarantined_diagnosis_reads_only_bound_prior_checkpoint(monkeypatch, tm
                                                             "runner": 0,
                                                             "infrastructure": 0},
                                         "cases": [{"case_status": "completed",
+                                                   "run_id": "finn-v2-run-" + "a" * 32,
+                                                   "terminal": {"response": {"mode": "READ"}},
                                                    "failure_classification": "product",
                                                    "error_category": "privateToken123",
                                                    "polling_sse_equal": False,
@@ -258,10 +295,14 @@ def test_quarantined_diagnosis_reads_only_bound_prior_checkpoint(monkeypatch, tm
     monkeypatch.setattr(temporary, "_find_child", find_child)
     monkeypatch.setattr(temporary, "_child_quiescent", quiescent)
     monkeypatch.setattr(temporary, "_db", lambda awaitable: asyncio.run(awaitable))
+    monkeypatch.setattr(qa, "manual_trade_wait_evidence", lambda run_id, *, owner_id: (
+        {"typed_wait": True, "reason_class": "manual_trade_benchmark_unavailable"}
+        if run_id == "finn-v2-run-" + "a" * 32 and owner_id == 42 else {}))
     result = temporary.diagnose_quarantined(f"diagnose-{namespace}")
     assert result["child_revoked"] and result["child_quiescent"]
     assert result["parent_marker_valid"] and not result["unsafe_child_rows_present"]
     assert result["prior_target_sha"] == "aabbccdd" + "a" * 32
+    assert result.get("prior_parent_changed") is (True if legacy_parent_change else None)
     assert result["original_child_report_summary"]["attempted_count"] == 2
     projected = result["original_child_report_summary"]["case_statuses"][0]
     assert projected["case_status"] == "completed"
@@ -271,10 +312,18 @@ def test_quarantined_diagnosis_reads_only_bound_prior_checkpoint(monkeypatch, tm
     assert projected["manual_trade_replay_unchanged"] is False
     assert projected["polling_sse_equal"] is False
     assert projected["fixture_action_error_category"] == "manual_trade_proposal_invalid"
+    assert projected["unexpected_manual_trade_wait_typed"] is True
+    assert projected["unexpected_manual_trade_wait_reason_class"] == "manual_trade_benchmark_unavailable"
     assert "private prompt" not in json.dumps(result)
     assert "privateToken123" not in json.dumps(result)
     assert result["original_child_report_summary"]["error_category"] is None
     assert child_report.exists() and journal.exists()
+    if legacy_parent_change:
+        previous = json.loads(prior_report.read_text())
+        prior_report.write_text(json.dumps({**previous, "temporary_qa_parent_unchanged": True}))
+        with pytest.raises(RuntimeError, match="diagnose_journal_binding_changed"):
+            temporary.diagnose_quarantined(f"diagnose-{namespace}")
+        prior_report.write_text(json.dumps(previous))
     with child_report.open("wb") as handle:
         handle.truncate(8 * 1024 * 1024 + 1)
     with pytest.raises(RuntimeError, match="diagnose_report_invalid"):

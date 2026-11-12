@@ -4,6 +4,51 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN watchlist parser en beschermde trade-QA diagnose (12 november 2026)
+
+Phase: `DIAGNOSTIC_REPAIR_LOCAL_VALIDATION`. Onafhankelijke QA op de vorige
+live release `97094374ddc6487d7b8bb24f119557d98d9b0a58` gaf **NOT_ACCEPTED**.
+De natuurlijke herhaalde zin “Ik wil in plaats van Apple voortaan Bitcoin
+volgen. Vervang Apple in mijn watchlist door Bitcoin.” vroeg nogmaals naar de
+al genoemde assets. De frontend-chat onderschepte deze zin vóór de backend en
+eiste precies twee assetvermeldingen, terwijl de zin er vier heeft. Een
+beschermde zes-case trade-QA-matrix (`43269998363`, artifact SHA-256
+`637b3176e87bd09412e3fca25d0614bcf4c0a210b5d993bb321219cf1f1c8b62`)
+bevestigde de budget-, setupkeuze-, opslag- en replaycases voor BTC, maar
+de ETH/USDT-case gaf onverwacht `READ/completed` zonder voorstel. De
+beschikbare veilige case-evidence bevat geen antwoordtekst of wait-reason;
+de oorzaak van deze tradecase is daarom nog **niet vastgesteld**. AAPL en
+de overige cases werden niet uitgevoerd. Geen Live-order is bevestigd.
+
+Deze reparatie verwerkt gerichte, herhaalde assetvermeldingen generiek in
+frontend en backend. Een los extra toevoeg- of verwijdercommando dat de
+vervanging kan tegenspreken, leidt fail-closed tot verduidelijking. Een
+onafhankelijke Security-herreview gaf **GO**. De beschermde tijdelijke
+QA-runner schrijft voortaan de quarantainestatus vóór een fout over
+parentwijziging; de alleen-lezen diagnose kan de reeds bestaande oudere
+`matrix_complete`-journal uitsluitend met gebonden mislukte rapportage,
+ingetrokken token en inactief kind herstellen. Zij projecteert uitsluitend
+een begrensde typed-waitcode voor de oude run. Het QA-kind blijft momenteel
+ingetrokken en in quarantaine; alleen onafhankelijke QA voert de diagnose
+en eventuele veilige opruiming uit.
+
+Gemeten lokale gates op deze batch: backend **4724 passed, 7 skipped**
+(log SHA-256 `06580b5a4bf390a44f89e7bee7479c085f618c93e5a6e4dd4019a2dcc222a0bc`);
+gerichte backend **131/131**; frontend commandtests **70/70**, typecheck,
+i18n lint/tests, proposaltests, productiebuild en high audit groen;
+FastAPI/Celery-actiematrix **17/17** (artifact SHA-256
+`a8435b6e58b6e74a20a87e63c49b0342ebfa0d62ab5156ff2a5615833b2de4ed`),
+adaptertests **26/26**. De echte provider-developmentset slaagde **20/20**
+(artifact SHA-256 `74eeb8d5356c12f2a8ea023ff3f5de677deea1f9416d4091e2a0abfcbed879cd`)
+en de regressieset **109/109** (artifact SHA-256
+`c7464267826919c8667c94cc637799f189eb2bb05ab229793386091e7981c88b`),
+beide met 100% operation-, entiteit-, doelasset-, polariteit-, referentie-,
+verduidelijkings- en missing-input-accuracy en nul provider-, schema-, parse-,
+validatie- of timeoutfouten. CI en deployment zijn nog in afwachting.
+Deze release is een diagnose- en watchlistreparatie; de ETH-tradecase mag
+pas als gerepareerd worden gemeld na oorzaakvaststelling en onafhankelijke
+live hertest.
+
 ## FINN watchlistvervanging en klikbare setupkeuze (12 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_QA_HANDOFF_PENDING_FINAL_SHA`. Onafhankelijke browsertest op live SHA

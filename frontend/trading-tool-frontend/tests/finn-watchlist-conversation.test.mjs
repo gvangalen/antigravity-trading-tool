@@ -10,6 +10,24 @@ const markets = [
   { pair: 'BTC/USDT', quote_currency: 'USDT', status: 'available' },
 ];
 
+function mentionsIn(text) {
+  const entries = [
+    { word: 'Apple', ...apple },
+    { word: 'Bitcoin', ...btc },
+    { word: 'Ethereum', ...eth },
+    { word: 'BTC/EUR', ...btc, quote_currency: 'EUR' },
+    { word: 'BTC/USDT', ...btc, quote_currency: 'USDT' },
+  ];
+  const mentions = [];
+  for (const entry of entries) {
+    for (const match of text.matchAll(new RegExp(entry.word.replace('/', '\\/'), 'gi'))) {
+      mentions.push({ ...entry, start: match.index, end: match.index + entry.word.length });
+    }
+  }
+  return mentions.sort((left, right) => left.start - right.start)
+    .filter((mention, index, all) => !all.slice(0, index).some((other) => other.start === mention.start && other.end > mention.end));
+}
+
 test('bare crypto add offers clickable market choices from supplied market catalog', () => {
   for (const target of [btc, eth]) {
     const intent = watchlistIntent(`Voeg ${target.symbol} toe aan mijn watchlist`, [target]);
@@ -48,6 +66,39 @@ test('natural in plaats van phrasing resolves direction without a ticker special
   assert.equal(intent.kind, 'replace');
   assert.equal(intent.source.symbol, 'AAPL');
   assert.equal(intent.target.symbol, 'BTC');
+});
+
+test('repeated directed asset names resolve one safe replacement with clickable pairs', () => {
+  const text = 'Ik wil in plaats van Apple voortaan Bitcoin volgen. Vervang Apple in mijn watchlist door Bitcoin.';
+  const intent = watchlistIntent(text, mentionsIn(text), [{ symbol: 'AAPL', market_id: null }]);
+  assert.equal(intent.kind, 'replace');
+  assert.equal(intent.source.symbol, 'AAPL');
+  assert.equal(intent.target.symbol, 'BTC');
+  assert.deepEqual(watchlistChoices(intent, [{ symbol: 'AAPL', market_id: null }], markets).choices
+    .map((choice) => choice.action.target_quote_currency), ['EUR', 'USDT']);
+});
+
+test('a previous unrelated pair cannot determine the replacement quote', () => {
+  const text = 'BTC/EUR staat al in mijn watchlist. Vervang Apple door Bitcoin.';
+  const intent = watchlistIntent(text, mentionsIn(text), [{ symbol: 'AAPL', market_id: null }]);
+  assert.equal(intent.kind, 'replace');
+  assert.equal(intent.target.quote_currency, undefined);
+  assert.equal(watchlistChoices(intent, [{ symbol: 'AAPL', market_id: null }], markets).choices.length, 2);
+});
+
+test('negated, conflicting and self-directed replacements do not offer a proposal', () => {
+  for (const text of [
+    'Vervang Apple niet door BTC/EUR in mijn watchlist.',
+    'Vervang Apple door Bitcoin en Bitcoin door Apple in mijn watchlist.',
+    'Vervang Apple door Apple en BTC/EUR in mijn watchlist.',
+    'Vervang Apple door BTC/EUR. Vervang Bitcoin door Apple in mijn watchlist.',
+    'Vervang Apple door Bitcoin in mijn watchlist. Verwijder Bitcoin uit mijn watchlist.',
+    'Vervang Apple door Bitcoin in mijn watchlist. Voeg BTC/EUR toe aan mijn watchlist.',
+  ]) {
+    const intent = watchlistIntent(text, mentionsIn(text), [{ symbol: 'AAPL', market_id: null }]);
+    assert.notEqual(intent?.kind, 'replace', text);
+    assert.deepEqual(watchlistChoices(intent, [{ symbol: 'AAPL', market_id: null }], markets)?.choices, []);
+  }
 });
 
 test('stop following one asset and follow another keeps replacement direction', () => {
