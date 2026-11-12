@@ -39,11 +39,36 @@ def test_replacement_direction_comes_from_words_and_catalog_mentions():
     assert replacement_mentions("Vergelijk Apple met Bitcoin", CATALOG) is None
 
 
+def test_repeated_asset_names_keep_a_consistent_directed_replacement():
+    cases = (
+        ("Ik wil in plaats van Apple voortaan Bitcoin volgen. Vervang Apple in mijn watchlist door Bitcoin.", "AAPL", "BTC", None),
+        ("Vervang Apple in mijn watchlist door BTC/EUR.", "AAPL", "BTC", "EUR"),
+        ("Replace Ether with Apple. I want Apple instead of Ethereum.", "ETH", "AAPL", None),
+    )
+    for message, source, target, quote in cases:
+        result = replacement_mentions(message, CATALOG)
+        assert result is not None
+        assert (result["source"]["symbol"], result["target"]["symbol"]) == (source, target)
+        assert result["target"]["quote_currency"] == quote
+
+    assert replacement_mentions("Vervang Apple door Bitcoin. Vervang Bitcoin door Apple.", CATALOG) is None
+    assert replacement_mentions("Vervang Apple door Bitcoin en vervang Bitcoin door Apple", CATALOG) is None
+    assert replacement_mentions("Vervang Apple door Bitcoin en Bitcoin door Apple", CATALOG) is None
+    assert replacement_mentions("Vervang Apple door Apple en BTC", CATALOG) is None
+    assert replacement_mentions("Vervang Apple en BTC door Apple", CATALOG) is None
+    assert replacement_mentions("Vervang Apple niet door BTC/EUR in mijn watchlist.", CATALOG) is None
+    assert replacement_mentions("BTC/EUR staat al in mijn watchlist. Vervang Apple door Bitcoin.", CATALOG)["target"]["quote_currency"] is None
+    assert replacement_mentions("Vervang Apple door BTC/EUR. Vervang Apple door BTC/USDT.", CATALOG) is None
+    assert replacement_mentions("Vervang Apple door Bitcoin. Volg ook Ether.", CATALOG) is None
+
+
 def test_responses_front_door_routes_replacements_through_action_contract():
     async def exercise():
         front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="replacement-test")
         cases = (
             ("Apple niet meer volgen; volg Bitcoin", "BTC", None, ["quote_currency"]),
+            ("Ik wil in plaats van Apple voortaan Bitcoin volgen. Vervang Apple in mijn watchlist door Bitcoin.", "BTC", None, ["quote_currency"]),
+            ("BTC/EUR staat al in mijn watchlist. Vervang Apple door Bitcoin.", "BTC", None, ["quote_currency"]),
             ("Verwijder Apple en voeg BTC/EUR toe aan de watchlist", "BTC", "EUR", []),
             ("Verwijder Apple en voeg ETH toe aan de watchlist", "ETH", None, ["quote_currency"]),
         )

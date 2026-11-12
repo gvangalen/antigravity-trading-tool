@@ -764,12 +764,23 @@ def test_follow_replacement_collects_destination_instead_of_removal_source():
         "Apple niet meer volgen; volg Bitcoin",
         "Verwijder Apple en voeg BTC toe aan mijn watchlist",
         "Nee, ik wil in plaats van Apple voortaan Bitcoin volgen op mijn watchlist",
+        "Ik wil in plaats van Apple voortaan Bitcoin volgen. Vervang Apple in mijn watchlist door Bitcoin.",
     ):
         analysis = SERVICE.analyze(message=message)
         assert analysis.request_plan.operation_id == "watchlist_add"
         assert analysis.request_plan.target_asset == "BTC"
         assert analysis.request_plan.operation_state["collected_inputs"] == {"asset": "BTC"}
         assert analysis.request_plan.operation_state["missing_required_inputs"] == ["quote_currency"]
+
+
+def test_replacement_does_not_take_a_pair_from_an_unrelated_sentence_or_negation():
+    unrelated = SERVICE.analyze(message="BTC/EUR staat al in mijn watchlist. Vervang Apple door Bitcoin.")
+    assert unrelated.request_plan.operation_id == "watchlist_add"
+    assert unrelated.request_plan.operation_state["collected_inputs"] == {"asset": "BTC"}
+    assert unrelated.request_plan.operation_state["missing_required_inputs"] == ["quote_currency"]
+
+    negated = SERVICE.analyze(message="Vervang Apple niet door BTC/EUR in mijn watchlist.")
+    assert negated.request_plan.operation_id != "watchlist_add"
 
 
 def test_two_asset_change_without_scope_asks_before_selecting_an_action():

@@ -27,7 +27,7 @@ import { clearActiveFinnConversation, readActiveFinnConversation, writeActiveFin
 import { parseFinnChatText } from "@/lib/finnChatText.mjs";
 import { finnSubmissionLocale } from "@/lib/finnChatLocale.mjs";
 import { inactiveProposalIds, isFinnProposalCorrection, mapBackendSessionMessages, retireEarlierFinnProposalCards, retireFinnProposalCards, setupDraftFrequencyLabel, setupDraftFromProposal, tradeSetupReviewComplete, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "@/lib/finnProposalCardState.mjs";
-import { clarificationQuestionChoices, draftConversationCopy, draftQuestionChoices, hasConfirmableDraft, isCollectingDraft, isOpenClarification } from "@/lib/finnDraftConversation.mjs";
+import { conversationQuestionChoices, draftConversationCopy, hasConfirmableDraft, isCollectingDraft, isOpenClarification } from "@/lib/finnDraftConversation.mjs";
 import { matchAssetsInText, fetchTradingMarkets } from "@/lib/api/assets";
 import { fetchWatchlist } from "@/lib/api/watchlist";
 import { watchlistIntent, watchlistChoices, watchlistScopeChoices, replacementAfterConfirmedAdd } from "@/lib/finnWatchlistConversation.mjs";
@@ -2186,9 +2186,7 @@ function AIAssistantContent({
   const renderDraftQuestionChoices = (message, messageIndex) => {
     if (message.isComplete === false || (!isCollectingDraft(message) && !isOpenClarification(message)) || message.draftCanceled || message.draftExecuted) return null;
     if (messages.slice(messageIndex + 1).some((later) => later.role === "user")) return null;
-    const choices = isOpenClarification(message)
-      ? clarificationQuestionChoices(message)
-      : draftQuestionChoices(message, locale);
+    const choices = conversationQuestionChoices(message, locale);
     const copy = draftConversationCopy(locale);
     return (
       <div className={`mt-3 space-y-2 ${choices.length > 5 ? "max-h-72 overflow-y-auto" : ""}`} aria-label={choices.length ? copy.hint : copy.freeTextHint}>

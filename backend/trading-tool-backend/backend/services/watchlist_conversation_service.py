@@ -52,19 +52,66 @@ def replacement_mentions(text: str, catalog: Mapping[str, Mapping[str, Any]]) ->
     """
     value = str(text or "")
     mentions = asset_mentions(value, catalog)
-    if len(mentions) != 2 or mentions[0]["symbol"] == mentions[1]["symbol"]:
+    if len({mention["symbol"] for mention in mentions}) != 2:
         return None
-    marker = re.search(r"\b(?:in\s+plaats\s+van|instead\s+of|anstatt)\b", value, re.I)
-    if marker and mentions[0]["end"] <= marker.start() and mentions[1]["start"] >= marker.end():
-        target, source = mentions
-    elif marker and marker.end() <= mentions[0]["start"]:
-        source, target = mentions
-    elif re.search(r"\b(?:verwijder|haal|remove|stop)\b.*\b(?:voeg|add|volg|follow)\b", value, re.I | re.S) or re.search(
-        r"\bniet\s+meer\s+volgen\b.*\b(?:volg|follow)\b", value, re.I | re.S,
-    ):
-        source, target = mentions
-    else:
+
+    def direction(fragment: str, pair: list[dict[str, Any]]) -> tuple[dict[str, Any], dict[str, Any]] | None:
+        first, second = pair
+        marker = re.search(r"\b(?:in\s+plaats\s+van|instead\s+of|anstatt)\b", fragment, re.I)
+        if marker and first["end"] <= marker.start() and second["start"] >= marker.end():
+            return second, first
+        if marker and marker.end() <= first["start"]:
+            return first, second
+        if re.search(r"\b(?:vervang|replace|ersetze)\b.*\b(?:door|with|durch)\b", fragment, re.I | re.S):
+            if re.search(r"\b(?:niet|not|nicht)\b", fragment, re.I):
+                return None
+            return first, second
+        if re.search(r"\b(?:verwijder|haal|remove|stop)\b.*\b(?:voeg|add|volg|follow)\b", fragment, re.I | re.S) or re.search(
+            r"\bniet\s+meer\s+volgen\b.*\b(?:volg|follow)\b", fragment, re.I | re.S,
+        ):
+            return first, second
         return None
+
+    directions: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    for sentence in re.finditer(r"[^.;!?]+", value):
+        for clause in re.split(r"(?=\b(?:vervang|replace|ersetze)\b)", sentence.group(), flags=re.I):
+            clause_mentions = asset_mentions(clause, catalog)
+            # More than two mentions in one clause can describe a second or
+            # self-directed replacement. Never discard those instructions.
+            if len(clause_mentions) > 2:
+                return None
+            if len(clause_mentions) == 2 and re.search(r"\b(?:vervang|replace|ersetze)\b", clause, re.I) and re.search(
+                r"\b(?:niet|not|nicht)\b", clause, re.I,
+            ):
+                return None
+            distinct = list(dict.fromkeys(item["symbol"] for item in clause_mentions))
+            if len(clause_mentions) == 2 and len(distinct) == 1 and re.search(
+                r"\b(?:vervang|replace|ersetze)\b", clause, re.I,
+            ):
+                return None
+            if len(distinct) == 2:
+                pair = [next(item for item in clause_mentions if item["symbol"] == symbol) for symbol in distinct]
+                parsed = direction(clause, pair)
+                if parsed:
+                    directions.append(parsed)
+    if not directions:
+        if len(mentions) != 2:
+            return None
+        parsed = direction(value, mentions)
+        if parsed:
+            directions.append(parsed)
+    if not directions:
+        return None
+    source, target = directions[0]
+    for other_source, other_target in directions[1:]:
+        if (source["symbol"], target["symbol"]) != (other_source["symbol"], other_target["symbol"]):
+            return None
+        for current, other in ((source, other_source), (target, other_target)):
+            quote = other["quote_currency"]
+            if quote:
+                if current["quote_currency"] and current["quote_currency"] != quote:
+                    return None
+                current["quote_currency"] = quote
     return {"source": source, "target": target}
 
 
