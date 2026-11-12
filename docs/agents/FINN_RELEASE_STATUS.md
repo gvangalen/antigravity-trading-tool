@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN beschermde trade-QA child-namespace herstel (12 november 2026)
 
-Phase: `LOCAL_VALIDATION`. Onafhankelijke QA op live
+Phase: `DEPLOYED_PENDING_FINAL_SHA`. Onafhankelijke QA op live
 `939b84caaf74942e4cab13dd9b4d0870fd57f2a6` gaf voor de volledige
 handmatige-tradematrix **NOT_ACCEPTED / INCOMPLETE door runnerinfrastructuur**,
 geen bewezen productdefect. Matrixrun `43291674279`, artifact SHA-256
@@ -48,7 +48,16 @@ en regression **109/109** (artifact SHA-256
 `b994fd15df3b42f800ae930d8526442a72d59bdc5de284c6642c05959aa0a179`)
 hadden 100% operation-, entiteit-, doelasset-, polariteit-, referentie-,
 verduidelijkings- en missing-input-accuracy en nul provider-, schema-,
-parse-, validatie- of timeoutfouten. CI en deployment volgen nog.
+parse-, validatie- of timeoutfouten.
+
+Product-PR [#1015](https://github.com/gvangalen/antigravity-trading-tool/pull/1015)
+had vijf groene PR-CI-jobs (run `43295404364`) en is gemerged als
+`4ad62910f71654224bdcc17a6b49917957e3b821`. De vijf main-CI-jobs
+(run `43296350865`) en Auto Deploy (run `43297150835`) slaagden. Publieke
+backend-health en frontend-buildinfo gaven beide HTTP 200 en exact deze SHA.
+Deze statuswijziging creëert een volgende main-SHA; Build wacht de laatste
+main-CI, Auto Deploy en publieke SHA-pariteit af vóór de onafhankelijke
+beschermde zes-case matrix.
 
 ## FINN trade-QA broncontrole en watchlistantwoord (12 november 2026)
 
