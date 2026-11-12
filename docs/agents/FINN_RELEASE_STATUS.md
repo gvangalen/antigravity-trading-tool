@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN handmatig tradevoorstel: tijdelijk geïsoleerde QA-matrix (12 november 2026)
 
-Phase: `QA_DIAGNOSIS_REPAIR_IN_PROGRESS`. De eerste productrelease was
+Phase: `PRODUCT_DEPLOYED_QA_DIAGNOSIS_PENDING`. De eerste productrelease was
 `d24c90f7da54b77073cd6a98217e925b92ddbfde`. PR
 [#998](https://github.com/gvangalen/antigravity-trading-tool/pull/998)
 had vijf groene PR-CI-jobs (run `43182417071`) en is gemerged als
@@ -76,6 +76,16 @@ quarantaine-cleanup en daarna een nieuwe matrix beoordelen.
 De oorspronkelijke parenthash is niet bewaard; de diagnose kan dus niet
 achteraf bewijzen dat de parent tijdens de mislukte poging ongewijzigd bleef.
 De afzonderlijke cleanup controleert de parent wel vóór en na zijn eigen actie.
+
+PR [#1003](https://github.com/gvangalen/antigravity-trading-tool/pull/1003)
+had vijf groene PR-CI-jobs (`43196365746`) en is gemerged als
+`d9f6d1572de39101dd0b1b67274ada4ec33dd727`. De vijf main-CI-jobs
+(`43197211467`) en Auto Deploy (`43197949369`) slaagden; publieke backend
+health en frontend build-info gaven HTTP 200 en exact die SHA. De gerichte
+runner-/workflow-/authsuite gaf **141/141**, `actionlint` en shellsyntax waren
+groen. Onafhankelijke QA, Security en Architecture gaven code-GO voor de
+diagnose. Deze statuswijziging creëert een nieuwe main-SHA; QA begint pas na
+controle van de laatste CI, Auto Deploy en publieke SHA-pariteit.
 
 Op de vorige diagnostische SHA `a0129feb9d0b27f024944ad8e8cc965f5ecbd5bb`
 bevestigde onafhankelijke read-only QA auth (`43172865270`) en drie beschikbare
