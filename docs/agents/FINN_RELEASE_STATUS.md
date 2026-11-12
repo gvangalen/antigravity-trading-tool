@@ -4,6 +4,68 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN handmatig tradevoorstel: tijdelijk geïsoleerde QA-matrix (12 november 2026)
+
+Phase: `CANDIDATE_LOCAL_VALIDATION`. De laatste publiek geverifieerde
+diagnoserelease is `a0129feb9d0b27f024944ad8e8cc965f5ecbd5bb` (PR #996 en
+status-PR #997); de laatste vijf main-CI-jobs (`43171919163`) en Auto Deploy
+(`43172580098`) slaagden en backend/frontend gaven HTTP 200 met exact die SHA.
+Onafhankelijke read-only QA bevestigde auth (`43172865270`) en drie beschikbare
+planbronnen (`43172966374`, artifact SHA-256
+`c64f9e183a16ad144e7e0f19f09752739c1880c1bd7534361934fd9191f9642d`).
+De BTC/EUR-doelmarkt heeft geen andere-marktconfiguratie, maar wel een
+dagscore met `market_id IS DISTINCT FROM` de doelmarkt; die kan ook ongescopeerd
+zijn. De gebonden prepare-route blijft daarom terecht geblokkeerd. De volledige
+kaart-/opslagmatrix is op deze SHA nog niet uitgevoerd of geaccepteerd.
+
+De nieuwe kandidaat houdt de serverbinding op de oorspronkelijke QA-eigenaar
+en maakt onder de bestaande hostbrede QA-lock één tijdelijk, gemarkeerd kind.
+Het account blijft inactief tijdens voorbereiding, krijgt alleen voor de
+matrix een kort geldige, DB-leasegebonden bearer en mag via FINN uitsluitend
+een `create_manual_trade_plan`-voorstel publiceren, bevestigen en opslaan.
+Er zijn twee BTC-keuzes voor een echte vervolgvraag, naast de doelsetup; de
+score- en adviesketen gebruikt echte bronnen. Na een volledig geslaagde matrix
+vereist cleanup terminale runs, een verse bearer die vóór intrekking 200 en
+erna 401 geeft, nul child-rijen, en
+een onveranderde hash van de oorspronkelijke QA-eigenaar. Onzekere runs worden
+ingetrokken en in quarantaine gehouden; QA heeft een apart exact-namespace
+cleanup-profiel na diagnose. Een child-proces houdt de QA-lock ook bij een
+afgebroken wrapper vast. De server-side QA-secretbinding wordt niet gewijzigd.
+Zeven owner-gebonden indicator-/regel-/logtabellen krijgen idempotente
+`ON DELETE CASCADE NOT VALID`-foreign keys. Daarmee blijven historische
+weesrijen en globale NULL-rijen ongemoeid, terwijl een late child-write na
+verwijdering door PostgreSQL wordt geweigerd. Algemene achtergrondselecties
+slaan de gemarkeerde tijdelijke QA-eigenaar over; de expliciete prepare-route
+kan hem nog wel scoren.
+
+De gerichte auth/lifecycle/cleanup-tests zijn **12/12** groen. De volledige
+backend-suite na de migratie- en achtergrondselectiewijzigingen gaf **4712
+passed, 7 skipped** (log SHA-256
+`7f544d5ee52b46d106797137b8f80f83adda0a12d9cc0ce9b9e4bac9e2b4d97b`).
+De gerichte matrix-/achtergrondtests na de market-sweep-correctie gaven
+**70/70**; de latere `confdeltype`-correctie is opnieuw lokaal op PostgreSQL
+en met gerichte cleanuptests gevalideerd.
+De lokale workeractie-matrix op de herstartte finale services
+gaf **17/17** (artifact SHA-256
+`f086dc7cad07098efe6a462d9dbbf2095ea8f0a10919e3d2111ebb19a8a41034`)
+en adaptertests **26/26**. Echte providerontwikkeling gaf **20/20**, nul
+provider-/schema-/parse-/timeout-/validatiefouten (artifact SHA-256
+`8c5fe257689ef2b7c8ee7897439f7f5d23fcc55ac66cc0189ac555ad0a929a13`);
+echte providerregressie gaf **109/109** met dezelfde nul foutpercentages
+(artifact SHA-256
+`586b9a4914fceb0e22f5d0d40b17a2c3293e9c8dcda3fcb5335816ad620b072a`).
+Een lokale proef op de actuele gemigreerde
+Postgres verwijderde de child en rijen uit `macro_data`,
+`market_data_indicators` en `technical_indicators` volledig, met onveranderde
+parenthash. De nieuwe FK-migratie draaide tweemaal idempotent; een aparte
+Postgres-proef bevestigde cascade over alle zeven tabellen en afwijzing van
+een nieuwe meting na owner-delete. De expliciete deploymigratielijst en
+schema-plangate bevatten deze migratie. Onafhankelijke Security, Architecture
+en QA gaven code-GO; live runtime en echte cleanup blijven QA-eigendom. QA heeft een
+zes-case afgeschermd manifest voorbereid met setupkeuze in hetzelfde gesprek,
+de drie adviestakken, niet-uitvoerbare opslag en replay; er is nog geen
+beschermde matrix gestart.
+
 ## FINN handmatig tradevoorstel: niet-doelmarkt bewijsdiagnose (12 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_QA_PENDING`. De diagnostische bronrelease is via

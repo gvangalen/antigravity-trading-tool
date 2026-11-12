@@ -172,7 +172,7 @@ class MarketDataIndicator(Base):
     score = Column(Numeric)
     symbol = Column(String, default="BTC")
     market_id = Column(BigInteger, ForeignKey('trading_markets.id'), nullable=True)
-    user_id = Column(Integer, nullable=True) # UUID via clerk/nextauth o.i.d.
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
     source_observed_at = Column(DateTime, nullable=True)
 
@@ -191,7 +191,7 @@ class MarketIndicatorRule(Base):
     score_mode = Column(String, default='standard')
     weight = Column(Numeric, default=1.0)
     is_active = Column(Boolean, default=True)
-    user_id = Column(Integer, nullable=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=True)
 
 class UserIndicatorConfig(Base):
     """
@@ -227,7 +227,7 @@ class MacroData(Base):
     action = Column(String)
     score = Column(Numeric)
     symbol = Column(String, default="BTC")
-    user_id = Column(Integer, nullable=True) # UUID via clerk/nextauth o.i.d.
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
     source_observed_at = Column(DateTime, nullable=True)
 
@@ -246,7 +246,7 @@ class MacroIndicatorRule(Base):
     score_mode = Column(String, default='standard')
     weight = Column(Numeric, default=1.0)
     is_active = Column(Boolean, default=True)
-    user_id = Column(Integer, nullable=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=True)
 
 class TechnicalDataIndicator(Base):
     __tablename__ = 'technical_indicators'
@@ -259,7 +259,7 @@ class TechnicalDataIndicator(Base):
     uitleg = Column(String)
     symbol = Column(String, default="BTC")
     market_id = Column(BigInteger, ForeignKey('trading_markets.id'), nullable=True)
-    user_id = Column(Integer, nullable=True) # UUID via clerk/nextauth o.i.d.
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
     source_observed_at = Column(DateTime, nullable=True)
 
@@ -278,7 +278,7 @@ class TechnicalIndicatorRule(Base):
     score_mode = Column(String, default='standard')
     weight = Column(Numeric, default=1.0)
     is_active = Column(Boolean, default=True)
-    user_id = Column(Integer, nullable=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=True)
 
 class MarketData7D(Base):
     __tablename__ = 'market_data_7d'
@@ -367,7 +367,7 @@ class SystemLog(Base):
     message = Column(String, nullable=False)
     source = Column(String, nullable=False) # 'backend', 'api', 'auth', 'market_data', 'ai', 'db'
     endpoint = Column(String, nullable=True)
-    user_id = Column(Integer, nullable=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=True)
     metadata_json = Column("metadata", JSON, nullable=True) # Context: payloads, stack traces, etc.
     created_at = Column(DateTime, default=datetime.utcnow)
 

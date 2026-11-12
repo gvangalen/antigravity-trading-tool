@@ -1,5 +1,6 @@
 import os
 import hashlib
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, Any
@@ -91,8 +92,79 @@ CAPACITY_FIXTURE_ROUTES = frozenset({
 })
 
 
+FINN_TEMP_QA_KIND = "manual_trade_temporary_v1"
+FINN_TEMP_QA_ROUTE_RULES = (
+    ("GET", re.compile(r"/api/auth/me")),
+    ("POST", re.compile(r"/api/assistant/v2/runs")),
+    ("GET", re.compile(r"/api/assistant/v2/runs/[A-Za-z0-9_-]+")),
+    ("GET", re.compile(r"/api/assistant/v2/runs/[A-Za-z0-9_-]+/stream")),
+    ("POST", re.compile(r"/api/assistant/v2/runs/[A-Za-z0-9_-]+/cancel")),
+    ("GET", re.compile(r"/api/assistant/v2/proposals/[A-Za-z0-9_-]+")),
+    ("POST", re.compile(r"/api/assistant/v2/proposals/[A-Za-z0-9_-]+/(?:publish|confirm|execute)")),
+)
+FINN_TEMP_QA_PROPOSAL_WRITE = re.compile(
+    r"/api/assistant/v2/proposals/([A-Za-z0-9_-]+)/(?:publish|confirm|execute)")
+
+
+async def _validate_finn_temp_qa_token(payload: Dict[str, Any], request: Request,
+                                       *, bearer_token: str | None,
+                                       selected_token: str) -> None:
+    """A temporary QA bearer is valid only while its owner-bound lease is active."""
+    from sqlalchemy import select
+    from backend.infrastructure.database import async_session_factory
+    from backend.infrastructure.models import FinnV2Proposal, User
+
+    fixture = payload.get("finn_temp_qa")
+    if (not bearer_token or selected_token != bearer_token or not isinstance(fixture, dict)
+            or fixture.get("kind") != FINN_TEMP_QA_KIND
+            or not isinstance(fixture.get("namespace"), str)
+            or not isinstance(fixture.get("lease"), str)
+            or not any(method == request.method and rule.fullmatch(request.url.path)
+                       for method, rule in FINN_TEMP_QA_ROUTE_RULES)):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Temporary QA token is restricted to FINN test routes")
+    try:
+        subject = int(payload["sub"])
+    except (KeyError, ValueError, TypeError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Temporary QA token subject invalid")
+    proposal_match = (FINN_TEMP_QA_PROPOSAL_WRITE.fullmatch(request.url.path)
+                      if request.method == "POST" else None)
+    async with async_session_factory() as session:
+        user = (await session.execute(select(User).where(User.id == subject))).scalar_one_or_none()
+        proposal = None
+        if proposal_match is not None:
+            proposal = (await session.execute(select(FinnV2Proposal).where(
+                FinnV2Proposal.id == proposal_match.group(1),
+                FinnV2Proposal.user_id == subject))).scalar_one_or_none()
+    preferences = user.ai_preferences if user is not None else None
+    lease = preferences.get("finn_temp_qa") if isinstance(preferences, dict) else None
+    if (user is None or user.is_active is not True or user.role != "user"
+            or not isinstance(preferences, dict)
+            or preferences.get("qa_fixture") != FINN_TEMP_QA_KIND
+            or not isinstance(lease, dict)
+            or lease.get("namespace") != fixture["namespace"]
+            or lease.get("lease") != fixture["lease"]
+            or lease.get("status") != "active"
+            or not isinstance(lease.get("expires_at"), str)):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Temporary QA lease inactive")
+    try:
+        expiry = datetime.fromisoformat(lease["expires_at"])
+        if expiry.tzinfo is None or expiry <= datetime.now(timezone.utc):
+            raise ValueError("expired")
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Temporary QA lease expired")
+    if proposal_match is not None and (
+            proposal is None or proposal.operation_type != "create_manual_trade_plan"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Temporary QA token permits only manual trade plans")
+
+
 def decode_token(token: str, *, verify_exp: bool = True,
-                 allow_capacity_fixture: bool = False) -> Dict[str, Any]:
+                 allow_capacity_fixture: bool = False,
+                 allow_finn_temp_qa: bool = False) -> Dict[str, Any]:
     try:
         payload = jwt.decode(
             token,
@@ -104,6 +176,8 @@ def decode_token(token: str, *, verify_exp: bool = True,
         raise ValueError(f"Invalid token: {e}")
     if "capacity_fixture" in payload and not allow_capacity_fixture:
         raise ValueError("Capacity fixture token is not valid for this operation")
+    if "finn_temp_qa" in payload and not allow_finn_temp_qa:
+        raise ValueError("Temporary QA token is not valid for this operation")
     return payload
 
 
@@ -129,7 +203,7 @@ async def get_current_user(
         )
 
     try:
-        payload = decode_token(token, allow_capacity_fixture=True)
+        payload = decode_token(token, allow_capacity_fixture=True, allow_finn_temp_qa=True)
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -159,6 +233,10 @@ async def get_current_user(
         ):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                                 detail="Capacity fixture token is restricted to read-only load routes")
+
+    if "finn_temp_qa" in payload:
+        await _validate_finn_temp_qa_token(payload, request, bearer_token=bearer_token,
+                                           selected_token=token)
 
     return {
         "id": int(user_id),

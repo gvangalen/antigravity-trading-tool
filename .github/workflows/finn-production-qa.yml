@@ -21,6 +21,8 @@ name: FINN Production QA
           - manual_trade_source_audit
           - manual_trade_fixture_preflight
           - manual_trade_fixture_prepare
+          - manual_trade_temporary_matrix
+          - manual_trade_temporary_cleanup
           - trade_review_preflight
           - manifest_key
           - targeted_regression
@@ -122,7 +124,7 @@ jobs:
         run: |
           set -uo pipefail
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$QA_PROFILE" =~ ^(auth_preflight|watchlist_browser_ui|watchlist_context_audit|manual_trade_source_audit|manual_trade_fixture_preflight|manual_trade_fixture_prepare|trade_review_preflight|manifest_key|targeted_regression|runtime_acceptance|action_contract_acceptance|full_release_acceptance|safety|latency|score2_stale_paper|score2_positive_paper|score2_outside_paper|score2_exact_eur_paper|score2_exact_usdt_paper|trader_pair_score_continuity|trader_account_state_readback|aapl_paper_quote_coach|trader_source_time_parity|trader_paper_exit_reconciliation|trader_paper_exit_fixture_audit|trader_pair_fixture_cleanup|trader_strategy_schema_audit|closed_paper_trade_review|closed_paper_trade_review_chat|auto_paper_trade_history|portfolio_paper_fx|portfolio_paper_fx_schema|typed_entry_paper)$ ]]
+          [[ "$QA_PROFILE" =~ ^(auth_preflight|watchlist_browser_ui|watchlist_context_audit|manual_trade_source_audit|manual_trade_fixture_preflight|manual_trade_fixture_prepare|manual_trade_temporary_matrix|manual_trade_temporary_cleanup|trade_review_preflight|manifest_key|targeted_regression|runtime_acceptance|action_contract_acceptance|full_release_acceptance|safety|latency|score2_stale_paper|score2_positive_paper|score2_outside_paper|score2_exact_eur_paper|score2_exact_usdt_paper|trader_pair_score_continuity|trader_account_state_readback|aapl_paper_quote_coach|trader_source_time_parity|trader_paper_exit_reconciliation|trader_paper_exit_fixture_audit|trader_pair_fixture_cleanup|trader_strategy_schema_audit|closed_paper_trade_review|closed_paper_trade_review_chat|auto_paper_trade_history|portfolio_paper_fx|portfolio_paper_fx_schema|typed_entry_paper)$ ]]
           [[ "$MANIFEST_ID" =~ ^[a-z0-9][a-z0-9._-]{0,80}$ ]]
           [[ "$RUN_LABEL" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$ ]]
           [ "${#MANIFEST_BUNDLE}" -le 65535 ]
@@ -154,6 +156,14 @@ jobs:
           fi
           if [ "$QA_PROFILE" = "manual_trade_fixture_prepare" ] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ] || [ "$ALLOW_FIXTURE_ACTIONS" != "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" != "false" ]; }; then
             echo "Manual trade fixture prepare requires fixture authorization and no manifest or execution." >&2
+            exit 1
+          fi
+          if [ "$QA_PROFILE" = "manual_trade_temporary_matrix" ] && { [ "$MANIFEST_ID" = "none" ] || [ "$ALLOW_FIXTURE_ACTIONS" != "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" != "true" ]; }; then
+            echo "The temporary manual-trade matrix requires a QA manifest and both fixture flags." >&2
+            exit 1
+          fi
+          if [ "$QA_PROFILE" = "manual_trade_temporary_cleanup" ] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ] || [ "$ALLOW_FIXTURE_ACTIONS" != "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" != "false" ] || [[ ! "$RUN_LABEL" =~ ^cleanup-qa-[0-9]+-[0-9]+-[0-9a-f]{8}-[0-9a-f]{8}$ ]]; }; then
+            echo "The temporary manual-trade cleanup requires an exact prior namespace and no manifest." >&2
             exit 1
           fi
           if [ "$QA_PROFILE" = "portfolio_paper_fx_schema" ] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ]; }; then
@@ -445,7 +455,7 @@ jobs:
           if [ "$qa_profile" = "typed_entry_paper" ] && [ "$allow_fixture_actions" = "true" ] && [ "$allow_safe_fixture_execution" = "true" ]; then
             export FINN_QA_ALLOW_TYPED_ENTRY_PAPER_FIXTURE=1
           fi
-          if [ "$qa_profile" = "manual_trade_fixture_prepare" ] && [ "$allow_fixture_actions" = "true" ] && [ "$allow_safe_fixture_execution" = "false" ]; then
+          if { [ "$qa_profile" = "manual_trade_fixture_prepare" ] && [ "$allow_fixture_actions" = "true" ] && [ "$allow_safe_fixture_execution" = "false" ]; } || { [ "$qa_profile" = "manual_trade_temporary_matrix" ] && [ "$allow_fixture_actions" = "true" ] && [ "$allow_safe_fixture_execution" = "true" ]; }; then
             export FINN_QA_ALLOW_MANUAL_TRADE_PREPARE=1
           fi
           runner_args=(

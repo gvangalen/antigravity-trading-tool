@@ -62,6 +62,38 @@ that linked reading and refuses an unlinked or additional AAPL reading.
 Provider helpers may also mark the owner's market and technical onboarding
 steps complete. The fixture never changes another user's onboarding state.
 
+### Temporary authenticated manual-trade matrix owner
+
+The user's later, explicit authorization permits one temporary QA child for the
+manual-trade acceptance matrix when the bound owner's existing evidence would
+be affected by fixture preparation. The server secret remains bound to the
+original QA owner. Under the host-wide protected QA lock, the
+`manual_trade_temporary_matrix` profile verifies that original marker, creates
+one random-namespace, non-admin child with no exchange keys, bots or orders,
+then sets `FINN_QA_USER_ID` only in its private matrix subprocess. The child
+receives a daily swing profile, genuine exact-market evidence and marked
+BTC/EUR, ETH/USDT and AAPL/USD setups. The BTC choices intentionally require
+a setup-selection turn in the QA-owned manifest.
+
+The child bearer is scoped to FINN run/proposal endpoints, a bounded JWT TTL,
+the active child lease and the `create_manual_trade_plan` proposal operation.
+It cannot publish, confirm or execute another operation. A complete successful
+matrix requires all child runs to be terminal, a fresh token to return 200
+before revocation and 401 afterward, zero broker/Live effects, deletion of
+all exact child-owned rows, and
+an unchanged hash of the original QA owner's rows. The private journal binds
+the run namespace and SHA; crash/retry revokes and quarantines a child instead
+of replaying matrix writes. Failed or uncertain matrices keep the child
+inactive for QA diagnosis. The separately protected
+`manual_trade_temporary_cleanup` profile can remove only that exact marked,
+quiescent child after QA diagnosis; it does not accept a manifest or execute a
+trade. Seven nullable owner columns in indicator, rule and log tables receive
+`ON DELETE CASCADE NOT VALID` foreign keys: historical orphan rows remain, new
+owner writes must reference an existing user, and late writes after child
+deletion fail. Global scoring and market sweeps skip this QA marker; explicit
+owner-scoped source preparation remains available. Neither profile authorizes
+changes to ordinary users or Live trading.
+
 ### Inactive synthetic score probe owner
 
 The user-authorized `score2_stale_paper` protected QA profile may create one

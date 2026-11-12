@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
@@ -27,7 +28,8 @@ from sqlalchemy import select
 
 from backend.infrastructure.database import async_session_factory
 from backend.infrastructure.models import User
-from backend.utils.auth_utils import ACCESS_TOKEN_EXPIRE_MINUTES, create_access_token
+from backend.utils.auth_utils import (ACCESS_TOKEN_EXPIRE_MINUTES, FINN_TEMP_QA_KIND,
+                                      create_token)
 
 
 def _json_default(value: Any) -> str:
@@ -73,7 +75,40 @@ async def _run() -> int:
         }, indent=2))
         return 1
 
-    token = create_access_token({"sub": str(user.id), "role": user.role})
+    if user.is_active is not True or user.role != "user" or args.minutes < 1:
+        print(json.dumps({"ok": False, "error": "token_issuance_denied"}))
+        return 1
+
+    preferences = user.ai_preferences if isinstance(user.ai_preferences, dict) else {}
+    claim = {}
+    if preferences.get("qa_fixture") == FINN_TEMP_QA_KIND:
+        if os.environ.get("FINN_QA_TEMP_CHILD_RUN") != "1":
+            print(json.dumps({"ok": False, "error": "temporary_token_scope_missing"}))
+            return 1
+        if args.minutes > 40:
+            print(json.dumps({"ok": False, "error": "temporary_ttl_too_long"}))
+            return 1
+        lease = preferences.get("finn_temp_qa")
+        if not isinstance(lease, dict) or lease.get("status") != "active":
+            print(json.dumps({"ok": False, "error": "temporary_lease_inactive"}))
+            return 1
+        try:
+            lease_expiry = datetime.fromisoformat(lease["expires_at"])
+            if (lease_expiry.tzinfo is None or
+                    lease_expiry <= datetime.now(timezone.utc) + timedelta(minutes=args.minutes)):
+                raise ValueError("temporary_lease_too_short")
+        except (KeyError, TypeError, ValueError):
+            print(json.dumps({"ok": False, "error": "temporary_lease_invalid"}))
+            return 1
+        if not isinstance(lease.get("namespace"), str) or not isinstance(lease.get("lease"), str):
+            print(json.dumps({"ok": False, "error": "temporary_lease_invalid"}))
+            return 1
+        claim = {"finn_temp_qa": {"kind": FINN_TEMP_QA_KIND,
+                                  "namespace": lease["namespace"],
+                                  "lease": lease["lease"]}}
+
+    token = create_token({"sub": str(user.id), "role": user.role, **claim},
+                         timedelta(minutes=args.minutes), "access")
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=args.minutes)
     payload: Dict[str, Any] = {
         "ok": True,

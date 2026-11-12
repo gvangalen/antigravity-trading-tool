@@ -46,6 +46,14 @@ class ExactMarketIndicatorService:
                 UserIndicatorConfig.market_id == market.id,
             ).distinct())
             owner_ids.update(int(row[0]) for row in configured_result.all())
+            if owner_ids:
+                eligible = await self.session.execute(text("""
+                    SELECT id FROM users
+                    WHERE id = ANY(CAST(:ids AS integer[]))
+                      AND COALESCE(ai_preferences->>'qa_fixture', '')
+                          <> 'manual_trade_temporary_v1'
+                """), {"ids": sorted(owner_ids)})
+                owner_ids = {int(row[0]) for row in eligible.all()}
         if not owner_ids:
             return {}
         result = await self.session.execute(select(UserIndicatorConfig).where(

@@ -519,7 +519,8 @@ def run_rule_based_daily_scores():
             with conn.cursor() as cur:
                 cur.execute("""
                     SELECT id FROM users
-                    WHERE COALESCE(ai_preferences #>> '{capacity_fixture,kind}', '') <> 'read_only_load_v1';
+                    WHERE COALESCE(ai_preferences #>> '{capacity_fixture,kind}', '') <> 'read_only_load_v1'
+                      AND COALESCE(ai_preferences->>'qa_fixture', '') <> 'manual_trade_temporary_v1';
                 """)
                 users = [r[0] for r in cur.fetchall()]
         finally:

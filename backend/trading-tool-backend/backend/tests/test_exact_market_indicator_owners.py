@@ -27,6 +27,8 @@ def test_watched_pair_inherits_owner_indicators_without_setup():
                 return Result([(7,)])
             if len(statements) == 2:
                 return Result([])
+            if len(statements) == 3:
+                return Result([(7,)])
             return Result([SimpleNamespace(user_id=7, symbol="BTC", category="market",
                                            indicator="price", market_id=None, enabled=True)])
 
@@ -36,7 +38,33 @@ def test_watched_pair_inherits_owner_indicators_without_setup():
     assert "watchlists WHERE market_id" in statements[0]
     assert "w.market_id IS NULL" in statements[0]
     assert "a.quote_currency = :quote_currency" in statements[0]
+    assert "manual_trade_temporary_v1" in statements[2]
     assert owners == {7: {"market": {"price"}, "technical": set()}}
+
+
+def test_global_pair_sweep_excludes_temporary_qa_owner():
+    class Result:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def fetchall(self):
+            return self.rows
+
+        def all(self):
+            return self.rows
+
+    class Session:
+        calls = 0
+
+        async def execute(self, _statement, _params=None):
+            self.calls += 1
+            return Result([(9,)]) if self.calls == 1 else Result([])
+
+    session = Session()
+    market = SimpleNamespace(id=73, asset_symbol="BTC", quote_currency="USDT")
+    owners = asyncio.run(ExactMarketIndicatorService(session)._configured_owners(market))
+    assert owners == {}
+    assert session.calls == 3
 
 
 def test_owner_repair_materializes_only_requested_owner(monkeypatch):

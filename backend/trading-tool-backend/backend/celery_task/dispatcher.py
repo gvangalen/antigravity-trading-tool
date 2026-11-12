@@ -207,12 +207,14 @@ def dispatch_for_all_users(
                     SELECT id FROM users
                     WHERE is_active = true
                       AND COALESCE(ai_preferences #>> '{capacity_fixture,kind}', '') <> 'read_only_load_v1'
+                      AND COALESCE(ai_preferences->>'qa_fixture', '') <> 'manual_trade_temporary_v1'
                     ORDER BY id;
                 """)
             else:
                 cur.execute("""
                     SELECT id FROM users
                     WHERE COALESCE(ai_preferences #>> '{capacity_fixture,kind}', '') <> 'read_only_load_v1'
+                      AND COALESCE(ai_preferences->>'qa_fixture', '') <> 'manual_trade_temporary_v1'
                     ORDER BY id;
                 """)
 

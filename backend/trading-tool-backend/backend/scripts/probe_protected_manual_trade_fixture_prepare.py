@@ -25,6 +25,7 @@ from backend.infrastructure.repositories.setup_repository import SetupRepository
 from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
 from backend.services.indicator_config_service import IndicatorConfigService
 from backend.services.setup_service import SetupService
+from backend.utils.auth_utils import FINN_TEMP_QA_KIND
 
 
 MARKER = "finn_manual_trade_qa_v1"
@@ -69,9 +70,22 @@ async def _owner_and_safety(session, owner: int) -> dict[str, Any]:
     row = (await session.execute(text("""
         SELECT role,is_active,ai_preferences FROM users WHERE id=:owner FOR UPDATE
     """), {"owner": owner})).mappings().one_or_none()
-    if (row is None or row["role"] != "user" or row["is_active"] is not True
-            or not isinstance(row["ai_preferences"], dict)
-            or row["ai_preferences"].get("qa_fixture") != "finn_production_qa_v1"):
+    if (row is None or row["role"] != "user"
+            or not isinstance(row["ai_preferences"], dict)):
+        raise RuntimeError("manual_trade_fixture_owner_invalid")
+    preferences = row["ai_preferences"]
+    if preferences.get("qa_fixture") == FINN_TEMP_QA_KIND:
+        lease = preferences.get("finn_temp_qa")
+        if (os.getenv("FINN_QA_TEMP_CHILD_RUN") != "1"
+                or not isinstance(lease, dict)
+                or lease.get("namespace") != os.getenv("FINN_QA_FIXTURE_NAMESPACE")
+                or lease.get("status") != "preparing"
+                or row["is_active"] is not False
+                or not isinstance(lease.get("parent"), int)
+                or not isinstance(lease.get("lease"), str)):
+            raise RuntimeError("manual_trade_fixture_owner_invalid")
+    elif (preferences.get("qa_fixture") != "finn_production_qa_v1"
+          or row["is_active"] is not True):
         raise RuntimeError("manual_trade_fixture_owner_invalid")
     safety = (await session.execute(text("""
         SELECT

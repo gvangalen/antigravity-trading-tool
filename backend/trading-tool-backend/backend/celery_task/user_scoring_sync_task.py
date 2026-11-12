@@ -21,6 +21,7 @@ def sync_all_users_scores():
                 SELECT id FROM users
                 WHERE is_active = TRUE
                   AND COALESCE(ai_preferences #>> '{capacity_fixture,kind}', '') <> 'read_only_load_v1'
+                  AND COALESCE(ai_preferences->>'qa_fixture', '') <> 'manual_trade_temporary_v1'
             """)
             user_ids = [r[0] for r in cur.fetchall()]
         

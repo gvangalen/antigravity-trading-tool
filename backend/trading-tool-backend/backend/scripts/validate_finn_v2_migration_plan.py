@@ -24,6 +24,7 @@ def canonical_finn_v2_migrations(migrations_dir: Path) -> set[str]:
         if path.is_file() and not path.name.startswith("__")
     }
     migrations.add("2026_09_14_strategy_domain_multiple_strategies.py")
+    migrations.add("2026_11_12_qa_owner_reading_foreign_keys.py")
     return migrations
 
 
