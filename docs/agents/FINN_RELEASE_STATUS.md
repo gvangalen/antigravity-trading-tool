@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN watchlist parser en beschermde trade-QA diagnose (12 november 2026)
 
-Phase: `DIAGNOSTIC_REPAIR_LOCAL_VALIDATION`. Onafhankelijke QA op de vorige
+Phase: `DIAGNOSTIC_DEPLOYED_PENDING_FINAL_SHA`. Onafhankelijke QA op de vorige
 live release `97094374ddc6487d7b8bb24f119557d98d9b0a58` gaf **NOT_ACCEPTED**.
 De natuurlijke herhaalde zin “Ik wil in plaats van Apple voortaan Bitcoin
 volgen. Vervang Apple in mijn watchlist door Bitcoin.” vroeg nogmaals naar de
@@ -44,7 +44,15 @@ en de regressieset **109/109** (artifact SHA-256
 `c7464267826919c8667c94cc637799f189eb2bb05ab229793386091e7981c88b`),
 beide met 100% operation-, entiteit-, doelasset-, polariteit-, referentie-,
 verduidelijkings- en missing-input-accuracy en nul provider-, schema-, parse-,
-validatie- of timeoutfouten. CI en deployment zijn nog in afwachting.
+validatie- of timeoutfouten. Product-PR
+[#1011](https://github.com/gvangalen/antigravity-trading-tool/pull/1011)
+had vijf groene PR-CI-jobs (run `43276414519`) en is gemerged als
+`06396f53148de8bf5690dfa36226bdedc2f8f0cd`. De vijf main-CI-jobs
+(run `43277261485`) en Auto Deploy (run `43278082961`) slaagden. Publieke
+backend-health en frontend-buildinfo gaven beide HTTP 200 en exact deze SHA.
+Deze statuswijziging creëert een volgende main-SHA; Build wacht de laatste
+main-CI, Auto Deploy en publieke SHA-pariteit af vóór de onafhankelijke
+alleen-lezen diagnose en gecontroleerde cleanup.
 Deze release is een diagnose- en watchlistreparatie; de ETH-tradecase mag
 pas als gerepareerd worden gemeld na oorzaakvaststelling en onafhankelijke
 live hertest.
