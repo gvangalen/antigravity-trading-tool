@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN handmatig tradevoorstel: gebonden QA-fixturevoorbereiding (11 november 2026)
 
-Phase: `RELEASE_CANDIDATE_AWAITING_CI`. De beschermde `manual_trade_fixture_prepare` route
+Phase: `PRODUCT_DEPLOYED_QA_PENDING`. De beschermde `manual_trade_fixture_prepare` route
 is een aparte owner-gebonden write met expliciete fixture-autorisatie,
 `manifest_id=none` en uitvoering uitgeschakeld. Ze laat de twee bestaande
 gekoppelde BTC-setups, strategieën en bots ongemoeid; hun gezamenlijke staat
@@ -77,8 +77,16 @@ beide met nul provider-, schema-, parse-, timeout- of validatiefouten.
 Een afzonderlijke echte Twelve Data-ontwikkelbron leverde vijftien afgesloten
 AAPL/USD-candles en een beschikbaar plan. Onafhankelijke QA- en Security-
 codechecks gaven GO voor uitsluitend de begrensde diagnostiek, niet voor
-positieve live acceptatie. CI, Auto Deploy en nieuwe publieke SHA-pariteit
-zijn nog open.
+positieve live acceptatie. PR
+[#994](https://github.com/gvangalen/antigravity-trading-tool/pull/994)
+is met vijf groene PR-CI-jobs (run `43163924960`) gemerged als
+`bd5f3405a4b1d3ff1c2599aa14d7a4198fb1c5e6`. De vijf main-CI-jobs
+(run `43164512851`) en Auto Deploy (run `43165029882`) slaagden. Publieke
+`https://tradamind.com/api/health` en `https://tradamind.com/build-info.json`
+gaven beide HTTP 200 en exact die SHA. Deze statuscommit maakt een nieuwe
+main-SHA; QA begint pas na de laatste bijbehorende CI, Auto Deploy en
+hernieuwde publieke SHA-pariteit. De oorzaak van de live AAPL-bronuitval en
+de volledige kaart-/opslagmatrix zijn nog open.
 
 ## FINN handmatig tradevoorstel: beschermde scorebron-diagnose (11 november 2026)
 
