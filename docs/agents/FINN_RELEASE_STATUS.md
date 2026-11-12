@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN watchlistvervanging en klikbare setupkeuze (12 november 2026)
 
-Phase: `PRODUCT_CANDIDATE_READY`. Onafhankelijke browsertest op live SHA
+Phase: `PRODUCT_DEPLOYED_QA_HANDOFF_PENDING_FINAL_SHA`. Onafhankelijke browsertest op live SHA
 `b34be20facd36613da8ea6b69ef887aaed45a917` was voor deze scope
 **NOT_ACCEPTED**: een natuurlijke, herhaalde Apple→Bitcoin-vervangzin vroeg
 opnieuw naar reeds genoemde assets, en een handmatig BTC/EUR-tradeverzoek
@@ -38,8 +38,14 @@ verduidelijkings- en missing-input-accuracy en zonder provider-, schema-,
 parse-, validatie- of timeoutfout (artifact SHA-256 respectievelijk
 `67ff14a755b7236694009f6c74a1a92dff479db6f99c63e7c7069ff7d684710a`
 en `0262f5564a4d1b1d696704bfd864592c1bca844dc408c4045fd3aa59aa7f0dcb`).
-PR-CI, main-CI, Auto Deploy, publieke SHA-pariteit en onafhankelijke live
-hertest zijn nog niet voltooid.
+Product-PR [#1009](https://github.com/gvangalen/antigravity-trading-tool/pull/1009)
+had vijf groene PR-CI-jobs (run `43263841218`) en is gemerged als
+`0d0e40edadfeeeca14c8c17b46c7dedf3b060316`. De vijf main-CI-jobs
+(run `43264898484`) en Auto Deploy (run `43265773392`) slaagden. Publieke
+backend-health en frontend-buildinfo gaven beide HTTP 200 en exact die SHA.
+Deze statuswijziging creëert een volgende main-SHA; Build wacht de laatste
+main-CI, Auto Deploy en publieke SHA-pariteit af vóór de onafhankelijke live
+hertest. De live hertest is nog niet uitgevoerd.
 
 ## FINN handmatig tradevoorstel: tijdelijk geïsoleerde QA-matrix (12 november 2026)
 
