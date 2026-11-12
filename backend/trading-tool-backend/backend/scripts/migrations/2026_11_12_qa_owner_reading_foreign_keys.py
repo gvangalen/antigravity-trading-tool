@@ -1,7 +1,8 @@
 """Prevent late owner-scoped writes after temporary QA user cleanup.
 
-NOT VALID leaves historical orphan rows untouched while enforcing every new
-insert/update and cascading existing rows when a real owner is deleted.
+Keep existing foreign-key delete actions. Add a NOT VALID cascading key only
+where none exists, leaving historical orphan rows untouched while checking
+new references. The temporary QA cleanup handles non-cascading child rows.
 """
 
 SQL = """

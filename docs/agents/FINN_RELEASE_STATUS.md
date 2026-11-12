@@ -14,6 +14,8 @@ had vijf groene PR-CI-jobs (run `43182417071`) en is gemerged als
 nieuwe FK-migratie: de productiecatalogus bevat al een niet-cascaderende
 `macro_data.user_id`-foreign key. De automatische rollback naar
 `a0129feb9d0b27f024944ad8e8cc965f5ecbd5bb` slaagde volgens de deploylog;
+publieke backend health en frontend build-info gaven daarna HTTP 200 met exact
+die rollback-SHA.
 de kandidaat is niet live geaccepteerd. De compatibiliteitsreparatie behoudt
 bestaande FK-acties en verwijdert rijen van uitsluitend het tijdelijke kind
 onder `FOR UPDATE` op diens owner voordat de owner wordt verwijderd. Een
