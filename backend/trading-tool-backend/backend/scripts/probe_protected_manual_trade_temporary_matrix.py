@@ -48,7 +48,7 @@ def _db(awaitable):
 
 
 def _email(namespace: str) -> str:
-    return f"finn-qa-{namespace}@example.invalid"
+    return f"finn-qa-{namespace}@example.org"
 
 
 def _path_state(path: Path, namespace: str, release_sha: str, parent: int) -> dict[str, Any]:

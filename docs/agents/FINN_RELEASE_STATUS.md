@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN handmatig tradevoorstel: tijdelijk geïsoleerde QA-matrix (12 november 2026)
 
-Phase: `PRODUCT_DEPLOYED_QA_PENDING`. De productrelease is
+Phase: `QA_REPAIR_IN_PROGRESS`. De productrelease is
 `d24c90f7da54b77073cd6a98217e925b92ddbfde`. PR
 [#998](https://github.com/gvangalen/antigravity-trading-tool/pull/998)
 had vijf groene PR-CI-jobs (run `43182417071`) en is gemerged als
@@ -27,9 +27,28 @@ slaagde. PR [#999](https://github.com/gvangalen/antigravity-trading-tool/pull/99
 had vijf groene PR-CI-jobs (`43185144628`) en is gemerged als de productrelease.
 De vijf main-CI-jobs (`43185946855`) en Auto Deploy (`43186669447`) slaagden;
 publieke backend health en frontend build-info gaven HTTP 200 en exact
-`d24c90f7da54b77073cd6a98217e925b92ddbfde`. Deze statuswijziging creëert
-een nieuwe main-SHA; de laatste CI, Auto Deploy en publieke SHA-pariteit worden
-vóór onafhankelijke QA opnieuw gecontroleerd.
+`d24c90f7da54b77073cd6a98217e925b92ddbfde`. Status-PR
+[#1000](https://github.com/gvangalen/antigravity-trading-tool/pull/1000)
+had vijf groene PR-CI-jobs (`43187088285`) en is gemerged als
+`cad5900ca5004dfd6538c458c061b7180f000c0a`. De vijf laatste main-CI-jobs
+(`43187827353`) en Auto Deploy (`43188528599`) slaagden; publieke backend
+health en frontend build-info gaven HTTP 200 met exact die SHA.
+
+Onafhankelijke QA valideerde de manifest-key en releasebinding (run
+`43188982279`, artifact SHA-256
+`8e4f8b3660b162b85b5556e6aaa8b1e547590f977cba8055ab80934cd9ec8f42`).
+De eerste beschermde matrix (run `43189219656`, artifact SHA-256
+`0379bfcd729dbce205d6e86547a5ae198ab6ae0aba7c4bf661df786c6b379099`)
+is **NOT_ACCEPTED / INCOMPLETE**: het tijdelijke kind kreeg via `/api/auth/me`
+HTTP 404 en **0/6** cases startten. Het gegenereerde `@example.invalid`-adres
+voldoet niet aan de bestaande `UserOut.email: EmailStr`-validatie. Er waren
+geen confirm-, execute- of Live-calls. De aparte cleanup (run `43189762759`,
+artifact SHA-256
+`474c8930f6209284fd5f622d81b5cb99d3dae8089c6f25e49c184c5b0eb595f0`)
+verwijderde het kind; de oorspronkelijke QA-eigenaar bleef onveranderd. De
+reparatie gebruikt een door `UserOut` geaccepteerd gereserveerd domein en een
+directe schemaspecifieke regressietest. De volledige matrix wordt pas na
+nieuwe groene CI, deploy en publieke SHA-check herhaald.
 
 Op de vorige diagnostische SHA `a0129feb9d0b27f024944ad8e8cc965f5ecbd5bb`
 bevestigde onafhankelijke read-only QA auth (`43172865270`) en drie beschikbare
@@ -86,8 +105,8 @@ een nieuwe meting na owner-delete. De expliciete deploymigratielijst en
 schema-plangate bevatten deze migratie. Onafhankelijke Security, Architecture
 en QA gaven code-GO; live runtime en echte cleanup blijven QA-eigendom. QA heeft een
 zes-case afgeschermd manifest voorbereid met setupkeuze in hetzelfde gesprek,
-de drie adviestakken, niet-uitvoerbare opslag en replay; er is nog geen
-beschermde matrix gestart.
+de drie adviestakken, niet-uitvoerbare opslag en replay; de eerste beschermde
+run stopte vóór de cases zoals hierboven beschreven.
 
 ## FINN handmatig tradevoorstel: niet-doelmarkt bewijsdiagnose (12 november 2026)
 
