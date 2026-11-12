@@ -178,6 +178,118 @@ def test_temporary_database_phases_share_one_event_loop():
     assert temporary._db(loop_identity()) == temporary._db(loop_identity())
 
 
+def test_quarantined_diagnosis_reads_only_bound_prior_checkpoint(monkeypatch, tmp_path):
+    import asyncio
+    import os
+    from contextlib import asynccontextmanager
+
+    namespace = "qa-123-1-aabbccdd-eeff0011"
+    old_dir = tmp_path / "finn-production-qa-123-1"
+    old_dir.mkdir()
+    old_dir.chmod(0o700)
+    journal = old_dir / "finn-production-qa-123-1.temp-journal.json"
+    journal.write_text(json.dumps({"kind": temporary.FINN_TEMP_QA_KIND,
+                                   "namespace": namespace, "parent": 7,
+                                   "release_sha": "aabbccdd" + "a" * 32,
+                                   "phase": "quarantined"}))
+    journal.chmod(0o600)
+    child_report = old_dir / "finn-production-qa-123-1.child-report.json"
+    child_report.write_text(json.dumps({"workflow_run_id": "123-1",
+                                        "target_sha": "aabbccdd" + "a" * 32,
+                                        "outcome": "failed", "qa_status": "INCOMPLETE",
+                                        "error_category": "privateToken123", "planned_count": 6,
+                                        "attempted_count": 2, "completed_count": 1,
+                                        "failed_count": 1, "not_run_count": 4,
+                                        "auth_preflight": {"http_status": 200,
+                                                           "fixture_authenticated": True},
+                                        "failure_summary": {"product": 1,
+                                                            "runner": 0,
+                                                            "infrastructure": 0},
+                                        "cases": [{"case_status": "completed",
+                                                   "failure_classification": "product",
+                                                   "error_category": "privateToken123",
+                                                   "polling_sse_equal": False,
+                                                   "fixture_action": {
+                                                       "outcome": "proposal_evidence_failed",
+                                                       "error_category": "manual_trade_proposal_invalid",
+                                                       "manual_trade_proposal_evidence": {
+                                                           "passed": False,
+                                                           "private_data": "private prompt"},
+                                                       "manual_trade_saved_evidence": {
+                                                           "plan": {"passed": False}},
+                                                       "manual_trade_replay_unchanged": False},
+                                                   "message": "private prompt"}]}))
+    child_report.chmod(0o600)
+    monkeypatch.setattr(temporary, "QA_STATE_ROOT", tmp_path)
+    monkeypatch.setenv("FINN_QA_USER_ID", "7")
+    monkeypatch.delenv("FINN_QA_ALLOW_FIXTURE_ACTIONS", raising=False)
+    monkeypatch.delenv("FINN_QA_ALLOW_FIXTURE_EXECUTION", raising=False)
+    original_fstat = temporary.os.fstat
+    monkeypatch.setattr(temporary.os, "fstat", lambda fd: object() if fd == 9 else original_fstat(fd))
+
+    class Session:
+        async def execute(self, query, params):
+            if "exchange_keys" in str(query):
+                return _DbResult({"keys": 0, "orders": 0, "bots": 0,
+                                  "strategies": 0, "executable_plans": 0})
+            owner = params["owner"]
+            return _DbResult({"role": "user", "is_active": owner == 7,
+                              "ai_preferences": ({"qa_fixture": temporary.PARENT_MARKER}
+                                                 if owner == 7 else
+                                                 {"qa_fixture": temporary.FINN_TEMP_QA_KIND,
+                                                  "finn_temp_qa": {"namespace": namespace,
+                                                                   "parent": 7,
+                                                                   "status": "revoked"}})})
+
+        async def rollback(self):
+            pass
+
+    @asynccontextmanager
+    async def session_factory():
+        yield Session()
+
+    async def find_child(*_args):
+        return 42
+
+    async def quiescent(*_args):
+        return True
+
+    monkeypatch.setattr(temporary, "async_session_factory", session_factory)
+    monkeypatch.setattr(temporary, "_find_child", find_child)
+    monkeypatch.setattr(temporary, "_child_quiescent", quiescent)
+    monkeypatch.setattr(temporary, "_db", lambda awaitable: asyncio.run(awaitable))
+    result = temporary.diagnose_quarantined(f"diagnose-{namespace}")
+    assert result["child_revoked"] and result["child_quiescent"]
+    assert result["parent_marker_valid"] and not result["unsafe_child_rows_present"]
+    assert result["prior_target_sha"] == "aabbccdd" + "a" * 32
+    assert result["original_child_report_summary"]["attempted_count"] == 2
+    projected = result["original_child_report_summary"]["case_statuses"][0]
+    assert projected["case_status"] == "completed"
+    assert projected["failure_classification"] == "product"
+    assert projected["manual_trade_proposal_passed"] is False
+    assert projected["manual_trade_saved_plan_passed"] is False
+    assert projected["manual_trade_replay_unchanged"] is False
+    assert projected["polling_sse_equal"] is False
+    assert projected["fixture_action_error_category"] == "manual_trade_proposal_invalid"
+    assert "private prompt" not in json.dumps(result)
+    assert "privateToken123" not in json.dumps(result)
+    assert result["original_child_report_summary"]["error_category"] is None
+    assert child_report.exists() and journal.exists()
+    with child_report.open("wb") as handle:
+        handle.truncate(8 * 1024 * 1024 + 1)
+    with pytest.raises(RuntimeError, match="diagnose_report_invalid"):
+        temporary.diagnose_quarantined(f"diagnose-{namespace}")
+
+
+def test_temporary_workflow_never_restarts_one_shot_profiles():
+    workflow = (Path(__file__).resolve().parents[4] / ".github" / "workflows"
+                / "finn-production-qa.yml").read_text()
+    guard = 'if [[ "$QA_PROFILE" =~ ^manual_trade_temporary_(matrix|cleanup|diagnose)$ ]]; then'
+    assert workflow.count(guard) == 2
+    assert workflow.index(guard) < workflow.index('if [ "$incomplete" = "true" ]')
+    assert 'manual_trade_temporary_diagnose' in workflow
+
+
 class _DbResult:
     def __init__(self, value):
         self.value = value

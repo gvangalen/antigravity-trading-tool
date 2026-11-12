@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN handmatig tradevoorstel: tijdelijk geïsoleerde QA-matrix (12 november 2026)
 
-Phase: `PRODUCT_DEPLOYED_QA_PENDING`. De eerste productrelease was
+Phase: `QA_DIAGNOSIS_REPAIR_IN_PROGRESS`. De eerste productrelease was
 `d24c90f7da54b77073cd6a98217e925b92ddbfde`. PR
 [#998](https://github.com/gvangalen/antigravity-trading-tool/pull/998)
 had vijf groene PR-CI-jobs (run `43182417071`) en is gemerged als
@@ -55,6 +55,27 @@ had vijf groene PR-CI-jobs (`43190065892`) en is gemerged als
 health en frontend build-info gaven HTTP 200 met exact die SHA. Deze
 statuswijziging creëert een nieuwe main-SHA; de laatste CI, Auto Deploy en
 publieke SHA-pariteit worden vóór de herhaalde onafhankelijke QA gecontroleerd.
+
+Status-PR [#1002](https://github.com/gvangalen/antigravity-trading-tool/pull/1002)
+had vijf groene PR-CI-jobs (`43191819069`) en is gemerged als
+`3779bfd3d89067aef6207f87fcbf4c347e4f161d`. De vijf main-CI-jobs
+(`43192728197`) en Auto Deploy (`43193545467`) slaagden; backend/frontend
+gaven publiek HTTP 200 en exact die SHA. De onafhankelijke matrix-run
+`43194048942` (artifact SHA-256
+`8b518af710bf5e08b5b20f36db05c807e32d542eb8f046dd889019e6328b9b56`)
+is **NOT_ACCEPTED / INCOMPLETE**. De beschermde workflow herstartte na een
+incompleet rapport de eenmalige tijdelijke matrix. De tweede entry zag de
+oude journalfase en overschreef het eerste gesaniteerde rapport met
+`temporary_qa_prior_attempt_interrupted`. De zichtbare `0/6` en ontbrekende
+parenthash vertellen niets over de eerste poging. Het kind is ingetrokken en
+blijft in quarantaine; QA heeft geen cleanup of retry gedaan. De reparatie
+schakelt automatische herstart uit voor tijdelijke profielen, bewaart zo het
+eerste rapport en biedt een alleen-lezen, exact-namespacegebonden samenvatting
+van het eerdere private child-checkpoint. Pas na die diagnose mag QA de
+quarantaine-cleanup en daarna een nieuwe matrix beoordelen.
+De oorspronkelijke parenthash is niet bewaard; de diagnose kan dus niet
+achteraf bewijzen dat de parent tijdens de mislukte poging ongewijzigd bleef.
+De afzonderlijke cleanup controleert de parent wel vóór en na zijn eigen actie.
 
 Op de vorige diagnostische SHA `a0129feb9d0b27f024944ad8e8cc965f5ecbd5bb`
 bevestigde onafhankelijke read-only QA auth (`43172865270`) en drie beschikbare
