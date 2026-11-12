@@ -639,7 +639,7 @@ def safe_closed_paper_chat_diagnostic(error: Exception) -> Dict[str, Any] | None
 
 SENSITIVE_KEYS = {"access_token", "authorization", "authorization_header", "cookie", "email", "password", "private_key", "secret", "token", "user_id"}
 FIXTURE_ACTION_MODES = {"read_only", "proposal", "confirmation", "safe_execution"}
-INFRASTRUCTURE_ERROR_CATEGORIES = {"dns", "connect", "tls", "clienttimeout", "client", "ssh", "database_evidence_unavailable"}
+INFRASTRUCTURE_ERROR_CATEGORIES = {"dns", "connect", "tls", "clienttimeout", "client", "ssh", "database_evidence_unavailable", "manual_trade_case_source_unavailable", "manual_trade_case_source_drift"}
 _DIAGNOSTIC_LOOP: Optional[asyncio.AbstractEventLoop] = None
 _DATABASE_LOOP: Optional[asyncio.AbstractEventLoop] = None
 
@@ -1251,6 +1251,107 @@ def manual_trade_wait_evidence(run_id: str, *, owner_id: int | None = None) -> D
     except Exception as error:
         return {"status": "unavailable", "error_category": classify_internal_issue(error),
                 "passed": False}
+
+
+async def _load_manual_trade_case_source_evidence(expected: Mapping[str, Any]) -> Dict[str, Any]:
+    """Read the temporary child's exact-market score status, without values."""
+    from sqlalchemy import text as sql_text
+
+    from backend.infrastructure.database import async_session_factory
+    from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
+    from backend.services.finn_manual_trade_suggestion_service import _owner_trade_context
+    from backend.services.setup_market_match_service import SetupMarketMatchService
+    from backend.utils.auth_utils import FINN_TEMP_QA_KIND
+
+    raw_owner = os.environ.get("FINN_QA_USER_ID", "")
+    namespace = os.environ.get("FINN_QA_FIXTURE_NAMESPACE", "")
+    asset = str(expected.get("asset") or "").upper()
+    quote = str(expected.get("quote_currency") or "").upper()
+    catalog = DEFAULT_ASSET_CATALOG.get(asset) or {}
+    if (os.environ.get("FINN_QA_TEMP_CHILD_RUN") != "1"
+            or not raw_owner.isdecimal() or int(raw_owner) <= 0
+            or not re.fullmatch(r"qa-[0-9]+-[0-9]+-[0-9a-f]{8}-[0-9a-f]{8}", namespace)
+            or not re.fullmatch(r"[A-Z0-9]{1,16}", asset)
+            or not re.fullmatch(r"[A-Z0-9]{2,12}", quote)
+            or not catalog or quote != str(catalog.get("quote_currency") or quote).upper()
+               and catalog.get("asset_class") != "crypto"):
+        return {"status": "binding_invalid"}
+    async with async_session_factory() as session:
+        owner = int(raw_owner)
+        row = (await session.execute(sql_text(
+            "SELECT role,is_active,ai_preferences FROM users WHERE id=:owner"
+        ), {"owner": owner})).mappings().one_or_none()
+        prefs = (row or {}).get("ai_preferences")
+        lease = prefs.get("finn_temp_qa") if isinstance(prefs, dict) else None
+        if (row is None or row["role"] != "user" or row["is_active"] is not True
+                or not isinstance(prefs, dict) or prefs.get("qa_fixture") != FINN_TEMP_QA_KIND
+                or not isinstance(lease, dict) or lease.get("namespace") != namespace
+                or lease.get("status") != "active"):
+            return {"status": "binding_invalid"}
+        market_id = None
+        if catalog.get("asset_class") == "crypto":
+            market_id = (await session.execute(sql_text(
+                "SELECT id FROM trading_markets WHERE asset_symbol=:asset "
+                "AND quote_currency=:quote AND venue=:venue AND is_active=TRUE LIMIT 1"
+            ), {"asset": asset, "quote": quote,
+                "venue": str(catalog.get("exchange") or "").upper()})).scalar_one_or_none()
+            if market_id is None:
+                return {"status": "exact_market_unavailable"}
+        elif catalog.get("asset_class") != "stock":
+            return {"status": "binding_invalid"}
+        assessment = await SetupMarketMatchService(session).for_asset(
+            owner, asset, setups=[], market_id=int(market_id) if market_id is not None else None,
+        )
+        context = await _owner_trade_context(
+            session, user_id=owner, asset=asset, quote_currency=quote,
+            market_id=int(market_id) if market_id is not None else None,
+        )
+        await session.rollback()
+    allowed_source = {"available", "missing_scores", "invalid_weights", "stale_sources", "unverified_scores"}
+    allowed_component = {"fresh", "missing_score", "stale_source", "score_rebuild_pending",
+                         "score_unverified", "configuration_unverified", "missing_indicator_reading",
+                         "rule_unverified", "unverified"}
+    components = assessment.get("component_source_status") or {}
+    source_status = assessment.get("source_status")
+    source_status = source_status if source_status in allowed_source else "unavailable"
+    expected_recommendation = expected.get("recommendation")
+    actual_recommendation = context.get("recommendation")
+    context_reason = context.get("reason")
+    scenario_status = (
+        "matched" if (actual_recommendation == expected_recommendation
+                      and (expected_recommendation != "wait"
+                           or context_reason == "manual_trade_setup_outside_conditions")) else
+        "setup_choice_pending" if context_reason == "manual_trade_setup_ambiguous" else
+        "mismatch"
+    )
+    context_reason = context_reason if context_reason in {
+        "", "manual_trade_setup_ambiguous", "manual_trade_setup_outside_conditions",
+        "manual_trade_benchmark_unavailable", "manual_trade_setup_not_confirmed",
+        "manual_trade_profile_missing", "manual_trade_setup_missing",
+        "manual_trade_timeframe_source_unavailable", "manual_trade_profile_timeframe_conflict",
+    } else "unavailable"
+    return {
+        "status": ("available" if source_status == "available"
+                   and assessment.get("benchmark_score") is not None
+                   and scenario_status == "matched"
+                   else "source_unavailable"),
+        "source_status": source_status,
+        "benchmark_present": assessment.get("benchmark_score") is not None,
+        "scenario_status": scenario_status,
+        "context_reason": context_reason,
+        "component_source_status": {
+            key: components.get(key) if components.get(key) in allowed_component else "unavailable"
+            for key in ("macro_score", "technical_score", "market_score")
+        },
+    }
+
+
+def manual_trade_case_source_evidence(expected: Mapping[str, Any]) -> Dict[str, Any]:
+    try:
+        return _shared_database_loop().run_until_complete(
+            _load_manual_trade_case_source_evidence(expected))
+    except Exception as error:
+        return {"status": "probe_unavailable", "error_category": classify_internal_issue(error)}
 
 
 def redact(value: Any) -> Any:
@@ -1927,6 +2028,23 @@ def classify_case_failure(case_result: Dict[str, Any]) -> Optional[str]:
     if action_error:
         if action_error in INFRASTRUCTURE_ERROR_CATEGORIES:
             return "infrastructure"
+        wait_diagnostic = case_result.get("unexpected_manual_trade_wait_evidence") or {}
+        source_before = case_result.get("manual_trade_case_source_before") or {}
+        source_after = case_result.get("manual_trade_case_source_after") or {}
+        if (action_error == "proposal_missing"
+                and case_result.get("manual_trade_case_source_drift") is True
+                and wait_diagnostic.get("typed_wait") is True
+                and wait_diagnostic.get("reason_class") == "manual_trade_benchmark_unavailable"
+                and (case_result.get("terminal") or {}).get("status") == "completed"
+                and case_result.get("polling_sse_equal") is True
+                and source_before.get("source_status") == "available"
+                and source_after.get("source_status") in {
+                    "missing_scores", "invalid_weights", "stale_sources", "unverified_scores"
+                }):
+            # A proposal may disappear because the verified benchmark changed
+            # during the run. Keep proposal_missing in the report, but do not
+            # call that timing-dependent observation a proven product defect.
+            return "infrastructure"
         return "product"
     if case_result.get("create_http_status") != 200:
         return "product" if category == "server_http_response" else "infrastructure"
@@ -1946,6 +2064,9 @@ def classify_case_failure(case_result: Dict[str, Any]) -> Optional[str]:
     manual_wait = case_result.get("manual_trade_wait_evidence")
     if isinstance(manual_wait, dict) and manual_wait.get("passed") is False:
         return "product"
+    if (case_result.get("manual_trade_case_source_drift") is True
+            or case_result.get("manual_trade_case_source_probe_failed") is True):
+        return "infrastructure"
     return None
 
 
@@ -2481,6 +2602,7 @@ def run_cases(
     fixture_namespace: Optional[str] = None,
     checkpoint=None,
     existing_results: Optional[Iterable[Dict[str, Any]]] = None,
+    source_probe=None,
 ) -> list[Dict[str, Any]]:
     case_list = list(cases)
     case_ids = [str(case["case_id"]) for case in case_list]
@@ -2513,6 +2635,17 @@ def run_cases(
             results=results,
             cases=case_list[start_index:],
             error_category="prior_write_case_failed",
+        )
+        if checkpoint:
+            checkpoint(stopped, planned_count=len(case_list))
+        return stopped
+
+    def stop_after_source_failure(start_index: int) -> list[Dict[str, Any]]:
+        # Later turns may rely on this missing conversation step. Never score
+        # them against a context the product was not asked to create.
+        stopped = add_missing_not_run_cases(
+            results=results, cases=case_list[start_index:],
+            error_category="prior_source_case_unavailable",
         )
         if checkpoint:
             checkpoint(stopped, planned_count=len(case_list))
@@ -2558,6 +2691,29 @@ def run_cases(
             and case.get("fixture_action", "read_only") == "read_only"
             and isinstance(case.get("expected_manual_trade"), dict)
         )
+        expected_manual = case.get("expected_manual_trade")
+        probe_case_source = (
+            source_probe is not None and isinstance(expected_manual, dict)
+            # The temporary matrix has a separate guided choice for review
+            # setups. Its selected setup does not exist before that turn;
+            # only single-setup reduced-risk and wait cases can be gated here.
+            and expected_manual.get("recommendation") in {"reduced_risk", "wait"}
+            and expected_manual.get("risk_budget_requested") is not True
+        )
+        source_before = source_probe(expected_manual) if probe_case_source else None
+        if source_before is not None and source_before.get("status") != "available":
+            result = {
+                "case_id": case["case_id"], "case_status": "not_run",
+                "error_category": "manual_trade_case_source_unavailable",
+                "manual_trade_case_source_before": source_before,
+                "fixture_action": {"mode": case.get("fixture_action", "read_only"),
+                                   "outcome": "not_run"},
+            }
+            result["failure_classification"] = classify_case_failure(result)
+            results.append(result)
+            if checkpoint:
+                checkpoint(results, planned_count=len(case_list))
+            return stop_after_source_failure(index + 1)
         needs_database_evidence = (
             (case.get("fixture_action", "read_only") != "read_only"
              and operation_id in DATABASE_EVIDENCE_WRITE_OPERATIONS)
@@ -2639,6 +2795,8 @@ def run_cases(
             "case_status": "completed",
             "fixture_action": {"mode": case.get("fixture_action", "read_only")},
         }
+        if source_before is not None:
+            result["manual_trade_case_source_before"] = source_before
         if database_before_run is not None:
             result["fixture_action"]["database_before_run"] = database_before_run
         if status != 200 or not run_id:
@@ -2785,6 +2943,13 @@ def run_cases(
                 result["fixture_action"]["error_category"] = "manual_trade_clarification_invalid"
         if result["fixture_action"]["outcome"] in {"not_run", "case_timeout"}:
             check_aborted_write_attempt(result)
+        if probe_case_source:
+            source_after = source_probe(expected_manual)
+            result["manual_trade_case_source_after"] = source_after
+            result["manual_trade_case_source_drift"] = source_after.get("status") == "source_unavailable"
+            result["manual_trade_case_source_probe_failed"] = source_after.get("status") not in {
+                "available", "source_unavailable"
+            }
         result["failure_classification"] = classify_case_failure(result)
         results[result_index] = result
         if checkpoint:
@@ -3792,7 +3957,7 @@ def main() -> int:
                     report["outcome"] = "incomplete" if report["incomplete"] else "running"
                     write_report_atomic(report_path, report)
 
-                report["cases"] = run_cases(base_url=args.base_url.rstrip("/"), token=token, cases=cases, matrix_deadline_seconds=getattr(args, "matrix_deadline_seconds", 2100.0), case_timeout_seconds=getattr(args, "case_timeout_seconds", 60.0), fixture_namespace=fixture_namespace, checkpoint=checkpoint, existing_results=report["cases"])
+                report["cases"] = run_cases(base_url=args.base_url.rstrip("/"), token=token, cases=cases, matrix_deadline_seconds=getattr(args, "matrix_deadline_seconds", 2100.0), case_timeout_seconds=getattr(args, "case_timeout_seconds", 60.0), fixture_namespace=fixture_namespace, checkpoint=checkpoint, existing_results=report["cases"], source_probe=(manual_trade_case_source_evidence if args.profile == "targeted_regression" and os.getenv("FINN_QA_TEMP_CHILD_RUN") == "1" else None))
                 report.update(case_progress(cases=report["cases"], planned_count=len(cases)))
                 report["failure_summary"] = failure_summary(report["cases"])
                 report["safety"]["read_only_profile"] = all(case.get("fixture_action", "read_only") == "read_only" for case in cases)

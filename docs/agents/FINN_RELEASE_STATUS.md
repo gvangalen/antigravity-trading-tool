@@ -4,6 +4,60 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN trade-QA broncontrole en watchlistantwoord (12 november 2026)
+
+Phase: `LOCAL_VALIDATION`. Onafhankelijke browser-QA op live
+`19ded33629f36e2e77d390379a287a49612b4c50` accepteerde de gerichte
+watchlist-kernflow: de natuurlijke Apple→Bitcoin-zin, expliciete vervanging,
+klikbare BTC- en ETH-paren, verduidelijking van de dubbelzinnige aandeelzin,
+en veilige afhandeling van ontkende/tegenstrijdige opdrachten. De tijdelijke
+Apple-notering is verwijderd en de oorspronkelijke watchlist gecontroleerd
+hersteld; er is geen order, trade of Live-actie bevestigd. Twee antwoorden
+bleven onnodig of misleidend. Deze batch laat een ontkende vervanging daarom
+zonder actie bevestigen en vraagt bij meerdere opdrachten welke wijziging de
+gebruiker eerst bedoelt, zonder voorstelknop.
+
+Beschermde read-only diagnose op dezelfde live SHA (run `43280655268`,
+artifact SHA-256 `c06315cdbfbe10ab6b181026a8628809228ea94737d04edda4331fbf59b15d70`)
+vond voor de eerdere ETH/USDT-case een getypeerde wait-reason
+`manual_trade_benchmark_unavailable`. Het oude rapport bewijst niet welke
+scorecomponent tussen voorbereiding en testcase veranderde. De exacte oude
+QA-child is daarna veilig opgeruimd (run `43280858483`, artifact SHA-256
+`c0aeb86e2d51858f74fc4c12e2b2ef43eb16c4901426e4578ccca09933cd2d1a`,
+`child_deleted=true`, `parent_unchanged=true`). De handmatige tradeflow blijft
+**NOT_ACCEPTED / INCOMPLETE**; AAPL en de overige cases zijn niet live getest.
+
+De nieuwe tijdelijke-child runner leest direct vóór en na de relevante
+`reduced_risk`/`wait`-cases de eigenaargebonden exacte marktbenchmark en
+setupaanbeveling. Hij rapporteert alleen begrensde bronstatussen, nooit
+scorewaarden of fixture-ID's. Een onbeschikbare voorwaarde vóór de case
+voorkomt de productaanvraag en stopt afhankelijke cases. Een ontbrekend
+voorstel telt alleen als bronverloop/onbeslist wanneer de server een getypeerde
+`manual_trade_benchmark_unavailable` gaf, de score tussen beide metingen
+onbeschikbaar werd, en terminal plus polling/SSE kloppen. Andere product-
+en veiligheidsfouten blijven productfouten. De BTC-setupkeuze heeft geen
+verifieerbare geselecteerde setup vóór de vervolgbeurt en valt daarom buiten
+deze nieuwe bronclaim; haar bestaande runtimecontractchecks blijven gelden.
+De productregel om zonder geverifieerde benchmark te wachten verandert niet.
+Onafhankelijke lokale QA-, Security- en Architecture-codebeoordeling: **GO**
+voor deze beperkte diagnoseaanpak; live acceptatie volgt na deployment.
+
+Gemeten lokale gates op deze definitieve code: backend **4726 passed, 7 skipped**
+(log SHA-256 `6b9095f4bd8f137a3393140485fc331d43dd444dd2f27aeaf6faa9156caebe25`);
+gerichte runner/matrix-tests **139/139**; frontend-commandtests **71/71**,
+typecheck, i18n lint/tests, proposaltests, productiebuild en high audit groen.
+De geïsoleerde FastAPI/Celery-actiematrix slaagde **17/17** zonder broker-
+orders, Live-calls of productieverbindingen (artifact SHA-256
+`d728f738ddc5b3ec7056266d3f4a8f0ade35434e18943ea67ec465e5d1b89d7d`);
+adaptertests **26/26**. Echte provider-development **20/20** (artifact
+SHA-256 `67d56e59bea4b5a76c4b09466e2ce7c6a703f6ea6016b7e160c833ee73a3bd06`),
+100% operation-, entiteit-, doelasset-, polariteit-, referentie-,
+verduidelijkings- en missing-input-accuracy en nul provider-, schema-,
+parse-, validatie- of timeoutfouten. Echte provider-regressie **109/109**
+(artifact SHA-256 `95ee07e5d9476c5a1cc688a071bed6d3491b2c6fd2e51a9b290dd24bc4662c22`)
+had dezelfde 100% accuracies en nul foutpercentages. CI en deployment zijn
+nog in afwachting.
+
 ## FINN watchlist parser en beschermde trade-QA diagnose (12 november 2026)
 
 Phase: `DIAGNOSTIC_DEPLOYED_PENDING_FINAL_SHA`. Onafhankelijke QA op de vorige

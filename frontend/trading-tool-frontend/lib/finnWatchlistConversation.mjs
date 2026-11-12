@@ -33,9 +33,9 @@ function directedReplacement(value, assets) {
       const fragment = value.slice(from, to);
       const pair = assets.filter((asset) => asset.start >= from && asset.end <= to)
         .map((asset) => ({ ...asset, start: asset.start - from, end: asset.end - from }));
-      if (pair.length > 2) return null;
-      if (pair.length === 2 && pair[0].symbol === pair[1].symbol && /\b(?:vervang|replace|ersetze)\b/i.test(fragment)) return null;
-      if (pair.length === 2 && /\b(?:vervang|replace|ersetze)\b/i.test(fragment) && /\b(?:niet|not|nicht)\b/i.test(fragment)) return null;
+      if (pair.length > 2) return { issue: 'conflict' };
+      if (pair.length === 2 && pair[0].symbol === pair[1].symbol && /\b(?:vervang|replace|ersetze)\b/i.test(fragment)) return { issue: 'conflict' };
+      if (pair.length === 2 && /\b(?:vervang|replace|ersetze)\b/i.test(fragment) && /\b(?:niet|not|nicht)\b/i.test(fragment)) return { issue: 'negated' };
       if (pair.length === 2 && pair[0].symbol !== pair[1].symbol) {
         const parsed = direction(fragment, pair);
         if (parsed) directions.push(parsed);
@@ -50,13 +50,14 @@ function directedReplacement(value, assets) {
     const parsed = direction(value, assets);
     if (parsed) directions.push(parsed);
   }
-  if (!directions.length || (hasDirectedClause && extraCommand)) return null;
+  if (!directions.length) return null;
+  if (hasDirectedClause && extraCommand) return { issue: 'conflict' };
   const [source, target] = directions[0].map((asset) => ({ ...asset }));
   for (const [nextSource, nextTarget] of directions.slice(1)) {
-    if (source.symbol !== nextSource.symbol || target.symbol !== nextTarget.symbol) return null;
+    if (source.symbol !== nextSource.symbol || target.symbol !== nextTarget.symbol) return { issue: 'conflict' };
     for (const [current, next] of [[source, nextSource], [target, nextTarget]]) {
       if (next.quote_currency) {
-        if (current.quote_currency && current.quote_currency !== next.quote_currency) return null;
+        if (current.quote_currency && current.quote_currency !== next.quote_currency) return { issue: 'conflict' };
         current.quote_currency = next.quote_currency;
       }
     }
@@ -68,7 +69,7 @@ const COPY = {
   nl: { scope: 'Bedoel je je watchlist of je portfolio?', watchlist: 'Watchlist', portfolio: 'Portfolio',
     scopeAction: 'Wat wil je in je watchlist doen?',
     addReply: (name) => `Voeg ${name} toe aan mijn watchlist`, portfolioReply: (name) => `Ik bedoel mijn portfolio met ${name}`,
-    assets: 'Welke asset wil je toevoegen en welke wil je niet meer volgen?', source: (name) => `${name} staat niet in je watchlist. Welke bestaande asset wil je vervangen?`,
+    assets: 'Welke asset wil je toevoegen en welke wil je niet meer volgen?', conflict: 'Je noemt meerdere wijzigingen of noteringen in één verzoek. Welke wijziging wil je eerst in je watchlist doen?', negated: 'Begrepen, ik voer deze vervanging niet uit.', source: (name) => `${name} staat niet in je watchlist. Welke bestaande asset wil je vervangen?`,
     missing: 'Die asset staat niet in je watchlist. Welke wil je verwijderen?', unavailable: (name) => `Ik kan nu geen handelspaar voor ${name} verifiëren. Probeer het later opnieuw.`,
     pairUnavailable: (pair) => `${pair} is niet beschikbaar. Welk handelspaar bedoel je?`, replace: 'Kies de nieuwe notering. Je bevestigt daarna eerst de toevoeging en vervolgens het verwijderen van de oude notering.',
     remove: 'Welke notering wil je verwijderen?', choose: (name) => `Welke notering van ${name} wil je volgen?`, add: 'Wil je deze asset aan je watchlist toevoegen?',
@@ -76,7 +77,7 @@ const COPY = {
   en: { scope: 'Do you mean your watchlist or your portfolio?', watchlist: 'Watchlist', portfolio: 'Portfolio',
     scopeAction: 'What would you like to do in your watchlist?',
     addReply: (name) => `Add ${name} to my watchlist`, portfolioReply: (name) => `I mean my portfolio with ${name}`,
-    assets: 'Which asset would you like to add, and which should you stop following?', source: (name) => `${name} is not in your watchlist. Which existing asset should I replace?`,
+    assets: 'Which asset would you like to add, and which should you stop following?', conflict: 'You mentioned several changes or listings in one request. Which watchlist change would you like to make first?', negated: 'Understood. I will not make this replacement.', source: (name) => `${name} is not in your watchlist. Which existing asset should I replace?`,
     missing: 'That asset is not in your watchlist. Which one should I remove?', unavailable: (name) => `I cannot verify a trading pair for ${name} right now. Please try again later.`,
     pairUnavailable: (pair) => `${pair} is unavailable. Which trading pair do you mean?`, replace: 'Choose the new listing. You will confirm its addition first, then removal of the old listing.',
     remove: 'Which listing should I remove?', choose: (name) => `Which ${name} listing would you like to follow?`, add: 'Do you want to add this asset to your watchlist?',
@@ -84,7 +85,7 @@ const COPY = {
   de: { scope: 'Meinst du deine Watchlist oder dein Portfolio?', watchlist: 'Watchlist', portfolio: 'Portfolio',
     scopeAction: 'Was möchtest du in deiner Watchlist tun?',
     addReply: (name) => `Füge ${name} meiner Watchlist hinzu`, portfolioReply: (name) => `Ich meine mein Portfolio mit ${name}`,
-    assets: 'Welchen Wert möchtest du hinzufügen und welchen nicht mehr verfolgen?', source: (name) => `${name} ist nicht in deiner Watchlist. Welchen vorhandenen Wert möchtest du ersetzen?`,
+    assets: 'Welchen Wert möchtest du hinzufügen und welchen nicht mehr verfolgen?', conflict: 'Du nennst mehrere Änderungen oder Notierungen in einer Anfrage. Welche Änderung möchtest du zuerst an deiner Watchlist vornehmen?', negated: 'Verstanden. Ich nehme diesen Austausch nicht vor.', source: (name) => `${name} ist nicht in deiner Watchlist. Welchen vorhandenen Wert möchtest du ersetzen?`,
     missing: 'Dieser Wert ist nicht in deiner Watchlist. Welchen möchtest du entfernen?', unavailable: (name) => `Ich kann derzeit kein Handelspaar für ${name} verifizieren. Versuche es später erneut.`,
     pairUnavailable: (pair) => `${pair} ist nicht verfügbar. Welches Handelspaar meinst du?`, replace: 'Wähle die neue Notierung. Du bestätigst zuerst das Hinzufügen und danach das Entfernen der alten Notierung.',
     remove: 'Welche Notierung möchtest du entfernen?', choose: (name) => `Welche Notierung von ${name} möchtest du verfolgen?`, add: 'Möchtest du diesen Wert zur Watchlist hinzufügen?',
@@ -112,6 +113,7 @@ export function watchlistIntent(text, mentions, ownedRows = []) {
   if (replacing) {
     const replacement = directedReplacement(value, assets);
     if (!replacement) return { kind: 'clarify_assets' };
+    if (replacement.issue) return { kind: replacement.issue === 'negated' ? 'acknowledge_no_action' : 'clarify_conflict' };
     const { source, target } = replacement;
     if (!ownedRows.some((row) => row.symbol === source.symbol)) return { kind: 'source_missing', source };
     return { kind: 'replace', source, target };
@@ -130,6 +132,8 @@ export function watchlistChoices(intent, ownedRows, markets = [], locale = 'nl')
     ] };
   }
   if (intent.kind === 'clarify_assets') return { question: copy.assets, choices: [] };
+  if (intent.kind === 'clarify_conflict') return { question: copy.conflict, choices: [] };
+  if (intent.kind === 'acknowledge_no_action') return { question: copy.negated, choices: [] };
   if (intent.kind === 'source_missing') return { question: copy.source(intent.source.display_name), choices: [] };
   const sourceRows = intent.kind === 'replace' || intent.kind === 'remove'
     ? ownedRows.filter((row) => row.symbol === (intent.source || intent.target).symbol &&

@@ -101,6 +101,22 @@ test('negated, conflicting and self-directed replacements do not offer a proposa
   }
 });
 
+test('conflicting instructions explain the conflict and a negated action is acknowledged', () => {
+  const conflict = 'Vervang Apple door Bitcoin in mijn watchlist. Voeg BTC/EUR toe aan mijn watchlist.';
+  const conflicting = watchlistChoices(watchlistIntent(conflict, mentionsIn(conflict), [
+    { symbol: 'AAPL', market_id: null },
+  ]), [{ symbol: 'AAPL', market_id: null }], markets);
+  assert.match(conflicting.question, /Welke wijziging wil je eerst/i);
+  assert.deepEqual(conflicting.choices, []);
+
+  const negated = 'Vervang Apple niet door BTC/EUR in mijn watchlist.';
+  const acknowledged = watchlistChoices(watchlistIntent(negated, mentionsIn(negated), [
+    { symbol: 'AAPL', market_id: null },
+  ]), [{ symbol: 'AAPL', market_id: null }], markets);
+  assert.match(acknowledged.question, /niet uit/i);
+  assert.deepEqual(acknowledged.choices, []);
+});
+
 test('stop following one asset and follow another keeps replacement direction', () => {
   const text = 'Apple niet meer volgen; volg Bitcoin';
   const source = { ...apple, start: text.indexOf('Apple'), end: text.indexOf('Apple') + 5 };

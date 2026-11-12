@@ -3469,6 +3469,134 @@ def test_manual_trade_typed_wait_is_read_only_acceptance_not_missing_operation(m
     assert wrong_mode["failure_classification"] == "product"
 
 
+def test_temporary_manual_trade_case_source_gate_stops_before_product_request(monkeypatch):
+    module = _module()
+    monkeypatch.setattr(module, "request_json", lambda **_kwargs: (_ for _ in ()).throw(
+        AssertionError("source gate must run before the product request")))
+    case = {"case_id": "near-miss", "message": "Prepare a trade", "fixture_action": "read_only",
+            "expected_operation_id": "create_manual_trade_plan",
+            "expected_manual_trade": {"asset": "ETH", "quote_currency": "USDT",
+                                      "recommendation": "reduced_risk", "max_loss_quote": "20"}}
+    source = {"status": "source_unavailable", "source_status": "unverified_scores",
+              "benchmark_present": False,
+              "component_source_status": {"macro_score": "fresh", "technical_score": "fresh",
+                                          "market_score": "score_rebuild_pending"}}
+    rows = module.run_cases(base_url="https://example.test", token="token", cases=[
+        case, {"case_id": "dependent", "message": "Use that plan"},
+    ],
+                            source_probe=lambda _expected: source)
+    assert rows[0]["case_status"] == "not_run"
+    assert rows[0]["failure_classification"] == "infrastructure"
+    assert rows[0]["manual_trade_case_source_before"] == source
+    assert rows[1]["case_status"] == "not_run"
+    assert rows[1]["error_category"] == "prior_source_case_unavailable"
+    drifted_wait = {
+        "fixture_action": {"error_category": "proposal_missing"},
+        "manual_trade_case_source_drift": True,
+        "manual_trade_case_source_before": {"source_status": "available"},
+        "manual_trade_case_source_after": {"source_status": "unverified_scores"},
+        "terminal": {"status": "completed"}, "polling_sse_equal": True,
+        "unexpected_manual_trade_wait_evidence": {
+            "typed_wait": True, "reason_class": "manual_trade_benchmark_unavailable"},
+    }
+    assert module.classify_case_failure(drifted_wait) == "infrastructure"
+    assert module.classify_case_failure({**drifted_wait,
+                                         "unexpected_manual_trade_wait_evidence": {}}) == "product"
+    assert module.classify_case_failure({**drifted_wait,
+                                         "manual_trade_case_source_after": {"source_status": "available"}}) == "product"
+    assert module.classify_case_failure({**drifted_wait,
+                                         "terminal": {"status": "failed"}}) == "product"
+    assert module.classify_case_failure({"fixture_action": {"error_category": "write_during_run"},
+                                         "manual_trade_case_source_drift": True}) == "product"
+    assert module.classify_case_failure({"create_http_status": 200,
+                                         "terminal": {"status": "completed"},
+                                         "polling_sse_equal": True,
+                                         "manual_trade_case_source_drift": True}) == "infrastructure"
+
+
+def test_temporary_manual_trade_source_probe_binds_owner_market_and_scenario(monkeypatch):
+    import asyncio
+    from backend.infrastructure import database
+    from backend.services import finn_manual_trade_suggestion_service as suggestions
+    from backend.services import setup_market_match_service as matching
+    from backend.utils.auth_utils import FINN_TEMP_QA_KIND
+
+    module = _module()
+    namespace = "qa-123-1-aabbccdd-eeff0011"
+    monkeypatch.setenv("FINN_QA_USER_ID", "42")
+    monkeypatch.setenv("FINN_QA_FIXTURE_NAMESPACE", namespace)
+    monkeypatch.setenv("FINN_QA_TEMP_CHILD_RUN", "1")
+    queries = []
+
+    class Result:
+        def __init__(self, value):
+            self.value = value
+        def mappings(self):
+            return self
+        def one_or_none(self):
+            return self.value
+        def scalar_one_or_none(self):
+            return self.value
+
+    class Session:
+        async def execute(self, query, params):
+            queries.append((str(query), dict(params)))
+            if "FROM users" in str(query):
+                return Result({"role": "user", "is_active": True,
+                               "ai_preferences": {"qa_fixture": FINN_TEMP_QA_KIND,
+                                                  "finn_temp_qa": {"namespace": namespace,
+                                                                   "status": "active"}}})
+            if "FROM trading_markets" in str(query):
+                return Result(99)
+            raise AssertionError("unexpected query")
+        async def rollback(self):
+            pass
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *_args):
+            pass
+
+    class Match:
+        def __init__(self, session):
+            assert isinstance(session, Session)
+        async def for_asset(self, owner, asset, *, setups, market_id):
+            assert (owner, asset, setups, market_id) == (42, "ETH", [], 99)
+            return {"source_status": "available", "benchmark_score": 75,
+                    "component_source_status": {"macro_score": "fresh",
+                                                "technical_score": "fresh",
+                                                "market_score": "fresh"}}
+
+    async def owner_context(_session, *, user_id, asset, quote_currency, market_id):
+        assert (user_id, asset, quote_currency, market_id) == (42, "ETH", "USDT", 99)
+        return {"recommendation": "reduced_risk", "reason": ""}
+
+    monkeypatch.setattr(database, "async_session_factory", Session)
+    monkeypatch.setattr(matching, "SetupMarketMatchService", Match)
+    monkeypatch.setattr(suggestions, "_owner_trade_context", owner_context)
+    expected = {"asset": "ETH", "quote_currency": "USDT", "recommendation": "reduced_risk"}
+    result = asyncio.run(module._load_manual_trade_case_source_evidence(expected))
+    assert result["status"] == "available"
+    assert result["scenario_status"] == "matched"
+    assert result["component_source_status"] == {
+        "macro_score": "fresh", "technical_score": "fresh", "market_score": "fresh"}
+    assert "75" not in str(result) and "99" not in str(result)
+    assert queries[0][1] == {"owner": 42}
+    assert queries[1][1]["quote"] == "USDT"
+
+    async def shifted_context(_session, **_kwargs):
+        return {"recommendation": "wait", "reason": "manual_trade_setup_outside_conditions"}
+
+    monkeypatch.setattr(suggestions, "_owner_trade_context", shifted_context)
+    shifted = asyncio.run(module._load_manual_trade_case_source_evidence(expected))
+    assert shifted["status"] == "source_unavailable"
+    assert shifted["source_status"] == "available"
+    assert shifted["scenario_status"] == "mismatch"
+
+    monkeypatch.setenv("FINN_QA_TEMP_CHILD_RUN", "0")
+    assert asyncio.run(module._load_manual_trade_case_source_evidence(expected)) == {
+        "status": "binding_invalid"}
+
+
 def test_manual_trade_manifest_requires_scoped_typed_expectation(tmp_path, monkeypatch):
     module = _module()
     monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_ACTIONS", "1")
