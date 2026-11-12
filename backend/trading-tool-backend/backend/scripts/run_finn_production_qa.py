@@ -178,6 +178,43 @@ def safe_portfolio_paper_fx_diagnostic(error: Exception) -> Dict[str, Any] | Non
     return diagnostic
 
 
+def safe_manual_trade_failure_diagnostic(profile: str, error: Exception) -> Dict[str, str] | None:
+    """Expose only fixed stages, catalog pairs, and allowlisted source reasons."""
+    if profile not in {"manual_trade_fixture_prepare", "manual_trade_fixture_preflight"}:
+        return None
+    phase = getattr(error, "manual_trade_failed_phase", None)
+    phases = {
+        "source_preflight", "sources_preflight_passed", "configured",
+        "sources_refreshed", "scenarios_configured", "verified",
+        "source_candles",
+    }
+    diagnostic: Dict[str, str] = {}
+    if phase in phases:
+        diagnostic["failed_phase"] = phase
+    asset = getattr(error, "manual_trade_asset", None)
+    if asset in {"BTC", "ETH", "AAPL"}:
+        diagnostic["asset"] = asset
+    reason = getattr(error, "manual_trade_source_reason", None)
+    allowed = {
+        "manual_trade_candles_insufficient", "manual_trade_candles_duplicate_day",
+        "manual_trade_candles_gap", "manual_trade_candles_stale",
+        "manual_trade_candle_geometry_invalid", "manual_trade_volatility_unusable",
+        "manual_trade_exact_market_unavailable", "twelve_data_not_configured",
+        "twelve_data_transport_unavailable", "twelve_data_unavailable:provider_error",
+        "twelve_data_unavailable:invalid_response",
+        "twelve_data_unavailable:400", "twelve_data_unavailable:401",
+        "twelve_data_unavailable:403", "twelve_data_unavailable:429",
+        "twelve_data_unavailable:http_400", "twelve_data_unavailable:http_401",
+        "twelve_data_unavailable:http_403", "twelve_data_unavailable:http_429",
+        "twelve_data_unavailable:http_500", "twelve_data_unavailable:http_503",
+    }
+    if reason in allowed:
+        diagnostic["source_reason"] = reason
+    elif reason is not None:
+        diagnostic["source_reason"] = "source_unavailable"
+    return diagnostic or None
+
+
 def profile_error_category(profile: str, error: Exception) -> str:
     """The published QA error category must not contain private fixture text."""
     if profile == "manual_trade_fixture_prepare":
@@ -202,6 +239,7 @@ def profile_error_category(profile: str, error: Exception) -> str:
             "manual_trade_pair_scores_incomplete",
             "manual_trade_verified_score_unavailable",
             "manual_trade_qa_setup_not_matched",
+            "manual_trade_fixture_source_preflight_failed",
         } else "manual_trade_fixture_prepare_runtime_error")
     if profile == "manual_trade_fixture_preflight":
         code = str(error)
@@ -2913,6 +2951,14 @@ async def _manual_trade_source_audit() -> Dict[str, Any]:
         "manual_trade_risk_budget_exceeded",
         "candle_open_invalid", "candle_high_invalid", "candle_low_invalid",
         "candle_close_invalid",
+        "twelve_data_not_configured", "twelve_data_transport_unavailable",
+        "twelve_data_unavailable:provider_error",
+        "twelve_data_unavailable:invalid_response",
+        "twelve_data_unavailable:400", "twelve_data_unavailable:401",
+        "twelve_data_unavailable:403", "twelve_data_unavailable:429",
+        "twelve_data_unavailable:http_400", "twelve_data_unavailable:http_401",
+        "twelve_data_unavailable:http_403", "twelve_data_unavailable:http_429",
+        "twelve_data_unavailable:http_500", "twelve_data_unavailable:http_503",
     }
     safe_context_reasons = {
         "manual_trade_profile_unavailable", "manual_trade_profile_missing",
@@ -3153,9 +3199,15 @@ async def _manual_trade_fixture_preflight() -> Dict[str, Any]:
             quote = item["quote_currency"]
             if asset == "AAPL":
                 await session.rollback()
-            market_id, _ = await _source_candles(
-                session, asset=asset, quote_currency=quote,
-            )
+            try:
+                market_id, _ = await _source_candles(
+                    session, asset=asset, quote_currency=quote,
+                )
+            except (RuntimeError, ValueError) as error:
+                error.manual_trade_failed_phase = "source_candles"
+                error.manual_trade_asset = asset
+                error.manual_trade_source_reason = str(error)
+                raise
             candidates = (await session.execute(sql_text("""
                 SELECT s.id, s.timeframe, s.min_benchmark_score, s.max_benchmark_score
                 FROM setups s
@@ -3700,6 +3752,9 @@ def main() -> int:
                 )
     except (RuntimeError, ValueError) as error:
         report["error_category"] = profile_error_category(args.profile, error)
+        diagnostic = safe_manual_trade_failure_diagnostic(args.profile, error)
+        if diagnostic is not None:
+            report["manual_trade_failure_diagnostic"] = diagnostic
         if args.profile == "portfolio_paper_fx":
             diagnostic = safe_portfolio_paper_fx_diagnostic(error)
             if diagnostic is not None:

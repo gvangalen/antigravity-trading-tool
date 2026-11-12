@@ -167,13 +167,19 @@ async def _source_preflight() -> None:
 
     async with async_session_factory() as session:
         for asset, quote in PAIRS:
-            if asset == "AAPL":
-                await session.rollback()
-            market_id, candles = await _source_candles(
-                session, asset=asset, quote_currency=quote)
-            derive_suggested_plan(
-                asset=asset, quote_currency=quote, direction="long",
-                max_loss_quote="20", candles=candles, market_id=market_id)
+            try:
+                if asset == "AAPL":
+                    await session.rollback()
+                market_id, candles = await _source_candles(
+                    session, asset=asset, quote_currency=quote)
+                derive_suggested_plan(
+                    asset=asset, quote_currency=quote, direction="long",
+                    max_loss_quote="20", candles=candles, market_id=market_id)
+            except (RuntimeError, ValueError) as error:
+                failure = RuntimeError("manual_trade_fixture_source_preflight_failed")
+                failure.manual_trade_asset = asset
+                failure.manual_trade_source_reason = str(error)
+                raise failure from error
         await session.rollback()
 
 
@@ -574,6 +580,8 @@ async def run(*, journal_path: Path, release_sha: str,
                  "phase": "started"}
     _journal(journal_path, state)
     try:
+        state["phase"] = "source_preflight"
+        _journal(journal_path, state)
         await _source_preflight()
         state["phase"] = "sources_preflight_passed"
         _journal(journal_path, state)
@@ -598,7 +606,8 @@ async def run(*, journal_path: Path, release_sha: str,
                 "configs_created": configured["configs_created"],
                 "pairs": verified, "writes_performed": True,
                 "broker_orders": 0, "live_bots": 0, "exchange_keys": 0}
-    except Exception:
+    except Exception as error:
+        error.manual_trade_failed_phase = state["phase"]
         state["phase"] = "failed"
         _journal(journal_path, state)
         raise

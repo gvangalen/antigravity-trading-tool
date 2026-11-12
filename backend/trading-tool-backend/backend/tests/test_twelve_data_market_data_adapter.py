@@ -32,6 +32,81 @@ def test_twelve_data_quote_without_configuration_is_typed_unavailable():
         asyncio.run(adapter.fetch_latest_snapshot(asset))
 
 
+@pytest.mark.parametrize("payload,expected", [
+    ({"status": "error", "code": 429, "message": "private provider text"},
+     "twelve_data_unavailable:429"),
+    ({"status": "error", "code": "secret", "message": "private provider text"},
+     "twelve_data_unavailable:provider_error"),
+    ([], "twelve_data_unavailable:invalid_response"),
+])
+def test_twelve_data_candle_provider_error_is_typed_and_redacted(monkeypatch, payload, expected):
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return payload
+
+    class Client:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def get(self, url, params):
+            assert url.endswith("/time_series")
+            assert params["symbol"] == "AAPL"
+            return Response()
+
+    monkeypatch.setattr(
+        "backend.services.providers.twelve_data_market_data_adapter.httpx.AsyncClient", Client,
+    )
+    asset = AssetRecord(
+        symbol="AAPL", display_name="Apple Inc.", asset_class="stock",
+        provider="twelve_data", quote_currency="USD", provider_symbol="AAPL",
+    )
+    with pytest.raises(ValueError, match=f"^{expected}$"):
+        asyncio.run(TwelveDataMarketDataAdapter(api_key="test-key")
+                    .fetch_candles(asset, "1day", limit=40))
+
+
+def test_twelve_data_quote_provider_error_redacts_untrusted_code(monkeypatch):
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"status": "error", "code": "private-token", "message": "secret"}
+
+    class Client:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def get(self, *_args, **_kwargs):
+            return Response()
+
+    monkeypatch.setattr(
+        "backend.services.providers.twelve_data_market_data_adapter.httpx.AsyncClient", Client,
+    )
+    asset = AssetRecord(
+        symbol="AAPL", display_name="Apple Inc.", asset_class="stock",
+        provider="twelve_data", quote_currency="USD", provider_symbol="AAPL",
+    )
+    with pytest.raises(ValueError, match="^twelve_data_unavailable:provider_error$"):
+        asyncio.run(TwelveDataMarketDataAdapter(api_key="test-key")
+                    .fetch_latest_snapshot(asset))
+
+
 def test_twelve_data_quote_is_normalized_for_persistent_market_snapshots(monkeypatch):
     class _Response:
         def raise_for_status(self):

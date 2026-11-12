@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN handmatig tradevoorstel: gebonden QA-fixturevoorbereiding (11 november 2026)
 
-Phase: `PRODUCT_DEPLOYED_QA_PENDING`. De beschermde `manual_trade_fixture_prepare` route
+Phase: `RELEASE_CANDIDATE_AWAITING_CI`. De beschermde `manual_trade_fixture_prepare` route
 is een aparte owner-gebonden write met expliciete fixture-autorisatie,
 `manifest_id=none` en uitvoering uitgeschakeld. Ze laat de twee bestaande
 gekoppelde BTC-setups, strategieën en bots ongemoeid; hun gezamenlijke staat
@@ -48,7 +48,37 @@ Publieke `https://tradamind.com/api/health` en
 SHA. Deze statuscommit creëert een nieuwe main-SHA; de laatste bijbehorende
 CI, Auto Deploy en publieke SHA-pariteit worden vóór beschermde QA opnieuw
 gecontroleerd. Er is nog geen beschermde productiewrite en geen volledige
-live kaart-/opslag-QA.
+live kaart-/opslag-QA. De definitieve statusdeploy op
+`071876e2f6b570145b179400a1e5091011e494ee` had vijf groene main-CI-jobs
+(run `43110971201`), Auto Deploy `43111767270` en HTTP 200 met exact die SHA
+op beide publieke buildoppervlakken. Onafhankelijke QA bevestigde die identiteit
+en beschermde authenticatie read-only (run `43112208068`). Prepare-run
+`43112449798` faalde met `manual_trade_fixture_prepare_runtime_error`;
+read-only bronaudit `43112644871` zag voor AAPL/USD `source_unavailable` en
+geen bruikbare planbron. Read-only fixture-preflight `43112784289` faalde ook
+generiek. De nacontrole zag geen profiel, scores, nieuwe setups, configuraties,
+plannen, orders of Live-activiteit; BTC behield zijn twee gekoppelde setups.
+QA-verdict voor deze SHA: `NOT_ACCEPTED / INCOMPLETE`; de positieve live
+kaart-, bevestig- en opslagmatrix is niet gestart. De huidige reparatiekandidaat
+typt providerfouten, begrenst de diagnostiek per bronfase en bewaart de
+fail-closed broncontrole vóór de eerste fixture-write. De actuele oorzaak van
+de AAPL-bronuitval moet na deployment opnieuw read-only worden vastgesteld.
+De laatste lokale backend-suite op deze kandidaat gaf **4699 passed, 7 skipped**
+(log SHA-256 `1b0b0ac58ccb544d30e7f2af348661e6210205190015671171cf5254e1f306ab`).
+De geïsoleerde FastAPI/Celery/Responses-actiematrix gaf **17/17** en de
+adaptertests **26/26**, met nul brokerorders, Live-bots, Live-calls of
+productieverbindingen (artifact SHA-256
+`3e43dc8d7ed5cb6d09c5767460b60fb1c465939536671a56a56d5c6362149ec8`).
+Echte providerontwikkeling gaf **20/20** (SHA-256
+`2ce6c4685705a2299986a1c1d95fdeb9e7ec92ce1bad3c482530f2c8b7e46281`)
+en regressie **109/109** (SHA-256
+`a4887f94aea8f7136ee8e81bba788527331495f37553982216706fc96b267261`),
+beide met nul provider-, schema-, parse-, timeout- of validatiefouten.
+Een afzonderlijke echte Twelve Data-ontwikkelbron leverde vijftien afgesloten
+AAPL/USD-candles en een beschikbaar plan. Onafhankelijke QA- en Security-
+codechecks gaven GO voor uitsluitend de begrensde diagnostiek, niet voor
+positieve live acceptatie. CI, Auto Deploy en nieuwe publieke SHA-pariteit
+zijn nog open.
 
 ## FINN handmatig tradevoorstel: beschermde scorebron-diagnose (11 november 2026)
 

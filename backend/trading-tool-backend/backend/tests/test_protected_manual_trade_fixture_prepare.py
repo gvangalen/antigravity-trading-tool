@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+from types import SimpleNamespace
 
 import pytest
 
@@ -206,6 +207,68 @@ def test_missing_real_plan_source_blocks_configuration(tmp_path, monkeypatch):
     assert json.loads(journal.read_text())["phase"] == "failed"
 
 
+def test_source_preflight_preserves_only_pair_and_typed_source_reason(monkeypatch):
+    from backend.services import finn_manual_trade_suggestion_service as suggestion
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def rollback(self):
+            return None
+
+    async def candles(_session, *, asset, quote_currency):
+        if asset == "AAPL":
+            raise ValueError("twelve_data_unavailable:429")
+        return 1, []
+
+    monkeypatch.setattr(fixture, "async_session_factory", Session)
+    monkeypatch.setattr(suggestion, "_source_candles", candles)
+    monkeypatch.setattr(suggestion, "derive_suggested_plan", lambda **_kwargs: {})
+    with pytest.raises(RuntimeError, match="^manual_trade_fixture_source_preflight_failed$") as caught:
+        asyncio.run(fixture._source_preflight())
+    assert caught.value.manual_trade_asset == "AAPL"
+    assert caught.value.manual_trade_source_reason == "twelve_data_unavailable:429"
+
+
+def test_read_only_preflight_artifact_redacts_provider_failure(tmp_path, monkeypatch):
+    from backend.scripts import run_finn_production_qa as runner
+
+    report_path = tmp_path / "report.json"
+    args = SimpleNamespace(
+        release_sha="a" * 40, run_label="preflight-test", runner_revision=None,
+        report_path=str(report_path), workflow_run_id="local", profile="manual_trade_fixture_preflight",
+        manifest_id="none", manifest_bundle_path=None, checkout=str(tmp_path),
+        release_marker=str(tmp_path / "release"), base_url="https://example.invalid",
+        dry_preflight=False, fixture_namespace=None,
+    )
+    monkeypatch.setattr(runner, "parse_args", lambda: args)
+    monkeypatch.setattr(runner, "release_identity", lambda **_kwargs: {"matches": True})
+    monkeypatch.setattr(runner, "issue_fixture_token", lambda **_kwargs: "local-token")
+    monkeypatch.setattr(runner, "authenticated_preflight",
+                        lambda **_kwargs: {"fixture_authenticated": True})
+
+    def fail_preflight():
+        error = ValueError("private provider token=secret")
+        error.manual_trade_failed_phase = "source_candles"
+        error.manual_trade_asset = "AAPL"
+        error.manual_trade_source_reason = str(error)
+        raise error
+
+    monkeypatch.setattr(runner, "manual_trade_fixture_preflight", fail_preflight)
+    assert runner.main() == 1
+    report = json.loads(report_path.read_text())
+    assert report["error_category"] == "manual_trade_fixture_preflight_runtime_error"
+    assert report["manual_trade_failure_diagnostic"] == {
+        "failed_phase": "source_candles", "asset": "AAPL",
+        "source_reason": "source_unavailable",
+    }
+    assert "secret" not in report_path.read_text()
+
+
 def test_prepare_profile_has_distinct_protected_authorization_boundary():
     from backend.scripts import run_finn_production_qa as runner
 
@@ -213,6 +276,21 @@ def test_prepare_profile_has_distinct_protected_authorization_boundary():
     assert runner.profile_error_category(
         "manual_trade_fixture_prepare", RuntimeError("private owner details"),
     ) == "manual_trade_fixture_prepare_runtime_error"
+    source_error = RuntimeError("manual_trade_fixture_source_preflight_failed")
+    source_error.manual_trade_failed_phase = "source_preflight"
+    source_error.manual_trade_asset = "AAPL"
+    source_error.manual_trade_source_reason = "twelve_data_unavailable:429"
+    assert runner.profile_error_category("manual_trade_fixture_prepare", source_error) == (
+        "manual_trade_fixture_source_preflight_failed"
+    )
+    assert runner.safe_manual_trade_failure_diagnostic(
+        "manual_trade_fixture_prepare", source_error,
+    ) == {"failed_phase": "source_preflight", "asset": "AAPL",
+          "source_reason": "twelve_data_unavailable:429"}
+    source_error.manual_trade_source_reason = "private provider token=secret"
+    assert runner.safe_manual_trade_failure_diagnostic(
+        "manual_trade_fixture_prepare", source_error,
+    )["source_reason"] == "source_unavailable"
     workflow = (REPO_ROOT / ".github/workflows/finn-production-qa.yml").read_text()
     assert "FINN_QA_ALLOW_MANUAL_TRADE_PREPARE=1" in workflow
     assert '"$ALLOW_SAFE_FIXTURE_EXECUTION" != "false"' in workflow
