@@ -4,6 +4,52 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN beschermde trade-QA child-namespace herstel (12 november 2026)
+
+Phase: `LOCAL_VALIDATION`. Onafhankelijke QA op live
+`939b84caaf74942e4cab13dd9b4d0870fd57f2a6` gaf voor de volledige
+handmatige-tradematrix **NOT_ACCEPTED / INCOMPLETE door runnerinfrastructuur**,
+geen bewezen productdefect. Matrixrun `43291674279`, artifact SHA-256
+`1418b26dc67cb3d02adebac84dfcd26b9f3e8913eae11fee35def878e0d0b56c`:
+vier van zes cases voltooid. BTC-budget, twee setupkeuzes, veilige opslag en
+replay slaagden. De ETH-case stopte vóór de productaanvraag met
+`manual_trade_case_source_before.status=binding_invalid`; AAPL werd terecht
+`not_run`. Eén bevestiging en één veilige uitvoering, nul Live- of ordercalls.
+De child was ingetrokken en in quarantaine, parent ongewijzigd. Read-only
+diagnose `43292108798` (artifact SHA-256
+`915fcbeaf01f1906b4f407314aa6d20b87d24e15d6516e1ad94e682a2ad34bb8`)
+bevestigde de veilige toestand; exact-namespace cleanup `43292418266`
+(artifact SHA-256
+`c980999c534f8b6d3af0d45dedba13b375b1791f363c4a3afe4e8d53953d5d73`)
+verwijderde de child met `parent_unchanged=true`.
+
+Oorzaak: de tijdelijke matrix gaf de fixture-namespace aan de child door
+als CLI-argument, maar niet als `FINN_QA_FIXTURE_NAMESPACE`-omgevingsvariabele.
+De nieuwe eigenaargebonden broncheck vereist beide bindingen en stopte veilig.
+Deze reparatie zet dezelfde namespace nu expliciet in de child-omgeving;
+een regressietest controleert subprocess-env, CLI-argument en lock-FD samen.
+De productbeslissingen en risicocontroles veranderen niet. De volledige
+beschermde matrix moet na een nieuwe geverifieerde release opnieuw door
+onafhankelijke QA worden uitgevoerd. De verse browser-QA op deze SHA
+bevestigde de nieuwe conflict- en negatie-antwoorden zonder voorstel of write.
+
+Onafhankelijke lokale codebeoordeling door QA, Security en Architecture:
+**GO** voor deze exacte namespace-doorgifte. Gemeten lokale gates: backend
+**4726 passed, 7 skipped** (log SHA-256
+`563a361be279c38c666f95360bbfca24637edbdc6c428f772188f3b6d4a9cb65`),
+gerichte runner/matrix-tests **139/139**, frontend-commandtests **71/71**,
+typecheck, i18n lint/tests, proposaltests, productiebuild en high audit groen.
+Geïsoleerde FastAPI/Celery-actiematrix **17/17** (artifact SHA-256
+`30f6478496a3a963820f4e4f028a758602ebd3b7afb38da8ddc9c3647fbf6246`),
+adaptertests **26/26**, nul brokerorders, Live-calls of productieverbindingen.
+Echte provider-development **20/20** (artifact SHA-256
+`0646c71d20152660e377a31c4d1731ff7f38f501855e33250fb0b2edf423e26b`)
+en regression **109/109** (artifact SHA-256
+`b994fd15df3b42f800ae930d8526442a72d59bdc5de284c6642c05959aa0a179`)
+hadden 100% operation-, entiteit-, doelasset-, polariteit-, referentie-,
+verduidelijkings- en missing-input-accuracy en nul provider-, schema-,
+parse-, validatie- of timeoutfouten. CI en deployment volgen nog.
+
 ## FINN trade-QA broncontrole en watchlistantwoord (12 november 2026)
 
 Phase: `DEPLOYED_PENDING_FINAL_SHA`. Onafhankelijke browser-QA op live
