@@ -257,7 +257,16 @@ def test_cleanup_deletes_known_loose_owner_rows_and_verifies_absence(monkeypatch
     assert session.rows == {"setups": 0, "market_data_indicators": 0}
 
 
-@pytest.mark.parametrize("failure", ["unknown_loose", "noncascade", "late_row"])
+def test_cleanup_deletes_child_rows_with_legacy_non_cascade_fk(monkeypatch):
+    import asyncio
+    session = _CleanupSession(noncascade=True)
+    monkeypatch.setattr(temporary, "async_session_factory", lambda: session)
+    asyncio.run(temporary._delete_child(42, "qa-123-1-aabbccdd-eeff0011"))
+    assert session.committed
+    assert session.rows == {"setups": 0, "market_data_indicators": 0}
+
+
+@pytest.mark.parametrize("failure", ["unknown_loose", "late_row"])
 def test_cleanup_rolls_back_on_schema_drift_or_remaining_row(monkeypatch, failure):
     import asyncio
     session = _CleanupSession(**{failure: True})
