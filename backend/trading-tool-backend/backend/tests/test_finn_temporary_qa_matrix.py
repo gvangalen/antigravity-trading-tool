@@ -25,6 +25,18 @@ def _args(tmp_path):
     )
 
 
+def test_temporary_email_is_accepted_by_auth_response_schema():
+    from backend.schemas.auth_schema import UserOut
+
+    namespace = "qa-123-1-aabbccdd-eeff0011"
+    email = temporary._email(namespace)
+    response = UserOut(id=42, email=email, role="user", is_active=True,
+                       first_name="FINN QA temporary", last_name=None,
+                       ai_plan=None, ai_requests_limit_day=None,
+                       ai_requests_used_day=None)
+    assert response.email == email
+
+
 def _prepare(monkeypatch, tmp_path):
     args = _args(tmp_path)
     (tmp_path / "manifest.json").write_text("{}")
