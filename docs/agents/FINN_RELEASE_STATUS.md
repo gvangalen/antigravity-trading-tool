@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN handmatig tradevoorstel: tijdelijk geïsoleerde QA-matrix (12 november 2026)
 
-Phase: `QA_REPAIR_IN_PROGRESS`. De productrelease is
+Phase: `PRODUCT_DEPLOYED_QA_PENDING`. De eerste productrelease was
 `d24c90f7da54b77073cd6a98217e925b92ddbfde`. PR
 [#998](https://github.com/gvangalen/antigravity-trading-tool/pull/998)
 had vijf groene PR-CI-jobs (run `43182417071`) en is gemerged als
@@ -47,8 +47,14 @@ artifact SHA-256
 `474c8930f6209284fd5f622d81b5cb99d3dae8089c6f25e49c184c5b0eb595f0`)
 verwijderde het kind; de oorspronkelijke QA-eigenaar bleef onveranderd. De
 reparatie gebruikt een door `UserOut` geaccepteerd gereserveerd domein en een
-directe schemaspecifieke regressietest. De volledige matrix wordt pas na
-nieuwe groene CI, deploy en publieke SHA-check herhaald.
+directe schemaspecifieke regressietest. PR
+[#1001](https://github.com/gvangalen/antigravity-trading-tool/pull/1001)
+had vijf groene PR-CI-jobs (`43190065892`) en is gemerged als
+`ba7c2d48bd416a18bc9645df8934cefa0912d139`. De vijf main-CI-jobs
+(`43190855626`) en Auto Deploy (`43191501603`) slaagden; publieke backend
+health en frontend build-info gaven HTTP 200 met exact die SHA. Deze
+statuswijziging creëert een nieuwe main-SHA; de laatste CI, Auto Deploy en
+publieke SHA-pariteit worden vóór de herhaalde onafhankelijke QA gecontroleerd.
 
 Op de vorige diagnostische SHA `a0129feb9d0b27f024944ad8e8cc965f5ecbd5bb`
 bevestigde onafhankelijke read-only QA auth (`43172865270`) en drie beschikbare
