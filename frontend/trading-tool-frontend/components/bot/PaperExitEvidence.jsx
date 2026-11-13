@@ -32,7 +32,7 @@ export default function PaperExitEvidence({ evidence, showMissing = false, defau
       <div>{copy.proceeds}: {evidence.execution_proceeds_eur == null ? copy.notRecorded : number(evidence.execution_proceeds_eur) + " EUR"}</div>
       <div>{copy.executionQuote}: {evidence.execution_source_price == null ? copy.notRecorded : `${number(evidence.execution_source_price)} ${sourceCurrency} · ${time(evidence.execution_source_price_at)}`}</div>
       <div>{copy.fx}: {evidence.execution_fx_eur_per_unit == null ? copy.notRecorded : `${number(evidence.execution_fx_eur_per_unit)} · ${time(evidence.execution_fx_observed_at)}`}</div>
-      {hasConversion && <div>{copy.conversion}: {number(evidence.execution_source_price)} {sourceCurrency} × {number(evidence.execution_fx_eur_per_unit)} = {number(evidence.execution_eur_price)} EUR</div>}
+      {hasConversion && <div>{copy.conversion}: {number(evidence.execution_source_price)} {sourceCurrency} × {number(evidence.execution_fx_eur_per_unit)} ≈ {number(evidence.execution_eur_price)} EUR</div>}
       {evidence.execution_source_ref?.measurement_id && <div>{copy.marketMeasurement}: #{evidence.execution_source_ref.measurement_id} · {time(evidence.execution_source_ref.source_observed_at_utc)}</div>}
     </dl>
   </details>;
