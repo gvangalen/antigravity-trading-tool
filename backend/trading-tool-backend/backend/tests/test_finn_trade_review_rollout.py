@@ -134,7 +134,7 @@ def test_worker_queries_only_allowlisted_users(monkeypatch):
     assert len(queries) == 4
     assert all("ANY(CAST(:allowed AS INTEGER[]))" in sql for sql, _ in queries)
     assert all(params == {"allowed": [7]} for _, params in queries[:1] + queries[2:])
-    assert queries[1][1] == {"allowed": [7], "format_version": "4"}
+    assert queries[1][1] == {"allowed": [7], "format_version": "5"}
     assert "WHERE (analysis_status='pending' OR" in queries[1][0]
     assert "analysis_json->>'format_version' IS DISTINCT FROM :format_version" in queries[1][0]
     assert "LEFT JOIN finn_exchange_import_attempts attempt" in queries[2][0]

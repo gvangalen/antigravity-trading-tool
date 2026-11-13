@@ -4289,11 +4289,11 @@ class FinnResponsesFrontDoor:
             required_read_tool_name=(
                 "get_open_plan_draft"
                 if guided_draft_question
-                else "get_active_plan_and_strategy"
-                if is_read_only_turn and account_state_bundle
-                and pending_operation is None and not resuming_clarification
                 else "get_closed_trade_review"
                 if (explicit_closed_review_read or contextual_closed_review_read)
+                and pending_operation is None and not resuming_clarification
+                else "get_active_plan_and_strategy"
+                if is_read_only_turn and account_state_bundle
                 and pending_operation is None and not resuming_clarification
                 else "get_indicator_snapshot"
                 if is_read_only_turn and _saved_indicator_configuration_read(request_facts)

@@ -3,10 +3,55 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
-from backend.services.finn_trade_review_service import FinnTradeReviewService, build_closed_positions, build_weekly_review_patterns, completed_reflection_week, unrecorded_plan_theme
+from backend.services.finn_trade_review_service import FinnTradeReviewService, attach_entry_decision_plan_evidence, build_closed_positions, build_weekly_review_patterns, completed_reflection_week, unrecorded_plan_theme
 
 
 START = datetime(2026, 10, 16, tzinfo=timezone.utc)
+
+
+def test_entry_decision_restores_only_proven_original_quote_and_fx():
+    row = {
+        "entry_at": datetime(2026, 11, 10, 14, 45, tzinfo=timezone.utc),
+        "plan_snapshot": {"stop_loss": {"price": 305.65}},
+        "plan_provenance": {"decision_id": 42, "order_id": 7},
+        "entry_decision_evidence": {
+            "decision_id": 42, "order_id": 7, "decision_at": "2026-11-10T14:44:00",
+            "trade_plan": {"source_price_currency": "USD",
+                           "source_levels": {"entry": 347.14, "stop_loss": 342,
+                                             "targets": [357.42]},
+                           "fx_eur_per_unit": 0.8937,
+                           "fx_as_of": "2026-11-10T14:42:00Z"},
+        },
+    }
+    enriched = attach_entry_decision_plan_evidence(row)
+    assert enriched["plan_snapshot"]["stop_loss"] == {"price": 305.65}
+    assert enriched["entry_decision_source_plan"]["source_price_currency"] == "USD"
+    assert enriched["entry_decision_source_plan"]["source_levels"]["stop_loss"] == 342
+    assert enriched["entry_decision_source_plan"]["fx_eur_per_unit"] == 0.8937
+    assert "entry_decision_evidence" not in enriched
+    assert "source_levels" not in row["plan_snapshot"]
+    for change in ({"decision_id": 43}, {"order_id": 8},
+                   {"decision_at": "2026-11-10T14:46:00"},
+                   {"trade_plan": {"source_price_currency": "USD"}}):
+        invalid = {**row, "entry_decision_evidence": {**row["entry_decision_evidence"], **change}}
+        assert attach_entry_decision_plan_evidence(invalid)["plan_snapshot"] == row["plan_snapshot"]
+        assert "entry_decision_source_plan" not in attach_entry_decision_plan_evidence(invalid)
+    late_fx = {**row, "entry_decision_evidence": {**row["entry_decision_evidence"],
+        "trade_plan": {**row["entry_decision_evidence"]["trade_plan"],
+                       "fx_as_of": "2026-11-10T14:45:00Z"}}}
+    assert "fx_eur_per_unit" not in attach_entry_decision_plan_evidence(late_fx)["entry_decision_source_plan"]
+    order_fx_only = {**row, "plan_snapshot": {**row["plan_snapshot"],
+                                                 "fx_eur_per_unit": 0.9}}
+    split = attach_entry_decision_plan_evidence(order_fx_only)
+    assert split["plan_snapshot"]["fx_eur_per_unit"] == 0.9
+    assert split["entry_decision_source_plan"]["fx_eur_per_unit"] == 0.8937
+    order_source = {**order_fx_only, "plan_snapshot": {
+        **order_fx_only["plan_snapshot"], "source_price_currency": "USD",
+        "source_levels": row["entry_decision_evidence"]["trade_plan"]["source_levels"],
+    }}
+    split = attach_entry_decision_plan_evidence(order_source)
+    assert split["plan_snapshot"]["source_levels"] == split["entry_decision_source_plan"]["source_levels"]
+    assert split["plan_snapshot"]["fx_eur_per_unit"] != split["entry_decision_source_plan"]["fx_eur_per_unit"]
 
 
 def test_paper_review_exposes_exit_evidence_with_explicit_utc_instants():

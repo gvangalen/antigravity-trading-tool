@@ -15,6 +15,29 @@ from backend.services.ai_usage_observability_service import get_ai_usage_context
 from backend.services.finn_trade_screenshot import MAX_BYTES, PNG_SIGNATURE, validate_png
 
 
+def test_entry_decision_source_levels_have_separate_ai_citation():
+    review = {
+        "id": 12, "symbol": "AAPL", "execution_environment": "paper",
+        "entry_at": datetime(2026, 11, 10, tzinfo=timezone.utc),
+        "exit_at": datetime(2026, 11, 12, tzinfo=timezone.utc),
+        "entry_value_eur": Decimal("393.01"), "exit_value_eur": Decimal("405.48"),
+        "pnl_eur_before_fees": Decimal("12.47"), "fills": [],
+        "plan_provenance": {"source": "bot_order_context", "order_id": 7, "decision_id": 42},
+        "plan_snapshot": {"stop_loss": {"price": 305.65}},
+        "entry_decision_source_plan": {
+                          "source_evidence": "linked_entry_decision",
+                          "source_price_currency": "USD",
+                          "source_levels": {"entry": 347.14, "stop_loss": 342,
+                                            "targets": [357.42]},
+                          "source_decision_id": 42,
+                          "source_decision_at": "2026-11-10T14:44:00+00:00"},
+    }
+    context, allowed = evidence_context(review)
+    assert {"plan:snapshot", "entry_decision:source_plan"} <= allowed
+    assert context["plan"]["data"] == {"stop_loss": {"price": 305.65}}
+    assert context["entry_decision_source_plan"]["data"]["source_levels"]["stop_loss"] == 342
+
+
 def _chunk(kind: bytes, payload: bytes) -> bytes:
     return struct.pack(">I", len(payload)) + kind + payload + struct.pack(">I", zlib.crc32(kind + payload) & 0xffffffff)
 
@@ -339,7 +362,7 @@ def test_luna_writes_review_and_evidence_remains_bound():
     raw = _analysis("De automatische exit beperkte het verlies; de reden voor de instap is onbekend.")
     raw["observations"][0]["text"] = "De geregistreerde verkoop sloot de positie."
     result = validate_analysis(raw, {"fill:1"})
-    assert result["format_version"] == 4
+    assert result["format_version"] == 5
     assert result["analysis_source"] == "ai_generated"
     assert result["summary"] == raw["summary"]
     assert result["observations"][0]["text"] == raw["observations"][0]["text"]

@@ -53,6 +53,14 @@ class FinnClosedTradeReflectionService:
                     JOIN bot_decisions d ON d.id=l.decision_id AND d.user_id=l.user_id
                     WHERE l.id=r.closing_ledger_id AND l.user_id=r.user_id
                       AND d.decision_kind='paper_exit') AS paper_exit_evidence,
+                   (SELECT jsonb_build_object('order_id',o.id,'decision_id',d.id,
+                               'decision_at',d.decision_ts,
+                               'trade_plan',d.scores_json->'trade_plan')
+                    FROM bot_ledger l
+                    JOIN bot_orders o ON o.id=l.order_id AND o.user_id=l.user_id
+                    JOIN bot_decisions d ON d.id=o.decision_id AND d.user_id=l.user_id
+                    WHERE l.id=r.opening_ledger_id AND l.user_id=r.user_id
+                   ) AS entry_decision_evidence,
                    (SELECT jsonb_build_object(
                         'lesson_text',l.lesson_text,'confirmed_at',l.confirmed_at,
                         'evidence_revision',l.evidence_revision)
@@ -103,6 +111,14 @@ class FinnClosedTradeReflectionService:
                     JOIN bot_decisions d ON d.id=l.decision_id AND d.user_id=l.user_id
                     WHERE l.id=r.closing_ledger_id AND l.user_id=r.user_id
                       AND d.decision_kind='paper_exit') AS paper_exit_evidence,
+                   (SELECT jsonb_build_object('order_id',o.id,'decision_id',d.id,
+                               'decision_at',d.decision_ts,
+                               'trade_plan',d.scores_json->'trade_plan')
+                    FROM bot_ledger l
+                    JOIN bot_orders o ON o.id=l.order_id AND o.user_id=l.user_id
+                    JOIN bot_decisions d ON d.id=o.decision_id AND d.user_id=l.user_id
+                    WHERE l.id=r.opening_ledger_id AND l.user_id=r.user_id
+                   ) AS entry_decision_evidence,
                    (SELECT jsonb_build_object(
                         'lesson_text',l.lesson_text,'confirmed_at',l.confirmed_at,
                         'evidence_revision',l.evidence_revision)
@@ -128,6 +144,8 @@ class FinnClosedTradeReflectionService:
     @staticmethod
     def _safe_row(row: dict) -> dict:
         from backend.services.bot_service import _paper_exit_evidence
+        from backend.services.finn_trade_review_service import attach_entry_decision_plan_evidence
+        row = attach_entry_decision_plan_evidence(row)
         analysis = row.get("analysis_json") or {}
         observations = analysis.get("observations") if isinstance(analysis, dict) else []
         themes = sorted({str(item.get("theme")) for item in observations or []
@@ -160,6 +178,8 @@ class FinnClosedTradeReflectionService:
             evidence_ids.append("closure:user-confirmed")
         if has_proven_plan:
             evidence_ids.append("plan:snapshot")
+            if row.get("entry_decision_source_plan"):
+                evidence_ids.append("entry_decision:source_plan")
         paper_exit = (_paper_exit_evidence("paper_exit", row.get("paper_exit_evidence"))
                       if str(row.get("execution_environment") or "").lower() == "paper"
                       else None)
@@ -193,6 +213,7 @@ class FinnClosedTradeReflectionService:
             "entry_at": row["entry_at"].isoformat(), "exit_at": row["exit_at"].isoformat(),
             "pnl_eur_before_fees": str(row["pnl_eur_before_fees"]) if row.get("pnl_eur_before_fees") is not None else None,
             "has_plan": has_proven_plan,
+            "plan_source_evidence": row.get("entry_decision_source_plan") if has_proven_plan else None,
             "confirmed_lesson": confirmed_lesson,
             "analysis_status": str(row["analysis_status"]),
             "chart_status": str(row["candles_status"]),

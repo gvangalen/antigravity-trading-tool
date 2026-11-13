@@ -48,7 +48,7 @@ def test_aapl_review_chain_projects_and_reads_exact_usd_evidence(monkeypatch):
             return {
                 "id": 77, "bot_id": 22, "execution_environment": "paper",
                 "analysis_status": "ready", "analysis_json": {
-                    "format_version": 4,
+                    "format_version": 5,
                     "observations": [{"evidence_ids": ["paper_exit:decision"]}],
                 },
                 "paper_exit_evidence": {"trigger": "first_target", **expected},
@@ -92,7 +92,7 @@ def test_aapl_review_chain_projects_and_reads_exact_usd_evidence(monkeypatch):
 
     result = asyncio.run(probe._review_chain(11, 22, expected))
     assert result["result"] == "PASS"
-    assert result["analysis_format_version"] == 4
+    assert result["analysis_format_version"] == 5
     assert steps == ["project", "dispose", "chat"]
 
 

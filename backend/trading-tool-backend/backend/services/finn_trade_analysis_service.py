@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 ANALYSIS_VERSION = 1
-ANALYSIS_FORMAT_VERSION = 4
+ANALYSIS_FORMAT_VERSION = 5
 MAX_AI_FILLS = 50
 MAX_AI_CASH_LEGS = 16
 SYSTEM_ROLE = (
@@ -41,6 +41,11 @@ SYSTEM_ROLE = (
     "Een vastgelegd Paper-exitlabel en de koers bij de botbeslissing zijn botbewijs; "
     "onderscheid dit van onafhankelijk geverifieerde marktuitvoering. Behandel "
     "omgerekende EUR-planniveaus niet als de oorspronkelijk opgeslagen koersvaluta. "
+    "Citeer bronkoersniveaus uit de instapbeslissing als entry_decision:source_plan, "
+    "niet als plan:snapshot. Als de gekoppelde instapbeslissing bronkoersniveaus en FX bevat, noem hun "
+    "brontijd afzonderlijk van de latere uitvoeringskoers en exit-FX. Verklaar "
+    "een verschil tussen bron- en EUR-planniveaus alleen met een aantoonbare "
+    "omrekening; zonder die koppeling blijft volledige plantrouw onzeker. "
     "Begin met het belangrijkste "
     "inzicht uit deze trade; herhaal de getoonde cijfers niet zonder duiding. "
     "Antwoord uitsluitend als JSON met summary, observations (array van "
@@ -87,8 +92,12 @@ def evidence_context(review: dict) -> tuple[dict, set[str]]:
     allowed = {item["id"] for item in evidence}
     if exchange or derivative:
         allowed.add("closure:user-confirmed")
-    if review.get("plan_snapshot") and review.get("plan_provenance"):
+    plan_snapshot = review.get("plan_snapshot")
+    linked_source = review.get("entry_decision_source_plan")
+    if plan_snapshot and review.get("plan_provenance"):
         allowed.add("plan:snapshot")
+    if linked_source:
+        allowed.add("entry_decision:source_plan")
     paper_exit = (review.get("paper_exit_evidence")
                   if str(review.get("execution_environment") or "").lower() == "paper"
                   else None)
@@ -133,9 +142,16 @@ def evidence_context(review: dict) -> tuple[dict, set[str]]:
         ("pnl_eur_including_simulated_costs" if str(review.get("execution_environment")).lower() == "paper"
          else "pnl_eur_before_fees"): str(review["pnl_eur_before_fees"]) if review.get("pnl_eur_before_fees") is not None else None,
         "fees_unknown": not (str(review.get("execution_environment")).lower() == "paper"), "fills": evidence,
-        "plan": {"id": "plan:snapshot", "data": review["plan_snapshot"],
+        "plan": {"id": "plan:snapshot", "data": plan_snapshot,
                  "provenance": review["plan_provenance"]}
-                if review.get("plan_snapshot") and review.get("plan_provenance") else None,
+                if plan_snapshot and review.get("plan_provenance") else None,
+        "entry_decision_source_plan": {"id": "entry_decision:source_plan",
+                                       "data": {key: linked_source.get(key) for key in
+                                                ("source_price_currency", "source_levels",
+                                                 "source_decision_id", "source_decision_at",
+                                                 "market_quote_currency", "fx_eur_per_unit", "fx_as_of")},
+                                       "authority": "owner-linked entry decision at or before the buy, distinct from order plan snapshot and execution FX"}
+                                      if linked_source else None,
         "plan_status": "entry_order_plan_recorded" if review.get("plan_snapshot") and review.get("plan_provenance")
                        else "legacy_plan_provenance_unknown" if review.get("plan_snapshot")
                        else "no_original_plan_recorded",
