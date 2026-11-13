@@ -386,6 +386,13 @@ def profile_error_category(profile: str, error: Exception) -> str:
         } else "account_probe_runtime_error")
     if profile in {"trader_paper_exit_reconciliation", "trader_paper_exit_review_chain", "trader_source_time_parity"}:
         code = str(error)
+        if profile == "trader_paper_exit_review_chain":
+            if code in {"closed_paper_review_projection_failed", "closed_paper_review_analysis_failed"}:
+                return code
+            if code.startswith("closed_paper_review_ai_unavailable:"):
+                cause = code.partition(":")[2]
+                if cause in {"local_rate_limit", "configuration", "rate_limit", "quota", "authentication", "model", "timeout", "connection", "provider"}:
+                    return f"paper_exit_review_ai_unavailable_{cause}"
         return (code if code in {
             "paper_exit_fixture_not_authorized", "paper_exit_namespace_invalid",
             "fixture_binding_invalid", "fixture_has_exchange_keys",
@@ -4055,6 +4062,10 @@ def main() -> int:
             phase = getattr(error, "probe_phase", None)
             if phase in {"preflight", "seed", "paper_open", "baseline", "engine", "evidence", "rendered_ui", "source_parity", "review_chain"}:
                 report["paper_exit_probe_phase"] = phase
+        if args.profile == "trader_paper_exit_review_chain":
+            step = getattr(error, "review_step", None)
+            if step in {"projection_analysis", "dossier_read", "finn_chat", "finn_verify"}:
+                report["paper_exit_review_step"] = step
         diagnostic = safe_manual_trade_failure_diagnostic(args.profile, error)
         if diagnostic is not None:
             report["manual_trade_failure_diagnostic"] = diagnostic

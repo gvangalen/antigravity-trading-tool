@@ -117,6 +117,19 @@ def run(label: str, *, expected_profile: str = "trader_paper_exit_reconciliation
                    WHERE l.user_id=%s AND d.decision_kind='paper_exit'""", (user_id,),
             )
             exit_ledger = int(cur.fetchone()[0])
+            review_progress = {}
+            if expected_profile == "trader_paper_exit_review_chain":
+                cur.execute("SELECT analysis_status FROM finn_trade_reviews WHERE user_id=%s", (user_id,))
+                reviews = cur.fetchall()
+                status = str(reviews[0][0]) if len(reviews) == 1 else "multiple" if reviews else "missing"
+                if status not in {"pending", "running", "ready", "failed", "unavailable", "missing", "multiple"}:
+                    status = "other"
+                cur.execute("SELECT COUNT(*) FROM finn_v2_runs WHERE user_id=%s", (user_id,))
+                review_progress = {
+                    "review_present": bool(reviews),
+                    "review_analysis_status": status,
+                    "finn_run_present": bool(cur.fetchone()[0]),
+                }
             return {
                 "fixture_state": "UNSAFE_ACTIVE" if unsafe else "QUARANTINED_INACTIVE",
                 "cleanup_verified": False,
@@ -125,6 +138,7 @@ def run(label: str, *, expected_profile: str = "trader_paper_exit_reconciliation
                 "paper_exit_order_present": bool(exit_orders),
                 "paper_exit_execution_present": bool(exit_executions),
                 "paper_exit_ledger_present": bool(exit_ledger),
+                **review_progress,
             }
     finally:
         conn.close()

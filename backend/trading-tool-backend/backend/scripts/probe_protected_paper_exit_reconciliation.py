@@ -223,6 +223,16 @@ def _stage(name: str):
 
 
 @contextmanager
+def _review_step(name: str):
+    """Tag only a fixed substep; never export the underlying exception text."""
+    try:
+        yield
+    except Exception as error:
+        error.review_step = name
+        raise
+
+
+@contextmanager
 def _guard_live_exchange():
     from backend.engine import trading_bot_execution as execution
 
@@ -557,7 +567,8 @@ async def _review_chain(user_id: int, bot_id: int, expected: dict) -> dict:
     from backend.services.finn_trade_review_service import FinnTradeReviewService
     from backend.scripts import probe_protected_closed_paper_review as review_probe
 
-    await asyncio.to_thread(review_probe._process_review_for_fixture, user_id)
+    with _review_step("projection_analysis"):
+        await asyncio.to_thread(review_probe._process_review_for_fixture, user_id)
     try:
         async with async_session_factory() as session:
             service = FinnTradeReviewService(session)
@@ -596,33 +607,38 @@ async def _review_chain(user_id: int, bot_id: int, expected: dict) -> dict:
             if "paper_exit:decision" not in evidence_ids:
                 raise RuntimeError("paper_exit_review_analysis_evidence_missing")
             review_id = int(detail["id"])
+    except Exception as error:
+        error.review_step = "dossier_read"
+        raise
     finally:
         await engine.dispose()
 
-    with review_probe._fixture_review_rollout(user_id):
-        answer = await review_probe._chat_turn(
-            user_id,
-            f"Wat was bij mijn trade-reflectie #{review_id} de vastgelegde Paper-exitreden? "
-            "Noem de oorspronkelijke koersvaluta, het opgeslagen eerste doel en de "
-            "wisselkoers bij uitvoering. Alleen teruglezen; geen voorstel of actie.",
-        )
-    response = answer.response
-    if (answer.status != "completed" or response is None
-            or response.proposal_id or response.confirmation_required
-            or (answer.policy and answer.policy.execute_allowed)):
-        raise RuntimeError("paper_exit_finn_read_failed")
-    if (not any(item.entity_type == "review_history" for item in response.evidence)
-            or not await review_probe._has_responses_exchange(
-                user_id, answer.run_id, answer.conversation_id)):
-        raise RuntimeError("paper_exit_finn_owner_evidence_missing")
-    text = response.content.casefold()
-    numbers = text.replace(",", ".")
-    target = f'{float(expected["saved_first_target"]):.6f}'.rstrip("0").rstrip(".")
-    fx = f'{float(expected["execution_fx_eur_per_unit"]):.6f}'.rstrip("0").rstrip(".")
-    if (not any(term in text for term in ("first_target", "eerste doel", "eerste koersdoel"))
-            or expected["source_price_currency"].casefold() not in text
-            or target not in numbers or fx not in numbers):
-        raise RuntimeError("paper_exit_finn_answer_incomplete")
+    with _review_step("finn_chat"):
+        with review_probe._fixture_review_rollout(user_id):
+            answer = await review_probe._chat_turn(
+                user_id,
+                f"Wat was bij mijn trade-reflectie #{review_id} de vastgelegde Paper-exitreden? "
+                "Noem de oorspronkelijke koersvaluta, het opgeslagen eerste doel en de "
+                "wisselkoers bij uitvoering. Alleen teruglezen; geen voorstel of actie.",
+            )
+    with _review_step("finn_verify"):
+        response = answer.response
+        if (answer.status != "completed" or response is None
+                or response.proposal_id or response.confirmation_required
+                or (answer.policy and answer.policy.execute_allowed)):
+            raise RuntimeError("paper_exit_finn_read_failed")
+        if (not any(item.entity_type == "review_history" for item in response.evidence)
+                or not await review_probe._has_responses_exchange(
+                    user_id, answer.run_id, answer.conversation_id)):
+            raise RuntimeError("paper_exit_finn_owner_evidence_missing")
+        text = response.content.casefold()
+        numbers = text.replace(",", ".")
+        target = f'{float(expected["saved_first_target"]):.6f}'.rstrip("0").rstrip(".")
+        fx = f'{float(expected["execution_fx_eur_per_unit"]):.6f}'.rstrip("0").rstrip(".")
+        if (not any(term in text for term in ("first_target", "eerste doel", "eerste koersdoel"))
+                or expected["source_price_currency"].casefold() not in text
+                or target not in numbers or fx not in numbers):
+            raise RuntimeError("paper_exit_finn_answer_incomplete")
     return {"result": "PASS", "owner_scoped_review": True,
             "analysis_format_version": 4, "exit_evidence_cited": True,
             "owner_scoped_finn_read": True, "action_proposals": 0}

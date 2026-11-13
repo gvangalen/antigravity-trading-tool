@@ -4,6 +4,55 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN Paper-review subfase-diagnostiek (13 november 2026)
+
+Phase: `LOCAL_VALIDATION`. De vorige QA-diagnostische kandidaat staat publiek
+op `d13e4bca82e1a45b8fb1b5a1ff79e38bd6c60b17` na vijf groene laatste
+main-CI-jobs (run `43428734766`) en Auto Deploy `43429344750`;
+backend-health en frontend-buildinfo gaven beide HTTP 200 met exact die SHA.
+Onafhankelijke QA deed eerst een read-only audit van de oude mislukte
+Paper-review-run: `43429740155` vond een inactieve child met een Paper-exit
+(artifact SHA-256
+`fbbf5eb4a85f7d426eb8fb65570c5caad819399357b903dea25059742c6feffe`).
+Exact gebonden cleanup `43429910273` verifieerde verwijdering (artifact
+SHA-256 `ef88efda0ecfcf4b71ce12645747feb72631f34908444d0e05b893ee6aa6b99b`).
+De verse beschermde ketenrun `43430099564-1` stopte opnieuw met
+`paper_exit_probe_runtime_error`, nu in fase `review_chain` (artifact SHA-256
+`50a456eace8122c1f7f85286353b44d8b7aa95aec76c43a31ca3858b1ca6a976`).
+QA-audit `43430266351` vond ook die child inactief in quarantaine; cleanup
+`43430466948` verifieerde verwijdering (artifact SHA-256
+`4cab8261e5f4bbc53b7723f71ab46cb6888b6a23866329105a6bae5073968bda`).
+Er was geen Live-actie. Het huidige onafhankelijke oordeel is
+**NOT_ACCEPTED / INCOMPLETE**; de bestaande geschoonde output kan niet
+onderscheiden of de fout bij reviewprojectie, AI-analyse, dossierlezing of
+FINN-chat ontstond.
+
+Deze vervolgkandidaat labelt uitsluitend vaste subfasen van de
+Review→FINN-keten, laat alleen bekende geschoonde projectie-/analyse- en
+AI-foutcategorieën door, en breidt de exact-run read-only audit uit met
+booleans voor review- en FINN-run-aanwezigheid en een vaste analysestatus.
+Er worden geen nieuwe productacties, gebruikerstoegang of Live-paden geopend.
+De nieuwe kandidaat is lokaal in validatie; er is nog geen nieuwe live
+acceptatie. Historische Reflectie #2127 blijft zonder toegang tot de
+normale Paper Test-accountinhoud onbeoordeeld.
+
+Gemeten lokale gates op deze subfase-kandidaat: gerichte runner-/audittests
+**191 passed, 3 skipped**; volledige backend **4745 passed, 7 skipped**
+(log SHA-256 `61fec1b4a6985de4648491099bc7c9fb2d0c38f88ae4c30244f4ae3e9d3b58e0`).
+Frontend typecheck, i18n-lint/tests, commands/proposals, high audit en
+productiebuild slaagden. Geïsoleerde worker-actiematrix **17/17** en
+adaptertests **26/26**, zonder Live-calls of productieverbindingen (artifact
+SHA-256 `95bd91c3ff64be6a821fba7e1aadfb83d8593bd5d09e1a5593359c12138e8760`).
+Echte-provider development **20/20**, nul provider-, schema- of
+timeoutfouten (artifact SHA-256
+`e7b131e46ec0b4549c18e917e861d66c93ee19c3615d41a3bc75a7ab00dbcf2a`).
+Echte-provider regression **109/109**, met 100% operation-, entiteit-,
+doelasset-, polariteit-, referentie-, verduidelijkings- en missing-inputscore,
+en nul provider-, schema-, parse-, validatie- of timeoutfouten (artifact
+SHA-256 `5156a66c2997d8508f227a4a5d19560ae9e14d962d37094c4f881a5eb024fc15`).
+Onafhankelijke QA-codecheck en Security-review: **GO**. Release en nieuwe
+beschermde live QA zijn nog pending.
+
 ## FINN AAPL Paper-review QA-diagnostiek (13 november 2026)
 
 Phase: `DEPLOYED_PENDING_FINAL_SHA`. Productcode voor het Reflectie-exitbewijs staat
