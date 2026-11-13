@@ -33,6 +33,10 @@ test('trade review exposes original source levels and FX provenance in each loca
       'fx_eur_per_unit', 'fx_as_of',
     ]);
     assert.ok(copy.planCurrencyNote);
+    assert.ok(copy.orderFxLabel);
+    assert.ok(copy.orderFxAsOfLabel);
+    assert.notEqual(copy.orderFxLabel, copy.planFields.fx_eur_per_unit);
+    assert.notEqual(copy.orderFxAsOfLabel, copy.planFields.fx_as_of);
     assert.ok(copy.paperExitDecisionEvidence);
     const exitCopy = dictionary.botPage?.history?.exitEvidence;
     assert.ok(exitCopy?.savedTarget);

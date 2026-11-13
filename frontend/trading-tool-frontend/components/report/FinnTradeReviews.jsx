@@ -138,6 +138,9 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
   const fills = Array.isArray(review.fills) ? review.fills : [];
   const plan = review.plan_snapshot && typeof review.plan_snapshot === 'object' ? review.plan_snapshot : null;
   const entryDecisionPlan = review.entry_decision_source_plan && typeof review.entry_decision_source_plan === 'object' ? review.entry_decision_source_plan : null;
+  const orderPlanCopy = review.plan_provenance?.source === 'bot_order_context'
+    ? { ...copy, planFields: { ...copy.planFields, fx_eur_per_unit: copy.orderFxLabel, fx_as_of: copy.orderFxAsOfLabel } }
+    : copy;
   const originalPlanVerified = Boolean(plan) && review.plan_status === 'entry_order_plan_recorded';
   const manualLinkedPlan = review.plan_provenance?.relation === 'linked_plan_at_manual_entry_not_adherence';
   const isDerivative = review.origin === 'bybit_derivative_user_attested';
@@ -356,7 +359,7 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
       <div className="mt-3 grid gap-5">
         <div className="min-w-0 break-words rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
           <h4 className="flex items-center gap-2 text-sm font-black text-slate-900 dark:text-white"><FileText size={17} /> {originalPlanVerified ? copy.plan : plan ? copy.planUnverified : copy.plan}</h4>
-          {plan ? <><PlanFacts plan={plan} copy={copy} />{manualLinkedPlan && <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">{copy.manualLinkedPlanHint}</p>}{!originalPlanVerified && !manualLinkedPlan && <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">{copy.planUnverifiedHint}</p>}</> : <p className="mt-3 text-sm text-slate-500">{isExchange ? copy.externalNoPlan : copy.noPlan}</p>}
+          {plan ? <><PlanFacts plan={plan} copy={orderPlanCopy} />{manualLinkedPlan && <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">{copy.manualLinkedPlanHint}</p>}{!originalPlanVerified && !manualLinkedPlan && <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">{copy.planUnverifiedHint}</p>}</> : <p className="mt-3 text-sm text-slate-500">{isExchange ? copy.externalNoPlan : copy.noPlan}</p>}
           {entryDecisionPlan && <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-800"><h5 className="text-sm font-semibold text-slate-900 dark:text-white">{copy.entryDecisionEvidence}</h5><PlanFacts plan={entryDecisionPlan} copy={copy} /><p className="mt-3 text-xs text-slate-500">{copy.planCurrencyNote}</p></div>}
         </div>
         <div className="min-w-0 rounded-2xl border border-slate-200 p-5 dark:border-slate-800">

@@ -1896,6 +1896,8 @@
           "paperExitDecisionEvidence": "Paper-Ausstiegsentscheidung",
           "planCurrencyNote": "Quellkursniveaus und FX-Messung gehören zur gespeicherten Einstiegsentscheidung. Für den EUR-Plan und den späteren Ausstieg gelten eigene Belege; die Entscheidungs-FX ist nicht automatisch die Ausführungs-FX.",
           "entryDecisionEvidence": "Einstiegsentscheidung: Quellkurs und Währung",
+          "orderFxLabel": "EUR-Faktor im Orderplan",
+          "orderFxAsOfLabel": "Quellzeitpunkt des Orderplan-FX",
           "planDetails": "Alle dokumentierten Planfelder ansehen",
           "recordedFacts": "Automatisch erfasste Daten",
           "yourInput": "Deine Ergänzung",
