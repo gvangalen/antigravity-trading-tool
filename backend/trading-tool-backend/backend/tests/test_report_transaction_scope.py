@@ -10,8 +10,10 @@ def test_report_rejects_unbounded_absence_of_executed_trades():
         "Er zijn geen feiten over uitgevoerde transacties.",
         "Er is geen bewijs van uitgevoerde transacties.",
         "There is no evidence of executed transactions.",
+        "Er zijn geen uitgevoerde orders of transacties aangetoond.",
     ):
         assert _report_v2_contradicts_facts("retrospective", claim, facts, context, comparison)
+        assert _report_v2_contradicts_facts("automation", claim, facts, context, comparison)
 
     for claim in (
         "Er is geen bewijs van uitgevoerde transacties op 13 november.",

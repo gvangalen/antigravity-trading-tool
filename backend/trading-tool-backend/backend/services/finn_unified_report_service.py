@@ -925,7 +925,10 @@ def _report_v2_contradicts_facts(section: str, value: str, facts: dict[str, Any]
         if re.search(
             r"\b(?:geen\s+(?:feiten|bewijs)|no\s+evidence|keine?\s+(?:Belege|Nachweise))"
             r"\b.{0,55}\b(?:uitgevoerde\s+transacties|executed\s+transactions|"
-            r"ausgeführte\s+Transaktionen)\b", sentence, re.I
+            r"ausgeführte\s+Transaktionen)\b|"
+            r"\b(?:geen|no|keine?)\b.{0,35}\b(?:uitgevoerde|executed|ausgeführte)"
+            r"\b.{0,35}\b(?:orders?|transacties?|transactions?|trades?)\b",
+            sentence, re.I
         ) and not re.search(
             r"\b(?:vandaag|deze\s+(?:dag|rapportdag|week|maand|rapportperiode)|"
             r"op\s+\d{1,2}\s+\w+|in\s+(?:dit|deze)\s+(?:rapport|periode)|"
