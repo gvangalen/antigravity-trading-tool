@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Reflectie-bewijsherstel na beschermde QA (13 november 2026)
 
-Phase: `LOCAL_VALIDATED_PENDING_CI`, kandidaatbranch
+Phase: `DEPLOYED_PENDING_FINAL_SHA`, statusbranch
+`codex/reflection-grounding-release-status` na productkandidaat
 `codex/reflection-grounding-repair`. De vorige release stond publiek op
 `0a863c8a4ac1b0dc1ae49c353728bede7065f367` na vijf groene laatste
 main-CI-jobs (`43469068016`) en Auto Deploy `43469970496`; backend-health en
@@ -47,8 +48,17 @@ provider-, schema-, timeout-, parse- of validatiefouten (artifact SHA-256
 Frontendbuild, typecheck, i18n-lint/tests, command-/proposaltests en
 high-severity audit groen, nul auditkwetsbaarheden (buildlog SHA-256
 `5e34d5544558d7d56e944ad82ae4903db726868e081b9a8094ffd50973796e90`).
-Onafhankelijke QA-codecheck en Security-deltareview: **GO**. CI, deploy,
-publieke SHA-controle en nieuwe beschermde live QA zijn nog pending.
+Onafhankelijke QA-codecheck en Security-deltareview: **GO**. Product-PR
+[#1033](https://github.com/gvangalen/antigravity-trading-tool/pull/1033)
+had vijf groene PR-CI-jobs (run `43474131429`) en is gemerged als
+`b5425d85a902ec998904f9ba78dd9908afe7b741`. De vijf laatste
+main-CI-jobs (`43475025249`) en Auto Deploy `43475926732` slaagden.
+Publieke `https://tradamind.com/api/health` en
+`https://tradamind.com/build-info.json` gaven beide HTTP 200 en exact die
+SHA, gelijk aan GitHub main, zonder nieuwere deploy in de wachtrij. Deze
+gemeten statusupdate maakt zelf een nieuwe main-SHA; Build wacht de laatste
+main-CI, Auto Deploy en publieke SHA-pariteit af vóór de nieuwe beschermde
+live QA. Die QA is nog pending.
 Historische Reflectie #2127 vereist daarnaast read-only controle in de
 juiste Paper Test-sessie; die toegang is niet door de beschermde fixture
 vervangen.
