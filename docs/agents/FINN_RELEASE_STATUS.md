@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN AAPL Paper-review QA-diagnostiek (13 november 2026)
 
-Phase: `LOCAL_VALIDATION`. Productcode voor het Reflectie-exitbewijs staat
+Phase: `DEPLOYED_PENDING_FINAL_SHA`. Productcode voor het Reflectie-exitbewijs staat
 publiek op `ee9551688b415ff8a732cd98fe429c8d5839f91b`; onafhankelijke
 beschermde QA-run `43422262566-1` op die SHA stopte met
 `paper_exit_probe_runtime_error` vóór een profielresultaat. De geschoonde
@@ -41,7 +41,15 @@ Echte-provider regression slaagde **109/109**, met 100% operation-, entiteit-,
 doelasset-, polariteit-, referentie-, verduidelijkings- en missing-inputscore,
 en nul provider-, schema-, parse-, validatie- of timeoutfouten (artifact
 SHA-256 `48740dd8a7108d004c94eebfe4c47d58458e05cd5424b0f802602b25a0aad156`).
-Release en onafhankelijk QA-oordeel zijn pending.
+Diagnostische PR [#1023](https://github.com/gvangalen/antigravity-trading-tool/pull/1023)
+had vijf groene PR-CI-jobs (run `43426027259`) en werd gemerged als
+`4643ec25cc96c7b7d9fd18fb5d2f24b44b2a493e`. Main-CI `43426895082`
+slaagde met vijf jobs; Auto Deploy `43427560912` slaagde. Publieke
+`https://tradamind.com/api/health` en
+`https://tradamind.com/build-info.json` gaven beide HTTP 200 en exact
+die SHA. Deze gemeten statusupdate maakt opnieuw een main-SHA; Build wacht
+ook daarvan de laatste main-CI, Auto Deploy en publieke SHA-pariteit af
+vóór beschermde QA. Onafhankelijk QA-oordeel is pending.
 Onafhankelijke read-only QA-codecheck en Security-review gaven **GO** voor
 deze nauw afgebakende diagnostische route. De live fixturestatus blijft
 onbekend tot QA de nieuwe audit op de exacte vorige run uitvoert.
