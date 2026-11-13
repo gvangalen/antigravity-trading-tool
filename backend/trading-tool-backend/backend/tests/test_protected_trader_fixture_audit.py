@@ -6,7 +6,7 @@ import json
 import pytest
 
 from backend.scripts import probe_protected_trader_fixture_audit as audit
-from backend.scripts.probe_protected_paper_exit_reconciliation import _stage
+from backend.scripts.probe_protected_paper_exit_reconciliation import _stage, _review_step
 from backend.scripts.run_finn_production_qa import profile_error_category
 
 
@@ -75,6 +75,25 @@ def test_review_audit_requires_exact_failed_review_profile(monkeypatch):
     assert audit.run(LABEL, expected_profile="trader_paper_exit_review_chain")["fixture_state"] == "NO_RETAINED_FIXTURE"
     with pytest.raises(RuntimeError, match="trader_fixture_audit_prior_report_mismatch"):
         audit.run(LABEL)
+
+
+@pytest.mark.parametrize("analysis_status,expected_status", [
+    ("failed", "failed"), ("private_status", "other"),
+])
+def test_review_audit_reports_only_bounded_review_and_finn_progress(monkeypatch, analysis_status, expected_status):
+    conn = Connection([
+        [(17, False, {"qa_namespace": NAMESPACE})], [(False, False)], [(0,)],
+        [("assessment", 1), ("paper_exit", 1)], [(1,)], [(1,)], [(1,)],
+        [(analysis_status,)], [(1,)],
+    ])
+    monkeypatch.setattr(audit, "_verify_prior_report", lambda *_: None)
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: conn)
+    result = audit.run(LABEL, expected_profile="trader_paper_exit_review_chain")
+    assert result["fixture_state"] == "QUARANTINED_INACTIVE"
+    assert result["review_present"] is True
+    assert result["review_analysis_status"] == expected_status
+    assert result["finn_run_present"] is True
+    assert NAMESPACE not in str(result) and "17" not in str(result)
 
 
 def test_review_cleanup_blocks_other_profile_before_database(monkeypatch):
@@ -357,6 +376,14 @@ def test_paper_exit_stage_codes_hide_exception_text():
         with _stage("review_chain"):
             raise RuntimeError("private fixture data")
     assert caught.value.probe_phase == "review_chain"
+    with pytest.raises(RuntimeError, match="private fixture data") as caught:
+        with _review_step("projection_analysis"):
+            raise RuntimeError("private fixture data")
+    assert caught.value.review_step == "projection_analysis"
+    assert profile_error_category("trader_paper_exit_review_chain", RuntimeError(
+        "closed_paper_review_ai_unavailable:timeout")) == "paper_exit_review_ai_unavailable_timeout"
+    assert profile_error_category("trader_paper_exit_review_chain", RuntimeError(
+        "closed_paper_review_ai_unavailable:private")) == "paper_exit_probe_runtime_error"
     assert profile_error_category(
         "trader_paper_exit_reconciliation", RuntimeError("paper_exit_paper_open_failed")
     ) == "paper_exit_paper_open_failed"
