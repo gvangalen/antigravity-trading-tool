@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Paper-exitbewijs in Reflectie (13 november 2026)
 
-Phase: `LOCAL_VALIDATION`. De zichtbare AAPL-Paper-exit van 12 november is in
+Phase: `DEPLOYED_PENDING_FINAL_SHA`. De zichtbare AAPL-Paper-exit van 12 november is in
 botgeschiedenis als `first_target` geregistreerd, terwijl Reflectie #2127
 de reden niet kon onderbouwen en omgerekende EUR-planniveaus zonder
 oorspronkelijke USD-niveaus of FX-herleiding toonde. De broncode verklaart
@@ -40,8 +40,21 @@ en regression **109/109** (artifact SHA-256
 hadden 100% selectienauwkeurigheid en nul provider-, schema-, parse-,
 validatie- of timeoutfouten. Een extra echte-provider synthetische
 reviewvraag citeerde `paper_exit:decision`, benoemde `first_target`, en
-onderscheidde USD-planniveaus van EUR-Paper-uitvoering. CI, deployment en
-onafhankelijke live dossier-QA volgen nog.
+onderscheidde USD-planniveaus van EUR-Paper-uitvoering.
+
+Onafhankelijke lokale QA, Security en Architecture gaven **GO** op de
+productbatch; QA's afrondingsopmerking is vóór release opgelost met `≈` in
+de zichtbare FX-herleiding. Security noteerde als P2 dat historische of
+afwijkende exit-JSON nog strikter op veldtype en lengte kan worden
+genormaliseerd vóór AI-context; geen P0/P1 of aangetoonde injectie. PR
+[#1017](https://github.com/gvangalen/antigravity-trading-tool/pull/1017)
+had vijf groene PR-CI-jobs op de definitieve branch (run `43374483260`)
+en is gemerged als `84649d2cb17a8df0b3b2e76b2ae42e56b75fc134`.
+Main-CI (run `43375074442`) en Auto Deploy (run `43375640765`) slaagden.
+Publieke backend-health en frontend-buildinfo gaven beide HTTP 200 en
+exact deze SHA. Deze statuswijziging creëert een volgende main-SHA;
+Build wacht de laatste main-CI, Auto Deploy en publieke SHA-pariteit af
+vóór onafhankelijke live dossier-QA voor #2127.
 
 ## FINN beschermde trade-QA child-namespace herstel (12 november 2026)
 
