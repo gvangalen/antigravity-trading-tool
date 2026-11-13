@@ -13712,6 +13712,25 @@ def test_bot_decision_question_binds_persisted_history_even_for_portfolio_tool()
     ) == selected
 
 
+def test_bot_decision_question_requires_current_owner_history_before_answer(monkeypatch):
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="bot-history-required")
+    front.model_led_coach = True
+    captured = {}
+
+    async def capture_loop(_self, **kwargs):
+        captured.update(kwargs)
+        return FinnResponsesResult("Ik lees de botbeslissingen.", "answer", ())
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run", capture_loop,
+    )
+    asyncio.run(front.run(
+        message="Vergelijk mijn actuele AAPL- en BTC-botbeslissingen met het dagrapport.",
+        instructions="Lees feiten", conversation_context={}, verified_asset="AAPL",
+    ))
+    assert captured["required_read_tool_name"] == "get_decision_history"
+
+
 def test_explicit_report_comparison_binds_owner_report_read(monkeypatch):
     class FixedDateTime(datetime):
         @classmethod
