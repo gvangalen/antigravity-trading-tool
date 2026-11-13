@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Reflectie-analysefaalreden (13 november 2026)
 
-Phase: `LOCAL_VALIDATION`. De vorige subfase-diagnostiek staat publiek op
+Phase: `DEPLOYED_PENDING_FINAL_SHA`. De vorige subfase-diagnostiek staat publiek op
 `1bcfe9d607e1a3e18646fcba54abed83c13b0681` na vijf groene laatste
 main-CI-jobs (run `43436171673`) en Auto Deploy `43436949628`; publieke
 backend-health en frontend-buildinfo gaven beide HTTP 200 met exact die SHA.
@@ -48,7 +48,16 @@ Echte-provider regression **109/109**, 100% operation-, entiteit-,
 doelasset-, polariteit-, referentie-, verduidelijkings- en missing-inputscore,
 en nul provider-, schema-, parse-, validatie- of timeoutfouten (artifact
 SHA-256 `7427f9b29b9bf432736c5213d9b849d3130b7aba781205c716a4a9ac90cd`).
-Release en live acceptatie pending.
+Diagnostische PR
+[#1027](https://github.com/gvangalen/antigravity-trading-tool/pull/1027)
+had vijf groene PR-CI-jobs (run `43440842177`) en is gemerged als
+`318a3f3267895c76def0e27cd8d12fe8a5224fd6`. Main-CI `43441715917`
+slaagde met vijf jobs; Auto Deploy `43442544002` slaagde. Publieke
+`https://tradamind.com/api/health` en
+`https://tradamind.com/build-info.json` gaven beide HTTP 200 en exact
+die SHA. Deze statusupdate maakt opnieuw een main-SHA; Build wacht de
+laatste main-CI, Auto Deploy en publieke SHA-pariteit af vóór onafhankelijke
+beschermde QA. Live acceptatie is pending.
 
 ## FINN Paper-review subfase-diagnostiek (13 november 2026)
 
