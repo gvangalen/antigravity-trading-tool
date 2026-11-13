@@ -40,13 +40,14 @@ function PlanFacts({ plan, copy }) {
     if (typeof item === 'object' && depth < 3) return <dl className="mt-1 space-y-1">{visible(Object.entries(item)).map(([key, part]) => <div key={key}><dt className="inline font-semibold">{label(key)}: </dt><dd className="inline">{value(part, depth + 1)}</dd></div>)}</dl>;
     return copy.planFields?.[String(item)] || String(item);
   };
-  return <details className="mt-3"><summary className="cursor-pointer text-sm font-semibold text-blue-700 dark:text-blue-300">{copy.planDetails}</summary><dl className="mt-4 space-y-3 text-sm leading-relaxed text-slate-700 dark:text-slate-300">{visible(Object.entries(plan)).map(([key, item]) => <div key={key}><dt className="font-bold text-slate-900 dark:text-white">{label(key)}</dt><dd>{value(item)}</dd></div>)}</dl></details>;
+  return <details open={Boolean(plan.source_levels)} className="mt-3"><summary className="cursor-pointer text-sm font-semibold text-blue-700 dark:text-blue-300">{copy.planDetails}</summary><dl className="mt-4 space-y-3 text-sm leading-relaxed text-slate-700 dark:text-slate-300">{visible(Object.entries(plan)).map(([key, item]) => <div key={key}><dt className="font-bold text-slate-900 dark:text-white">{label(key)}</dt><dd>{value(item)}</dd></div>)}</dl></details>;
 }
 
 function evidenceLabels(ids, review, copy, locale) {
   const fills = Array.isArray(review.fills) ? review.fills : [];
   return (Array.isArray(ids) ? ids : []).map((id) => {
     if (id === 'plan:snapshot') return copy.plan;
+    if (id === 'paper_exit:decision') return copy.paperExitDecisionEvidence;
     if (id === 'screenshot:user-upload') return copy.screenshotTitle;
     if (id === 'chart:binance-eur') return copy.chartTitle;
     if (id === 'closure:user-confirmed') return copy.userConfirmedClosure;
@@ -109,7 +110,7 @@ function ExecutionTimeline({ fills, copy, locale }) {
   </div>;
 }
 
-const currentAnalysis = (value) => value?.format_version === 3 ? value : null;
+const currentAnalysis = (value) => value?.format_version === 4 ? value : null;
 
 function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
   const [note, setNote] = useState(review.note || '');
@@ -353,7 +354,7 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
       <div className="mt-3 grid gap-5">
         <div className="min-w-0 break-words rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
           <h4 className="flex items-center gap-2 text-sm font-black text-slate-900 dark:text-white"><FileText size={17} /> {originalPlanVerified ? copy.plan : plan ? copy.planUnverified : copy.plan}</h4>
-          {plan ? <><PlanFacts plan={plan} copy={copy} />{manualLinkedPlan && <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">{copy.manualLinkedPlanHint}</p>}{!originalPlanVerified && !manualLinkedPlan && <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">{copy.planUnverifiedHint}</p>}</> : <p className="mt-3 text-sm text-slate-500">{isExchange ? copy.externalNoPlan : copy.noPlan}</p>}
+          {plan ? <><PlanFacts plan={plan} copy={copy} />{plan.source_levels && plan.source_price_currency && <p className="mt-3 text-xs text-slate-500">{copy.planCurrencyNote}</p>}{manualLinkedPlan && <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">{copy.manualLinkedPlanHint}</p>}{!originalPlanVerified && !manualLinkedPlan && <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">{copy.planUnverifiedHint}</p>}</> : <p className="mt-3 text-sm text-slate-500">{isExchange ? copy.externalNoPlan : copy.noPlan}</p>}
         </div>
         <div className="min-w-0 rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
           <h4 className="text-sm font-black text-slate-900 dark:text-white">{copy.executionEvidence}</h4>
@@ -365,7 +366,7 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
               <span className="font-bold">{isExchange ? formatQuote(fill.price_quote, fill.quote_currency, locale) : fill.price_eur ? formatMoney(fill.price_eur, locale, 4) : formatMoney(number(fill.cash_eur) / number(fill.qty), locale, 4)}</span>
             </li>)}
           </ol>
-          {isPaper && <PaperExitEvidence evidence={review.paper_exit_evidence} showMissing />}
+          {isPaper && <PaperExitEvidence evidence={review.paper_exit_evidence} showMissing defaultOpen />}
         </div>
       </div>
 

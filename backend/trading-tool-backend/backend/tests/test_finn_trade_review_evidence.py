@@ -189,6 +189,36 @@ def test_paper_ai_facts_label_result_including_simulated_costs():
     assert facts["fees_unknown"] is False
 
 
+def test_paper_exit_reason_and_quote_fx_are_available_to_coach_with_distinct_evidence_id():
+    review = {
+        "id": 2127, "symbol": "AAPL", "execution_environment": "paper",
+        "entry_at": datetime(2026, 11, 10, tzinfo=timezone.utc),
+        "exit_at": datetime(2026, 11, 12, tzinfo=timezone.utc),
+        "fills": [],
+        "plan_snapshot": {
+            "price_currency": "EUR", "source_price_currency": "USD",
+            "source_levels": {"stop_loss": 342, "targets": [357.42]},
+        },
+        "plan_provenance": {"source": "bot_order_context"},
+        "paper_exit_evidence": {
+            "trigger": "first_target", "source_price_currency": "USD",
+            "saved_first_target": 357.42, "source_price": 358,
+            "source_price_at": "2026-11-12T15:00:00+00:00",
+            "execution_source_price": 358.1, "execution_fx_eur_per_unit": 0.9,
+            "execution_fx_observed_at": "2026-11-12T15:00:00+00:00",
+        },
+    }
+    facts, allowed = evidence_context(review)
+    assert facts["paper_exit"]["data"]["trigger"] == "first_target"
+    assert facts["paper_exit"]["data"]["execution_fx_eur_per_unit"] == 0.9
+    assert facts["plan"]["data"]["source_levels"]["targets"] == [357.42]
+    assert "paper_exit:decision" in allowed
+    assert "plan:snapshot" in allowed
+    live_facts, live_allowed = evidence_context({**review, "execution_environment": "live"})
+    assert live_facts["paper_exit"] is None
+    assert "paper_exit:decision" not in live_allowed
+
+
 def test_only_server_supplied_confirmed_lesson_can_be_rendered():
     context = {"prior_user_confirmed_lessons_untrusted": [{
         "review_id": 12, "symbol": "BTC", "lesson_text_untrusted": "Mijn bevestigde les",
@@ -309,7 +339,7 @@ def test_luna_writes_review_and_evidence_remains_bound():
     raw = _analysis("De automatische exit beperkte het verlies; de reden voor de instap is onbekend.")
     raw["observations"][0]["text"] = "De geregistreerde verkoop sloot de positie."
     result = validate_analysis(raw, {"fill:1"})
-    assert result["format_version"] == 3
+    assert result["format_version"] == 4
     assert result["analysis_source"] == "ai_generated"
     assert result["summary"] == raw["summary"]
     assert result["observations"][0]["text"] == raw["observations"][0]["text"]
