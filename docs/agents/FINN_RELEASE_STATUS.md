@@ -4,9 +4,53 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN geïsoleerde AAPL/USD exitbewijs-QA (13 november 2026)
+
+Phase: `CANDIDATE_LOCAL_VALIDATED`. De productreparatie voor Reflectie #2127
+staat publiek op `a23c823df1f09a08269110c4a062cb71e098f56c`; de eigenaargebonden
+historische dossierinhoud is nog niet onafhankelijk live gelezen. Deze
+vervolgkandidaat voegt een beschermd QA-profiel toe dat op één tijdelijke,
+inactieve gebruiker de AAPL/USD Paper-exit, dossierprojectie, analyseformaat 4,
+citeerbaar `paper_exit:decision`-bewijs en een FINN-read in dezelfde keten
+controleert. Het profiel gebruikt een proceslokale synthetische koers van
+400 USD en een gedateerde EUR-factor 0,92; het schrijft geen marktdata en
+test geen externe AAPL-marktmeting of historische Reflectie #2127. De bestaande
+Paper-exitbrowsercontrole is bijgewerkt voor het zichtbare doel, beide
+FX-momenten en de omrekenregel. Fixturebinding, Paper-only, Live-blokkade,
+eigenaargebonden leesacties en opruiming blijven verplicht.
+
+Een lokale run op een verse PostgreSQL/Celery-stack met de echte FINN-provider
+gaf één `first_target`-Paper-verkoop na twee engine-aanroepen, één compleet
+Reflectie-dossier met analyseformaat 4 en `paper_exit:decision`, een
+eigenaargebonden FINN-antwoord met USD-doel en FX, nul Live-calls en nul
+actievoorstellen. De tijdelijke child- en parentgebruikers en hun reviews,
+runs en orders zijn daarna afwezig. De lokale run verving alleen de
+browserweergave door een stub; onafhankelijk live QA moet de echte UI en
+publieke deployment nog beoordelen. Canonieke backend: **4732 passed,
+7 skipped** (log SHA-256
+`b114d9c5676eaf507f19e9e0e525399efc103cab1e70c9b1fe79d51d71aba848`).
+Gerichte runner-, gate- en workflowtests: **174 passed, 3 skipped**.
+Frontend typecheck, i18n-lint, i18n-/command-/proposaltests, high audit en
+productiebuild groen. Geïsoleerde worker-actiematrix: **17/17** (artifact
+SHA-256 `aa121b1ed6591e1d419c117cfe1435acd98112614124de48406c28c735303bfa`),
+adaptertests **26/26**. Echte-provider development: **20/20** (artifact
+SHA-256 `d68877ef70a1bcc4bc0e7f6176b610e3619ed64db22dc6bc3397aad7f9a4f584`),
+zonder provider-/schema-/parse-/validatie-/timeoutfouten. Onafhankelijke
+lokale code-QA en Security gaven **GO**; Security noteerde als P2 dat een
+bredere child-inventory vóór opruiming de fail-closed bewijsvoering nog kan
+versterken. De eerste echte-provider regression-meting had één tijdelijke
+OpenAI-requesttimeout op een RSI-uitlegvraag en was daardoor **108/109**;
+die meting telt niet als groene gate. De volledige herhaling was **109/109**
+(artifact SHA-256
+`8eae316f1e077e9f43071c58b7880209f280ef31b41b029db13b9daed4e49bec`),
+met 100% operation-/entiteit-/doelasset-/polariteit-/referentie-/
+verduidelijkings-/missing-inputnauwkeurigheid en nul provider-, schema-,
+parse-, validatie- of timeoutfouten. CI en deployment moeten nog worden
+uitgevoerd; er is geen onafhankelijke live QA-acceptatie voor deze kandidaat.
+
 ## FINN Paper-exitbewijs in Reflectie (13 november 2026)
 
-Phase: `DEPLOYED_PENDING_FINAL_SHA`. De zichtbare AAPL-Paper-exit van 12 november is in
+Phase: `DEPLOYED_SHA_VERIFIED_PENDING_LIVE_QA`. De zichtbare AAPL-Paper-exit van 12 november is in
 botgeschiedenis als `first_target` geregistreerd, terwijl Reflectie #2127
 de reden niet kon onderbouwen en omgerekende EUR-planniveaus zonder
 oorspronkelijke USD-niveaus of FX-herleiding toonde. De broncode verklaart
@@ -52,9 +96,13 @@ had vijf groene PR-CI-jobs op de definitieve branch (run `43374483260`)
 en is gemerged als `84649d2cb17a8df0b3b2e76b2ae42e56b75fc134`.
 Main-CI (run `43375074442`) en Auto Deploy (run `43375640765`) slaagden.
 Publieke backend-health en frontend-buildinfo gaven beide HTTP 200 en
-exact deze SHA. Deze statuswijziging creëert een volgende main-SHA;
-Build wacht de laatste main-CI, Auto Deploy en publieke SHA-pariteit af
-vóór onafhankelijke live dossier-QA voor #2127.
+exact deze SHA. De daaropvolgende statuswijziging is als
+`a23c823df1f09a08269110c4a062cb71e098f56c` gedeployed: laatste
+main-CI `43376534758` slaagde met vijf jobs, Auto Deploy `43377154977`
+slaagde, en publieke backend-health en frontend-buildinfo gaven beide
+HTTP 200 en deze SHA. Onafhankelijke live dossier-QA voor #2127 bleef
+zonder toegang tot de normale accountinhoud onvolledig; de hierboven
+beschreven geïsoleerde AAPL/USD-keten is de volgende QA-route.
 
 ## FINN beschermde trade-QA child-namespace herstel (12 november 2026)
 

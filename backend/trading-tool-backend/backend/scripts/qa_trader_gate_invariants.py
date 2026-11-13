@@ -212,7 +212,7 @@ def check_paper_exit(evidence: dict) -> dict[str, Any]:
                               and evidence.get("side") == "sell" and evidence.get("status") == "filled",
         "dated_sources": _utc(evidence.get("execution_source_at")) is not None
                          and _utc(evidence.get("execution_fx_at")) is not None,
-        "currency_recorded": evidence.get("execution_source_currency") in {"EUR", "USDT"}
+        "currency_recorded": evidence.get("execution_source_currency") in {"EUR", "USD", "USDT"}
                              and evidence.get("settlement_currency") == "EUR",
         "source_conversion": source is not None and factor is not None and eur_price is not None
                              and _near(eur_price, source * factor, "0.000001"),
