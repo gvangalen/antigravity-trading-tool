@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import os
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit
 
 from backend.scripts import probe_protected_score2_stale_paper as fixture
@@ -167,18 +168,25 @@ async def _rendered_exit(user_id: int, bot_id: int, expected: dict) -> dict:
                 timeZoneName: 'short',
             }).format(new Date(value));
             return {
-                rendered_exit_fields_present: lines.length === 8,
-                rendered_decision_source_quote: lines[2]?.includes(format(evidence.source_price, 6)) &&
-                    lines[2]?.includes(evidence.source_price_currency) &&
-                    lines[2]?.includes(time(evidence.source_price_at)),
-                rendered_exit_eur_price: lines[3]?.includes(`${format(evidence.execution_eur_price, 6)} EUR`) ?? false,
-                rendered_exit_quantity: lines[4]?.includes(format(evidence.execution_qty, 8)) ?? false,
-                rendered_exit_proceeds: lines[5]?.includes(`${format(evidence.execution_proceeds_eur, 6)} EUR`) ?? false,
-                rendered_exit_source_quote: lines[6]?.includes(format(evidence.execution_source_price, 6)) &&
-                    lines[6]?.includes(evidence.execution_source_price_currency) &&
-                    lines[6]?.includes(time(evidence.execution_source_price_at)),
-                rendered_exit_fx: lines[7]?.includes(format(evidence.execution_fx_eur_per_unit, 6)) &&
-                    lines[7]?.includes(time(evidence.execution_fx_observed_at)),
+                rendered_exit_fields_present: lines.length >= 10,
+                rendered_saved_target: lines[2]?.includes(format(evidence.saved_first_target, 6)) &&
+                    lines[2]?.includes(evidence.source_price_currency),
+                rendered_decision_source_quote: lines[3]?.includes(format(evidence.source_price, 6)) &&
+                    lines[3]?.includes(evidence.source_price_currency) &&
+                    lines[3]?.includes(time(evidence.source_price_at)),
+                rendered_decision_fx: lines[4]?.includes(format(evidence.fx_eur_per_unit, 6)) &&
+                    lines[4]?.includes(time(evidence.fx_observed_at)),
+                rendered_exit_eur_price: lines[5]?.includes(`${format(evidence.execution_eur_price, 6)} EUR`) ?? false,
+                rendered_exit_quantity: lines[6]?.includes(format(evidence.execution_qty, 8)) ?? false,
+                rendered_exit_proceeds: lines[7]?.includes(`${format(evidence.execution_proceeds_eur, 6)} EUR`) ?? false,
+                rendered_exit_source_quote: lines[8]?.includes(format(evidence.execution_source_price, 6)) &&
+                    lines[8]?.includes(evidence.execution_source_price_currency) &&
+                    lines[8]?.includes(time(evidence.execution_source_price_at)),
+                rendered_exit_fx: lines[9]?.includes(format(evidence.execution_fx_eur_per_unit, 6)) &&
+                    lines[9]?.includes(time(evidence.execution_fx_observed_at)),
+                rendered_conversion: lines[10]?.includes(format(evidence.execution_source_price, 6)) &&
+                    lines[10]?.includes(format(evidence.execution_fx_eur_per_unit, 6)) &&
+                    lines[10]?.includes(format(evidence.execution_eur_price, 6)),
             };
         }""", {"lines": lines, "evidence": expected})
 
@@ -264,12 +272,66 @@ def _preflight() -> tuple[int, dict]:
         connection.close()
 
 
+def _aapl_fixture_context() -> tuple[None, dict]:
+    """A dated process-local USD quote; no shared market-data write or market claim."""
+    from backend.engine.trading_bot_execution import PAPER_AUTO_EXIT_CUTOVER
+    from backend.services.portfolio_fx_service import trade_quote_context
+
+    if not PAPER_AUTO_EXIT_CUTOVER:
+        raise RuntimeError("paper_exit_cutover_unavailable")
+    connection = fixture._connection()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT quote_currency FROM asset_catalog WHERE symbol='AAPL'")
+            rows = cursor.fetchall()
+        if len(rows) != 1 or str(rows[0][0]).upper() != "USD":
+            raise RuntimeError("paper_exit_aapl_catalog_unavailable")
+    finally:
+        connection.close()
+    now = datetime.now(timezone.utc)
+    quote_at, fx_at = now - timedelta(seconds=30), now - timedelta(seconds=45)
+    context = trade_quote_context(
+        price=400, price_at=quote_at, row_quote="USD", catalog_quote="USD",
+        usd_fx={"eur_per_unit": 0.92, "observed_at": fx_at},
+        quote_fx={"eur_per_unit": 0.92, "observed_at": fx_at},
+        require_usd=True, now=now,
+    )
+    if context.get("reason") is not None:
+        raise RuntimeError("paper_exit_aapl_fixture_quote_invalid")
+    return None, {**context, "source_ref": None}
+
+
+@contextmanager
+def _fixture_quote_context(symbol: str, context: dict):
+    """Restrict synthetic context to the inactive AAPL fixture engine calls."""
+    if symbol != "AAPL":
+        yield
+        return
+    from backend.engine import trading_bot_execution as execution
+
+    original = execution._get_trade_quote_fx_context
+
+    def fixture_quote(_connection, requested_symbol, *, require_usd=True, market_id=None):
+        if requested_symbol != "AAPL" or market_id is not None or not require_usd:
+            raise RuntimeError("paper_exit_fixture_quote_scope_changed")
+        return context
+
+    execution._get_trade_quote_fx_context = fixture_quote
+    try:
+        yield
+    finally:
+        execution._get_trade_quote_fx_context = original
+
+
 def _seed_trade(user_id: int, bot_id: int,
-                market_id: int, context: dict) -> tuple[int, int]:
+                market_id: int | None, context: dict, *, symbol: str = "BTC") -> tuple[int, int]:
+    if symbol not in {"BTC", "AAPL"} or (symbol == "BTC") != (market_id is not None):
+        raise RuntimeError("paper_exit_fixture_identity_invalid")
+    currency = "USD" if symbol == "AAPL" else "USDT"
     source_price = float(context["market_price"])
     eur_price = float(context["market_price_eur"])
     entry, stop, target = source_price * 0.7, source_price * 0.6, source_price * 0.8
-    qty = 0.001
+    qty = 1 if symbol == "AAPL" else 0.001
     invested = round(eur_price * qty, 2)
     now = datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)
     connection = fixture._connection()
@@ -290,10 +352,10 @@ def _seed_trade(user_id: int, bot_id: int,
                 raise RuntimeError("paper_exit_fixture_identity_invalid")
             setup_id = int(row[0])
             phase = "setup_update"
-            cursor.execute("""UPDATE setups SET symbol='BTC',market_id=%s,setup_type='trade',
+            cursor.execute("""UPDATE setups SET symbol=%s,market_id=%s,setup_type='trade',
                               dca_frequency=NULL,last_validated=%s
                               WHERE id=%s AND user_id=%s""",
-                           (market_id, now, setup_id, user_id))
+                           (symbol, market_id, now, setup_id, user_id))
             phase = "target_type"
             cursor.execute("""SELECT udt_name FROM information_schema.columns
                               WHERE table_schema='public' AND table_name='strategies'
@@ -301,30 +363,30 @@ def _seed_trade(user_id: int, bot_id: int,
             target_type = cursor.fetchone()
             target_expression = _target_array_expression(target_type[0] if target_type else None)
             phase = "strategy_update"
-            cursor.execute(f"""UPDATE strategies SET symbol='BTC',market_id=%s,setup_type='trade',
+            cursor.execute(f"""UPDATE strategies SET symbol=%s,market_id=%s,setup_type='trade',
                               entry=%s,stop_loss=%s,targets={target_expression},data=%s::jsonb
                               WHERE id=%s AND user_id=%s""",
-                           (market_id, entry, stop, str(target),
-                            json.dumps({"price_currency": "USDT", "price_currency_confirmed": True}),
+                           (symbol, market_id, entry, stop, str(target),
+                            json.dumps({"price_currency": currency, "price_currency_confirmed": True}),
                             strategy_id, user_id))
             phase = "bot_update"
-            cursor.execute("""UPDATE bot_configs SET symbol='BTC',market_id=%s,mode='auto',
+            cursor.execute("""UPDATE bot_configs SET symbol=%s,market_id=%s,mode='auto',
                               is_live=FALSE,is_active=TRUE,budget_total_eur=1000,
                               budget_daily_limit_eur=1000,budget_max_order_eur=1000,
                               paper_initial_cash_eur=1000
                               WHERE id=%s AND user_id=%s AND is_live=FALSE""",
-                           (market_id, bot_id, user_id))
+                           (symbol, market_id, bot_id, user_id))
             if cursor.rowcount != 1:
                 raise RuntimeError("paper_exit_fixture_identity_invalid")
             phase = "portfolio_update"
-            cursor.execute("""UPDATE bot_portfolios SET symbol='BTC',cash_eur=%s,
+            cursor.execute("""UPDATE bot_portfolios SET symbol=%s,cash_eur=%s,
                               position_qty=%s,invested_eur=%s,avg_entry=%s,realized_pnl_eur=0
                               WHERE bot_id=%s AND user_id=%s""",
-                           (1000 - invested, qty, invested, eur_price, bot_id, user_id))
+                           (symbol, 1000 - invested, qty, invested, eur_price, bot_id, user_id))
             if cursor.rowcount != 1:
                 raise RuntimeError("paper_exit_fixture_identity_invalid")
             opening = {"trade_plan": {
-                "source_price_currency": "USDT",
+                "source_price_currency": currency,
                 "source_levels": {"entry": entry, "stop_loss": stop, "targets": [target]},
             }}
             phase = "decision_insert"
@@ -332,9 +394,9 @@ def _seed_trade(user_id: int, bot_id: int,
                               (user_id,bot_id,strategy_id,setup_id,symbol,market_id,
                                decision_date,decision_ts,action,confidence,amount_eur,
                                scores_json,status,executed_by)
-                              VALUES (%s,%s,%s,%s,'BTC',%s,CURRENT_DATE,%s,'buy','high',
+                               VALUES (%s,%s,%s,%s,%s,%s,CURRENT_DATE,%s,'buy','high',
                                       %s,%s::jsonb,'executed','auto') RETURNING id""",
-                           (user_id, bot_id, strategy_id, setup_id, market_id,
+                           (user_id, bot_id, strategy_id, setup_id, symbol, market_id,
                             now, invested, json.dumps(opening)))
             decision_id = int(cursor.fetchone()[0])
             phase = "order_insert"
@@ -342,18 +404,33 @@ def _seed_trade(user_id: int, bot_id: int,
                               (user_id,bot_id,decision_id,symbol,market_id,side,order_type,
                                quote_amount_eur,estimated_price_eur,estimated_qty,status,
                                execution_environment)
-                              VALUES (%s,%s,%s,'BTC',%s,'buy','market',%s,%s,%s,
+                              VALUES (%s,%s,%s,%s,%s,'buy','market',%s,%s,%s,
                                       'filled','paper') RETURNING id""",
-                           (user_id, bot_id, decision_id, market_id, invested, eur_price, qty))
+                           (user_id, bot_id, decision_id, symbol, market_id, invested, eur_price, qty))
             order_id = int(cursor.fetchone()[0])
+            # The opening order must carry the original quote-currency plan.
+            # The review projector reads this immutable capture, not today's
+            # mutable strategy levels or a later exit decision.
+            phase = "plan_capture"
+            opening_at = datetime.now(timezone.utc)
+            cursor.execute("""UPDATE finn_trade_order_context
+                              SET plan_snapshot=%s::jsonb,captured_at=%s
+                              WHERE user_id=%s AND order_id=%s AND decision_id=%s""",
+                           (json.dumps({"source_price_currency": currency,
+                                        "source_levels": {"entry": entry,
+                                                          "stop_loss": stop,
+                                                          "targets": [target]}}),
+                            opening_at, user_id, order_id, decision_id))
+            if cursor.rowcount != 1:
+                raise RuntimeError("paper_exit_open_plan_capture_missing")
             phase = "ledger_insert"
             cursor.execute("""INSERT INTO bot_ledger
                               (user_id,bot_id,decision_id,order_id,entry_type,symbol,market_id,
                                cash_delta_eur,qty_delta,price_eur,note,meta,ts,valuation_version)
-                              VALUES (%s,%s,%s,%s,'execute','BTC',%s,%s,%s,%s,
+                              VALUES (%s,%s,%s,%s,'execute',%s,%s,%s,%s,%s,
                                       'Protected QA Paper opening','{}'::jsonb,%s,2)""",
-                           (user_id, bot_id, decision_id, order_id, market_id,
-                            -invested, qty, eur_price, now))
+                           (user_id, bot_id, decision_id, order_id, symbol, market_id,
+                            -invested, qty, eur_price, opening_at))
         phase = "commit"
         connection.commit()
         return setup_id, strategy_id
@@ -377,9 +454,9 @@ async def _history(user_id: int) -> list[dict]:
         await engine.dispose()
 
 
-def _evidence(namespace: str, user_id: int, bot_id: int, market_id: int,
+def _evidence(namespace: str, user_id: int, bot_id: int, market_id: int | None,
               initial_cash: float, initial_qty: float,
-              live_calls: int) -> dict:
+              live_calls: int, *, symbol: str = "BTC") -> dict:
     connection = fixture._connection()
     try:
         with connection.cursor() as cursor:
@@ -389,12 +466,13 @@ def _evidence(namespace: str, user_id: int, bot_id: int, market_id: int,
                               FROM bot_decisions d JOIN bot_orders o
                                 ON o.decision_id=d.id AND o.user_id=d.user_id
                               WHERE d.user_id=%s AND d.bot_id=%s
-                                AND d.market_id=%s AND d.decision_kind='paper_exit'""",
+                                AND d.market_id IS NOT DISTINCT FROM %s
+                                AND d.decision_kind='paper_exit'""",
                            (user_id, bot_id, market_id))
             rows = cursor.fetchall()
             cursor.execute("""SELECT cash_eur,position_qty FROM bot_portfolios
-                              WHERE user_id=%s AND bot_id=%s AND symbol='BTC'""",
-                           (user_id, bot_id))
+                              WHERE user_id=%s AND bot_id=%s AND symbol=%s""",
+                           (user_id, bot_id, symbol))
             portfolio = cursor.fetchone()
             cursor.execute("""SELECT l.cash_delta_eur,l.qty_delta,l.price_eur,l.order_id
                               FROM bot_ledger l JOIN bot_decisions d
@@ -468,7 +546,97 @@ def _evidence(namespace: str, user_id: int, bot_id: int, market_id: int,
         connection.close()
 
 
-def run(namespace: str, *, source_parity: bool = False) -> dict:
+async def _review_chain(user_id: int, bot_id: int, expected: dict) -> dict:
+    """Project the same closed Paper position and require an owner-bound FINN read."""
+    from backend.infrastructure.database import async_session_factory, engine
+    from backend.services.finn_trade_review_service import FinnTradeReviewService
+    from backend.scripts import probe_protected_closed_paper_review as review_probe
+
+    await asyncio.to_thread(review_probe._process_review_for_fixture, user_id)
+    try:
+        async with async_session_factory() as session:
+            service = FinnTradeReviewService(session)
+            items = (await service.list_reviews(user_id, limit=10)).get("items") or []
+            if len(items) != 1:
+                raise RuntimeError("paper_exit_review_count_invalid")
+            detail = await service.get_review(user_id, int(items[0]["id"]))
+            exit_proof = detail.get("paper_exit_evidence") or {}
+            plan = detail.get("plan_snapshot") or {}
+            analysis = detail.get("analysis_json") or {}
+            levels = plan.get("source_levels") or {}
+            matches_level = lambda actual, saved: (
+                isinstance(actual, (int, float)) and isinstance(saved, (int, float))
+                and math.isclose(float(actual), float(saved), rel_tol=1e-9, abs_tol=1e-6)
+            )
+            if (detail.get("bot_id") != bot_id or detail.get("execution_environment") != "paper"
+                    or detail.get("analysis_status") != "ready"
+                    or analysis.get("format_version") != 4
+                    or exit_proof.get("trigger") != "first_target"
+                    or exit_proof.get("source_price_currency") != expected.get("source_price_currency")
+                    or exit_proof.get("source_price") != expected.get("source_price")
+                    or exit_proof.get("source_price_at") != expected.get("source_price_at")
+                    or exit_proof.get("fx_eur_per_unit") != expected.get("fx_eur_per_unit")
+                    or exit_proof.get("fx_observed_at") != expected.get("fx_observed_at")
+                    or exit_proof.get("execution_source_price") != expected.get("execution_source_price")
+                    or exit_proof.get("execution_source_price_at") != expected.get("execution_source_price_at")
+                    or exit_proof.get("execution_fx_eur_per_unit") != expected.get("execution_fx_eur_per_unit")
+                    or exit_proof.get("execution_fx_observed_at") != expected.get("execution_fx_observed_at")
+                    or not matches_level(exit_proof.get("saved_stop_loss"), levels.get("stop_loss"))
+                    or not matches_level(exit_proof.get("saved_first_target"), (levels.get("targets") or [None])[0])
+                    or plan.get("source_price_currency") != expected.get("source_price_currency")
+                    or detail.get("plan_status") != "entry_order_plan_recorded"):
+                raise RuntimeError("paper_exit_review_evidence_incomplete")
+            evidence_ids = {evidence_id for observation in analysis.get("observations") or []
+                            for evidence_id in observation.get("evidence_ids") or []}
+            if "paper_exit:decision" not in evidence_ids:
+                raise RuntimeError("paper_exit_review_analysis_evidence_missing")
+            review_id = int(detail["id"])
+    finally:
+        await engine.dispose()
+
+    with review_probe._fixture_review_rollout(user_id):
+        answer = await review_probe._chat_turn(
+            user_id,
+            f"Wat was bij mijn trade-reflectie #{review_id} de vastgelegde Paper-exitreden? "
+            "Noem de oorspronkelijke koersvaluta, het opgeslagen eerste doel en de "
+            "wisselkoers bij uitvoering. Alleen teruglezen; geen voorstel of actie.",
+        )
+    response = answer.response
+    if (answer.status != "completed" or response is None
+            or response.proposal_id or response.confirmation_required
+            or (answer.policy and answer.policy.execute_allowed)):
+        raise RuntimeError("paper_exit_finn_read_failed")
+    if (not any(item.entity_type == "review_history" for item in response.evidence)
+            or not await review_probe._has_responses_exchange(
+                user_id, answer.run_id, answer.conversation_id)):
+        raise RuntimeError("paper_exit_finn_owner_evidence_missing")
+    text = response.content.casefold()
+    numbers = text.replace(",", ".")
+    target = f'{float(expected["saved_first_target"]):.6f}'.rstrip("0").rstrip(".")
+    fx = f'{float(expected["execution_fx_eur_per_unit"]):.6f}'.rstrip("0").rstrip(".")
+    if (not any(term in text for term in ("first_target", "eerste doel", "eerste koersdoel"))
+            or expected["source_price_currency"].casefold() not in text
+            or target not in numbers or fx not in numbers):
+        raise RuntimeError("paper_exit_finn_answer_incomplete")
+    return {"result": "PASS", "owner_scoped_review": True,
+            "analysis_format_version": 4, "exit_evidence_cited": True,
+            "owner_scoped_finn_read": True, "action_proposals": 0}
+
+
+def _assert_fixture_absent(user_id: int) -> None:
+    connection = fixture._connection()
+    try:
+        with connection.cursor() as cursor:
+            for table in ("users", "finn_trade_reviews", "finn_v2_runs", "bot_orders"):
+                cursor.execute(f"SELECT COUNT(*) FROM {table} WHERE {'id' if table == 'users' else 'user_id'}=%s",
+                               (user_id,))
+                if cursor.fetchone()[0]:
+                    raise RuntimeError("paper_exit_fixture_cleanup_incomplete")
+    finally:
+        connection.close()
+
+
+def run(namespace: str, *, source_parity: bool = False, review_chain: bool = False) -> dict:
     if os.getenv("FINN_QA_ALLOW_PAPER_EXIT_FIXTURE") != "1":
         raise RuntimeError("paper_exit_fixture_not_authorized")
     if not fixture.NAMESPACE_PATTERN.fullmatch(namespace):
@@ -476,15 +644,16 @@ def run(namespace: str, *, source_parity: bool = False) -> dict:
     bound = os.getenv("FINN_QA_USER_ID", "")
     if not bound.isdecimal() or int(bound) <= 0:
         raise RuntimeError("fixture_binding_invalid")
+    symbol = "AAPL" if review_chain else "BTC"
     with _stage("preflight"):
-        market_id, context = _preflight()
+        market_id, context = _aapl_fixture_context() if review_chain else _preflight()
     user_id = bot_id = None
     passed = False
     try:
         with _stage("seed"):
             user_id, bot_id, _ = fixture._seed(namespace, int(bound))
         with _stage("paper_open"):
-            _seed_trade(user_id, bot_id, market_id, context)
+            _seed_trade(user_id, bot_id, market_id, context, **({"symbol": symbol} if review_chain else {}))
         with _stage("baseline"):
             connection = fixture._connection()
             try:
@@ -497,7 +666,7 @@ def run(namespace: str, *, source_parity: bool = False) -> dict:
         from backend.engine.trading_bot_execution import run_trading_bot_execution
 
         with _stage("engine"):
-            with _guard_live_exchange() as live_attempts:
+            with _guard_live_exchange() as live_attempts, _fixture_quote_context(symbol, context):
                 first = run_trading_bot_execution(user_id, bot_id=bot_id, paper_only=True)
                 second = run_trading_bot_execution(user_id, bot_id=bot_id, paper_only=True)
         live_calls = len(live_attempts)
@@ -505,7 +674,8 @@ def run(namespace: str, *, source_parity: bool = False) -> dict:
             raise RuntimeError("paper_exit_engine_unavailable")
         with _stage("evidence"):
             evidence = _evidence(namespace, user_id, bot_id, market_id,
-                                 float(initial_cash), float(initial_qty), live_calls)
+                                 float(initial_cash), float(initial_qty), live_calls,
+                                 **({"symbol": symbol} if review_chain else {}))
         result = check_paper_exit(evidence)
         if result["result"] != "PASS":
             return {**result, "rendered_ui_checked": False,
@@ -514,10 +684,11 @@ def run(namespace: str, *, source_parity: bool = False) -> dict:
         with _stage("rendered_ui"):
             rendered = asyncio.run(_rendered_exit(user_id, bot_id, evidence["ui_projection"]))
         required_rendered = {
-            "rendered_exit_fields_present", "rendered_decision_source_quote",
+            "rendered_exit_fields_present", "rendered_saved_target",
+            "rendered_decision_source_quote", "rendered_decision_fx",
             "rendered_exit_eur_price",
             "rendered_exit_quantity", "rendered_exit_proceeds",
-            "rendered_exit_source_quote", "rendered_exit_fx",
+            "rendered_exit_source_quote", "rendered_exit_fx", "rendered_conversion",
         }
         if not all(
             rendered.get(key) is True for key in required_rendered
@@ -562,16 +733,24 @@ def run(namespace: str, *, source_parity: bool = False) -> dict:
                         "source_time_parity": parity, "rendered_ui_checked": True,
                         "gate_status": status, "engine_calls": 2,
                         "live_calls": live_calls, "onboarding_navigation_override": True}
+        review_result = None
+        if review_chain:
+            with _stage("review_chain"):
+                review_result = asyncio.run(_review_chain(user_id, bot_id, evidence["ui_projection"]))
         passed = True
         return {**result, "exit_decisions": 1, "replay_duplicate_sells": 0,
                 "engine_calls": 2, "live_calls": live_calls,
                 "rendered_ui_checked": True,
                 "onboarding_navigation_override": True,
+                **({"review_chain": review_result} if review_result is not None else {}),
+                **({"fixture_quote_source": "process_local_synthetic_usd_fx"} if review_chain else {}),
                 **({"source_time_parity": parity} if parity is not None else {}),
                 "gate_status": "PASS"}
     finally:
         if user_id is not None and bot_id is not None:
             if passed:
                 fixture._cleanup(namespace, user_id, bot_id)
+                if review_chain:
+                    _assert_fixture_absent(user_id)
             else:
                 fixture._quarantine(namespace, user_id, bot_id)

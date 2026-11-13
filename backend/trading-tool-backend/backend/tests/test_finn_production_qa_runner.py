@@ -379,7 +379,7 @@ def test_trader_gate_profiles_are_protected_and_distinguish_execution_scope():
         'elif args.profile == "trader_account_state_readback":', 1
     )[0]
     exit_branch = source.split(
-        'elif args.profile in {"trader_paper_exit_reconciliation", "trader_source_time_parity"}:', 1
+        'elif args.profile in {"trader_paper_exit_reconciliation", "trader_paper_exit_review_chain", "trader_source_time_parity"}:', 1
     )[1].split('elif args.profile in {"trader_paper_exit_fixture_audit", "trader_pair_fixture_audit"}:', 1)[0]
     for branch in (pair_branch, exit_branch):
         assert branch.index('report["protected_profile_attempted"] = True') < branch.index('report[args.profile] =')

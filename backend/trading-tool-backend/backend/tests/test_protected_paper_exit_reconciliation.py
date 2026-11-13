@@ -1,6 +1,9 @@
 """Test the protected Paper-exit collector boundary and optional PostgreSQL casts."""
 
 import os
+import asyncio
+from contextlib import contextmanager
+from types import SimpleNamespace
 
 import pytest
 
@@ -9,6 +12,137 @@ from backend.scripts.run_finn_production_qa import profile_error_category
 
 
 NAMESPACE = "qa-123-1-ad9fe0d3-deadbeef"
+
+
+def test_aapl_review_chain_projects_and_reads_exact_usd_evidence(monkeypatch):
+    from backend.infrastructure import database
+    from backend.services import finn_trade_review_service
+    from backend.scripts import probe_protected_closed_paper_review as review_probe
+
+    expected = {
+        "source_price_currency": "USD", "source_price": 400,
+        "source_price_at": "2026-11-13T15:00:00+00:00",
+        "fx_eur_per_unit": 0.92, "fx_observed_at": "2026-11-13T14:59:45+00:00",
+        "execution_source_price": 400,
+        "execution_source_price_at": "2026-11-13T15:00:00+00:00",
+        "execution_fx_eur_per_unit": 0.92,
+        "execution_fx_observed_at": "2026-11-13T14:59:45+00:00",
+        "saved_stop_loss": 240, "saved_first_target": 320,
+    }
+    steps = []
+
+    class Session:
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *_args):
+            return None
+
+    class Reviews:
+        def __init__(self, session):
+            assert isinstance(session, Session)
+        async def list_reviews(self, owner, limit):
+            assert owner == 11 and limit == 10
+            return {"items": [{"id": 77}]}
+        async def get_review(self, owner, review_id):
+            assert owner == 11 and review_id == 77
+            return {
+                "id": 77, "bot_id": 22, "execution_environment": "paper",
+                "analysis_status": "ready", "analysis_json": {
+                    "format_version": 4,
+                    "observations": [{"evidence_ids": ["paper_exit:decision"]}],
+                },
+                "paper_exit_evidence": {"trigger": "first_target", **expected},
+                "plan_snapshot": {"source_price_currency": "USD", "source_levels": {
+                    "stop_loss": 240, "targets": [320],
+                }},
+                "plan_status": "entry_order_plan_recorded",
+            }
+
+    async def dispose():
+        steps.append("dispose")
+
+    @contextmanager
+    def rollout(owner):
+        assert owner == 11
+        yield
+
+    async def chat(owner, message):
+        assert owner == 11 and "#77" in message
+        steps.append("chat")
+        return SimpleNamespace(
+            status="completed", run_id="qa-run", conversation_id="qa-conversation",
+            policy=None,
+            response=SimpleNamespace(
+                proposal_id=None, confirmation_required=False,
+                evidence=[SimpleNamespace(entity_type="review_history")],
+                content="Het vastgelegde first_target was 320 USD; EUR-factor 0,92.",
+            ),
+        )
+
+    async def exchange(owner, run_id, conversation_id):
+        return (owner, run_id, conversation_id) == (11, "qa-run", "qa-conversation")
+
+    monkeypatch.setattr(database, "async_session_factory", Session)
+    monkeypatch.setattr(database, "engine", SimpleNamespace(dispose=dispose))
+    monkeypatch.setattr(finn_trade_review_service, "FinnTradeReviewService", Reviews)
+    monkeypatch.setattr(review_probe, "_process_review_for_fixture", lambda owner: steps.append("project"))
+    monkeypatch.setattr(review_probe, "_fixture_review_rollout", rollout)
+    monkeypatch.setattr(review_probe, "_chat_turn", chat)
+    monkeypatch.setattr(review_probe, "_has_responses_exchange", exchange)
+
+    result = asyncio.run(probe._review_chain(11, 22, expected))
+    assert result["result"] == "PASS"
+    assert result["analysis_format_version"] == 4
+    assert steps == ["project", "dispose", "chat"]
+
+
+def test_aapl_fixture_seeds_only_usd_paper_rows(monkeypatch):
+    statements = []
+
+    class Cursor:
+        rowcount = 1
+        def __enter__(self):
+            return self
+        def __exit__(self, *_args):
+            return None
+        def execute(self, sql, values=None):
+            statements.append((sql, values))
+        def fetchone(self):
+            if "udt_name" in statements[-1][0]:
+                return ("_text",)
+            return (5,)
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+        def commit(self):
+            statements.append(("COMMIT", None))
+        def close(self):
+            return None
+
+    monkeypatch.setattr(probe.fixture, "_connection", Connection)
+    probe._seed_trade(11, 22, None, {"market_price": 400, "market_price_eur": 368}, symbol="AAPL")
+    assert statements[-1][0] == "COMMIT"
+    assert all("'BTC'" not in sql for sql, _ in statements)
+    assert any("UPDATE bot_configs" in sql and values[:2] == ("AAPL", None)
+               for sql, values in statements if values)
+    assert any("INSERT INTO bot_orders" in sql and values[3:5] == ("AAPL", None)
+               for sql, values in statements if values)
+    assert any("UPDATE finn_trade_order_context" in sql
+               and '"source_price_currency": "USD"' in values[0]
+               for sql, values in statements if values)
+
+
+def test_synthetic_aapl_quote_is_process_scoped(monkeypatch):
+    from backend.engine import trading_bot_execution as execution
+
+    original = execution._get_trade_quote_fx_context
+    context = {"market_price": 400, "quote_currency": "USD"}
+    with probe._fixture_quote_context("AAPL", context):
+        assert execution._get_trade_quote_fx_context(None, "AAPL", require_usd=True) is context
+        with pytest.raises(RuntimeError, match="paper_exit_fixture_quote_scope_changed"):
+            execution._get_trade_quote_fx_context(None, "BTC", require_usd=True)
+    assert execution._get_trade_quote_fx_context is original
 
 
 def _emit_page_bot_response(kwargs, *, status=200, bots=None):
@@ -64,12 +198,15 @@ def test_probe_replays_once_and_cleans_only_after_contract_pass(monkeypatch, ren
         steps.append("render")
         return {
             "rendered_exit_fields_present": rendered_value,
+            "rendered_saved_target": True,
             "rendered_decision_source_quote": True,
+            "rendered_decision_fx": True,
             "rendered_exit_eur_price": True,
             "rendered_exit_quantity": True,
             "rendered_exit_proceeds": True,
             "rendered_exit_source_quote": True,
             "rendered_exit_fx": True,
+            "rendered_conversion": True,
         }
     monkeypatch.setattr(probe, "_rendered_exit", rendered)
     monkeypatch.setattr(probe.fixture, "_cleanup", lambda *args: steps.append("cleanup"))
@@ -124,10 +261,11 @@ def test_source_parity_profile_requires_its_own_four_surface_result(monkeypatch)
                         lambda *_args: {"result": "PASS", "failed_checks": []})
     async def rendered(*_args):
         return {key: True for key in (
-            "rendered_exit_fields_present", "rendered_decision_source_quote",
+            "rendered_exit_fields_present", "rendered_saved_target",
+            "rendered_decision_source_quote", "rendered_decision_fx",
             "rendered_exit_eur_price",
             "rendered_exit_quantity", "rendered_exit_proceeds",
-            "rendered_exit_source_quote", "rendered_exit_fx",
+            "rendered_exit_source_quote", "rendered_exit_fx", "rendered_conversion",
         )}
     monkeypatch.setattr(probe, "_rendered_exit", rendered)
     monkeypatch.setattr(probe_protected_account_answer, "_business_state", lambda *_args: {
@@ -242,10 +380,11 @@ def test_rendered_exit_opens_trades_before_reading_evidence(monkeypatch):
                 reads.append('trades')
                 return {"status": 200, "present": True}
             return {key: True for key in (
-                "rendered_exit_fields_present", "rendered_decision_source_quote",
+                "rendered_exit_fields_present", "rendered_saved_target",
+                "rendered_decision_source_quote", "rendered_decision_fx",
                 "rendered_exit_eur_price",
                 "rendered_exit_quantity", "rendered_exit_proceeds",
-                "rendered_exit_source_quote", "rendered_exit_fx",
+                "rendered_exit_source_quote", "rendered_exit_fx", "rendered_conversion",
             )}
     async def observe_page(**kwargs):
         assert kwargs["path"] == "/bot?bot_id=22"
@@ -469,7 +608,7 @@ def test_rendered_exit_classifies_missing_tab_without_url_leak(
 @pytest.mark.parametrize("failed_statement,phase", [
     (2, "setup_update"), (3, "target_type"), (4, "strategy_update"),
     (5, "bot_update"), (6, "portfolio_update"), (7, "decision_insert"),
-    (8, "order_insert"), (9, "ledger_insert"),
+    (8, "order_insert"), (9, "plan_capture"), (10, "ledger_insert"),
 ])
 def test_opening_fixture_reports_fixed_statement_phase(monkeypatch, failed_statement, phase):
     class Cursor:

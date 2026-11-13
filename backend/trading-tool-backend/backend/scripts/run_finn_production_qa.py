@@ -56,6 +56,7 @@ ALLOWED_PROFILES = {
     "aapl_paper_quote_coach",
     "trader_source_time_parity",
     "trader_paper_exit_reconciliation",
+    "trader_paper_exit_review_chain",
     "trader_paper_exit_fixture_audit",
     "trader_pair_fixture_audit",
     "trader_pair_fixture_cleanup",
@@ -381,13 +382,15 @@ def profile_error_category(profile: str, error: Exception) -> str:
             "fixture_binding_invalid", "fixture_has_exchange_keys",
             "fixture_cleanup_failed", "fixture_quarantine_failed",
         } else "account_probe_runtime_error")
-    if profile in {"trader_paper_exit_reconciliation", "trader_source_time_parity"}:
+    if profile in {"trader_paper_exit_reconciliation", "trader_paper_exit_review_chain", "trader_source_time_parity"}:
         code = str(error)
         return (code if code in {
             "paper_exit_fixture_not_authorized", "paper_exit_namespace_invalid",
             "fixture_binding_invalid", "fixture_has_exchange_keys",
             "paper_exit_cutover_unavailable", "paper_exit_exact_market_unavailable",
             "paper_exit_dated_quote_unavailable", "paper_exit_fixture_identity_invalid",
+            "paper_exit_aapl_catalog_unavailable", "paper_exit_aapl_fixture_quote_invalid",
+            "paper_exit_fixture_quote_scope_changed", "paper_exit_fixture_cleanup_incomplete",
             "paper_exit_target_type_unavailable",
             "paper_exit_engine_unavailable", "paper_exit_persisted_effect_incomplete",
             "paper_exit_fixture_manifest_forbidden", "fixture_cleanup_failed",
@@ -400,7 +403,12 @@ def profile_error_category(profile: str, error: Exception) -> str:
             "paper_exit_open_strategy_update_failed",
             "paper_exit_open_bot_update_failed", "paper_exit_open_portfolio_update_failed",
             "paper_exit_open_decision_insert_failed", "paper_exit_open_order_insert_failed",
+            "paper_exit_open_plan_capture_failed", "paper_exit_open_plan_capture_missing",
             "paper_exit_open_ledger_insert_failed", "paper_exit_open_commit_failed",
+            "paper_exit_review_chain_failed", "paper_exit_review_count_invalid",
+            "paper_exit_review_evidence_incomplete", "paper_exit_review_analysis_evidence_missing",
+            "paper_exit_finn_read_failed", "paper_exit_finn_owner_evidence_missing",
+            "paper_exit_finn_answer_incomplete",
             "paper_exit_rendered_ui_failed",
             "paper_exit_rendered_bootstrap_failed",
             "paper_exit_rendered_owner_bot_api_failed",
@@ -3763,7 +3771,7 @@ def main() -> int:
                 report["outcome"] = ({"PASS": "passed", "FAIL": "failed",
                                      "INCONCLUSIVE": "incomplete"}[report[args.profile]["result"]])
                 report["qa_status"] = "INCOMPLETE" if report["outcome"] == "incomplete" else "COMPLETED"
-            elif args.profile in {"trader_paper_exit_reconciliation", "trader_source_time_parity"}:
+            elif args.profile in {"trader_paper_exit_reconciliation", "trader_paper_exit_review_chain", "trader_source_time_parity"}:
                 if args.manifest_id != "none" or args.manifest_bundle_path:
                     raise ValueError("paper_exit_fixture_manifest_forbidden")
                 if os.getenv("FINN_QA_ALLOW_PAPER_EXIT_FIXTURE") != "1":
@@ -3779,6 +3787,7 @@ def main() -> int:
                 report[args.profile] = run_exit_probe(
                     fixture_namespace or "",
                     source_parity=args.profile == "trader_source_time_parity",
+                    review_chain=args.profile == "trader_paper_exit_review_chain",
                 )
                 report["safety"]["execution_calls"] = report[args.profile].get("engine_calls")
                 report["safety"]["live_trading_calls"] = report[args.profile].get("live_calls")
