@@ -599,6 +599,7 @@ class FinnResponsesFrontDoor:
                 "benchmark_score": score_data.get("benchmark_score"),
                 "component_source_status": score_data.get("component_source_status"),
                 "component_source_observed_at": score_data.get("component_source_observed_at"),
+                "oldest_indicator_source_observed_at": score_data.get("oldest_indicator_source_observed_at"),
             } if score_item is not None else None),
             "field_meaning": {
                 "analysis_timeframe": "Chart interval, not an automated purchase schedule.",
@@ -651,6 +652,9 @@ class FinnResponsesFrontDoor:
             "making a new freshness claim. Never call a previously verified score stale "
             "merely because its report date is today or because it came from a prior turn. "
             "Do not present historical saved scores as current scores. "
+            "When you describe a score as current or verified, name the oldest "
+            "indicator source moment from that score read. Distinguish it from "
+            "the latest market quote time and the score report date. "
             "A market price snapshot is not a score report. "
             "The asset catalog prices US stocks such as AAPL in USD. AAPL/USD "
             "names that same USD-priced stock, not a separate Binance market; "

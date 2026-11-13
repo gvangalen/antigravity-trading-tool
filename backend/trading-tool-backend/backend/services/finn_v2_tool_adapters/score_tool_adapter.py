@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from backend.schemas.finn_v2_evidence_schema import AssetScoresData
 from backend.services.finn_shared_context_service import FinnSharedContextService
 from backend.services.setup_market_match_service import verified_indicator_evidence
@@ -27,6 +29,21 @@ class ScoreToolAdapter:
             }
             for component, indicators in (assessment.get("component_source_observed_at") or {}).items()
         }
+        source_moments = []
+        for indicators in (assessment.get("component_source_observed_at") or {}).values():
+            if not isinstance(indicators, dict):
+                continue
+            for moment in indicators.values():
+                if not moment:
+                    continue
+                try:
+                    parsed = datetime.fromisoformat(str(moment).replace("Z", "+00:00"))
+                except ValueError:
+                    continue
+                source_moments.append(parsed.replace(tzinfo=parsed.tzinfo or timezone.utc).astimezone(timezone.utc))
+        payload["oldest_indicator_source_observed_at"] = (
+            min(source_moments).isoformat(timespec="seconds") if source_moments else None
+        )
         payload["component_indicator_source_status"] = assessment.get("component_indicator_source_status") or {}
         verified = verified_indicator_evidence(
             assessment, getattr(getattr(self.context, "matches", None), "last_source_row", None)
