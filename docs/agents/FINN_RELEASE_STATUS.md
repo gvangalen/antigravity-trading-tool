@@ -6,8 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Reflectie-planbron en algemene dossierlezing (13 november 2026)
 
-Phase: `DEPLOYED_PENDING_FINAL_SHA`, kandidaatbranch
-`codex/reflection-plan-provenance-finn-read`. De onafhankelijke traderinspectie in het account
+Phase: `LOCAL_GATES_GREEN`, huidige kandidaatbranch
+`codex/reflection-plan-qa-coverage`. De onafhankelijke traderinspectie in het account
 `Paper Test BTC AAPL` bevestigde dat Reflectie #2127 de Paper-exit intern
 herleidt: `first_target`, USD 358,60 boven USD 357,42, afzonderlijke
 EUR-factor 0,901396 bij de exit en EUR 405,48 opbrengst. Open bleef de
@@ -50,11 +50,50 @@ main-CI-jobs (run `43456045670`) en Auto Deploy `43456812228` slaagden.
 Publieke `https://tradamind.com/api/health` en
 `https://tradamind.com/build-info.json` gaven beide HTTP 200 en exact die
 SHA; GitHub main wees eveneens naar die SHA zonder nieuwere deploy in de
-wachtrij. Deze statusupdate maakt een nieuwe main-SHA: Build wacht opnieuw
-de laatste main-CI, Auto Deploy en publieke SHA-pariteit af. Daarna draagt
-Build de beschermde live runtime-QA over aan de bestaande onafhankelijke
-QA-agent. Historisch #2127 moet na release in de juiste Paper Test-sessie
-opnieuw worden gecontroleerd.
+wachtrij. Status-PR
+[#1030](https://github.com/gvangalen/antigravity-trading-tool/pull/1030)
+had vijf groene PR-CI-jobs (`43457281604`) en is gemerged als
+`13084108b4de55117e59a4c0dc9f3921abcd0e46`. Laatste main-CI
+`43458133312` (vijf jobs) en Auto Deploy `43458967459` slaagden; beide
+publieke oppervlakken gaven HTTP 200 en exact die SHA, gelijk aan main,
+zonder nieuwere deploy. Onafhankelijke QA deed daarop uitsluitend
+read-only auth-preflight `43459673887-1`: PASS op exact die SHA, artifact
+SHA-256 `1136445c76dd0aaac60e23821aad915f72254230f9909014c83151d6cd4688f2`,
+zonder fixture-write of Live-call.
+
+De QA-inspectie vond dat het bestaande beschermde Paper-profiel de nieuwe
+beslisbron en algemene dossierlezing nog niet afdwong. De huidige kandidaat
+breidt alleen die begrensde fixture uit: afzonderlijke USD-beslisniveaus en
+FX, een EUR-orderplansnapshot met eigen FX, exacte eigenaar-/tijd-/ID- en
+v5-bewijschecks, een gemengde algemene FINN-vraag met review-first en
+getypeerde bron, polling/SSE-pariteit, no-redirect bearer-transport, een
+read-only browsercheck van de twee Reflectie-plansecties en een Live-guard
+om de chat. Omdat de inactieve QA-child buiten de publieke reviewrollout
+valt, krijgt uitsluitend de exacte detail-GET in die browser een
+proceslokale respons uit de al eigenaargebonden serviceread; de UI-check
+claimt geen afzonderlijke publieke backend-GET. Een gevonden
+labelinconsistentie is generiek hersteld: alleen
+bewezen order-contextplannen krijgen hun eigen order-FX-label; de
+beslisbron houdt haar eigen label. De gemengde test bewijst dossierlezing
+met voorrang en bronantwoord, niet een volledig antwoord op alle huidige
+account-/positiedelen.
+
+Lokale kandidaatvalidatie: backend **4763 passed, 7 skipped** (log SHA-256
+`af39259183fae19eecf11f4efb959603945d28afd8f692caf18042d43ec25c0a`);
+gerichte QA-runner-/probetests **178 passed, 3 skipped**. Frontendbuild,
+typecheck, i18n, command-, proposal-, setup-, planveld- en PDF-tests groen;
+high-severity audit nul kwetsbaarheden (laatste buildlog SHA-256
+`129aaaf4cd4abd925cfe1c2499a5d8caafde419e25154bb8177fb9d8276fa3c0`).
+Lokale API/Celery-actiematrix **17/17** contracten en **26/26** adapters,
+nul brokerorders, Live-calls, Live-bots of productieverbindingen (artifact
+SHA-256 `2c48217e65b1836484e545b0558ee9bf8e69ae7ad4fe57ae87aab33b2336d9e4`).
+De echte-provider development/regressie hierboven blijft van toepassing:
+selectie- en productpromptcode is in deze QA-dekkingskandidaat ongewijzigd.
+Onafhankelijke QA-codecheck en Security-hercontrole: **GO**. Er is nog geen
+PR, deploy of beschermde fixture-run voor deze huidige kandidaat. Na de
+laatste SHA-gate draagt Build de volledige live runtime-QA over aan de
+bestaande onafhankelijke QA-agent. Historisch #2127 moet in de juiste Paper
+Test-sessie read-only worden hergetest.
 
 ## FINN Reflectie-analysefaalreden (13 november 2026)
 

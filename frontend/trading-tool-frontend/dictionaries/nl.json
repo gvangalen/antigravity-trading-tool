@@ -1879,6 +1879,8 @@
           "paperExitDecisionEvidence": "Paper-exitbeslissing",
           "planCurrencyNote": "De bronkoersniveaus en FX-meting horen bij de vastgelegde instapbeslissing. De EUR-planmomentopname en latere exit hebben afzonderlijk bewijs; de beslissings-FX is niet vanzelf de uitvoerings-FX.",
           "entryDecisionEvidence": "Instapbeslissing: bronkoers en valuta",
+          "orderFxLabel": "EUR-factor in orderplan",
+          "orderFxAsOfLabel": "Bronmoment orderplan-FX",
           "planDetails": "Bekijk alle vastgelegde planvelden",
           "recordedFacts": "Automatisch vastgelegde gegevens",
           "yourInput": "Jouw aanvulling",

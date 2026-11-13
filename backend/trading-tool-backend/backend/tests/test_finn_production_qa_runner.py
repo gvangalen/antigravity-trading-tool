@@ -456,7 +456,7 @@ def test_paper_exit_runtime_phase_is_fixed_and_does_not_expose_exception_text():
     assert '"preflight", "seed", "paper_open", "baseline", "engine", "evidence", "rendered_ui", "source_parity", "review_chain"' in source
     assert 'report["paper_exit_review_step"] = step' in source
     assert 'report["paper_exit_review_analysis_failure"] = analysis_failure' in source
-    assert '"projection_analysis", "dossier_read", "finn_chat", "finn_verify"' in source
+    assert '"projection_analysis", "dossier_read", "rendered_review", "finn_chat", "finn_verify"' in source
 
 
 def test_strategy_schema_audit_has_no_fixture_action_permission():

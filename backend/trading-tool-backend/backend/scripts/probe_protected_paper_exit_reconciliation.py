@@ -6,6 +6,9 @@ import asyncio
 import json
 import math
 import os
+import re
+import urllib.error
+import urllib.request
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit
@@ -210,6 +213,105 @@ async def _rendered_exit(user_id: int, bot_id: int, expected: dict) -> dict:
         token = None
 
 
+async def _rendered_review_plan(user_id: int, review_id: int,
+                                source_plan: dict, order_plan: dict,
+                                detail: dict) -> dict[str, bool]:
+    """Observe separate source and order sections with exact in-memory QA detail."""
+    from backend.scripts.qa_protected_browser import observe_page
+    from backend.utils.auth_utils import create_access_token
+
+    async def inspect(page):
+        # The inactive child is intentionally outside the public review rollout.
+        # Feed its owner-scoped service detail to the deployed frontend only;
+        # every other browser request keeps the protected origin/method policy.
+        detail_url = f"https://tradamind.com/api/bot/trade-reviews/{review_id}"
+        async def serve_detail(route):
+            if route.request.method != "GET" or route.request.url != detail_url:
+                await route.abort()
+                return
+            await route.fulfill(status=200, content_type="application/json",
+                                body=json.dumps(detail, default=str))
+        await page.route(detail_url, serve_detail)
+        await page.goto(f"https://tradamind.com/report?trade_review_id={review_id}",
+                        wait_until="domcontentloaded", timeout=30000)
+        await page.locator("h5").filter(
+            has_text=re.compile("Instapbeslissing|Entry decision|Einstiegsentscheidung", re.I),
+        ).first.wait_for(timeout=20000)
+        return await page.evaluate("""({reviewId, sourceTarget, orderTarget,
+                                     sourceDecisionAt, sourceFx, orderFx, orderFxAt}) => {
+            const labels = [
+                'Instapbeslissing: bronkoers en valuta',
+                'Entry decision: source quote and currency',
+                'Einstiegsentscheidung: Quellkurs und Währung',
+            ];
+            const heading = [...document.querySelectorAll('h5')]
+                .find(node => labels.includes(node.textContent.trim()));
+            const source = heading?.parentElement;
+            const card = source?.parentElement;
+            const sourceDetails = source?.querySelector('details');
+            const orderDetails = [...(card?.children || [])]
+                .find(node => node.tagName === 'DETAILS');
+            const sourceText = sourceDetails?.textContent || '';
+            const orderText = orderDetails?.textContent || '';
+            const sourceFxLabels = [
+                'EUR-factor bij instapbeslissing',
+                'EUR factor at entry decision',
+                'EUR-Faktor der Einstiegsentscheidung',
+            ];
+            const orderFxLabels = [
+                'EUR-factor in orderplan',
+                'EUR factor in order plan',
+                'EUR-Faktor im Orderplan',
+            ];
+            const sourceTimeLabels = [
+                'Bronmoment instapbeslissing', 'Entry decision time',
+                'Zeitpunkt der Einstiegsentscheidung',
+            ];
+            const orderTimeLabels = [
+                'Bronmoment orderplan-FX', 'Order-plan FX observation time',
+                'Quellzeitpunkt des Orderplan-FX',
+            ];
+            return {
+                dossier_visible: document.body.textContent.includes(`#${reviewId}`),
+                separate_plan_sections: !!heading && !!sourceDetails && !!orderDetails &&
+                    sourceDetails !== orderDetails,
+                source_currency_level_visible: sourceText.includes('USD') &&
+                    sourceText.includes(String(sourceTarget)),
+                source_decision_time_visible: sourceText.includes(sourceDecisionAt) &&
+                    sourceTimeLabels.some(label => sourceText.includes(label)),
+                source_fx_visible: sourceText.includes(String(sourceFx)) &&
+                    sourceFxLabels.some(label => sourceText.includes(label)),
+                order_currency_level_visible: orderText.includes('EUR') &&
+                    orderText.includes(String(orderTarget)),
+                order_fx_visible: orderText.includes(String(orderFx)) &&
+                    orderFxLabels.some(label => orderText.includes(label)),
+                order_fx_time_visible: orderText.includes(orderFxAt) &&
+                    orderTimeLabels.some(label => orderText.includes(label)),
+            };
+        }""", {
+            "reviewId": review_id,
+            "sourceTarget": source_plan["source_levels"]["targets"][0],
+            "orderTarget": order_plan["targets"][0]["price"],
+            "sourceDecisionAt": source_plan["source_decision_at"],
+            "sourceFx": source_plan["fx_eur_per_unit"],
+            "orderFx": order_plan["fx_eur_per_unit"],
+            "orderFxAt": order_plan["fx_as_of"],
+        })
+
+    token = create_access_token({"sub": str(user_id), "role": "user"})
+    try:
+        result = await observe_page(
+            base_url="https://tradamind.com",
+            path="/report", token=token,
+            inspect=inspect, bypass_fixture_onboarding=True,
+        )
+        return result if isinstance(result, dict) else {}
+    except Exception:
+        raise RuntimeError("paper_exit_rendered_review_failed") from None
+    finally:
+        token = None
+
+
 @contextmanager
 def _stage(name: str):
     try:
@@ -401,9 +503,16 @@ def _seed_trade(user_id: int, bot_id: int,
                            (symbol, 1000 - invested, qty, invested, eur_price, bot_id, user_id))
             if cursor.rowcount != 1:
                 raise RuntimeError("paper_exit_fixture_identity_invalid")
+            decision_fx = float(context["market_fx_eur_per_unit"])
+            decision_fx_at = context["market_fx_as_of"]
+            if decision_fx_at is None or decision_fx <= 0:
+                raise RuntimeError("paper_exit_entry_decision_fx_missing")
             opening = {"trade_plan": {
                 "source_price_currency": currency,
                 "source_levels": {"entry": entry, "stop_loss": stop, "targets": [target]},
+                "market_quote_currency": currency,
+                "fx_eur_per_unit": decision_fx,
+                "fx_as_of": decision_fx_at.isoformat(),
             }}
             phase = "decision_insert"
             cursor.execute("""INSERT INTO bot_decisions
@@ -424,18 +533,23 @@ def _seed_trade(user_id: int, bot_id: int,
                                       'filled','paper') RETURNING id""",
                            (user_id, bot_id, decision_id, symbol, market_id, invested, eur_price, qty))
             order_id = int(cursor.fetchone()[0])
-            # The opening order must carry the original quote-currency plan.
-            # The review projector reads this immutable capture, not today's
-            # mutable strategy levels or a later exit decision.
+            # Keep the order's EUR capture distinct from the earlier decision's
+            # quote-currency source and FX, as in older Paper review records.
             phase = "plan_capture"
             opening_at = datetime.now(timezone.utc)
+            order_fx = round(decision_fx * 0.99, 8)
+            order_plan = {
+                "price_currency": "EUR",
+                "entry_plan": {"price": round(entry * order_fx, 6)},
+                "stop_loss": {"price": round(stop * order_fx, 6)},
+                "targets": [{"price": round(target * order_fx, 6)}],
+                "fx_eur_per_unit": order_fx,
+                "fx_as_of": opening_at.isoformat(),
+            }
             cursor.execute("""UPDATE finn_trade_order_context
                               SET plan_snapshot=%s::jsonb,captured_at=%s
                               WHERE user_id=%s AND order_id=%s AND decision_id=%s""",
-                           (json.dumps({"source_price_currency": currency,
-                                        "source_levels": {"entry": entry,
-                                                          "stop_loss": stop,
-                                                          "targets": [target]}}),
+                           (json.dumps(order_plan),
                             opening_at, user_id, order_id, decision_id))
             if cursor.rowcount != 1:
                 raise RuntimeError("paper_exit_open_plan_capture_missing")
@@ -468,6 +582,72 @@ async def _history(user_id: int) -> list[dict]:
             return await BotService(session).get_bot_history(user_id, 7)
     finally:
         await engine.dispose()
+
+
+def _no_redirect_get(url: str, token: str, *, sse: bool) -> dict | None:
+    """Read a protected QA endpoint without forwarding its bearer on redirect."""
+    class RejectRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, request, fp, code, msg, headers, newurl):
+            return None
+
+    request = urllib.request.Request(url, headers={
+        "Authorization": f"Bearer {token}",
+        "Accept": "text/event-stream" if sse else "application/json",
+        "Connection": "close",
+    })
+    try:
+        with urllib.request.build_opener(RejectRedirect).open(request, timeout=15) as response:
+            if response.status != 200 or response.geturl() != url:
+                return None
+            if not sse:
+                parsed = json.load(response)
+                return parsed if isinstance(parsed, dict) else None
+            for raw_line in response:
+                line = raw_line.decode("utf-8", errors="replace").strip()
+                if line.startswith("data:"):
+                    try:
+                        parsed = json.loads(line[5:].strip())
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(parsed, dict) and parsed.get("status") in {"completed", "failed", "cancelled"}:
+                        return parsed
+    except (urllib.error.URLError, TimeoutError, ValueError, json.JSONDecodeError):
+        return None
+    return None
+
+
+def _mentions_level(answer: str, value: object) -> bool:
+    """Accept ordinary Dutch or English decimal display, within cent rounding."""
+    try:
+        expected = float(value)
+    except (TypeError, ValueError):
+        return False
+    for token in re.findall(r"(?<!\w)\d+(?:[.,]\d+)?", answer):
+        try:
+            if math.isclose(float(token.replace(",", ".")), expected,
+                            rel_tol=0, abs_tol=0.02):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+async def _public_polling_sse_match(user_id: int, run_id: str) -> bool:
+    """Compare the same owner-bound terminal run through both public transports."""
+    from backend.utils.auth_utils import create_access_token
+
+    token = create_access_token({"sub": str(user_id), "role": "user"})
+    url = f"https://tradamind.com/api/assistant/v2/runs/{run_id}"
+    try:
+        envelope, event = await asyncio.gather(
+            asyncio.to_thread(_no_redirect_get, url, token, sse=False),
+            asyncio.to_thread(_no_redirect_get, f"{url}/stream", token, sse=True),
+        )
+        return (isinstance(envelope, dict) and isinstance(event, dict)
+                and envelope.get("run_id") == run_id
+                and envelope.get("status") == "completed" and event == envelope)
+    finally:
+        token = None
 
 
 def _evidence(namespace: str, user_id: int, bot_id: int, market_id: int | None,
@@ -565,6 +745,9 @@ def _evidence(namespace: str, user_id: int, bot_id: int, market_id: int | None,
 async def _review_chain(user_id: int, bot_id: int, expected: dict) -> dict:
     """Project the same closed Paper position and require an owner-bound FINN read."""
     from backend.infrastructure.database import async_session_factory, engine
+    from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import (
+        FinnV2RuntimeContractRepository,
+    )
     from backend.services.finn_trade_review_service import FinnTradeReviewService
     from backend.scripts import probe_protected_closed_paper_review as review_probe
 
@@ -580,8 +763,24 @@ async def _review_chain(user_id: int, bot_id: int, expected: dict) -> dict:
             detail = await service.get_review(user_id, int(items[0]["id"]))
             exit_proof = detail.get("paper_exit_evidence") or {}
             plan = detail.get("plan_snapshot") or {}
+            source_plan = detail.get("entry_decision_source_plan") or {}
+            provenance = detail.get("plan_provenance") or {}
             analysis = detail.get("analysis_json") or {}
-            levels = plan.get("source_levels") or {}
+            levels = source_plan.get("source_levels") or {}
+            try:
+                decision_at = datetime.fromisoformat(source_plan["source_decision_at"])
+                fx_at = datetime.fromisoformat(source_plan["fx_as_of"])
+                entry_at = detail["entry_at"]
+                chronology_valid = (
+                    decision_at.tzinfo is not None and fx_at.tzinfo is not None
+                    and entry_at.tzinfo is not None
+                    and fx_at <= decision_at <= entry_at
+                )
+                order_fx_at = datetime.fromisoformat(plan["fx_as_of"])
+                chronology_valid = (chronology_valid and order_fx_at.tzinfo is not None
+                                    and order_fx_at == entry_at)
+            except (KeyError, TypeError, ValueError):
+                chronology_valid = False
             if detail.get("analysis_status") != "ready":
                 failure = RuntimeError("paper_exit_review_analysis_not_ready")
                 failure.analysis_failure = analysis_failures[-1] if analysis_failures else "not_captured"
@@ -604,12 +803,31 @@ async def _review_chain(user_id: int, bot_id: int, expected: dict) -> dict:
                     or exit_proof.get("execution_fx_observed_at") != expected.get("execution_fx_observed_at")
                     or not matches_level(exit_proof.get("saved_stop_loss"), levels.get("stop_loss"))
                     or not matches_level(exit_proof.get("saved_first_target"), (levels.get("targets") or [None])[0])
-                    or plan.get("source_price_currency") != expected.get("source_price_currency")
+                    or not matches_level(levels.get("entry"), float(expected.get("source_price") or 0) * 0.7)
+                    or source_plan.get("source_price_currency") != expected.get("source_price_currency")
+                    or source_plan.get("market_quote_currency") != expected.get("source_price_currency")
+                    or source_plan.get("source_evidence") != "linked_entry_decision"
+                    or source_plan.get("source_decision_id") != provenance.get("decision_id")
+                    or not chronology_valid
+                    or plan.get("price_currency") != "EUR"
+                    or set(plan) != {"price_currency", "entry_plan", "stop_loss", "targets",
+                                     "fx_eur_per_unit", "fx_as_of"}
+                    or not matches_level(plan.get("fx_eur_per_unit"),
+                                         float(source_plan.get("fx_eur_per_unit") or 0) * 0.99)
+                    or not matches_level(source_plan.get("fx_eur_per_unit"), expected.get("fx_eur_per_unit"))
+                    or source_plan.get("fx_as_of") != expected.get("fx_observed_at")
+                    or plan.get("source_levels") is not None
+                    or not matches_level((plan.get("entry_plan") or {}).get("price"),
+                                         float(levels.get("entry") or 0) * float(plan.get("fx_eur_per_unit") or 0))
+                    or not matches_level((plan.get("stop_loss") or {}).get("price"),
+                                         float(levels.get("stop_loss") or 0) * float(plan.get("fx_eur_per_unit") or 0))
+                    or not matches_level(((plan.get("targets") or [{}])[0] or {}).get("price"),
+                                         float((levels.get("targets") or [0])[0]) * float(plan.get("fx_eur_per_unit") or 0))
                     or detail.get("plan_status") != "entry_order_plan_recorded"):
                 raise RuntimeError("paper_exit_review_evidence_incomplete")
             evidence_ids = {evidence_id for observation in analysis.get("observations") or []
                             for evidence_id in observation.get("evidence_ids") or []}
-            if "paper_exit:decision" not in evidence_ids:
+            if not {"paper_exit:decision", "entry_decision:source_plan"} <= evidence_ids:
                 raise RuntimeError("paper_exit_review_analysis_evidence_missing")
             review_id = int(detail["id"])
     except Exception as error:
@@ -618,15 +836,33 @@ async def _review_chain(user_id: int, bot_id: int, expected: dict) -> dict:
     finally:
         await engine.dispose()
 
+    with _review_step("rendered_review"):
+        rendered_plan = await _rendered_review_plan(user_id, review_id, source_plan, plan, detail)
+        if not all(rendered_plan.get(key) is True for key in {
+            "dossier_visible", "separate_plan_sections", "source_currency_level_visible",
+            "source_decision_time_visible", "source_fx_visible",
+            "order_currency_level_visible", "order_fx_visible", "order_fx_time_visible",
+        }):
+            raise RuntimeError("paper_exit_rendered_review_plan_incomplete")
+
     with _review_step("finn_chat"):
-        with review_probe._fixture_review_rollout(user_id):
+        with _guard_live_exchange() as chat_live_attempts, review_probe._fixture_review_rollout(user_id):
             answer = await review_probe._chat_turn(
                 user_id,
                 f"Wat was bij mijn trade-reflectie #{review_id} de vastgelegde Paper-exitreden? "
                 "Noem de oorspronkelijke koersvaluta, het opgeslagen eerste doel en de "
                 "wisselkoers bij uitvoering. Alleen teruglezen; geen voorstel of actie.",
             )
+            mixed_answer = await review_probe._chat_turn(
+                user_id,
+                f"Lees Reflectie #{review_id}, mijn plan, botbeslissing en huidige positie. "
+                "Noem het dossiernummer, het bronkoersdoel bij de instapbeslissing "
+                "en het afzonderlijke EUR-orderplandoel met hun valuta. "
+                "Alleen teruglezen; geen voorstel of actie.",
+            )
     with _review_step("finn_verify"):
+        if chat_live_attempts:
+            raise RuntimeError("paper_exit_finn_live_execution_attempt")
         response = answer.response
         if (answer.status != "completed" or response is None
                 or response.proposal_id or response.confirmation_required
@@ -644,9 +880,73 @@ async def _review_chain(user_id: int, bot_id: int, expected: dict) -> dict:
                 or expected["source_price_currency"].casefold() not in text
                 or target not in numbers or fx not in numbers):
             raise RuntimeError("paper_exit_finn_answer_incomplete")
+        mixed_response = mixed_answer.response
+        if (mixed_answer.status != "completed" or mixed_response is None
+                or mixed_response.proposal_id or mixed_response.confirmation_required
+                or (mixed_answer.policy and mixed_answer.policy.execute_allowed)):
+            raise RuntimeError("paper_exit_mixed_finn_read_failed")
+        if (not any(item.entity_type == "review_history" for item in mixed_response.evidence)
+                or len(mixed_response.content.strip()) < 50
+                or not await review_probe._has_responses_exchange(
+                    user_id, mixed_answer.run_id, mixed_answer.conversation_id)):
+            raise RuntimeError("paper_exit_mixed_finn_owner_evidence_missing")
+        mixed_text = mixed_response.content.casefold()
+        if (str(review_id) not in mixed_text or "usd" not in mixed_text or "eur" not in mixed_text
+                or "bron" not in mixed_text or "order" not in mixed_text
+                or not _mentions_level(mixed_text, levels["targets"][0])
+                or not _mentions_level(mixed_text, plan["targets"][0]["price"])):
+            raise RuntimeError("paper_exit_mixed_finn_answer_incomplete")
+        if not await _public_polling_sse_match(user_id, mixed_answer.run_id):
+            raise RuntimeError("paper_exit_mixed_finn_transport_mismatch")
+        async with async_session_factory() as session:
+            contract = await FinnV2RuntimeContractRepository(session).get_for_run(
+                run_id=mixed_answer.run_id,
+            )
+            if (contract is None or contract.user_id != user_id
+                    or contract.conversation_id != mixed_answer.conversation_id):
+                raise RuntimeError("paper_exit_mixed_finn_contract_missing")
+            exchange = (contract.state_json or {}).get("responses_exchange") or {}
+            trace = exchange.get("tool_trace") or []
+            first = next((item for item in trace if isinstance(item, dict)
+                          and item.get("name")), None)
+            if not first or first.get("name") != "get_closed_trade_review":
+                raise RuntimeError("paper_exit_mixed_finn_read_priority_invalid")
+            result = first.get("result") or {}
+            review_read = next((item for item in result.get("results") or []
+                                if isinstance(item, dict)
+                                and item.get("scope") == "read_review_history"), None)
+            trades = ((review_read or {}).get("data") or {}).get("closed_trades") or []
+            selected = next((item for item in trades if isinstance(item, dict)
+                             and item.get("review_id") == review_id), None)
+            typed_source = (selected or {}).get("plan_source_evidence") or {}
+            typed_source = typed_source if isinstance(typed_source, dict) else {}
+            typed_levels = typed_source.get("source_levels") or {}
+            typed_levels = typed_levels if isinstance(typed_levels, dict) else {}
+            if (review_read is None or review_read.get("status") != "completed"
+                    or selected is None
+                    or typed_source.get("source_evidence") != "linked_entry_decision"
+                    or typed_source.get("source_price_currency") != source_plan["source_price_currency"]
+                    or typed_source.get("source_decision_id") != source_plan["source_decision_id"]
+                    or typed_source.get("source_decision_at") != source_plan["source_decision_at"]
+                    or typed_source.get("fx_as_of") != source_plan["fx_as_of"]
+                    or not matches_level(typed_source.get("fx_eur_per_unit"),
+                                         source_plan["fx_eur_per_unit"])
+                    or not matches_level(typed_levels.get("entry"), levels["entry"])
+                    or not matches_level(typed_levels.get("stop_loss"), levels["stop_loss"])
+                    or not matches_level((typed_levels.get("targets") or [None])[0],
+                                         levels["targets"][0])
+                    or not {"plan:snapshot", "entry_decision:source_plan"}
+                    <= set(selected.get("evidence_ids") or [])):
+                raise RuntimeError("paper_exit_mixed_finn_typed_source_missing")
+        review_probe._assert_fixture_orders_unchanged(user_id, bot_id)
     return {"result": "PASS", "owner_scoped_review": True,
-            "analysis_format_version": ANALYSIS_FORMAT_VERSION, "exit_evidence_cited": True,
-            "owner_scoped_finn_read": True, "action_proposals": 0}
+            "analysis_format_version": ANALYSIS_FORMAT_VERSION,
+            "entry_decision_source_separate": True, "entry_decision_cited": True,
+            "exit_evidence_cited": True, "owner_scoped_finn_read": True,
+            "rendered_review_plan_separate": True,
+            "mixed_read_review_first": True, "mixed_read_typed_source": True,
+            "mixed_read_polling_sse_equal": True,
+            "action_proposals": 0}
 
 
 def _assert_fixture_absent(user_id: int) -> None:

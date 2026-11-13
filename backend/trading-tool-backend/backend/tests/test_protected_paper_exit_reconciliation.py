@@ -2,7 +2,11 @@
 
 import os
 import asyncio
+import json
 from contextlib import contextmanager
+from datetime import datetime, timezone
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Thread
 from types import SimpleNamespace
 
 import pytest
@@ -14,8 +18,24 @@ from backend.scripts.run_finn_production_qa import profile_error_category
 NAMESPACE = "qa-123-1-ad9fe0d3-deadbeef"
 
 
-def test_aapl_review_chain_projects_and_reads_exact_usd_evidence(monkeypatch):
+@pytest.mark.parametrize("tool_name,source_evidence,typed_fx,generic_answer,rendered_present,error_code", [
+    ("get_closed_trade_review", "linked_entry_decision", 0.92, False, True, None),
+    ("get_active_plan_and_strategy", "linked_entry_decision", 0.92, False, True,
+     "paper_exit_mixed_finn_read_priority_invalid"),
+    ("get_closed_trade_review", None, 0.92, False, True,
+     "paper_exit_mixed_finn_typed_source_missing"),
+    ("get_closed_trade_review", "linked_entry_decision", None, False, True,
+     "paper_exit_mixed_finn_typed_source_missing"),
+    ("get_closed_trade_review", "linked_entry_decision", 0.92, True, True,
+     "paper_exit_mixed_finn_answer_incomplete"),
+    ("get_closed_trade_review", "linked_entry_decision", 0.92, False, False,
+     "paper_exit_rendered_review_plan_incomplete"),
+])
+def test_aapl_review_chain_projects_and_reads_exact_usd_evidence(
+        monkeypatch, tool_name, source_evidence, typed_fx, generic_answer,
+        rendered_present, error_code):
     from backend.infrastructure import database
+    from backend.infrastructure.repositories import finn_v2_runtime_contract_repository
     from backend.services import finn_trade_review_service
     from backend.scripts import probe_protected_closed_paper_review as review_probe
 
@@ -49,14 +69,53 @@ def test_aapl_review_chain_projects_and_reads_exact_usd_evidence(monkeypatch):
                 "id": 77, "bot_id": 22, "execution_environment": "paper",
                 "analysis_status": "ready", "analysis_json": {
                     "format_version": 5,
-                    "observations": [{"evidence_ids": ["paper_exit:decision"]}],
+                    "observations": [{"evidence_ids": [
+                        "paper_exit:decision", "entry_decision:source_plan", "plan:snapshot",
+                    ]}],
                 },
                 "paper_exit_evidence": {"trigger": "first_target", **expected},
-                "plan_snapshot": {"source_price_currency": "USD", "source_levels": {
-                    "stop_loss": 240, "targets": [320],
-                }},
+                "entry_at": datetime(2026, 11, 13, 15, 0, tzinfo=timezone.utc),
+                "plan_provenance": {"decision_id": 42, "order_id": 43},
+                "plan_snapshot": {"price_currency": "EUR", "fx_eur_per_unit": 0.9108,
+                                  "fx_as_of": "2026-11-13T15:00:00+00:00",
+                                  "entry_plan": {"price": 255.024},
+                                  "stop_loss": {"price": 218.592},
+                                  "targets": [{"price": 291.456}]},
+                "entry_decision_source_plan": {
+                    "source_evidence": "linked_entry_decision", "source_decision_id": 42,
+                    "source_decision_at": "2026-11-13T14:59:50+00:00",
+                    "source_price_currency": "USD",
+                    "market_quote_currency": "USD",
+                    "source_levels": {"entry": 280, "stop_loss": 240, "targets": [320]},
+                    "fx_eur_per_unit": 0.92,
+                    "fx_as_of": "2026-11-13T14:59:45+00:00",
+                },
                 "plan_status": "entry_order_plan_recorded",
             }
+
+    class Contracts:
+        def __init__(self, session):
+            assert isinstance(session, Session)
+        async def get_for_run(self, run_id):
+            assert run_id == "qa-mixed-run"
+            return SimpleNamespace(user_id=11, conversation_id="qa-mixed-conversation",
+                                   state_json={"responses_exchange": {"tool_trace": [{
+                                       "name": tool_name, "result": {"results": [{
+                                           "scope": "read_review_history", "status": "completed",
+                                           "data": {"closed_trades": [{"review_id": 77,
+                                               "plan_source_evidence": {
+                                                   "source_evidence": source_evidence,
+                                                   "source_price_currency": "USD",
+                                                   "source_decision_id": 42,
+                                                   "source_decision_at": "2026-11-13T14:59:50+00:00",
+                                                   "source_levels": {"entry": 280, "stop_loss": 240,
+                                                                     "targets": [320]},
+                                                   "fx_eur_per_unit": typed_fx,
+                                                   "fx_as_of": "2026-11-13T14:59:45+00:00",
+                                               },
+                                               "evidence_ids": ["plan:snapshot", "entry_decision:source_plan"]}]},
+                                       }]},
+                                   }]}})
 
     async def dispose():
         steps.append("dispose")
@@ -69,31 +128,177 @@ def test_aapl_review_chain_projects_and_reads_exact_usd_evidence(monkeypatch):
     async def chat(owner, message):
         assert owner == 11 and "#77" in message
         steps.append("chat")
+        mixed = "mijn plan" in message
         return SimpleNamespace(
-            status="completed", run_id="qa-run", conversation_id="qa-conversation",
+            status="completed", run_id="qa-mixed-run" if mixed else "qa-run",
+            conversation_id="qa-mixed-conversation" if mixed else "qa-conversation",
             policy=None,
             response=SimpleNamespace(
                 proposal_id=None, confirmation_required=False,
                 evidence=[SimpleNamespace(entity_type="review_history")],
-                content="Het vastgelegde first_target was 320 USD; EUR-factor 0,92.",
+                content=(("Ik kan je plan en positie toelichten zodra de dossiergegevens beschikbaar "
+                          "zijn. Kijk later opnieuw in je account voor deze informatie."
+                          if generic_answer else
+                          "Reflectie #77 toont het bronkoersdoel 320 USD en het afzonderlijke "
+                          "EUR-orderplandoel 291,46; de huidige positie lees ik apart.")
+                         if mixed else "Het vastgelegde first_target was 320 USD; EUR-factor 0,92."),
             ),
         )
 
     async def exchange(owner, run_id, conversation_id):
-        return (owner, run_id, conversation_id) == (11, "qa-run", "qa-conversation")
+        return owner == 11 and (run_id, conversation_id) in {
+            ("qa-run", "qa-conversation"), ("qa-mixed-run", "qa-mixed-conversation"),
+        }
+
+    async def parity(owner, run_id):
+        return (owner, run_id) == (11, "qa-mixed-run")
+
+    async def rendered(owner, review_id, source_plan, order_plan, detail):
+        assert (owner, review_id) == (11, 77)
+        assert source_plan["source_price_currency"] == "USD"
+        assert order_plan["price_currency"] == "EUR"
+        assert detail["id"] == review_id
+        return {key: rendered_present for key in (
+            "dossier_visible", "separate_plan_sections", "source_currency_level_visible",
+            "source_decision_time_visible", "source_fx_visible",
+            "order_currency_level_visible", "order_fx_visible", "order_fx_time_visible",
+        )}
 
     monkeypatch.setattr(database, "async_session_factory", Session)
     monkeypatch.setattr(database, "engine", SimpleNamespace(dispose=dispose))
+    monkeypatch.setattr(finn_v2_runtime_contract_repository, "FinnV2RuntimeContractRepository", Contracts)
     monkeypatch.setattr(finn_trade_review_service, "FinnTradeReviewService", Reviews)
     monkeypatch.setattr(review_probe, "_process_review_for_fixture", lambda owner: steps.append("project"))
     monkeypatch.setattr(review_probe, "_fixture_review_rollout", rollout)
     monkeypatch.setattr(review_probe, "_chat_turn", chat)
     monkeypatch.setattr(review_probe, "_has_responses_exchange", exchange)
+    monkeypatch.setattr(probe, "_public_polling_sse_match", parity)
+    monkeypatch.setattr(probe, "_rendered_review_plan", rendered)
+    monkeypatch.setattr(review_probe, "_assert_fixture_orders_unchanged",
+                        lambda owner, bot: steps.append("orders") if (owner, bot) == (11, 22) else None)
 
+    if error_code:
+        with pytest.raises(RuntimeError, match=f"^{error_code}$"):
+            asyncio.run(probe._review_chain(11, 22, expected))
+        assert profile_error_category("trader_paper_exit_review_chain", RuntimeError(error_code)) == error_code
+        return
     result = asyncio.run(probe._review_chain(11, 22, expected))
     assert result["result"] == "PASS"
     assert result["analysis_format_version"] == 5
-    assert steps == ["project", "dispose", "chat"]
+    assert steps == ["project", "dispose", "chat", "chat", "orders"]
+
+
+def test_protected_mixed_read_requires_exact_polling_sse_parity(monkeypatch):
+    from backend.utils import auth_utils
+
+    envelope = {"run_id": "run-1", "status": "completed", "response": {"content": "private"}}
+    monkeypatch.setattr(auth_utils, "create_access_token", lambda *_args: "in-memory-token")
+    monkeypatch.setattr(probe, "_no_redirect_get", lambda _url, _token, *, sse: dict(envelope))
+    assert asyncio.run(probe._public_polling_sse_match(11, "run-1")) is True
+    monkeypatch.setattr(probe, "_no_redirect_get", lambda _url, _token, *, sse: (
+        {**envelope, "response": {"content": "other"}} if sse else dict(envelope)))
+    assert asyncio.run(probe._public_polling_sse_match(11, "run-1")) is False
+
+
+def test_protected_transport_never_forwards_bearer_on_cross_origin_redirect():
+    received = []
+
+    class Destination(BaseHTTPRequestHandler):
+        def do_GET(self):
+            received.append(self.headers.get("Authorization"))
+            self.send_response(200)
+            self.end_headers()
+        def log_message(self, *_args):
+            pass
+
+    destination = ThreadingHTTPServer(("127.0.0.1", 0), Destination)
+
+    class Redirect(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(302)
+            self.send_header("Location", f"http://127.0.0.1:{destination.server_port}/stolen")
+            self.end_headers()
+        def log_message(self, *_args):
+            pass
+
+    origin = ThreadingHTTPServer(("127.0.0.1", 0), Redirect)
+    threads = [Thread(target=server.serve_forever, daemon=True) for server in (origin, destination)]
+    for thread in threads:
+        thread.start()
+    try:
+        url = f"http://127.0.0.1:{origin.server_port}/run"
+        assert probe._no_redirect_get(url, "secret", sse=False) is None
+        assert probe._no_redirect_get(url, "secret", sse=True) is None
+        assert received == []
+    finally:
+        origin.shutdown()
+        destination.shutdown()
+        origin.server_close()
+        destination.server_close()
+        for thread in threads:
+            thread.join(timeout=2)
+
+
+def test_rendered_review_override_serves_only_exact_owner_detail_get(monkeypatch):
+    from backend.scripts import qa_protected_browser
+    from backend.utils import auth_utils
+
+    actions = []
+    detail = {"id": 77, "plan_snapshot": {"price_currency": "EUR"}}
+
+    class Locator:
+        def filter(self, **_kwargs):
+            return self
+        @property
+        def first(self):
+            return self
+        async def wait_for(self, **_kwargs):
+            return None
+
+    class Route:
+        def __init__(self, method, url):
+            self.request = SimpleNamespace(method=method, url=url)
+        async def fulfill(self, **kwargs):
+            actions.append(("fulfill", self.request.method, kwargs))
+        async def abort(self):
+            actions.append(("abort", self.request.method))
+
+    class Page:
+        async def route(self, url, handler):
+            assert url == "https://tradamind.com/api/bot/trade-reviews/77"
+            await handler(Route("GET", url))
+            await handler(Route("POST", url))
+            await handler(Route("GET", url + "?other=1"))
+        async def goto(self, url, **_kwargs):
+            assert url == "https://tradamind.com/report?trade_review_id=77"
+        def locator(self, selector):
+            assert selector == "h5"
+            return Locator()
+        async def evaluate(self, _script, _args):
+            return {key: True for key in (
+                "dossier_visible", "separate_plan_sections", "source_currency_level_visible",
+                "source_decision_time_visible", "source_fx_visible",
+                "order_currency_level_visible", "order_fx_visible", "order_fx_time_visible",
+            )}
+
+    async def observe(**kwargs):
+        assert kwargs["path"] == "/report" and kwargs["bypass_fixture_onboarding"] is True
+        return await kwargs["inspect"](Page())
+
+    monkeypatch.setattr(qa_protected_browser, "observe_page", observe)
+    monkeypatch.setattr(auth_utils, "create_access_token", lambda *_args: "in-memory-token")
+    result = asyncio.run(probe._rendered_review_plan(
+        11, 77,
+        {"source_levels": {"targets": [320]}, "source_decision_at": "2026-11-13T15:00:00Z",
+         "fx_eur_per_unit": 0.92},
+        {"targets": [{"price": 291.456}], "fx_eur_per_unit": 0.9108,
+         "fx_as_of": "2026-11-13T15:00:00Z"}, detail,
+    ))
+    assert all(result.values())
+    assert actions[0][0:2] == ("fulfill", "GET")
+    assert actions[0][2]["content_type"] == "application/json"
+    assert json.loads(actions[0][2]["body"]) == detail
+    assert actions[1:] == [("abort", "POST"), ("abort", "GET")]
 
 
 def test_review_chain_reports_bounded_analysis_failure_before_finn(monkeypatch):
@@ -190,15 +395,25 @@ def test_aapl_fixture_seeds_only_usd_paper_rows(monkeypatch):
             return None
 
     monkeypatch.setattr(probe.fixture, "_connection", Connection)
-    probe._seed_trade(11, 22, None, {"market_price": 400, "market_price_eur": 368}, symbol="AAPL")
+    probe._seed_trade(11, 22, None, {
+        "market_price": 400, "market_price_eur": 368,
+        "market_fx_eur_per_unit": 0.92,
+        "market_fx_as_of": datetime(2026, 11, 13, 14, 59, tzinfo=timezone.utc),
+    }, symbol="AAPL")
     assert statements[-1][0] == "COMMIT"
     assert all("'BTC'" not in sql for sql, _ in statements)
     assert any("UPDATE bot_configs" in sql and values[:2] == ("AAPL", None)
                for sql, values in statements if values)
     assert any("INSERT INTO bot_orders" in sql and values[3:5] == ("AAPL", None)
                for sql, values in statements if values)
+    assert any("INSERT INTO bot_decisions" in sql
+               and '"source_price_currency": "USD"' in values[-1]
+               and '"fx_eur_per_unit": 0.92' in values[-1]
+               for sql, values in statements if values)
     assert any("UPDATE finn_trade_order_context" in sql
-               and '"source_price_currency": "USD"' in values[0]
+               and '"price_currency": "EUR"' in values[0]
+               and '"fx_eur_per_unit": 0.9108' in values[0]
+               and '"source_levels"' not in values[0]
                for sql, values in statements if values)
 
 
@@ -711,7 +926,11 @@ def test_opening_fixture_reports_fixed_statement_phase(monkeypatch, failed_state
     conn = Connection()
     monkeypatch.setattr(probe.fixture, "_connection", lambda: conn)
     with pytest.raises(RuntimeError, match=f"^paper_exit_open_{phase}_failed$"):
-        probe._seed_trade(11, 22, 33, {"market_price": 100, "market_price_eur": 90})
+        probe._seed_trade(11, 22, 33, {
+            "market_price": 100, "market_price_eur": 90,
+            "market_fx_eur_per_unit": 0.9,
+            "market_fx_as_of": datetime(2026, 11, 13, 14, 59, tzinfo=timezone.utc),
+        })
     assert conn.rolled_back
     assert profile_error_category(
         "trader_paper_exit_reconciliation", RuntimeError(f"paper_exit_open_{phase}_failed")

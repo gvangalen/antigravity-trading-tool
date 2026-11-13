@@ -414,11 +414,20 @@ def profile_error_category(profile: str, error: Exception) -> str:
             "paper_exit_open_decision_insert_failed", "paper_exit_open_order_insert_failed",
             "paper_exit_open_plan_capture_failed", "paper_exit_open_plan_capture_missing",
             "paper_exit_open_ledger_insert_failed", "paper_exit_open_commit_failed",
+            "paper_exit_entry_decision_fx_missing",
             "paper_exit_review_chain_failed", "paper_exit_review_count_invalid",
             "paper_exit_review_analysis_not_ready",
             "paper_exit_review_evidence_incomplete", "paper_exit_review_analysis_evidence_missing",
+            "paper_exit_rendered_review_failed", "paper_exit_rendered_review_plan_incomplete",
             "paper_exit_finn_read_failed", "paper_exit_finn_owner_evidence_missing",
             "paper_exit_finn_answer_incomplete",
+            "paper_exit_finn_live_execution_attempt",
+            "paper_exit_mixed_finn_read_failed", "paper_exit_mixed_finn_owner_evidence_missing",
+            "paper_exit_mixed_finn_answer_incomplete",
+            "paper_exit_mixed_finn_contract_missing",
+            "paper_exit_mixed_finn_read_priority_invalid",
+            "paper_exit_mixed_finn_typed_source_missing",
+            "paper_exit_mixed_finn_transport_mismatch",
             "paper_exit_rendered_ui_failed",
             "paper_exit_rendered_bootstrap_failed",
             "paper_exit_rendered_owner_bot_api_failed",
@@ -4065,7 +4074,7 @@ def main() -> int:
                 report["paper_exit_probe_phase"] = phase
         if args.profile == "trader_paper_exit_review_chain":
             step = getattr(error, "review_step", None)
-            if step in {"projection_analysis", "dossier_read", "finn_chat", "finn_verify"}:
+            if step in {"projection_analysis", "dossier_read", "rendered_review", "finn_chat", "finn_verify"}:
                 report["paper_exit_review_step"] = step
             analysis_failure = getattr(error, "analysis_failure", None)
             if analysis_failure in {
