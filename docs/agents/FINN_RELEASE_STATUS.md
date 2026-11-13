@@ -4,6 +4,29 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN bronmomenten en tijdzonepariteit (13 november 2026)
+
+Phase: `LOCAL_CANDIDATE_NOT_READY_FOR_DEPLOY`. Concept-PR #1038 vanaf
+`codex/finn-source-moment-parity-20261113` op productcommit `999979f56518459b3901d092ce42e5effdbb447f`.
+De lokale reparatie geeft FINN getypeerde UTC- en Amsterdamse bronmomenten,
+controleert actuele koers- en portefeuilleclaims ook in tabellen en voor het
+exacte handelspaar, en toont Analyse, rapport en bot met expliciete CET/CEST.
+Een onjuist bronmoment wordt vóór aflevering afgekeurd en mag niet als
+geverifieerd feit verschijnen; de bestaande read-only herstelroute kan daarna
+een nieuw antwoord samenstellen. Dit is nog geen bewezen live herstelsucces.
+
+Gemeten: volledige backend `4780 passed, 7 skipped`; gerichte tests voor
+verkeerde AAPL-koersbron, Paper UTC/CET, zomer-/wintertijd, historisch
+dagrapport, compacte tabellen en BTC/EUR versus BTC/USDT groen. Onafhankelijke
+lokale QA-hertest vond in die scope geen resterende blocker. Frontend build,
+typecheck, i18n-tests/lint, commandtests en high-severity audit groen.
+De verplichte lokale API/Celery-actiematrix en echte-providerontwikkeling/
+regressie zijn in de schone werkboom niet uitgevoerd omdat de benodigde
+runtimeverbindingen niet zijn geconfigureerd. PR-CI, merge, Auto Deploy,
+publieke SHA-pariteit en ingelogde live QA zijn op dit moment nog open.
+Deze kandidaat is daarom **niet vrijgegeven** en verandert de huidige
+publieke status of de eerdere onafhankelijke QA-uitspraak niet.
+
 ## FINN algemene Reflectiechat: afzonderlijk orderplanbewijs (13 november 2026)
 
 Phase: `DEPLOYED_PENDING_FINAL_SHA`, statusbranch
