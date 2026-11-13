@@ -4,9 +4,58 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN Reflectie-bewijsherstel na beschermde QA (13 november 2026)
+
+Phase: `LOCAL_VALIDATED_PENDING_CI`, kandidaatbranch
+`codex/reflection-grounding-repair`. De vorige release stond publiek op
+`0a863c8a4ac1b0dc1ae49c353728bede7065f367` na vijf groene laatste
+main-CI-jobs (`43469068016`) en Auto Deploy `43469970496`; backend-health en
+frontend-buildinfo gaven HTTP 200 en exact die SHA. Onafhankelijke beschermde
+QA-run `43470626220-1` kwam in `review_chain/dossier_read` niet voorbij
+`paper_exit_review_analysis_not_ready`, met `analysis_failure=evidence_grounding`
+(artifact SHA-256 `2b9d75341cc03a26b37608272c27800c5517c8fd6489c8432fe80a83d536660d`).
+Read-only audit `43470890106-1` bevestigde een inactieve, geïsoleerde child,
+Paper-exit en review, maar geen FINN-run; cleanup `43471083145-1` verwijderde
+die exacte child aantoonbaar. Geen Live-actie of gewone accountwijziging. Het
+onafhankelijke oordeel over die SHA is **NOT_ACCEPTED / INCOMPLETE**.
+
+De geschoonde live foutcode onderscheidde twee bewijsvalidaties niet. Een
+lokale synthetische reconstructie van afzonderlijke USD-beslisniveaus en
+EUR-orderplan liet de echte provider vóór de wijziging twee keer
+`plan_followed` met alleen beslis- en exitbewijs teruggeven, ook na de
+algemene herstelpoging; daarnaast ontstond een lege verplichte `question`.
+De kandidaat maakt de bewijsregel expliciet: `plan_followed` vereist nu
+`plan:snapshot` plus een toegestane uitvoerings- of exitbron. Bij ontbrekende
+koppeling vraagt de begrensde tweede poging een inhoudelijke vergelijking of
+herclassificatie naar `exit_process`/`evidence_gap`; de bestaande servervalidatie
+blijft in beide pogingen gelden. Dit is een generieke bewijsreparatie, niet
+een AAPL- of BTC-uitzondering. De definitieve synthetische providerproef gaf
+**5/5** geldige analyses (log SHA-256
+`7ad8f7163e4e73997a8e612ee47b85809050cfa5d73ad2934d148885cdf1a094`).
+
+Lokale Build-gates op de laatste code: backend **4765 passed, 7 skipped**
+(log SHA-256 `3b408fa7d6104db280f0d52b4b85eed7105a67d8c8f3ba2be98a683a35077568`);
+gerichte bewijs-/hersteltests **35 passed**. Lokale worker-actiematrix
+**17/17** en adaptertests **26/26**, nul brokerorders, Live-calls, Live-bots
+of productieverbindingen (artifact SHA-256
+`d939feed06ec98569dd171411fdedbd746915f3887d6b5960293bff9e4d115f5`).
+Echte-provider development **20/20** (artifact SHA-256
+`cbcbc3114ee38627e6469b4dd7ced84bec6214a4fc6f48d97dbfa73c26177389`)
+en regression **109/109** met 100% op alle gerapporteerde accuracies en nul
+provider-, schema-, timeout-, parse- of validatiefouten (artifact SHA-256
+`63067ae43f104c9fa344f5ff02c8f398ed2e09fc48c4f61f5b01ff7d7852b901`).
+Frontendbuild, typecheck, i18n-lint/tests, command-/proposaltests en
+high-severity audit groen, nul auditkwetsbaarheden (buildlog SHA-256
+`5e34d5544558d7d56e944ad82ae4903db726868e081b9a8094ffd50973796e90`).
+Onafhankelijke QA-codecheck en Security-deltareview: **GO**. CI, deploy,
+publieke SHA-controle en nieuwe beschermde live QA zijn nog pending.
+Historische Reflectie #2127 vereist daarnaast read-only controle in de
+juiste Paper Test-sessie; die toegang is niet door de beschermde fixture
+vervangen.
+
 ## FINN Reflectie-planbron en algemene dossierlezing (13 november 2026)
 
-Phase: `DEPLOYED_PENDING_FINAL_SHA`, huidige kandidaatbranch
+Phase: `HISTORICAL_DEPLOYED_NOT_ACCEPTED`, vorige kandidaatbranch
 `codex/reflection-plan-qa-coverage`. De onafhankelijke traderinspectie in het account
 `Paper Test BTC AAPL` bevestigde dat Reflectie #2127 de Paper-exit intern
 herleidt: `first_target`, USD 358,60 boven USD 357,42, afzonderlijke

@@ -129,6 +129,9 @@ def test_model_cannot_assess_plan_following_from_fills_without_original_plan():
         validate_analysis(raw, {"fill:1", "plan:snapshot"})
     raw["observations"][0]["evidence_ids"].append("plan:snapshot")
     assert validate_analysis(raw, {"fill:1", "plan:snapshot"})["observations"][0]["theme"] == "plan_followed"
+    raw["observations"][0]["evidence_ids"] = ["plan:snapshot", "entry_decision:source_plan"]
+    with pytest.raises(ValueError, match="Original plan"):
+        validate_analysis(raw, {"plan:snapshot", "entry_decision:source_plan"})
 
 
 def test_real_provider_selection_contract_retries_an_unbound_response(monkeypatch):
@@ -151,7 +154,53 @@ def test_real_provider_selection_contract_retries_an_unbound_response(monkeypatc
     assert '"allowed_evidence_ids": ["fill:1"]' in calls[0]["prompt"]
     assert '"plan_followed"' not in calls[0]["prompt"]
     assert "repair_instruction" in calls[1]["prompt"]
+    assert "Ungrounded analysis observation" in calls[1]["prompt"]
     assert result["observations"][0]["evidence_ids"] == ["fill:1"]
+
+
+def test_model_repair_reclassifies_unproved_plan_following(monkeypatch):
+    from backend.services import finn_trade_analysis_service as module
+    calls = []
+
+    async def fake_ai(**kwargs):
+        calls.append(kwargs)
+        raw = _analysis("De exit is vastgelegd.")
+        raw["observations"][0]["theme"] = "plan_followed"
+        raw["observations"][0]["evidence_ids"] = ["entry_decision:source_plan", "paper_exit:decision"]
+        if len(calls) == 2:
+            raw["observations"][0]["theme"] = "exit_process"
+        return raw
+
+    monkeypatch.setattr(module.openai_client, "ask_gpt_json_async", fake_ai)
+    result = asyncio.run(module._validated_model_analysis(
+        {"plan": {"id": "plan:snapshot"},
+         "entry_decision_source_plan": {"id": "entry_decision:source_plan"}},
+        {"entry_decision:source_plan", "plan:snapshot", "paper_exit:decision"}, image=None,
+    ))
+    assert len(calls) == 2
+    assert "plan:snapshot" in calls[0]["prompt"]
+    assert "Original plan was not grounded" in calls[1]["prompt"]
+    assert "herclassificeer" in calls[1]["prompt"]
+    assert result["observations"][0]["theme"] == "exit_process"
+    assert result["observations"][0]["evidence_ids"] == ["entry_decision:source_plan", "paper_exit:decision"]
+
+
+def test_model_repair_names_empty_required_question(monkeypatch):
+    from backend.services import finn_trade_analysis_service as module
+    calls = []
+
+    async def fake_ai(**kwargs):
+        calls.append(kwargs)
+        raw = _analysis("De exit is vastgelegd.")
+        if len(calls) == 1:
+            raw["question"] = ""
+        return raw
+
+    monkeypatch.setattr(module.openai_client, "ask_gpt_json_async", fake_ai)
+    result = asyncio.run(module._validated_model_analysis({}, {"fill:1"}, image=None))
+    assert len(calls) == 2
+    assert "Invalid analysis question" in calls[1]["prompt"]
+    assert result["question"]
 
 
 def test_provider_error_does_not_trigger_an_unbounded_repair_loop(monkeypatch):

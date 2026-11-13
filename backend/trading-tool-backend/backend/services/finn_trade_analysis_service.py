@@ -56,10 +56,16 @@ SYSTEM_ROLE = (
     "dat de gebruiker zelf moet bevestigen, geen vastgestelde eigenschap. "
     "Als een eerder bevestigde gebruikersles relevant is, geef prior_lesson_review_id "
     "als exact een van de meegegeven review_id waarden; anders null. "
-    "Theme is een van plan_followed, risk, timing, exit_process, evidence_gap, other."
+    "Theme is een van plan_followed, risk, timing, exit_process, evidence_gap, other. "
+    "Gebruik plan_followed alleen wanneer je het opgeslagen orderplan "
+    "(plan:snapshot) concreet met bevestigd uitvoeringsbewijs vergelijkt. "
+    "Een vergelijking van uitsluitend bronbeslissing en exit hoort bij "
+    "exit_process; onzekere plantrouw hoort bij evidence_gap. Vul elk verplicht "
+    "tekstveld, ook question, met betekenisvolle tekst."
 )
 
 THEMES = {"plan_followed", "risk", "timing", "exit_process", "evidence_gap", "other"}
+EXECUTION_EVIDENCE_PREFIXES = ("fill:", "exchange_fill:", "derivative_exec:")
 def evidence_context(review: dict) -> tuple[dict, set[str]]:
     all_fills = review.get("fills") or []
     fills = (all_fills[:MAX_AI_FILLS // 2] + all_fills[-MAX_AI_FILLS // 2:]
@@ -206,7 +212,11 @@ def validate_analysis(raw: dict, allowed: set[str], context: dict | None = None,
         if (theme not in THEMES or not isinstance(refs, list) or not refs
                 or any(not isinstance(ref, str) or ref not in allowed for ref in refs)):
             raise ValueError("Ungrounded analysis observation")
-        if theme == "plan_followed" and "plan:snapshot" not in refs:
+        if theme == "plan_followed" and (
+            "plan:snapshot" not in refs
+            or not any(ref == "paper_exit:decision" or ref.startswith(EXECUTION_EVIDENCE_PREFIXES)
+                       for ref in refs)
+        ):
             raise ValueError("Original plan was not grounded")
         checked.append({"text": _model_text(observation, "text", maximum=550),
                         "evidence_ids": list(dict.fromkeys(refs)), "theme": theme})
@@ -253,16 +263,31 @@ async def _validated_model_analysis(context: dict, allowed: set[str], *,
             "observations": "Schrijf 1 tot 3 concrete observaties met theme, text en bewijs uit evidence_ids.",
             "allowed_themes": permitted_themes,
             "allowed_evidence_ids": sorted(allowed),
-            "evidence_rule": "Gebruik uitsluitend exacte IDs uit allowed_evidence_ids. Verzin geen IDs of thema's.",
+            "evidence_rule": (
+                "Gebruik uitsluitend exacte IDs uit allowed_evidence_ids. Verzin geen IDs of thema's. "
+                "Elke observatie heeft ten minste één geldig ID. Bij theme plan_followed "
+                "moeten plan:snapshot én ten minste één uitvoerings-ID (fill, "
+                "exchange_fill, derivative_exec of paper_exit:decision) in dezelfde "
+                "evidence_ids staan. Vergelijk de concrete niveaus en uitvoering "
+                "voordat je plantrouw claimt. Vergelijk je alleen de bronbeslissing "
+                "met de exit, gebruik theme exit_process; bij onzekere plantrouw "
+                "theme evidence_gap. Voeg geen ID toe zonder inhoudelijke onderbouwing."
+            ),
+            "text_rule": (
+                "summary, uncertainty en question zijn niet-lege teksten; ook zonder "
+                "gebruikersvraag formuleer je een concrete reflectievraag in question."
+            ),
             "writing_rule": "Gebruik de profielcontext om aan te sluiten bij deze trader, maar leid er geen tradefeiten of motieven uit af. Benoem ontbrekend bewijs concreet. Schrijf in de taal van de gebruikersvraag als die aanwezig is; anders Nederlands.",
         },
     }
+    repair_reason = None
     for attempt in range(2):
         if attempt:
             task["repair_instruction"] = (
                 "Je vorige antwoord voldeed niet aan het JSON- en bewijscontract. "
-                "Schrijf een nieuwe analyse met alle verplichte velden en ten minste "
-                "één geldige evidence_id per observatie."
+                f"Fout: {repair_reason}. Schrijf een nieuwe analyse met alle "
+                "verplichte velden en ten minste één geldige evidence_id per observatie. "
+                "Behoud de bewijsgrens: vul geen ontbrekende feiten in."
             )
         raw = await openai_client.ask_gpt_json_async(
             prompt=json.dumps(task, default=str), system_role=SYSTEM_ROLE,
@@ -272,9 +297,16 @@ async def _validated_model_analysis(context: dict, allowed: set[str], *,
         )
         try:
             return validate_analysis(raw, allowed, context, question_mode=question is not None)
-        except ValueError:
+        except ValueError as error:
             if not isinstance(raw, dict) or raw.get("error") or attempt:
                 raise
+            repair_reason = str(error)
+            if repair_reason == "Original plan was not grounded":
+                repair_reason += (
+                    " Vergelijk opgeslagen orderplan en uitvoering concreet, "
+                    "of herclassificeer deze observatie als exit_process of evidence_gap; "
+                    "voeg plan:snapshot niet alleen toe om de validatie te passeren."
+                )
     raise ValueError("Invalid analysis response")
 
 
