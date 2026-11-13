@@ -36,6 +36,7 @@ from backend.services.finn_v2_hard_claim_boundary import FinnV2HardClaimBoundary
 from backend.services.finn_v2_responses_model import finn_responses_model_options
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.services.finn_v2_responses_read_executor import FinnResponsesReadExecutor
+from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
 
 
 logger = logging.getLogger(__name__)
@@ -3057,6 +3058,13 @@ class FinnResponsesAnswerVerifier:
             for item in (call.get("result", {}).get("results") or [])
             if isinstance(item, dict)
         )
+        if result.answer_kind == "free_text" and not current_source_moments_supported(result.text, evidence):
+            return FinnResponsesVerifiedAnswer(
+                "unavailable",
+                self._fallback_copy("responses_evidence_not_verified", message=message, locale=locale),
+                "source_moment_conflicts_with_source", evidence,
+                rejection_details={"fact_mismatch": "current_source_moment"},
+            )
         if result.answer_kind == "free_text" and not self._latest_quote_claim_supported(result.text, evidence):
             return FinnResponsesVerifiedAnswer(
                 "unavailable",

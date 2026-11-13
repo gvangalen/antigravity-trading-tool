@@ -4,8 +4,8 @@ import { Calendar, Info } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { HUDSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import { useTranslation } from "@/app/providers/I18nProvider";
-import { formatDateTime } from "@/lib/i18n";
-import { parseUtcMoment, scoreSourceSnapshot } from "@/lib/report/reportSourceSnapshot.mjs";
+import { scoreSourceSnapshot } from "@/lib/report/reportSourceSnapshot.mjs";
+import { formatAmsterdamTimestamp } from "@/lib/time/formatUtcTimestamp.mjs";
 import { reportV2PeriodLabel } from "@/lib/report/reportV2Presentation.mjs";
 
 export default function ReportTerminalHUD({ report, type = "daily", loading = false }) {
@@ -21,11 +21,9 @@ export default function ReportTerminalHUD({ report, type = "daily", loading = fa
 
   const { report_date, generated_at } = report;
   const sourceSnapshot = scoreSourceSnapshot(report);
-  const formatUtc = (value) => {
-    const moment = parseUtcMoment(value);
-    return moment ? `${formatDateTime(moment, locale, {
-      day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC',
-    })} UTC` : null;
+  const formatSource = (value) => {
+    const formatted = formatAmsterdamTimestamp(value, locale);
+    return formatted === '—' ? null : formatted;
   };
 
   return (
@@ -52,7 +50,7 @@ export default function ReportTerminalHUD({ report, type = "daily", loading = fa
       </div>
 
       <p className="mt-5 text-sm text-slate-600 dark:text-slate-300">
-        {sourceSnapshot ? reportT.hudSnapshotTitle : reportT.hudGeneratedTitle}: {formatUtc(sourceSnapshot?.observed_at) || formatUtc(generated_at) || reportT.hudSourceUnknown}. {sourceSnapshot ? reportT.hudSnapshotExplanation : reportT.hudLegacyExplanation}
+        {sourceSnapshot ? reportT.hudSnapshotTitle : reportT.hudGeneratedTitle}: {formatSource(sourceSnapshot?.observed_at) || formatSource(generated_at) || reportT.hudSourceUnknown}. {sourceSnapshot ? reportT.hudSnapshotExplanation : reportT.hudLegacyExplanation}
       </p>
 
       <footer className="mt-10 flex min-w-0 flex-col items-start gap-3 border-t-2 border-slate-50 pt-6 text-[9px] font-black uppercase tracking-widest text-slate-400 sm:flex-row sm:items-center sm:justify-between">
@@ -63,7 +61,7 @@ export default function ReportTerminalHUD({ report, type = "daily", loading = fa
          <div className="flex min-w-0 flex-wrap items-center gap-2 break-words sm:gap-4">
             <span className="min-w-0 break-words">{reportT.hudUser}: {user?.name || reportT.hudSystem}</span>
             <span className="hidden h-1 w-1 shrink-0 rounded-full bg-slate-300 sm:block" />
-            <span className="min-w-0 break-words">{reportT.hudGeneratedTitle}: {formatUtc(generated_at) || "—"}</span>
+            <span className="min-w-0 break-words">{reportT.hudGeneratedTitle}: {formatSource(generated_at) || "—"}</span>
          </div>
       </footer>
     </div>

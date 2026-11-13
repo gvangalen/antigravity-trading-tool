@@ -83,7 +83,7 @@ export default function BotFocusView({
   const money = (amount) => formatCurrency(Number(amount || 0), locale, "EUR", { maximumFractionDigits: 2 });
   const statusTime = orderState ? pendingOrder?.created_at : risk.checked_at;
   const checkedAt = statusTime
-    ? formatDateTime(statusTime, locale, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+    ? formatDateTime(statusTime, locale, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam", timeZoneName: "short" })
     : copy.notChecked;
   const availableCash = portfolio?.stats?.paper_cash_configured
     ? money(portfolio.stats.paper_cash_eur)
@@ -200,7 +200,7 @@ export default function BotFocusView({
               </tr></thead>
               <tbody>{allTrades.items.map((trade) => (
                 <tr key={trade.id} className="border-b border-slate-100 dark:border-slate-800">
-                  <td className="p-3">{trade.executed_at ? formatDateTime(trade.executed_at, locale, { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short" }) : "—"}</td>
+                  <td className="p-3">{trade.executed_at ? formatDateTime(trade.executed_at, locale, { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam", timeZoneName: "short" }) : "—"}</td>
                   <td className="p-3">{trade.bot_name}</td>
                   <td className="p-3">{trade.side === "buy" ? copy.buy : copy.sell} {trade.symbol}</td>
                   <td className="p-3">{money(trade.amount_eur)}</td>
@@ -266,7 +266,7 @@ export default function BotFocusView({
               <section className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-blue-950" role="status" aria-live="polite">
                 <h3 className="font-bold">{paperCheckMessage}</h3>
                 <p className="mt-1 text-xs">{formatDateTime(paperCheckResult.checkedAt, locale, {
-                  day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+                  day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam", timeZoneName: "short",
                 })}</p>
               </section>
             )}
@@ -350,7 +350,7 @@ export default function BotFocusView({
               </section>
               <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-800 lg:col-span-2"><h3 className="font-black text-slate-950 dark:text-white">{historyOnlyDecision ? copy.previousRecordedDecision : copy.lastDecision}</h3>
                 <p className="mt-2 text-sm font-bold">{lastRecordedDecision?.action ? (copy.actions?.[String(lastRecordedDecision.action).toLowerCase()] || lastRecordedDecision.action) : copy.noDecision}</p>
-                {historyOnlyDecision && <p className="mt-1 text-xs text-slate-500">{historicalDecisionAt ? `${formatDateTime(historicalDecisionAt, locale)} · ` : ""}{copy.historicalDecisionHint}</p>}
+                {historyOnlyDecision && <p className="mt-1 text-xs text-slate-500">{historicalDecisionAt ? `${formatDateTime(historicalDecisionAt, locale, { timeZone: "Europe/Amsterdam", timeZoneName: "short" })} · ` : ""}{copy.historicalDecisionHint}</p>}
                 <p className="mt-1 text-sm text-slate-500">{lastRecordedDecision
                   ? (decision && (["blocked", "reduced", "error"].includes(risk.state) || explanations.length > 0)
                     ? riskReason : strategyReason || copy.riskCodes?.[recordedSafety.reason_code] || copy.reasonUnavailable)

@@ -158,6 +158,8 @@ export default function BotTodayProposal({
         month: "short",
         hour: "2-digit",
         minute: "2-digit",
+        timeZone: "Europe/Amsterdam",
+        timeZoneName: "short",
       })
     : null;
 

@@ -1,8 +1,8 @@
 "use client";
 
 import { useTranslation } from "@/app/providers/I18nProvider";
-import { formatDateTime } from "@/lib/i18n";
-import { parseUtcMoment, reportMarketLabel, scoreSourceSnapshot } from "@/lib/report/reportSourceSnapshot.mjs";
+import { reportMarketLabel, scoreSourceSnapshot } from "@/lib/report/reportSourceSnapshot.mjs";
+import { formatAmsterdamTimestamp } from "@/lib/time/formatUtcTimestamp.mjs";
 import { indicatorDisplayName } from "@/lib/indicators/configuredIndicatorRows.mjs";
 
 export default function ReportCategoryEvidence({ report, category, isPrint = false }) {
@@ -13,10 +13,8 @@ export default function ReportCategoryEvidence({ report, category, isPrint = fal
 
   const label = { market: copy.hudMarket, macro: copy.hudMacro, technical: copy.hudTechnical }[category];
   const formatMoment = (value) => {
-    const date = parseUtcMoment(value);
-    return date ? `${formatDateTime(date, locale, {
-      day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC",
-    })} UTC` : copy.hudSourceUnknown;
+    const formatted = formatAmsterdamTimestamp(value, locale);
+    return formatted === '—' ? copy.hudSourceUnknown : formatted;
   };
   const sourceLabel = (name) => copy.hudIndicatorLabels?.[String(name).toLowerCase().replaceAll(/[-\s]+/g, "_")] || indicatorDisplayName(name);
 

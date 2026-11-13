@@ -1559,6 +1559,13 @@ def _minimal_read_answer(
             if isinstance(item, dict)
         )
     text = prepared.response.text.strip()
+    from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
+    if not current_source_moments_supported(text, evidence):
+        return FinnResponsesVerifiedAnswer(
+            "unavailable", "Ik kan de bronmomenten in dit antwoord niet verifiëren.",
+            "source_moment_conflicts_with_source", evidence,
+            rejection_details={"fact_mismatch": "current_source_moment"},
+        )
     if not FinnResponsesAnswerVerifier._latest_quote_claim_supported(text, tuple(
         item for call in prepared.response.tool_trace
         for item in (call.get("result") or {}).get("results") or []
@@ -5376,7 +5383,7 @@ class FinnV2RunService:
                                     "saved_action_claim_unverified", "trading_outcome_claim_unverified",
                                     "user_condition_bypass_blocked", "saved_entity_type_unverified",
                                     "turn_contract_mismatch", "price_relation_conflicts_with_source",
-                                    "latest_quote_conflicts_with_source",
+                                    "latest_quote_conflicts_with_source", "source_moment_conflicts_with_source",
                                 }
                                 and cls._read_only_repair_eligible(prepared.response.tool_trace)
                                 and cls._read_repair_has_budget(remaining, explain_limit=explain_limit)
