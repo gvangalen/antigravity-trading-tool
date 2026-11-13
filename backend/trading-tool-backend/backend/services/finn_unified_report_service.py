@@ -918,6 +918,25 @@ def _report_v2_factual_fallbacks(context: dict[str, Any], facts: dict[str, Any],
 def _report_v2_contradicts_facts(section: str, value: str, facts: dict[str, Any],
                                context: dict[str, Any], comparison: dict[str, Any]) -> bool:
     """Reject only concrete contradictions with the frozen report facts."""
+    # A report snapshot cannot establish that the owner has never traded. If
+    # transactions are absent from this report's evidence, the claim must be
+    # limited to its date or period; older closed trades may still exist.
+    for sentence in re.split(r"(?<=[.!?])\s+", value):
+        if re.search(
+            r"\b(?:geen\s+(?:feiten|bewijs)|no\s+evidence|keine?\s+(?:Belege|Nachweise))"
+            r"\b.{0,55}\b(?:uitgevoerde\s+transacties|executed\s+transactions|"
+            r"ausgeführte\s+Transaktionen)\b|"
+            r"\b(?:geen|no|keine?)\b.{0,35}\b(?:uitgevoerde|executed|ausgeführte)"
+            r"\b.{0,35}\b(?:orders?|transacties?|transactions?|trades?)\b",
+            sentence, re.I
+        ) and not re.search(
+            r"\b(?:vandaag|deze\s+(?:dag|rapportdag|week|maand|rapportperiode)|"
+            r"op\s+\d{1,2}\s+\w+|in\s+(?:dit|deze)\s+(?:rapport|periode)|"
+            r"today|this\s+(?:day|week|month|report|period)|"
+            r"on\s+\w+\s+\d{1,2}|heute|dies(?:em|er|es)\s+(?:Tag|Woche|Monat|Bericht|Zeitraum))\b",
+            sentence, re.I
+        ):
+            return True
     if section == "retrospective":
         if re.search(r"\b(?:benchmark_availability|market_score|macro_score|technical_score)\b|"
                      r"\b(?:True|False)\s*→\s*(?:True|False)\b", value):
@@ -1015,6 +1034,8 @@ def generate_unified_daily_report_sections(user_id: int, period: str = "daily") 
             "A setup match is not an entry signal; a bot budget is not cash. "
             "The market_score is one component; benchmark_score is the weighted total. Never call the total a market score. "
             "Do not claim an order or trade occurred unless the supplied facts prove it. "
+            "If the snapshot has no transaction evidence, limit that absence claim to the report date or period; "
+            "never imply the owner has no historical executed trades. "
             "If market_session_at_report is outside_regular_hours, explain that the "
             "latest stock quote may be from the previous regular session; do not "
             "infer that a market was open from a timestamp alone. "

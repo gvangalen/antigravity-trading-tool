@@ -75,6 +75,7 @@ def test_score_adapter_presents_component_source_times_without_milliseconds():
                 "component_source_status": {"market_score": "fresh"},
                 "component_source_observed_at": {
                     "market": {"price": "2026-10-10T04:20:11.926000+00:00"},
+                    "macro": {"dxy": "2026-10-09T22:59:00+00:00"},
                 },
             }
 
@@ -84,7 +85,9 @@ def test_score_adapter_presents_component_source_times_without_milliseconds():
 
     assert result["data"].component_source_observed_at == {
         "market": {"price": "2026-10-10T04:20:11+00:00"},
+        "macro": {"dxy": "2026-10-09T22:59:00+00:00"},
     }
+    assert result["data"].oldest_indicator_source_observed_at == "2026-10-09T22:59:00+00:00"
 
 
 def test_exact_pair_score_adapter_exposes_verified_indicator_scores_only():

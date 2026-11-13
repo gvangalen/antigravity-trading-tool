@@ -92,6 +92,17 @@ def test_autonomous_financial_delegation_is_a_financial_execution_fact():
     assert facts.action_polarity == "execute"
 
 
+def test_bot_decision_correction_is_a_read_not_an_execution_request():
+    facts = FinnV2RequestPreprocessorService().preprocess(message=(
+        "Ik zie in bot 129 bovenaan de beslissingentabel: Geen order, reden "
+        "Opgeslagen setupvoorwaarden passen niet. Corrigeer je eerdere antwoord. "
+        "Welke bron lees je zelf en wat kun je niet bevestigen?"
+    ))
+
+    assert facts.financial_execution_intent is False
+    assert facts.action_polarity == "read"
+
+
 @pytest.mark.parametrize("message", [
     "Als ik Apple koop vanwege FOMO, mag ik dan dezelfde regel als bij BTC hanteren?",
     "Wat als ik BTC koop volgens mijn opgeslagen plan?",

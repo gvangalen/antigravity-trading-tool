@@ -1186,7 +1186,16 @@ class FinnResponsesLoop:
                 if call_id in seen_call_ids:
                     raise FinnResponsesError("responses_duplicate_call_id")
                 seen_call_ids.add(call_id)
-                if len(seen_call_ids) > self.max_tool_calls:
+                # A read-only comparison across several assets legitimately
+                # needs more source reads than one action turn. Keep the
+                # original bound for proposals and any non-read tool.
+                read_only_limit = max(self.max_tool_calls, 18)
+                safe_read = (
+                    read_only_turn and not proposal_selected
+                    and tool_name.startswith(("get_", "evaluate_"))
+                    and all(item["name"].startswith(("get_", "evaluate_")) for item in trace)
+                )
+                if len(seen_call_ids) > (read_only_limit if safe_read else self.max_tool_calls):
                     raise FinnResponsesError("responses_tool_call_limit")
                 parsed_arguments: dict[str, Any] | None = None
                 try:

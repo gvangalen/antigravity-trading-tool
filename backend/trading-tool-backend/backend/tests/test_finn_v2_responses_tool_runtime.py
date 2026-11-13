@@ -13288,6 +13288,37 @@ def test_responses_loop_bounds_tool_rounds_without_silent_answer():
         ).run(message="Welke asset?", instructions="Check feiten"))
 
 
+def test_multi_asset_read_can_use_more_than_action_tool_limit():
+    calls = tuple(tool_call(f"c{index}", "get_saved_setup_inventory", {}) for index in range(11))
+    fake = FakeResponses(
+        response("many-reads", calls=calls),
+        response("answer", text="Ik heb de gevraagde markten vergeleken op basis van de gelezen feiten."),
+    )
+
+    async def execute(_call):
+        return {"status": "completed", "results": []}
+
+    result = asyncio.run(FinnResponsesLoop(
+        client=SimpleNamespace(responses=fake), executor=execute,
+    ).run(message="Vergelijk mijn plannen voor drie markten", instructions="Lees feiten",
+          model_led_coach=True, read_only_turn=True))
+    assert len(result.tool_trace) == 11
+    assert result.text.startswith("Ik heb de gevraagde markten")
+
+    with pytest.raises(FinnResponsesError, match="responses_tool_call_limit"):
+        asyncio.run(FinnResponsesLoop(
+            client=SimpleNamespace(responses=FakeResponses(response("many-reads", calls=calls))),
+            executor=execute,
+        ).run(message="Maak een voorstel", instructions="Check feiten", read_only_turn=False))
+
+    too_many_reads = tuple(tool_call(f"r{index}", "get_saved_setup_inventory", {}) for index in range(19))
+    with pytest.raises(FinnResponsesError, match="responses_tool_call_limit"):
+        asyncio.run(FinnResponsesLoop(
+            client=SimpleNamespace(responses=FakeResponses(response("too-many", calls=too_many_reads))),
+            executor=execute,
+        ).run(message="Vergelijk alle plannen", instructions="Lees feiten", read_only_turn=True))
+
+
 def test_read_probe_gets_answer_round_even_without_coach_classification():
     fake = FakeResponses(
         response("read", calls=(tool_call("c1", "get_current_asset_scores", {}),)),
@@ -13710,6 +13741,25 @@ def test_bot_decision_question_binds_persisted_history_even_for_portfolio_tool()
     assert FinnResponsesFrontDoor._bind_bot_decision_evidence(
         selected, message="Wijzig mijn botbesluit", read_only=False,
     ) == selected
+
+
+def test_bot_decision_question_requires_current_owner_history_before_answer(monkeypatch):
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="bot-history-required")
+    front.model_led_coach = True
+    captured = {}
+
+    async def capture_loop(_self, **kwargs):
+        captured.update(kwargs)
+        return FinnResponsesResult("Ik lees de botbeslissingen.", "answer", ())
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run", capture_loop,
+    )
+    asyncio.run(front.run(
+        message="Vergelijk mijn actuele AAPL- en BTC-botbeslissingen met het dagrapport.",
+        instructions="Lees feiten", conversation_context={}, verified_asset="AAPL",
+    ))
+    assert captured["required_read_tool_name"] == "get_decision_history"
 
 
 def test_explicit_report_comparison_binds_owner_report_read(monkeypatch):

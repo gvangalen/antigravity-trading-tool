@@ -599,6 +599,7 @@ class FinnResponsesFrontDoor:
                 "benchmark_score": score_data.get("benchmark_score"),
                 "component_source_status": score_data.get("component_source_status"),
                 "component_source_observed_at": score_data.get("component_source_observed_at"),
+                "oldest_indicator_source_observed_at": score_data.get("oldest_indicator_source_observed_at"),
             } if score_item is not None else None),
             "field_meaning": {
                 "analysis_timeframe": "Chart interval, not an automated purchase schedule.",
@@ -651,6 +652,9 @@ class FinnResponsesFrontDoor:
             "making a new freshness claim. Never call a previously verified score stale "
             "merely because its report date is today or because it came from a prior turn. "
             "Do not present historical saved scores as current scores. "
+            "When you describe a score as current or verified, name the oldest "
+            "indicator source moment from that score read. Distinguish it from "
+            "the latest market quote time and the score report date. "
             "A market price snapshot is not a score report. "
             "The asset catalog prices US stocks such as AAPL in USD. AAPL/USD "
             "names that same USD-priced stock, not a separate Binance market; "
@@ -925,7 +929,7 @@ class FinnResponsesFrontDoor:
     def _asks_about_bot_decision(message: str) -> bool:
         """Bind explicit bot-decision questions to persisted owner evidence."""
         return bool(
-            re.search(r"\b(?:bot(?:besluit|beslissing|beoordeling|check)?|automatisering|automation)\b", message, re.I)
+            re.search(r"\b(?:bot(?:besluit(?:en)?|beslissing(?:en)?|beoordeling(?:en)?|check(?:s)?)?|automatisering|automation)\b", message, re.I)
             and re.search(
                 r"\b(?:botbeslissing(?:en)?|botbesluit(?:en)?|beslissing(?:en)?|besluit(?:en)?|decision(?:s)?|"
                 r"beoordeling(?:en)?|check(?:s)?|entscheidung(?:en)?)\b",
@@ -4294,6 +4298,9 @@ class FinnResponsesFrontDoor:
                 and pending_operation is None and not resuming_clarification
                 else "get_active_plan_and_strategy"
                 if is_read_only_turn and account_state_bundle
+                and pending_operation is None and not resuming_clarification
+                else "get_decision_history"
+                if is_read_only_turn and self._asks_about_bot_decision(message)
                 and pending_operation is None and not resuming_clarification
                 else "get_indicator_snapshot"
                 if is_read_only_turn and _saved_indicator_configuration_read(request_facts)

@@ -923,7 +923,15 @@ class FinnV2RequestPreprocessorService:
             or (re.search(finance_object, text) and re.search(autonomy, text) and re.search(decision, text))
             # A financial object plus an action and delegated selection is
             # likewise a financial execution request, not off-topic.
-            or (re.search(finance_object, text) and re.search(market_action, text) and re.search(decision, text))
+            or (
+                re.search(finance_object, text) and re.search(market_action, text)
+                and re.search(decision, text)
+                and re.search(
+                    r"\b(?:move|transfer|verplaats\w*|stort\w*|manage\w*|beheer\w*|"
+                    r"laat|let|wil\s+dat\s+je|want\s+you\s+to|can\s+you|kun\s+je)\b",
+                    text,
+                )
+            )
         )
 
     @staticmethod
