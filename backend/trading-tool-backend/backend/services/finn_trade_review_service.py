@@ -41,9 +41,71 @@ def _near_zero(value: Decimal) -> bool:
     return abs(value) <= EPSILON
 
 
-def _utc_instant(value: datetime) -> datetime:
+def _utc_instant(value: datetime | str) -> datetime:
     """Compare legacy UTC timestamps and timezone-aware capture timestamps."""
+    if isinstance(value, str):
+        value = datetime.fromisoformat(value)
+    if not isinstance(value, datetime):
+        raise ValueError("Invalid evidence timestamp")
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+
+def attach_entry_decision_plan_evidence(row: dict) -> dict:
+    """Expose recorded decision-time source levels without rewriting the order plan.
+
+    Older order-context snapshots kept only the EUR plan fields. The linked
+    decision can contain the original quote levels and the FX observation used
+    when that plan was prepared. Its identity and chronology must be proven.
+    """
+    row = dict(row)
+    evidence = row.pop("entry_decision_evidence", None)
+    plan = row.get("plan_snapshot")
+    provenance = row.get("plan_provenance")
+    if not isinstance(plan, dict) or not isinstance(provenance, dict) or not isinstance(evidence, dict):
+        return row
+    decision_id = evidence.get("decision_id")
+    order_id = evidence.get("order_id")
+    if (type(decision_id) is not int or provenance.get("decision_id") != decision_id
+            or type(order_id) is not int or provenance.get("order_id") != order_id):
+        return row
+    decision_at = evidence.get("decision_at")
+    entry_at = row.get("entry_at")
+    try:
+        if not decision_at or not entry_at or _utc_instant(decision_at) > _utc_instant(entry_at):
+            return row
+    except (TypeError, ValueError):
+        return row
+    recorded = evidence.get("trade_plan")
+    if not isinstance(recorded, dict):
+        return row
+    currency = recorded.get("source_price_currency")
+    levels = recorded.get("source_levels")
+    if currency not in {"EUR", "USD", "USDT"} or not isinstance(levels, dict):
+        return row
+    targets = levels.get("targets")
+    values = [levels.get("entry"), levels.get("stop_loss"), *(targets if isinstance(targets, list) else [])]
+    if not isinstance(targets, list) or not 1 <= len(targets) <= 5:
+        return row
+    try:
+        if not all(_decimal(value).is_finite() and _decimal(value) > 0 for value in values):
+            return row
+    except ValueError:
+        return row
+    additions = {"source_price_currency": currency,
+                 "source_levels": {key: levels[key] for key in ("entry", "stop_loss", "targets")},
+                 "source_evidence": "linked_entry_decision", "source_decision_id": decision_id,
+                 "source_decision_at": _utc_instant(decision_at).isoformat()}
+    if recorded.get("market_quote_currency") in {"EUR", "USD", "USDT"}:
+        additions["market_quote_currency"] = recorded["market_quote_currency"]
+    try:
+        if (_decimal(recorded.get("fx_eur_per_unit")) > 0 and recorded.get("fx_as_of")
+                and _utc_instant(recorded["fx_as_of"]) <= _utc_instant(decision_at)):
+            additions["fx_eur_per_unit"] = recorded["fx_eur_per_unit"]
+            additions["fx_as_of"] = _utc_instant(recorded["fx_as_of"]).isoformat()
+    except (TypeError, ValueError):
+        pass
+    row["entry_decision_source_plan"] = additions
+    return row
 
 
 def unrecorded_plan_theme(origin: str | None) -> str:
@@ -240,7 +302,7 @@ class FinnTradeReviewService:
     @staticmethod
     def _presented_review(row: dict) -> dict:
         from backend.services.bot_service import _paper_exit_evidence
-        row = dict(row)
+        row = attach_entry_decision_plan_evidence(row)
         if str(row.get("execution_environment") or "").lower() == "paper":
             row["paper_exit_evidence"] = _paper_exit_evidence("paper_exit", row.get("paper_exit_evidence"))
         if str(row.get("execution_environment")).lower() == "paper":
@@ -528,6 +590,14 @@ class FinnTradeReviewService:
                     JOIN bot_decisions d ON d.id=l.decision_id AND d.user_id=l.user_id
                     WHERE l.id=finn_trade_reviews.closing_ledger_id AND l.user_id=:user_id
                       AND d.decision_kind='paper_exit') AS paper_exit_evidence,
+                   (SELECT jsonb_build_object('order_id',o.id,'decision_id',d.id,
+                               'decision_at',d.decision_ts,
+                               'trade_plan',d.scores_json->'trade_plan')
+                    FROM bot_ledger l
+                    JOIN bot_orders o ON o.id=l.order_id AND o.user_id=l.user_id
+                    JOIN bot_decisions d ON d.id=o.decision_id AND d.user_id=l.user_id
+                    WHERE l.id=finn_trade_reviews.opening_ledger_id AND l.user_id=:user_id
+                   ) AS entry_decision_evidence,
                    (SELECT a.identity_basis FROM finn_exchange_review_attestations a
                     WHERE a.user_id=:user_id AND a.review_id=:id) AS attestation_identity_basis,
                    (SELECT a.same_account_confirmed FROM finn_exchange_review_attestations a

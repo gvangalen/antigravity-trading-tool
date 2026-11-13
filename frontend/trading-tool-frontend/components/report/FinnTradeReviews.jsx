@@ -47,6 +47,7 @@ function evidenceLabels(ids, review, copy, locale) {
   const fills = Array.isArray(review.fills) ? review.fills : [];
   return (Array.isArray(ids) ? ids : []).map((id) => {
     if (id === 'plan:snapshot') return copy.plan;
+    if (id === 'entry_decision:source_plan') return copy.entryDecisionEvidence;
     if (id === 'paper_exit:decision') return copy.paperExitDecisionEvidence;
     if (id === 'screenshot:user-upload') return copy.screenshotTitle;
     if (id === 'chart:binance-eur') return copy.chartTitle;
@@ -110,7 +111,7 @@ function ExecutionTimeline({ fills, copy, locale }) {
   </div>;
 }
 
-const currentAnalysis = (value) => value?.format_version === 4 ? value : null;
+const currentAnalysis = (value) => value?.format_version === 5 ? value : null;
 
 function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
   const [note, setNote] = useState(review.note || '');
@@ -136,6 +137,7 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
   const [question, setQuestion] = useState('');
   const fills = Array.isArray(review.fills) ? review.fills : [];
   const plan = review.plan_snapshot && typeof review.plan_snapshot === 'object' ? review.plan_snapshot : null;
+  const entryDecisionPlan = review.entry_decision_source_plan && typeof review.entry_decision_source_plan === 'object' ? review.entry_decision_source_plan : null;
   const originalPlanVerified = Boolean(plan) && review.plan_status === 'entry_order_plan_recorded';
   const manualLinkedPlan = review.plan_provenance?.relation === 'linked_plan_at_manual_entry_not_adherence';
   const isDerivative = review.origin === 'bybit_derivative_user_attested';
@@ -354,7 +356,8 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
       <div className="mt-3 grid gap-5">
         <div className="min-w-0 break-words rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
           <h4 className="flex items-center gap-2 text-sm font-black text-slate-900 dark:text-white"><FileText size={17} /> {originalPlanVerified ? copy.plan : plan ? copy.planUnverified : copy.plan}</h4>
-          {plan ? <><PlanFacts plan={plan} copy={copy} />{plan.source_levels && plan.source_price_currency && <p className="mt-3 text-xs text-slate-500">{copy.planCurrencyNote}</p>}{manualLinkedPlan && <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">{copy.manualLinkedPlanHint}</p>}{!originalPlanVerified && !manualLinkedPlan && <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">{copy.planUnverifiedHint}</p>}</> : <p className="mt-3 text-sm text-slate-500">{isExchange ? copy.externalNoPlan : copy.noPlan}</p>}
+          {plan ? <><PlanFacts plan={plan} copy={copy} />{manualLinkedPlan && <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">{copy.manualLinkedPlanHint}</p>}{!originalPlanVerified && !manualLinkedPlan && <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">{copy.planUnverifiedHint}</p>}</> : <p className="mt-3 text-sm text-slate-500">{isExchange ? copy.externalNoPlan : copy.noPlan}</p>}
+          {entryDecisionPlan && <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-800"><h5 className="text-sm font-semibold text-slate-900 dark:text-white">{copy.entryDecisionEvidence}</h5><PlanFacts plan={entryDecisionPlan} copy={copy} /><p className="mt-3 text-xs text-slate-500">{copy.planCurrencyNote}</p></div>}
         </div>
         <div className="min-w-0 rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
           <h4 className="text-sm font-black text-slate-900 dark:text-white">{copy.executionEvidence}</h4>

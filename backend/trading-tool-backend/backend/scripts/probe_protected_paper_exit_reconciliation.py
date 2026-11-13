@@ -16,6 +16,7 @@ from backend.scripts.qa_browser_error_signature import (
     classify_browser_error,
 )
 from backend.scripts.qa_trader_gate_invariants import check_paper_exit
+from backend.services.finn_trade_analysis_service import ANALYSIS_FORMAT_VERSION
 
 
 async def _rendered_exit(user_id: int, bot_id: int, expected: dict) -> dict:
@@ -590,7 +591,7 @@ async def _review_chain(user_id: int, bot_id: int, expected: dict) -> dict:
                 and math.isclose(float(actual), float(saved), rel_tol=1e-9, abs_tol=1e-6)
             )
             if (detail.get("bot_id") != bot_id or detail.get("execution_environment") != "paper"
-                    or analysis.get("format_version") != 4
+                    or analysis.get("format_version") != ANALYSIS_FORMAT_VERSION
                     or exit_proof.get("trigger") != "first_target"
                     or exit_proof.get("source_price_currency") != expected.get("source_price_currency")
                     or exit_proof.get("source_price") != expected.get("source_price")
@@ -644,7 +645,7 @@ async def _review_chain(user_id: int, bot_id: int, expected: dict) -> dict:
                 or target not in numbers or fx not in numbers):
             raise RuntimeError("paper_exit_finn_answer_incomplete")
     return {"result": "PASS", "owner_scoped_review": True,
-            "analysis_format_version": 4, "exit_evidence_cited": True,
+            "analysis_format_version": ANALYSIS_FORMAT_VERSION, "exit_evidence_cited": True,
             "owner_scoped_finn_read": True, "action_proposals": 0}
 
 

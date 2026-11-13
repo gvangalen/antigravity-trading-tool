@@ -22,7 +22,7 @@ class ReviewToolAdapter:
 
     @staticmethod
     def requested_review_id(message: str) -> int | None:
-        match = re.search(r"\b(?:trade[ -]?review|trade[ -]?reflectie|review)\s*#\s*(\d{1,12})\b", str(message or ""), re.I)
+        match = re.search(r"\b(?:trade[ -]?review|trade[ -]?reflectie|review|reflectie|dossier)\s*#\s*(\d{1,12})\b", str(message or ""), re.I)
         return int(match.group(1)) if match else None
 
     @staticmethod
@@ -152,12 +152,24 @@ class ReviewToolAdapter:
                           f"resultaat EUR {review['pnl_eur_before_fees']} vóór kosten")
                 closure = "positie bewezen gesloten in Tradamind-ledger"
                 quote_context = self._paper_exit_summary(review.get("paper_exit_evidence"))
+            source_plan = review.get("plan_source_evidence") or {}
+            source_context = ""
+            if source_plan:
+                source_context = (
+                    f"; bij de instapbeslissing vastgelegde bronkoersvaluta "
+                    f"{source_plan['source_price_currency']}; bronniveaus "
+                    f"{json.dumps(source_plan['source_levels'], ensure_ascii=False)}; "
+                    f"beslissingsmoment {source_plan['source_decision_at']}; "
+                    f"EUR-factor bij die beslissing {source_plan.get('fx_eur_per_unit') or 'onbekend'} "
+                    f"met bronmoment {source_plan.get('fx_as_of') or 'onbekend'}; "
+                    "oorspronkelijke orderplansnapshot en beslissingsbron zijn afzonderlijk bewijs"
+                )
             items.append(
                 f"{'Nieuwste: ' if index == 0 else ''}Bevestigde gesloten trade #{review['review_id']} "
                 f"(instap {review['entry_at']}, uitstap {review['exit_at']}; {review['symbol']}, "
                 f"{review['environment']}, bot: {json.dumps(bot_label, ensure_ascii=False)}, "
                 f"bronnen: {', '.join(review['execution_sources'])}): "
-                f"{closure}; {result}{quote_context}; "
+                f"{closure}; {result}{quote_context}{source_context}; "
                 f"FINN-analyse {review['analysis_status']}; thema's "
                 f"{', '.join(review['themes']) if review['themes'] else 'geen'} "
                 f"(modelobservatie, geen bewezen oorzaak); bewijs {', '.join(review['evidence_ids'])}; "
@@ -187,6 +199,7 @@ class ReviewToolAdapter:
                     "pnl_eur": review.get("pnl_eur_before_fees"),
                     "pnl_basis": review["pnl_status"],
                     "has_original_plan": review["has_plan"],
+                    "plan_source_evidence": review.get("plan_source_evidence"),
                     "evidence_ids": review["evidence_ids"][:20],
                     "confirmed_lesson": (
                         {

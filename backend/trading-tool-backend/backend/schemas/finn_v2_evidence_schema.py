@@ -387,6 +387,7 @@ class ClosedTradeEvidenceData(BaseModel):
     pnl_eur: Optional[str] = None
     pnl_basis: str
     has_original_plan: bool
+    plan_source_evidence: Optional[Dict[str, Any]] = None
     evidence_ids: List[str] = Field(default_factory=list)
     confirmed_lesson: Optional[ConfirmedTradeLessonEvidenceData] = None
 

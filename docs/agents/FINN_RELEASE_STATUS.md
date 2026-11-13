@@ -4,6 +4,48 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN Reflectie-planbron en algemene dossierlezing (13 november 2026)
+
+Phase: `LOCAL_GATES_GREEN`, kandidaatbranch
+`codex/reflection-plan-provenance-finn-read`. De onafhankelijke traderinspectie in het account
+`Paper Test BTC AAPL` bevestigde dat Reflectie #2127 de Paper-exit intern
+herleidt: `first_target`, USD 358,60 boven USD 357,42, afzonderlijke
+EUR-factor 0,901396 bij de exit en EUR 405,48 opbrengst. Open bleef de
+herkomst van de lagere EUR-planniveaus en het onvermogen van de algemene
+FINN-chat om datzelfde dossier zelfstandig te lezen.
+
+De kandidaat leest de bronvaluta, koersniveaus en eventuele FX-meting uit de
+eigenaar-, order- en beslissinggebonden instapbeslissing. De opgeslagen
+orderplansnapshot blijft apart en onveranderd; beide bronnen krijgen een
+eigen bewijs-ID in Reflectie en AI-analyse. De algemene FINN-chat geeft een
+expliciete dossierlezing voorrang boven een brede accountvraag. Reflectie-
+analyseformaat 5 heranalyseert bestaande formaat-4-teksten via het bestaande
+versiepad. Als de gekoppelde historische beslissing geen bronvelden bevat,
+blijft de herkomst onbekend; er is geen afgeleide of ingevulde FX-claim.
+
+Lokale bewijsstand: backend **4755 passed, 7 skipped** (log SHA-256
+`c1b5a8a85fbd38c7ab1f73bb92a70a31971b1c8d59a155b164948bd3a91d581c`);
+frontendbuild, typecheck, i18n, commandtests en high-severity audit groen
+(buildlog SHA-256 `559da42850bfccb8107de3274a54e8d2bb8af9a5b6af6be95cacbc0554c481a9`).
+De herstartte lokale API/Celery-actiematrix passeerde **17/17** contracten en
+**26/26** adapters, met nul brokerorders, Live-calls of productieverbindingen
+(artifact SHA-256 `3f8c04c9b4deb8d23f358964991b6cefeea5a1c229781fad31e1f1e5b0cd07e9`).
+Echte-provider development passeerde **20/20** (artifact SHA-256
+`3320a4cd4a2baf792b7440c6f021c4b7a4b0d2455ac431a67186cd6a75d87440`).
+Een aparte echte-provider analyse van synthetische plan/exit-feiten gaf formaat
+5 terug en citeerde `entry_decision:source_plan` afzonderlijk, met plantrouw
+terecht als onzeker. De eerste 109-case providerregressie had één foutieve
+conversatiereferentie bij een ongewijzigde herschrijfprompt en telt niet als
+groene gate. De volledige herhaling passeerde **109/109**, met 100% op alle
+gemeten nauwkeurigheden en nul provider-, schema-, timeout-, parse- of
+validatiefouten (artifact SHA-256
+`1fa971b519a1f50c6d9e52a4d06ef9ccac0a43877cf4ff204ad4feeb8b270d4e`).
+Frontendproposals, PDF-download en setuptests passeerden aanvullend
+respectievelijk **9/9**, **2/2** en **20/20**. Onafhankelijke
+QA-codecheck, Security- en Architecture-review: **GO**. Er is nog geen PR,
+deploy of onafhankelijke live QA voor deze kandidaat. Historisch #2127 moet
+na release in de juiste Paper Test-sessie opnieuw worden gecontroleerd.
+
 ## FINN Reflectie-analysefaalreden (13 november 2026)
 
 Phase: `DEPLOYED_PENDING_FINAL_SHA`. De vorige subfase-diagnostiek staat publiek op

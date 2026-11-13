@@ -103,6 +103,7 @@ def test_model_only_coach_experiment_cannot_be_enabled_outside_local_fixture(mon
     "Wat weet je zeker over mijn gesloten Paper-trade-review #123 en wat was "
     "het resultaat? Alleen lezen, geen voorstel of aankoop.",
     "Kun je review #123 teruglezen en de bevestigde les noemen?",
+    "Lees Reflectie #2127, mijn plan, botbeslissing en huidige positie.",
     "Wat weet je zeker over mijn zojuist gesloten Paper-trade en het resultaat? "
     "Alleen sparren, geen voorstel of aankoop.",
     "What can you verify about my recently closed Paper trade and its result? "
@@ -148,7 +149,10 @@ def test_explicit_closed_trade_review_forces_owner_scoped_dossier_read(message):
     assert fake.requests[0]["tool_choice"] == {
         "type": "function", "name": "get_closed_trade_review",
     }
-    assert [call.name for call in calls] == ["get_closed_trade_review"]
+    assert calls[0].name == "get_closed_trade_review"
+    assert {call.name for call in calls} <= {
+        "get_closed_trade_review", "get_portfolio_and_exposure",
+    }
     assert result.response.tool_trace[0]["result"]["results"][0]["scope"] == "read_review_history"
 
 

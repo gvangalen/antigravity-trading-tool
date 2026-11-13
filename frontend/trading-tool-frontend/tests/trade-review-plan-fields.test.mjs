@@ -24,11 +24,12 @@ test('trade review exposes original source levels and FX provenance in each loca
     const planFields = copy.planFields;
     const fields = visiblePlanFields(Object.entries({
       price_currency: 'EUR', source_price_currency: 'USD',
+      source_decision_at: '2026-11-10T14:44:00Z',
       source_levels: { stop_loss: 342, targets: [357.42] },
       fx_eur_per_unit: 0.9, fx_as_of: '2026-11-10T14:45:00Z',
     }), planFields);
     assert.deepEqual(fields.map(([key]) => key), [
-      'price_currency', 'source_price_currency', 'source_levels',
+      'price_currency', 'source_price_currency', 'source_decision_at', 'source_levels',
       'fx_eur_per_unit', 'fx_as_of',
     ]);
     assert.ok(copy.planCurrencyNote);
