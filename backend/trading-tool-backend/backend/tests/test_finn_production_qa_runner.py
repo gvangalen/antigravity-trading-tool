@@ -455,6 +455,7 @@ def test_paper_exit_runtime_phase_is_fixed_and_does_not_expose_exception_text():
     assert 'report["paper_exit_probe_phase"] = phase' in source
     assert '"preflight", "seed", "paper_open", "baseline", "engine", "evidence", "rendered_ui", "source_parity", "review_chain"' in source
     assert 'report["paper_exit_review_step"] = step' in source
+    assert 'report["paper_exit_review_analysis_failure"] = analysis_failure' in source
     assert '"projection_analysis", "dossier_read", "finn_chat", "finn_verify"' in source
 
 
