@@ -380,7 +380,7 @@ def test_trader_gate_profiles_are_protected_and_distinguish_execution_scope():
     )[0]
     exit_branch = source.split(
         'elif args.profile in {"trader_paper_exit_reconciliation", "trader_paper_exit_review_chain", "trader_source_time_parity"}:', 1
-    )[1].split('elif args.profile in {"trader_paper_exit_fixture_audit", "trader_pair_fixture_audit"}:', 1)[0]
+    )[1].split('elif args.profile in {"trader_paper_exit_fixture_audit", "trader_paper_exit_review_fixture_audit", "trader_pair_fixture_audit"}:', 1)[0]
     for branch in (pair_branch, exit_branch):
         assert branch.index('report["protected_profile_attempted"] = True') < branch.index('report[args.profile] =')
         assert branch.index('report["qa_status"] = "INCOMPLETE"') < branch.index('report[args.profile] =')
@@ -393,7 +393,7 @@ def test_prior_trader_fixture_audits_are_read_only_and_bounded():
     module = _module()
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
     dispatch = DISPATCH_SCRIPT_PATH.read_text(encoding="utf-8")
-    for profile in ("trader_paper_exit_fixture_audit", "trader_pair_fixture_audit"):
+    for profile in ("trader_paper_exit_fixture_audit", "trader_paper_exit_review_fixture_audit", "trader_pair_fixture_audit"):
         assert profile in module.ALLOWED_PROFILES
         assert profile in workflow and profile in dispatch
     assert '"$ALLOW_FIXTURE_ACTIONS" != "false"' in workflow
@@ -402,9 +402,9 @@ def test_prior_trader_fixture_audits_are_read_only_and_bounded():
     assert '"$allow_safe_fixture_execution" != "false"' in dispatch
     source = SCRIPT_PATH.read_text(encoding="utf-8")
     audit_branch = source.split(
-        'elif args.profile in {"trader_paper_exit_fixture_audit", "trader_pair_fixture_audit"}:', 1
+        'elif args.profile in {"trader_paper_exit_fixture_audit", "trader_paper_exit_review_fixture_audit", "trader_pair_fixture_audit"}:', 1
     )[1].split(
-        'elif args.profile == "trader_strategy_schema_audit":', 1
+        'elif args.profile == "trader_pair_fixture_cleanup":', 1
     )[0]
     assert 'expected_profile=("trader_pair_score_continuity"' in audit_branch
     assert 'execution_calls' not in audit_branch
@@ -429,6 +429,31 @@ def test_prior_pair_cleanup_is_scoped_and_requires_fixture_permission():
     )[0]
     assert 'cleanup_pair(args.run_label)' in branch
     assert 'report["safety"]["read_only_profile"] = False' in branch
+
+
+def test_prior_review_cleanup_is_scoped_and_requires_fixture_permission():
+    module = _module()
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    dispatch = DISPATCH_SCRIPT_PATH.read_text(encoding="utf-8")
+    source = SCRIPT_PATH.read_text(encoding="utf-8")
+    profile = "trader_paper_exit_review_fixture_cleanup"
+    assert profile in module.ALLOWED_PROFILES
+    assert profile in workflow and profile in dispatch
+    assert 'FINN_QA_ALLOW_PAPER_EXIT_REVIEW_CLEANUP' in workflow and source
+    assert 'export FINN_QA_ALLOW_PAPER_EXIT_REVIEW_CLEANUP=0' in workflow
+    assert 'export FINN_QA_ALLOW_PAPER_EXIT_REVIEW_CLEANUP=$(printf' in workflow
+    branch = source.split(f'elif args.profile == "{profile}":', 1)[1].split(
+        'elif args.profile == "trader_strategy_schema_audit":', 1
+    )[0]
+    assert 'cleanup_review(args.run_label)' in branch
+    assert 'report["safety"]["read_only_profile"] = False' in branch
+
+
+def test_paper_exit_runtime_phase_is_fixed_and_does_not_expose_exception_text():
+    source = SCRIPT_PATH.read_text(encoding="utf-8")
+    assert 'phase = getattr(error, "probe_phase", None)' in source
+    assert 'report["paper_exit_probe_phase"] = phase' in source
+    assert '"preflight", "seed", "paper_open", "baseline", "engine", "evidence", "rendered_ui", "source_parity", "review_chain"' in source
 
 
 def test_strategy_schema_audit_has_no_fixture_action_permission():

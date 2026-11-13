@@ -65,6 +65,70 @@ def test_audit_accepts_only_attempted_incomplete_prior_paper_run(monkeypatch):
     assert audit.run(LABEL)["fixture_state"] == "NO_RETAINED_FIXTURE"
 
 
+def test_review_audit_requires_exact_failed_review_profile(monkeypatch):
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: Connection([[]]))
+    monkeypatch.setattr(audit.Path, "read_text", lambda *_a, **_k: json.dumps({
+        "workflow_run_id": "42502525173-1", "profile": "trader_paper_exit_review_chain",
+        "target_sha": "9a72d5e4c8e10533a6a7359861e242efdd2c4808",
+        "protected_profile_attempted": True, "outcome": "incomplete",
+    }))
+    assert audit.run(LABEL, expected_profile="trader_paper_exit_review_chain")["fixture_state"] == "NO_RETAINED_FIXTURE"
+    with pytest.raises(RuntimeError, match="trader_fixture_audit_prior_report_mismatch"):
+        audit.run(LABEL)
+
+
+def test_review_cleanup_blocks_other_profile_before_database(monkeypatch):
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: pytest.fail("database touched"))
+    monkeypatch.setattr(audit.Path, "read_text", lambda *_a, **_k: json.dumps({
+        "workflow_run_id": "42502525173-1", "profile": "trader_paper_exit_reconciliation",
+        "target_sha": "9a72d5e4c8e10533a6a7359861e242efdd2c4808",
+        "protected_profile_attempted": True, "outcome": "incomplete",
+    }))
+    with pytest.raises(RuntimeError, match="trader_fixture_audit_prior_report_mismatch"):
+        audit.cleanup_review(LABEL)
+
+
+def test_review_cleanup_blocks_active_child_without_deletion(monkeypatch):
+    conn = Connection([[(17, True, {"qa_namespace": NAMESPACE})]])
+    monkeypatch.setattr(audit, "_verify_prior_report", lambda *_: None)
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: conn)
+    monkeypatch.setattr(audit.fixture, "_cleanup", lambda *_a, **_k: pytest.fail("cleanup called"))
+    with pytest.raises(RuntimeError, match="trader_review_cleanup_owner_unsafe"):
+        audit.cleanup_review(LABEL)
+
+
+@pytest.mark.parametrize("keys,live_orders,code", [
+    (1, 0, "trader_review_cleanup_keys_unsafe"),
+    (0, 1, "trader_review_cleanup_live_order_unsafe"),
+])
+def test_review_cleanup_blocks_keys_and_nonpaper_orders(monkeypatch, keys, live_orders, code):
+    conn = Connection([
+        [(17, False, {"qa_namespace": NAMESPACE})], [(22, False, False)],
+        [(keys,)], [(live_orders,)],
+    ])
+    monkeypatch.setattr(audit, "_verify_prior_report", lambda *_: None)
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: conn)
+    monkeypatch.setattr(audit.fixture, "_cleanup", lambda *_a, **_k: pytest.fail("cleanup called"))
+    with pytest.raises(RuntimeError, match=f"^{code}$"):
+        audit.cleanup_review(LABEL)
+
+
+def test_review_cleanup_verifies_child_and_review_absence(monkeypatch):
+    before = Connection([
+        [(17, False, {"qa_namespace": NAMESPACE})], [(22, False, False)],
+        [(0,)], [(0,)],
+    ])
+    after = Connection([[(0,)]] * 5)
+    connections = iter([before, after])
+    cleaned = []
+    monkeypatch.setattr(audit, "_verify_prior_report", lambda *_: None)
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: next(connections))
+    monkeypatch.setattr(audit.fixture, "_cleanup", lambda *args, **kwargs: cleaned.append((args, kwargs)))
+    assert audit.cleanup_review(LABEL) == {"fixture_state": "CLEANED", "cleanup_verified": True}
+    assert cleaned == [((NAMESPACE, 17, 22), {"require_safe_review_cleanup": True})]
+    assert before.closed and after.closed
+
+
 def test_audit_reports_only_bounded_quarantine_state(monkeypatch):
     conn = Connection([
         [(17, False, {"qa_namespace": NAMESPACE})], [(False, False)],
@@ -208,6 +272,44 @@ def test_locked_cleanup_blocks_prior_decisions_and_trades_without_delete(monkeyp
     assert not any("DELETE FROM" in query for query in queries)
 
 
+@pytest.mark.parametrize("blocked_query", ["exchange_keys", "execution_environment"])
+def test_locked_review_cleanup_blocks_keys_or_nonpaper_orders(monkeypatch, blocked_query):
+    queries = []
+    class LockedCursor:
+        def execute(self, query, _params):
+            queries.append(query)
+        def fetchone(self):
+            query = queries[-1]
+            if "SELECT ai_preferences" in query:
+                return ({"qa_fixture": audit.fixture.FIXTURE_MARKER,
+                         "qa_namespace": NAMESPACE},)
+            if "SELECT is_active" in query:
+                return (False,)
+            if "SELECT COUNT" in query:
+                return (int(blocked_query in query),)
+            raise AssertionError("unexpected query")
+        def fetchall(self):
+            return [(22, False, False)]
+    class LockedConnection:
+        rolled_back = False
+        committed = False
+        @contextmanager
+        def cursor(self):
+            yield LockedCursor()
+        def rollback(self):
+            self.rolled_back = True
+        def commit(self):
+            self.committed = True
+        def close(self):
+            pass
+    conn = LockedConnection()
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: conn)
+    with pytest.raises(RuntimeError, match="^fixture_cleanup_failed$"):
+        audit.fixture._cleanup(NAMESPACE, 17, 22, require_safe_review_cleanup=True)
+    assert conn.rolled_back and not conn.committed
+    assert not any("DELETE FROM" in query for query in queries)
+
+
 def test_audit_rejects_unscoped_label_before_database(monkeypatch):
     monkeypatch.setattr(audit.fixture, "_connection", lambda: pytest.fail("database touched"))
     with pytest.raises(RuntimeError, match="trader_fixture_audit_label_invalid"):
@@ -247,9 +349,14 @@ def test_audit_rejects_unattempted_or_successful_prior_run(monkeypatch, attempte
 
 
 def test_paper_exit_stage_codes_hide_exception_text():
-    with pytest.raises(RuntimeError, match="^paper_exit_paper_open_failed$"):
+    with pytest.raises(RuntimeError, match="^paper_exit_paper_open_failed$") as caught:
         with _stage("paper_open"):
             raise TypeError("private fixture data")
+    assert caught.value.probe_phase == "paper_open"
+    with pytest.raises(RuntimeError, match="private fixture data") as caught:
+        with _stage("review_chain"):
+            raise RuntimeError("private fixture data")
+    assert caught.value.probe_phase == "review_chain"
     assert profile_error_category(
         "trader_paper_exit_reconciliation", RuntimeError("paper_exit_paper_open_failed")
     ) == "paper_exit_paper_open_failed"

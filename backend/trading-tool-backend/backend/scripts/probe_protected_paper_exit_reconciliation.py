@@ -213,10 +213,13 @@ async def _rendered_exit(user_id: int, bot_id: int, expected: dict) -> dict:
 def _stage(name: str):
     try:
         yield
-    except (RuntimeError, ValueError):
+    except (RuntimeError, ValueError) as error:
+        error.probe_phase = name
         raise
     except Exception:
-        raise RuntimeError(f"paper_exit_{name}_failed") from None
+        failure = RuntimeError(f"paper_exit_{name}_failed")
+        failure.probe_phase = name
+        raise failure from None
 
 
 @contextmanager

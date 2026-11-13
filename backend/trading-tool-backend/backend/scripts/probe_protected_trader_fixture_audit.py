@@ -44,7 +44,7 @@ def _verify_prior_report(workflow_id: str, attempt: str, sha_prefix: str,
 
 
 def run(label: str, *, expected_profile: str = "trader_paper_exit_reconciliation") -> dict:
-    if expected_profile not in {"trader_paper_exit_reconciliation", "trader_pair_score_continuity"}:
+    if expected_profile not in {"trader_paper_exit_reconciliation", "trader_paper_exit_review_chain", "trader_pair_score_continuity"}:
         raise RuntimeError("trader_fixture_audit_profile_invalid")
     match = LABEL.fullmatch(label)
     if not match:
@@ -186,6 +186,62 @@ def cleanup_pair(label: str) -> dict:
                 cur.execute(f"SELECT COUNT(*) FROM {table} WHERE user_id=%s", (user_id,))
                 if cur.fetchone()[0]:
                     raise RuntimeError("trader_pair_cleanup_postcondition_failed")
+    finally:
+        conn.close()
+    return {"fixture_state": "CLEANED", "cleanup_verified": True}
+
+
+def cleanup_review(label: str) -> dict:
+    """Remove only one exact failed, inactive Paper review-chain QA child."""
+    match = LABEL.fullmatch(label)
+    if not match:
+        raise RuntimeError("trader_fixture_audit_label_invalid")
+    workflow_id, attempt, sha_prefix = match.groups()
+    _verify_prior_report(workflow_id, attempt, sha_prefix, "trader_paper_exit_review_chain")
+    namespace_prefix = f"qa-{workflow_id}-{attempt}-{sha_prefix}-"
+    conn = fixture._connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT id,is_active,ai_preferences FROM users
+                   WHERE ai_preferences->>'qa_fixture'=%s
+                     AND ai_preferences->>'qa_namespace' LIKE %s""",
+                (fixture.FIXTURE_MARKER, namespace_prefix + "%"),
+            )
+            owners = cur.fetchall()
+            if not owners:
+                return {"fixture_state": "NO_RETAINED_FIXTURE", "cleanup_verified": False}
+            if len(owners) != 1:
+                raise RuntimeError("trader_review_cleanup_scope_ambiguous")
+            user_id, active, preferences = owners[0]
+            namespace = (preferences or {}).get("qa_namespace", "")
+            if (active or not fixture.NAMESPACE_PATTERN.fullmatch(namespace)
+                    or not namespace.startswith(namespace_prefix)):
+                raise RuntimeError("trader_review_cleanup_owner_unsafe")
+            cur.execute("SELECT id,is_active,is_live FROM bot_configs WHERE user_id=%s", (user_id,))
+            bots = cur.fetchall()
+            if len(bots) != 1 or bots[0][1:] != (False, False):
+                raise RuntimeError("trader_review_cleanup_bot_unsafe")
+            bot_id = bots[0][0]
+            cur.execute("SELECT COUNT(*) FROM exchange_keys WHERE user_id=%s", (user_id,))
+            if cur.fetchone()[0]:
+                raise RuntimeError("trader_review_cleanup_keys_unsafe")
+            cur.execute("SELECT COUNT(*) FROM bot_orders WHERE user_id=%s AND execution_environment IS DISTINCT FROM 'paper'", (user_id,))
+            if cur.fetchone()[0]:
+                raise RuntimeError("trader_review_cleanup_live_order_unsafe")
+    finally:
+        conn.close()
+    try:
+        fixture._cleanup(namespace, user_id, bot_id, require_safe_review_cleanup=True)
+    except Exception:
+        raise RuntimeError("trader_review_cleanup_failed") from None
+    conn = fixture._connection()
+    try:
+        with conn.cursor() as cur:
+            for table in ("users", "finn_trade_reviews", "finn_v2_runs", "bot_orders", "bot_executions"):
+                cur.execute(f"SELECT COUNT(*) FROM {table} WHERE {'id' if table == 'users' else 'user_id'}=%s", (user_id,))
+                if cur.fetchone()[0]:
+                    raise RuntimeError("trader_review_cleanup_postcondition_failed")
     finally:
         conn.close()
     return {"fixture_state": "CLEANED", "cleanup_verified": True}
