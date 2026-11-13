@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Reflectie-planbron en algemene dossierlezing (13 november 2026)
 
-Phase: `LOCAL_GATES_GREEN`, kandidaatbranch
+Phase: `DEPLOYED_PENDING_FINAL_SHA`, kandidaatbranch
 `codex/reflection-plan-provenance-finn-read`. De onafhankelijke traderinspectie in het account
 `Paper Test BTC AAPL` bevestigde dat Reflectie #2127 de Paper-exit intern
 herleidt: `first_target`, USD 358,60 boven USD 357,42, afzonderlijke
@@ -42,9 +42,19 @@ validatiefouten (artifact SHA-256
 `1fa971b519a1f50c6d9e52a4d06ef9ccac0a43877cf4ff204ad4feeb8b270d4e`).
 Frontendproposals, PDF-download en setuptests passeerden aanvullend
 respectievelijk **9/9**, **2/2** en **20/20**. Onafhankelijke
-QA-codecheck, Security- en Architecture-review: **GO**. Er is nog geen PR,
-deploy of onafhankelijke live QA voor deze kandidaat. Historisch #2127 moet
-na release in de juiste Paper Test-sessie opnieuw worden gecontroleerd.
+QA-codecheck, Security- en Architecture-review: **GO**. PR
+[#1029](https://github.com/gvangalen/antigravity-trading-tool/pull/1029)
+had vijf groene PR-CI-jobs (run `43455060548`) en is gemerged als
+`b935af6393463baef796d411177e30220378d30d`. De vijf laatste
+main-CI-jobs (run `43456045670`) en Auto Deploy `43456812228` slaagden.
+Publieke `https://tradamind.com/api/health` en
+`https://tradamind.com/build-info.json` gaven beide HTTP 200 en exact die
+SHA; GitHub main wees eveneens naar die SHA zonder nieuwere deploy in de
+wachtrij. Deze statusupdate maakt een nieuwe main-SHA: Build wacht opnieuw
+de laatste main-CI, Auto Deploy en publieke SHA-pariteit af. Daarna draagt
+Build de beschermde live runtime-QA over aan de bestaande onafhankelijke
+QA-agent. Historisch #2127 moet na release in de juiste Paper Test-sessie
+opnieuw worden gecontroleerd.
 
 ## FINN Reflectie-analysefaalreden (13 november 2026)
 
