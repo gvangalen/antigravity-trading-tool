@@ -96,6 +96,75 @@ def test_aapl_review_chain_projects_and_reads_exact_usd_evidence(monkeypatch):
     assert steps == ["project", "dispose", "chat"]
 
 
+def test_review_chain_reports_bounded_analysis_failure_before_finn(monkeypatch):
+    from backend.infrastructure import database
+    from backend.services import finn_trade_review_service
+    from backend.scripts import probe_protected_closed_paper_review as review_probe
+
+    class Session:
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *_args):
+            return None
+
+    class Reviews:
+        def __init__(self, _session):
+            pass
+        async def list_reviews(self, owner, limit):
+            assert owner == 11 and limit == 10
+            return {"items": [{"id": 77}]}
+        async def get_review(self, owner, review_id):
+            assert owner == 11 and review_id == 77
+            return {"analysis_status": "failed"}
+
+    @contextmanager
+    def capture():
+        yield ["evidence_grounding"]
+
+    async def dispose():
+        pass
+
+    monkeypatch.setattr(database, "async_session_factory", Session)
+    monkeypatch.setattr(database, "engine", SimpleNamespace(dispose=dispose))
+    monkeypatch.setattr(finn_trade_review_service, "FinnTradeReviewService", Reviews)
+    monkeypatch.setattr(review_probe, "_process_review_for_fixture", lambda _owner: None)
+    monkeypatch.setattr(review_probe, "_capture_fixture_analysis_failures", capture)
+    monkeypatch.setattr(review_probe, "_chat_turn", lambda *_args: pytest.fail("FINN chat started"))
+    with pytest.raises(RuntimeError, match="^paper_exit_review_analysis_not_ready$") as caught:
+        asyncio.run(probe._review_chain(11, 22, {}))
+    assert caught.value.review_step == "dossier_read"
+    assert caught.value.analysis_failure == "evidence_grounding"
+    assert profile_error_category("trader_paper_exit_review_chain", caught.value) == "paper_exit_review_analysis_not_ready"
+
+
+@pytest.mark.parametrize("error,expected", [
+    (ValueError("Ungrounded analysis observation"), "evidence_grounding"),
+    (ValueError("Invalid analysis observations"), "observation_shape"),
+    (ValueError("Invalid analysis summary"), "invalid_summary"),
+    (ValueError("private model content"), "validation_other"),
+    (TimeoutError("private timeout detail"), "runtime_timeout"),
+])
+def test_review_analysis_failure_categories_are_fixed(error, expected):
+    from backend.scripts.probe_protected_closed_paper_review import _safe_analysis_failure
+
+    assert _safe_analysis_failure(error) == expected
+
+
+def test_fixture_analysis_failure_capture_is_process_local_and_restored(monkeypatch):
+    from backend.services import finn_trade_analysis_service as analysis_service
+    from backend.scripts.probe_protected_closed_paper_review import _capture_fixture_analysis_failures
+
+    async def failing(*_args, **_kwargs):
+        raise ValueError("Ungrounded analysis observation")
+
+    monkeypatch.setattr(analysis_service, "_validated_model_analysis", failing)
+    with _capture_fixture_analysis_failures() as failures:
+        with pytest.raises(ValueError, match="Ungrounded analysis observation"):
+            asyncio.run(analysis_service._validated_model_analysis({}, set(), image=None))
+        assert failures == ["evidence_grounding"]
+    assert analysis_service._validated_model_analysis is failing
+
+
 def test_aapl_fixture_seeds_only_usd_paper_rows(monkeypatch):
     statements = []
 

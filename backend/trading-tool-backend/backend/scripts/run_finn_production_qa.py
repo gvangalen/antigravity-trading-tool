@@ -415,6 +415,7 @@ def profile_error_category(profile: str, error: Exception) -> str:
             "paper_exit_open_plan_capture_failed", "paper_exit_open_plan_capture_missing",
             "paper_exit_open_ledger_insert_failed", "paper_exit_open_commit_failed",
             "paper_exit_review_chain_failed", "paper_exit_review_count_invalid",
+            "paper_exit_review_analysis_not_ready",
             "paper_exit_review_evidence_incomplete", "paper_exit_review_analysis_evidence_missing",
             "paper_exit_finn_read_failed", "paper_exit_finn_owner_evidence_missing",
             "paper_exit_finn_answer_incomplete",
@@ -4066,6 +4067,16 @@ def main() -> int:
             step = getattr(error, "review_step", None)
             if step in {"projection_analysis", "dossier_read", "finn_chat", "finn_verify"}:
                 report["paper_exit_review_step"] = step
+            analysis_failure = getattr(error, "analysis_failure", None)
+            if analysis_failure in {
+                "ai_unavailable", "observation_shape", "evidence_grounding",
+                "invalid_summary", "invalid_text", "invalid_uncertainty",
+                "invalid_question", "invalid_suggested_lesson", "validation_other",
+                "runtime_local_rate_limit", "runtime_configuration", "runtime_rate_limit",
+                "runtime_quota", "runtime_authentication", "runtime_model",
+                "runtime_timeout", "runtime_connection", "runtime_provider", "not_captured",
+            }:
+                report["paper_exit_review_analysis_failure"] = analysis_failure
         diagnostic = safe_manual_trade_failure_diagnostic(args.profile, error)
         if diagnostic is not None:
             report["manual_trade_failure_diagnostic"] = diagnostic

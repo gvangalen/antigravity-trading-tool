@@ -255,6 +255,46 @@ def _capture_fixture_ai_errors():
         openai_client.ask_gpt_json_async = original
 
 
+def _safe_analysis_failure(error: Exception) -> str:
+    """Classify a failed fixture analysis without exporting model content."""
+    if isinstance(error, ValueError):
+        message = str(error)
+        if message == "AI unavailable":
+            return "ai_unavailable"
+        if message in {"Invalid analysis observations", "Invalid analysis observation"}:
+            return "observation_shape"
+        if message in {"Ungrounded analysis observation", "Original plan was not grounded"}:
+            return "evidence_grounding"
+        if message.startswith("Invalid analysis "):
+            field = message.removeprefix("Invalid analysis ")
+            if field in {"summary", "text", "uncertainty", "question", "suggested_lesson"}:
+                return "invalid_" + field
+        return "validation_other"
+    return "runtime_" + _safe_ai_error_category(error)
+
+
+@contextmanager
+def _capture_fixture_analysis_failures():
+    """Observe only fixed failure codes in this isolated protected QA process."""
+    from backend.services import finn_trade_analysis_service as analysis_service
+
+    original = analysis_service._validated_model_analysis
+    failures: list[str] = []
+
+    async def capture(*args, **kwargs):
+        try:
+            return await original(*args, **kwargs)
+        except Exception as error:
+            failures.append(_safe_analysis_failure(error))
+            raise
+
+    try:
+        analysis_service._validated_model_analysis = capture
+        yield failures
+    finally:
+        analysis_service._validated_model_analysis = original
+
+
 def _close_paper_position(user_id: int, bot_id: int, buy_decision_id: int) -> None:
     from backend.engine.trading_bot_execution import _auto_execute_decision, _persist_bot_order
 

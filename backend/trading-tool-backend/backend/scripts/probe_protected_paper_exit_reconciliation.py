@@ -568,7 +568,8 @@ async def _review_chain(user_id: int, bot_id: int, expected: dict) -> dict:
     from backend.scripts import probe_protected_closed_paper_review as review_probe
 
     with _review_step("projection_analysis"):
-        await asyncio.to_thread(review_probe._process_review_for_fixture, user_id)
+        with review_probe._capture_fixture_analysis_failures() as analysis_failures:
+            await asyncio.to_thread(review_probe._process_review_for_fixture, user_id)
     try:
         async with async_session_factory() as session:
             service = FinnTradeReviewService(session)
@@ -580,12 +581,15 @@ async def _review_chain(user_id: int, bot_id: int, expected: dict) -> dict:
             plan = detail.get("plan_snapshot") or {}
             analysis = detail.get("analysis_json") or {}
             levels = plan.get("source_levels") or {}
+            if detail.get("analysis_status") != "ready":
+                failure = RuntimeError("paper_exit_review_analysis_not_ready")
+                failure.analysis_failure = analysis_failures[-1] if analysis_failures else "not_captured"
+                raise failure
             matches_level = lambda actual, saved: (
                 isinstance(actual, (int, float)) and isinstance(saved, (int, float))
                 and math.isclose(float(actual), float(saved), rel_tol=1e-9, abs_tol=1e-6)
             )
             if (detail.get("bot_id") != bot_id or detail.get("execution_environment") != "paper"
-                    or detail.get("analysis_status") != "ready"
                     or analysis.get("format_version") != 4
                     or exit_proof.get("trigger") != "first_target"
                     or exit_proof.get("source_price_currency") != expected.get("source_price_currency")
