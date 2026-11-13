@@ -163,8 +163,9 @@ def test_probe_requires_authorization_before_source_read(monkeypatch):
         probe.run(NAMESPACE)
 
 
-@pytest.mark.parametrize("rendered_value", [True, False])
-def test_probe_replays_once_and_cleans_only_after_contract_pass(monkeypatch, rendered_value):
+@pytest.mark.parametrize(("rendered_value", "stop_present"),
+                         [(True, True), (False, True), (True, False)])
+def test_probe_replays_once_and_cleans_only_after_contract_pass(monkeypatch, rendered_value, stop_present):
     from backend.engine import trading_bot_execution
 
     monkeypatch.setenv("FINN_QA_ALLOW_PAPER_EXIT_FIXTURE", "1")
@@ -198,6 +199,7 @@ def test_probe_replays_once_and_cleans_only_after_contract_pass(monkeypatch, ren
         steps.append("render")
         return {
             "rendered_exit_fields_present": rendered_value,
+            "rendered_saved_stop": stop_present,
             "rendered_saved_target": True,
             "rendered_decision_source_quote": True,
             "rendered_decision_fx": True,
@@ -212,7 +214,7 @@ def test_probe_replays_once_and_cleans_only_after_contract_pass(monkeypatch, ren
     monkeypatch.setattr(probe.fixture, "_cleanup", lambda *args: steps.append("cleanup"))
     monkeypatch.setattr(probe.fixture, "_quarantine", lambda *args: steps.append("quarantine"))
     result = probe.run(NAMESPACE)
-    if rendered_value:
+    if rendered_value and stop_present:
         assert result == {"result": "PASS", "failed_checks": [],
                           "exit_decisions": 1, "replay_duplicate_sells": 0,
                           "engine_calls": 2, "live_calls": 0,
@@ -220,7 +222,8 @@ def test_probe_replays_once_and_cleans_only_after_contract_pass(monkeypatch, ren
                           "onboarding_navigation_override": True}
         assert steps == ["seed_trade", "run", "run", "render", "cleanup"]
     else:
-        assert result == {"result": "FAIL", "failed_checks": ["rendered_exit_fields_present"],
+        failed = "rendered_exit_fields_present" if not rendered_value else "rendered_saved_stop"
+        assert result == {"result": "FAIL", "failed_checks": [failed],
                           "engine_calls": 2, "live_calls": 0,
                           "rendered_ui_checked": True, "gate_status": "FAIL",
                           "onboarding_navigation_override": True}
@@ -261,7 +264,7 @@ def test_source_parity_profile_requires_its_own_four_surface_result(monkeypatch)
                         lambda *_args: {"result": "PASS", "failed_checks": []})
     async def rendered(*_args):
         return {key: True for key in (
-            "rendered_exit_fields_present", "rendered_saved_target",
+            "rendered_exit_fields_present", "rendered_saved_stop", "rendered_saved_target",
             "rendered_decision_source_quote", "rendered_decision_fx",
             "rendered_exit_eur_price",
             "rendered_exit_quantity", "rendered_exit_proceeds",
@@ -380,7 +383,7 @@ def test_rendered_exit_opens_trades_before_reading_evidence(monkeypatch):
                 reads.append('trades')
                 return {"status": 200, "present": True}
             return {key: True for key in (
-                "rendered_exit_fields_present", "rendered_saved_target",
+                "rendered_exit_fields_present", "rendered_saved_stop", "rendered_saved_target",
                 "rendered_decision_source_quote", "rendered_decision_fx",
                 "rendered_exit_eur_price",
                 "rendered_exit_quantity", "rendered_exit_proceeds",
