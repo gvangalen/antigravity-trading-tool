@@ -160,6 +160,12 @@ class FinnClosedTradeReflectionService:
             evidence_ids.append("closure:user-confirmed")
         if has_proven_plan:
             evidence_ids.append("plan:snapshot")
+        paper_exit = (_paper_exit_evidence("paper_exit", row.get("paper_exit_evidence"))
+                      if str(row.get("execution_environment") or "").lower() == "paper"
+                      else None)
+        if (paper_exit and isinstance(paper_exit.get("trigger"), str)
+                and paper_exit["trigger"] in {"stop_loss", "first_target"}):
+            evidence_ids.append("paper_exit:decision")
         if row.get("candles_status") == "ready":
             evidence_ids.append("chart:binance-eur")
         if row.get("has_screenshot"):
@@ -183,8 +189,7 @@ class FinnClosedTradeReflectionService:
             "settle_currency": row.get("settle_currency") if derivative else None,
             "native_pnl_status": row.get("native_pnl_status") if derivative else None,
             "execution_sources": row.get("execution_sources") or [],
-            "paper_exit_evidence": _paper_exit_evidence("paper_exit", row.get("paper_exit_evidence"))
-            if str(row.get("execution_environment") or "").lower() == "paper" else None,
+            "paper_exit_evidence": paper_exit,
             "entry_at": row["entry_at"].isoformat(), "exit_at": row["exit_at"].isoformat(),
             "pnl_eur_before_fees": str(row["pnl_eur_before_fees"]) if row.get("pnl_eur_before_fees") is not None else None,
             "has_plan": has_proven_plan,

@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 ANALYSIS_VERSION = 1
-ANALYSIS_FORMAT_VERSION = 3
+ANALYSIS_FORMAT_VERSION = 4
 MAX_AI_FILLS = 50
 MAX_AI_CASH_LEGS = 16
 SYSTEM_ROLE = (
@@ -38,6 +38,9 @@ SYSTEM_ROLE = (
     "geen bewijs voor motieven of een vooraf bestaand plan. Schrijf zelf een concrete, "
     "persoonlijke terugblik in de gevraagde taal, standaard Nederlands. Een Paper-resultaat "
     "is berekend uit virtuele kassastromen inclusief gesimuleerde kosten; noem het nooit vóór kosten. "
+    "Een vastgelegd Paper-exitlabel en de koers bij de botbeslissing zijn botbewijs; "
+    "onderscheid dit van onafhankelijk geverifieerde marktuitvoering. Behandel "
+    "omgerekende EUR-planniveaus niet als de oorspronkelijk opgeslagen koersvaluta. "
     "Begin met het belangrijkste "
     "inzicht uit deze trade; herhaal de getoonde cijfers niet zonder duiding. "
     "Antwoord uitsluitend als JSON met summary, observations (array van "
@@ -86,6 +89,14 @@ def evidence_context(review: dict) -> tuple[dict, set[str]]:
         allowed.add("closure:user-confirmed")
     if review.get("plan_snapshot") and review.get("plan_provenance"):
         allowed.add("plan:snapshot")
+    paper_exit = (review.get("paper_exit_evidence")
+                  if str(review.get("execution_environment") or "").lower() == "paper"
+                  else None)
+    if (isinstance(paper_exit, dict) and isinstance(paper_exit.get("trigger"), str)
+            and paper_exit["trigger"] in {"stop_loss", "first_target"}):
+        allowed.add("paper_exit:decision")
+    else:
+        paper_exit = None
     if review.get("has_screenshot"):
         allowed.add("screenshot:user-upload")
     chart = review.get("candles_json") or {}
@@ -128,6 +139,9 @@ def evidence_context(review: dict) -> tuple[dict, set[str]]:
         "plan_status": "entry_order_plan_recorded" if review.get("plan_snapshot") and review.get("plan_provenance")
                        else "legacy_plan_provenance_unknown" if review.get("plan_snapshot")
                        else "no_original_plan_recorded",
+        "paper_exit": {"id": "paper_exit:decision", "data": paper_exit,
+                       "authority": "recorded bot decision and Paper execution evidence, not independent exchange execution"}
+                      if paper_exit else None,
         "note_untrusted": review.get("note") or None,
         "chart_status": review.get("candles_status"),
         "chart_reason": review.get("candles_reason"),

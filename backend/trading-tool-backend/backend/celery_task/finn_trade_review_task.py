@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend.infrastructure.database import ASYNC_DATABASE_URL, async_session_factory
 from backend.services.finn_trade_review_service import FinnTradeReviewService, completed_reflection_week
-from backend.services.finn_trade_analysis_service import FinnTradeAnalysisService
+from backend.services.finn_trade_analysis_service import ANALYSIS_FORMAT_VERSION, FinnTradeAnalysisService
 from backend.services.finn_trade_review_rollout import allowed_trade_review_users
 from backend.services.finn_exchange_import_service import FinnExchangeImportService
 from backend.services.finn_bybit_derivative_import_service import FinnBybitDerivativeImportService
@@ -189,6 +189,9 @@ async def _analyze_pending_trade_reviews(session_factory=None) -> int:
     if allowed == set():
         return 0
     user_filter = "AND user_id = ANY(CAST(:allowed AS INTEGER[]))" if allowed is not None else ""
+    params = {"format_version": str(ANALYSIS_FORMAT_VERSION)}
+    if allowed is not None:
+        params["allowed"] = sorted(allowed)
     async with session_factory() as session:
         result = await session.execute(text(f"""
             WITH queued AS (
@@ -196,7 +199,7 @@ async def _analyze_pending_trade_reviews(session_factory=None) -> int:
                      ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY exit_at, id) AS rank
               FROM finn_trade_reviews
               WHERE (analysis_status='pending' OR
-                (analysis_status='ready' AND analysis_json->>'format_version' IS DISTINCT FROM '3') OR
+                (analysis_status='ready' AND analysis_json->>'format_version' IS DISTINCT FROM :format_version) OR
                 (analysis_status='running' AND analysis_updated_at < NOW() - INTERVAL '10 minutes') OR
                 (analysis_status IN ('failed','unavailable')
                  AND analysis_updated_at < NOW() - INTERVAL '1 hour'
@@ -212,7 +215,7 @@ async def _analyze_pending_trade_reviews(session_factory=None) -> int:
               WHERE recent.user_id=q.user_id AND recent.created_at >= NOW() - INTERVAL '1 day'
             ) < 20
             ORDER BY q.exit_at, q.id LIMIT 6
-        """), {"allowed": sorted(allowed)} if allowed is not None else {})
+        """), params)
         targets = [(int(row.user_id), int(row.id)) for row in result.fetchall()]
     completed = 0
     for user_id, review_id in targets:

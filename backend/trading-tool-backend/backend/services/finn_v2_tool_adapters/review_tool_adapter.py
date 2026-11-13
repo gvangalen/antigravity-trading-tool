@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+import math
 import re
 
 from fastapi import HTTPException
@@ -32,6 +33,46 @@ class ReviewToolAdapter:
         # combining them; max(naive, aware) otherwise fails the whole read.
         return instant.replace(tzinfo=timezone.utc) if instant.tzinfo is None else instant.astimezone(timezone.utc)
 
+    @staticmethod
+    def _paper_exit_summary(raw: dict | None) -> str:
+        if (not isinstance(raw, dict) or not isinstance(raw.get("trigger"), str)
+                or raw["trigger"] not in {"stop_loss", "first_target"}):
+            return ""
+
+        def numeric(key: str) -> str | None:
+            value = raw.get(key)
+            try:
+                amount = float(value)
+            except (TypeError, ValueError, OverflowError):
+                return None
+            return str(amount) if math.isfinite(amount) and amount > 0 else None
+
+        def instant(key: str) -> str | None:
+            value = raw.get(key)
+            if not isinstance(value, str):
+                return None
+            try:
+                return ReviewToolAdapter._utc_instant(value).isoformat()
+            except ValueError:
+                return None
+
+        currency = raw.get("source_price_currency")
+        currency = currency if isinstance(currency, str) and currency in {"EUR", "USD", "USDT"} else None
+        facts = [f"vastgelegd Paper-exitlabel {raw['trigger']} (botbewijs, geen onafhankelijke beursuitvoering)"]
+        if currency:
+            facts.append(f"opgeslagen stop {numeric('saved_stop_loss') or 'onbekend'} {currency}")
+            facts.append(f"eerste doel {numeric('saved_first_target') or 'onbekend'} {currency}")
+            facts.append(
+                f"beslissingskoers {numeric('source_price') or 'onbekend'} {currency} "
+                f"op {instant('source_price_at') or 'onbekend'}")
+            facts.append(
+                f"uitvoeringskoers {numeric('execution_source_price') or 'onbekend'} {currency} "
+                f"op {instant('execution_source_price_at') or 'onbekend'}")
+        facts.append(
+            f"EUR-factor bij uitvoering {numeric('execution_fx_eur_per_unit') or 'onbekend'} "
+            f"op {instant('execution_fx_observed_at') or 'onbekend'}")
+        return "; " + "; ".join(facts)
+
     async def execute(self, *, user_id: int, asset: str | None = None, selector: dict | None = None,
                       review_id: int | None = None, **_kwargs):
         self.sources.get("review_history").validate_request(user_id=user_id)
@@ -44,7 +85,7 @@ class ReviewToolAdapter:
             reverse=True,
         )
         decision_items = [
-            f"Botbeslissing, geen bevestigde gesloten trade: "
+            f"{'Bot-exitbeslissing; controleer het trade-dossier voor sluitingsbewijs: ' if row.get('decision_kind') == 'paper_exit' else 'Botbeslissing, geen bevestigde gesloten trade: '}"
             f"{amsterdam_source_moment(row['decision_ts'])} "
             f"({self._utc_instant(row['decision_ts']).isoformat()} UTC): "
             f"bot {row['bot_name']} ({row['symbol']}) actie {row['action']}; "
@@ -110,7 +151,7 @@ class ReviewToolAdapter:
                           if str(review.get("environment")).lower() == "paper" else
                           f"resultaat EUR {review['pnl_eur_before_fees']} vóór kosten")
                 closure = "positie bewezen gesloten in Tradamind-ledger"
-                quote_context = ""
+                quote_context = self._paper_exit_summary(review.get("paper_exit_evidence"))
             items.append(
                 f"{'Nieuwste: ' if index == 0 else ''}Bevestigde gesloten trade #{review['review_id']} "
                 f"(instap {review['entry_at']}, uitstap {review['exit_at']}; {review['symbol']}, "

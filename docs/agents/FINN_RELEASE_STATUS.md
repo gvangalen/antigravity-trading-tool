@@ -4,6 +4,45 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN Paper-exitbewijs in Reflectie (13 november 2026)
+
+Phase: `LOCAL_VALIDATION`. De zichtbare AAPL-Paper-exit van 12 november is in
+botgeschiedenis als `first_target` geregistreerd, terwijl Reflectie #2127
+de reden niet kon onderbouwen en omgerekende EUR-planniveaus zonder
+oorspronkelijke USD-niveaus of FX-herleiding toonde. De broncode verklaart
+deze kloof: het eigenaargebonden trade-dossier las het bot-exitbewijs wel,
+maar de AI-analysecontext kreeg het niet. De planpresentatie filterde de
+opgeslagen `source_levels`, bronvaluta en FX-momenten weg. Deze bevinding
+bewijst nog niet welke afzonderlijke bewijsvelden historisch in #2127 zijn
+opgeslagen; dat vraagt een onafhankelijke live read na deployment.
+
+De reparatie geeft FINN het bestaande Paper-exitbewijs met een eigen citeerbare
+bron, toont de oorspronkelijke koersniveaus en instap-FX naast de EUR-waarden,
+en maakt de exitreden, beslissing- en uitvoeringskoers, FX-factor, bronmoment
+en beschikbare marktmeting direct zichtbaar. De algemene FINN-read van
+gesloten trades krijgt het gevalideerde botlabel en de gescheiden koers- en
+FX-momenten. Botbewijs blijft uitdrukkelijk onderscheiden van onafhankelijke
+beursuitvoering. Analyseformaat 4 laat bestaande dossiers opnieuw analyseren;
+er is geen handelsactiecontract of orderuitvoering gewijzigd.
+
+Gemeten lokale validatie: canonieke backend **4728 passed, 7 skipped**
+(log SHA-256 `ccb8fd5a688af569c30a3b35ea79160fa1c03a1c61eec494b5aead2f57e50c21`),
+gerichte reflectie-/rollouttests **51/51**, FINN-runtime-regressies **1105/1105**,
+frontend-commandtests **71/71**, i18n-tests **42/42**, planpresentatietests
+**2/2**, typecheck, i18n-lint, high audit en productiebuild groen. De
+geïsoleerde FastAPI/Celery-actiematrix slaagde **17/17** (artifact SHA-256
+`598bee621c4bd29d0755230b364c8ef6a0a6c3dea4a0214f986364c975919294`),
+adaptertests **26/26**, zonder Live- of brokerorders. Echte-provider
+development **20/20** (artifact SHA-256
+`69aabf1632fc3b220a1be5acf9cee667ffd1e10e91119c55a5d509b1c94ce550`)
+en regression **109/109** (artifact SHA-256
+`ecac89b9cf38b1f0e8f9fc579ecbd3a6d193495972f017a1def789f473e4d954`)
+hadden 100% selectienauwkeurigheid en nul provider-, schema-, parse-,
+validatie- of timeoutfouten. Een extra echte-provider synthetische
+reviewvraag citeerde `paper_exit:decision`, benoemde `first_target`, en
+onderscheidde USD-planniveaus van EUR-Paper-uitvoering. CI, deployment en
+onafhankelijke live dossier-QA volgen nog.
+
 ## FINN beschermde trade-QA child-namespace herstel (12 november 2026)
 
 Phase: `DEPLOYED_PENDING_FINAL_SHA`. Onafhankelijke QA op live
