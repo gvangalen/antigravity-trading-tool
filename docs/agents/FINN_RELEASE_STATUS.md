@@ -4,6 +4,48 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN AAPL Paper-review QA-diagnostiek (13 november 2026)
+
+Phase: `LOCAL_VALIDATION`. Productcode voor het Reflectie-exitbewijs staat
+publiek op `ee9551688b415ff8a732cd98fe429c8d5839f91b`; onafhankelijke
+beschermde QA-run `43422262566-1` op die SHA stopte met
+`paper_exit_probe_runtime_error` vóór een profielresultaat. De geschoonde
+artifact-JSON had SHA-256
+`0a4a89a63c53b5ac1ce5767f559b0a477a2811c246c4e9dbac9d684c91fa0e9d`.
+De huidige output bewijst niet of de tijdelijke QA-child is aangemaakt,
+opgeruimd of inactief in quarantaine staat. Dit is een onvolledige QA-run,
+geen aangetoond productdefect of geaccepteerde live test.
+
+Deze kandidaat voegt een read-only audit toe die uitsluitend het mislukte
+`trader_paper_exit_review_chain`-profiel met exact runnummer, poging,
+SHA-prefix, fixturemarker en namespace inspecteert. Een aparte, expliciet
+geautoriseerde opruimroute kan alleen de eigen inactieve child verwijderen
+na hercontrole onder lock van eigenaar, bot, sleutels en Paper-only orders;
+de eindcontrole eist afwezigheid van gebruiker, reviews, FINN-runs en orders.
+Nieuwe beschermde runs rapporteren alleen een vaste fasecode bij een
+runtimefout. De oorspronkelijke mislukte run krijgt hierdoor niet met
+terugwerkende kracht een fasecode. Build start geen officiële beschermde QA.
+
+Lokale gerichte runner-/audittests: **152 passed**; volledige backend vóór de
+laatste bronassertie in die gerichte set:
+**4743 passed, 7 skipped** (log SHA-256
+`2b129e70bba3823db194f39941388a263d6bdec732c05ecb7752980d93a1b4a7`).
+Frontend typecheck, i18n, commands, proposals, high audit en productiebuild
+slaagden. De lokale worker-actiematrix slaagde **17/17**, adaptertests **26/26**,
+nul Live-calls, brokerorders of productieverbindingen (artifact SHA-256
+`54578a9b72df5d98c2a260c8cc0b9244c10537906183f55b9c59e40bfec67cf9`).
+Echte-provider development slaagde **20/20** met nul provider-, schema-,
+parse-, validatie- of timeoutfouten (artifact SHA-256
+`2516aae7ac47003108003b2da4a3167d35a374719c8c3286b58a452f1d983e3f`).
+Echte-provider regression slaagde **109/109**, met 100% operation-, entiteit-,
+doelasset-, polariteit-, referentie-, verduidelijkings- en missing-inputscore,
+en nul provider-, schema-, parse-, validatie- of timeoutfouten (artifact
+SHA-256 `48740dd8a7108d004c94eebfe4c47d58458e05cd5424b0f802602b25a0aad156`).
+Release en onafhankelijk QA-oordeel zijn pending.
+Onafhankelijke read-only QA-codecheck en Security-review gaven **GO** voor
+deze nauw afgebakende diagnostische route. De live fixturestatus blijft
+onbekend tot QA de nieuwe audit op de exacte vorige run uitvoert.
+
 ## FINN geïsoleerde AAPL/USD exitbewijs-QA (13 november 2026)
 
 Phase: `DEPLOYED_PENDING_FINAL_SHA`. De productreparatie voor Reflectie #2127

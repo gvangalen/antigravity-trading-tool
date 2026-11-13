@@ -262,7 +262,8 @@ def _age_market_reading(user_id: int) -> None:
 
 
 def _cleanup(namespace: str, user_id: int, bot_id: int, *, require_safe_pair_cleanup: bool = False,
-             allow_planned_decisions: bool = False) -> None:
+             allow_planned_decisions: bool = False,
+             require_safe_review_cleanup: bool = False) -> None:
     conn = _connection()
     try:
         with conn.cursor() as cur:
@@ -304,6 +305,19 @@ def _cleanup(namespace: str, user_id: int, bot_id: int, *, require_safe_pair_cle
                     cur.execute("SELECT COUNT(*) FROM bot_decisions WHERE user_id=%s", (user_id,))
                 if cur.fetchone()[0]:
                     raise RuntimeError("fixture_cleanup_trade_present")
+            if require_safe_review_cleanup:
+                cur.execute("SELECT is_active FROM users WHERE id=%s", (user_id,))
+                if cur.fetchone()[0]:
+                    raise RuntimeError("fixture_cleanup_owner_active")
+                cur.execute("SELECT id,is_active,is_live FROM bot_configs WHERE user_id=%s FOR UPDATE", (user_id,))
+                if cur.fetchall() != [(bot_id, False, False)]:
+                    raise RuntimeError("fixture_cleanup_bot_unsafe")
+                cur.execute("SELECT COUNT(*) FROM exchange_keys WHERE user_id=%s", (user_id,))
+                if cur.fetchone()[0]:
+                    raise RuntimeError("fixture_cleanup_keys_present")
+                cur.execute("SELECT COUNT(*) FROM bot_orders WHERE user_id=%s AND execution_environment IS DISTINCT FROM 'paper'", (user_id,))
+                if cur.fetchone()[0]:
+                    raise RuntimeError("fixture_cleanup_live_order_present")
             cur.execute("UPDATE bot_configs SET is_active=FALSE WHERE id=%s AND user_id=%s AND is_live=FALSE", (bot_id, user_id))
             if cur.rowcount != 1:
                 raise RuntimeError("fixture_cleanup_bot_mismatch")
@@ -325,7 +339,7 @@ def _cleanup(namespace: str, user_id: int, bot_id: int, *, require_safe_pair_cle
         conn.commit()
     except Exception:
         conn.rollback()
-        if require_safe_pair_cleanup:
+        if require_safe_pair_cleanup or require_safe_review_cleanup:
             raise RuntimeError("fixture_cleanup_failed") from None
         # A failed cleanup must still disable the Paper bot.
         with conn.cursor() as cur:
