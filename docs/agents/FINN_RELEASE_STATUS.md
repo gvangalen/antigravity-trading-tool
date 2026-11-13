@@ -22,7 +22,9 @@ lokale QA-hertest vond in die scope geen resterende blocker. Frontend build,
 typecheck, i18n-tests/lint, commandtests en high-severity audit groen.
 De verplichte lokale API/Celery-actiematrix en echte-providerontwikkeling/
 regressie zijn in de schone werkboom niet uitgevoerd omdat de benodigde
-runtimeverbindingen niet zijn geconfigureerd. PR-CI, merge, Auto Deploy,
+runtimeverbindingen niet zijn geconfigureerd. PR-CI op exportcommit
+`e1055002cf94d1fdfe43b92e5034921e7bdbca4b` was groen in alle vijf jobs:
+backend, frontend, mobiel, security en workflow-validatie. Merge, Auto Deploy,
 publieke SHA-pariteit en ingelogde live QA zijn op dit moment nog open.
 Deze kandidaat is daarom **niet vrijgegeven** en verandert de huidige
 publieke status of de eerdere onafhankelijke QA-uitspraak niet.
