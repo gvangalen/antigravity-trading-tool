@@ -4,9 +4,65 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN algemene Reflectiechat: afzonderlijk orderplanbewijs (13 november 2026)
+
+Phase: `LOCAL_VALIDATED_PENDING_CI`, kandidaatbranch
+`codex/reflection-order-plan-finn-read`. De vorige release stond exact publiek op
+`0bc345c629a4087a751f25d8101b1f0208f6d154` na vijf groene laatste
+main-CI-jobs (`43477206269`) en Auto Deploy `43477918065`; backend-health
+en frontend-buildinfo gaven HTTP 200 en dezelfde SHA als GitHub main.
+Onafhankelijke QA-preflight `43478490719-1` slaagde. De beschermde ketenrun
+`43478643811-1` kwam voorbij Reflectie v5, dossierlezing en de read-only
+rapportweergave maar stopte in `review_chain/finn_verify` op
+`paper_exit_mixed_finn_answer_incomplete` (artifact SHA-256
+`1df8d004d43430106c2aa1ec31d436e69ce010a3a824a59a1f61931e023bf56a`).
+De geschoonde artifact bewaart niet welke specifieke antwoordterm ontbrak.
+Exact-bound audit `43478931679-1` vond een inactieve child met review
+`analysis_status=ready` en een FINN-run, safety nul; cleanup `43479125303-1`
+verwijderde die child aantoonbaar (artifact SHA-256
+`b7693730be1ece34078cbf986318ead06a9e439765b1076209a50c79fb7ac334`).
+Geen Live-actie. Het onafhankelijke oordeel op de vorige SHA is
+**NOT_ACCEPTED / INCOMPLETE**.
+
+Statische code-inspectie wees op een generiek leesgat: het eigenaargebonden
+gesloten-tradedossier projecteerde de bronkoersniveaus van de instapbeslissing,
+maar niet het afzonderlijke opgeslagen orderplandoel naar de algemene
+FINN-chat. De kandidaat projecteert alleen ondersteunde valuta, een positieve
+begrensde eerste doelkoers en eventueel een geldige plan-FX uit het bewezen
+opgeslagen plan. Beslisbron en orderplan blijven aparte getypeerde feiten;
+vrije plantekst, extreme getallen en FX van na de instap worden niet
+doorgegeven. FINN krijgt expliciet de bewijsgrens dat verschil en plantrouw
+niet uit een ongedocumenteerde omrekening mogen worden afgeleid. De vorige
+live fout is hiermee plausibel geraakt; de exacte ontbrekende term was in
+die run niet geobserveerd.
+
+Lokale Build-gates op de laatste code: backend **4767 passed, 7 skipped**
+(log SHA-256 `4b39cec228ef9678ad25c8c8d72d138b82a518ed4dc83471511de5ab9b917805`);
+gerichte dossier-/adaptertests **15 passed**. Lokale API/Celery-actiematrix
+**17/17** en adapters **26/26**, nul brokerorders, Live-calls, Live-bots of
+productieverbindingen (artifact SHA-256
+`3a4706be6131f037ff75c5f0a13abb8b663383dfcc5793dbe943677677c50319`).
+Een extra lokale API/Celery-chat met een synthetisch eigenaargebonden Paper-
+dossier gaf het opgeslagen EUR-orderplandoel terug, zonder voorstel en met
+polling/SSE-pariteit; de tijdelijke lokale gebruiker is verwijderd (log
+SHA-256 `ea8c8b1b080ea9e8e6e6896c2d2b4aa034900cc2cc3562920f1f659e8248367a`).
+Die test bewijst de nieuwe orderplanleesroute, niet de volledige gemengde
+live vraag. Echte-provider development **20/20** (artifact SHA-256
+`543383373625c2a4a8c15394e9f433b88127ddc0c3371d70f96ce92fa218ac53`)
+en regression **109/109**, alle gerapporteerde accuracies 100% en nul
+provider-, schema-, timeout-, parse- of validatiefouten (artifact SHA-256
+`b60a1db9b895c79dab7a06f8b53f08e16e4b8306e3f269f37a2d3ed6569cfc8f`).
+Frontendbuild, typecheck, i18n-lint/tests, command-/proposaltests en
+high-severity audit groen; nul auditkwetsbaarheden (buildlog SHA-256
+`129aaaf4cd4abd925cfe1c2499a5d8caafde419e25154bb8177fb9d8276fa3c0`).
+Onafhankelijke QA-codecheck, Security- en Architecture-review: **GO**.
+CI, deploy, publieke SHA-controle en nieuwe beschermde live QA zijn pending.
+Historische Reflectie #2127 in de gewone Paper Test-sessie blijft apart
+read-only te verifiëren; een ontbrekende koersvaluta wordt daar niet ingevuld.
+
 ## FINN Reflectie-bewijsherstel na beschermde QA (13 november 2026)
 
-Phase: `DEPLOYED_PENDING_FINAL_SHA`, statusbranch
+Phase: `HISTORICAL_DEPLOYED_NOT_ACCEPTED`, statusbranch
 `codex/reflection-grounding-release-status` na productkandidaat
 `codex/reflection-grounding-repair`. De vorige release stond publiek op
 `0a863c8a4ac1b0dc1ae49c353728bede7065f367` na vijf groene laatste
@@ -58,7 +114,8 @@ Publieke `https://tradamind.com/api/health` en
 SHA, gelijk aan GitHub main, zonder nieuwere deploy in de wachtrij. Deze
 gemeten statusupdate maakt zelf een nieuwe main-SHA; Build wacht de laatste
 main-CI, Auto Deploy en publieke SHA-pariteit af vóór de nieuwe beschermde
-live QA. Die QA is nog pending.
+live QA. Die QA eindigde later **NOT_ACCEPTED** op de gemengde FINN-chat;
+zie de actuele sectie hierboven.
 Historische Reflectie #2127 vereist daarnaast read-only controle in de
 juiste Paper Test-sessie; die toegang is niet door de beschermde fixture
 vervangen.

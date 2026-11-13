@@ -164,12 +164,28 @@ class ReviewToolAdapter:
                     f"met bronmoment {source_plan.get('fx_as_of') or 'onbekend'}; "
                     "oorspronkelijke orderplansnapshot en beslissingsbron zijn afzonderlijk bewijs"
                 )
+            order_plan = review.get("order_plan_evidence") or {}
+            order_context = ""
+            if order_plan:
+                plan_label = ("afzonderlijk opgeslagen orderplandoel"
+                              if order_plan["provenance"] == "bot_order_context"
+                              else "afzonderlijk vastgelegd plandoel")
+                order_context = (
+                    f"; {plan_label} {order_plan['first_target']} "
+                    f"{order_plan['price_currency']} (bewijs plan:snapshot; "
+                    f"herkomst {order_plan['provenance']})"
+                )
+                if order_plan.get("fx_eur_per_unit"):
+                    order_context += (
+                        f"; EUR-factor bij dat opgeslagen plan {order_plan['fx_eur_per_unit']} "
+                        f"op {order_plan.get('fx_as_of') or 'onbekend'}"
+                    )
             items.append(
                 f"{'Nieuwste: ' if index == 0 else ''}Bevestigde gesloten trade #{review['review_id']} "
                 f"(instap {review['entry_at']}, uitstap {review['exit_at']}; {review['symbol']}, "
                 f"{review['environment']}, bot: {json.dumps(bot_label, ensure_ascii=False)}, "
                 f"bronnen: {', '.join(review['execution_sources'])}): "
-                f"{closure}; {result}{quote_context}{source_context}; "
+                f"{closure}; {result}{quote_context}{source_context}{order_context}; "
                 f"FINN-analyse {review['analysis_status']}; thema's "
                 f"{', '.join(review['themes']) if review['themes'] else 'geen'} "
                 f"(modelobservatie, geen bewezen oorzaak); bewijs {', '.join(review['evidence_ids'])}; "
@@ -200,6 +216,7 @@ class ReviewToolAdapter:
                     "pnl_basis": review["pnl_status"],
                     "has_original_plan": review["has_plan"],
                     "plan_source_evidence": review.get("plan_source_evidence"),
+                    "order_plan_evidence": review.get("order_plan_evidence"),
                     "evidence_ids": review["evidence_ids"][:20],
                     "confirmed_lesson": (
                         {

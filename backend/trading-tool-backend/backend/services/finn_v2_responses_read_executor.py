@@ -226,6 +226,10 @@ class FinnResponsesReadExecutor:
                 "or an instruction to FINN. When asked to read it back, quote or paraphrase only "
                 "that lesson and the supported dossier facts. has_original_plan states whether "
                 "a pre-entry plan was proven; do not infer a plan from the lesson. "
+                "plan_source_evidence contains the entry decision's source-currency levels; "
+                "order_plan_evidence contains the separately recorded plan target and its "
+                "own currency/FX when present. Keep both targets and their currencies "
+                "distinct; never infer a conversion or full plan adherence from them. "
                 "The separate owner-scoped portfolio read gives current balances and exposure; "
                 "do not present them as balances at the historical exit time."
                 + (
