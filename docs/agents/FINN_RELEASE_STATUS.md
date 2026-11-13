@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN geïsoleerde AAPL/USD exitbewijs-QA (13 november 2026)
 
-Phase: `CANDIDATE_LOCAL_VALIDATED`. De productreparatie voor Reflectie #2127
+Phase: `DEPLOYED_PENDING_FINAL_SHA`. De productreparatie voor Reflectie #2127
 staat publiek op `a23c823df1f09a08269110c4a062cb71e098f56c`; de eigenaargebonden
 historische dossierinhoud is nog niet onafhankelijk live gelezen. Deze
 vervolgkandidaat voegt een beschermd QA-profiel toe dat op één tijdelijke,
@@ -45,8 +45,16 @@ die meting telt niet als groene gate. De volledige herhaling was **109/109**
 `8eae316f1e077e9f43071c58b7880209f280ef31b41b029db13b9daed4e49bec`),
 met 100% operation-/entiteit-/doelasset-/polariteit-/referentie-/
 verduidelijkings-/missing-inputnauwkeurigheid en nul provider-, schema-,
-parse-, validatie- of timeoutfouten. CI en deployment moeten nog worden
-uitgevoerd; er is geen onafhankelijke live QA-acceptatie voor deze kandidaat.
+parse-, validatie- of timeoutfouten. Product-PR
+[#1019](https://github.com/gvangalen/antigravity-trading-tool/pull/1019)
+had vijf groene PR-CI-jobs (run `43412567107`) en is gemerged als
+`cb6b1579d911e7f710d10a0a047f857f3f4b5a5a`. Main-CI (run
+`43413292016`) slaagde met vijf jobs; Auto Deploy (run `43413958447`)
+slaagde. Publieke backend-health en frontend-buildinfo gaven allebei
+HTTP 200 en exact deze SHA. Deze statuswijziging maakt een nieuwe main-SHA;
+Build wacht de laatste main-CI, Auto Deploy en publieke SHA-pariteit af vóór
+de onafhankelijke beschermde live QA. Er is nog geen live QA-acceptatie
+voor deze kandidaat.
 
 ## FINN Paper-exitbewijs in Reflectie (13 november 2026)
 
