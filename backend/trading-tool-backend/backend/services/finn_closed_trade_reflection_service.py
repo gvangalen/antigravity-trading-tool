@@ -1,6 +1,8 @@
 """Owner-scoped, read-only evidence contract for FINN's closed-trade coaching."""
 
 from collections import defaultdict
+from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 import re
 from typing import Any
 
@@ -142,6 +144,66 @@ class FinnClosedTradeReflectionService:
         }
 
     @staticmethod
+    def _order_plan_evidence(snapshot: Any, provenance: Any,
+                             entry_at: datetime | None = None) -> dict | None:
+        """Expose only recorded price fields, never arbitrary plan JSON text."""
+        if not isinstance(snapshot, dict) or not isinstance(provenance, dict):
+            return None
+        currency = snapshot.get("price_currency")
+        targets = snapshot.get("targets")
+        if currency not in {"EUR", "USD", "USDT"} or not isinstance(targets, list) or not targets:
+            return None
+        first = targets[0]
+        if not isinstance(first, dict):
+            return None
+
+        def positive(value: Any) -> str | None:
+            if isinstance(value, bool):
+                return None
+            raw = str(value)
+            if len(raw) > 64:
+                return None
+            try:
+                number = Decimal(raw)
+            except (InvalidOperation, TypeError, ValueError):
+                return None
+            if (not number.is_finite() or number <= 0 or len(number.as_tuple().digits) > 30
+                    or not -30 <= number.adjusted() <= 30):
+                return None
+            rendered = str(number)
+            return rendered if len(rendered) <= 64 else None
+
+        first_target = positive(first.get("price"))
+        if first_target is None:
+            return None
+        source = provenance.get("source")
+        evidence = {
+            "price_currency": currency,
+            "first_target": first_target,
+            "provenance": source if source in {"bot_order_context", "linked_plan_at_manual_entry"}
+                          else "recorded_plan",
+        }
+        fx = positive(snapshot.get("fx_eur_per_unit"))
+        fx_at = snapshot.get("fx_as_of")
+        parsed_fx_at = None
+        if isinstance(fx_at, str) and len(fx_at) <= 40:
+            try:
+                parsed_fx_at = datetime.fromisoformat(fx_at)
+            except ValueError:
+                pass
+        if parsed_fx_at is not None and isinstance(entry_at, datetime):
+            source_time = parsed_fx_at.replace(tzinfo=timezone.utc) if parsed_fx_at.tzinfo is None else parsed_fx_at
+            entry_time = entry_at.replace(tzinfo=timezone.utc) if entry_at.tzinfo is None else entry_at
+            if source_time > entry_time:
+                fx = None
+                parsed_fx_at = None
+        if fx is not None:
+            evidence["fx_eur_per_unit"] = fx
+        if fx is not None and parsed_fx_at is not None:
+            evidence["fx_as_of"] = parsed_fx_at.isoformat()
+        return evidence
+
+    @staticmethod
     def _safe_row(row: dict) -> dict:
         from backend.services.bot_service import _paper_exit_evidence
         from backend.services.finn_trade_review_service import attach_entry_decision_plan_evidence
@@ -214,6 +276,9 @@ class FinnClosedTradeReflectionService:
             "pnl_eur_before_fees": str(row["pnl_eur_before_fees"]) if row.get("pnl_eur_before_fees") is not None else None,
             "has_plan": has_proven_plan,
             "plan_source_evidence": row.get("entry_decision_source_plan") if has_proven_plan else None,
+            "order_plan_evidence": FinnClosedTradeReflectionService._order_plan_evidence(
+                row.get("plan_snapshot"), row.get("plan_provenance"), row.get("entry_at"))
+                if has_proven_plan else None,
             "confirmed_lesson": confirmed_lesson,
             "analysis_status": str(row["analysis_status"]),
             "chart_status": str(row["candles_status"]),
