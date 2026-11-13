@@ -169,6 +169,8 @@ async def _rendered_exit(user_id: int, bot_id: int, expected: dict) -> dict:
             }).format(new Date(value));
             return {
                 rendered_exit_fields_present: lines.length >= 10,
+                rendered_saved_stop: lines[1]?.includes(format(evidence.saved_stop_loss, 6)) &&
+                    lines[1]?.includes(evidence.source_price_currency),
                 rendered_saved_target: lines[2]?.includes(format(evidence.saved_first_target, 6)) &&
                     lines[2]?.includes(evidence.source_price_currency),
                 rendered_decision_source_quote: lines[3]?.includes(format(evidence.source_price, 6)) &&
@@ -684,7 +686,7 @@ def run(namespace: str, *, source_parity: bool = False, review_chain: bool = Fal
         with _stage("rendered_ui"):
             rendered = asyncio.run(_rendered_exit(user_id, bot_id, evidence["ui_projection"]))
         required_rendered = {
-            "rendered_exit_fields_present", "rendered_saved_target",
+            "rendered_exit_fields_present", "rendered_saved_stop", "rendered_saved_target",
             "rendered_decision_source_quote", "rendered_decision_fx",
             "rendered_exit_eur_price",
             "rendered_exit_quantity", "rendered_exit_proceeds",

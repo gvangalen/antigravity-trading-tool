@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN geïsoleerde AAPL/USD exitbewijs-QA (13 november 2026)
 
-Phase: `DEPLOYED_PENDING_FINAL_SHA`. De productreparatie voor Reflectie #2127
+Phase: `REPAIR_CANDIDATE_LOCAL_VALIDATED`. De productreparatie voor Reflectie #2127
 staat publiek op `a23c823df1f09a08269110c4a062cb71e098f56c`; de eigenaargebonden
 historische dossierinhoud is nog niet onafhankelijk live gelezen. Deze
 vervolgkandidaat voegt een beschermd QA-profiel toe dat op één tijdelijke,
@@ -55,6 +55,40 @@ HTTP 200 en exact deze SHA. Deze statuswijziging maakt een nieuwe main-SHA;
 Build wacht de laatste main-CI, Auto Deploy en publieke SHA-pariteit af vóór
 de onafhankelijke beschermde live QA. Er is nog geen live QA-acceptatie
 voor deze kandidaat.
+
+De laatste status-SHA `62201559115c10bca4f22617731121b0200481e5`
+doorliep main-CI `43415072632` en Auto Deploy `43415788669` succesvol;
+publieke backend en frontend rapporteerden allebei HTTP 200 en exact die
+SHA. Onafhankelijke beschermde QA-run `43416197666-1` op deze SHA gaf
+**NOT_ACCEPTED voor de volledige gevraagde dekking**, hoewel de synthetische
+AAPL/USD Paper-exit → Reflectie v4 → FINN-keten slaagde. Het geschoonde
+QA-artifact had SHA-256
+`6910d0dbeeca62c3c5975e4c01d55f94cff0f8a9501cd0e1d16977728acce344`:
+één exitbeslissing, twee engine-aanroepen, geen dubbele verkoop, nul Live-calls
+of actievoorstellen, en bevestigde opruiming. De browsercontrole verifieerde
+zichtbaar doel, bronkoersen, FX-momenten en EUR-omrekening, maar niet de
+afzonderlijke USD-stopregel. De review-detailcontrole verifieerde de
+opgeslagen stop wel. Deze vervolgpatch maakt de zichtbare USD-stop een
+verplichte browserassertie; een gerichte regressie faalt nu als die regel
+ontbreekt. De koers en FX in deze QA blijven synthetisch zonder externe
+marktmeting. Historische Reflectie #2127 blijft zonder toegang tot de
+normale Paper Test-accountinhoud onbeoordeeld.
+
+Gemeten gates voor deze beperkte observability-reparatie: canonieke backend
+**4733 passed, 7 skipped** (log SHA-256
+`c2c7843972554126ae7315dd0180bb1589e12077fcc0cd41b4d9372a7dc5eb12`),
+gerichte runner-/workflowtests **165 passed, 3 skipped**, frontend
+typecheck, i18n-lint/tests, command-/proposaltests, high audit en
+productiebuild groen. De geïsoleerde worker-actiematrix slaagde **17/17**
+(artifact SHA-256
+`48d3a0d4b0b8afac99ad3fc0efc0816ca95ba883b5d5e0ddcbb594083824ac41`),
+adaptertests **26/26**. Echte-provider development **20/20** (artifact
+SHA-256 `b7c446e8d19849db464cc873d692189dc191795ee582cfd66584c27c7dbfee42`)
+en regression **109/109** (artifact SHA-256
+`f499564c7aeb0baf37138c80791c5c6e1d819117d919d4457ca9da07542fc77e`)
+hadden nul provider-, schema-, parse-, validatie- of timeoutfouten.
+Onafhankelijke QA-codecheck: **GO** voor de verplichte zichtbare
+USD-stopassertie. PR-CI, deployment en de beschermde live herproef volgen.
 
 ## FINN Paper-exitbewijs in Reflectie (13 november 2026)
 
