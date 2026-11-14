@@ -7,7 +7,9 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 ## FINN bronmomenten en tijdzonepariteit (13 november 2026)
 
 Phase: `LOCAL_GATES_COMPLETE_PENDING_DEPLOY`. Concept-PR #1038 vanaf
-`codex/finn-source-moment-parity-20261113` op productcommit `999979f56518459b3901d092ce42e5effdbb447f`.
+`codex/finn-source-moment-parity-20261113` op herbaseerde productcommit
+`0fa7df879` (basis `6aba2b38a`). De chartwijziging op de nieuwe basis raakt
+de FINN-backend niet; de frontend-export is op die basis opnieuw gebouwd.
 De lokale reparatie geeft FINN getypeerde UTC- en Amsterdamse bronmomenten,
 controleert actuele koers- en portefeuilleclaims ook in tabellen en voor het
 exacte handelspaar, en toont Analyse, rapport en bot met expliciete CET/CEST.
@@ -28,10 +30,10 @@ en regressie **109/109** (SHA-256 `d609afe1efa7768b32493d818bbfa43210b9f192d5111
 beide zonder provider-, schema-, timeout-, parse- of validatiefouten. Een
 aanvullende synthetische lokale Paper-portefeuillechat slaagde **2/2**
 (SHA-256 `af41fe379cfe705b6b585ecef5b25ca15f08fffa12b2d641e50785ec608a7adf`).
-PR-CI op exportcommit `e1055002cf94d1fdfe43b92e5034921e7bdbca4b`
-en statuscommit `5bf03974b39729b7767323ef4512c0327676ebe2` was groen in alle vijf
-jobs: backend, frontend, mobiel, security en workflow-validatie. Merge,
-Auto Deploy, publieke SHA-pariteit en ingelogde live QA zijn nog open. Deze
+PR-CI op de eerdere branch was groen in alle vijf jobs: backend, frontend,
+mobiel, security en workflow-validatie. Die SHA is door de nieuwe `main`-basis
+achterhaald; CI op de herbaseerde kandidaat, merge, Auto Deploy, publieke
+SHA-pariteit en ingelogde live QA zijn nog open. Deze
 kandidaat verandert tot een geverifieerde deployment de huidige publieke
 status of de eerdere onafhankelijke QA-uitspraak niet.
 
