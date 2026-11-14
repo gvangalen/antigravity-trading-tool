@@ -8,6 +8,7 @@ import {
   watchlistRowKey,
 } from "../lib/workspace/watchlistMembership.mjs";
 import { getCachedResourceSnapshot, setCachedResourceData } from "../lib/clientDataCache.js";
+import { mergeQuoteBackfill } from "../lib/workspace/quoteBackfill.mjs";
 
 const eur = { symbol: "BTC", market_id: 41, quote_currency: "EUR" };
 const usdt = { symbol: "BTC", market_id: 42, quote_currency: "USDT" };
@@ -75,4 +76,23 @@ test("an account switch hides old rows and rejects its late response", () => {
   assert.equal(tracker.isCurrent(firstKey, firstGeneration), false);
   assert.deepEqual(ownerScopedWatchlistValues({ ownerId: 701, rows: [eur] }, 702, "rows"), []);
   assert.deepEqual(ownerScopedWatchlistValues({ ownerId: 702, rows: [usdt] }, 702, "rows"), [usdt]);
+});
+
+test("ETF watchlist backfills a missing price despite a known catalog currency", () => {
+  const workspace = { watchlist: { rows: [
+    { symbol: "SPY", quote_currency: "USD", price: null, change_24h: null },
+    { ...eur, price: 68000 },
+    { ...usdt, price: null },
+  ] } };
+  const result = mergeQuoteBackfill(workspace, new Map([
+    ["SPY", { price: 754.25, change_24h: 0.05 }],
+    ["BTC", { price: 75000, change_24h: 1.1 }],
+  ]), "SPY");
+
+  assert.equal(result.watchlist.rows[0].price, 754.25);
+  assert.equal(result.watchlist.rows[0].change_24h, 0.05);
+  assert.equal(result.watchlist.rows[0].quote_currency, "USD");
+  assert.equal(result.watchlist.rows[1].price, 68000);
+  assert.equal(result.watchlist.rows[2].price, null);
+  assert.equal(workspace.watchlist.rows[0].price, null);
 });

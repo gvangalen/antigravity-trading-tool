@@ -19,6 +19,7 @@ import {
 } from "@/lib/workspace/pendingEvidence.mjs";
 import { matchesWorkspaceAsset } from "@/lib/workspace/workspaceAssetScope.mjs";
 import { exactMarketScoreNeedsRefresh } from "@/lib/workspace/pendingExactMarketScore.mjs";
+import { mergeQuoteBackfill } from "@/lib/workspace/quoteBackfill.mjs";
 
 const WORKSPACE_REQUEST_TIMEOUT_MS = 15000;
 const WORKSPACE_CACHE_TTL_MS = 300_000;
@@ -75,51 +76,6 @@ function normalizeQuotePayload(quote) {
     stale: false,
     age_seconds: 0,
   };
-}
-
-function mergeQuoteBackfill(workspace, quoteMap, assetSymbol) {
-  if (!workspace || !quoteMap || quoteMap.size === 0) return workspace;
-
-  let changed = false;
-  const nextWorkspace = { ...workspace };
-  const activeQuote = quoteMap.get(assetSymbol);
-  if (!nextWorkspace.market_id && activeQuote && (!nextWorkspace.quote || nextWorkspace.quote.price === null || nextWorkspace.quote.price === undefined)) {
-    nextWorkspace.quote = {
-      ...(nextWorkspace.quote || {}),
-      ...activeQuote,
-    };
-    changed = true;
-  }
-
-  if (Array.isArray(nextWorkspace?.watchlist?.rows)) {
-    const nextRows = nextWorkspace.watchlist.rows.map((row) => {
-      const rowSymbol = String(row?.symbol || "").toUpperCase();
-      if (row?.market_id || row?.quote_currency) return row;
-      const backfilledQuote = quoteMap.get(rowSymbol);
-      if (!backfilledQuote || (row?.price !== null && row?.price !== undefined)) {
-        return row;
-      }
-      changed = true;
-      return {
-        ...row,
-        price: backfilledQuote.price,
-        change_24h: backfilledQuote.change_24h,
-        quote: {
-          ...(row?.quote || {}),
-          ...backfilledQuote,
-        },
-      };
-    });
-
-    if (changed) {
-      nextWorkspace.watchlist = {
-        ...nextWorkspace.watchlist,
-        rows: nextRows,
-      };
-    }
-  }
-
-  return changed ? nextWorkspace : workspace;
 }
 
 function hasFreshWorkspaceCache(key) {
