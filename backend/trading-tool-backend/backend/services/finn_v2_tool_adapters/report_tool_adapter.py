@@ -45,6 +45,20 @@ class ReportToolAdapter:
                  and str(item.get("symbol") or "").upper() == asset.upper()]
                 if requested_date and asset else snapshot["assets"][:30]
             )}
+            localized_assets = []
+            for item in snapshot["assets"]:
+                if not isinstance(item, dict):
+                    continue
+                market = item.get("market_snapshot")
+                if isinstance(market, dict):
+                    observed = market.get("as_of") or market.get("source_observed_at")
+                    local = amsterdam_source_moment(observed)
+                    if local:
+                        item = {**item, "market_snapshot": {
+                            **market, "source_observed_at_amsterdam": local,
+                        }}
+                localized_assets.append(item)
+            snapshot["assets"] = localized_assets
         report_assets = snapshot.get("assets") if snapshot else None
         report_symbol = None if not isinstance(report_assets, list) else (
             report_assets[0].get("symbol") if len(report_assets) == 1

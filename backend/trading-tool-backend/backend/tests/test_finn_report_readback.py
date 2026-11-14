@@ -44,7 +44,8 @@ def test_latest_report_read_exposes_saved_scores_and_source_moments():
         "assets": [
             {"symbol": "ETH", "reported_scores": {
                 "market_score": 50, "macro_score": 20, "technical_score": 40,
-            }, "component_source_observed_at": {
+            }, "market_snapshot": {"as_of": "2026-10-12T07:20:00+00:00"},
+            "component_source_observed_at": {
                 "market": {"Price": "2026-10-12T07:20:00+00:00"},
             }},
             {"symbol": "AAPL", "reported_scores": {
@@ -72,7 +73,10 @@ def test_latest_report_read_exposes_saved_scores_and_source_moments():
     adapter.repository = Reports()
     result = asyncio.run(adapter.execute(user_id=7, asset="ETH", selector={}))
     data = result["data"].dict()
-    assert data["score_source_snapshot"] == snapshot
+    assert data["score_source_snapshot"]["assets"][0]["market_snapshot"] == {
+        "as_of": "2026-10-12T07:20:00+00:00",
+        "source_observed_at_amsterdam": "2026-10-12 09:20:00 CEST",
+    }
     assert data["setup_score"] == 74
     assert data["best_setup"]["name"] == "ETH Base"
     assert data["market_score"] is None  # Multi-asset report has no global market score.

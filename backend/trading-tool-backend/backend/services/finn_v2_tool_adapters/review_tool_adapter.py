@@ -9,6 +9,7 @@ from fastapi import HTTPException
 
 from backend.domain.finn_v2_source_registry import FinnV2InformationSourceRegistry
 from backend.services.bot_service import BotService
+from backend.infrastructure.repositories.bot_repository import BotRepository
 from backend.schemas.finn_v2_evidence_schema import ReviewHistoryData
 from backend.services.finn_closed_trade_reflection_service import FinnClosedTradeReflectionService
 from backend.services.finn_v2_tool_adapters.display_source_moment import amsterdam_source_moment
@@ -17,6 +18,7 @@ from backend.services.finn_v2_tool_adapters.display_source_moment import amsterd
 class ReviewToolAdapter:
     def __init__(self, session):
         self.bot_service = BotService(session)
+        self.repository = BotRepository(session)
         self.sources = FinnV2InformationSourceRegistry()
         self.closed_trades = FinnClosedTradeReflectionService(session)
 
@@ -79,6 +81,32 @@ class ReviewToolAdapter:
         rows = [] if review_id is not None else await self.bot_service.get_bot_history(user_id, 30)
         if asset:
             rows = [row for row in rows if str(row.get("symbol") or "").upper() == asset.upper()]
+        latest_rows = [] if review_id is not None else await self.repository.get_latest_bot_decisions_for_owner(user_id)
+        if asset:
+            requested = asset.upper()
+            latest_rows = [row for row in latest_rows if (
+                str(row.get("symbol") or "").upper() == requested
+                or ("/" not in requested and str(row.get("symbol") or "").upper().split("/", 1)[0] == requested)
+                or (row.get("symbol") and row.get("quote_currency") and
+                    f'{row["symbol"]}/{row["quote_currency"]}'.upper() == requested)
+            )]
+        latest_decisions = []
+        for row in latest_rows:
+            if row.get("decision_ts") is None:
+                continue
+            decision = {
+                "bot_name": str(row.get("bot_name") or "onbekend")[:100],
+                "symbol": row.get("symbol"),
+                "is_live": bool(row.get("is_live")),
+                "action": row.get("action"),
+                "persistence_status": row.get("status"),
+                "decision_kind": row.get("decision_kind") or "assessment",
+                "decision_at": self._utc_instant(row["decision_ts"]).isoformat(),
+                "decision_at_amsterdam": amsterdam_source_moment(row["decision_ts"]),
+            }
+            if row.get("symbol") and row.get("quote_currency") and "/" not in str(row["symbol"]):
+                decision["pair"] = f'{row["symbol"]}/{row["quote_currency"]}'
+            latest_decisions.append(decision)
         rows.sort(
             key=lambda row: self._utc_instant(row["decision_ts"])
             if row.get("decision_ts") is not None else datetime.min.replace(tzinfo=timezone.utc),
@@ -201,6 +229,7 @@ class ReviewToolAdapter:
         return {
             "data": ReviewHistoryData(
                 items=[item for item in items if item],
+                latest_bot_decisions=latest_decisions,
                 closed_trade_status=closed["status"],
                 closed_trade_coverage=closed["coverage"],
                 closed_trade_review_ids=[r["review_id"] for r in closed_reviews],
@@ -241,6 +270,7 @@ class ReviewToolAdapter:
                         "requested_review_id": review_id},
             "as_of": max(
                 [self._utc_instant(row["decision_ts"]) for row in rows if row.get("decision_ts") is not None]
+                + [self._utc_instant(row["decision_ts"]) for row in latest_rows if row.get("decision_ts") is not None]
                 + [self._utc_instant(review["exit_at"]) for review in closed_reviews],
                 default=None,
             ),

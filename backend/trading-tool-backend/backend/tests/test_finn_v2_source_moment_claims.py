@@ -135,6 +135,24 @@ def test_report_generation_uses_ce_st_in_summer():
     )
 
 
+def test_explicit_cet_report_comparison_requires_local_saved_quote_source():
+    evidence = ({"scope": "read_latest_report", "status": "completed", "data": {
+        "generated_at": "2026-11-14T04:33:08+00:00",
+        "score_source_snapshot": {"assets": [{
+            "pair": "BTC/EUR", "market_snapshot": {"as_of": "2026-11-14T04:29:59+00:00"},
+        }]},
+    }},)
+    question = ("Vergelijk mijn dagrapport van 14 november voor BTC/EUR met de "
+                "nieuwste BTC/EUR-koers. Noem apart rapportmoment, koersbron in "
+                "het rapport en huidige koersbronmoment in CET.")
+    utc_only = ("Het dagrapport is gegenereerd om 05:33:08 CET. De historische "
+                "koersbron is 14 november 2026 om 04:29:59 UTC.")
+    assert not current_source_moments_supported(utc_only, evidence, question=question)
+    assert current_source_moments_supported(
+        utc_only.replace("04:29:59 UTC", "05:29:59 CET"), evidence, question=question,
+    )
+
+
 def test_current_market_source_in_prose_requires_the_matching_quote_read():
     wrong = "Het nieuwste AAPL-koersbronmoment is 13 november 2026 om 20:44 UTC."
     assert not current_source_moments_supported(wrong, _evidence())

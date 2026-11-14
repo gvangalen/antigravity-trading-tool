@@ -9,6 +9,11 @@ from fastapi import HTTPException
 from backend.services.finn_closed_trade_reflection_service import FinnClosedTradeReflectionService
 from backend.domain.finn_v2_source_registry import FinnV2InformationSourceRegistry
 from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
+
+
+class EmptyLatestDecisions:
+    async def get_latest_bot_decisions_for_owner(self, user_id):
+        return []
 from backend.services.finn_v2_visible_delivery_service import FinnV2VisibleDeliveryService
 
 
@@ -135,6 +140,7 @@ def test_owner_review_read_keeps_source_target_and_recorded_order_target_separat
             return []
 
     adapter = object.__new__(ReviewToolAdapter)
+    adapter.repository = EmptyLatestDecisions()
     adapter.bot_service = Decisions()
     adapter.sources = FinnV2InformationSourceRegistry()
     adapter.closed_trades = service
@@ -198,6 +204,7 @@ def test_paper_exit_reason_is_distinct_safe_reflection_evidence():
         {**row, "execution_environment": "live"})["evidence_ids"]
 
     adapter = object.__new__(ReviewToolAdapter)
+    adapter.repository = EmptyLatestDecisions()
     adapter.sources = FinnV2InformationSourceRegistry()
     adapter.closed_trades = FinnClosedTradeReflectionService(Session({7: {81: row}}))
     item = asyncio.run(adapter.execute(user_id=7, review_id=81))["data"].items[0]
@@ -222,6 +229,7 @@ def test_v2_coach_receives_only_current_owner_confirmed_lesson_as_untrusted_refl
                and "l.evidence_revision=r.input_revision" in sql
                for sql, _ in session.queries if "AS confirmed_lesson" in sql)
     adapter = object.__new__(ReviewToolAdapter)
+    adapter.repository = EmptyLatestDecisions()
     adapter.bot_service = SimpleNamespace(get_bot_history=lambda *_: None)
     adapter.sources = FinnV2InformationSourceRegistry()
     adapter.closed_trades = service
@@ -252,6 +260,7 @@ def test_asset_filter_is_applied_before_recent_limit_for_coach_lessons():
         "confirmed_at": "2026-10-15T12:00:00+00:00", "evidence_revision": 2}}
     session = Session({7: rows})
     adapter = object.__new__(ReviewToolAdapter)
+    adapter.repository = EmptyLatestDecisions()
     adapter.sources = FinnV2InformationSourceRegistry()
     adapter.closed_trades = FinnClosedTradeReflectionService(session)
 
@@ -284,6 +293,7 @@ def test_user_attested_exchange_review_has_distinct_evidence_and_no_eur_claim():
     assert safe["pnl_eur_before_fees"] is None
     assert safe["closure_label"] == "Afsluiting bevestigd door gebruiker"
     adapter = object.__new__(ReviewToolAdapter)
+    adapter.repository = EmptyLatestDecisions()
     adapter.repository = SimpleNamespace(get_bot_history=lambda *_: None)
     adapter.sources = FinnV2InformationSourceRegistry()
     adapter.closed_trades = service
@@ -313,6 +323,7 @@ def test_v2_adapter_keeps_closed_trades_separate_from_bot_decisions():
             return []
 
     adapter = object.__new__(ReviewToolAdapter)
+    adapter.repository = EmptyLatestDecisions()
     adapter.bot_service = Decisions()
     adapter.sources = FinnV2InformationSourceRegistry()
     adapter.closed_trades = FinnClosedTradeReflectionService(Session({7: {81: ROW}}))
@@ -353,6 +364,7 @@ def test_review_read_combines_legacy_naive_decision_time_and_aware_trade_exit():
                      "symbol": "BTC", "action": "HOLD", "status": "completed"}]
 
     adapter = object.__new__(ReviewToolAdapter)
+    adapter.repository = EmptyLatestDecisions()
     adapter.bot_service = Decisions()
     adapter.sources = FinnV2InformationSourceRegistry()
     adapter.closed_trades = FinnClosedTradeReflectionService(Session({7: {81: ROW}}))

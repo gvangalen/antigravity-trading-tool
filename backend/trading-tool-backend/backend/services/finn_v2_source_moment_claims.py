@@ -96,6 +96,7 @@ def current_source_moments_supported(
     market_rows: dict[tuple[str, str], datetime] = {}
     portfolio_reads: list[datetime] = []
     report_generations: list[datetime] = []
+    report_quote_sources: list[tuple[str, datetime]] = []
     for item in evidence:
         if item.get("status") != "completed" or not isinstance(item.get("data"), dict):
             continue
@@ -116,6 +117,33 @@ def current_source_moments_supported(
             generated = _utc(data.get("generated_at"))
             if generated:
                 report_generations.append(generated)
+            snapshot = data.get("score_source_snapshot")
+            for asset in snapshot.get("assets", []) if isinstance(snapshot, dict) else []:
+                if not isinstance(asset, dict):
+                    continue
+                market = asset.get("market_snapshot")
+                observed = _utc(market.get("as_of")) if isinstance(market, dict) else None
+                pair = str(asset.get("pair") or asset.get("display_symbol") or "").upper()
+                if observed and pair:
+                    report_quote_sources.append((pair, observed))
+
+    # A user asking for all report/quote moments in CET/CEST should receive
+    # the saved report quote source converted too, not only its UTC clock.
+    if question and re.search(r"\b(?:CET|CEST)\b", question, re.I) and re.search(
+        r"\b(?:dagrapport|ochtendrapport|rapport|report)\b", question, re.I,
+    ) and re.search(r"\b(?:koersbron|bronmoment|source\s+time)\b", question, re.I):
+        requested_pairs = {match.group(0).upper() for match in re.finditer(
+            r"\b[A-Z][A-Z0-9]*/(?:EUR|USD|USDT)\b", question, re.I,
+        )}
+        relevant = [observed for pair, observed in report_quote_sources
+                    if not requested_pairs or pair in requested_pairs]
+        if len(relevant) == 1 and not any(
+            claim is not None and _same_moment(claim, relevant[0])
+            and match.group("zone" if match.group("zone") else "iso_zone").upper() in {"CET", "CEST"}
+            for match in _DATED_MOMENT.finditer(answer)
+            for claim in (_claimed_moment(match.group(0)),)
+        ):
+            return False
 
     # A report's UTC and Amsterdam times must describe the same instant. The
     # model may put the local clock in parentheses without a repeated date,
