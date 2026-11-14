@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN compacte actuele koers met correct bronmoment (14 november 2026)
 
-Phase: `LOCAL_REPAIR_CANDIDATE_PENDING_CI`. De vorige publieke kandidaat
+Phase: `DEPLOYED_PENDING_FINAL_SHA`. De vorige publieke kandidaat
 `2222de6e7fb0c9ccdf9df849510d1c11f948e0f8` had succesvolle main-CI en
 Auto Deploy `43573163046`; publieke backend-health en frontend-buildinfo
 gaven beide HTTP 200 met exact die SHA. Onafhankelijke ingelogde read-only QA
@@ -39,8 +39,14 @@ en regressie **109/109** (SHA-256
 met nul provider-, schema-, timeout-, parse- of validatiefouten. Een
 synthetische lokale Paper-portefeuillechat slaagde **2/2** (SHA-256
 `19b94a647a124eb9eda54ca137a2c0c45a5cdce3f4c18807b9ca564e443fd70f`).
-PR-CI, merge, Auto Deploy, publieke SHA-pariteit en onafhankelijke ingelogde
-live hertest zijn nog open. Deze kandidaat is **niet vrijgegeven**.
+PR-CI en main-CI (`43577112003`) waren groen in alle vijf jobs. PR #1041 is
+gemerged op `a23f6214472a217b0d607a55c406c563d66503af`; Auto Deploy
+`43577504045` slaagde. Publieke `https://tradamind.com/api/health` en
+`https://tradamind.com/build-info.json` gaven beide HTTP 200 en exact die
+SHA, gelijk aan GitHub `main`. Deze statusbijwerking maakt zelf weer een
+nieuw `main`-commit en kan een nieuwe deploy starten. De finale publieke SHA
+en onafhankelijke ingelogde live hertest zijn daarom nog open. De kandidaat
+is **nog niet door QA geaccepteerd**.
 
 ## FINN bronmomenten en tijdzonepariteit (13 november 2026)
 
