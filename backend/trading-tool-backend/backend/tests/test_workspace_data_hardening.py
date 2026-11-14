@@ -715,11 +715,14 @@ def test_asset_workspace_materializes_quote_before_asset_catalog_lookup():
             pass
 
         async def get_asset(self, _symbol):
-            return {"asset_class": "crypto"}
+            return {"asset_class": "etf" if _symbol == "SPY" else "crypto"}
 
         async def get_assets(self, _symbols):
             quote.expired = True
-            return {"BTC": {"display_name": "Bitcoin", "asset_class": "crypto"}}
+            return {
+                "BTC": {"display_name": "Bitcoin", "asset_class": "crypto"},
+                "SPY": {"display_name": "SPDR S&P 500 ETF", "asset_class": "etf", "quote_currency": "USD"},
+            }
 
     with patch("backend.services.workspace_data_service.AssetCatalogService", FakeAssetCatalogService):
         result = asyncio.run(service.get_asset_workspace(7, "BTC", "day", "day", "day", ["BTC"]))
@@ -735,6 +738,14 @@ def test_asset_workspace_materializes_quote_before_asset_catalog_lookup():
         assert method.await_args.kwargs["asset_class"] == "crypto"
     service.market.get_latest_snapshot.assert_awaited_once_with("BTC")
     assert service._build_watchlist_payload.await_args.kwargs["quote_map"]["BTC"]["price"] == 64000.0
+
+    # Legacy ETF quotes can have a price and source moment but no stored currency.
+    quote.expired = False
+    quote.quote_currency = None
+    with patch("backend.services.workspace_data_service.AssetCatalogService", FakeAssetCatalogService):
+        etf_result = asyncio.run(service.get_asset_workspace(7, "SPY", "day", "day", "day", ["SPY"]))
+    assert etf_result["quote"]["price"] == 64000.0
+    assert etf_result["quote"]["quote_currency"] == "USD"
 
 
 def test_watchlist_reuses_only_matching_owner_and_symbol_assessment(monkeypatch):
@@ -764,6 +775,15 @@ def test_watchlist_reuses_only_matching_owner_and_symbol_assessment(monkeypatch)
     ))
     assert [(row["symbol"], row["score"]) for row in result["rows"]] == [("BTC", 80), ("ETH", 20)]
     assert assessed == [(7, "ETH", [])]
+
+    etf = asyncio.run(service._build_watchlist_payload(
+        7, ["SPY"],
+        asset_catalog={"SPY": {"asset_class": "etf", "quote_currency": "USD"}},
+        quote_map={"SPY": {"price": 754.25, "quote_currency": None, "timestamp": None}},
+        selected_assessment=(7, "SPY", selected, None),
+    ))
+    assert etf["rows"][0]["price"] == 754.25
+    assert etf["rows"][0]["quote_currency"] == "USD"
 
     asyncio.run(service._build_watchlist_payload(
         8, ["BTC"], asset_catalog={}, quote_map=quotes,

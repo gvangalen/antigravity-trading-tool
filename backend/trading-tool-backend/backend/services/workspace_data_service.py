@@ -501,7 +501,9 @@ class WorkspaceDataService:
             "price": quote_snapshot.get("price"),
             "change_24h": quote_snapshot.get("change_24h"),
             "volume": quote_snapshot.get("volume"),
-            "quote_currency": quote_snapshot.get("quote_currency"),
+            "quote_currency": quote_snapshot.get("quote_currency") or (
+                asset_meta.get("quote_currency") if asset_meta.get("asset_class") in {"stock", "etf", "index"} else None
+            ),
             "price_provider": quote_snapshot.get("price_provider"),
             **_freshness(quote_snapshot.get("timestamp"), STALE_AFTER_SECONDS["quote"], "market_data"),
         }
@@ -670,7 +672,7 @@ class WorkspaceDataService:
                 "tradingview_symbol": asset_meta.get("tradingview_symbol"),
                 "price": quote.get("price") if quote else None,
                 "quote_currency": (quote.get("quote_currency") if quote else None)
-                    or (asset_meta.get("quote_currency") if asset_meta.get("asset_class") == "crypto" else None),
+                    or (asset_meta.get("quote_currency") if asset_meta.get("asset_class") in {"crypto", "stock", "etf", "index"} else None),
                 "change_24h": quote.get("change_24h") if quote else None,
                 "score": combined,
                 "score_period": "day",
