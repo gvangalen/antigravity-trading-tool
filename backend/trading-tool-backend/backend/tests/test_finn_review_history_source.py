@@ -140,3 +140,29 @@ def test_latest_owner_bot_decisions_do_not_depend_on_active_setup_or_history_win
     assert len(result["data"].latest_bot_decisions) == 2
     assert result["data"].latest_bot_decisions[1]["pair"] == "BTC/USDT"
     assert result["data"].latest_bot_decisions[1]["is_live"] is True
+
+
+def test_bot_decision_only_read_survives_unavailable_trade_review_and_legacy_history():
+    class UnavailableLegacy:
+        async def get_bot_history(self, *_args):
+            raise AssertionError("legacy 30-day history must not block latest bot decision")
+
+    class LatestDecisions:
+        async def get_latest_bot_decisions_for_owner(self, user_id):
+            assert user_id == 42
+            return [{"bot_name": "BTC Paper", "is_live": False, "symbol": "BTC",
+                     "action": "hold", "status": "planned",
+                     "decision_ts": datetime(2026, 10, 18, 7, 48, 54, tzinfo=timezone.utc)}]
+
+    adapter = object.__new__(ReviewToolAdapter)
+    adapter.bot_service = UnavailableLegacy()
+    adapter.repository = LatestDecisions()
+    from backend.domain.finn_v2_source_registry import FinnV2InformationSourceRegistry
+    adapter.sources = FinnV2InformationSourceRegistry()
+    adapter.closed_trades = UnavailableLegacy()
+
+    result = asyncio.run(adapter.execute(
+        user_id=42, asset="BTC", selector={"_latest_bot_decisions_only": True},
+    ))
+    assert result["source"] == "bot_decisions"
+    assert result["data"].latest_bot_decisions[0]["decision_at_amsterdam"] == "2026-10-18 09:48:54 CEST"

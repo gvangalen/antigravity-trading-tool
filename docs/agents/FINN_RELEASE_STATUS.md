@@ -4,6 +4,52 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN interactieve bronlezing voor bot, rapport en koers (14 november 2026)
+
+Phase: `LOCAL_CANDIDATE_PENDING_CI` op branch
+`codex/finn-interactive-source-read-reliability-20261114`. De vorige
+productie-SHA `6110c0c6017961dd2bbdaf8e5db406de74083424` had geslaagde
+Auto Deploy en publieke backend/frontend-SHA-pariteit, maar onafhankelijke
+ingelogde QA gaf **NOT_ACCEPTED**. Het BTC Paper-botbesluit van 18 oktober
+09:48 CEST stond in de bot-UI en eigenaargebonden `/api/bot/history`, maar
+FINN kon het 2/2 niet verifiëren. Een vraag naar het BTC/EUR-dagrapport en
+actuele koers was 1/2 goed; de andere poging eindigde met
+`source_moment_conflicts_with_source`. AAPL-koersbron en Paper-uitleestijd
+waren zichtbaar in de UI, terwijl FINN ze in die proef niet kon verifiëren.
+Er waren geen accountmutaties of orders. De ingelogde weergave bood geen
+per-tool trace; de exacte afzonderlijke bronfout bleef onbewezen.
+
+De nieuwe kandidaat maakt een botbesluitvraag rechtstreeks eigenaargebonden
+aan het laatst opgeslagen besluit per bot. De oude 30-dagenhistorie en
+gesloten-tradereview zijn voor die specifieke vraag geen voorwaarde meer.
+Een zuivere koers- of rapportvraag leest alleen de gevraagde bron; een vraag
+die het rapport met de actuele koers vergelijkt, leest beide. Bot+rapport
+behoudt beide bronnen zonder een ongevraagde portefeuilleread; exposure- en
+kasvragen houden die read wel. Het interactieve budget is 6 seconden per
+bron en 14 seconden voor de hele read, tegenover 2 en 4 eerder; de
+afzonderlijke shadow-uitvoering behoudt zijn bestaande grenzen. Geen
+wijziging aan auth, beleggingsactie of Live-uitvoering. Onafhankelijke lokale
+code-QA vond na twee gecorrigeerde P2-randgevallen geen resterende P1/P2
+in deze diff; de live uitkomst staat nog open.
+
+Definitieve lokale Build-gates: volledige backend **4787 passed, 7 skipped**;
+gerichte bron-/tooltests **928 passed**; frontend typecheck, i18n-lint en
+-tests, commandtests, high-audit en productiebuild groen. Echte-provider
+selectorontwikkeling **20/20** (artifact SHA-256
+`ee47a164559a6822ffeb9ca1709b7cb427b4339dba43a8f029dcd85834bf6385`)
+en regressie **109/109** (SHA-256
+`602cd8bfb1bf26e21a250cd03fedeaeaa15cbe58b42e608b1cf895710fba6bcd`)
+hadden geen provider-, schema-, timeout-, parse- of validatiefouten. De eerste
+geïsoleerde API/Celery/Responses-matrix was **37/38**: de provider koos bij
+"Show the bot linked to my strategy" een planleesactie in plaats van de
+botleesactie. De volledige herhaling op dezelfde code slaagde **38/38**,
+16/16 actiecontracten en 9/9 lineage (SHA-256
+`da78d3f69181bec31617fa972ed1922473d278b3ea09ca1a27ac5b9bb138ada0`),
+met nul Live-bots of niet-toegestane uitvoeringen. Die eerste selectorafwijking
+blijft als intermittente bevinding zichtbaar. PR-CI, main-CI, Auto Deploy,
+publieke SHA-pariteit en onafhankelijke ingelogde QA zijn nog open; dit is
+geen live acceptatie.
+
 ## FINN rapportkoers CET en opgeslagen botbesluit (14 november 2026)
 
 Phase: `LOCAL_CANDIDATE_PENDING_CI` op branch

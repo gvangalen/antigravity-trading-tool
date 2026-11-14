@@ -78,9 +78,6 @@ class ReviewToolAdapter:
     async def execute(self, *, user_id: int, asset: str | None = None, selector: dict | None = None,
                       review_id: int | None = None, **_kwargs):
         self.sources.get("review_history").validate_request(user_id=user_id)
-        rows = [] if review_id is not None else await self.bot_service.get_bot_history(user_id, 30)
-        if asset:
-            rows = [row for row in rows if str(row.get("symbol") or "").upper() == asset.upper()]
         latest_rows = [] if review_id is not None else await self.repository.get_latest_bot_decisions_for_owner(user_id)
         if asset:
             requested = asset.upper()
@@ -107,6 +104,21 @@ class ReviewToolAdapter:
             if row.get("symbol") and row.get("quote_currency") and "/" not in str(row["symbol"]):
                 decision["pair"] = f'{row["symbol"]}/{row["quote_currency"]}'
             latest_decisions.append(decision)
+        if selector and selector.get("_latest_bot_decisions_only") and review_id is None:
+            return {
+                "data": ReviewHistoryData(latest_bot_decisions=latest_decisions),
+                "summary": {"title": "review_history", "kind": "latest_bot_decisions",
+                            "asset": asset, "count": len(latest_decisions)},
+                "as_of": max(
+                    (self._utc_instant(row["decision_ts"]) for row in latest_rows
+                     if row.get("decision_ts") is not None), default=None,
+                ),
+                "source": "bot_decisions", "schema_name": "ReviewHistoryData",
+                "entity_type": "review_history",
+            }
+        rows = [] if review_id is not None else await self.bot_service.get_bot_history(user_id, 30)
+        if asset:
+            rows = [row for row in rows if str(row.get("symbol") or "").upper() == asset.upper()]
         rows.sort(
             key=lambda row: self._utc_instant(row["decision_ts"])
             if row.get("decision_ts") is not None else datetime.min.replace(tzinfo=timezone.utc),

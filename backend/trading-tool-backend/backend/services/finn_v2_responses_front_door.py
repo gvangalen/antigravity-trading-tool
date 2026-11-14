@@ -975,10 +975,21 @@ class FinnResponsesFrontDoor:
         # A bot-only question does not need a daily report. A missing report
         # must not turn an available saved decision into a partial read.
         report_requested = bool(re.search(r"\b(?:dagrapport|ochtendrapport|rapport|report)\b", message, re.I))
+        needs_portfolio = account_bundle or bool(re.search(
+            r"\b(?:positie|posities|portefeuille|portfolio|kas|cash|exposure|blootstelling)\b", message, re.I,
+        ))
         base_tools = tuple(tool for tool in call.read_tools
-                           if report_requested or tool != "read_latest_report")
-        return replace(call, read_tools=tuple(dict.fromkeys((
-            *base_tools, "read_review_history", "read_portfolio",
+                           if (report_requested or tool != "read_latest_report")
+                           and (not report_requested or needs_portfolio or tool != "read_portfolio"))
+        decision_only = not report_requested and not needs_portfolio and not re.search(
+            r"\b(?:trade|transactie)\b", message, re.I,
+        )
+        return replace(call, inputs={**call.inputs, **({"_latest_bot_decisions_only": True}
+                                                    if decision_only and call.name == "get_decision_history" else {})},
+                       read_tools=tuple(dict.fromkeys((
+            *base_tools, "read_review_history",
+            *(("read_portfolio",) if needs_portfolio or
+              (call.name != "get_decision_history" and not report_requested) else ()),
             *(('read_bot_status',) if account_bundle or FinnResponsesFrontDoor._asks_about_account_state_bundle(message) else ()),
         ))))
 
@@ -1093,6 +1104,31 @@ class FinnResponsesFrontDoor:
                     **({"report_date_unresolved": True} if unresolved_old_report else {})},
             read_tools=tuple(dict.fromkeys((*call.read_tools, "read_latest_report"))),
         )
+
+    @staticmethod
+    def _focus_source_reads(call: FinnResponsesToolCall, *, message: str, read_only: bool) -> FinnResponsesToolCall:
+        """Keep factual quote and report questions on the sources they ask for.
+
+        Optional score, macro, trade-review and portfolio reads can fail or
+        exhaust the short interactive tool budget while the requested source
+        itself is available. A comparison that names those domains keeps them.
+        """
+        if not read_only or not call.read_tools:
+            return call
+        wants_score = bool(re.search(r"\b(?:score|scores|benchmark|indicator|macro|technisch)\b", message, re.I))
+        wants_report = bool(re.search(r"\b(?:dagrapport|ochtendrapport|rapport|report)\b", message, re.I))
+        wants_bot = FinnResponsesFrontDoor._asks_about_bot_decision(message)
+        wants_portfolio = bool(re.search(r"\b(?:positie|posities|portefeuille|portfolio|kas|cash|exposure|blootstelling)\b", message, re.I))
+        tools = call.read_tools
+        if call.name == "get_market_snapshot" and not wants_score:
+            tools = tuple(tool for tool in tools if tool not in {"read_macro_snapshot", "read_asset_scores"})
+        if wants_report and not wants_bot:
+            tools = tuple(tool for tool in tools if tool != "read_review_history"
+                          and (wants_portfolio or tool != "read_portfolio"))
+            if re.search(r"\b(?:actuele|huidige|nieuwste|laatste|current|latest)\b", message, re.I) \
+                    and _QUOTE_QUESTION.search(message):
+                tools = tuple(dict.fromkeys((*tools, "read_market_snapshot")))
+        return replace(call, read_tools=tools)
 
     @staticmethod
     def _focus_portfolio_on_open_bot(read_result: dict[str, Any], bot_id: int | None) -> dict[str, Any]:
@@ -3342,6 +3378,9 @@ class FinnResponsesFrontDoor:
                     call, message=message, read_only=call.operation_id is None and not pending_operation,
                     previous_response=previous_response, owner_user_id=self.user_id,
                 )
+                call = self._focus_source_reads(
+                    call, message=message, read_only=call.operation_id is None and not pending_operation,
+                )
                 # The collection adapter may clear global filters for a
                 # multi-setup comparison, but a later owner-scoped read of
                 # two named rows is a narrower request than the inventory.
@@ -4182,6 +4221,7 @@ class FinnResponsesFrontDoor:
         loop = FinnResponsesLoop(
             client=self.client, executor=execute, on_tool_result=checkpoint,
             catalog=catalog,
+            tool_timeout_seconds=14.0,
             model=os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna"),
             clarification_model=os.getenv("FINN_RESPONSES_CLARIFICATION_MODEL", "gpt-6-luna"),
             reasoning_effort=os.getenv("FINN_RESPONSES_REASONING_EFFORT", "none"),
