@@ -3683,6 +3683,78 @@ class FinnResponsesFrontDoor:
                     }
                 else:
                     read_result = await self.reads(call)
+                if call.operation_id is None and call.evaluation_operation_id and not pending_operation:
+                    # An evaluation contract selects the main reasoning path, but a
+                    # question can also request independent factual domains. Read
+                    # those owner-scoped sources before the model answers instead
+                    # of treating the contract's required scopes as the entire ask.
+                    extra_results = []
+                    completed_scopes = {
+                        item.get("scope") for item in read_result.get("results") or []
+                        if isinstance(item, dict)
+                    }
+                    if aggregate_portfolio_requested and "read_portfolio" not in completed_scopes:
+                        portfolio_result = await self.reads(replace(
+                            call, name="get_portfolio_and_exposure",
+                            inputs={"environment": "paper"} if re.search(r"\bPaper\b", message, re.I)
+                            and not re.search(r"\bLive\b", message, re.I) else {},
+                            read_tools=("read_portfolio",), evaluation_operation_id=None,
+                        ))
+                        extra_results.extend(portfolio_result.get("results") or [])
+                    if self._asks_about_bot_decision(message) and "read_review_history" not in completed_scopes:
+                        decision_result = await self.reads(replace(
+                            call, name="get_decision_history",
+                            inputs={
+                                **({"asset": next(iter(mentioned_assets))} if len(mentioned_assets) == 1 else {}),
+                                "_latest_bot_decisions_only": True,
+                            },
+                            read_tools=("read_review_history",), evaluation_operation_id=None,
+                        ))
+                        extra_results.extend(decision_result.get("results") or [])
+                    if len(mentioned_pairs) > 1:
+                        comparison_result = await self.reads(replace(
+                            call, name="get_setup_market_matches", inputs={},
+                            read_tools=("read_setup_market_matches",), evaluation_operation_id=None,
+                        ))
+                        pair_quotes: dict[str, set[str]] = {}
+                        for pair_asset, pair_quote in mentioned_pairs:
+                            pair_quotes.setdefault(pair_asset, set()).add(pair_quote)
+                        for item in comparison_result.get("results") or []:
+                            if not isinstance(item, dict) or item.get("scope") != "read_setup_market_matches":
+                                extra_results.append(item)
+                                continue
+                            data = item.get("data")
+                            if not isinstance(data, dict):
+                                extra_results.append(item)
+                                continue
+                            matches = []
+                            for row in data.get("matches") or []:
+                                if not isinstance(row, dict):
+                                    continue
+                                symbol = str(row.get("symbol") or "").upper()
+                                pair = str(row.get("trading_pair") or row.get("pair") or "").upper()
+                                quote = str(row.get("quote_currency") or "").upper()
+                                if not quote and "/" in pair:
+                                    quote = pair.rsplit("/", 1)[1]
+                                if quote in pair_quotes.get(symbol, set()):
+                                    matches.append(row)
+                            extra_results.append({**item, "data": {**data, "matches": matches}})
+                        for asset, quote in sorted(mentioned_pairs):
+                            pair_result = await self.reads(replace(
+                                call, name="get_market_snapshot",
+                                inputs={"asset": asset, "quote_currency": quote},
+                                read_tools=("read_market_snapshot", "read_technical_snapshot", "read_asset_scores"),
+                                evaluation_operation_id=None,
+                            ))
+                            extra_results.extend(pair_result.get("results") or [])
+                    if extra_results:
+                        read_result = {**read_result, "status": (
+                            "completed" if read_result.get("status") == "completed"
+                            and all(item.get("status") == "completed" for item in extra_results
+                                    if isinstance(item, dict)) else "partial"
+                        ), "results": [
+                            *(read_result.get("results") or []), *extra_results,
+                        ]}
                 if (position_read_requested or (
                     aggregate_portfolio_requested and "read_portfolio" in call.read_tools
                 )) and not portfolio_only_read:
