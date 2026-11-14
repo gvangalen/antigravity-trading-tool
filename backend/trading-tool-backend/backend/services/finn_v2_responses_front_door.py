@@ -1464,7 +1464,8 @@ class FinnResponsesFrontDoor:
             elif len(symbols) == 1 and self._asks_about_bot_decision(message) \
                     and re.search(r"\b(?:laatste|nieuwste)\b", message, re.I) \
                     and re.search(r"\bopgeslagen\b", message, re.I) \
-                    and not re.search(r"\b(?:dagrapport|rapport|positie|portefeuille|kas)\b", message, re.I):
+                    and not re.search(r"\b(?:dagrapport|rapport|positie|portefeuille|kas|"
+                                      r"score\w*|benchmark\w*|plan|setup|strategie|strategy)\b", message, re.I):
                 fact_kind = "bot_decision"
                 symbol = next(iter(symbols))
             elif re.search(r"\bPaper[- ]?portefeuille\b", message, re.I) \
@@ -3693,7 +3694,7 @@ class FinnResponsesFrontDoor:
                         item.get("scope") for item in read_result.get("results") or []
                         if isinstance(item, dict)
                     }
-                    if aggregate_portfolio_requested and "read_portfolio" not in completed_scopes:
+                    if full_portfolio_requested and "read_portfolio" not in completed_scopes:
                         portfolio_result = await self.reads(replace(
                             call, name="get_portfolio_and_exposure",
                             inputs={"environment": "paper"} if re.search(r"\bPaper\b", message, re.I)
@@ -4567,6 +4568,12 @@ class FinnResponsesFrontDoor:
                 if guided_draft_question
                 else "get_closed_trade_review"
                 if (explicit_closed_review_read or contextual_closed_review_read)
+                and pending_operation is None and not resuming_clarification
+                else "evaluate_plan"
+                if is_read_only_turn and self._asks_about_bot_decision(message)
+                and {"plan", "setup", "strategy"}.intersection(request_facts.explicit_entities)
+                and ("scores" in request_facts.explicit_entities
+                     or re.search(r"\b(?:score\w*|benchmark\w*)\b", message, re.I))
                 and pending_operation is None and not resuming_clarification
                 else "get_active_plan_and_strategy"
                 if is_read_only_turn and account_state_bundle

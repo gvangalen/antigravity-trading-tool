@@ -57,6 +57,20 @@ _READ_ONLY_QUESTION = re.compile(
     r"(?:herhaal|repeat|wiederhole)\b.{0,50}\b(?:les|lesson|lektion))\b",
     re.I,
 )
+_CURRENT_EVIDENCE = re.compile(
+    r"\b(?:actuele|huidige|nieuwste|laatste|current|latest|aktuelle[nr]?|letzte[nr]?)\b"
+    r".{0,100}\b(?:score\w*|bronmoment\w*|indicator\w*|koers\w*|prijs\w*|"
+    r"botbeslissing\w*|botbesluit\w*|portfolio|portefeuille|kas|cash|positie\w*|"
+    r"source\w*|quote\w*|price\w*|decision\w*|quelle\w*|kurs\w*|"
+    r"entscheidung\w*|position\w*)\b",
+    re.I | re.S,
+)
+_EVIDENCE_READ_VERB = re.compile(
+    r"\b(?:lees|lezen|ophalen|control\w*|check\w*|vergelijk\w*|beoordeel\w*|"
+    r"read|fetch|check|compare|assess|verify|lese\w*|abruf\w*|prüf\w*|"
+    r"vergleich\w*|bewert\w*)\b",
+    re.I,
+)
 _DIRECT_ACTION_REQUEST = re.compile(
     r"\b(?:kan je|can you|kannst du)\b.{0,70}\b"
     r"(?:maken|aanmaken|wijzigen|aanpassen|hernoemen|opslaan|bevestigen|"
@@ -135,6 +149,11 @@ def requests_execution_capability_question(message: str, context: dict[str, Any]
     if is_report_technical_comparison_request(text):
         # "Wat kan Analyse lezen?" asks for owner-scoped measurements, not
         # whether a plan rule is executable. Let the factual read run first.
+        return False
+    if _CURRENT_EVIDENCE.search(text) and _EVIDENCE_READ_VERB.search(text):
+        # "Can you check my current score and last bot decision?" asks for
+        # owner-scoped facts. The words can/execute in a later no-action
+        # sentence do not make it a question about executable plan rules.
         return False
     # A guided plan answer can contain words such as "uitvoering" and an
     # active design focus. Those words do not turn supplied fields into a

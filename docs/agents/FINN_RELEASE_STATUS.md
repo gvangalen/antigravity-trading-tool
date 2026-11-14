@@ -4,9 +4,59 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN vervolgvraag over Paper-plan en botbewijs (14 november 2026)
+
+Phase: `PR_CI_PENDING`. Branch `codex/finn-broad-coach-followup` is based on
+the final deployed main SHA `5029a0c273c6ca46d0fa3e5b28c86dbcdc1b1937`.
+The previous broad-question candidate passed local validation and deployment,
+but independent browser QA returned `NOT_ACCEPTED`: the broad first question
+was mostly answered, whereas its direct followup falsely claimed the current
+score, saved score band, and bot decision were inaccessible. QA did not run an
+official protected matrix because no active QA goal/manifest was present.
+
+The exact two-turn question was reproduced on isolated local HTTP/Celery with
+the real Responses provider. Before this repair, the second turn completed
+with **zero tool calls** and a typed execution-capability answer claiming
+plan and bot evidence could not be read. The code path treated a request to
+*check* current evidence as a question about executable plan rules because it
+contained “Kun je”, “koop”, and “Geen actie uitvoeren”. In parallel, the
+request preprocessor treated “zonder iets te wijzigen” at the end of a plan
+evaluation as a mutation, and a narrow bot-decision fast path could preempt
+a mixed plan, score, and bot request.
+
+The repair routes current-evidence requests to owner-scoped reads, preserves
+read-only evaluation polarity under a trailing no-change clause, and selects
+`evaluate_plan` for a combined plan/score/bot-decision question. The same
+evaluation then binds the requested Paper portfolio, bot decisions, saved
+plan, and market sources. Rules are based on request intent and source type,
+with regression cases for BTC, ETH, and AAPL; no asset-specific product rule
+or trading mutation was added. The local two-turn artifact
+`/tmp/finn-followup-final.json` (SHA-256
+`6a301821de29e5b6bca8aece2334dd4374a7b6010070eed454403fd185e0b8d3`)
+passes all first- and second-turn checks:
+both turns use `evaluate_plan`, the saved BTC/EUR 61–75 band and both BTC pairs
+are recognized, the combined and BTC-only Paper cash are distinguished, and
+neither turn creates a proposal. This local fixture has no current market
+scores, so FINN explicitly withholds approval of the hypothetical €10 buy.
+The exact backend suite passed **4829 tests, 7 skipped** (log SHA-256
+`93e37461ffdbe51485d396180221a2e77558a8286c734bfbc6d4bc2fb6d2ec9e`).
+The local worker action matrix passed **17/17** with **26/26** adapters and
+zero broker orders, Live bots, Live trading calls, or production connections
+(artifact SHA-256
+`e1987b1d750e4aa1ef3c8c85c0c7e738be5357b06bfe957d22c96d2b38399f98`).
+Frontend build, typecheck, i18n lint, **43/43** i18n, **74/74** commands,
+**9/9** proposals, and high audit with zero vulnerabilities passed (build log
+SHA-256 `45956f06e33cca8d0197af997a8af9da79cbfffeedf386ba67a036a65e3558ef`).
+The real-provider development selector passed **20/20** (artifact SHA-256
+`6c1db233996ca0e336dda1e73de38bf37917c2c88c1ce613b20f542833a6ee22`).
+The real-provider regression selector passed **109/109** (artifact SHA-256
+`eccd62d8621c6e3b9e85ab8a571de1e73c611456010f68b1dc4076cf40496725`),
+with no provider, schema, parse, validation, or timeout errors. PR CI, deploy,
+public SHA parity, and independent live QA remain pending.
+
 ## FINN samengestelde Paper-coachvraag en brondekking (14 november 2026)
 
-Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Kandidaatbranch
+Phase: `QA_NOT_ACCEPTED`. Kandidaatbranch
 `codex/finn-broad-coach-evidence`, productcommit
 `f1cc278bcb1a7a2ce99a86d1d0ca1fce19bb4a50` op publieke basis
 `5e8e7c75415517bcf3cf403931537fe76cbd15ee`, is via PR #1061 gemerged
@@ -14,9 +64,10 @@ als `54a7a0ecf087808f9768412bbc6df20164078b00`. PR-CI `43642701722`
 en main-CI `43643120292` slaagden elk met vijf jobs. Auto Deploy
 `43643564470` slaagde. GitHub main, publieke backend-health en
 frontend-buildinfo gaven op 14 november exact de productmerge-SHA; beide
-publieke endpoints gaven HTTP 200. Deze statusbijwerking maakt zelf een nieuwe
-main-SHA; laatste main-CI, Auto Deploy, publieke SHA-pariteit en onafhankelijke
-live hertest blijven daarom open. De onafhankelijke
+publieke endpoints gaven HTTP 200. De statusbijwerking uit PR #1062 leidde tot
+definitieve main- en publieke SHA
+`5029a0c273c6ca46d0fa3e5b28c86dbcdc1b1937` na succesvolle laatste
+main-CI `43644351051` en Auto Deploy `43644813261`. De onafhankelijke
 ingelogde browserhertest op die basis gaf `NOT_ACCEPTED`: de gezamenlijke
 Paper-kas en beide botkassen zijn nu correct, maar bij een brede vraag over
 BTC/EUR, BTC/USDT, opgeslagen setup, score, botbeslissing en hypothetische

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local HTTP/Celery/Responses check for an account-wide Paper cash question."""
+"""Local HTTP/Celery/Responses check for Paper cash and coach followups."""
 
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ def main() -> None:
     parser.add_argument("--base-url", default="http://127.0.0.1:18000")
     parser.add_argument("--output", required=True)
     parser.add_argument("--question")
+    parser.add_argument("--followup")
     args = parser.parse_args()
     if not args.base_url.startswith(("http://127.0.0.1:", "http://localhost:")):
         raise SystemExit("This regression is local-only")
@@ -77,6 +78,14 @@ def main() -> None:
     state = record["runtime_state"]
     trace = (state.get("responses_exchange") or {}).get("tool_trace") or []
     answer = str((state.get("terminal_response") or {}).get("content") or "")
+    followup_observed = None
+    followup_record = None
+    if args.followup:
+        followup_observed = run_gate(
+            base_url=args.base_url, bearer_token=token, message=args.followup,
+            conversation_id=observed["conversation_id"], timeout_seconds=120,
+        )
+        followup_record = _runtime_record(followup_observed["run_id"])
     portfolio_reads = [
         item["data"]
         for call in trace for item in (call.get("result") or {}).get("results") or []
@@ -102,6 +111,26 @@ def main() -> None:
     if args.question:
         checks["saved_score_band_answer"] = "61–75" in answer or "61-75" in answer
         checks["both_pairs_answered"] = "BTC/EUR" in answer and "BTC/USDT" in answer
+    followup_trace = (
+        (followup_record["runtime_state"].get("responses_exchange") or {}).get("tool_trace") or []
+        if followup_record else []
+    )
+    followup_answer = str(
+        (followup_record["runtime_state"].get("terminal_response") or {}).get("content") or ""
+    ) if followup_record else ""
+    if args.followup:
+        checks.update({
+            "followup_completed": followup_observed["status"] == "completed",
+            "followup_single_dispatch": followup_observed["dispatch_count"]
+                == followup_observed["attempt_count"] == 1,
+            "followup_evaluated_plan": any(
+                call.get("name") == "evaluate_plan" for call in followup_trace
+            ),
+            "followup_no_proposal": followup_record["proposal"] is None,
+            "followup_saved_score_band": "61–75" in followup_answer
+                or "61-75" in followup_answer,
+            "followup_scoped_pair": "BTC/EUR" in followup_answer,
+        })
     artifact = {
         "synthetic_local_only": True, "question": question,
         "run_id": observed["run_id"], "status": observed["status"],
@@ -113,6 +142,13 @@ def main() -> None:
             if isinstance(item, dict)
         ],
         "answer": answer, "checks": checks, "pass": all(checks.values()),
+        "followup": ({
+            "question": args.followup,
+            "run_id": followup_observed["run_id"],
+            "status": followup_observed["status"],
+            "tool_names": [call.get("name") for call in followup_trace],
+            "answer": followup_answer,
+        } if followup_observed and followup_record else None),
     }
     Path(args.output).write_text(json.dumps(artifact, ensure_ascii=False, indent=2) + "\n")
     if not artifact["pass"]:

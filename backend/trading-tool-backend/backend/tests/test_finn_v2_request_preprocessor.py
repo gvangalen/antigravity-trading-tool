@@ -38,6 +38,8 @@ def test_german_indicator_add_imperative_is_an_operation_request(message):
     ("Wijzig mijn strategiebedrag naar €100. Wijzig niets.", "update"),
     ("Leg uit hoe mijn ETH-setups verschillen. Alleen lezen, niets wijzigen.", "read"),
     ("Maak een Paper-bot. Alleen kijken, niets wijzigen.", "create"),
+    ("Beoordeel mijn BTC/EUR-plan en botbeslissing zonder iets te wijzigen.", "evaluate"),
+    ("Beoordeel mijn ETH/EUR-plan en actuele score, zonder iets te wijzigen.", "evaluate"),
 ])
 def test_standalone_no_change_clause_does_not_turn_reads_into_updates(message, expected):
     assert FinnV2RequestPreprocessorService().preprocess(message=message).action_polarity == expected
