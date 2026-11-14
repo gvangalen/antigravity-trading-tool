@@ -686,7 +686,7 @@ def requested_catalog_trading_pair(value: object) -> tuple[str, str] | None:
     pairs = {(match.group(1).upper(), match.group(2).upper()) for match in re.finditer(
         r"(?<![A-Za-z0-9])([A-Za-z0-9]{2,10})/([A-Za-z0-9]{2,10})(?![A-Za-z0-9])",
         positive_text,
-    )}
+    ) if not {match.group(1).upper(), match.group(2).upper()} <= {"UTC", "CET", "CEST"}}
     if len(pairs) != 1:
         return None
     base, quote = next(iter(pairs))
