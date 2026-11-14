@@ -144,6 +144,7 @@ class MacroSnapshotData(BaseModel):
 
 class TechnicalSnapshotItem(BaseModel):
     indicator: str
+    measurement_id: Optional[int] = None
     value: Optional[float] = None
     score: Optional[float] = None
     source_status: Optional[str] = None
@@ -157,6 +158,7 @@ class TechnicalSnapshotData(BaseModel):
     symbol: str
     market_id: Optional[int] = None
     pair: Optional[str] = None
+    read_at: Optional[datetime] = None
     items: List[TechnicalSnapshotItem] = Field(default_factory=list)
 
 

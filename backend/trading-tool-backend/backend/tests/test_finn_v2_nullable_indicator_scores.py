@@ -31,7 +31,7 @@ def test_technical_snapshot_keeps_real_zero_but_not_missing_score():
     adapter = object.__new__(TechnicalToolAdapter)
     observed = datetime.now(timezone.utc)
     adapter.service = SimpleNamespace(get_day_indicators=AsyncMock(return_value=[
-        SimpleNamespace(indicator="rsi", value=30, score=0, advies=None,
+        SimpleNamespace(id=33, indicator="rsi", value=30, score=0, advies=None,
                         uitleg=None, timestamp=observed, source_observed_at=observed),
         SimpleNamespace(indicator="adx", value=20, score=None, advies=None,
                         uitleg=None, timestamp=observed, source_observed_at=observed),
@@ -40,3 +40,5 @@ def test_technical_snapshot_keeps_real_zero_but_not_missing_score():
     result = asyncio.run(adapter.execute(user_id=7, asset="AAPL"))
 
     assert [item.score for item in result["data"].items] == [0, None]
+    assert result["data"].items[0].measurement_id == 33
+    assert result["data"].read_at is not None

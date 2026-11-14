@@ -791,7 +791,8 @@ def normalize_macro_value_with_history(conn, user_id: int, indicator: str,
             WHERE user_id = %s AND symbol = %s AND LOWER(name) = LOWER(%s)
               AND source_observed_at >= NOW() - INTERVAL '90 days'
               AND source_observed_at IS NOT NULL AND value IS NOT NULL
-            ORDER BY source_observed_at::date, source_observed_at DESC, timestamp DESC
+            ORDER BY source_observed_at::date, source_observed_at DESC,
+                     timestamp DESC, id DESC
         """, (user_id, symbol, indicator))
         dated_history = {row[0]: float(row[1]) for row in cur.fetchall()}
     if observed_at is not None:

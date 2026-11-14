@@ -13,17 +13,19 @@ class DashboardRepository:
             FROM market_data
             WHERE symbol = :symbol
               AND market_id IS NULL
-            ORDER BY symbol, timestamp DESC
+            ORDER BY symbol, source_observed_at DESC NULLS LAST, timestamp DESC, id DESC
         """)
         result = await self.session.execute(query, {"symbol": symbol})
         return [dict(row._mapping) for row in result.fetchall()]
 
     async def get_latest_technical_data(self, user_id: int, symbol: str = "BTC") -> List[dict]:
         query = text("""
-            SELECT LOWER(indicator) AS indicator, value, score, timestamp
+            SELECT DISTINCT ON (LOWER(indicator))
+                LOWER(indicator) AS indicator, value, score, timestamp
             FROM technical_indicators
-            WHERE user_id = :user_id AND symbol = :symbol
-            ORDER BY indicator, timestamp DESC
+            WHERE user_id = :user_id AND symbol = :symbol AND market_id IS NULL
+            ORDER BY LOWER(indicator), source_observed_at DESC NULLS LAST,
+                     timestamp DESC, id DESC
         """)
         result = await self.session.execute(query, {"user_id": user_id, "symbol": symbol})
         return [dict(row._mapping) for row in result.fetchall()]
@@ -34,7 +36,7 @@ class DashboardRepository:
                 name, value, trend, interpretation, action, score, timestamp
             FROM macro_data
             WHERE user_id = :user_id
-            ORDER BY name, timestamp DESC
+            ORDER BY name, source_observed_at DESC NULLS LAST, timestamp DESC, id DESC
         """)
         result = await self.session.execute(query, {"user_id": user_id})
         return [dict(row._mapping) for row in result.fetchall()]

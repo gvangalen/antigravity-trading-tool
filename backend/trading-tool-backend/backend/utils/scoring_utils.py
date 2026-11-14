@@ -233,7 +233,8 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
                 SELECT DISTINCT ON ({name_col}) {name_col}, value, source_observed_at
                 FROM {data_table}
                 WHERE user_id = %s {source_scope}
-                ORDER BY {name_col}, source_observed_at DESC NULLS LAST, timestamp DESC NULLS LAST
+                ORDER BY {name_col}, source_observed_at DESC NULLS LAST,
+                         timestamp DESC NULLS LAST, id DESC
             """, (user_id, symbol) if category == "macro" else
                   ((user_id, market_id) if market_id is not None else (user_id, symbol)))
             rows = {normalize_indicator_name(row[0]): row for row in cur.fetchall()

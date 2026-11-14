@@ -60,7 +60,8 @@ class MacroDataRepository:
             )
         )
         result = await self.session.execute(
-            stmt.order_by(MacroData.timestamp.desc()).limit(limit)
+            stmt.order_by(MacroData.source_observed_at.desc().nulls_last(),
+                          MacroData.timestamp.desc(), MacroData.id.desc()).limit(limit)
         )
         return list(result.scalars().all())
 
@@ -70,7 +71,8 @@ class MacroDataRepository:
                 MacroData.user_id == user_id,
                 MacroData.symbol == symbol,
                 func.lower(MacroData.name) == func.lower(name),
-            ).order_by(MacroData.source_observed_at.desc().nulls_last(), MacroData.timestamp.desc()).limit(1)
+            ).order_by(MacroData.source_observed_at.desc().nulls_last(),
+                       MacroData.timestamp.desc(), MacroData.id.desc()).limit(1)
         )
         return result.scalars().first()
 
@@ -81,7 +83,7 @@ class MacroDataRepository:
                 .where(MacroData.user_id == user_id, MacroData.symbol == symbol)
                 .distinct(MacroData.name)
                 .order_by(MacroData.name, MacroData.source_observed_at.desc().nulls_last(),
-                          MacroData.timestamp.desc()))
+                          MacroData.timestamp.desc(), MacroData.id.desc()))
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
@@ -116,7 +118,8 @@ class MacroDataRepository:
                     func.date(MacroData.timestamp).in_(dates)
                 )
             )
-            .order_by(desc(MacroData.timestamp))
+            .order_by(MacroData.source_observed_at.desc().nulls_last(),
+                      desc(MacroData.timestamp), MacroData.id.desc())
         )
         result = await self.session.execute(stmt)
         return result.scalars().all()

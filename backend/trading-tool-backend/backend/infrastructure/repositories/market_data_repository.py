@@ -277,7 +277,8 @@ class MarketDataRepository:
             .where(MarketDataIndicator.user_id == user_id)
             .where(MarketDataIndicator.symbol == symbol)
             .where(MarketDataIndicator.market_id.is_(None))
-            .order_by(desc(MarketDataIndicator.timestamp))
+            .order_by(MarketDataIndicator.source_observed_at.desc().nulls_last(),
+                      desc(MarketDataIndicator.timestamp), MarketDataIndicator.id.desc())
             .limit(limit)
         )
         result = await self.session.execute(stmt)
@@ -303,7 +304,8 @@ class MarketDataRepository:
             .where(MarketDataIndicator.user_id == user_id)
             .where(MarketDataIndicator.symbol == symbol)
             .where(MarketDataIndicator.market_id.is_(None))
-            .order_by(desc(MarketDataIndicator.timestamp))
+            .order_by(MarketDataIndicator.source_observed_at.desc().nulls_last(),
+                      desc(MarketDataIndicator.timestamp), MarketDataIndicator.id.desc())
         )
         result = await self.session.execute(stmt)
         rows = result.scalars().all()
@@ -355,7 +357,9 @@ class MarketDataRepository:
                     func.date(MarketDataIndicator.timestamp).in_(dates),
                 )
             )
-            .order_by(desc(MarketDataIndicator.timestamp), MarketDataIndicator.name.asc())
+            .order_by(MarketDataIndicator.source_observed_at.desc().nulls_last(),
+                      desc(MarketDataIndicator.timestamp), MarketDataIndicator.id.desc(),
+                      MarketDataIndicator.name.asc())
         )
         result = await self.session.execute(stmt)
         return result.scalars().all()

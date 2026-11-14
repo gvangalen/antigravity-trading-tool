@@ -50,10 +50,10 @@ def _fresh(conn, user_id: int, symbol: str, category: str, row: dict,
         cur.execute(
             f"SELECT DISTINCT ON ({name_column}) {name_column}, value, source_observed_at "
             f"FROM {table} WHERE user_id=%s "
-            + ("" if category == "macro" else "AND symbol=%s " + market_scope)
-            + f"ORDER BY {name_column}, source_observed_at DESC NULLS LAST, timestamp DESC NULLS LAST",
-            (user_id,) if category == "macro" else
-            (user_id, symbol, market_id) if market_id is not None else (user_id, symbol),
+            + "AND symbol=%s " + ("" if category == "macro" else market_scope)
+            + f"ORDER BY {name_column}, source_observed_at DESC NULLS LAST, timestamp DESC NULLS LAST, id DESC",
+            (user_id, symbol, market_id) if category != "macro" and market_id is not None
+            else (user_id, symbol),
         )
         rows = cur.fetchall()
     evidence = row.get("indicator_evidence") or {}
