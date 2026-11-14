@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor
 from backend.services.finn_v2_responses_answer_verifier import FinnResponsesAnswerVerifier
+from backend.services.asset_catalog_service import requested_catalog_trading_pair
 
 
 def _run(message, results, *, verified_asset=None):
@@ -88,7 +89,8 @@ def test_latest_aapl_quote_reports_friday_source_on_weekend(monkeypatch):
 
 
 def test_explicit_pair_quote_keeps_exact_market_currency():
-    message = "Wat is de nieuwste BTC/USDT-koers met bronmoment?"
+    message = ("Wat is de nieuwste BTC/USDT-koers? Noem prijs, valuta en exact "
+               "bronmoment in CET/CEST.")
     response, call = _run(message, [{"scope": "read_market_snapshot", "status": "completed", "data": {
         "symbol": "BTC", "quote_currency": "USDT", "price": 74000,
         "source_observed_at": "2026-11-14T11:19:57+00:00",
@@ -97,6 +99,19 @@ def test_explicit_pair_quote_keeps_exact_market_currency():
     assert "BTC/USDT" in response.text and "74000 USDT" in response.text
     assert "geen reguliere beurssluiting" in response.text
     assert "Amerikaanse beurssessie" not in response.text
+
+
+def test_timezone_slash_does_not_obscure_eur_pair_or_two_real_pairs():
+    question = ("Wat is de nieuwste BTC/EUR-koers? Noem prijs, valuta en exact "
+                "bronmoment in CET/CEST.")
+    assert requested_catalog_trading_pair(question) == ("BTC", "EUR")
+    assert requested_catalog_trading_pair("BTC/EUR en BTC/USDT, tijden in CET/CEST") is None
+    response, call = _run(question, [{"scope": "read_market_snapshot", "status": "completed", "data": {
+        "symbol": "BTC", "quote_currency": "EUR", "price": 60900.05,
+        "source_observed_at": "2026-11-14T11:19:57+00:00",
+    }}], verified_asset="BTC")
+    assert call.inputs == {"asset": "BTC", "quote_currency": "EUR"}
+    assert "BTC/EUR" in response.text and "60900.05 EUR" in response.text
 
 
 def test_bot_decision_with_explicit_pair_does_not_mix_pair_rows():

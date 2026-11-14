@@ -4,6 +4,38 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN expliciet handelspaar naast CET/CEST (14 november 2026)
+
+Phase: `LOCAL_CANDIDATE_PENDING_CI` op branch
+`codex/finn-timezone-pair-fix-20261114`. De vorige finale publieke SHA
+`7f3ddf1e98ad809bf69766d3b53f7f50c43fecdd` had vijf groene
+main-CI-jobs, succesvolle Auto Deploy `43593745533` en identieke publieke
+backend/frontend-SHA met HTTP 200. Onafhankelijke ingelogde QA gaf
+**NOT_ACCEPTED**. Vier feitelijke FINN-vragen waren elk 2/2 correct, maar
+een expliciete BTC/USDT-koersvraag op de BTC/EUR-pagina gaf een EUR-koers;
+omgekeerd gaf een BTC/EUR-vraag op de BTC/USDT-pagina een USDT-koers.
+Beide vragen vroegen ook om CET/CEST. De paarparser telde `CET/CEST` als
+tweede slash-paar, verloor daardoor het echte handelspaar en gebruikte
+vervolgens de workspacevaluta. Er waren geen accountmutaties of orders.
+
+De reparatie negeert bij het bepalen van één expliciet handelspaar alleen
+slash-notaties die geheel uit UTC/CET/CEST bestaan. Twee echte genoemde
+handelparen blijven ambigu. De letterlijke twee gefaalde live vragen zijn
+regressies voor de exacte quotevaluta en tijdzone. Onafhankelijke lokale
+code-QA vond geen P1/P2 in de kleine patch. Gerichte tests **9/9**,
+volledige backend **4795 passed, 7 skipped**, en
+frontend typecheck, i18n-lint en -tests, commandtests, high-audit en
+productiebuild groen. Echte-provider ontwikkeling **20/20** (artifact
+SHA-256 `0a2d47b5a9cf13ffcf623d0cf0a7e628abe65e5c8003c402b2e8ed0165a0927b`).
+De geïsoleerde API/Celery/Responses-matrix slaagde **38/38**,
+16/16 actiecontracten en 9/9 lineage (artifact SHA-256
+`caa818e72345c23af9b07a8716ee91c110feaccae51995ccccbd2402238ae13e`),
+met nul Live-bots of niet-toegestane uitvoeringen. Echte-provider regressie
+**109/109** (artifact SHA-256
+`00ff5d992c2f92fb2c2e380adf0eda8f61fc6aef6efd577bef074ba2f1ba6fec`).
+CI, Auto Deploy en
+onafhankelijke live hertest lopen nog.
+
 ## FINN feitelijke bronantwoorden en tijdzone (14 november 2026)
 
 Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Productcommit
@@ -45,9 +77,9 @@ met nul Live-bots en nul niet-toegestane uitvoeringen. PR-CI en main-CI
 waren beide groen in vijf jobs. Auto Deploy `43592666010` slaagde. Publieke
 backend-health en frontend-buildinfo gaven beide HTTP 200 en exact
 `d078cc4fbeea9c3c92b253e43bb7073104f3119b`, gelijk aan GitHub main.
-Deze statusbijwerking maakt zelf een nieuwe main-SHA en kan de laatste
-CI/deploy starten. De finale publieke SHA en onafhankelijke ingelogde QA
-blijven open; dit is nog geen live acceptatie.
+Deze statusbijwerking maakte zelf een nieuwe main-SHA; de finale publieke
+SHA was `7f3ddf1e98ad809bf69766d3b53f7f50c43fecdd`. De onafhankelijke
+ingelogde QA-uitkomst en parseroorzaak staan in de sectie hierboven.
 
 ## FINN interactieve bronlezing voor bot, rapport en koers (14 november 2026)
 
