@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from backend.services.finn_v2_factual_source_answer import is_report_technical_comparison_request
+
 
 _NEW_SETUP = re.compile(
     r"\b(?:nieuwe?|new|neu(?:e|en|er|es)?|separate|aparte|losse|"
@@ -130,6 +132,10 @@ def remember_unsaved_design(context: dict[str, Any]) -> bool:
 def requests_execution_capability_question(message: str, context: dict[str, Any] | None = None) -> bool:
     """Route explicit feasibility questions through the executable contracts."""
     text = str(message or "")
+    if is_report_technical_comparison_request(text):
+        # "Wat kan Analyse lezen?" asks for owner-scoped measurements, not
+        # whether a plan rule is executable. Let the factual read run first.
+        return False
     # A guided plan answer can contain words such as "uitvoering" and an
     # active design focus. Those words do not turn supplied fields into a
     # capability question, even when the answer spans several sentences.

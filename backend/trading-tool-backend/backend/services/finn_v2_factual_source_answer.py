@@ -148,6 +148,16 @@ def mentions_technical_indicator(message: str) -> bool:
     return bool(_requested_technical_names(message, names))
 
 
+def is_report_technical_comparison_request(message: str) -> bool:
+    """A measured-report read, even when the user says what Analyse can read."""
+    return bool(
+        re.search(r"\b(?:dagrapport|ochtendrapport|rapport|report)\b", message, re.I)
+        and re.search(r"\b(?:analyse|nu|actuel\w*|huidig\w*|nieuwste|laatste|naast|vergelijk\w*)\b", message, re.I)
+        and re.search(r"\b(?:naast|vergelijk\w*|verhoud\w*|verschil\w*|beide|revisi\w*|moment\w*|waarden?)\b", message, re.I)
+        and mentions_technical_indicator(message)
+    )
+
+
 def render_report_and_technical_read(
     result: dict[str, Any], *, symbol: str, message: str, pair: str | None = None,
 ) -> str:

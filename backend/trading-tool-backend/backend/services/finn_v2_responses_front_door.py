@@ -51,7 +51,7 @@ from backend.services.watchlist_conversation_service import ambiguous_asset_chan
 from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
 from backend.services.finn_v2_account_bundle_answer import render_account_bundle_answer
 from backend.services.finn_v2_factual_source_answer import (
-    mentions_technical_indicator, render_bot_decision, render_latest_quote,
+    is_report_technical_comparison_request, render_bot_decision, render_latest_quote,
     render_portfolio_read_time, render_report_and_quote_times,
     render_report_and_technical_read,
 )
@@ -1427,11 +1427,7 @@ class FinnResponsesFrontDoor:
             pair = requested_catalog_trading_pair(message)
             pair_mentions = re.findall(r"\b[A-Z][A-Z0-9]*/(?:EUR|USDT)\b", message, re.I)
             symbols = mentioned_catalog_symbols(message)
-            report_technical_comparison = bool(
-                re.search(r"\b(?:dagrapport|ochtendrapport|rapport|report)\b", message, re.I)
-                and re.search(r"\b(?:analyse|nu|actuel\w*|huidig\w*|nieuwste|laatste|naast|vergelijk\w*)\b", message, re.I)
-                and mentions_technical_indicator(message)
-            )
+            report_technical_comparison = is_report_technical_comparison_request(message)
             fact_kind = None
             if pair and re.search(r"\b(?:dagrapport|ochtendrapport)\b", message, re.I) \
                     and re.search(r"\b(?:nieuwste|huidige|actuele)\b", message, re.I) \
