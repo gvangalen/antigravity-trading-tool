@@ -19,7 +19,7 @@ import {
 } from "@/lib/workspace/pendingEvidence.mjs";
 import { matchesWorkspaceAsset } from "@/lib/workspace/workspaceAssetScope.mjs";
 import { exactMarketScoreNeedsRefresh } from "@/lib/workspace/pendingExactMarketScore.mjs";
-import { mergeQuoteBackfill } from "@/lib/workspace/quoteBackfill.mjs";
+import { mergeQuoteBackfill, symbolsNeedingQuoteBackfill } from "@/lib/workspace/quoteBackfill.mjs";
 
 const WORKSPACE_REQUEST_TIMEOUT_MS = 15000;
 const WORKSPACE_CACHE_TTL_MS = 300_000;
@@ -416,31 +416,15 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols, quoteCu
   }, [assetSymbol, cachedWatchlist.length, normalizedWatchlistSymbols, periods, selectedQuote, symbol, workspaceKey, snapshotScope]);
 
   useEffect(() => {
-    if (selectedQuote) return;
-    const baseWorkspace = matchesWorkspaceAsset(latestWorkspaceRef.current, assetSymbol, periods)
+    const baseWorkspace = matchesWorkspaceAsset(latestWorkspaceRef.current, assetSymbol, periods, selectedQuote)
       ? latestWorkspaceRef.current : null;
     const baseWatchlist = Array.isArray(latestWatchlistRef.current) ? latestWatchlistRef.current : [];
-    const symbolsNeedingQuotes = new Set();
-
-    if (baseWorkspace && (baseWorkspace?.quote?.price === null || baseWorkspace?.quote?.price === undefined)) {
-      symbolsNeedingQuotes.add(assetSymbol);
-    }
-
-    baseWatchlist.forEach((row) => {
-      if (row?.price === null || row?.price === undefined) {
-        const rowSymbol = String(row?.symbol || "").toUpperCase();
-        if (rowSymbol) {
-          symbolsNeedingQuotes.add(rowSymbol);
-        }
-      }
-    });
-
-    if (!symbolsNeedingQuotes.size) {
+    const sortedSymbols = symbolsNeedingQuoteBackfill(baseWorkspace, baseWatchlist, assetSymbol, selectedQuote);
+    if (!sortedSymbols.length) {
       quoteBackfillRequestKeyRef.current = "";
       return;
     }
 
-    const sortedSymbols = Array.from(symbolsNeedingQuotes).sort();
     const requestKey = `${workspaceKey}:quote-backfill:${sortedSymbols.join(",")}`;
     if (quoteBackfillRequestKeyRef.current === requestKey) return;
     quoteBackfillRequestKeyRef.current = requestKey;
@@ -466,13 +450,13 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols, quoteCu
       if (!quoteMap.size) return;
 
       setWorkspace((currentWorkspace) => {
-        if (!matchesWorkspaceAsset(currentWorkspace || latestWorkspaceRef.current, assetSymbol, periods)) {
+        if (!matchesWorkspaceAsset(currentWorkspace || latestWorkspaceRef.current, assetSymbol, periods, selectedQuote)) {
           return currentWorkspace;
         }
         const mergedWorkspace = mergeQuoteBackfill(
           currentWorkspace || latestWorkspaceRef.current,
           quoteMap,
-          assetSymbol,
+          selectedQuote ? null : assetSymbol,
         );
         if (!mergedWorkspace) return currentWorkspace;
 
@@ -489,6 +473,11 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols, quoteCu
 
     return () => {
       cancelled = true;
+      // A new watchlist response can cancel this request before it completes.
+      // Let the next render retry for the updated membership.
+      if (quoteBackfillRequestKeyRef.current === requestKey) {
+        quoteBackfillRequestKeyRef.current = "";
+      }
     };
   }, [assetSymbol, periods, selectedQuote, workspaceKey, watchlist, snapshotScope]);
 

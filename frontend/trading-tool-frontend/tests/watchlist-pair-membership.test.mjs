@@ -8,7 +8,7 @@ import {
   watchlistRowKey,
 } from "../lib/workspace/watchlistMembership.mjs";
 import { getCachedResourceSnapshot, setCachedResourceData } from "../lib/clientDataCache.js";
-import { mergeQuoteBackfill } from "../lib/workspace/quoteBackfill.mjs";
+import { mergeQuoteBackfill, symbolsNeedingQuoteBackfill } from "../lib/workspace/quoteBackfill.mjs";
 
 const eur = { symbol: "BTC", market_id: 41, quote_currency: "EUR" };
 const usdt = { symbol: "BTC", market_id: 42, quote_currency: "USDT" };
@@ -95,4 +95,20 @@ test("ETF watchlist backfills a missing price despite a known catalog currency",
   assert.equal(result.watchlist.rows[1].price, 68000);
   assert.equal(result.watchlist.rows[2].price, null);
   assert.equal(workspace.watchlist.rows[0].price, null);
+});
+
+test("an active exact pair can backfill a new ETF row without replacing its pair price", () => {
+  const workspace = {
+    symbol: "BTC", quote_currency: "USDT", market_id: 42,
+    quote: { price: 75000 },
+    watchlist: { rows: [{ symbol: "SPY", quote_currency: "USD", price: null }, { ...usdt, price: null }] },
+  };
+  assert.deepEqual(symbolsNeedingQuoteBackfill(workspace, workspace.watchlist.rows, "BTC", "USDT"), ["SPY"]);
+  const result = mergeQuoteBackfill(workspace, new Map([
+    ["SPY", { price: 754.25, change_24h: 0.05 }],
+    ["BTC", { price: 68000, change_24h: -1 }],
+  ]), null);
+  assert.equal(result.quote.price, 75000);
+  assert.equal(result.watchlist.rows[0].price, 754.25);
+  assert.equal(result.watchlist.rows[1].price, null);
 });

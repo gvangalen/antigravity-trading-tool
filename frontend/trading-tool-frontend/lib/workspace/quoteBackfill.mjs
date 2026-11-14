@@ -1,3 +1,16 @@
+export function symbolsNeedingQuoteBackfill(workspace, watchlistRows, assetSymbol, selectedQuote) {
+  const symbols = new Set();
+  if (!selectedQuote && workspace && (workspace.quote?.price === null || workspace.quote?.price === undefined)) {
+    symbols.add(assetSymbol);
+  }
+  for (const row of watchlistRows || []) {
+    if (row?.market_id || (row?.price !== null && row?.price !== undefined)) continue;
+    const symbol = String(row?.symbol || "").toUpperCase();
+    if (symbol) symbols.add(symbol);
+  }
+  return [...symbols].sort();
+}
+
 export function mergeQuoteBackfill(workspace, quoteMap, assetSymbol) {
   if (!workspace || !quoteMap || quoteMap.size === 0) return workspace;
 
