@@ -4,6 +4,44 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN feitelijke bronantwoorden en tijdzone (14 november 2026)
+
+Phase: `LOCAL_CANDIDATE_PENDING_CI` op branch
+`codex/finn-factual-source-live-qa-20261114`. De vorige publieke SHA
+`efd3612dd7f42c76c5a7a4d2b7c3c117a2ae8974` kreeg van onafhankelijke
+ingelogde QA **NOT_ACCEPTED**. FINN kon het zichtbare opgeslagen BTC
+Paper-botbesluit 2/2 niet noemen, gaf de BTC/EUR-rapport- en huidige
+koersbronnen 1/2 niet volledig weer, miste de zichtbare AAPL-koersbron 2/2,
+en kon het Paper-portefeuilleuitleesmoment 2/2 niet verifiëren. De exacte
+toolstap was in de browser niet zichtbaar. Dit is geen acceptatie voor breed
+Live-gebruik.
+
+De nieuwe kandidaat bindt uitsluitend vier nauw omschreven feitelijke
+vragen direct aan eigenaargebonden FINN-reads: opgeslagen botbesluit,
+historisch rapport plus actuele koersbron, laatst beschikbare koers, en
+Paper-portefeuilleuitleestijd. De tekst komt uit de getypeerde gelezen
+velden en wordt door de antwoordverifier opnieuw uit dezelfde tooltrace
+opgebouwd. Expliciete BTC/EUR- en BTC/USDT-vragen gaan via hun eigen actieve
+market-ID; botbesluiten worden op paar en Paper/Live gefilterd. Tijden
+gebruiken Europe/Amsterdam en tonen CET/CEST. Voor aandelen buiten
+reguliere New York-uren wordt de sluiting benoemd; crypto krijgt geen
+beurssluitingslabel. Een bronfout toont een gewone Nederlandse reden zonder
+interne foutcode. Er zijn geen auth-, order- of Live-uitvoeringswijzigingen.
+Onafhankelijke lokale code-QA vond na correctie van twee paargevallen en
+een crypto-sessietekst geen resterende P1/P2 binnen deze scope.
+
+Gemeten: gerichte bron- en regressietests **8/8**; volledige backend op de
+definitieve code **4794 passed, 7 skipped**. Frontend typecheck, i18n-lint en -tests, commandtests, high-audit en
+productiebuild groen. Echte-provider ontwikkeling **20/20** (artifact
+SHA-256 `adeaea4edf7360cc213e84706a87fb68449cbcdf79f9a06182690ca9777f2463`)
+en regressie **109/109** (SHA-256
+`a8a3fbddd5eae9a9bfb4dbbfa4d65db3b75f4e6fe12f29481728c4f0c0a7e9fd`).
+De geïsoleerde API/Celery/Responses-actiematrix slaagde **38/38**,
+16/16 actiecontracten en 9/9 lineage (artifact SHA-256
+`bd62b39c21db8a471c91acb9f3752766055ce85c1c99ae7841e085e9612fd1de`),
+met nul Live-bots en nul niet-toegestane uitvoeringen. CI, Auto Deploy, publieke SHA-pariteit en
+onafhankelijke ingelogde live QA zijn nog open.
+
 ## FINN interactieve bronlezing voor bot, rapport en koers (14 november 2026)
 
 Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Productcommit

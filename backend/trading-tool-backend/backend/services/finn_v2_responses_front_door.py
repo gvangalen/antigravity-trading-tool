@@ -50,6 +50,10 @@ from backend.services.finn_manual_trade_suggestion_service import ManualTradeSet
 from backend.services.watchlist_conversation_service import ambiguous_asset_change_scope, asks_for_watchlist_inventory, replacement_mentions
 from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
 from backend.services.finn_v2_account_bundle_answer import render_account_bundle_answer
+from backend.services.finn_v2_factual_source_answer import (
+    render_bot_decision, render_latest_quote, render_portfolio_read_time,
+    render_report_and_quote_times,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1409,6 +1413,89 @@ class FinnResponsesFrontDoor:
             and os.getenv("FINN_PER_OPERATION_TOOLS_EXPERIMENT") == "1"
         )
         catalog = FinnResponsesToolCatalog(individual_proposals=individual_proposals)
+        # Narrow factual source questions have a server-owned answer. The
+        # source read and its dated facts must not depend on a model deciding
+        # to call a tool or transcribing UTC/CET correctly in a later round.
+        if str(locale).lower().startswith("nl") and not resuming_clarification \
+                and not conversation_context.get("active_guided_operation") \
+                and not re.search(r"\b(?:wijzig|verwijder|maak|plaats|koop|verkoop|activeer)\b", message, re.I):
+            pair = requested_catalog_trading_pair(message)
+            pair_mentions = re.findall(r"\b[A-Z][A-Z0-9]*/(?:EUR|USDT)\b", message, re.I)
+            symbols = mentioned_catalog_symbols(message)
+            fact_kind = None
+            if pair and re.search(r"\b(?:dagrapport|ochtendrapport)\b", message, re.I) \
+                    and re.search(r"\b(?:nieuwste|huidige|actuele)\b", message, re.I) \
+                    and re.search(r"\b(?:koersbron|bronmoment|koers)\b", message, re.I):
+                fact_kind = "report_quote_times"
+                symbol = pair[0]
+            elif len(symbols) == 1 and self._asks_about_bot_decision(message) \
+                    and re.search(r"\b(?:laatste|nieuwste)\b", message, re.I) \
+                    and re.search(r"\bopgeslagen\b", message, re.I) \
+                    and not re.search(r"\b(?:dagrapport|rapport|positie|portefeuille|kas)\b", message, re.I):
+                fact_kind = "bot_decision"
+                symbol = next(iter(symbols))
+            elif re.search(r"\bPaper[- ]?portefeuille\b", message, re.I) \
+                    and re.search(r"\b(?:uitgelezen|uitleesmoment|opgehaald)\b", message, re.I) \
+                    and not symbols:
+                fact_kind = "portfolio_read_time"
+            elif len(symbols) == 1 and len({item.upper() for item in pair_mentions}) <= 1 \
+                    and _named_asset_quote_question(message) \
+                    and re.search(r"\b(?:nieuwste|laatste|huidige|actuele)\b", message, re.I) \
+                    and not re.search(r"\b(?:setup|plan|bot|rapport|score|indicator|portefeuille)\b", message, re.I):
+                fact_kind = "latest_quote"
+                symbol = next(iter(symbols))
+            if fact_kind:
+                if fact_kind == "report_quote_times":
+                    call = replace(catalog.validate("get_decision_history", {"asset": symbol}),
+                                   read_tools=("read_latest_report", "read_market_snapshot"))
+                    call = self._bind_explicit_report_evidence(
+                        call, message=message, read_only=True,
+                        previous_response=previous_response, owner_user_id=self.user_id,
+                    )
+                    call = replace(call, inputs={**call.inputs, "quote_currency": pair[1]})
+                elif fact_kind == "bot_decision":
+                    call = replace(catalog.validate("get_decision_history", {"asset": symbol}),
+                                   read_tools=("read_review_history",),
+                                   inputs={"asset": symbol, "_latest_bot_decisions_only": True})
+                elif fact_kind == "portfolio_read_time":
+                    call = replace(catalog.validate("get_portfolio_and_exposure", {}),
+                                   read_tools=("read_portfolio",), inputs={"environment": "paper"})
+                else:
+                    call = replace(catalog.validate("get_market_snapshot", {"asset": symbol}),
+                                   read_tools=("read_market_snapshot",),
+                                   inputs={"asset": symbol, **({"quote_currency": pair[1]} if pair and pair[0] == symbol else {})})
+                try:
+                    read_result = await self.reads(call)
+                except Exception:
+                    logger.exception("FINN factual source read failed kind=%s", fact_kind)
+                    read_result = {"status": "unavailable", "results": []}
+                if fact_kind == "report_quote_times":
+                    fact_text = render_report_and_quote_times(
+                        read_result, symbol=symbol, quote_currency=pair[1],
+                    )
+                elif fact_kind == "bot_decision":
+                    mode = False if re.search(r"\bPaper\b", message, re.I) else (
+                        True if re.search(r"\bLive\b", message, re.I) else None)
+                    fact_text = render_bot_decision(
+                        read_result, symbol=symbol, paper=mode,
+                        pair=f"{pair[0]}/{pair[1]}" if pair and pair[0] == symbol else None,
+                    )
+                elif fact_kind == "portfolio_read_time":
+                    fact_text = render_portfolio_read_time(read_result)
+                else:
+                    fact_text = render_latest_quote(
+                        read_result, symbol=symbol,
+                        quote_currency=pair[1] if pair and pair[0] == symbol else None,
+                    )
+                return FinnResponsesFrontDoorResult(
+                    FinnResponsesResult(
+                        text=fact_text, response_id=f"factual-source-{self.run_id}",
+                        tool_trace=({"name": call.name, "status": read_result.get("status", "unavailable"),
+                                     "arguments": call.inputs, "result": read_result},),
+                        answer_kind="factual_source", model_led_coach=True,
+                        response_id_reusable=False,
+                    ), None, previous_response, locale=locale,
+                )
         if asks_for_watchlist_inventory(message):
             # A list of saved entries belongs to the owner-scoped watchlist
             # read. It must not depend on a selected workspace asset or on
