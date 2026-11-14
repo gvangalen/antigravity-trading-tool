@@ -481,6 +481,7 @@ class FinnResponsesLoop:
         repair_exhausted = False
         incomplete_output_retry_used = False
         transient_provider_retry_used = False
+        context_overflow_retries = 0
         output_token_override: int | None = None
         # Reserve a final answer-only round after read tools. A read-only coach
         # turn must also be able to explain a failed or incomplete read instead
@@ -1045,6 +1046,45 @@ class FinnResponsesLoop:
                     provider_code = provider_code or (provider_body.get("error") or {}).get("code")
                 if provider_code in {"credit_balance_exhausted", "insufficient_quota"}:
                     raise FinnResponsesError("responses_provider_quota_unavailable") from exc
+                if (provider_code == "context_length_exceeded" and model_led_coach
+                        and not proposal_selected and context_overflow_retries < 2):
+                    # Stored Responses cursors can carry preceding model turns. A long
+                    # conversation can overflow even when the latest question is short.
+                    # Start a fresh provider chain, keeping the verified prior turn in
+                    # explicit input. If that still does not fit, retain its bounded
+                    # answer and evidence statuses; current facts must be read again.
+                    if prior_id:
+                        context_overflow_retries += 1
+                        prior_id = None
+                        current_input = initial_input + tool_exchange
+                        logger.warning("FINN Responses context overflow; retrying without prior cursor")
+                        continue
+                    if verified_turn_context:
+                        compact_context = {
+                            "answer": str(verified_turn_context.get("answer") or "")[:1600],
+                            "user_message": str(verified_turn_context.get("user_message") or "")[:700],
+                            "terminal_status": verified_turn_context.get("terminal_status"),
+                            "evidence": [
+                                {key: item.get(key) for key in ("scope", "status", "reason", "asset") if key in item}
+                                for item in (verified_turn_context.get("evidence") or [])[:16]
+                                if isinstance(item, dict)
+                            ],
+                        }
+                        compact_input = [
+                            {"role": "assistant", "content": json.dumps(compact_context, ensure_ascii=False)},
+                            {"role": "user", "content": message},
+                            *(item for item in initial_input if item["role"] == "developer"),
+                            *tool_exchange,
+                        ]
+                    else:
+                        compact_input = None
+                    if compact_input and current_input != compact_input:
+                        context_overflow_retries += 1
+                        current_input = compact_input
+                        logger.warning("FINN Responses context overflow; retrying with bounded verified context")
+                        continue
+                if provider_code == "context_length_exceeded":
+                    raise FinnResponsesError("responses_context_length_exceeded") from exc
                 transient = (
                     provider_status in {429, 500, 502, 503, 504, 520, 521, 522, 524}
                     or type(exc).__name__ in {

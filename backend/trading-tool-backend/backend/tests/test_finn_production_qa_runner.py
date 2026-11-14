@@ -834,6 +834,10 @@ def test_closed_paper_review_chat_terminal_diagnostic_is_bounded():
     assert module.safe_closed_paper_chat_diagnostic(
         ClosedPaperChatTurnFailure("first_turn", envelope)
     )["typed_error_code"] == "responses_provider_timeout"
+    envelope.error_code = "responses_context_length_exceeded"
+    assert module.safe_closed_paper_chat_diagnostic(
+        ClosedPaperChatTurnFailure("first_turn", envelope)
+    )["typed_error_code"] == "responses_context_length_exceeded"
     envelope.error_code = "responses_limited_evaluation_incomplete:private-field"
     assert module.safe_closed_paper_chat_diagnostic(
         ClosedPaperChatTurnFailure("first_turn", envelope)
