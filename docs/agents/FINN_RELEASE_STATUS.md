@@ -4,6 +4,49 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN indicatorrevisies en rapportmomenten (14 november 2026)
+
+Phase: `LOCAL_CANDIDATE_PENDING_CI` op branch
+`codex/indicator-measurement-consistency-20261114`. Deze door de gebruiker
+gevraagde reparatie volgt op de vorige gedeployde kandidaat; daarvoor is nog
+geen onafhankelijke live acceptatie vastgelegd. Er liep geen officiële QA-run
+toen deze kandidaat werd voorbereid.
+
+Read-only productiediagnose op de Paper Test-account liet voor AAPL MA50
+dezelfde broncandle van 13 november 00:00 UTC met verschillende opgeslagen
+metingen zien: het om 05:21 CET gemaakte dagrapport bewaart 1,0575293101,
+terwijl de latere dagread 1,0501669741 gaf. De weekread bevatte daarnaast
+1,0508310900 voor diezelfde broncandle. Alleen de broncandle-tijd bepaalde
+dus niet eenduidig welke revisie de huidige meting was. De ruwe provider-
+candles zijn niet opgeslagen, zodat deze diagnose niet bewijst welke waarde
+wiskundig juist is.
+
+De huidige reads kiezen nu voor elk technisch, markt- en macro-indicator eerst
+het nieuwste bronmoment en bij gelijke bron- en opslagtijd het hoogste
+record-ID. Periodegemiddelden tellen herziene metingen van dezelfde broncandle
+eenmaal. De FINN-techniektool geeft het meet-ID en het uitleesmoment terug;
+de antwoordinstructie onderscheidt een bevroren rapport van een latere read
+zonder een nieuwe candle of foutieve waarde te verzinnen. De selectie is
+indicator- en assetonafhankelijk. Er zijn geen order-, bot- of Live-acties
+gewijzigd.
+
+Gerichte backendregressies en volledige backend suite: **4798 passed,
+7 skipped**. Frontend typecheck, i18n-lint, **43/43** i18n-tests,
+**71/71** commandtests, productiebuild en high-audit (**0** meldingen)
+groen. De geïsoleerde API/Celery/Responses-matrix: **17/17** contracten,
+adaptertests **26/26**, nul Live-bots, Live-calls, brokerorders of
+productieverbindingen (artifact SHA-256
+`b1d32d2cd9cc3bd48373d4f2d1ec9044210677fab6269ab6e8a8a628e7c314b6`).
+Echte-provider ontwikkeling **20/20** (artifact SHA-256
+`d9bccca4434f15870b7b138439cf63a63d69da52e50ed38cf541fcc8d34ae4bb`)
+en regressie **109/109** (artifact SHA-256
+`3425f820ba93f38ac51cb1f0d7052f14d4335c409366a3ec49e9b640d9ec2d16`).
+Een aanvullende lokale indicatorvraag door API en worker gebruikte de
+techniektool en stelde bij ontbrekend asset terecht een vervolgvraag
+(artifact SHA-256
+`42e1303472d79d78d07fc56ffa6685f2082b60a870ee6087620689262cd18ef9`).
+CI, deployment-SHA en onafhankelijke ingelogde live QA zijn nog open.
+
 ## FINN expliciet handelspaar naast CET/CEST (14 november 2026)
 
 Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Productcommit

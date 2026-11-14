@@ -90,7 +90,8 @@ def normalize_market_value_with_history(conn, symbol: str, indicator: str,
             FROM market_data
             WHERE {market_filter} AND source_observed_at >= NOW() - INTERVAL '30 days'
               AND source_observed_at IS NOT NULL AND {column} IS NOT NULL
-            ORDER BY source_observed_at::date, source_observed_at DESC
+            ORDER BY source_observed_at::date, source_observed_at DESC,
+                     timestamp DESC, id DESC
         """, (market_id if market_id is not None else symbol,))
         history = [float(row[0]) for row in cur.fetchall()]
     if len(history) < 5:

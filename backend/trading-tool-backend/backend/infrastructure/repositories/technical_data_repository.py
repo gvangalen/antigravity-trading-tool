@@ -765,7 +765,8 @@ class TechnicalDataRepository:
             stmt = stmt.where(TechnicalDataIndicator.symbol == symbol)
         
         result = await self.session.execute(
-            stmt.order_by(TechnicalDataIndicator.timestamp.desc())
+            stmt.order_by(TechnicalDataIndicator.source_observed_at.desc().nulls_last(),
+                          TechnicalDataIndicator.timestamp.desc(), TechnicalDataIndicator.id.desc())
             .limit(limit)
         )
         return list(result.scalars().all())
@@ -852,7 +853,9 @@ class TechnicalDataRepository:
                 TechnicalDataIndicator.symbol == symbol,
                 TechnicalDataIndicator.market_id.is_(None),
             ))
-            .order_by(TechnicalDataIndicator.indicator, TechnicalDataIndicator.timestamp.desc())
+            .order_by(TechnicalDataIndicator.indicator,
+                      TechnicalDataIndicator.source_observed_at.desc().nulls_last(),
+                      TechnicalDataIndicator.timestamp.desc(), TechnicalDataIndicator.id.desc())
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
@@ -894,7 +897,8 @@ class TechnicalDataRepository:
                     func.cast(func.date_trunc('week', TechnicalDataIndicator.timestamp), Date).in_(weeks)
                 )
             )
-            .order_by(TechnicalDataIndicator.timestamp.desc())
+            .order_by(TechnicalDataIndicator.source_observed_at.desc().nulls_last(),
+                      TechnicalDataIndicator.timestamp.desc(), TechnicalDataIndicator.id.desc())
         )
         return list(result.scalars().all())
 
@@ -979,7 +983,8 @@ class TechnicalDataRepository:
                     TechnicalDataIndicator.market_id.is_(None),
                 )
             )
-            .order_by(TechnicalDataIndicator.timestamp.desc())
+            .order_by(TechnicalDataIndicator.source_observed_at.desc().nulls_last(),
+                      TechnicalDataIndicator.timestamp.desc(), TechnicalDataIndicator.id.desc())
             .limit(limit)
         )
         # We halen de nieuwste eerst op, en draaien ze om in de lijst voor chronologische volgorde (L -> R)

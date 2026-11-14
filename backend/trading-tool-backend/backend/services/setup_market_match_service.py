@@ -125,7 +125,8 @@ class SetupMarketMatchService:
             SELECT DISTINCT ON ({name_column}) {name_column}, value, source_observed_at
             FROM {table}
             WHERE user_id = :user_id {asset_clause}
-            ORDER BY {name_column}, source_observed_at DESC NULLS LAST, timestamp DESC NULLS LAST
+            ORDER BY {name_column}, source_observed_at DESC NULLS LAST,
+                     timestamp DESC NULLS LAST, id DESC
         """), parameters)
         observations = result.fetchall()
         configured_names = {normalize_indicator_name(str(item[0])) for item in configured}

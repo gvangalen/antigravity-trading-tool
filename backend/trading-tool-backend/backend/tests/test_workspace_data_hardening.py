@@ -14,6 +14,7 @@ from backend.services.technical_data_service import TechnicalDataService
 from backend.services.workspace_data_service import (
     WorkspaceDataService,
     _aggregate_by_name,
+    _latest_by_name,
     _current_indicator_rows,
     _enrich_indicator_rows,
     _macro_row,
@@ -21,6 +22,41 @@ from backend.services.workspace_data_service import (
     _score_summary,
     _technical_row,
 )
+
+
+def test_latest_indicator_revision_uses_source_moment_then_record_id_for_every_category():
+    earlier = datetime(2026, 11, 12, tzinfo=timezone.utc)
+    candle = datetime(2026, 11, 13, tzinfo=timezone.utc)
+    for name_attr in ("indicator", "name"):
+        rows = [
+            SimpleNamespace(**{name_attr: "sample"}, id=12, timestamp=candle,
+                            source_observed_at=candle, value=1.058),
+            SimpleNamespace(**{name_attr: "sample"}, id=14, timestamp=earlier,
+                            source_observed_at=earlier, value=2.0),
+            SimpleNamespace(**{name_attr: "sample"}, id=13, timestamp=candle,
+                            source_observed_at=candle, value=1.0502),
+        ]
+        assert _latest_by_name(rows, name_attr)[0].value == 1.0502
+
+
+def test_period_aggregate_counts_one_revision_per_source_candle():
+    first = datetime(2026, 11, 12, tzinfo=timezone.utc)
+    second = datetime(2026, 11, 13, tzinfo=timezone.utc)
+    rows = [
+        SimpleNamespace(indicator="sample", id=1, timestamp=first,
+                        source_observed_at=first, value=0.9, score=30,
+                        advies="", uitleg=""),
+        SimpleNamespace(indicator="sample", id=2, timestamp=second,
+                        source_observed_at=second, value=1.058, score=65,
+                        advies="", uitleg=""),
+        SimpleNamespace(indicator="sample", id=3, timestamp=second,
+                        source_observed_at=second, value=1.0502, score=65,
+                        advies="", uitleg=""),
+    ]
+    result = _aggregate_by_name(rows, "indicator", _technical_row)[0]
+    assert result["sample_size"] == 2
+    assert result["value"] == 0.9751
+    assert result["source_observed_at"] == second.isoformat()
 
 
 def test_day_indicator_uses_verified_weighted_score_instead_of_legacy_row_score():

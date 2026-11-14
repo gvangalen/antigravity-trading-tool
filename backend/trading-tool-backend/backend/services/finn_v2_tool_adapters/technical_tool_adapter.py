@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from backend.schemas.finn_v2_evidence_schema import TechnicalSnapshotData, TechnicalSnapshotItem
 from backend.services.finn_v2_tool_adapters.display_source_moment import display_source_moment
 from backend.services.technical_data_service import TechnicalDataService
@@ -22,7 +24,7 @@ class TechnicalToolAdapter:
                 TechnicalDataIndicator.user_id == user_id,
                 TechnicalDataIndicator.symbol == asset,
                 TechnicalDataIndicator.market_id == market_id,
-            ).order_by(TechnicalDataIndicator.source_observed_at.desc(),
+            ).order_by(TechnicalDataIndicator.source_observed_at.desc().nulls_last(),
                        TechnicalDataIndicator.id.desc()))
             seen = set()
             rows = []
@@ -36,6 +38,7 @@ class TechnicalToolAdapter:
         payload = [
             TechnicalSnapshotItem(
                 indicator=row.indicator,
+                measurement_id=getattr(row, "id", None),
                 value=float(row.value) if row.value is not None else None,
                 score=(float(row.score) if row.score is not None and
                        score_source_is_fresh("technical", row.indicator, getattr(row, "source_observed_at", None), symbol=asset)
@@ -65,6 +68,7 @@ class TechnicalToolAdapter:
             "data": TechnicalSnapshotData(
                 symbol=asset, market_id=market_id,
                 pair=f"{asset}/{quote_currency}" if market_id is not None else None,
+                read_at=datetime.now(timezone.utc),
                 items=payload),
             "summary": {"title": "technical_snapshot", "symbol": asset, "count": len(payload)},
             "as_of": display_source_moment(latest),

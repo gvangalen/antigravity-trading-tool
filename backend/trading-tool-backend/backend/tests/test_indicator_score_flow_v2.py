@@ -100,6 +100,8 @@ def test_macro_score_reads_only_the_selected_assets_observations(monkeypatch):
     assert len(source_reads) == 1
     sql, params = source_reads[0]
     assert "WHERE user_id = %s AND symbol = %s" in sql
+    assert "source_observed_at DESC NULLS LAST" in sql
+    assert "timestamp DESC NULLS LAST, id DESC" in sql
     assert params == (7, "AAPL")
 
 

@@ -132,6 +132,13 @@ def _keep_watchlist_row(
             and (row["symbol"], row.get("quote_currency")) not in pair_quotes)
 
 
+def _measurement_order(row: Any) -> tuple[datetime, datetime, int]:
+    """Prefer the newest source candle, then the latest stored revision."""
+    stored_at = _as_utc(getattr(row, "timestamp", None)) or datetime.min.replace(tzinfo=timezone.utc)
+    source_at = _as_utc(getattr(row, "source_observed_at", None)) or stored_at
+    return source_at, stored_at, int(getattr(row, "id", None) or 0)
+
+
 def _latest_by_name(rows: Iterable[Any], name_attr: str) -> list[Any]:
     latest: dict[str, Any] = {}
     for row in rows:
@@ -139,13 +146,7 @@ def _latest_by_name(rows: Iterable[Any], name_attr: str) -> list[Any]:
         if not name:
             continue
         current = latest.get(name)
-        row_ts = getattr(row, "timestamp", None) or datetime.min
-        current_ts = (
-            getattr(current, "timestamp", None) or datetime.min
-            if current is not None
-            else datetime.min
-        )
-        if current is None or row_ts > current_ts:
+        if current is None or _measurement_order(row) > _measurement_order(current):
             latest[name] = row
     return sorted(latest.values(), key=lambda item: str(getattr(item, name_attr, "")).lower())
 
@@ -391,8 +392,17 @@ def _aggregate_by_name(
 
     aggregated = []
     for name in sorted(grouped, key=str.lower):
-        samples = grouped[name]
-        latest = max(samples, key=lambda item: getattr(item, "timestamp", None) or datetime.min)
+        # Refreshes can revise a value without changing its source candle.
+        # Count that candle once, using its newest stored revision.
+        by_source: dict[tuple[str, Any], Any] = {}
+        for index, row in enumerate(grouped[name]):
+            observed = _as_utc(getattr(row, "source_observed_at", None)) or _as_utc(getattr(row, "timestamp", None))
+            key = ("source", observed) if observed is not None else ("unknown", getattr(row, "id", None) or index)
+            current = by_source.get(key)
+            if current is None or _measurement_order(row) > _measurement_order(current):
+                by_source[key] = row
+        samples = list(by_source.values())
+        latest = max(samples, key=_measurement_order)
         payload = serializer(latest)
         values = [_number(getattr(item, "value", None)) for item in samples]
         scores = [_number(getattr(item, "score", None)) for item in samples]

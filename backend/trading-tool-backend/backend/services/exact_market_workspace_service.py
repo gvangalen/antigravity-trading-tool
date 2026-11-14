@@ -76,11 +76,11 @@ class ExactMarketWorkspaceService:
         market_result = await self.session.execute(select(MarketDataIndicator).where(
             MarketDataIndicator.user_id == user_id,
             MarketDataIndicator.market_id == market.id,
-        ).order_by(MarketDataIndicator.source_observed_at.desc(), MarketDataIndicator.id.desc()))
+        ).order_by(MarketDataIndicator.source_observed_at.desc().nulls_last(), MarketDataIndicator.id.desc()))
         technical_result = await self.session.execute(select(TechnicalDataIndicator).where(
             TechnicalDataIndicator.user_id == user_id,
             TechnicalDataIndicator.market_id == market.id,
-        ).order_by(TechnicalDataIndicator.source_observed_at.desc(), TechnicalDataIndicator.id.desc()))
+        ).order_by(TechnicalDataIndicator.source_observed_at.desc().nulls_last(), TechnicalDataIndicator.id.desc()))
         market_rows = self._latest_rows(market_result.scalars().all(), "name", _market_row)
         technical_rows = self._latest_rows(technical_result.scalars().all(), "indicator", _technical_row)
         workspace = WorkspaceDataService(self.session)
