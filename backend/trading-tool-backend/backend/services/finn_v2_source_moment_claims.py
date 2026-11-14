@@ -84,7 +84,9 @@ def _same_moment(claim: tuple[datetime, bool], observed: datetime) -> bool:
     return stated == (expected if has_seconds else expected.replace(second=0))
 
 
-def current_source_moments_supported(answer: str, evidence: tuple[dict[str, Any], ...]) -> bool:
+def current_source_moments_supported(
+    answer: str, evidence: tuple[dict[str, Any], ...], *, question: str | None = None,
+) -> bool:
     """Reject wrong current quote table moments and current portfolio read times.
 
     Historical reports and saved plan timestamps are outside this check.
@@ -182,6 +184,65 @@ def current_source_moments_supported(answer: str, evidence: tuple[dict[str, Any]
                 if claim is None or len(candidates) != 1 or len(symbols) > 1 or not _same_moment(
                     claim, candidates[0],
                 ):
+                    return False
+
+    # A concise answer to a latest-price question may consist only of a price,
+    # provider and timestamp. It has no "bronmoment" label or asset name to
+    # trigger the prose check above, but the question and tool read identify
+    # the current quote unambiguously.
+    if question and re.search(r"\b(?:nieuwste|laatste|actuele|huidige|latest|current)\b", question, re.I) \
+            and re.search(r"\b(?:koers|prijs|price|quote)\b", question, re.I):
+        requested_pairs = {(match.group("symbol").upper(), match.group("quote").upper())
+                           for match in re.finditer(
+                               r"\b(?P<symbol>[A-Z][A-Z0-9]*)/(?P<quote>EUR|USD|USDT)\b",
+                               question, re.I,
+                           )}
+        requested_symbols = {symbol for symbol, _ in market_rows if re.search(
+            rf"\b{re.escape(symbol)}\b", question, re.I,
+        )}
+        candidates = [moment for key, moment in market_rows.items()
+                      if key in requested_pairs] if requested_pairs else [
+                          moment for (symbol, _), moment in market_rows.items()
+                          if not requested_symbols or symbol in requested_symbols
+                      ]
+        if len(candidates) == 1:
+            sentences = re.split(
+                r"(?<=[.!?])\s+|\n+|;\s*|\b(?:maar|but|terwijl|whereas)\b\s*|"
+                r"\ben\s+(?=(?:de\s+)?(?:nieuwste|laatste|actuele|huidige)\b)",
+                answer, flags=re.I,
+            )
+            quote_cue = re.compile(r"\b(?:koers|prijs|price|quote|USD|EUR|USDT)\b|[$€]", re.I)
+            unrelated_moment = re.compile(
+                r"\b(?:oud(?:e|er)?|vorige|historisch(?:e)?|older|previous|"
+                r"dagrapport|rapport|report|portefeuille|portfolio|plan|setup|"
+                r"strategie|bot|order)\b|\banalyse\s+is\s+(?:aangemaakt|bijgewerkt)\b",
+                re.I,
+            )
+            for index, sentence in enumerate(sentences):
+                if not _ZONED_CLOCK.search(sentence):
+                    continue
+                dated = _DATED_MOMENT.search(sentence)
+                before_date = sentence[:dated.start()] if dated else sentence
+                unrelated = list(unrelated_moment.finditer(before_date))
+                if unrelated:
+                    current_quotes = list(re.finditer(
+                        r"\b(?:nieuwste|actuele|huidige|latest|current)\b"
+                        r"[^.!?\n]{0,100}\b(?:koers|prijs|price|quote)\b",
+                        before_date, re.I,
+                    ))
+                    if not current_quotes or current_quotes[-1].start() < unrelated[-1].end():
+                        continue
+                    sentence = sentence[current_quotes[-1].start():]
+                if re.match(r"\s*(?:beurs\s+nu|market\s+(?:is\s+)?(?:open|closed))\b", sentence, re.I):
+                    continue
+                dated_claim = _DATED_MOMENT.search(sentence)
+                current_quote_text = sentence[:dated_claim.end()] if dated_claim else sentence
+                nearby = sentences[max(0, index - 2):index] + [current_quote_text]
+                if not any(quote_cue.search(part) and not unrelated_moment.search(part)
+                           for part in nearby):
+                    continue
+                claim = _claimed_moment(sentence)
+                if claim is None or not _same_moment(claim, candidates[0]):
                     return False
 
     # "Fresh portfolio read" refers to read_at, not the oldest valuation

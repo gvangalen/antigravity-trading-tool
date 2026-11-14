@@ -3058,19 +3058,21 @@ class FinnResponsesAnswerVerifier:
             for item in (call.get("result", {}).get("results") or [])
             if isinstance(item, dict)
         )
-        if result.answer_kind == "free_text" and not current_source_moments_supported(result.text, evidence):
-            return FinnResponsesVerifiedAnswer(
-                "unavailable",
-                self._fallback_copy("responses_evidence_not_verified", message=message, locale=locale),
-                "source_moment_conflicts_with_source", evidence,
-                rejection_details={"fact_mismatch": "current_source_moment"},
-            )
         if result.answer_kind == "free_text" and not self._latest_quote_claim_supported(result.text, evidence):
             return FinnResponsesVerifiedAnswer(
                 "unavailable",
                 self._fallback_copy("responses_evidence_not_verified", message=message, locale=locale),
                 "latest_quote_conflicts_with_source", evidence,
                 rejection_details={"fact_mismatch": "latest_market_quote"},
+            )
+        if result.answer_kind == "free_text" and not current_source_moments_supported(
+            result.text, evidence, question=message,
+        ):
+            return FinnResponsesVerifiedAnswer(
+                "unavailable",
+                self._fallback_copy("responses_evidence_not_verified", message=message, locale=locale),
+                "source_moment_conflicts_with_source", evidence,
+                rejection_details={"fact_mismatch": "current_source_moment"},
             )
         if (
             result.answer_kind == "free_text"
