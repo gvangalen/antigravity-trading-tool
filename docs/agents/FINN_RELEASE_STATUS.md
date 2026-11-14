@@ -6,8 +6,10 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN indicatorrevisies en rapportmomenten (14 november 2026)
 
-Phase: `LOCAL_CANDIDATE_PENDING_CI` op branch
-`codex/indicator-measurement-consistency-20261114`. Deze door de gebruiker
+Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Productcommit
+`6e2816581933ecc5f27362f37aaad243244f9836` op branch
+`codex/indicator-measurement-consistency-20261114` is via PR #1051 gemerged
+als `96609ea0a34dd69f31e3965aee0a3c866277e928`. Deze door de gebruiker
 gevraagde reparatie volgt op de vorige gedeployde kandidaat; daarvoor is nog
 geen onafhankelijke live acceptatie vastgelegd. Er liep geen officiële QA-run
 toen deze kandidaat werd voorbereid.
@@ -45,7 +47,13 @@ Een aanvullende lokale indicatorvraag door API en worker gebruikte de
 techniektool en stelde bij ontbrekend asset terecht een vervolgvraag
 (artifact SHA-256
 `42e1303472d79d78d07fc56ffa6685f2082b60a870ee6087620689262cd18ef9`).
-CI, deployment-SHA en onafhankelijke ingelogde live QA zijn nog open.
+PR-CI en main-CI (`43602132994`) waren allebei groen in vijf jobs. Auto
+Deploy `43602568762` slaagde. Publieke backend-health en frontend-buildinfo
+gaven beide HTTP 200 en exact
+`96609ea0a34dd69f31e3965aee0a3c866277e928`, gelijk aan GitHub main.
+Deze statusbijwerking maakt zelf een nieuwe main-SHA; de laatste main-CI,
+Auto Deploy, publieke SHA-pariteit en onafhankelijke ingelogde live QA
+blijven daarom open.
 
 ## FINN expliciet handelspaar naast CET/CEST (14 november 2026)
 
