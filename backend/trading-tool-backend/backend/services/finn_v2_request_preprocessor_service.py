@@ -645,8 +645,10 @@ class FinnV2RequestPreprocessorService:
             )
             starts_new_request = re.search(r"\b(?:maar|but|aber)\b", tail)
             prefix = text[:negated_tail.start()].rstrip(" ,")
-            if has_mutation and not starts_new_request and prefix and self._action_polarity(prefix) == "read":
-                return "read"
+            if has_mutation and not starts_new_request and prefix:
+                prefix_polarity = self._action_polarity(prefix)
+                if prefix_polarity in {"read", "evaluate"}:
+                    return prefix_polarity
         # Declarative and interrogative verb forms ("volg ik", "bevestigd")
         # describe existing product state; they are not confirmation or add
         # commands. This is grammatical normalization, not prompt matching.

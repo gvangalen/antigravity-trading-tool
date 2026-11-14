@@ -90,6 +90,17 @@ def test_model_capabilities_match_confirmed_dca_amount_contract():
 
 def test_generic_capability_questions_include_ma_and_trendline_designs():
     assert not requests_execution_capability_question(
+        "Ik bedoel voor de handmatige €10-koop mijn opgeslagen BTC/EUR-plan. "
+        "Kun je de actuele score, relevante bronmomenten en laatste BTC-botbeslissing "
+        "controleren en zeggen of de koop binnen het plan valt? Geen actie uitvoeren."
+    )
+    assert not requests_execution_capability_question(
+        "Kun je mijn huidige ETH/EUR-score en laatste botbeslissing controleren?"
+    )
+    assert not requests_execution_capability_question(
+        "Can you check the current AAPL price and latest bot decision against my saved plan?"
+    )
+    assert not requests_execution_capability_question(
         "In het AAPL-dagrapport staat een 50-daags gemiddelde. Leg dat naast wat "
         "Analyse nu voor dezelfde indicator kan lezen. Gaat het om een nieuwe koersdag "
         "of om een latere revisie/uitlezing van dezelfde broncandle? "

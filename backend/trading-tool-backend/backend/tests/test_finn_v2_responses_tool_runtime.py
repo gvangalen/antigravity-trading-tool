@@ -13965,6 +13965,32 @@ def test_bot_decision_question_requires_current_owner_history_before_answer(monk
     assert captured["required_read_tool_name"] == "get_decision_history"
 
 
+@pytest.mark.parametrize("asset", ["BTC", "ETH"])
+@pytest.mark.parametrize("score_phrase", ["de actuele score", "de opgeslagen scoreband 61–75"])
+def test_read_only_plan_score_and_bot_question_requires_evaluation_read(monkeypatch, asset, score_phrase):
+    question = (
+        f"Beoordeel mijn {asset}/EUR-plan. Vergelijk {asset}/EUR en {asset}/USDT, "
+        f"{score_phrase} en de laatste botbeslissing zonder iets te wijzigen."
+    )
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="coach-bundle")
+    front.model_led_coach = True
+    captured = {}
+
+    async def capture_loop(_self, **kwargs):
+        captured.update(kwargs)
+        return FinnResponsesResult("Ik controleer je plan en actuele bronnen.", "answer", ())
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run", capture_loop,
+    )
+    asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset=asset,
+    ))
+    assert captured["required_read_tool_name"] == "evaluate_plan"
+    assert captured["read_only_turn"] is True
+
+
 def test_explicit_report_comparison_binds_owner_report_read(monkeypatch):
     class FixedDateTime(datetime):
         @classmethod
