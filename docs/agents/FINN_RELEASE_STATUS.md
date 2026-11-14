@@ -6,8 +6,10 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN feitelijke bronantwoorden en tijdzone (14 november 2026)
 
-Phase: `LOCAL_CANDIDATE_PENDING_CI` op branch
-`codex/finn-factual-source-live-qa-20261114`. De vorige publieke SHA
+Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Productcommit
+`2b658049eca631bad581377570e6da8365f570be` op branch
+`codex/finn-factual-source-live-qa-20261114` is via PR #1047 gemerged
+als `d078cc4fbeea9c3c92b253e43bb7073104f3119b`. De vorige publieke SHA
 `efd3612dd7f42c76c5a7a4d2b7c3c117a2ae8974` kreeg van onafhankelijke
 ingelogde QA **NOT_ACCEPTED**. FINN kon het zichtbare opgeslagen BTC
 Paper-botbesluit 2/2 niet noemen, gaf de BTC/EUR-rapport- en huidige
@@ -39,8 +41,13 @@ en regressie **109/109** (SHA-256
 De geïsoleerde API/Celery/Responses-actiematrix slaagde **38/38**,
 16/16 actiecontracten en 9/9 lineage (artifact SHA-256
 `bd62b39c21db8a471c91acb9f3752766055ce85c1c99ae7841e085e9612fd1de`),
-met nul Live-bots en nul niet-toegestane uitvoeringen. CI, Auto Deploy, publieke SHA-pariteit en
-onafhankelijke ingelogde live QA zijn nog open.
+met nul Live-bots en nul niet-toegestane uitvoeringen. PR-CI en main-CI
+waren beide groen in vijf jobs. Auto Deploy `43592666010` slaagde. Publieke
+backend-health en frontend-buildinfo gaven beide HTTP 200 en exact
+`d078cc4fbeea9c3c92b253e43bb7073104f3119b`, gelijk aan GitHub main.
+Deze statusbijwerking maakt zelf een nieuwe main-SHA en kan de laatste
+CI/deploy starten. De finale publieke SHA en onafhankelijke ingelogde QA
+blijven open; dit is nog geen live acceptatie.
 
 ## FINN interactieve bronlezing voor bot, rapport en koers (14 november 2026)
 
