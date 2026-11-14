@@ -15,7 +15,9 @@ from backend.schemas.finn_v2_evidence_schema import ActiveSetupData
 from backend.services.finn_v2_json_safety import to_json_safe
 from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCall
 from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
-from backend.services.finn_v2_tool_adapters.display_source_moment import display_source_moment
+from backend.services.finn_v2_tool_adapters.display_source_moment import (
+    amsterdam_source_moment, display_source_moment,
+)
 
 
 class FinnResponsesReadExecutor:
@@ -135,8 +137,17 @@ class FinnResponsesReadExecutor:
                     "as_of": display_source_moment(data.get("as_of")),
                     "source_observed_at": display_source_moment(data.get("source_observed_at")),
                     "source_observed_at_utc": str(source_instant) if source_instant else None,
+                    "source_observed_at_amsterdam": amsterdam_source_moment(source_instant),
                 }
                 as_of = display_source_moment(as_of)
+            if read_tool == "read_portfolio" and isinstance(data, dict):
+                data = {
+                    **data,
+                    "read_at_utc": display_source_moment(data.get("read_at")),
+                    "read_at_amsterdam": amsterdam_source_moment(data.get("read_at")),
+                    "valuation_as_of_utc": display_source_moment(data.get("valuation_as_of")),
+                    "valuation_as_of_amsterdam": amsterdam_source_moment(data.get("valuation_as_of")),
+                }
             if read_tool == "read_active_setup" and self._facts_only_local_experiment():
                 data = self._setup_facts_for_local_experiment(data)
             evidence = {
@@ -399,6 +410,8 @@ class FinnResponsesReadExecutor:
                 "For a named bot, use that bot row's strategy_name, setup_name and mode "
                 "when present; missing fields do not prove that no link exists. "
                 "data.read_at is when FINN fetched the records, not the date of a market price. "
+                "Use data.read_at_amsterdam for the user-facing Paper portfolio read time; "
+                "if also stating UTC, use data.read_at_utc for that same instant. "
                 "A bot's price_as_of is its market-price date; the outer as_of is the oldest "
                 "required price date when a valuation is available. If valuation_available is "
                 "false, do not infer cash or equity from budgets. Translate technical field "

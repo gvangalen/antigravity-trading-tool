@@ -1,8 +1,8 @@
 "use client";
 
 import { getDictionary, useTranslation } from '@/app/providers/I18nProvider';
-import { formatDateTime } from '@/lib/i18n';
 import { parseUtcMoment, reportMarketLabel, scoreSourceSnapshot } from '@/lib/report/reportSourceSnapshot.mjs';
+import { formatAmsterdamTimestamp } from '@/lib/time/formatUtcTimestamp.mjs';
 import { reportV2AnalysisParagraphs, reportV2Change, reportV2IndicatorName, reportV2Locale } from '@/lib/report/reportV2Presentation.mjs';
 
 const ZONES = [
@@ -65,7 +65,7 @@ export default function ReportV2Layout({ report, isPrint = false }) {
   const measured = (value) => number(value) !== null
     ? new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(value)
     : typeof value === 'string' && value.trim() ? value.trim() : c.unknown;
-  const timestamp = (value) => { const moment = parseUtcMoment(value); return moment ? `${formatDateTime(moment, language, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} UTC` : c.unknown; };
+  const timestamp = (value) => { const formatted = formatAmsterdamTimestamp(value, language); return formatted === '—' ? c.unknown : formatted; };
   const cadence = (setup) => {
     const frequency = String(setup.dca_frequency || '').toLowerCase();
     if (frequency === 'weekly') {

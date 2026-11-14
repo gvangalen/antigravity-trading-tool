@@ -115,7 +115,7 @@ export default function BotHistoryTable({
                   || (status === "executed" ? copy.executedDecisionReason : copy.reasonNotRecorded));
               const dateValue = h.is_trade ? h.created_at : safety.checked_at || h.decision_ts || h.created_at || h.date;
               const dateLabel = dateValue
-                ? formatDateTime(dateValue, locale, { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short" })
+                ? formatDateTime(dateValue, locale, { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam", timeZoneName: "short" })
                 : "—";
               const action = String(h.action || h.side || "").toLowerCase();
               const actionLabel = h.is_trade

@@ -918,7 +918,7 @@ def test_frontend_workspace_reads_are_centralized_and_ai_is_explicit():
     assert "getDailyScores" not in workspace
     assert "useOverviewSnapshot" not in workspace
     assert "workspace?.quote" in workspace
-    assert "assetLive?.as_of ? formatUtcTimestamp(assetLive.as_of, locale) : null" in workspace
+    assert "assetLive?.as_of ? formatAmsterdamTimestamp(assetLive.as_of, locale) : null" in workspace
     assert "assetLive?.as_of || workspace?.generated_at" not in workspace
     assert "fetchAssetWorkspace" in hook
     assert "watchlistSymbols" in hook

@@ -4,6 +4,39 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN bronmomenten en tijdzonepariteit (13 november 2026)
+
+Phase: `LOCAL_GATES_COMPLETE_PENDING_DEPLOY`. Concept-PR #1038 vanaf
+`codex/finn-source-moment-parity-20261113` op herbaseerde productcommit
+`0fa7df879` (basis `6aba2b38a`). De chartwijziging op de nieuwe basis raakt
+de FINN-backend niet; de frontend-export is op die basis opnieuw gebouwd.
+De lokale reparatie geeft FINN getypeerde UTC- en Amsterdamse bronmomenten,
+controleert actuele koers- en portefeuilleclaims ook in tabellen en voor het
+exacte handelspaar, en toont Analyse, rapport en bot met expliciete CET/CEST.
+Een onjuist bronmoment wordt vóór aflevering afgekeurd en mag niet als
+geverifieerd feit verschijnen; de bestaande read-only herstelroute kan daarna
+een nieuw antwoord samenstellen. Dit is nog geen bewezen live herstelsucces.
+
+Gemeten: volledige backend `4780 passed, 7 skipped`; gerichte tests voor
+verkeerde AAPL-koersbron, Paper UTC/CET, zomer-/wintertijd, historisch
+dagrapport, compacte tabellen en BTC/EUR versus BTC/USDT groen. Onafhankelijke
+lokale QA-hertest vond in die scope geen resterende blocker. Frontend build,
+typecheck, i18n-tests/lint, commandtests en high-severity audit groen.
+De geïsoleerde lokale API/Celery/Responses-actiematrix slaagde **38/38**
+(artifact SHA-256 `2631b476730d98262a9fd88dc3d72825413dc8ca1df9f8007e1ecfa671f167e1`),
+zonder QA-materiaal of productieacties. De echte-provider selectorontwikkeling
+slaagde **20/20** (SHA-256 `2f6d00d89f8403673684ac8ab8f1469686988af09b34e6a6ca833da04d62db83`)
+en regressie **109/109** (SHA-256 `d609afe1efa7768b32493d818bbfa43210b9f192d511130fc47db6b421aad841`),
+beide zonder provider-, schema-, timeout-, parse- of validatiefouten. Een
+aanvullende synthetische lokale Paper-portefeuillechat slaagde **2/2**
+(SHA-256 `af41fe379cfe705b6b585ecef5b25ca15f08fffa12b2d641e50785ec608a7adf`).
+PR-CI op de eerdere branch was groen in alle vijf jobs: backend, frontend,
+mobiel, security en workflow-validatie. Die SHA is door de nieuwe `main`-basis
+achterhaald; CI op de herbaseerde kandidaat, merge, Auto Deploy, publieke
+SHA-pariteit en ingelogde live QA zijn nog open. Deze
+kandidaat verandert tot een geverifieerde deployment de huidige publieke
+status of de eerdere onafhankelijke QA-uitspraak niet.
+
 ## FINN algemene Reflectiechat: afzonderlijk orderplanbewijs (13 november 2026)
 
 Phase: `DEPLOYED_PENDING_FINAL_SHA`, statusbranch

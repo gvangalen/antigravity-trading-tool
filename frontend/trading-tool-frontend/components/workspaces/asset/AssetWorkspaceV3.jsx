@@ -38,7 +38,7 @@ import { fetchSetupMarketMatches } from "@/lib/api/setups";
 import { deleteTechnicalIndicator, technicalDataAdd } from "@/lib/api/technical";
 import { mapTechnicalToStudies } from "@/config/indicator_mapping";
 import { removeFromWatchlist } from "@/lib/api/watchlist";
-import { formatUtcTimestamp, formatUtcSourceDate } from "@/lib/time/formatUtcTimestamp.mjs";
+import { formatAmsterdamTimestamp, formatAmsterdamSourceDate } from "@/lib/time/formatUtcTimestamp.mjs";
 import { fetchTradingMarkets } from "@/lib/api/assets";
 import { updateIntelligenceWeights } from "@/lib/api/scores";
 import { getAssistantPreferences, updateAssistantPreferences } from "@/lib/api/ai";
@@ -1451,11 +1451,11 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
     const tone = scoreTone(score, ui);
     const unavailableReason = item?.score_unavailable_reason;
     const pendingScore = score === null && unavailableReason === "score_pending";
-    const sourceDate = formatUtcSourceDate(item?.source_observed_at, locale);
+    const sourceDate = formatAmsterdamSourceDate(item?.source_observed_at, locale);
     const priorIndicatorMoment = item?.indicator_source_observed_at
-      ? formatUtcTimestamp(item.indicator_source_observed_at, locale) : null;
+      ? formatAmsterdamTimestamp(item.indicator_source_observed_at, locale) : null;
     const currentQuoteMoment = item?.source_observed_at
-      ? formatUtcTimestamp(item.source_observed_at, locale) : null;
+      ? formatAmsterdamTimestamp(item.source_observed_at, locale) : null;
     const pendingWithPriorIndicator = pendingScore && priorIndicatorMoment && priorIndicatorMoment !== "—"
       && currentQuoteMoment && currentQuoteMoment !== "—";
     const datedSource = score === null && unavailableReason === "stale_source" && sourceDate;
@@ -1682,7 +1682,7 @@ function ScoreOverview({ assetSymbol, market, macro, technical, combined, sectio
               {view.currentBand ? conditionOptions?.[view.currentBand.id]?.title || ui.benchmarkCustom(view.currentBand.min, view.currentBand.max) : ui.unavailable}
             </div>
             <div className="text-[11px] text-slate-500">
-              {currentScore !== null ? (combinedSource ? `${ui.scoreSourceDate}: ${formatUtcTimestamp(combinedSource, locale)}` : ui.scoreSourceUnknown) : ui.benchmarkMissing}
+              {currentScore !== null ? (combinedSource ? `${ui.scoreSourceDate}: ${formatAmsterdamTimestamp(combinedSource, locale)}` : ui.scoreSourceUnknown) : ui.benchmarkMissing}
             </div>
           </div>
         </div>
@@ -2117,7 +2117,7 @@ function EvidenceRow({
     : ui.unavailable;
   const historyCoverage = row.raw?.score_history_coverage;
   const freshness = row.raw?.freshness;
-  const sourceDate = formatUtcSourceDate(row.timestamp, locale);
+  const sourceDate = formatAmsterdamSourceDate(row.timestamp, locale);
   const freshnessState = indicatorSourceFreshness(freshness);
   const freshnessText = freshnessState === "stale" && sourceDate
     ? ui.sourceReadingFrom(sourceDate)
@@ -2231,7 +2231,7 @@ function EvidenceRow({
               </div>
             </div>
             <div className="flex flex-wrap justify-between gap-2 border-t border-slate-200 px-4 py-2 text-[11px] text-slate-500">
-              <span>{ui.dataSource}: {String(row.raw?.source || "—").replaceAll("_", " ")} · {ui.latestSignal}: {row.timestamp ? formatUtcTimestamp(row.timestamp, locale) : ui.missingSourceMoment}</span>
+              <span>{ui.dataSource}: {String(row.raw?.source || "—").replaceAll("_", " ")} · {ui.latestSignal}: {row.timestamp ? formatAmsterdamTimestamp(row.timestamp, locale) : ui.missingSourceMoment}</span>
               <span>{ui.freshness}: {freshnessText}</span>
             </div>
           </div>
@@ -3234,7 +3234,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         assetLogoUrl={activeAssetLogo}
         price={formatQuotePrice(assetLive?.price, locale, assetLive?.quote_currency)}
         change24h={assetLive?.change_24h}
-        updatedAt={assetLive?.as_of ? formatUtcTimestamp(assetLive.as_of, locale) : null}
+        updatedAt={assetLive?.as_of ? formatAmsterdamTimestamp(assetLive.as_of, locale) : null}
         statusLabel={isFallbackWorkspace ? ui.fallbackData : quoteStatus === "closed_session" ? ui.closedMarketQuote : quoteStatus === "stale" ? ui.staleData : null}
         quoteStatus={quoteStatus}
         combinedSummary={combinedSummary}
