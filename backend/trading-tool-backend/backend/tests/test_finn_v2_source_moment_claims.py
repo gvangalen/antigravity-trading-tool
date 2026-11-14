@@ -111,6 +111,85 @@ def test_current_market_source_in_prose_requires_the_matching_quote_read():
     )
 
 
+def test_live_latest_aapl_quote_rejects_wrong_parenthesized_source_day():
+    evidence = ({"scope": "read_market_snapshot", "status": "completed", "data": {
+        "symbol": "AAPL", "quote_currency": "USD", "price": 356.4,
+        "source_observed_at_utc": "2026-11-13T21:00:00+00:00",
+    }},)
+    question = (
+        "Wat is de nieuwste beschikbare AAPL-koers? Noem uitsluitend prijs, "
+        "databron, exact bronmoment in Europe/Amsterdam en of de beurs nu open is."
+    )
+    wrong = "$356,40 USD · Twelve Data · 14 november 2026, 22:00:00 CET " \
+            "(Europe/Amsterdam) · Beurs nu: gesloten."
+    assert not current_source_moments_supported(wrong, evidence, question=question)
+    assert not current_source_moments_supported(
+        "$356,40 USD. Twelve Data · 14 november 2026, 22:00:00 CET.",
+        evidence, question=question,
+    )
+    assert not current_source_moments_supported(
+        "AAPL: $356,40 USD. Bron: Twelve Data. Gemeten: 14 november 2026, 22:00:00 CET.",
+        evidence, question=question,
+    )
+    assert current_source_moments_supported(
+        wrong.replace("14 november", "13 november"), evidence, question=question,
+    )
+    assert current_source_moments_supported(
+        "In het oude dagrapport was de laatste AAPL-koers $356,40 USD "
+        "op 9 november 2026 om 22:00 CET.", evidence, question=question,
+    )
+    assert current_source_moments_supported(
+        "De laatste AAPL-koers in het dagrapport was $350 USD "
+        "op 9 november 2026 om 22:00 CET.", evidence, question=question,
+    )
+    assert current_source_moments_supported(
+        "Het dagrapport bevatte een oudere AAPL-koers van $350 USD op "
+        "9 november 2026 om 22:00 CET. Het plan is bijgewerkt op "
+        "14 november 2026 om 08:00 CET.", evidence, question=question,
+    )
+    assert current_source_moments_supported(
+        "Het dagrapport bevatte een oudere AAPL-koers van $350 USD op "
+        "9 november 2026 om 22:00 CET. De analyse is aangemaakt op "
+        "14 november 2026 om 08:00 CET.", evidence, question=question,
+    )
+    assert not current_source_moments_supported(
+        "Het dagrapport is historisch, maar de nieuwste AAPL-koers is "
+        "$356,40 USD · Twelve Data · 14 november 2026, 22:00 CET.",
+        evidence, question=question,
+    )
+    assert not current_source_moments_supported(
+        "In het rapport staat een oudere koers; de actuele AAPL-koers is "
+        "$356,40 USD · Twelve Data · 14 november 2026, 22:00 CET.",
+        evidence, question=question,
+    )
+    assert not current_source_moments_supported(
+        "Het dagrapport is historisch en de nieuwste AAPL-koers is "
+        "$356,40 USD · Twelve Data · 14 november 2026, 22:00 CET.",
+        evidence, question=question,
+    )
+    assert not current_source_moments_supported(
+        "Het dagrapport is historisch en de laatste AAPL-koers is "
+        "$356,40 USD · Twelve Data · 14 november 2026, 22:00 CET.",
+        evidence, question=question,
+    )
+    assert not current_source_moments_supported(
+        "De nieuwste AAPL-koers is $356,40 USD op 14 november 2026 om "
+        "22:00 CET en het oude rapport toont een andere koers.",
+        evidence, question=question,
+    )
+    prepared = SimpleNamespace(
+        response=SimpleNamespace(
+            text=wrong,
+            tool_trace=({"name": "get_market_snapshot", "result": {"results": list(evidence)}},),
+            uses_previous_response=False,
+        ),
+        previous_response=None,
+    )
+    rejected = _minimal_read_answer(message=question, prepared=prepared)
+    assert rejected.status == "unavailable"
+    assert rejected.reason == "source_moment_conflicts_with_source"
+
+
 def test_current_market_source_in_prose_keeps_exact_quote_pair():
     evidence = (
         {"scope": "read_market_snapshot", "status": "completed", "data": {

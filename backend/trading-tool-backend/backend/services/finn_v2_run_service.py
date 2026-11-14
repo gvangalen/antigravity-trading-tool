@@ -1559,13 +1559,6 @@ def _minimal_read_answer(
             if isinstance(item, dict)
         )
     text = prepared.response.text.strip()
-    from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
-    if not current_source_moments_supported(text, evidence):
-        return FinnResponsesVerifiedAnswer(
-            "unavailable", "Ik kan de bronmomenten in dit antwoord niet verifiëren.",
-            "source_moment_conflicts_with_source", evidence,
-            rejection_details={"fact_mismatch": "current_source_moment"},
-        )
     if not FinnResponsesAnswerVerifier._latest_quote_claim_supported(text, tuple(
         item for call in prepared.response.tool_trace
         for item in (call.get("result") or {}).get("results") or []
@@ -1575,6 +1568,13 @@ def _minimal_read_answer(
             "unavailable", "Ik kan dit nog niet onderbouwen met betrouwbare koersgegevens.",
             "latest_quote_conflicts_with_source", evidence,
             rejection_details={"fact_mismatch": "latest_market_quote"},
+        )
+    from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
+    if not current_source_moments_supported(text, evidence, question=message):
+        return FinnResponsesVerifiedAnswer(
+            "unavailable", "Ik kan de bronmomenten in dit antwoord niet verifiëren.",
+            "source_moment_conflicts_with_source", evidence,
+            rejection_details={"fact_mismatch": "current_source_moment"},
         )
     if not FinnResponsesAnswerVerifier._saved_entity_type_supported(
         text, evidence, user_message=message,
