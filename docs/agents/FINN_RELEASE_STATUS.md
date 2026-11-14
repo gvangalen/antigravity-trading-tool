@@ -6,8 +6,10 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN interactieve bronlezing voor bot, rapport en koers (14 november 2026)
 
-Phase: `LOCAL_CANDIDATE_PENDING_CI` op branch
-`codex/finn-interactive-source-read-reliability-20261114`. De vorige
+Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Productcommit
+`f647a5f577f45d47229e90845c755fdd38034a62` op branch
+`codex/finn-interactive-source-read-reliability-20261114` is via PR #1045
+gemerged als `eb5f1e3d7b9439fd705ce1944a626c2367b8fa28`. De vorige
 productie-SHA `6110c0c6017961dd2bbdaf8e5db406de74083424` had geslaagde
 Auto Deploy en publieke backend/frontend-SHA-pariteit, maar onafhankelijke
 ingelogde QA gaf **NOT_ACCEPTED**. Het BTC Paper-botbesluit van 18 oktober
@@ -46,9 +48,13 @@ botleesactie. De volledige herhaling op dezelfde code slaagde **38/38**,
 16/16 actiecontracten en 9/9 lineage (SHA-256
 `da78d3f69181bec31617fa972ed1922473d278b3ea09ca1a27ac5b9bb138ada0`),
 met nul Live-bots of niet-toegestane uitvoeringen. Die eerste selectorafwijking
-blijft als intermittente bevinding zichtbaar. PR-CI, main-CI, Auto Deploy,
-publieke SHA-pariteit en onafhankelijke ingelogde QA zijn nog open; dit is
-geen live acceptatie.
+blijft als intermittente bevinding zichtbaar. PR-CI en main-CI waren beide
+groen in vijf jobs. Auto Deploy `43588481347` slaagde op de merge-SHA;
+publieke backend-health en frontend-buildinfo gaven beide HTTP 200 en exact
+`eb5f1e3d7b9439fd705ce1944a626c2367b8fa28`, gelijk aan GitHub `main`.
+Deze statusbijwerking maakt zelf een nieuwe `main`-SHA en kan een laatste
+CI/deploy starten. De finale publieke SHA en onafhankelijke ingelogde
+QA-hertest blijven open; dit is geen live acceptatie.
 
 ## FINN rapportkoers CET en opgeslagen botbesluit (14 november 2026)
 
