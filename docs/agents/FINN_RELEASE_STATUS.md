@@ -6,10 +6,19 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN contextoverloop in BTC-coachgesprek (14 november 2026)
 
-Phase: `LOCAL_VALIDATED_PENDING_CI`. Branch `codex/finn-context-overflow-recovery`,
-productcommit `f54a77c6968edee135da4192bea36e24d0f4f261` op main-basis
-`e346d2e5346d5d674c52f2dfb729811c87d2a68e`. CI, merge, Auto Deploy,
-publieke SHA-verificatie en onafhankelijke live QA zijn nog niet uitgevoerd.
+Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Branch
+`codex/finn-context-overflow-recovery`, productcommit
+`f54a77c6968edee135da4192bea36e24d0f4f261` op main-basis
+`e346d2e5346d5d674c52f2dfb729811c87d2a68e` is via PR #1057
+gemerged als `3cc60ebb0838ec248ddf9f1432fd16ddc2852f06`. De
+PR-CI `43633450109` en main-CI `43633909669` slaagden beide in vijf
+jobs. Auto Deploy `43634360662` slaagde. Publieke
+`https://tradamind.com/api/health` en
+`https://tradamind.com/build-info.json` gaven op 14 november beide
+HTTP 200 en exact `3cc60ebb0838ec248ddf9f1432fd16ddc2852f06`,
+gelijk aan GitHub main. Deze statusbijwerking maakt zelf een nieuwe
+main-SHA. De laatste main-CI, Auto Deploy, publieke SHA-pariteit en
+onafhankelijke ingelogde live QA blijven daarom open.
 
 De twee mislukte BTC-coachvragen uit de Paper Test-browser zijn in de
 productie-operatorlogs teruggevonden bij trace-ID's
