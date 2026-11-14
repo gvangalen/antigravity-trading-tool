@@ -6,8 +6,10 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN expliciet handelspaar naast CET/CEST (14 november 2026)
 
-Phase: `LOCAL_CANDIDATE_PENDING_CI` op branch
-`codex/finn-timezone-pair-fix-20261114`. De vorige finale publieke SHA
+Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Productcommit
+`ada12079546cda3ad991a72ab74943a4f3d44e68` op branch
+`codex/finn-timezone-pair-fix-20261114` is via PR #1049 gemerged als
+`13061c606bf5efcfbc44c49250f192c55b48d5d4`. De vorige finale publieke SHA
 `7f3ddf1e98ad809bf69766d3b53f7f50c43fecdd` had vijf groene
 main-CI-jobs, succesvolle Auto Deploy `43593745533` en identieke publieke
 backend/frontend-SHA met HTTP 200. Onafhankelijke ingelogde QA gaf
@@ -33,8 +35,13 @@ De geïsoleerde API/Celery/Responses-matrix slaagde **38/38**,
 met nul Live-bots of niet-toegestane uitvoeringen. Echte-provider regressie
 **109/109** (artifact SHA-256
 `00ff5d992c2f92fb2c2e380adf0eda8f61fc6aef6efd577bef074ba2f1ba6fec`).
-CI, Auto Deploy en
-onafhankelijke live hertest lopen nog.
+PR-CI en main-CI waren beide groen in vijf jobs. Auto Deploy
+`43596023034` slaagde. Publieke backend-health en frontend-buildinfo
+gaven beide HTTP 200 en exact
+`13061c606bf5efcfbc44c49250f192c55b48d5d4`, gelijk aan GitHub main.
+Deze statusbijwerking maakt zelf een nieuwe main-SHA en kan een laatste
+CI/deploy starten. De finale publieke SHA en onafhankelijke ingelogde
+QA-hertest blijven open; dit is nog geen live acceptatie.
 
 ## FINN feitelijke bronantwoorden en tijdzone (14 november 2026)
 
