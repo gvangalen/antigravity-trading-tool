@@ -972,8 +972,13 @@ class FinnResponsesFrontDoor:
                 or call.name not in {"get_saved_bots", "get_portfolio_and_exposure",
                                      "get_active_plan_and_strategy", "get_decision_history"}):
             return call
+        # A bot-only question does not need a daily report. A missing report
+        # must not turn an available saved decision into a partial read.
+        report_requested = bool(re.search(r"\b(?:dagrapport|ochtendrapport|rapport|report)\b", message, re.I))
+        base_tools = tuple(tool for tool in call.read_tools
+                           if report_requested or tool != "read_latest_report")
         return replace(call, read_tools=tuple(dict.fromkeys((
-            *call.read_tools, "read_review_history", "read_portfolio",
+            *base_tools, "read_review_history", "read_portfolio",
             *(('read_bot_status',) if account_bundle or FinnResponsesFrontDoor._asks_about_account_state_bundle(message) else ()),
         ))))
 

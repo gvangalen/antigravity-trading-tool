@@ -229,6 +229,31 @@ class BotRepository:
         row = result.fetchone()
         return dict(row._mapping) if row else None
 
+    async def get_latest_bot_decisions_for_owner(self, user_id: int) -> List[dict]:
+        """One saved latest decision per owner bot, regardless of decision age."""
+        if not await self.check_table_exists("bot_decisions"):
+            return []
+        result = await self.session.execute(text("""
+            SELECT b.name AS bot_name, b.is_live,
+                   COALESCE(d.symbol, s.symbol, s.data->>'symbol', st.symbol) AS symbol,
+                   tm.quote_currency, d.action, d.status, d.decision_ts,
+                   d.decision_kind
+            FROM bot_configs b
+            LEFT JOIN strategies s ON s.id = b.strategy_id AND s.user_id = b.user_id
+            LEFT JOIN setups st ON st.id = s.setup_id AND st.user_id = b.user_id
+            LEFT JOIN trading_markets tm ON tm.id = b.market_id
+            JOIN LATERAL (
+                SELECT symbol, action, status, decision_ts, decision_kind
+                FROM bot_decisions
+                WHERE user_id = b.user_id AND bot_id = b.id
+                ORDER BY decision_ts DESC, id DESC
+                LIMIT 1
+            ) d ON TRUE
+            WHERE b.user_id = :user_id
+            ORDER BY b.id
+        """), {"user_id": user_id})
+        return [dict(row._mapping) for row in result.fetchall()]
+
     # ==========================
     # MANUAL ORDER / LEDGER
     # ==========================

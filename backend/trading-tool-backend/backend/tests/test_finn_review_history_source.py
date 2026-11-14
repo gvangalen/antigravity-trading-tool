@@ -28,6 +28,14 @@ def test_review_history_separates_owner_bot_decisions_from_closed_trade_evidence
 
     adapter = object.__new__(ReviewToolAdapter)
     adapter.bot_service = BotHistory()
+    class LatestDecisions:
+        async def get_latest_bot_decisions_for_owner(self, user_id):
+            assert user_id == 42
+            return [{"bot_name": "BTC Paper", "is_live": False, "symbol": "BTC",
+                     "action": "HOLD", "status": "completed", "decision_ts": instant},
+                    {"bot_name": "AAPL Paper", "is_live": False, "symbol": "AAPL",
+                     "action": "HOLD", "status": "completed", "decision_ts": instant}]
+    adapter.repository = LatestDecisions()
     from backend.domain.finn_v2_source_registry import FinnV2InformationSourceRegistry
     adapter.sources = FinnV2InformationSourceRegistry()
     class ClosedTrades:
@@ -47,6 +55,8 @@ def test_review_history_separates_owner_bot_decisions_from_closed_trade_evidence
     assert "ETH Paper" not in repr(result["data"].items)
     assert result["data"].closed_trade_status == "no_data"
     assert result["data"].closed_trade_review_ids == []
+    assert len(result["data"].latest_bot_decisions) == 1
+    assert result["data"].latest_bot_decisions[0]["decision_at_amsterdam"] == "2026-10-09 14:00:00 CEST"
 
 
 def test_review_history_keeps_newest_bot_decision_when_many_rows_exist():
@@ -75,6 +85,10 @@ def test_review_history_keeps_newest_bot_decision_when_many_rows_exist():
 
     adapter = object.__new__(ReviewToolAdapter)
     adapter.bot_service = BotHistory()
+    class LatestDecisions:
+        async def get_latest_bot_decisions_for_owner(self, user_id):
+            return []
+    adapter.repository = LatestDecisions()
     from backend.domain.finn_v2_source_registry import FinnV2InformationSourceRegistry
     adapter.sources = FinnV2InformationSourceRegistry()
     adapter.closed_trades = ClosedTrades()
@@ -82,3 +96,47 @@ def test_review_history_keeps_newest_bot_decision_when_many_rows_exist():
     result = asyncio.run(adapter.execute(user_id=42))
     assert "Latest AAPL" in result["data"].items[0]
     assert "2026-11-07 19:45:00 CET" in result["data"].items[0]
+
+
+def test_latest_owner_bot_decisions_do_not_depend_on_active_setup_or_history_window():
+    class BotHistory:
+        async def get_bot_history(self, user_id, days):
+            assert (user_id, days) == (42, 30)
+            return []
+
+    class LatestDecisions:
+        async def get_latest_bot_decisions_for_owner(self, user_id):
+            assert user_id == 42
+            return [
+                {"bot_name": "BTC Paper", "is_live": False, "symbol": "BTC",
+                 "action": "hold", "status": "completed",
+                 "decision_ts": datetime(2026, 10, 18, 7, 48, 54, tzinfo=timezone.utc)},
+                {"bot_name": "AAPL Paper", "is_live": False, "symbol": "AAPL",
+                 "action": "buy", "status": "completed",
+                 "decision_ts": datetime(2026, 11, 7, 19, tzinfo=timezone.utc)},
+                {"bot_name": "BTC Live", "is_live": True, "symbol": "BTC",
+                 "quote_currency": "USDT", "action": "hold", "status": "completed",
+                 "decision_ts": datetime(2026, 11, 7, 19, tzinfo=timezone.utc)},
+            ]
+
+    class ClosedTrades:
+        async def recent(self, user_id, *, days, limit, symbol=None):
+            return {"status": "no_data", "coverage": {"trades": 0,
+                    "analyzed": 0, "pending": 0, "unavailable": 0}, "reviews": []}
+
+    adapter = object.__new__(ReviewToolAdapter)
+    adapter.bot_service = BotHistory()
+    adapter.repository = LatestDecisions()
+    from backend.domain.finn_v2_source_registry import FinnV2InformationSourceRegistry
+    adapter.sources = FinnV2InformationSourceRegistry()
+    adapter.closed_trades = ClosedTrades()
+    result = asyncio.run(adapter.execute(user_id=42, asset="BTC"))
+    assert result["data"].latest_bot_decisions[0] == {
+        "bot_name": "BTC Paper", "symbol": "BTC", "is_live": False,
+        "action": "hold", "persistence_status": "completed",
+        "decision_kind": "assessment", "decision_at": "2026-10-18T07:48:54+00:00",
+        "decision_at_amsterdam": "2026-10-18 09:48:54 CEST",
+    }
+    assert len(result["data"].latest_bot_decisions) == 2
+    assert result["data"].latest_bot_decisions[1]["pair"] == "BTC/USDT"
+    assert result["data"].latest_bot_decisions[1]["is_live"] is True

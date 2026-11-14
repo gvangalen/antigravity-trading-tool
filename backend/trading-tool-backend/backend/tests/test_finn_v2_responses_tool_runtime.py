@@ -13741,6 +13741,22 @@ def test_bot_decision_question_binds_persisted_history_even_for_portfolio_tool()
     assert FinnResponsesFrontDoor._bind_bot_decision_evidence(
         selected, message="Wijzig mijn botbesluit", read_only=False,
     ) == selected
+    exact = catalog.validate("get_decision_history", {"asset": "BTC"})
+    bound_exact = FinnResponsesFrontDoor._bind_bot_decision_evidence(
+        exact,
+        message=("Wat is het laatste opgeslagen besluit van mijn BTC Paper-bot? "
+                 "Noem actie, besluitmoment met CET/CEST en of dit een "
+                 "historische of actuele beoordeling is."),
+        read_only=True,
+    )
+    assert {"read_review_history", "read_portfolio"} <= set(
+        bound_exact.read_tools,
+    )
+    assert "read_latest_report" not in bound_exact.read_tools
+    report_question = FinnResponsesFrontDoor._bind_bot_decision_evidence(
+        exact, message="Vergelijk mijn laatste botbesluit met mijn dagrapport.", read_only=True,
+    )
+    assert "read_latest_report" in report_question.read_tools
 
 
 def test_bot_decision_question_requires_current_owner_history_before_answer(monkeypatch):

@@ -218,8 +218,17 @@ class FinnResponsesReadExecutor:
             output["evidence_boundary"] = (
                 "A saved daily report is a historical snapshot, not the latest market quote. "
                 "When comparing its price with a current market read, give each source "
-                "moment with the full date including year, clock time and explicit UTC "
-                "or Amsterdam time zone. Do not shorten a dated report source to a day "
+                "moment with the full date including year, clock time and the user's "
+                "requested time zone. The report asset's market_snapshot."
+                "source_observed_at_amsterdam is its saved quote source in Amsterdam "
+                "time; do not leave it in UTC when the user asks for CET or CEST. "
+                "read_review_history.latest_bot_decisions contains the exact "
+                "latest saved decision for each owner bot, including older "
+                "decisions and decision_at_amsterdam. Match an explicit bot name, "
+                "asset and Paper/Live mode to those rows. If several bots match, "
+                "ask which bot the user means. The portfolio read alone does "
+                "not contain decision history. "
+                "Do not shorten a dated report source to a day "
                 "and month merely because the user's question omitted the year."
             )
         if call.name == "get_closed_trade_review":
@@ -433,6 +442,8 @@ class FinnResponsesReadExecutor:
                 "date including year, clock time and explicit time zone. For the report "
                 "generation time use data.generated_at_amsterdam, which is converted "
                 "from data.generated_at UTC; never copy the UTC clock into CET or CEST. "
+                "For a report asset's saved quote source use market_snapshot."
+                "source_observed_at_amsterdam when the user asks for CET or CEST. "
                 "Never describe "
                 "the report price as the latest market price.",
             )))

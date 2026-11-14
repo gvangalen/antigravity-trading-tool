@@ -4,6 +4,54 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN rapportkoers CET en opgeslagen botbesluit (14 november 2026)
+
+Phase: `LOCAL_CANDIDATE_PENDING_CI` op branch
+`codex/finn-report-bot-evidence-parity-20261114`. De vorige kandidaat
+`7ccd577b7ea8827c44ccd3446be4390145f33a34` had vijf groene main-CI-jobs,
+succesvolle Auto Deploy `43581699901` en dezelfde publieke SHA op backend
+health en frontend build-info, beide HTTP 200. Onafhankelijke ingelogde QA
+gaf **NOT_ACCEPTED**: de oorspronkelijke fout `04:33 UTC = 04:33 CET` was
+hersteld (rapportmoment nu `05:33:08 CET`), maar FINN noemde de historische
+BTC/EUR-rapportkoersbron 2/2 alleen `04:29:59 UTC` ondanks een expliciet
+CET-verzoek; Reflectie toont `05:29 CET`. FINN kon bovendien 2/2 het zichtbare
+laatste BTC Paper-botbesluit van 18 oktober `09:48 CEST` niet verifiëren.
+AAPL-koers en Paper-portefeuilletijd kwamen overeen met de UI. Gerrit heeft
+geen AAPL-plan of -bot; die route bleef ongetest. Geen accountmutaties of
+Live-orders. Browsertelemetrie gaf geen per-turn tooltrace, dus de precieze
+missende FINN-bronstap op die live SHA kon niet worden bewezen.
+
+De reparatie levert bij opgeslagen rapportassets de werkelijke
+`market_snapshot.as_of` ook als `source_observed_at_amsterdam`. Bij een
+expliciet CET/CEST-verzoek over de rapportkoersbron verwerpt de antwoordgrens
+een uitsluitend in UTC geformuleerd bronmoment. Voor botbesluiten bevat
+`read_review_history` nu getypeerde `latest_bot_decisions` uit één
+eigenaargebonden SQL-read, per bot gesorteerd met dezelfde
+`decision_ts DESC, id DESC`-regel als het botscherm. Dit pad hangt niet af van
+een actieve setup of een 30-dagenvenster. Botnaam, asset/pair, Paper/Live,
+actie en expliciete UTC- en Amsterdamse besluitmomenten blijven gescheiden;
+bij meerdere passende bots moet FINN verduidelijken. Een botvraag zonder
+rapportverzoek leest geen ongerelateerd dagrapport, zodat een ontbrekend
+rapport de opgeslagen botbeslissing niet tot een gedeeltelijke read maakt.
+De bestaande leesrechten blijven eigenaargebonden en er is geen uitvoering.
+Onafhankelijke lokale QA vond na herziening geen P1/P2 in deze afgebakende
+code; live acceptatie staat nog open.
+
+Gemeten op de definitieve lokale code: volledige backend **4785 passed,
+7 skipped**; gerichte tests voor rapportbron, botinventaris en leesbinding
+groen. Echte-provider selectorontwikkeling **20/20** (artifact SHA-256
+`c415f63fb4293217d7e5eb5e73bcfbdb7f2a1dc22d226f2fb66f0679bec60af8`)
+en regressie **109/109** (SHA-256
+`690b3de067cca19e6e5a1a065d78ec190eacfe153d2d243fadc4f6ef73265263`)
+hadden nul provider-, schema-, timeout-, parse- of validatiefouten. De
+geïsoleerde API/Celery/Responses-actiematrix slaagde **38/38**, 16/16 acties
+en 9/9 lineage (SHA-256
+`0323228fdf8b05e9b5d9df3b0085f3c3b223c042f4412fdefd4e275d55de9d7f`),
+met nul Live-bots of niet-toegestane executies. De nieuwe SQL-read is tegen
+de lokale PostgreSQL-schema uitgevoerd voor een lege eigenaar; een echte
+botrij en FINN-eindantwoord vergen nog onafhankelijke live QA. PR-CI,
+main-CI, Auto Deploy en publieke SHA-pariteit van deze kandidaat zijn open.
+
 ## FINN rapportmoment UTC/CET-pariteit (14 november 2026)
 
 Phase: `LOCAL_CANDIDATE_PENDING_CI` op branch
