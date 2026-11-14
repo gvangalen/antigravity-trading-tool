@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN bronmomenten en tijdzonepariteit (13 november 2026)
 
-Phase: `LOCAL_CANDIDATE_NOT_READY_FOR_DEPLOY`. Concept-PR #1038 vanaf
+Phase: `LOCAL_GATES_COMPLETE_PENDING_DEPLOY`. Concept-PR #1038 vanaf
 `codex/finn-source-moment-parity-20261113` op productcommit `999979f56518459b3901d092ce42e5effdbb447f`.
 De lokale reparatie geeft FINN getypeerde UTC- en Amsterdamse bronmomenten,
 controleert actuele koers- en portefeuilleclaims ook in tabellen en voor het
@@ -20,14 +20,20 @@ verkeerde AAPL-koersbron, Paper UTC/CET, zomer-/wintertijd, historisch
 dagrapport, compacte tabellen en BTC/EUR versus BTC/USDT groen. Onafhankelijke
 lokale QA-hertest vond in die scope geen resterende blocker. Frontend build,
 typecheck, i18n-tests/lint, commandtests en high-severity audit groen.
-De verplichte lokale API/Celery-actiematrix en echte-providerontwikkeling/
-regressie zijn in de schone werkboom niet uitgevoerd omdat de benodigde
-runtimeverbindingen niet zijn geconfigureerd. PR-CI op exportcommit
-`e1055002cf94d1fdfe43b92e5034921e7bdbca4b` was groen in alle vijf jobs:
-backend, frontend, mobiel, security en workflow-validatie. Merge, Auto Deploy,
-publieke SHA-pariteit en ingelogde live QA zijn op dit moment nog open.
-Deze kandidaat is daarom **niet vrijgegeven** en verandert de huidige
-publieke status of de eerdere onafhankelijke QA-uitspraak niet.
+De geïsoleerde lokale API/Celery/Responses-actiematrix slaagde **38/38**
+(artifact SHA-256 `2631b476730d98262a9fd88dc3d72825413dc8ca1df9f8007e1ecfa671f167e1`),
+zonder QA-materiaal of productieacties. De echte-provider selectorontwikkeling
+slaagde **20/20** (SHA-256 `2f6d00d89f8403673684ac8ab8f1469686988af09b34e6a6ca833da04d62db83`)
+en regressie **109/109** (SHA-256 `d609afe1efa7768b32493d818bbfa43210b9f192d511130fc47db6b421aad841`),
+beide zonder provider-, schema-, timeout-, parse- of validatiefouten. Een
+aanvullende synthetische lokale Paper-portefeuillechat slaagde **2/2**
+(SHA-256 `af41fe379cfe705b6b585ecef5b25ca15f08fffa12b2d641e50785ec608a7adf`).
+PR-CI op exportcommit `e1055002cf94d1fdfe43b92e5034921e7bdbca4b`
+en statuscommit `5bf03974b39729b7767323ef4512c0327676ebe2` was groen in alle vijf
+jobs: backend, frontend, mobiel, security en workflow-validatie. Merge,
+Auto Deploy, publieke SHA-pariteit en ingelogde live QA zijn nog open. Deze
+kandidaat verandert tot een geverifieerde deployment de huidige publieke
+status of de eerdere onafhankelijke QA-uitspraak niet.
 
 ## FINN algemene Reflectiechat: afzonderlijk orderplanbewijs (13 november 2026)
 
