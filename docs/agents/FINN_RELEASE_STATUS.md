@@ -4,6 +4,54 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN contextoverloop in BTC-coachgesprek (14 november 2026)
+
+Phase: `LOCAL_VALIDATED_PENDING_CI`. Branch `codex/finn-context-overflow-recovery`,
+productcommit `f54a77c6968edee135da4192bea36e24d0f4f261` op main-basis
+`e346d2e5346d5d674c52f2dfb729811c87d2a68e`. CI, merge, Auto Deploy,
+publieke SHA-verificatie en onafhankelijke live QA zijn nog niet uitgevoerd.
+
+De twee mislukte BTC-coachvragen uit de Paper Test-browser zijn in de
+productie-operatorlogs teruggevonden bij trace-ID's
+`trdm-trace-bb18d5ec-6af8af70` en `trdm-trace-bc6aa907-6af8af84`.
+De FINN-worker registreerde respectievelijk op 14 november 18:58:58 en
+18:59:18 UTC een `BadRequestError`, HTTP 400, `context_length_exceeded` in de
+eerste provider-ronde. Er waren 29 respectievelijk 23 tools beschikbaar,
+maar geen tool was al aangeroepen. Dit bevestigt contextoverloop als directe
+foutoorzaak, niet de toolaanroeplimiet; de exacte bijdrage van opgeslagen
+provider-cursor versus vorige geverifieerde beurt is niet afzonderlijk gemeten.
+
+De generieke reparatie probeert bij deze specifieke providerfout eerst een
+nieuwe modelketen zonder oude cursor. Als de expliciete vorige beurt ook te
+groot is, bewaart FINN alleen een begrensd eerder antwoord met bewijsstatussen;
+actuele feiten moeten opnieuw via eigenaargebonden leestools worden verkregen.
+Na maximaal twee veilige pogingen volgt een getypeerde, gelokaliseerde
+melding. Een al gekozen actievoorstel wordt nooit opnieuw aangeroepen. De
+beschermde diagnostische code-allowlists herkennen de nieuwe foutcode zonder
+ruwe providerdata vrij te geven. Er is geen asset- of handelspaarregel
+hardcoded en er zijn geen handelscontracten gewijzigd.
+
+Gemeten lokale validatie: volledige backend **4812 passed, 7 skipped**
+(`684351d79e6b0f0a6029c2b3ec60f37261f7b7485d5e952d4819d02dcb4362cf`);
+HTTP/Celery/Responses-actiecontractmatrix **17/17**, adapters **26/26**,
+nul brokerorders, Live-bots, Live-calls of productieverbindingen
+(`641a399a5623c32dc10a968cedf5b9c5ed68816dd130bf4517f0cc273e3f424d`).
+Echte-provider selectorontwikkeling **20/20**
+(`603797e8eb73d67119be1174ec775b6776408b28fbd07d2b0a5021d4f4354700`)
+en regressie **109/109**
+(`d0b3e32775870d460579b9f33c540c26f21092da5cc2c8528cb3bfe0b26363ee`)
+hadden nul provider-, schema-, parse-, validatie- of timeoutfouten. Een
+synthetische lokale NL-coachflow via HTTP/Celery/echte Responses-provider
+eindigde **4/4 completed**
+(`2fbf9ac360992d38cf8d3955743b1eb1f14dd1eb9dd049f4f7a849b2fa170288`).
+De specifieke hersteloproep is ook met een geïnjecteerde overloop gevolgd
+door een echte provideroproep gecontroleerd; de provider accepteerde de
+nieuwe keten. Frontendbuild, typecheck, i18n-lint, **43/43** i18n-tests,
+**74/74** commandtests, **9/9** proposaltests en high-severity audit
+(nul kwetsbaarheden) slaagden. De definitieve buildlog heeft SHA-256
+`4df367d5681bf67478573cfe433f637895d59d66fb38869bddc7ff7b45591c0d`.
+Dit bewijst de lokale herstelroute, niet het volledige ingelogde live gesprek.
+
 ## FINN rapport-indicatorroute bij nieuwe chat (14 november 2026)
 
 Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Productcommit

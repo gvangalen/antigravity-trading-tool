@@ -3472,6 +3472,26 @@ def test_provider_quota_failure_has_honest_localized_copy_without_internal_code(
     assert "responses_provider" not in content
 
 
+@pytest.mark.parametrize("locale, expected", [
+    ("nl", "Begin een nieuw gesprek"),
+    ("en", "Start a new conversation"),
+    ("de", "Beginne ein neues Gespräch"),
+])
+def test_context_overflow_fallback_explains_the_next_step_without_internal_code(locale, expected):
+    service = object.__new__(FinnV2RunService)
+    service.runs = SimpleNamespace(get_by_id_for_user=AsyncMock(
+        return_value=SimpleNamespace(message="Discuss my plan"),
+    ))
+    service.session = SimpleNamespace(get=AsyncMock(
+        return_value=SimpleNamespace(ai_preferences={"locale": locale}),
+    ))
+    content = asyncio.run(service._localized_runtime_failure_content(
+        run_id="run-overflow", user_id=1, error_code="responses_context_length_exceeded",
+    ))
+    assert expected in content
+    assert "context_length_exceeded" not in content
+
+
 def test_markdown_formatting_cannot_hide_internal_setup_identifier():
     assert FinnResponsesAnswerVerifier._contains_internal_identifier("**Setup ID:** 11363")
     assert FinnResponsesAnswerVerifier._contains_internal_identifier("Strategy ID: 42")
@@ -16799,6 +16819,124 @@ def test_first_provider_call_retries_one_transient_server_failure():
         model_led_coach=True, locale="nl",
     ))
     assert result.text == "BTC Full Base staat op 4H."
+    assert len(fake.requests) == 2
+
+
+def test_model_led_context_overflow_restarts_without_stored_conversation_cursor():
+    class ContextOverflow(Exception):
+        status_code = 400
+        code = "context_length_exceeded"
+
+    fake = FakeResponses(
+        ContextOverflow("context too long"),
+        response("fresh-chain", text="De score ligt buiten je opgeslagen band; wacht."),
+    )
+    question = "Past de BTC/EUR-score bij mijn plan en wat besloot mijn bot?"
+    result = asyncio.run(FinnResponsesLoop(
+        client=SimpleNamespace(responses=fake), executor=AsyncMock(),
+    ).run(
+        message=question, instructions="Gebruik alleen bevestigde feiten.",
+        previous_response_id="long-conversation-cursor",
+        verified_turn_context={"answer": "Eerdere AAPL-uitleg", "evidence": []},
+        model_led_coach=True, read_only_turn=True,
+    ))
+    assert result.text.startswith("De score ligt buiten")
+    assert fake.requests[0]["previous_response_id"] == "long-conversation-cursor"
+    assert "previous_response_id" not in fake.requests[1]
+    assert "Eerdere AAPL-uitleg" in fake.requests[1]["input"][0]["content"]
+    assert fake.requests[1]["input"][-1]["content"] == question
+
+
+def test_model_led_context_overflow_compacts_prior_evidence_after_fresh_retry():
+    class ContextOverflow(Exception):
+        status_code = 400
+        code = "context_length_exceeded"
+
+    fake = FakeResponses(
+        ContextOverflow("stored chain too long"),
+        ContextOverflow("preceding evidence too long"),
+        response("bounded-chain", text="Ik lees de actuele plan- en botgegevens opnieuw."),
+    )
+    prior = {
+        "answer": "Vorige conclusie", "user_message": "Vorige vraag",
+        "terminal_status": "completed",
+        "evidence": [{"scope": "read_asset_scores", "status": "completed", "data": "x" * 200_000}],
+    }
+    result = asyncio.run(FinnResponsesLoop(
+        client=SimpleNamespace(responses=fake), executor=AsyncMock(),
+    ).run(
+        message="Beoordeel BTC/EUR en mijn bot.", instructions="Lees actuele bronnen opnieuw.",
+        previous_response_id="long-cursor", verified_turn_context=prior,
+        model_led_coach=True, read_only_turn=True,
+    ))
+    assert result.response_id == "bounded-chain"
+    assert "previous_response_id" not in fake.requests[2]
+    compact = json.loads(fake.requests[2]["input"][0]["content"])
+    assert compact["answer"] == "Vorige conclusie"
+    assert compact["evidence"] == [{"scope": "read_asset_scores", "status": "completed"}]
+    assert "data" not in compact["evidence"][0]
+    assert len(fake.requests[2]["input"][0]["content"]) < 3000
+
+
+def test_model_led_context_overflow_stops_after_two_safe_retries():
+    class ContextOverflow(Exception):
+        status_code = 400
+        code = "context_length_exceeded"
+
+    fake = FakeResponses(*(ContextOverflow("context too long") for _ in range(3)))
+    with pytest.raises(FinnResponsesError, match="responses_context_length_exceeded"):
+        asyncio.run(FinnResponsesLoop(
+            client=SimpleNamespace(responses=fake), executor=AsyncMock(),
+        ).run(
+            message="Beoordeel mijn plan.", instructions="Gebruik bewijs.",
+            previous_response_id="long-cursor",
+            verified_turn_context={"answer": "Vorige antwoord", "evidence": [{
+                "scope": "read_saved_setup", "status": "completed", "data": "x" * 50000,
+            }]},
+            model_led_coach=True, read_only_turn=True,
+        ))
+    assert len(fake.requests) == 3
+
+
+def test_context_overflow_does_not_retry_an_action_proposal():
+    class ContextOverflow(Exception):
+        status_code = 400
+        code = "context_length_exceeded"
+
+    fake = FakeResponses(ContextOverflow("context too long"))
+    with pytest.raises(FinnResponsesError, match="responses_context_length_exceeded"):
+        asyncio.run(FinnResponsesLoop(
+            client=SimpleNamespace(responses=fake), executor=AsyncMock(),
+        ).run(
+            message="Maak een BTC-tradevoorstel.", instructions="Gebruik het actiecontract.",
+            previous_response_id="long-cursor", model_led_coach=False,
+        ))
+    assert len(fake.requests) == 1
+
+
+def test_context_overflow_after_proposal_never_repeats_the_proposal_tool():
+    class ContextOverflow(Exception):
+        status_code = 400
+        code = "context_length_exceeded"
+
+    fake = FakeResponses(
+        response("proposal", calls=(tool_call("proposal-call", "manage_asset_watchlist_proposal", {
+            "operation_id": "watchlist_add", "draft_intent": "new", "inputs": {},
+        }),)),
+        ContextOverflow("context too long"),
+    )
+    executions = []
+
+    async def execute(call):
+        executions.append(call.name)
+        return {"status": "validation_pending", "missing_inputs": ["asset"]}
+
+    with pytest.raises(FinnResponsesError, match="responses_context_length_exceeded"):
+        asyncio.run(FinnResponsesLoop(
+            client=SimpleNamespace(responses=fake), executor=execute,
+        ).run(message="Voeg een asset toe aan mijn watchlist.", instructions="Gebruik het actiecontract.",
+              model_led_coach=True))
+    assert executions == ["manage_asset_watchlist_proposal"]
     assert len(fake.requests) == 2
 
 

@@ -4128,6 +4128,12 @@ class FinnV2RunService:
                 "en": "My AI connection is currently unavailable. I can't answer reliably right now; please try again later.",
                 "de": "Meine KI-Verbindung ist derzeit nicht verfügbar. Ich kann deine Frage gerade nicht zuverlässig beantworten; versuche es später erneut.",
             }[locale]
+        if error_code == "responses_context_length_exceeded":
+            return {
+                "nl": "De context voor deze vraag is te groot om betrouwbaar te antwoorden. Begin een nieuw gesprek en stel je vraag opnieuw, eventueel korter.",
+                "en": "The context for this question is too large to answer reliably. Start a new conversation and ask again, using a shorter question if needed.",
+                "de": "Der Kontext für diese Frage ist zu groß für eine verlässliche Antwort. Beginne ein neues Gespräch und stelle die Frage erneut, falls nötig kürzer.",
+            }[locale]
         return {
             "nl": "FINN kon dit antwoord niet afronden. Probeer het opnieuw.",
             "en": "FINN couldn't complete this answer. Please try again.",

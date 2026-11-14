@@ -632,6 +632,7 @@ def safe_closed_paper_chat_diagnostic(error: Exception) -> Dict[str, Any] | None
         "selector_phase_timeout", "lifecycle_deadline_exceeded", "orchestrator_failed",
         "responses_provider_quota_unavailable", "responses_provider_unconfigured",
         "responses_provider_timeout", "responses_provider_error",
+        "responses_context_length_exceeded",
         "responses_lifecycle_budget_exhausted", "responses_tool_round_limit",
         "responses_tool_call_limit", "responses_incomplete", "responses_empty_answer",
         "responses_missing_id", "responses_missing_call_id", "responses_duplicate_call_id",
