@@ -6,7 +6,11 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN eerste natuurlijke rapport-indicatorvraag (14 november 2026)
 
-Phase: `LOCAL_CANDIDATE_PENDING_CI`. De onafhankelijke ingelogde QA op
+Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Productcommit
+`1db880f82bfb96a7a502bafd8f07c4d8e5ca3bff` op branch
+`codex/finn-indicator-first-turn-20261114` is via
+PR #1053 gemerged als `7918712a7956e6af1ff04b99a2b7cf86a191c96b`.
+De onafhankelijke ingelogde QA op
 publieke SHA `741e50f681e315e932c1553e51ae9ef32fffe733` gaf
 **NOT_ACCEPTED**: in een nieuw gesprek zei FINN bij een gewone vraag over het
 AAPL-dagrapport en het 50-daags gemiddelde dat rapport en waarden ontbraken.
@@ -36,8 +40,17 @@ Echte-provider ontwikkeling: **20/20** (artifact SHA-256
 `70989e68d0bbe8f9e215c0f99e906182ab630955dc4c8cdb2ab2095330b4fc77`)
 en regressie: **109/109** (artifact SHA-256
 `ac6049f577f60d03ce0004eb74a83821324447de0451ea2f08555f458ec3290c`),
-zonder provider-, schema- of timeoutfouten. PR-CI, main-CI, Auto Deploy,
-publieke SHA-pariteit en onafhankelijke live QA-hertest staan nog open.
+zonder provider-, schema- of timeoutfouten. PR-CI en main-CI
+(`43614444278`) waren beide groen in vijf jobs. De eerste Auto Deploy-run
+`43614867004` kreeg tweemaal een PostgreSQL-lock-timeout bij de bestaande
+migratie `2026_08_06_user_indicator_symbol_overrides.py` en rolde veilig
+terug naar `741e50f681e315e932c1553e51ae9ef32fffe733`. Herstart van
+dezelfde run op dezelfde commit (poging 2) slaagde. Publieke backend-health
+en frontend-buildinfo gaven beide HTTP 200 en exact
+`7918712a7956e6af1ff04b99a2b7cf86a191c96b`, gelijk aan GitHub main.
+Deze statusbijwerking maakt zelf een nieuwe main-SHA. De laatste main-CI,
+Auto Deploy, publieke SHA-pariteit en onafhankelijke ingelogde live QA-hertest
+blijven daarom open.
 
 ## FINN indicatorrevisies en rapportmomenten (14 november 2026)
 
