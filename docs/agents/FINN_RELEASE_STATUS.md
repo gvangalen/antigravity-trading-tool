@@ -4,6 +4,44 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN compacte actuele koers met correct bronmoment (14 november 2026)
+
+Phase: `LOCAL_REPAIR_CANDIDATE_PENDING_CI`. De vorige publieke kandidaat
+`2222de6e7fb0c9ccdf9df849510d1c11f948e0f8` had succesvolle main-CI en
+Auto Deploy `43573163046`; publieke backend-health en frontend-buildinfo
+gaven beide HTTP 200 met exact die SHA. Onafhankelijke ingelogde read-only QA
+gaf **NOT_ACCEPTED**: FINN noemde bij de nieuwste AAPL-koers US$356,40 van
+Twelve Data `14 november 2026, 22:00 CET`, terwijl Analyse dezelfde koers
+toonde met bronmoment `13 november 2026, 22:00 CET`. Een gerichte herhaling
+gaf wel 13 november. Paper-portefeuilletijd, afzonderlijke BTC/EUR- en
+BTC/USDT-bronmomenten, rapportmomenten en een historische botbeslissing
+kwamen in deze account overeen. De gebruikte account had geen AAPL-plan/bot;
+die route bleef ongetest. Geen accountmutaties of Live-orders.
+
+De reparatie op productcommit `80813f6f042938722de8db1216651fa2f546ed05`
+controleert ook compacte koersantwoorden zonder het woord `bronmoment`,
+waaronder meerzinnige antwoorden, tegen de actuele gelezen marktrij. De
+bestaande afwijscode voor een aantoonbaar oude koers blijft prioriteit houden.
+Regressies dekken de exacte live formulering, een correcte datum, historische
+rapporten, gemengde plan-/Analyse-momenten en afzonderlijke BTC-paren.
+Onafhankelijke lokale QA vond na meerdere tegenproeven geen resterende
+P1/P2-blocker binnen deze beperkte scope; dit is geen live hertest.
+
+Gemeten op deze kandidaat: gerichte regressies **33/33**, volledige backend
+**4781 passed, 7 skipped**. De geïsoleerde lokale API/Celery/Responses-matrix
+slaagde **38/38** (artifact SHA-256
+`e4d32a3bc0a5b4be481f053c34414b48c92c22d28c75958a65c451fb446b97b3`),
+zonder QA-materiaal of productieacties. De echte-provider ontwikkeling
+slaagde **20/20** (SHA-256
+`f6cce9be98ca40998c7af0e9ccd0946e91228ffaf6834222488a38ebcf962dff`)
+en regressie **109/109** (SHA-256
+`bbb13d90d99c73b787787dfd719bd2b4adce578d2987171c9c7bf76f38d31dc2`),
+met nul provider-, schema-, timeout-, parse- of validatiefouten. Een
+synthetische lokale Paper-portefeuillechat slaagde **2/2** (SHA-256
+`19b94a647a124eb9eda54ca137a2c0c45a5cdce3f4c18807b9ca564e443fd70f`).
+PR-CI, merge, Auto Deploy, publieke SHA-pariteit en onafhankelijke ingelogde
+live hertest zijn nog open. Deze kandidaat is **niet vrijgegeven**.
+
 ## FINN bronmomenten en tijdzonepariteit (13 november 2026)
 
 Phase: `DEPLOYED_PENDING_FINAL_SHA`. PR #1038 is gemerged op
