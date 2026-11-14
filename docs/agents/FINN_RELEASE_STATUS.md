@@ -4,17 +4,69 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN botblokkade als laatste besluit in Paper-coach (14 november 2026)
+
+Phase: `PR_CI_PENDING`. Branch `codex/finn-bot-decision-reason` is based on
+the deployed main SHA `3123be49ed37deb8a1ec5d2b6c80409dbf5ad01b`.
+Independent browser QA on that SHA returned `NOT_ACCEPTED` for the full
+two-turn coach test. The earlier followup-routing failure did **not** recur:
+FINN read the saved BTC/EUR score band 61–75, current score 35, separate
+BTC/EUR and BTC/USDT markets and advised against a €10 Paper buy without
+creating an action. But FINN called the latest bot outcome “houden” while the
+bot page showed “Trade geblokkeerd / Geen order” because a recent USD/EUR
+conversion was missing. QA made no account writes or trades. The official
+protected QA matrix was not run because no active QA goal/manifest existed.
+
+The source mismatch is confirmed in code: the owner-scoped latest decision
+projection passed `action`, persistence status and timestamp to FINN but
+dropped the saved guardrail and reason fields used by the bot page. A `hold`
+action alone therefore could not distinguish a blocked trade from an ordinary
+wait. This candidate selects the saved guardrail fields in the owner-scoped
+repository query and projects only bounded safety state, reason code, reason
+and check time through the existing review-history read. The projection uses
+the same safety interpretation as the bot page. Both the direct factual
+answer and the model instructions distinguish the action from the safety
+outcome. No asset-specific product rule or trading mutation was added.
+
+Targeted unit tests pass for a blocked ETH decision and its direct factual
+answer. The exact two-turn local HTTP/Celery/real-provider regression with a
+synthetic BTC decision (artifact SHA-256
+`7e00550b82d8b019fd21b90c3f1494242ecb90693e6eac22c21c3020b6f23931`)
+passes all source and answer assertions: both turns
+read the saved blocker and decision time, say the trade was blocked with no
+order because the recent USD/EUR conversion was missing, retain the correct
+plan/pair/cash distinctions and create no proposal. The backend suite passed
+**4831 tests, 7 skipped** (log SHA-256
+`7bda21133f1a8886b786fac0d074f76b4b73cd2b18d2a466946727a2976ae828`).
+The local worker action matrix passed **17/17**, adapters **26/26**, with zero
+broker orders, Live bots, Live trading calls or production connections
+(artifact SHA-256
+`809e0ab480a0a3f4393507a286d1b7e709f23e4bb4d0402bb90d9ba10d879820`).
+Frontend build, typecheck, i18n lint, **43/43** i18n, **74/74** commands,
+**9/9** proposals and high audit with zero vulnerabilities passed (build log
+SHA-256 `4df367d5681bf67478573cfe433f637895d59d66fb38869bddc7ff7b45591c0d`).
+The real-provider development selector passed **20/20** (artifact SHA-256
+`4a02d86111119e019a0104a6bbe90d24926d3ee52eba12af769e084854772d78`).
+The real-provider regression selector passed **109/109** (artifact SHA-256
+`20af64f820c1199d56a1ac407b34a5fb65d2fffe2805f7e3c31471727b5810e2`),
+with zero provider, schema, parse, validation or timeout failures. CI, deploy,
+public SHA parity and independent live QA remain pending.
+
 ## FINN vervolgvraag over Paper-plan en botbewijs (14 november 2026)
 
-Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Branch
+Phase: `QA_NOT_ACCEPTED`. Branch
 `codex/finn-broad-coach-followup` was based on the previously deployed main
 SHA `5029a0c273c6ca46d0fa3e5b28c86dbcdc1b1937` and merged via PR #1063
 as `f5bb58ab2f315a71d6fc65b87e9c36b27263f601`. Its required PR-CI
 `43647416025` and main-CI `43647931799` each passed all five jobs. Auto
 Deploy `43648350226` succeeded. GitHub main, backend-health, and
 frontend-buildinfo all reported the product merge SHA; both public endpoints
-returned HTTP 200. This status update creates a new main SHA, so the last
-main-CI, Auto Deploy, public SHA parity, and independent live QA remain open.
+returned HTTP 200. Status PR #1064 merged as final SHA
+`3123be49ed37deb8a1ec5d2b6c80409dbf5ad01b`; its last main-CI
+`43649027687` passed five jobs and Auto Deploy `43649438909` succeeded.
+GitHub main and both public HTTP 200 surfaces reported that final SHA. Live
+QA accepted the repaired followup routing but found the bot-blocker mismatch
+described in the active section above.
 The previous broad-question candidate passed local validation and deployment,
 but independent browser QA returned `NOT_ACCEPTED`: the broad first question
 was mostly answered, whereas its direct followup falsely claimed the current

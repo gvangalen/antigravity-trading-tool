@@ -227,7 +227,11 @@ class FinnResponsesReadExecutor:
                 "decisions and decision_at_amsterdam. Match an explicit bot name, "
                 "asset and Paper/Live mode to those rows. If several bots match, "
                 "ask which bot the user means. The portfolio read alone does "
-                "not contain decision history. "
+                "not contain decision history. The action (for example hold) "
+                "does not replace the saved safety_state. If safety_state is "
+                "blocked or error, say the trade was blocked, no order was "
+                "placed, and give the saved safety_reason when present. Do not "
+                "invent a missing reason or treat hold as approval to trade. "
                 "Do not shorten a dated report source to a day "
                 "and month merely because the user's question omitted the year."
             )

@@ -67,6 +67,14 @@ def render_bot_decision(
     mode = "Paper" if not row.get("is_live") else "Live"
     action_text = {"hold": "geen order (hold)", "buy": "koopbesluit (buy)",
                    "sell": "verkoopbesluit (sell)"}[action]
+    safety_state = str(row.get("safety_state") or "").lower()
+    safety_text = ""
+    if safety_state in {"blocked", "error"}:
+        action_text = "trade geblokkeerd / geen order"
+        saved_reason = str(row.get("safety_reason") or "").strip()
+        safety_text = f" Opgeslagen blokkadereden: {saved_reason}." if saved_reason else (
+            " De opgeslagen veiligheidscontrole vermeldt geen controleerbare reden."
+        )
     status = {"planned": "besluit opgeslagen", "completed": "besluit afgerond",
               "failed": "besluit mislukt"}.get(str(row.get("persistence_status") or ""),
                                           "opslagstatus onbekend")
@@ -79,7 +87,7 @@ def render_bot_decision(
     label = pair or symbol
     return (f"Het laatst opgeslagen besluit van je {label} {mode}-bot is {action_text}, "
             f"op {at} (Europe/Amsterdam). Dit is een {kind}, geen actuele "
-            f"marktbeoordeling. Opslagstatus: {status}.")
+            f"marktbeoordeling. Opslagstatus: {status}.{safety_text}")
 
 
 def render_report_and_quote_times(

@@ -234,16 +234,18 @@ class BotRepository:
         if not await self.check_table_exists("bot_decisions"):
             return []
         result = await self.session.execute(text("""
-            SELECT b.name AS bot_name, b.is_live,
+            SELECT b.name AS bot_name, b.is_live, b.id AS bot_id,
                    COALESCE(d.symbol, s.symbol, s.data->>'symbol', st.symbol) AS symbol,
                    tm.quote_currency, d.action, d.status, d.decision_ts,
-                   d.decision_kind
+                   d.decision_kind, d.id AS decision_id, d.created_at,
+                   d.scores_json, d.reason_json
             FROM bot_configs b
             LEFT JOIN strategies s ON s.id = b.strategy_id AND s.user_id = b.user_id
             LEFT JOIN setups st ON st.id = s.setup_id AND st.user_id = b.user_id
             LEFT JOIN trading_markets tm ON tm.id = b.market_id
             JOIN LATERAL (
-                SELECT symbol, action, status, decision_ts, decision_kind
+                SELECT id, symbol, action, status, decision_ts, decision_kind,
+                       created_at, scores_json, reason_json
                 FROM bot_decisions
                 WHERE user_id = b.user_id AND bot_id = b.id
                 ORDER BY decision_ts DESC, id DESC
