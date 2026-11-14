@@ -10,6 +10,7 @@ from backend.utils.db import get_db_connection
 from backend.engine.bot_brain import run_bot_brain
 from backend.engine.guardrails_engine import apply_guardrails
 from backend.domain.finn_dca_plan_contract import benchmark_score, normalize_benchmark_weights, is_confirmed_dca_amount_rule
+from backend.domain.asset_benchmark_weights import asset_benchmark_weights
 from backend.domain.setup_market_match import match_setup_from_daily_scores
 from backend.domain.entry_signal import evaluate_entry_signal, validate_entry_signal
 import asyncio
@@ -1260,8 +1261,7 @@ def _get_current_benchmark_weights(conn, user_id: int, symbol: str,
     preferences = _safe_json(row[0], {}) if isinstance(row[0], str) else (row[0] or {})
     if not isinstance(preferences, dict):
         return None, "invalid_preferences"
-    custom = preferences.get("intelligence_weights")
-    return normalize_benchmark_weights(custom), "user_preferences" if custom else "equal_default"
+    return asset_benchmark_weights(preferences, symbol)
 
 
 def _get_saved_setup_conditions(conn, user_id: int, setup_id: int | None) -> dict | None:

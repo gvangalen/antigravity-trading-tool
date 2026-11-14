@@ -47,6 +47,28 @@ export async function confirmBenchmarkCopy(preview) {
   });
 }
 
+export async function saveAssetBenchmarkWeights(symbol, weights) {
+  return fetchAuth('/api/workspace/asset/benchmark-weights', {
+    method: 'PUT', body: JSON.stringify({ symbol, weights }),
+  });
+}
+
+export async function getAssetBenchmarkCopySources(targetKey) {
+  return fetchAuth(`/api/workspace/benchmark-copy-sources?target_key=${encodeURIComponent(targetKey)}`);
+}
+
+export async function previewAssetBenchmarkCopy(sourceKey, targetKey) {
+  const params = new URLSearchParams({ source_key: sourceKey, target_key: targetKey });
+  return fetchAuth(`/api/workspace/benchmark-copy-preview?${params}`);
+}
+
+export async function confirmAssetBenchmarkCopy(preview) {
+  return fetchAuth('/api/workspace/benchmark-copy', {
+    method: 'POST', body: JSON.stringify({ source_key: preview.source_key,
+      target_key: preview.target_key, revision: preview.revision }),
+  });
+}
+
 export async function previewIndicatorImpact({ category, indicator, symbol }) {
   return fetchAuth('/api/indicator_config/preview', {
     method: 'POST',

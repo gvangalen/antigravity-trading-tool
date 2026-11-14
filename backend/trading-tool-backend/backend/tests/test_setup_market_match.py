@@ -553,7 +553,7 @@ def test_positive_match_uses_saved_evidence_for_each_selected_source():
 
     async def run():
         service = SetupMarketMatchService(SimpleNamespace(execute=execute), daily_rows={"BTC": row})
-        service._weights_by_user[7] = {"market_score": 1 / 3, "macro_score": 1 / 3,
+        service._weights_by_user[(7, None, "BTC")] = {"market_score": 1 / 3, "macro_score": 1 / 3,
                                        "technical_score": 1 / 3}
         owned = [setup(1, "BTC", min_benchmark_score=60, max_benchmark_score=80),
                  setup(2, "AAPL", min_benchmark_score=60)]

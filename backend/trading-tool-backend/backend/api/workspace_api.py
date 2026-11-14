@@ -10,7 +10,10 @@ from backend.services.exact_market_workspace_service import ExactMarketWorkspace
 from backend.services.exact_market_indicator_service import ExactMarketIndicatorService
 from backend.services.pair_indicator_config_service import PairIndicatorConfigService
 from backend.services.indicator_impact_preview_service import IndicatorImpactPreviewService
-from backend.services.indicator_score_refresh_service import queue_indicator_score_refresh, queue_exact_market_refresh
+from backend.services.indicator_score_refresh_service import (
+    queue_indicator_score_refresh, queue_exact_market_refresh, queue_exact_market_owner_repair,
+    queue_asset_benchmark_materialization,
+)
 from backend.utils.scoring_utils import normalize_indicator_name, score_source_is_fresh
 from backend.domain.market_indicator_catalog import get_market_indicator_definition
 from backend.domain.macro_indicator_catalog import get_macro_indicator_definition
@@ -18,7 +21,10 @@ from backend.domain.technical_indicator_catalog import get_technical_indicator_d
 from backend.infrastructure.models import MarketDataIndicator, TechnicalDataIndicator
 from backend.services.pair_benchmark_service import (
     PairBenchmarkCopyService, benchmark_weights, save_benchmark_weights,
+    save_asset_benchmark_weights,
 )
+from backend.services.asset_catalog_service import AssetCatalogService
+from backend.services.asset_benchmark_copy_service import AssetBenchmarkCopyService
 from backend.utils.auth_utils import get_current_user
 
 
@@ -44,6 +50,78 @@ class PairBenchmarkCopyWrite(BaseModel):
     source_market_id: int = Field(gt=0)
     target_market_id: int = Field(gt=0)
     revision: str = Field(min_length=64, max_length=64)
+
+
+class AssetBenchmarkWeightsWrite(BaseModel):
+    symbol: str = Field(min_length=1, max_length=20)
+    weights: dict[str, float]
+
+
+class AssetBenchmarkCopyWrite(BaseModel):
+    source_key: str = Field(min_length=3, max_length=40)
+    target_key: str = Field(min_length=3, max_length=40)
+    revision: str = Field(min_length=64, max_length=64)
+
+
+@router.get("/workspace/benchmark-copy-sources")
+async def get_asset_benchmark_copy_sources(
+    target_key: str = Query(..., min_length=3, max_length=40),
+    current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    try:
+        return await AssetBenchmarkCopyService(db).sources(int(current_user["id"]), target_key)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/workspace/benchmark-copy-preview")
+async def get_asset_benchmark_copy_preview(
+    source_key: str = Query(..., min_length=3, max_length=40),
+    target_key: str = Query(..., min_length=3, max_length=40),
+    current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    try:
+        return await AssetBenchmarkCopyService(db).preview(int(current_user["id"]), source_key, target_key)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/workspace/benchmark-copy")
+async def post_asset_benchmark_copy(
+    payload: AssetBenchmarkCopyWrite, current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        result = await AssetBenchmarkCopyService(db).apply(
+            int(current_user["id"]), payload.source_key, payload.target_key, payload.revision)
+    except ValueError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=409 if str(exc) == "benchmark_preview_changed" else 422,
+                            detail=str(exc)) from exc
+    if result["market_id"] is not None:
+        queue_exact_market_owner_repair(int(current_user["id"]), int(result["market_id"]))
+    elif not queue_asset_benchmark_materialization(int(current_user["id"]), result["symbol"]):
+        queue_indicator_score_refresh(int(current_user["id"]), result["symbol"])
+    return result
+
+
+@router.put("/workspace/asset/benchmark-weights")
+async def put_asset_benchmark_weights(
+    payload: AssetBenchmarkWeightsWrite, current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    symbol = payload.symbol.strip().upper()
+    asset = await AssetCatalogService(db).get_asset(symbol)
+    if (asset.get("provider") == "fallback" or asset.get("asset_class") not in {"crypto", "stock", "etf", "index"}
+            or not asset.get("is_active", True)):
+        raise HTTPException(status_code=422, detail="asset_not_supported")
+    try:
+        weights = await save_asset_benchmark_weights(db, int(current_user["id"]), symbol, payload.weights)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    queue_indicator_score_refresh(int(current_user["id"]), symbol)
+    return {"ok": True, "symbol": symbol,
+            "weights": {key.removesuffix("_score"): value for key, value in weights.items()}}
 
 
 @router.get("/workspace/exact-market/configured-markets")

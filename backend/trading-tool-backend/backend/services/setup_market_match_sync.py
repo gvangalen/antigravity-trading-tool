@@ -10,7 +10,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from backend.domain.finn_dca_plan_contract import benchmark_score, normalize_benchmark_weights
+from backend.domain.finn_dca_plan_contract import benchmark_score
+from backend.domain.asset_benchmark_weights import asset_benchmark_weights
 from backend.domain.setup_market_match import rank_matches
 from backend.utils.scoring_utils import score_snapshot_is_current
 
@@ -95,10 +96,7 @@ def current_setup_market_assessment(conn, user_id: int, symbol: str) -> dict[str
             preferences = json.loads(preferences)
         except json.JSONDecodeError:
             preferences = False
-    weights = normalize_benchmark_weights(
-        preferences.get("intelligence_weights") if isinstance(preferences, dict) else
-        None if preferences is None else False
-    ) if user_row else None
+    weights = asset_benchmark_weights(preferences, symbol)[0] if user_row else None
     row = dict(zip(("report_date", "macro_score", "technical_score", "market_score",
                     "calculated_at", "indicator_evidence"), daily_row)) if daily_row else None
     scores = None
