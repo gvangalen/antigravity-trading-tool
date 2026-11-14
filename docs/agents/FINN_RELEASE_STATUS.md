@@ -4,9 +4,61 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN rapport-indicatorroute bij nieuwe chat (14 november 2026)
+
+Phase: `LOCAL_CANDIDATE_PENDING_CI`. De eerdere reparatie op definitieve
+publieke SHA `c1b76b22c91cb62f9c68da4c18b0c6f6c78e7a20` is in de
+onafhankelijke ingelogde browserhertest **NOT_ACCEPTED**. De letterlijke
+eerste natuurlijke AAPL-vraag in een nieuw gesprek kreeg opnieuw een
+antwoord zonder de aanwezige rapport- en Analysewaarden; FINN vroeg de
+gebruiker deze aan te leveren en verwees naar “contracts”. Expliciete
+AAPL MA50- en RSI-vragen, de BTC-paargrens en een ETH/EUR-grensvraag
+slaagden. Er was geen actiekaart of accountmutatie. Runtrace en effectieve
+serverlocale waren niet zichtbaar in de browser; de zichtbare accounttaal
+was Nederlands.
+Er was voor deze hertest geen actief beschermd QA-goal/manifest beschikbaar;
+dit oordeel betreft de ingelogde browserherkeuring, niet een volledige
+beschermde runtime-matrix.
+
+Een lokale HTTP→Celery→FINN-reproductie van de letterlijke vraag vond de
+werkelijke oorzaak: de eerdere capability-classificatie zag “kan lezen” plus
+“indicator” als een vraag over uitvoerbare planregels. Zij onderschepte de
+beurt vóór de rapport-/techniekreads en gaf `plan_execution_capability` met
+algemene contractinformatie terug. De nieuwe kandidaat laat generieke
+rapport-indicatorvergelijkingen door naar de bestaande eigenaargebonden
+feitelijke leesroute. De bestaande locale- en gespreksstatusvoorwaarden van
+die route blijven behouden. Een gerichte regressie beschermt de
+capability-grens zodat echte vragen over uitvoerbare planregels daar blijven.
+Asset- en
+indicatorselectie blijft catalogusgedreven;
+er zijn geen order-, bot- of Live-acties gewijzigd.
+
+De letterlijke QA-vraag is daarnaast met een synthetische lokale gebruiker,
+opgeslagen rapport- en techniekrij, via HTTP→Celery→FINN opnieuw uitgevoerd.
+De eerste run vóór de classifierreparatie gaf `plan_execution_capability`;
+de definitieve run gaf beide waarden en de drie momenten, eindigde als
+`completed` met `factual_source_verified`, zonder actiekaart. Een tweede
+lokale run over de uitvoerbaarheid van een indicatorregel bleef correct bij
+`plan_execution_capability` (artifact SHA-256
+`f26ee9c08dc78c3613a09a62782b9ae976c9e0c6d4e8ebb7e8023864cec244bc`).
+
+Gerichte runtime- en bronmomenttests: **924 passed**. Volledige backend suite:
+**4804 passed, 7 skipped**. Frontend typecheck, i18n-lint, **43/43**
+i18n-tests, **71/71** commandtests, high-audit (**0** meldingen) en
+productiebuild groen. Lokale API/Celery/Responses-matrix: **17/17**
+actiecontracten en **26/26** adaptertests, nul Live-calls, brokerorders of
+productieverbindingen (artifact SHA-256
+`6a16b5428d7ae2307deba0d9e24e238bee148d4479cc63dd6c4f4a0ec89e1126`).
+Echte-provider ontwikkeling **20/20** (artifact SHA-256
+`43c5363ab2371d13d2b5acf2c686cd3b862ff28b657364534f25da21fb27dd36`)
+en regressie **109/109** (artifact SHA-256
+`8602c4a5eba6de1fe386e59019f56cbdfbc99acb7a9939de08f688be35bc10bc`),
+zonder provider-, schema- of timeoutfouten. PR-CI, main-CI, Auto Deploy,
+publieke SHA-pariteit en onafhankelijke live QA-hertest staan nog open.
+
 ## FINN eerste natuurlijke rapport-indicatorvraag (14 november 2026)
 
-Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Productcommit
+Phase: `NOT_ACCEPTED`. Productcommit
 `1db880f82bfb96a7a502bafd8f07c4d8e5ca3bff` op branch
 `codex/finn-indicator-first-turn-20261114` is via
 PR #1053 gemerged als `7918712a7956e6af1ff04b99a2b7cf86a191c96b`.
@@ -48,9 +100,11 @@ terug naar `741e50f681e315e932c1553e51ae9ef32fffe733`. Herstart van
 dezelfde run op dezelfde commit (poging 2) slaagde. Publieke backend-health
 en frontend-buildinfo gaven beide HTTP 200 en exact
 `7918712a7956e6af1ff04b99a2b7cf86a191c96b`, gelijk aan GitHub main.
-Deze statusbijwerking maakt zelf een nieuwe main-SHA. De laatste main-CI,
-Auto Deploy, publieke SHA-pariteit en onafhankelijke ingelogde live QA-hertest
-blijven daarom open.
+De laatste main-CI (`43615921531`) en Auto Deploy (`43616422763`) slaagden.
+GitHub main en beide publieke endpoints rapporteerden HTTP 200 en exact
+`c1b76b22c91cb62f9c68da4c18b0c6f6c78e7a20`. De onafhankelijke
+ingelogde browserhertest gaf **NOT_ACCEPTED** op de natuurlijke eerste
+AAPL-vraag; de nieuwe kandidaat staat hierboven.
 
 ## FINN indicatorrevisies en rapportmomenten (14 november 2026)
 

@@ -90,6 +90,18 @@ def test_model_capabilities_match_confirmed_dca_amount_contract():
 
 def test_generic_capability_questions_include_ma_and_trendline_designs():
     assert not requests_execution_capability_question(
+        "In het AAPL-dagrapport staat een 50-daags gemiddelde. Leg dat naast wat "
+        "Analyse nu voor dezelfde indicator kan lezen. Gaat het om een nieuwe koersdag "
+        "of om een latere revisie/uitlezing van dezelfde broncandle? "
+        "Noem beide waarden en de drie relevante momenten. Doe geen voorstel of wijziging."
+    )
+    assert not requests_execution_capability_question(
+        "Kan Analyse nu de RSI voor ETH/EUR lezen en die met mijn dagrapport vergelijken?"
+    )
+    assert requests_execution_capability_question(
+        "Kan mijn dagrapport de huidige MA50 als uitvoerbare regel gebruiken?"
+    )
+    assert not requests_execution_capability_question(
         "Noem het SMA50 Doorloop QA. Vaste uitvoering, gebalanceerd risico, "
         "entry €68000, stop-loss €60000 en target €80000.",
         {"plan_design_focus": {"kind": "new_separate_setup"}},
