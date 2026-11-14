@@ -125,14 +125,14 @@ function resolveAssetLogoUrl(symbol, explicitLogoUrl = null, assetClass = null) 
 const ASSET_GROUPS = [
   { id: "crypto", label: "Crypto" },
   { id: "stocks", label: "Stocks" },
+  { id: "etfs", label: "ETF" },
 ];
 
 function normalizeAssetGroup(assetClass) {
   const normalized = String(assetClass || "").trim().toLowerCase();
   if (normalized === "crypto") return "crypto";
-  if (normalized === "stock" || normalized === "stocks" || normalized === "etf" || normalized === "etfs") {
-    return "stocks";
-  }
+  if (normalized === "stock" || normalized === "stocks") return "stocks";
+  if (normalized === "etf" || normalized === "etfs") return "etfs";
   return "crypto";
 }
 
@@ -2080,7 +2080,11 @@ function AssetList({
             );
           }) : (
             <div className="px-4 py-6 text-center text-xs font-bold text-slate-400">
-              {activeGroup === "stocks" ? "Nog geen stock-assets in je watchlist." : "Nog geen crypto-assets in je watchlist."}
+              {activeGroup === "etfs"
+                ? "Nog geen ETF’s in je watchlist. Voeg er een toe via Asset toevoegen."
+                : activeGroup === "stocks"
+                  ? "Nog geen stock-assets in je watchlist."
+                  : "Nog geen crypto-assets in je watchlist."}
             </div>
           )}
         </div>
@@ -3253,7 +3257,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         onRemove={handleRemoveWatchlistAsset}
         activeGroup={activeAssetGroup}
         onGroupChange={handleAssetGroupChange}
-        onAddAsset={() => openSearch({ mode: "asset" })}
+        onAddAsset={() => openSearch({ mode: "asset", assetGroup: activeAssetGroup })}
         conditionOptions={t?.setups?.marketConditions?.options}
         ui={ui}
       />

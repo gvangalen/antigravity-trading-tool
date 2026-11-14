@@ -77,6 +77,15 @@ export const FINN_ASSETS = [
   { symbol: "GLD", name: "SPDR Gold Shares", icon: "G", assetClass: "etf" },
 ];
 
+export function matchesAssetGroup(asset, group) {
+  if (!group) return true;
+  const assetClass = String(asset?.assetClass || "").toLowerCase();
+  if (group === "stocks") return assetClass === "stock";
+  if (group === "etfs") return assetClass === "etf";
+  if (group === "crypto") return assetClass === "crypto";
+  return false;
+}
+
 export function buildExactPairOptions(assets, marketsBySymbol, query = "") {
   return assets.filter((asset) => asset.assetClass === "crypto").flatMap((asset) =>
     (marketsBySymbol[asset.symbol] || [])

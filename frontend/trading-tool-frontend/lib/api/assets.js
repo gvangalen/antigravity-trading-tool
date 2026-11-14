@@ -34,7 +34,7 @@ export async function selectTradingMarket(symbol, quoteCurrency, options = {}) {
 
 export async function searchAssets(query, options = {}) {
   const {
-    assetClasses = ["crypto", "stock"],
+    assetClasses = ["crypto", "stock", "etf"],
     limit = 8,
   } = options;
 

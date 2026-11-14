@@ -152,6 +152,7 @@ export default function FinnWorkspaceShell({ children }) {
       setCommandRequest({
         mode: detail.mode || "chat",
         category: detail.category || null,
+        assetGroup: detail.assetGroup || null,
         marketId: detail.marketId || null,
         quoteCurrency: detail.quoteCurrency || null,
         context: detail.context || null,

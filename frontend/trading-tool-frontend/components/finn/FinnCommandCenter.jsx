@@ -25,6 +25,7 @@ import { getMacroIndicatorNames, macroDataAdd } from "@/lib/api/macro";
 import { getIndicatorNames as getTechnicalIndicatorNames, technicalDataAdd } from "@/lib/api/technical";
 import {
   FINN_ASSETS,
+  matchesAssetGroup,
   FINN_INDICATOR_MODAL_COMPLETED_EVENT,
   FINN_INDICATOR_MODAL_OPEN_EVENT,
   buildExactPairOptions,
@@ -216,7 +217,7 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
       request.mode === "indicator"
         ? { kind: "indicator", category: request.category || getDefaultIndicatorCategory(pathname) }
         : request.mode === "asset"
-          ? { kind: "asset", category: null }
+          ? { kind: "asset", category: null, assetGroup: request.assetGroup || null }
           : request.mode === "chat"
             ? { kind: "chat", category: null }
           : { kind: "all", category: null }
@@ -260,7 +261,7 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
   }, [mode.kind, marketChoice.asset]);
 
   useEffect(() => {
-    if (!isOpen || mode.kind !== "asset") return;
+    if (!isOpen || mode.kind !== "asset" || (mode.assetGroup && mode.assetGroup !== "crypto")) return;
     let cancelled = false;
     setPairCatalog((current) => ({ ...current, loading: true, error: false }));
     const assets = FINN_ASSETS.filter((asset) => asset.assetClass === "crypto");
@@ -274,7 +275,7 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
         setPairCatalog({ markets, loading: false, error: results.every((result) => result.status === "rejected") });
       });
     return () => { cancelled = true; };
-  }, [isOpen, mode.kind]);
+  }, [isOpen, mode.assetGroup, mode.kind]);
 
   const workflows = useMemo(
     () => [
@@ -290,20 +291,23 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
   const assetResults = useMemo(() => {
     if (mode.kind === "indicator" || mode.kind === "asset_market" || !isDirectCommandSearchMode(mode.kind)) return [];
     if (!hasQuery && mode.kind !== "asset") return [];
-    return FINN_ASSETS.filter((asset) => (mode.kind !== "asset" || asset.assetClass !== "crypto") && matchesCommandQuery(`${asset.symbol} ${asset.name} ${asset.assetClass === "crypto" ? `${asset.symbol}/EUR ${asset.symbol}/USDT` : ""}`, query)).map((asset) => ({
+    return FINN_ASSETS.filter((asset) =>
+      (mode.kind !== "asset" || (asset.assetClass !== "crypto" && matchesAssetGroup(asset, mode.assetGroup))) &&
+      matchesCommandQuery(`${asset.symbol} ${asset.name} ${asset.assetClass === "crypto" ? `${asset.symbol}/EUR ${asset.symbol}/USDT` : ""}`, query)
+    ).map((asset) => ({
       id: `asset:${asset.symbol}`,
       type: "asset",
       title: asset.symbol,
-      subtitle: asset.name,
+      subtitle: asset.assetClass === "etf" ? `${asset.name} · ETF` : asset.name,
       asset,
       icon: Search,
     }));
-  }, [hasQuery, mode.kind, query]);
+  }, [hasQuery, mode.assetGroup, mode.kind, query]);
 
   const marketResults = useMemo(() => {
     const options = mode.kind === "asset_market"
       ? marketChoice.markets.map((market) => ({ market, asset: marketChoice.asset }))
-      : mode.kind === "asset"
+      : mode.kind === "asset" && (!mode.assetGroup || mode.assetGroup === "crypto")
         ? buildExactPairOptions(FINN_ASSETS, pairCatalog.markets, query)
         : [];
     return options.map(({ market, asset }) => ({
@@ -316,7 +320,7 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
       icon: Search,
       disabled: market.status !== "available",
     }));
-  }, [copy.marketUnavailable, marketChoice, mode.kind, pairCatalog.markets, query]);
+  }, [copy.marketUnavailable, marketChoice, mode.assetGroup, mode.kind, pairCatalog.markets, query]);
 
   const workflowResults = useMemo(() => {
     if (mode.kind !== "all" || !hasQuery) return [];
@@ -387,8 +391,11 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
       }
       setActiveSetup(null);
       setFocusedBotId(null);
-      if (!watchlist.isInWatchlist(symbol)) {
-        await watchlist.add(asset);
+      try {
+        if (!watchlist.isInWatchlist(symbol)) await watchlist.add(asset);
+      } catch {
+        showSnackbar(copy.failed, "danger");
+        return;
       }
       setSelectedAsset(symbol);
       initializeAsset(symbol).catch((error) => console.error("Asset initialization failed:", error));

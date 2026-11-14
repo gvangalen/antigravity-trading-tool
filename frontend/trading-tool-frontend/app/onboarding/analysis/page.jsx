@@ -38,6 +38,7 @@ import { fetchAssetWorkspace } from "@/lib/api/workspace";
 const ASSET_CLASS_LABELS = {
   crypto: "Crypto",
   stock: "Stock",
+  etf: "ETF",
 };
 
 function normalizeCatalogItems(items) {
@@ -410,7 +411,7 @@ export default function OnboardingAnalysisPage() {
       try {
         setLoadingResults(true);
         const data = await searchAssets(normalizedQuery, {
-          assetClasses: ["crypto", "stock"],
+          assetClasses: ["crypto", "stock", "etf"],
           limit: 8,
         });
         if (!cancelled) {

@@ -10,6 +10,7 @@ import {
   isDirectCommandSearchMode,
   isExactMarketInWatchlist,
   isWorkspaceIndicatorConfigured,
+  matchesAssetGroup,
   matchesCommandQuery,
   normalizeCommandText,
   openFinnContext,
@@ -30,6 +31,14 @@ test("asset picker lists exact EUR and USDT markets as separate results", () => 
     ["BTC/EUR", "BTC/USDT", "ETH/USDT"]);
   assert.deepEqual(buildExactPairOptions(FINN_ASSETS, markets, "btc/eur").map(({ market }) => market.pair),
     ["BTC/EUR"]);
+});
+
+test("ETF choices stay separate from stocks and crypto markets", () => {
+  const symbols = FINN_ASSETS.filter((asset) => matchesAssetGroup(asset, "etfs")).map((asset) => asset.symbol);
+  assert.deepEqual(symbols, ["SPY", "QQQ", "IBIT", "FBTC", "GLD"]);
+  assert.equal(matchesAssetGroup(FINN_ASSETS.find((asset) => asset.symbol === "AAPL"), "etfs"), false);
+  assert.equal(matchesAssetGroup(FINN_ASSETS.find((asset) => asset.symbol === "BTC"), "etfs"), false);
+  assert.equal(matchesAssetGroup(FINN_ASSETS.find((asset) => asset.symbol === "SPY"), "stocks"), false);
 });
 
 test("normalizes accents and punctuation in natural commands", () => {

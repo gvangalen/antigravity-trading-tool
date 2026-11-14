@@ -338,7 +338,7 @@ async def get_crypto_trading_markets(
 @router.get("/assets/search", response_model=List[AssetSearchItemResponse])
 async def search_assets(
     q: str = Query(default="", min_length=1),
-    asset_classes: str = Query(default="crypto,stock"),
+    asset_classes: str = Query(default="crypto,stock,etf"),
     limit: int = Query(default=8, ge=1, le=20),
     current_user: dict = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
