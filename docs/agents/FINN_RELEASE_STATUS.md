@@ -6,7 +6,10 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN rapport-indicatorroute bij nieuwe chat (14 november 2026)
 
-Phase: `LOCAL_CANDIDATE_PENDING_CI`. De eerdere reparatie op definitieve
+Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Productcommit
+`1e9b9e013ecf767bb5024d08653700fad411f0d1` op branch
+`codex/finn-report-indicator-route-20261114` is via PR #1055 gemerged als
+`9c14d36266854a39f75cfbf22a3cdd3b327d50a3`. De eerdere reparatie op definitieve
 publieke SHA `c1b76b22c91cb62f9c68da4c18b0c6f6c78e7a20` is in de
 onafhankelijke ingelogde browserhertest **NOT_ACCEPTED**. De letterlijke
 eerste natuurlijke AAPL-vraag in een nieuw gesprek kreeg opnieuw een
@@ -53,8 +56,13 @@ Echte-provider ontwikkeling **20/20** (artifact SHA-256
 `43c5363ab2371d13d2b5acf2c686cd3b862ff28b657364534f25da21fb27dd36`)
 en regressie **109/109** (artifact SHA-256
 `8602c4a5eba6de1fe386e59019f56cbdfbc99acb7a9939de08f688be35bc10bc`),
-zonder provider-, schema- of timeoutfouten. PR-CI, main-CI, Auto Deploy,
-publieke SHA-pariteit en onafhankelijke live QA-hertest staan nog open.
+zonder provider-, schema- of timeoutfouten. PR-CI en main-CI
+(`43620998931`) waren beide groen in vijf jobs. Auto Deploy `43621422442`
+slaagde. Publieke backend-health en frontend-buildinfo gaven beide HTTP 200
+en exact `9c14d36266854a39f75cfbf22a3cdd3b327d50a3`, gelijk aan
+GitHub main. Deze statusbijwerking maakt zelf een nieuwe main-SHA. De
+laatste main-CI, Auto Deploy, publieke SHA-pariteit en onafhankelijke
+ingelogde live QA-hertest blijven daarom open.
 
 ## FINN eerste natuurlijke rapport-indicatorvraag (14 november 2026)
 
