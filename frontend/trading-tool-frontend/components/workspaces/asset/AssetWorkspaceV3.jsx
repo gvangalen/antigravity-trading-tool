@@ -174,8 +174,6 @@ function getUiCopy(locale = "nl") {
       chartTitle: "TradingView chart",
       chartClose: "Close chart",
       chartOpen: "Open chart",
-      chartIndicators: "Selected technical indicators",
-      chartIndicatorNote: "TradingView uses the selected pair and chart interval for visual indicators. Score 2.0 uses its own source readings and rules.",
       chartLoading: "Loading the selected market's chart…",
       chartFallback: "TradingView could not load the chart. Try again later.",
       chartBackup: "Temporary market chart",
@@ -389,8 +387,6 @@ function getUiCopy(locale = "nl") {
       chartTitle: "TradingView-chart",
       chartClose: "Chart schließen",
       chartOpen: "Chart öffnen",
-      chartIndicators: "Ausgewählte technische Indikatoren",
-      chartIndicatorNote: "Für visuelle Indikatoren verwendet TradingView das gewählte Handelspaar und Chartintervall. Score 2.0 verwendet eigene Messwerte und Regeln.",
       chartLoading: "Chart für den gewählten Markt wird geladen…",
       chartFallback: "TradingView konnte den Chart nicht laden. Versuche es später erneut.",
       chartBackup: "Temporärer Kurschart",
@@ -603,8 +599,6 @@ function getUiCopy(locale = "nl") {
     chartTitle: "TradingView-chart",
     chartClose: "Chart sluiten",
     chartOpen: "Chart openen",
-    chartIndicators: "Geselecteerde technische indicatoren",
-    chartIndicatorNote: "Voor visuele indicatoren gebruikt TradingView het gekozen handelspaar en grafiektijdsframe. Score 2.0 gebruikt eigen metingen en regels.",
     chartLoading: "Grafiek voor de gekozen markt wordt geladen…",
     chartFallback: "TradingView kon de grafiek niet laden. Probeer het later opnieuw.",
     chartBackup: "Tijdelijke koersgrafiek",
@@ -1864,11 +1858,6 @@ function AnalysisChartSection({ interval, onIntervalChange, tradingViewSymbol, s
               onIntervalChange={onIntervalChange}
             />
           ) : <p className="py-12 text-center text-sm text-slate-500">{ui.chartLoading}</p>}
-          {tradingViewSymbol && studies.length ? (
-            <p className="mt-2 px-1 text-xs text-slate-500">
-              {ui.chartIndicators}: {studies.map((study) => study.label).join(", ")}. {ui.chartIndicatorNote}
-            </p>
-          ) : null}
         </div>
       ) : null}
     </section>
