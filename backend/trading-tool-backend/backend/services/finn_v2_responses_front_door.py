@@ -935,6 +935,26 @@ class FinnResponsesFrontDoor:
         )
 
     @staticmethod
+    def _asks_about_aggregate_portfolio(message: str) -> bool:
+        """An account-wide balance must not inherit the active asset filter."""
+        return bool(
+            (
+                re.search(
+                    r"\b(?:gezamenlijk\w*|totaal|totale|volledig\w*|overall|"
+                    r"combined|total|entire|gesamt\w*)\b", message, re.I,
+                )
+                and re.search(
+                    r"\b(?:portefeuille|portfolio|kas|cash|saldo|balance)\b", message, re.I,
+                )
+            )
+            or re.search(
+                r"\b(?:alle|all|alle[nr]?)\s+"
+                r"(?:(?:mijn|my|meine[nr]?)\s+)?(?:paper[-\s]+)?"
+                r"(?:bots?|posities|positions)\b", message, re.I,
+            )
+        )
+
+    @staticmethod
     def _asks_about_bot_decision(message: str) -> bool:
         """Bind explicit bot-decision questions to persisted owner evidence."""
         return bool(
@@ -1185,7 +1205,9 @@ class FinnResponsesFrontDoor:
                     "unverified_workspace_bot" if bot_id is None
                     else "resolved" if focused else "not_in_portfolio_read"
                 ),
-                "global_summary_scope": "all_bots",
+                "global_summary_scope": (
+                    "selected_asset_bots" if item.get("asset") else "all_bots"
+                ),
             }})
         return {
             **read_result,
@@ -3597,8 +3619,20 @@ class FinnResponsesFrontDoor:
                     is_read_only_turn and not pending_operation
                     and self._asks_about_open_position(message)
                 )
-                if position_read_requested and call.name == "get_portfolio_and_exposure":
-                    call = replace(call, inputs={})
+                aggregate_portfolio_requested = (
+                    call.operation_id is None and not pending_operation
+                    and self._asks_about_aggregate_portfolio(message)
+                )
+                full_portfolio_requested = position_read_requested or aggregate_portfolio_requested
+                portfolio_only_read = (
+                    call.name == "get_portfolio_and_exposure"
+                    and set(call.read_tools) == {"read_portfolio"}
+                )
+                if full_portfolio_requested and portfolio_only_read:
+                    portfolio_inputs = {key: value for key, value in call.inputs.items() if key != "asset"}
+                    if re.search(r"\bPaper\b", message, re.I) and not re.search(r"\bLive\b", message, re.I):
+                        portfolio_inputs["environment"] = "paper"
+                    call = replace(call, inputs=portfolio_inputs)
                 if call.name == "get_active_plan_and_strategy" and not pending_operation:
                     workspace_selector = await self._workspace_bot_plan_selector(
                         workspace_hints=workspace_hints, message=message,
@@ -3649,12 +3683,20 @@ class FinnResponsesFrontDoor:
                     }
                 else:
                     read_result = await self.reads(call)
-                if position_read_requested and call.name != "get_portfolio_and_exposure":
+                if (position_read_requested or (
+                    aggregate_portfolio_requested and "read_portfolio" in call.read_tools
+                )) and not portfolio_only_read:
                     # The selected plan or score read can be correct yet omit an
-                    # existing Paper position. Add only owner-scoped facts; Luna
-                    # still decides how to answer the user.
+                    # account-wide Paper balance. Re-read without an asset
+                    # filter; other reads keep their selected asset.
+                    portfolio_inputs = {
+                        key: value for key, value in call.inputs.items()
+                        if key == "environment"
+                    }
+                    if re.search(r"\bPaper\b", message, re.I) and not re.search(r"\bLive\b", message, re.I):
+                        portfolio_inputs["environment"] = "paper"
                     portfolio_result = await self.reads(replace(
-                        call, name="get_portfolio_and_exposure", inputs={},
+                        call, name="get_portfolio_and_exposure", inputs=portfolio_inputs,
                         read_tools=("read_portfolio",),
                     ))
                     read_result = {
@@ -3695,7 +3737,8 @@ class FinnResponsesFrontDoor:
                         ]
                         scoped_results.append({**item, "data": {**data, "matches": matches}})
                     read_result = {**read_result, "results": scoped_results}
-                if visible_bot_reference and "read_portfolio" in call.read_tools:
+                if visible_bot_reference and not full_portfolio_requested \
+                        and "read_portfolio" in call.read_tools:
                     read_result = self._focus_portfolio_on_open_bot(
                         read_result,
                         workspace_selector["bot_id"] if workspace_selector is not None else None,
