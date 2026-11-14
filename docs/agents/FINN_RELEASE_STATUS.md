@@ -6,12 +6,18 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN gezamenlijke Paper-kas in assetgericht coachgesprek (14 november 2026)
 
-Phase: `LOCAL_VALIDATED_PENDING_CI`. Reparatiebranch
+Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Reparatiebranch
 `codex/finn-paper-portfolio-scope`, productcommit
 `a5b23c7f087af4353169789090ddc5455ed99b7a` op definitieve vorige main-basis
-`db9a5a30f405d08ec8d963a8ccc325a3398f0e77`. PR-CI, merge,
-Auto Deploy, publieke SHA-verificatie en onafhankelijke live hertest
-zijn nog niet uitgevoerd.
+`db9a5a30f405d08ec8d963a8ccc325a3398f0e77` is via PR #1059
+gemerged als `ceb8b3546e9643d541a6a06d589e3d7f5f59d4fc`.
+PR-CI `43638460601` en main-CI `43638967246` slaagden beide in vijf jobs.
+Auto Deploy `43639396459` slaagde. GitHub main, publieke backend-health
+en frontend-buildinfo gaven op 14 november exact
+`ceb8b3546e9643d541a6a06d589e3d7f5f59d4fc`; beide publieke
+endpoints gaven HTTP 200. Deze statusbijwerking maakt zelf een nieuwe
+main-SHA; de laatste main-CI, Auto Deploy, publieke SHA-pariteit en
+onafhankelijke live hertest blijven daarom open.
 
 De onafhankelijke QA-browserproef op de vorige release accepteerde de
 oorspronkelijke contextoverloopreparatie niet volledig. De brede BTC-vraag
