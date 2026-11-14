@@ -15,7 +15,7 @@ import re
 from typing import Any
 from langdetect import DetectorFactory, LangDetectException, detect, detect_langs
 
-from backend.services.asset_catalog_service import mentioned_catalog_symbols
+from backend.services.asset_catalog_service import mentioned_catalog_symbols, requested_catalog_trading_pair
 from backend.services.finn_v2_responses_loop import (
     FinnResponsesError,
     FinnResponsesResult,
@@ -37,6 +37,10 @@ from backend.services.finn_v2_responses_model import finn_responses_model_option
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.services.finn_v2_responses_read_executor import FinnResponsesReadExecutor
 from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
+from backend.services.finn_v2_factual_source_answer import (
+    render_bot_decision, render_latest_quote, render_portfolio_read_time,
+    render_report_and_quote_times,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -3058,6 +3062,44 @@ class FinnResponsesAnswerVerifier:
             for item in (call.get("result", {}).get("results") or [])
             if isinstance(item, dict)
         )
+        if result.answer_kind == "factual_source":
+            calls = result.tool_trace
+            if len(calls) != 1 or not isinstance(calls[0].get("result"), dict):
+                return FinnResponsesVerifiedAnswer(
+                    "unavailable", self._fallback_copy("responses_evidence_not_verified", message=message, locale=locale),
+                    "factual_source_missing_read", evidence,
+                )
+            call = calls[0]
+            read = call["result"]
+            args = call.get("arguments") or {}
+            scopes = {item.get("scope") for item in evidence}
+            symbol = str(args.get("asset") or "").upper()
+            if scopes == {"read_latest_report", "read_market_snapshot"} and symbol:
+                quote = str(args.get("quote_currency") or "").upper()
+                expected = render_report_and_quote_times(read, symbol=symbol, quote_currency=quote)
+            elif scopes == {"read_review_history"} and symbol:
+                mode = False if re.search(r"\bPaper\b", message, re.I) else (
+                    True if re.search(r"\bLive\b", message, re.I) else None)
+                requested_pair = requested_catalog_trading_pair(message)
+                expected = render_bot_decision(
+                    read, symbol=symbol, paper=mode,
+                    pair=f"{requested_pair[0]}/{requested_pair[1]}" if requested_pair and requested_pair[0] == symbol else None,
+                )
+            elif scopes == {"read_portfolio"} and args.get("environment") == "paper":
+                expected = render_portfolio_read_time(read)
+            elif scopes == {"read_market_snapshot"} and symbol:
+                expected = render_latest_quote(
+                    read, symbol=symbol,
+                    quote_currency=str(args.get("quote_currency") or "").upper() or None,
+                )
+            else:
+                expected = None
+            if expected is None or expected != result.text:
+                return FinnResponsesVerifiedAnswer(
+                    "unavailable", self._fallback_copy("responses_evidence_not_verified", message=message, locale=locale),
+                    "factual_source_mismatch", evidence,
+                )
+            return FinnResponsesVerifiedAnswer("completed", expected, "factual_source_verified", evidence)
         if result.answer_kind == "free_text" and not self._latest_quote_claim_supported(result.text, evidence):
             return FinnResponsesVerifiedAnswer(
                 "unavailable",
