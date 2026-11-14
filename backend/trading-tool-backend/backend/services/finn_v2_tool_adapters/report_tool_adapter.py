@@ -5,6 +5,9 @@ from datetime import date
 
 from backend.infrastructure.repositories.report_repository import ReportRepository
 from backend.schemas.finn_v2_evidence_schema import LatestReportData
+from backend.services.finn_v2_tool_adapters.display_source_moment import (
+    amsterdam_source_moment, display_source_moment,
+)
 
 
 class ReportToolAdapter:
@@ -65,7 +68,8 @@ class ReportToolAdapter:
             symbol=report_symbol,
             status=row.get("status"),
             id=row.get("id"),
-            generated_at=row.get("generated_at"),
+            generated_at=display_source_moment(row.get("generated_at")),
+            generated_at_amsterdam=amsterdam_source_moment(row.get("generated_at")),
             market_score=row.get("market_score"),
             macro_score=row.get("macro_score"),
             technical_score=row.get("technical_score"),

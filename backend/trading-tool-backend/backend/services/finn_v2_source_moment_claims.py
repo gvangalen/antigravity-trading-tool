@@ -34,6 +34,11 @@ _DATED_MOMENT = re.compile(
     re.I,
 )
 _ZONED_CLOCK = re.compile(r"\b\d{1,2}:\d{2}(?::\d{2})?\s*(?:UTC|CET|CEST)\b", re.I)
+_REPORT_CLOCK = re.compile(
+    r"\b(?P<hour>\d{1,2}):(?P<minute>\d{2})(?::(?P<second>\d{2}))?\s*"
+    r"(?:(?:in\s+)?Europe/Amsterdam\s*,?\s*)?(?P<zone>UTC|CET|CEST)\b",
+    re.I,
+)
 
 
 def _utc(value: Any) -> datetime | None:
@@ -87,12 +92,10 @@ def _same_moment(claim: tuple[datetime, bool], observed: datetime) -> bool:
 def current_source_moments_supported(
     answer: str, evidence: tuple[dict[str, Any], ...], *, question: str | None = None,
 ) -> bool:
-    """Reject wrong current quote table moments and current portfolio read times.
-
-    Historical reports and saved plan timestamps are outside this check.
-    """
+    """Check stated quote, portfolio and report times against their own reads."""
     market_rows: dict[tuple[str, str], datetime] = {}
     portfolio_reads: list[datetime] = []
+    report_generations: list[datetime] = []
     for item in evidence:
         if item.get("status") != "completed" or not isinstance(item.get("data"), dict):
             continue
@@ -109,6 +112,44 @@ def current_source_moments_supported(
             observed = _utc(data.get("read_at"))
             if observed:
                 portfolio_reads.append(observed)
+        elif item.get("scope") == "read_latest_report":
+            generated = _utc(data.get("generated_at"))
+            if generated:
+                report_generations.append(generated)
+
+    # A report's UTC and Amsterdam times must describe the same instant. The
+    # model may put the local clock in parentheses without a repeated date,
+    # which the dated quote checks below cannot validate.
+    if len(report_generations) == 1:
+        generated = report_generations[0]
+        local = generated.astimezone(_AMSTERDAM)
+        for marker in re.finditer(
+            r"\b(?:gegenereerd|opgesteld|rapportmoment(?:opname)?|generated)\b",
+            answer, re.I,
+        ):
+            fragment = re.split(r"[.!?\n;]", answer[marker.end():marker.end() + 130], maxsplit=1)[0]
+            first = _REPORT_CLOCK.search(fragment[:75])
+            if first is None or re.search(
+                r"\b(?:koersbron|prijsbron|bronmeting|koersbronmoment)\b",
+                fragment[:first.start()], re.I,
+            ):
+                continue
+            # Only an immediately parenthesized conversion belongs to this
+            # report time. A later clock after "en de koersbron" is another fact.
+            parenthesized = re.match(r"\s*\(\s*(.*?)\s*\)", fragment[first.end():])
+            paired = _REPORT_CLOCK.match(parenthesized[1].strip()) if parenthesized else None
+            for clock in (first, paired):
+                if clock is None:
+                    continue
+                zone = clock["zone"].upper()
+                expected = generated if zone == "UTC" else local
+                claimed = (int(clock["hour"]), int(clock["minute"]), int(clock["second"] or 0))
+                actual = (expected.hour, expected.minute,
+                          expected.second if clock["second"] is not None else 0)
+                if claimed != actual:
+                    return False
+                if zone != "UTC" and zone != local.tzname():
+                    return False
 
     # A table can claim a current source time without giving a price. The
     # sentence-level price verifier cannot see such a claim.

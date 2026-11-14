@@ -77,11 +77,13 @@ def test_latest_report_read_exposes_saved_scores_and_source_moments():
     assert data["best_setup"]["name"] == "ETH Base"
     assert data["market_score"] is None  # Multi-asset report has no global market score.
     assert data["symbol"] is None  # A global report cannot be attributed to the active asset.
+    assert data["generated_at_amsterdam"] == "2026-10-12 10:16:00 CEST"
 
     facts = FinnV2ReasoningContextService(session=object())._sanitize_facts(data, "read_latest_report")
     assert facts["score_source_snapshot"]["assets"][0]["reported_scores"]["market_score"] == 50
     assert facts["score_source_snapshot"]["assets"][1]["reported_scores"]["market_score"] is None
     assert facts["generated_at"] == row["generated_at"]
+    assert facts["generated_at_amsterdam"] == "2026-10-12 10:16:00 CEST"
 
 
 def test_later_live_score_change_does_not_rewrite_saved_report_snapshot():

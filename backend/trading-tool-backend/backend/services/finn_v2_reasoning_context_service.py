@@ -641,6 +641,7 @@ class FinnV2ReasoningContextService:
         if tool_name == "read_latest_report":
             return {key: payload.get(key) for key in [
                 "report_type", "report_date", "symbol", "status", "id", "generated_at",
+                "generated_at_amsterdam",
                 "market_score", "macro_score", "technical_score", "setup_score",
                 "score_source_snapshot", "best_setup", "top_setups",
             ] if payload.get(key) is not None}

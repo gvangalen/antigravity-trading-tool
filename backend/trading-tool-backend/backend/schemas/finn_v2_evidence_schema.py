@@ -361,6 +361,7 @@ class LatestReportData(BaseModel):
     status: Optional[str] = None
     id: Optional[int] = None
     generated_at: Optional[datetime] = None
+    generated_at_amsterdam: Optional[str] = None
     market_score: Optional[float] = None
     macro_score: Optional[float] = None
     technical_score: Optional[float] = None
