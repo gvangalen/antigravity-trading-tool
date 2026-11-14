@@ -6,8 +6,15 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN vervolgvraag over Paper-plan en botbewijs (14 november 2026)
 
-Phase: `PR_CI_PENDING`. Branch `codex/finn-broad-coach-followup` is based on
-the final deployed main SHA `5029a0c273c6ca46d0fa3e5b28c86dbcdc1b1937`.
+Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Branch
+`codex/finn-broad-coach-followup` was based on the previously deployed main
+SHA `5029a0c273c6ca46d0fa3e5b28c86dbcdc1b1937` and merged via PR #1063
+as `f5bb58ab2f315a71d6fc65b87e9c36b27263f601`. Its required PR-CI
+`43647416025` and main-CI `43647931799` each passed all five jobs. Auto
+Deploy `43648350226` succeeded. GitHub main, backend-health, and
+frontend-buildinfo all reported the product merge SHA; both public endpoints
+returned HTTP 200. This status update creates a new main SHA, so the last
+main-CI, Auto Deploy, public SHA parity, and independent live QA remain open.
 The previous broad-question candidate passed local validation and deployment,
 but independent browser QA returned `NOT_ACCEPTED`: the broad first question
 was mostly answered, whereas its direct followup falsely claimed the current
@@ -51,8 +58,8 @@ The real-provider development selector passed **20/20** (artifact SHA-256
 `6c1db233996ca0e336dda1e73de38bf37917c2c88c1ce613b20f542833a6ee22`).
 The real-provider regression selector passed **109/109** (artifact SHA-256
 `eccd62d8621c6e3b9e85ab8a571de1e73c611456010f68b1dc4076cf40496725`),
-with no provider, schema, parse, validation, or timeout errors. PR CI, deploy,
-public SHA parity, and independent live QA remain pending.
+with no provider, schema, parse, validation, or timeout errors. Independent
+live QA remains pending on the final status SHA.
 
 ## FINN samengestelde Paper-coachvraag en brondekking (14 november 2026)
 
