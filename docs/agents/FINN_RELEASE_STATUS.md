@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN bronmomenten en tijdzonepariteit (13 november 2026)
 
-Phase: `LOCAL_GATES_COMPLETE_PENDING_DEPLOY`. Concept-PR #1038 vanaf
+Phase: `DEPLOYED_PENDING_FINAL_SHA`. PR #1038 is gemerged op
+`0008f9a5b0e44abb408f8306f752ab34063fc875`, vanaf
 `codex/finn-source-moment-parity-20261113` op herbaseerde productcommit
 `0fa7df879` (basis `6aba2b38a`). De chartwijziging op de nieuwe basis raakt
 de FINN-backend niet; de frontend-export is op die basis opnieuw gebouwd.
@@ -30,12 +31,15 @@ en regressie **109/109** (SHA-256 `d609afe1efa7768b32493d818bbfa43210b9f192d5111
 beide zonder provider-, schema-, timeout-, parse- of validatiefouten. Een
 aanvullende synthetische lokale Paper-portefeuillechat slaagde **2/2**
 (SHA-256 `af41fe379cfe705b6b585ecef5b25ca15f08fffa12b2d641e50785ec608a7adf`).
-PR-CI op de eerdere branch was groen in alle vijf jobs: backend, frontend,
-mobiel, security en workflow-validatie. Die SHA is door de nieuwe `main`-basis
-achterhaald; CI op de herbaseerde kandidaat, merge, Auto Deploy, publieke
-SHA-pariteit en ingelogde live QA zijn nog open. Deze
-kandidaat verandert tot een geverifieerde deployment de huidige publieke
-status of de eerdere onafhankelijke QA-uitspraak niet.
+De laatste PR-CI en main-CI (`43571745463`) waren groen in alle vijf jobs:
+backend, frontend, mobiel, security en workflow-validatie. Auto Deploy
+`43572113988` slaagde voor de merge-SHA. Publieke
+`https://tradamind.com/api/health` en
+`https://tradamind.com/build-info.json` gaven beide HTTP 200 en exact
+`0008f9a5b0e44abb408f8306f752ab34063fc875`. De statusbijwerking zelf
+maakt een nieuw `main`-commit en kan een nieuwe Auto Deploy starten; daarom
+is de finale publieke SHA en onafhankelijke ingelogde live QA nog open. De
+lokale en publieke Build-gates bewijzen geen live FINN-antwoordcorrectheid.
 
 ## FINN algemene Reflectiechat: afzonderlijk orderplanbewijs (13 november 2026)
 
