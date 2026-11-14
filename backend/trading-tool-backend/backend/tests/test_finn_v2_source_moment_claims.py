@@ -90,6 +90,51 @@ def test_historical_report_moment_remains_separate_from_current_read():
     )
 
 
+def test_live_report_generation_utc_and_cet_must_be_the_same_instant():
+    report = ({"scope": "read_latest_report", "status": "completed", "data": {
+        "report_date": "2026-11-14", "generated_at": "2026-11-14T04:33:08+00:00",
+    }},)
+    wrong = ("Het dagrapport werd gegenereerd om 04:33:08 UTC "
+             "(04:33:08 in Europe/Amsterdam, CET).")
+    assert not current_source_moments_supported(wrong, report)
+    assert current_source_moments_supported(
+        wrong.replace("(04:33:08 in", "(05:33:08 in"), report,
+    )
+    assert not current_source_moments_supported(
+        "Rapport opgesteld: 14 november 2026, 04:33 CET.", report,
+    )
+    assert current_source_moments_supported(
+        "Rapport opgesteld: 14 november 2026, 05:33 CET.", report,
+    )
+    assert current_source_moments_supported(
+        "Het dagrapport is gegenereerd om 05:33:08 CET en de BTC/EUR-koersbron "
+        "daarin was 04:29:59 UTC.", report,
+    )
+    assert current_source_moments_supported(
+        "Het dagrapport is gegenereerd om 04:33:08 UTC en de BTC/EUR-koersbron "
+        "daarin was 05:29:59 CET.", report,
+    )
+    assert current_source_moments_supported(
+        "Het dagrapport werd gegenereerd met de koersbron van 04:29:59 UTC.", report,
+    )
+    assert current_source_moments_supported(
+        "Het dagrapport werd gegenereerd om 05:33:08 CET "
+        "(koersbron BTC/EUR 04:29:59 UTC).", report,
+    )
+
+
+def test_report_generation_uses_ce_st_in_summer():
+    report = ({"scope": "read_latest_report", "status": "completed", "data": {
+        "generated_at": "2026-07-14T04:33:08+00:00",
+    }},)
+    assert current_source_moments_supported(
+        "Rapport opgesteld om 06:33:08 CEST.", report,
+    )
+    assert not current_source_moments_supported(
+        "Rapport opgesteld om 05:33:08 CET.", report,
+    )
+
+
 def test_current_market_source_in_prose_requires_the_matching_quote_read():
     wrong = "Het nieuwste AAPL-koersbronmoment is 13 november 2026 om 20:44 UTC."
     assert not current_source_moments_supported(wrong, _evidence())

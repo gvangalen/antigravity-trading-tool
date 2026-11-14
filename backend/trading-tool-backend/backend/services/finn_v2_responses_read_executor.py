@@ -430,7 +430,10 @@ class FinnResponsesReadExecutor:
                 output.get("evidence_boundary"),
                 "The owner-read daily report is a historical snapshot. When comparing it "
                 "with the current market quote, state each source moment with the full "
-                "date including year, clock time and explicit time zone. Never describe "
+                "date including year, clock time and explicit time zone. For the report "
+                "generation time use data.generated_at_amsterdam, which is converted "
+                "from data.generated_at UTC; never copy the UTC clock into CET or CEST. "
+                "Never describe "
                 "the report price as the latest market price.",
             )))
         if any(

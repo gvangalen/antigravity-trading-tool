@@ -4,6 +4,49 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN rapportmoment UTC/CET-pariteit (14 november 2026)
+
+Phase: `LOCAL_CANDIDATE_PENDING_CI` op branch
+`codex/finn-report-time-parity-20261114`. De vorige kandidaat
+`beb10c9c810b07fa38cb604726231213e10be2dd` had vijf groene main-CI-jobs,
+succesvolle Auto Deploy `43578590696` en identieke publieke backend- en
+frontend-SHA bij HTTP 200. Onafhankelijke ingelogde read-only QA gaf
+**NOT_ACCEPTED** voor de tijdzonescope. De generieke nieuwste AAPL-koers was
+3/3 correct: US$356,40 van Twelve Data, bronmoment 13 november 22:00 CET,
+beurs gesloten, gelijk aan Analyse. Ook BTC/EUR versus BTC/USDT, Paper en
+historische botmomenten kwamen overeen. Maar FINN noemde het dagrapport van
+14 november gegenereerd om `04:33:08 UTC (04:33:08 CET)` terwijl Reflectie
+`05:33 CET` toont. `04:33:08 UTC` is `05:33:08 CET`. Gerrit heeft geen
+AAPL-plan of AAPL-bot; die route bleef ongetest. QA wijzigde geen accountdata
+en plaatste geen orders.
+
+De reparatie geeft `read_latest_report` het UTC-rapportmoment en de daaruit
+berekende `generated_at_amsterdam` als afzonderlijke feiten. De FINN-leesgrens
+wijst de lokale rapporttijd aan. De antwoordcontrole vergelijkt de direct bij
+`gegenereerd` of `opgesteld` genoemde UTC/CET-klok en een direct aansluitende
+omrekening tussen haakjes met hetzelfde gelezen rapportmoment. Een latere
+koersbrontijd in dezelfde zin of tussen haakjes blijft een afzonderlijk feit.
+Regressies dekken exact de live foute zin, de juiste winter- en zomertijd en
+gemengde rapport-/koersbronzinnen. Onafhankelijke lokale QA vond na twee
+gerapporteerde en herstelde false positives geen P1/P2 binnen deze scope;
+dit is geen live hertest.
+
+Gemeten op de definitieve lokale code: gerichte tests **15/15**, volledige
+backend **4783 passed, 7 skipped**. Echte-provider selectorontwikkeling
+**20/20** (artifact SHA-256
+`d69d86e74f6f51beff9598730a16fbbe2cffbfa4fcb4378aa00ba5a615c94232`)
+en regressie **109/109** (SHA-256
+`e65240a22da8fef2df25b8c97b906368256c5c5af0f8dff278305a5ce8a8d503`)
+hadden nul provider-, schema-, timeout-, parse- of validatiefouten. De eerste
+geïsoleerde API/Celery/Responses-actiematrix was **37/38**: een setup-update
+viel veilig terug op een leesantwoord zonder wijziging. De volledige
+herhaling slaagde **38/38**, 16/16 acties en 9/9 lineage (SHA-256
+`7dc446dd64286822012d7d9205b836615444ea1e5e83e3011ad91102412574f3`),
+met nul Live-bots, niet-toegestane executies of productieverbindingen. De
+wisselende setup-selectie blijft een afzonderlijk betrouwbaarheidsrisico.
+PR-CI, main-CI, Auto Deploy, publieke SHA-pariteit en onafhankelijke live
+hertest van deze reparatie zijn nog open; er is nog geen QA-acceptatie.
+
 ## FINN compacte actuele koers met correct bronmoment (14 november 2026)
 
 Phase: `DEPLOYED_PENDING_FINAL_SHA`. De vorige publieke kandidaat
