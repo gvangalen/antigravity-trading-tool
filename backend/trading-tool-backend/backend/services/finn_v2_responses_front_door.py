@@ -51,8 +51,9 @@ from backend.services.watchlist_conversation_service import ambiguous_asset_chan
 from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
 from backend.services.finn_v2_account_bundle_answer import render_account_bundle_answer
 from backend.services.finn_v2_factual_source_answer import (
-    render_bot_decision, render_latest_quote, render_portfolio_read_time,
-    render_report_and_quote_times,
+    mentions_technical_indicator, render_bot_decision, render_latest_quote,
+    render_portfolio_read_time, render_report_and_quote_times,
+    render_report_and_technical_read,
 )
 
 logger = logging.getLogger(__name__)
@@ -1426,12 +1427,22 @@ class FinnResponsesFrontDoor:
             pair = requested_catalog_trading_pair(message)
             pair_mentions = re.findall(r"\b[A-Z][A-Z0-9]*/(?:EUR|USDT)\b", message, re.I)
             symbols = mentioned_catalog_symbols(message)
+            report_technical_comparison = bool(
+                re.search(r"\b(?:dagrapport|ochtendrapport|rapport|report)\b", message, re.I)
+                and re.search(r"\b(?:analyse|nu|actuel\w*|huidig\w*|nieuwste|laatste|naast|vergelijk\w*)\b", message, re.I)
+                and mentions_technical_indicator(message)
+            )
             fact_kind = None
             if pair and re.search(r"\b(?:dagrapport|ochtendrapport)\b", message, re.I) \
                     and re.search(r"\b(?:nieuwste|huidige|actuele)\b", message, re.I) \
                     and re.search(r"\b(?:koersbron|bronmoment|koers)\b", message, re.I):
                 fact_kind = "report_quote_times"
                 symbol = pair[0]
+            elif report_technical_comparison and len(symbols) <= 1 \
+                    and len({item.upper() for item in pair_mentions}) <= 1:
+                symbol = next(iter(symbols)) if symbols else resolve_catalog_symbol(verified_asset)
+                if symbol:
+                    fact_kind = "report_technical_comparison"
             elif len(symbols) == 1 and self._asks_about_bot_decision(message) \
                     and re.search(r"\b(?:laatste|nieuwste)\b", message, re.I) \
                     and re.search(r"\bopgeslagen\b", message, re.I) \
@@ -1457,6 +1468,15 @@ class FinnResponsesFrontDoor:
                         previous_response=previous_response, owner_user_id=self.user_id,
                     )
                     call = replace(call, inputs={**call.inputs, "quote_currency": pair[1]})
+                elif fact_kind == "report_technical_comparison":
+                    call = replace(catalog.validate("get_current_technical_snapshot", {
+                        "asset": symbol,
+                        **({"quote_currency": pair[1]} if pair and pair[0] == symbol else {}),
+                    }), read_tools=("read_latest_report", "read_technical_snapshot"))
+                    call = self._bind_explicit_report_evidence(
+                        call, message=message, read_only=True,
+                        previous_response=previous_response, owner_user_id=self.user_id,
+                    )
                 elif fact_kind == "bot_decision":
                     call = replace(catalog.validate("get_decision_history", {"asset": symbol}),
                                    read_tools=("read_review_history",),
@@ -1476,6 +1496,11 @@ class FinnResponsesFrontDoor:
                 if fact_kind == "report_quote_times":
                     fact_text = render_report_and_quote_times(
                         read_result, symbol=symbol, quote_currency=pair[1],
+                    )
+                elif fact_kind == "report_technical_comparison":
+                    fact_text = render_report_and_technical_read(
+                        read_result, symbol=symbol, message=message,
+                        pair=f"{pair[0]}/{pair[1]}" if pair and pair[0] == symbol else None,
                     )
                 elif fact_kind == "bot_decision":
                     mode = False if re.search(r"\bPaper\b", message, re.I) else (
