@@ -301,10 +301,11 @@ class BotService:
             raise HTTPException(409, "Geen recente, gecontroleerde koers en omrekening voor deze Paper-order. Vernieuw de preview.")
         return checked
 
-    def _safety_contract(self, decision: Dict[str, Any], is_live: bool, *, historical: bool = False) -> dict:
+    @staticmethod
+    def _safety_contract(decision: Dict[str, Any], is_live: bool, *, historical: bool = False) -> dict:
         """Expose the saved guardrail result without rerunning market checks on a read."""
         result = decision.get("guardrails_result")
-        checked_at = self._parse_execution_timestamp(
+        checked_at = BotService._parse_execution_timestamp(
             decision.get("guardrails_checked_at") or (decision.get("created_at") if result else None)
         )
         proposed = float((result or {}).get("original_amount_eur") or decision.get("requested_amount_eur") or 0)
@@ -984,7 +985,8 @@ class BotService:
         event["source"] = "manual_order_guardrail"
         return event
 
-    def _parse_execution_timestamp(self, value: Any) -> Optional[datetime]:
+    @staticmethod
+    def _parse_execution_timestamp(value: Any) -> Optional[datetime]:
         if not value:
             return None
         if isinstance(value, datetime):

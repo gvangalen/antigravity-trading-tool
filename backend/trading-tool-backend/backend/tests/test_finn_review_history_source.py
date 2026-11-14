@@ -166,3 +166,34 @@ def test_bot_decision_only_read_survives_unavailable_trade_review_and_legacy_his
     ))
     assert result["source"] == "bot_decisions"
     assert result["data"].latest_bot_decisions[0]["decision_at_amsterdam"] == "2026-10-18 09:48:54 CEST"
+
+
+def test_latest_bot_decision_preserves_saved_safety_blocker_without_raw_scores():
+    class LatestDecisions:
+        async def get_latest_bot_decisions_for_owner(self, user_id):
+            assert user_id == 42
+            return [{
+                "bot_id": 9, "decision_id": 19, "bot_name": "ETH Paper",
+                "is_live": False, "symbol": "ETH", "quote_currency": "EUR",
+                "action": "hold", "status": "completed",
+                "decision_ts": datetime.now(timezone.utc),
+                "scores_json": {"guardrails_result": {
+                    "allowed": False,
+                    "blocked_by": "market_price_stale",
+                    "reason": "Een recente koersomrekening ontbreekt.",
+                }},
+            }]
+
+    adapter = object.__new__(ReviewToolAdapter)
+    adapter.repository = LatestDecisions()
+    from backend.domain.finn_v2_source_registry import FinnV2InformationSourceRegistry
+    adapter.sources = FinnV2InformationSourceRegistry()
+    result = asyncio.run(adapter.execute(
+        user_id=42, asset="ETH", selector={"_latest_bot_decisions_only": True},
+    ))
+    row = result["data"].latest_bot_decisions[0]
+    assert row["action"] == "hold"
+    assert row["safety_state"] == "error"
+    assert row["safety_reason_code"] == "market_price_stale"
+    assert row["safety_reason"] == "Een recente koersomrekening ontbreekt."
+    assert "scores_json" not in row

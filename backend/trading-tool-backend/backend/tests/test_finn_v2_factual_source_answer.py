@@ -46,6 +46,26 @@ def test_latest_btc_paper_decision_uses_the_persisted_row():
     assert "BTC Live" not in response.text
 
 
+def test_blocked_bot_decision_reports_safety_outcome_and_reason():
+    response, _ = _run(
+        "Wat is het laatste opgeslagen besluit van mijn ETH Paper-bot? "
+        "Noem de veiligheidsstatus en reden.",
+        [{"scope": "read_review_history", "status": "completed", "data": {
+            "latest_bot_decisions": [{
+                "symbol": "ETH", "bot_name": "ETH Paper", "is_live": False,
+                "action": "hold", "persistence_status": "completed",
+                "decision_at": "2026-11-14T22:45:00+00:00",
+                "safety_state": "blocked",
+                "safety_reason_code": "conversion_unavailable",
+                "safety_reason": "Een recente USD/EUR-omrekening ontbreekt.",
+            }],
+        }}],
+    )
+    assert "trade geblokkeerd / geen order" in response.text
+    assert "Een recente USD/EUR-omrekening ontbreekt" in response.text
+    assert "geen order (hold)" not in response.text
+
+
 def test_report_and_current_pair_sources_keep_separate_cet_moments():
     message = ("Vergelijk mijn dagrapport van 14 november voor BTC/EUR met de nieuwste BTC/EUR-koers. "
                "Noem apart rapportmoment, koersbron in het rapport en huidige koersbronmoment in CET, "

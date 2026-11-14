@@ -23,6 +23,7 @@ def main() -> None:
     parser.add_argument("--output", required=True)
     parser.add_argument("--question")
     parser.add_argument("--followup")
+    parser.add_argument("--blocked-decision", action="store_true")
     args = parser.parse_args()
     if not args.base_url.startswith(("http://127.0.0.1:", "http://localhost:")):
         raise SystemExit("This regression is local-only")
@@ -63,6 +64,26 @@ def main() -> None:
                 VALUES (:bot_id, :user_id, :symbol, :cash, 0, 0, 0, 0)
             """), {"bot_id": bot_id, "user_id": user["id"],
                    "symbol": symbol, "cash": cash})
+            if args.blocked_decision and symbol == "BTC":
+                connection.execute(text("""
+                    INSERT INTO bot_decisions
+                        (user_id, bot_id, strategy_id, setup_id, symbol,
+                         decision_date, decision_ts, action, confidence, amount_eur, status,
+                         scores_json)
+                    VALUES (:user_id, :bot_id, :strategy_id, :setup_id, :symbol,
+                            CURRENT_DATE, CURRENT_TIMESTAMP, 'hold', 'low', 0, 'planned',
+                            CAST(:scores AS jsonb))
+                """), {
+                    "user_id": user["id"], "bot_id": bot_id,
+                    "strategy_id": strategy_id, "setup_id": setup_id,
+                    "symbol": symbol, "scores": json.dumps({
+                        "guardrails_result": {
+                            "allowed": False,
+                            "blocked_by": "strategy_price_conversion_unavailable",
+                            "reason": "Een recente USD/EUR-omrekening ontbreekt.",
+                        },
+                    }),
+                })
 
     token = create_access_token({"sub": str(user["id"]), "role": "user"})
     question = args.question or (
@@ -92,6 +113,13 @@ def main() -> None:
         if isinstance(item, dict) and item.get("scope") == "read_portfolio"
         and isinstance(item.get("data"), dict)
     ]
+    decision_rows = [
+        row for call in trace for item in (call.get("result") or {}).get("results") or []
+        if isinstance(item, dict) and item.get("scope") == "read_review_history"
+        and isinstance(item.get("data"), dict)
+        for row in item["data"].get("latest_bot_decisions") or []
+        if isinstance(row, dict)
+    ]
     checks = {
         "completed": observed["status"] == "completed",
         "single_dispatch": observed["dispatch_count"] == observed["attempt_count"] == 1,
@@ -111,6 +139,15 @@ def main() -> None:
     if args.question:
         checks["saved_score_band_answer"] = "61–75" in answer or "61-75" in answer
         checks["both_pairs_answered"] = "BTC/EUR" in answer and "BTC/USDT" in answer
+    if args.blocked_decision:
+        checks["blocked_decision_read"] = any(
+            row.get("safety_state") in {"blocked", "error"}
+            and "omrekening" in str(row.get("safety_reason") or "").lower()
+            and row.get("decision_at") for row in decision_rows
+        )
+        checks["blocked_decision_answer"] = (
+            "geblokkeerd" in answer.lower() and "omrekening" in answer.lower()
+        )
     followup_trace = (
         (followup_record["runtime_state"].get("responses_exchange") or {}).get("tool_trace") or []
         if followup_record else []
@@ -131,6 +168,24 @@ def main() -> None:
                 or "61-75" in followup_answer,
             "followup_scoped_pair": "BTC/EUR" in followup_answer,
         })
+        if args.blocked_decision:
+            followup_decisions = [
+                row for call in followup_trace
+                for item in (call.get("result") or {}).get("results") or []
+                if isinstance(item, dict) and item.get("scope") == "read_review_history"
+                and isinstance(item.get("data"), dict)
+                for row in item["data"].get("latest_bot_decisions") or []
+                if isinstance(row, dict)
+            ]
+            checks["followup_blocked_decision_read"] = any(
+                row.get("safety_state") in {"blocked", "error"}
+                and "omrekening" in str(row.get("safety_reason") or "").lower()
+                and row.get("decision_at") for row in followup_decisions
+            )
+            checks["followup_blocked_decision_answer"] = (
+                "geblokkeerd" in followup_answer.lower()
+                and "omrekening" in followup_answer.lower()
+            )
     artifact = {
         "synthetic_local_only": True, "question": question,
         "run_id": observed["run_id"], "status": observed["status"],
