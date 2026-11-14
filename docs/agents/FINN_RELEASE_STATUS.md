@@ -4,6 +4,41 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN eerste natuurlijke rapport-indicatorvraag (14 november 2026)
+
+Phase: `LOCAL_CANDIDATE_PENDING_CI`. De onafhankelijke ingelogde QA op
+publieke SHA `741e50f681e315e932c1553e51ae9ef32fffe733` gaf
+**NOT_ACCEPTED**: in een nieuw gesprek zei FINN bij een gewone vraag over het
+AAPL-dagrapport en het 50-daags gemiddelde dat rapport en waarden ontbraken.
+Een explicietere vervolgvraag vond de bronnen wel. De rapportwaarde was
+1,0575293 en de later gelezen waarde 1,0508311 bij hetzelfde bronmoment
+13 november 2026 00:00 UTC. De oorzaak van dat verschil blijft onbewezen.
+
+De eerste vraag ging nog via modelafhankelijke toolkeuze. De reparatie
+herkent rapport-indicatorvergelijkingen uit de vraag en bindt de bestaande
+eigenaargebonden rapport- en techniekreads al in de eerste beurt. De
+antwoordinhoud wordt uitsluitend uit gemeten velden opgebouwd en opnieuw
+uit dezelfde tooltrace geverifieerd. Asset, handelspaar en indicator worden
+uit catalogus en getypeerde bronnen bepaald; meerdere paren of ontbrekend
+bewaard bewijs worden niet samengevoegd of ingevuld. De regressies omvatten
+de letterlijke QA-vraag, ETH/EUR RSI, een dubbelzinnige BTC-pair en
+ontbrekende of ongeldige bronnen. Er zijn geen order-, bot- of Live-acties
+gewijzigd.
+
+De gerichte tool-runtime- en bronmomenttests: **924 passed**. De volledige
+backend suite: **4804 passed, 7 skipped**. Frontend typecheck, i18n-lint,
+**43/43** i18n-tests, **71/71** commandtests, high-audit (**0** meldingen)
+en productiebuild zijn groen. De geïsoleerde API/Celery/Responses-matrix:
+**17/17** actiecontracten en **26/26** adaptertests, zonder Live-calls of
+productieverbindingen (artifact SHA-256
+`1f0652bf39c48c96d9aec385a9b9c01431a32674e92c099e3a8d30724e79cced`).
+Echte-provider ontwikkeling: **20/20** (artifact SHA-256
+`70989e68d0bbe8f9e215c0f99e906182ab630955dc4c8cdb2ab2095330b4fc77`)
+en regressie: **109/109** (artifact SHA-256
+`ac6049f577f60d03ce0004eb74a83821324447de0451ea2f08555f458ec3290c`),
+zonder provider-, schema- of timeoutfouten. PR-CI, main-CI, Auto Deploy,
+publieke SHA-pariteit en onafhankelijke live QA-hertest staan nog open.
+
 ## FINN indicatorrevisies en rapportmomenten (14 november 2026)
 
 Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Productcommit

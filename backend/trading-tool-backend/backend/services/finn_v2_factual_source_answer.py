@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
+import re
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from backend.domain.indicator_display import indicator_display_name
+from backend.domain.technical_indicator_catalog import get_active_technical_indicator_definitions
 from backend.services.finn_v2_tool_adapters.display_source_moment import amsterdam_source_moment
 from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
 
@@ -110,6 +113,117 @@ def render_report_and_quote_times(
             f"De nieuwste afzonderlijk gelezen {pair}-koersbron is {current} "
             f"(Europe/Amsterdam); dit is de huidige beschikbare meting, "
             f"niet het bronmoment van het opgeslagen rapport.")
+
+
+def _requested_technical_names(message: str, names: set[str]) -> list[str]:
+    """Match measured indicator names, including generic moving-average phrasing."""
+    selected = []
+    for name in sorted(names):
+        normalized = str(name).casefold().replace("-", "_").replace(" ", "_")
+        parts = normalized.split("_")
+        label = indicator_display_name(name).casefold()
+        normalized_pattern = re.escape(normalized).replace("_", r"[\s_-]*")
+        label_pattern = re.escape(label).replace(r"\ ", r"[\s_-]*")
+        patterns = [
+            rf"\b{normalized_pattern}\b",
+            rf"\b{label_pattern}\b",
+        ]
+        if len(parts) >= 2 and parts[1].isdigit():
+            prefix, period = parts[0], parts[1]
+            patterns.append(rf"\b{re.escape(prefix)}[\s_-]*{period}\b")
+            if prefix == "ma":
+                patterns.append(rf"\b{period}[\s_-]*(?:daags?|dagen|day)[\s_-]+(?:gemiddelde|moving[\s_-]+average)\b")
+        elif len(parts[0]) >= 3:
+            patterns.append(rf"\b{re.escape(parts[0])}\b")
+        if any(re.search(pattern, message, re.I) for pattern in patterns):
+            selected.append(name)
+    return selected
+
+
+def mentions_technical_indicator(message: str) -> bool:
+    """Recognize the technical domain from language or the active catalog."""
+    if re.search(r"\b(?:indicator\w*|technisch\w*|gemiddelde|moving[\s_-]+average)\b", message, re.I):
+        return True
+    names = {str(item["name"]) for item in get_active_technical_indicator_definitions()}
+    return bool(_requested_technical_names(message, names))
+
+
+def render_report_and_technical_read(
+    result: dict[str, Any], *, symbol: str, message: str, pair: str | None = None,
+) -> str:
+    """Compare saved report evidence with a separately timed owner-scoped read."""
+    report, report_reason = _read(result, "read_latest_report")
+    technical, technical_reason = _read(result, "read_technical_snapshot")
+    if report is None or technical is None:
+        missing = []
+        if report is None:
+            missing.append(f"dagrapport: {report_reason}")
+        if technical is None:
+            missing.append(f"huidige indicatoren: {technical_reason}")
+        return "Ik kan het rapport en de huidige indicatormeting nog niet volledig vergelijken (" + "; ".join(missing) + ")."
+    assets = (report.get("score_source_snapshot") or {}).get("assets") or []
+    matched = [row for row in assets if isinstance(row, dict)
+               and str(row.get("symbol") or "").upper() == symbol
+               and (pair is None or str(row.get("pair") or row.get("display_symbol") or "").upper() == pair)]
+    if len(matched) != 1 or str(technical.get("symbol") or "").upper() != symbol \
+            or (pair is not None and str(technical.get("pair") or "").upper() != pair):
+        return f"Ik kan de rapport- en indicatorbronnen voor {pair or symbol} niet eenduidig koppelen."
+    indicator_evidence = matched[0].get("verified_indicator_evidence") or {}
+    if not isinstance(indicator_evidence, dict):
+        indicator_evidence = {}
+    raw_report_items = indicator_evidence.get("technical") or {}
+    if not isinstance(raw_report_items, dict):
+        raw_report_items = {}
+    report_items = {
+        str(name).casefold(): item
+        for name, item in raw_report_items.items()
+        if isinstance(item, dict)
+    }
+    current_items = {
+        str(item.get("indicator") or "").casefold(): item
+        for item in technical.get("items") or [] if isinstance(item, dict)
+    }
+    common = set(report_items).intersection(current_items)
+    selected = _requested_technical_names(message, common)
+    if not selected and len(common) == 1:
+        selected = list(common)
+    if not selected:
+        if not common:
+            return f"Voor {pair or symbol} kan ik geen technische indicator met zowel rapport- als huidige meetwaarde verifiëren."
+        labels = ", ".join(indicator_display_name(name) for name in sorted(common))
+        return f"Welke indicator van {pair or symbol} bedoel je: {labels}?"
+    generated = _moment(report.get("generated_at"))
+    read_at = _moment(technical.get("read_at"))
+    if not generated or not read_at:
+        return f"Voor {pair or symbol} ontbreekt een controleerbaar rapport- of uitleesmoment."
+    comparisons = []
+    for name in selected:
+        historical = report_items.get(name)
+        current = current_items.get(name)
+        if not isinstance(historical, dict) or not isinstance(current, dict):
+            continue
+        old_value, new_value = _number(historical.get("value")), _number(current.get("value"))
+        old_source = _moment(historical.get("source_observed_at"))
+        new_source = _moment(current.get("source_observed_at"))
+        if not all((old_value, new_value, old_source, new_source)):
+            continue
+        conclusion = (
+            "Het bronmoment is gelijk; dit bewijst geen nieuwe candle. De latere uitlezing kan een herziene "
+            "meting tonen, maar de oorzaak van het verschil en welke waarde wiskundig juist is, zijn hiermee niet bewezen."
+            if old_source == new_source and old_value != new_value else
+            "Beide uitlezingen hebben hetzelfde bronmoment en dezelfde waarde."
+            if old_source == new_source else
+            "De bronmomenten verschillen; dit zijn metingen van verschillende candles."
+        )
+        comparisons.append(
+            f"{indicator_display_name(name)}: rapportwaarde {old_value} (bron {old_source}); "
+            f"huidige uitlezing {new_value} (bron {new_source}). {conclusion}"
+        )
+    if not comparisons:
+        return f"Voor {pair or symbol} ontbreken controleerbare waarden of bronmomenten voor de bedoelde indicator."
+    return (f"Dagrapport {report.get('report_date')} voor {pair or symbol}: opgesteld op {generated}. "
+            f"De huidige indicatoren zijn afzonderlijk uitgelezen op {read_at} (Europe/Amsterdam). "
+            + " ".join(comparisons))
 
 
 def render_latest_quote(

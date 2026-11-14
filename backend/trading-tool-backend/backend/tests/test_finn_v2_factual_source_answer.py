@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor
 from backend.services.finn_v2_responses_answer_verifier import FinnResponsesAnswerVerifier
+from backend.services.finn_v2_factual_source_answer import mentions_technical_indicator
 from backend.services.asset_catalog_service import requested_catalog_trading_pair
 
 
@@ -66,6 +67,127 @@ def test_report_and_current_pair_sources_keep_separate_cet_moments():
     assert "2026-11-14 05:33:08 CET" in response.text
     assert "2026-11-14 05:29:59 CET" in response.text
     assert "2026-11-14 12:19:57 CET" in response.text
+
+
+def test_first_natural_report_indicator_question_reads_both_sources():
+    message = ("In het AAPL-dagrapport staat een 50-daags gemiddelde. Leg dat naast wat "
+               "Analyse nu voor dezelfde indicator kan lezen. Gaat het om een nieuwe koersdag "
+               "of om een latere revisie/uitlezing van dezelfde broncandle? "
+               "Noem beide waarden en de drie relevante momenten. Doe geen voorstel of wijziging.")
+    response, call = _run(message, [
+        {"scope": "read_latest_report", "status": "completed", "data": {
+            "report_date": "2026-11-14", "generated_at": "2026-11-14T04:21:34+00:00",
+            "score_source_snapshot": {"assets": [{"symbol": "AAPL", "verified_indicator_evidence": {
+                "technical": {
+                    "ma_50": {"value": 1.0575293, "source_observed_at": "2026-11-13T00:00:00+00:00"},
+                    "rsi": {"value": 58.46, "source_observed_at": "2026-11-13T00:00:00+00:00"},
+                },
+            }}]},
+        }},
+        {"scope": "read_technical_snapshot", "status": "completed", "data": {
+            "symbol": "AAPL", "read_at": "2026-11-14T13:16:23+00:00",
+            "items": [
+                {"indicator": "ma_50", "value": 1.0508311,
+                 "source_observed_at": "2026-11-13T00:00:00+00:00"},
+                {"indicator": "rsi", "value": 58.46,
+                 "source_observed_at": "2026-11-13T00:00:00+00:00"},
+            ],
+        }},
+    ], verified_asset="AAPL")
+    assert call.read_tools == ("read_latest_report", "read_technical_snapshot")
+    assert call.inputs["asset"] == "AAPL"
+    assert "1.0575293" in response.text and "1.0508311" in response.text
+    assert "2026-11-14 05:21:34 CET" in response.text
+    assert "2026-11-14 14:16:23 CET" in response.text
+    assert "2026-11-13 01:00:00 CET" in response.text
+    assert "geen nieuwe candle" in response.text
+    assert "RSI" not in response.text
+
+
+def test_report_indicator_comparison_keeps_exact_pair_and_other_indicator():
+    message = "Vergelijk de RSI in mijn dagrapport van 14 november voor ETH/EUR met de huidige RSI in Analyse."
+    response, call = _run(message, [
+        {"scope": "read_latest_report", "status": "completed", "data": {
+            "report_date": "2026-11-14", "generated_at": "2026-11-14T06:00:00+00:00",
+            "score_source_snapshot": {"assets": [
+                {"symbol": "ETH", "pair": "ETH/USDT", "verified_indicator_evidence": {
+                    "technical": {"rsi": {"value": 20, "source_observed_at": "2026-11-13T00:00:00+00:00"}}}},
+                {"symbol": "ETH", "pair": "ETH/EUR", "verified_indicator_evidence": {
+                    "technical": {"rsi": {"value": 30, "source_observed_at": "2026-11-13T00:00:00+00:00"}}}},
+            ]},
+        }},
+        {"scope": "read_technical_snapshot", "status": "completed", "data": {
+            "symbol": "ETH", "pair": "ETH/EUR", "read_at": "2026-11-14T10:00:00+00:00",
+            "items": [{"indicator": "rsi", "value": 35,
+                       "source_observed_at": "2026-11-14T00:00:00+00:00"}],
+        }},
+    ], verified_asset="ETH")
+    assert call.inputs["quote_currency"] == "EUR"
+    assert call.inputs["report_date"] == "2026-11-14"
+    assert "ETH/EUR" in response.text and "RSI" in response.text
+    assert "rapportwaarde 30" in response.text and "huidige uitlezing 35" in response.text
+    assert "rapportwaarde 20" not in response.text
+    assert "verschillende candles" in response.text
+
+
+def test_report_indicator_comparison_does_not_choose_between_two_saved_pairs():
+    message = "Vergelijk mijn BTC-dagrapport met de huidige RSI in Analyse."
+    response, call = _run(message, [
+        {"scope": "read_latest_report", "status": "completed", "data": {
+            "report_date": "2026-11-14", "generated_at": "2026-11-14T06:00:00+00:00",
+            "score_source_snapshot": {"assets": [
+                {"symbol": "BTC", "pair": "BTC/EUR", "verified_indicator_evidence": {
+                    "technical": {"rsi": {"value": 31, "source_observed_at": "2026-11-13T00:00:00+00:00"}}}},
+                {"symbol": "BTC", "pair": "BTC/USDT", "verified_indicator_evidence": {
+                    "technical": {"rsi": {"value": 26, "source_observed_at": "2026-11-13T00:00:00+00:00"}}}},
+            ]},
+        }},
+        {"scope": "read_technical_snapshot", "status": "completed", "data": {
+            "symbol": "BTC", "pair": "BTC/EUR", "read_at": "2026-11-14T10:00:00+00:00",
+            "items": [{"indicator": "rsi", "value": 35,
+                       "source_observed_at": "2026-11-14T00:00:00+00:00"}],
+        }},
+    ], verified_asset="BTC")
+    assert call.inputs == {"asset": "BTC"}
+    assert "niet eenduidig koppelen" in response.text
+    assert "31" not in response.text and "26" not in response.text
+
+
+def test_report_indicator_comparison_reports_only_the_missing_source():
+    message = "Vergelijk de huidige AAPL RSI met die in mijn dagrapport."
+    response, call = _run(message, [
+        {"scope": "read_latest_report", "status": "completed", "data": {
+            "report_date": "2026-11-14", "generated_at": "2026-11-14T04:21:34+00:00",
+            "score_source_snapshot": {"assets": [{"symbol": "AAPL"}]},
+        }},
+        {"scope": "read_technical_snapshot", "status": "unavailable", "reason": "tool_timeout"},
+    ], verified_asset="AAPL")
+    assert call.read_tools == ("read_latest_report", "read_technical_snapshot")
+    assert "huidige indicatoren: de bron reageerde niet op tijd" in response.text
+    assert "dagrapport: " not in response.text
+
+
+def test_report_indicator_comparison_does_not_parse_unmeasured_report_copy():
+    message = "Vergelijk de huidige AAPL RSI met die in mijn dagrapport."
+    response, _ = _run(message, [
+        {"scope": "read_latest_report", "status": "completed", "data": {
+            "report_date": "2026-11-14", "generated_at": "2026-11-14T04:21:34+00:00",
+            "score_source_snapshot": {"assets": [{"symbol": "AAPL", "verified_indicator_evidence": []}]},
+        }},
+        {"scope": "read_technical_snapshot", "status": "completed", "data": {
+            "symbol": "AAPL", "read_at": "2026-11-14T10:00:00+00:00",
+            "items": [{"indicator": "rsi", "value": 58.46,
+                       "source_observed_at": "2026-11-13T00:00:00+00:00"}],
+        }},
+    ], verified_asset="AAPL")
+    assert "geen technische indicator met zowel rapport- als huidige meetwaarde" in response.text
+    assert "58.46" not in response.text
+
+
+def test_technical_request_detection_uses_active_indicator_catalog():
+    assert mentions_technical_indicator("vergelijk MACD HIST PCT met mijn rapport")
+    assert mentions_technical_indicator("50-daags gemiddelde in Analyse")
+    assert not mentions_technical_indicator("vergelijk mijn rapport met de huidige koers")
 
 
 def test_latest_aapl_quote_reports_friday_source_on_weekend(monkeypatch):

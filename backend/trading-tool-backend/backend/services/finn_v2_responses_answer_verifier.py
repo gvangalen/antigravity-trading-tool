@@ -39,7 +39,7 @@ from backend.services.finn_v2_responses_read_executor import FinnResponsesReadEx
 from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
 from backend.services.finn_v2_factual_source_answer import (
     render_bot_decision, render_latest_quote, render_portfolio_read_time,
-    render_report_and_quote_times,
+    render_report_and_quote_times, render_report_and_technical_read,
 )
 
 
@@ -3077,6 +3077,12 @@ class FinnResponsesAnswerVerifier:
             if scopes == {"read_latest_report", "read_market_snapshot"} and symbol:
                 quote = str(args.get("quote_currency") or "").upper()
                 expected = render_report_and_quote_times(read, symbol=symbol, quote_currency=quote)
+            elif scopes == {"read_latest_report", "read_technical_snapshot"} and symbol:
+                quote = str(args.get("quote_currency") or "").upper()
+                expected = render_report_and_technical_read(
+                    read, symbol=symbol, message=message,
+                    pair=f"{symbol}/{quote}" if quote else None,
+                )
             elif scopes == {"read_review_history"} and symbol:
                 mode = False if re.search(r"\bPaper\b", message, re.I) else (
                     True if re.search(r"\bLive\b", message, re.I) else None)
