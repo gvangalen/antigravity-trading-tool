@@ -4,6 +4,56 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN samengestelde Paper-coachvraag en brondekking (14 november 2026)
+
+Phase: `BUILD_LOCAL_GREEN_PR_PENDING`. Kandidaatbranch `codex/finn-broad-coach-evidence` op
+publieke basis `5e8e7c75415517bcf3cf403931537fe76cbd15ee`. De onafhankelijke
+ingelogde browserhertest op die basis gaf `NOT_ACCEPTED`: de gezamenlijke
+Paper-kas en beide botkassen zijn nu correct, maar bij een brede vraag over
+BTC/EUR, BTC/USDT, opgeslagen setup, score, botbeslissing en hypothetische
+Paper-koop gaf FINN geen onderbouwd oordeel. Ook de expliciete vervolgvraag
+vond de zichtbare 61–75-regel niet betrouwbaar. De browser bood geen
+per-turn tooltrace; de precieze productie-toolcall is daarom niet bewezen.
+
+De foutklasse is lokaal met de letterlijke brede QA-vraag gereproduceerd.
+Responses koos één `evaluate_plan`-contract. Dat contract las profiel, plan en
+enkele marktbronnen, maar niet de afzonderlijk gevraagde gezamenlijke
+Paper-portefeuille of opgeslagen botbeslissing. De twee expliciete
+handelsparen werden evenmin servermatig als twee afzonderlijke bronlezingen
+gebonden. De eerdere productievragen die geheel faalden hadden daarnaast de
+bevestigde providerfout `context_length_exceeded` vóór de eerste toolaanroep;
+dat is een afzonderlijk, al uitgerold herstel.
+
+De kandidaat vult een read-only evaluatie aan met precies de expliciet
+gevraagde eigenaargebonden bronnen: gezamenlijke Paper-portefeuille,
+begrensde laatste botbeslissingen en afzonderlijke markt-, technische en
+scorelezingen per genoemd paar. Een setupvergelijking wordt vóór het model
+teruggebracht tot de genoemde paren. Er is geen asset-specifieke productregel,
+geen nieuwe mutatie en geen handelscontractwijziging. De gerichte unitproef
+voor BTC en ETH slaagt. De lokale HTTP/Celery/echte Responses-proef met twee
+synthetische Paper-bots, een opgeslagen BTC/EUR-band 61–75 en de letterlijke
+brede vraag slaagt zonder voorstel: FINN noemt beide paren, de opgeslagen
+band, €10.005,45 gezamenlijke kas en €9.599,97 BTC-botkas. In die geïsoleerde
+proef ontbreken actuele marktbronnen; FINN zegt dat expliciet en adviseert
+geen koop. Artifact `/tmp/finn-broad-eval-runtime-exact.json` heeft SHA-256
+`34325e2beaacdb7c14186e0a53c13c71bc26760d33dcc31e838cb469d488a302`.
+De actiecontractmatrix slaagde **17/17**, adapters **26/26**, zonder
+brokerorders, Live-bots, Live-aanroepen of productieverbindingen; artifact
+`.local-finn-parity-artifacts/full-action-matrix.json` heeft SHA-256
+`94ff2ca245f99c485cfb8a14ec79e6d8587d32a5d7c2c61b319609fdba2eccd4`.
+Frontendbuild, typecheck, i18n-lint, **43/43** i18n, **74/74** commands,
+**9/9** proposals en high audit met nul kwetsbaarheden slaagden; log-SHA-256
+`fe91cb65b08102b08eff5f18513ea7d82f1228cbdaa301647b278d4e2715cfbf`.
+Echte-provider selectorontwikkeling **20/20** (SHA-256
+`05582d598057190fbd8bed98afe42b3e883629dfa7672b0df62bcab8b7ab0090`)
+en regressie **109/109** (SHA-256
+`da296116ddc4eb596d2dfc61cd196b4b855e4c555039f962350dcc44a863f65a`)
+hadden nul provider-, schema-, parse-, validatie- of timeoutfouten. De
+definitieve backend-suite op de productcode slaagde met **4823 passed, 7
+skipped** (log-SHA-256
+`53a595f8d0fa49e53464f66fe2947b473a6a05db72f95d1ad46b61a9da58c858`).
+CI, deploy, publieke SHA-pariteit en onafhankelijke live QA volgen nog.
+
 ## FINN gezamenlijke Paper-kas in assetgericht coachgesprek (14 november 2026)
 
 Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Reparatiebranch

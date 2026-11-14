@@ -13764,6 +13764,77 @@ def test_combined_paper_cash_reads_all_assets_despite_selected_asset(
         assert "read_review_history" in selected_calls[0].read_tools
 
 
+@pytest.mark.parametrize("asset,other_asset", [("BTC", "AAPL"), ("ETH", "AAPL")])
+def test_broad_evaluation_binds_requested_sources_and_pairs(monkeypatch, asset, other_asset):
+    question = (
+        f"Beoordeel mijn {asset} Paper-plan. Vergelijk {asset}/EUR en {asset}/USDT, "
+        "mijn opgeslagen setup, de laatste botbeslissing, de gezamenlijke Paper-kas "
+        "en posities. Is een handmatige Paper-koop van €10 in lijn met mijn plan? "
+        "Wijzig niets."
+    )
+
+    @asynccontextmanager
+    async def session_factory():
+        yield SimpleNamespace(commit=AsyncMock())
+
+    selected_calls = []
+
+    class FakeRead:
+        async def __call__(self, call):
+            selected_calls.append(call)
+            if call.name == "get_setup_market_matches":
+                return {"status": "completed", "results": [{
+                    "scope": "read_setup_market_matches", "status": "completed",
+                    "data": {"matches": [
+                        {"symbol": asset, "trading_pair": f"{asset}/EUR"},
+                        {"symbol": asset, "trading_pair": f"{asset}/USDT"},
+                        {"symbol": other_asset, "trading_pair": f"{other_asset}/EUR"},
+                    ]},
+                }]}
+            return {"status": "completed", "results": [
+                {"scope": scope, "status": "completed", "data": {
+                    "global": {"cash_balance": 10005.45},
+                    "bots": [{"symbol": asset}, {"symbol": other_asset}],
+                } if scope == "read_portfolio" else {}}
+                for scope in call.read_tools
+            ]}
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnV2RuntimeContractRepository.record_responses_progress",
+        AsyncMock(),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=FakeResponses(
+            response("read", calls=[tool_call("call-evaluate", "evaluate_plan", {})]),
+            response("answer", text="Ik heb de gevraagde bronnen apart gelezen."),
+        )), session_factory=session_factory, user_id=7, run_id="broad-evaluation-sources",
+        model_led_coach=True,
+    )
+    front.reads = FakeRead()
+    result = asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset=asset,
+        workspace_hints={"page": "/asset", "symbol": asset},
+    ))
+    rows = result.response.tool_trace[0]["result"]["results"]
+    assert {row["scope"] for row in rows} >= {
+        "read_portfolio", "read_review_history", "read_setup_market_matches",
+        "read_market_snapshot", "read_technical_snapshot", "read_asset_scores",
+    }
+    assert {row["trading_pair"] for item in rows if item["scope"] == "read_setup_market_matches"
+            for row in item["data"]["matches"]} == {f"{asset}/EUR", f"{asset}/USDT"}
+    assert [call.inputs for call in selected_calls if call.name == "get_market_snapshot"] == [
+        {"asset": asset, "quote_currency": "EUR"},
+        {"asset": asset, "quote_currency": "USDT"},
+    ]
+    assert next(call for call in selected_calls if call.name == "get_portfolio_and_exposure").inputs == {
+        "environment": "paper",
+    }
+    decision_call = next(call for call in selected_calls if call.name == "get_decision_history")
+    assert decision_call.inputs == {"asset": asset, "_latest_bot_decisions_only": True}
+    assert all(call.operation_id is None for call in selected_calls)
+
+
 def test_open_position_question_reads_owner_portfolio_without_bot_page(monkeypatch):
     assert FinnResponsesFrontDoor._asks_about_open_position(
         "Welke open AAPL-positie heb ik naast mijn BTC/EUR-plan?"
