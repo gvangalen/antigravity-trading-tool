@@ -6,8 +6,15 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN botblokkade als laatste besluit in Paper-coach (14 november 2026)
 
-Phase: `PR_CI_PENDING`. Branch `codex/finn-bot-decision-reason` is based on
-the deployed main SHA `3123be49ed37deb8a1ec5d2b6c80409dbf5ad01b`.
+Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Branch
+`codex/finn-bot-decision-reason` was based on the previously deployed main
+SHA `3123be49ed37deb8a1ec5d2b6c80409dbf5ad01b` and merged via PR #1065
+as `ace38f32bb45be47b39afac043e778c37b1f48b6`. Its required PR-CI
+`43651303218` and main-CI `43651777417` each passed all five jobs. Auto
+Deploy `43652198415` succeeded. GitHub main, backend-health and
+frontend-buildinfo all reported the product merge SHA; both public endpoints
+returned HTTP 200. This status update creates a new main SHA, so the last
+main-CI, Auto Deploy, public SHA parity and independent live QA remain open.
 Independent browser QA on that SHA returned `NOT_ACCEPTED` for the full
 two-turn coach test. The earlier followup-routing failure did **not** recur:
 FINN read the saved BTC/EUR score band 61–75, current score 35, separate
@@ -49,8 +56,8 @@ The real-provider development selector passed **20/20** (artifact SHA-256
 `4a02d86111119e019a0104a6bbe90d24926d3ee52eba12af769e084854772d78`).
 The real-provider regression selector passed **109/109** (artifact SHA-256
 `20af64f820c1199d56a1ac407b34a5fb65d2fffe2805f7e3c31471727b5810e2`),
-with zero provider, schema, parse, validation or timeout failures. CI, deploy,
-public SHA parity and independent live QA remain pending.
+with zero provider, schema, parse, validation or timeout failures. Independent
+live QA remains pending on the final status SHA.
 
 ## FINN vervolgvraag over Paper-plan en botbewijs (14 november 2026)
 
