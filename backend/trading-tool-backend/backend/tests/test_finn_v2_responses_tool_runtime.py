@@ -13749,14 +13749,13 @@ def test_bot_decision_question_binds_persisted_history_even_for_portfolio_tool()
                  "historische of actuele beoordeling is."),
         read_only=True,
     )
-    assert {"read_review_history", "read_portfolio"} <= set(
-        bound_exact.read_tools,
-    )
+    assert bound_exact.read_tools == ("read_review_history",)
+    assert bound_exact.inputs["_latest_bot_decisions_only"] is True
     assert "read_latest_report" not in bound_exact.read_tools
     report_question = FinnResponsesFrontDoor._bind_bot_decision_evidence(
         exact, message="Vergelijk mijn laatste botbesluit met mijn dagrapport.", read_only=True,
     )
-    assert "read_latest_report" in report_question.read_tools
+    assert report_question.read_tools == ("read_review_history", "read_latest_report")
 
 
 def test_bot_decision_question_requires_current_owner_history_before_answer(monkeypatch):
@@ -17882,3 +17881,39 @@ def test_setup_choice_followup_uses_preceding_verified_read():
     ))
     assert result == "explain_previous"
     create.assert_not_awaited()
+
+
+def test_factual_source_reads_omit_unrelated_optional_dependencies():
+    catalog = FinnResponsesToolCatalog()
+    quote = catalog.validate("get_market_snapshot", {"asset": "AAPL"})
+    focused_quote = FinnResponsesFrontDoor._focus_source_reads(
+        quote, message="Wat is de nieuwste AAPL-koers en het exacte bronmoment?", read_only=True,
+    )
+    assert focused_quote.read_tools == ("read_market_snapshot",)
+
+    report = catalog.validate("get_decision_history", {"asset": "BTC"})
+    focused_report = FinnResponsesFrontDoor._focus_source_reads(
+        report, message="Wat is het bronmoment in mijn BTC/EUR-dagrapport?", read_only=True,
+    )
+    assert focused_report.read_tools == ("read_latest_report",)
+    compared = FinnResponsesFrontDoor._focus_source_reads(
+        report,
+        message="Vergelijk het bronmoment in mijn BTC/EUR-dagrapport met de nieuwste BTC/EUR-koers.",
+        read_only=True,
+    )
+    assert compared.read_tools == ("read_latest_report", "read_market_snapshot")
+    exposure_question = "Vergelijk mijn BTC-dagrapport met mijn exposure."
+    with_report = FinnResponsesFrontDoor._bind_explicit_report_evidence(
+        catalog.validate("get_portfolio_and_exposure", {"asset": "BTC"}),
+        message=exposure_question, read_only=True,
+    )
+    focused_exposure = FinnResponsesFrontDoor._focus_source_reads(
+        with_report, message=exposure_question, read_only=True,
+    )
+    assert focused_exposure.read_tools == ("read_portfolio", "read_latest_report")
+
+    decision = FinnResponsesFrontDoor._bind_bot_decision_evidence(
+        report, message="Wat was het laatste BTC Paper-botbesluit?", read_only=True,
+    )
+    assert decision.read_tools == ("read_review_history",)
+    assert decision.inputs["_latest_bot_decisions_only"] is True

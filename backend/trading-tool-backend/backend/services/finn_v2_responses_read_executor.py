@@ -106,14 +106,14 @@ class FinnResponsesReadExecutor:
                 async with self.session_factory() as session:
                     result = await FinnV2ToolExecutionService(session).execute_tool(
                         run_id=self.run_id, user_id=self.user_id, tool_name=read_tool,
-                        selector=selector, shared_state=shared_state,
+                        selector=selector, shared_state=shared_state, timeout_seconds=6.0,
                     )
                     data = to_json_safe(result.result) if result.success else None
                     as_of = str(result.as_of) if getattr(result, "as_of", None) else self._as_of(data)
             else:
                 result = await self.reads.execute_tool(
                     run_id=self.run_id, user_id=self.user_id, tool_name=read_tool,
-                    selector=selector, shared_state=shared_state,
+                    selector=selector, shared_state=shared_state, timeout_seconds=6.0,
                 )
                 data = to_json_safe(result.result) if result.success else None
                 as_of = str(result.as_of) if getattr(result, "as_of", None) else self._as_of(data)
