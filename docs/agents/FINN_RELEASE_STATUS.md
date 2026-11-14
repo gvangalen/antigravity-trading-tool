@@ -6,8 +6,17 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN samengestelde Paper-coachvraag en brondekking (14 november 2026)
 
-Phase: `BUILD_LOCAL_GREEN_PR_PENDING`. Kandidaatbranch `codex/finn-broad-coach-evidence` op
-publieke basis `5e8e7c75415517bcf3cf403931537fe76cbd15ee`. De onafhankelijke
+Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Kandidaatbranch
+`codex/finn-broad-coach-evidence`, productcommit
+`f1cc278bcb1a7a2ce99a86d1d0ca1fce19bb4a50` op publieke basis
+`5e8e7c75415517bcf3cf403931537fe76cbd15ee`, is via PR #1061 gemerged
+als `54a7a0ecf087808f9768412bbc6df20164078b00`. PR-CI `43642701722`
+en main-CI `43643120292` slaagden elk met vijf jobs. Auto Deploy
+`43643564470` slaagde. GitHub main, publieke backend-health en
+frontend-buildinfo gaven op 14 november exact de productmerge-SHA; beide
+publieke endpoints gaven HTTP 200. Deze statusbijwerking maakt zelf een nieuwe
+main-SHA; laatste main-CI, Auto Deploy, publieke SHA-pariteit en onafhankelijke
+live hertest blijven daarom open. De onafhankelijke
 ingelogde browserhertest op die basis gaf `NOT_ACCEPTED`: de gezamenlijke
 Paper-kas en beide botkassen zijn nu correct, maar bij een brede vraag over
 BTC/EUR, BTC/USDT, opgeslagen setup, score, botbeslissing en hypothetische
