@@ -4,9 +4,63 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN gezamenlijke Paper-kas in assetgericht coachgesprek (14 november 2026)
+
+Phase: `LOCAL_VALIDATED_PENDING_CI`. Reparatiebranch
+`codex/finn-paper-portfolio-scope`, productcommit
+`a5b23c7f087af4353169789090ddc5455ed99b7a` op definitieve vorige main-basis
+`db9a5a30f405d08ec8d963a8ccc325a3398f0e77`. PR-CI, merge,
+Auto Deploy, publieke SHA-verificatie en onafhankelijke live hertest
+zijn nog niet uitgevoerd.
+
+De onafhankelijke QA-browserproef op de vorige release accepteerde de
+oorspronkelijke contextoverloopreparatie niet volledig. De brede BTC-vraag
+en drie vervolgvragen werden wel afgerond zonder providerfout, maar FINN noemde
+€9.599,97 uit het BTC-botledger de gezamenlijke Paper-kas. De actuele
+portefeuille toonde €10.005,45 over BTC en AAPL. Op doorvragen hield FINN
+vast aan het BTC-bedrag en noemde hij alleen de BTC-bot. De browser gaf geen
+runtrace; de precieze productie-toolcall is daarom niet bewezen.
+
+De codeoorzaak van deze foutklasse is wel lokaal vastgesteld:
+`project_portfolio` berekent `global.cash_balance` over de geselecteerde
+asset wanneer een assetfilter is meegegeven. Een BTC-gebonden portfolio- of
+botread levert dus €9.599,97 als `global` en slechts de BTC-bot op. De
+frontdoor herkende “gezamenlijke Paper-kas” nog niet als eigenaarbreed
+portfolioverzoek. De reparatie haalt voor zo'n verzoek de Paper-portefeuille
+zonder assetfilter op, maar bewaart een BTC- of andere assetfilter voor
+gelijktijdige botbeslissings- en marktreads. Een enkelbotvraag blijft
+assetgericht; de projectie van een geopende bot noemt een gefilterd totaal
+voortaan `selected_asset_bots`. Geen asset of handelspaar is als productregel
+hardcoded; eigenaargrenzen en actiecontracten zijn niet gewijzigd.
+
+De lokale HTTP/Celery/echte Responses-proef met twee synthetische Paper-bots
+las beide bots en antwoordde €10.005,45 gezamenlijk, €9.599,97 BTC en
+€405,48 AAPL, zonder voorstel of mutatie
+(`/tmp/finn-paper-scope-runtime.json`, SHA-256
+`45e2d9e085cb06341e68627bd634acfe782a786a506db9f3c8b9a7bf4e6a5ab5`).
+De geïsoleerde actiecontractmatrix slaagde **17/17**, adapters **26/26**,
+zonder brokerorders, Live-bots, Live-tradingcalls of productieverbindingen
+(`.local-finn-parity-artifacts/full-action-matrix.json`, SHA-256
+`715a6e9b5ceff40bb185e33f88ec2b9b1f9bd16cc8e6d8639af8b9ee37414de7`).
+Echte-provider selectorontwikkeling **20/20** (SHA-256
+`605e9db63e7b411c4bfc8ec02c8328bb470143bebad4143085a5b360850966b7`)
+en regressie **109/109** (SHA-256
+`629eabdb88753d5899e031ccf5455f116c4fe0a0c993af1756ac15f151b6d2b0`)
+hadden nul provider-, schema-, parse-, validatie- of timeoutfouten.
+Frontendbuild, typecheck, i18n-lint, **43/43** i18n-tests,
+**74/74** commandtests, **9/9** proposaltests en high-severity audit
+(nul kwetsbaarheden) slaagden; buildlog SHA-256
+`4df367d5681bf67478573cfe433f637895d59d66fb38869bddc7ff7b45591c0d`.
+De volledige backend-suite op de definitieve productcommit slaagde met
+**4821 passed, 7 skipped** (`/tmp/finn-paper-scope-pytest-exact.log`,
+SHA-256 `6d2684aadf58e1bb236ebd0edf81c5bb0ede66d143aff7b28fe3b7df1acb8a8a`).
+De gerichte eindproef voor beide assettypen, directe en gebundelde leesroutes
+is **8/8** groen.
+Dit is lokaal Build-bewijs; de ingelogde live QA-herkansing blijft open.
+
 ## FINN contextoverloop in BTC-coachgesprek (14 november 2026)
 
-Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Branch
+Phase: `LIVE_QA_NOT_ACCEPTED`. Branch
 `codex/finn-context-overflow-recovery`, productcommit
 `f54a77c6968edee135da4192bea36e24d0f4f261` op main-basis
 `e346d2e5346d5d674c52f2dfb729811c87d2a68e` is via PR #1057
@@ -16,9 +70,18 @@ jobs. Auto Deploy `43634360662` slaagde. Publieke
 `https://tradamind.com/api/health` en
 `https://tradamind.com/build-info.json` gaven op 14 november beide
 HTTP 200 en exact `3cc60ebb0838ec248ddf9f1432fd16ddc2852f06`,
-gelijk aan GitHub main. Deze statusbijwerking maakt zelf een nieuwe
-main-SHA. De laatste main-CI, Auto Deploy, publieke SHA-pariteit en
-onafhankelijke ingelogde live QA blijven daarom open.
+gelijk aan GitHub main. Die statusbijwerking maakte daarna zelf een
+nieuwe main-SHA; de afronding daarvan staat hieronder.
+
+De laatste statuscommit werd `db9a5a30f405d08ec8d963a8ccc325a3398f0e77`.
+De laatste main-CI `43635074205` en Auto Deploy `43635543815` slaagden;
+GitHub main, publieke backend-health en frontend-buildinfo wezen alle drie
+naar die SHA en beide publieke endpoints gaven HTTP 200. De onafhankelijke
+ingelogde browserproef rondde de brede oorspronkelijke BTC-vraag, de korte
+vervolgvraag en twee aanvullende vervolgvragen af zonder de eerdere
+`context_length_exceeded`-fout. QA gaf toch `NOT_ACCEPTED` vanwege de
+onjuiste gezamenlijke Paper-kas en onvolledige botlijst zoals hierboven
+beschreven. De officiële beschermde QA-matrix is niet uitgevoerd.
 
 De twee mislukte BTC-coachvragen uit de Paper Test-browser zijn in de
 productie-operatorlogs teruggevonden bij trace-ID's

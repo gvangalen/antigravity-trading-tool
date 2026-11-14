@@ -2,6 +2,7 @@ import asyncio
 import json
 from datetime import datetime
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -13653,6 +13654,17 @@ def test_open_bot_reference_does_not_show_another_bot_if_focused_row_is_missing(
     assert unverified["results"][0]["data"]["focus_status"] == "unverified_workspace_bot"
 
 
+def test_open_bot_focus_preserves_asset_filter_scope():
+    original = {"status": "completed", "results": [{
+        "scope": "read_portfolio", "status": "completed", "asset": "ETH", "data": {
+            "global": {"cash_balance": 40},
+            "bots": [{"bot_id": 12, "symbol": "ETH", "paper_cash_eur": 40}],
+        },
+    }]}
+    focused = FinnResponsesFrontDoor._focus_portfolio_on_open_bot(original, 12)
+    assert focused["results"][0]["data"]["global_summary_scope"] == "selected_asset_bots"
+
+
 def test_open_bot_finance_projection_keeps_an_enabled_cap_and_funded_cash():
     original = {"status": "completed", "results": [{
         "scope": "read_portfolio", "status": "completed", "data": {
@@ -13665,6 +13677,91 @@ def test_open_bot_finance_projection_keeps_an_enabled_cap_and_funded_cash():
     assert row["budget_total_eur"] == 100
     assert row["paper_cash_status"] == "assigned"
     assert "optional_budget_cap_status" not in row
+
+
+@pytest.mark.parametrize("selected_tool", ["get_portfolio_and_exposure", "get_saved_bots"])
+@pytest.mark.parametrize("active_asset,other_asset", [("BTC", "AAPL"), ("ETH", "AAPL")])
+@pytest.mark.parametrize("include_bot_decision", [False, True])
+def test_combined_paper_cash_reads_all_assets_despite_selected_asset(
+    monkeypatch, selected_tool, active_asset, other_asset, include_bot_decision,
+):
+    question = (
+        f"Beoordeel mijn {active_asset}-plan en actieve {active_asset}-bot. Noem de gezamenlijke "
+        "Paper-kas en positie zonder iets te wijzigen."
+    )
+    if include_bot_decision:
+        question += f" Noem ook de laatste {active_asset}-botbeslissing."
+    assert FinnResponsesFrontDoor._asks_about_aggregate_portfolio(question)
+    assert not FinnResponsesFrontDoor._asks_about_aggregate_portfolio(
+        f"Noem de Paper-kas van alleen mijn {active_asset}-bot."
+    )
+    assert not FinnResponsesFrontDoor._asks_about_aggregate_portfolio(
+        f"Vergelijk alle {active_asset}-bots in mijn portfolio."
+    )
+    assert not FinnResponsesFrontDoor._asks_about_aggregate_portfolio(
+        f"Wat is mijn totale {active_asset}-positie?"
+    )
+
+    @asynccontextmanager
+    async def session_factory():
+        yield SimpleNamespace(commit=AsyncMock())
+
+    selected_calls = []
+
+    class FakeRead:
+        async def __call__(self, call):
+            selected_calls.append(call)
+            rows = [
+                {"bot_id": 1, "symbol": active_asset, "paper_cash_eur": 9599.97},
+                {"bot_id": 2, "symbol": other_asset, "paper_cash_eur": 405.48},
+            ]
+            if call.inputs.get("asset"):
+                rows = [row for row in rows if row["symbol"] == call.inputs["asset"]]
+            return {"status": "completed", "results": [{
+                "scope": "read_portfolio", "status": "completed", "data": {
+                    "global": {"cash_balance": round(sum(row["paper_cash_eur"] for row in rows), 2)},
+                    "bots": rows,
+                },
+            }, *([{"scope": "read_review_history", "status": "completed", "data": {
+                "latest_decision": {"action": "hold"},
+            }}] if "read_review_history" in call.read_tools else [])]}
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnV2RuntimeContractRepository.record_responses_progress",
+        AsyncMock(),
+    )
+    fake = FakeResponses(
+        response("read", calls=[tool_call("call-read", selected_tool, {"asset": active_asset})]),
+        response("answer", text="De gezamenlijke Paper-kas omvat beide bots."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session_factory=session_factory,
+        user_id=7, run_id="combined-paper-cash", model_led_coach=True,
+    )
+    front.reads = FakeRead()
+    if include_bot_decision:
+        # Exercise a bundled asset-specific read while the portfolio summary
+        # itself must be refreshed for the whole account.
+        monkeypatch.setattr(front, "_bind_bot_decision_evidence", lambda call, **_kwargs: replace(
+            call, read_tools=tuple(dict.fromkeys((*call.read_tools, "read_review_history"))),
+        ))
+    result = asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset=active_asset,
+        workspace_hints={"page": "/asset", "symbol": active_asset},
+    ))
+
+    portfolio = next(item["data"] for item in result.response.tool_trace[0]["result"]["results"]
+                     if item["scope"] == "read_portfolio")
+    assert portfolio["global"]["cash_balance"] == 10005.45, [
+        (call.name, call.inputs, call.read_tools) for call in selected_calls
+    ]
+    assert {row["symbol"] for row in portfolio["bots"]} == {active_asset, other_asset}
+    assert selected_calls[-1].name == "get_portfolio_and_exposure"
+    assert selected_calls[-1].inputs == {"environment": "paper"}
+    if include_bot_decision:
+        assert selected_calls[0].inputs.get("asset") == active_asset
+        assert "read_review_history" in selected_calls[0].read_tools
 
 
 def test_open_position_question_reads_owner_portfolio_without_bot_page(monkeypatch):
