@@ -405,6 +405,29 @@ def test_latest_quote_check_keeps_indicator_source_moment_separate():
     )
 
 
+def test_broad_current_score_question_does_not_turn_bot_clock_into_quote_clock():
+    evidence = ({"scope": "read_market_snapshot", "status": "completed", "data": {
+        "symbol": "ETH", "quote_currency": "EUR", "price": 3000,
+        "source_observed_at_utc": "2026-11-15T09:02:06+00:00",
+    }},)
+    question = (
+        "Beoordeel mijn ETH/EUR-conceptsetup en actieve Paper-bot apart: actuele "
+        "score versus 61–75, koers- en indicatorbronmoment, laatste botbeslissing."
+    )
+    answer = (
+        "Het actuele ETH/EUR-koersbronmoment is 15 november 2026 om 10:02:06 CET. "
+        "De botstatus is hold. Beslismoment: 15 november 2026 om 10:00 CET."
+    )
+    diagnostics = []
+    assert current_source_moments_supported(
+        answer, evidence, question=question, diagnostics=diagnostics,
+    )
+    assert diagnostics == []
+    assert not current_source_moments_supported(
+        answer.replace("10:02:06 CET", "10:03:06 CET"), evidence, question=question,
+    )
+
+
 def test_broad_coach_keeps_paper_valuation_clock_separate_from_quote_source():
     evidence = (
         {"scope": "read_market_snapshot", "status": "completed", "data": {
