@@ -347,7 +347,7 @@ class SetupService:
         if commit:
             await self.session.commit()
             await self._mark_setup_step_completed_best_effort(user_id)
-            self._notify_coach_feed(user_id, raw_payload["symbol"])
+            self._notify_coach_feed(user_id, raw_payload["symbol"], raw_payload.get("market_id"))
 
         created = await self.repository.get_setup_by_id(setup_id, user_id)
         return {
@@ -439,9 +439,9 @@ class SetupService:
             
         await self.session.commit()
         await self._mark_setup_step_completed_best_effort(user_id)
-        self._notify_coach_feed(user_id, str(row.get("symbol") or ""))
+        self._notify_coach_feed(user_id, str(row.get("symbol") or ""), row.get("market_id"))
         if raw_payload.get("symbol") and raw_payload["symbol"] != row.get("symbol"):
-            self._notify_coach_feed(user_id, raw_payload["symbol"])
+            self._notify_coach_feed(user_id, raw_payload["symbol"], raw_payload.get("market_id"))
         updated = await self.repository.get_setup_by_id(setup_id, user_id)
         return {"message": "Setup bijgewerkt", "setup": self._format_setup(updated)}
 
@@ -472,16 +472,19 @@ class SetupService:
             raise HTTPException(404, "Niet gevonden of geen toegang")
         await self.session.commit()
         await self._mark_setup_step_completed_best_effort(user_id)
-        self._notify_coach_feed(user_id, str(owned.get("symbol") or ""))
+        self._notify_coach_feed(user_id, str(owned.get("symbol") or ""), owned.get("market_id"))
         return {"message": "Setup verwijderd"}
 
     @staticmethod
-    def _notify_coach_feed(user_id: int, symbol: str) -> None:
+    def _notify_coach_feed(user_id: int, symbol: str, market_id: int | None = None) -> None:
         if not symbol:
             return
         try:
             from backend.celery_task.store_daily_scores_task import reconcile_coach_feed_score
-            reconcile_coach_feed_score.delay(user_id, symbol)
+            if market_id is None:
+                reconcile_coach_feed_score.delay(user_id, symbol)
+            else:
+                reconcile_coach_feed_score.delay(user_id, symbol, market_id)
         except Exception:
             logger.warning("FINN feed plan dispatch failed", exc_info=True)
 
