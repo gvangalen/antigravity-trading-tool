@@ -119,6 +119,8 @@ async def update_indicator_settings(
         logger.warning("⚠️ Ongeldige indicator settings update: %s", e)
         if str(e) == "indicator_score_rules_unavailable":
             raise HTTPException(status_code=422, detail="Voor deze indicator ontbreekt een scoreregel. Kies eerst een eigen scoreregel.")
+        if str(e) == "indicator_only_available_for_btc":
+            raise HTTPException(status_code=422, detail="Deze indicator is alleen beschikbaar voor BTC.")
         raise HTTPException(status_code=400, detail="Ongeldige indicator-instellingen.")
     except Exception as e:
         logger.exception("❌ Error updating indicator settings")
@@ -149,6 +151,8 @@ async def save_custom_rules(
         logger.warning("⚠️ Ongeldige indicator rules save: %s", e)
         if str(e) == "indicator_already_configured":
             raise HTTPException(status_code=409, detail="Deze indicator is al toegevoegd. Bewerk de bestaande indicator.")
+        if str(e) == "indicator_only_available_for_btc":
+            raise HTTPException(status_code=422, detail="Deze indicator is alleen beschikbaar voor BTC.")
         raise HTTPException(status_code=400, detail="Ongeldige indicatorregels.")
     except Exception as e:
         logger.exception("❌ Error saving custom rules")

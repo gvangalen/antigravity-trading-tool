@@ -11,6 +11,7 @@ from backend.infrastructure.database import async_session_factory
 from backend.domain.macro_indicator_catalog import (
     get_active_macro_indicator_definitions,
     get_macro_indicator_definition,
+    macro_indicator_supports_symbol,
 )
 from backend.infrastructure.models import MacroData
 from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
@@ -271,6 +272,8 @@ class MacroDataService:
             raise HTTPException(400, "❌ Indicator mag niet leeg zijn.")
 
         normalized_symbol = str(symbol or "").strip().upper() or None
+        if not macro_indicator_supports_symbol(indicator_name, normalized_symbol or "BTC"):
+            raise HTTPException(422, "Deze indicator is alleen beschikbaar voor BTC.")
         asset_scope = await self._get_asset_scope(normalized_symbol or "BTC")
         if persist_preference:
             await self.preference_repository.ensure_user_config(
@@ -478,6 +481,7 @@ class MacroDataService:
             merged[definition["name"]] = MacroIndicatorNamesResponse(
                 name=str(definition["name"]),
                 display_name=str(definition["display_name"]),
+                asset_symbols=definition.get("asset_symbols"),
             )
 
         for record in records:

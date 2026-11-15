@@ -119,6 +119,30 @@ def test_copy_rejects_changed_preview():
     session.commit.assert_not_awaited()
 
 
+def test_pair_copy_rejects_btc_only_macro_on_another_asset():
+    source = SimpleNamespace(id=41, asset_symbol="BTC", quote_currency="EUR")
+    target = SimpleNamespace(id=42, asset_symbol="ETH", quote_currency="USDT")
+    selected = {("macro", "etf_bitcoin_inflow"): {
+        "category": "macro", "indicator": "etf_bitcoin_inflow",
+        "weight": 1, "score_mode": "standard", "rules": [],
+    }}
+    weights = {"market": 1 / 3, "macro": 1 / 3, "technical": 1 / 3}
+    session = SimpleNamespace(execute=AsyncMock(), commit=AsyncMock())
+    service = PairBenchmarkCopyService(session)
+    service.configs.market = AsyncMock(side_effect=lambda market_id: {41: source, 42: target}[market_id])
+    service._state = AsyncMock(side_effect=lambda _owner, market: (
+        (selected, weights) if market.id == 41 else ({}, weights)))
+
+    async def run():
+        preview = await service.preview(7, 41, 42)
+        assert preview["unsupported"] == ["macro:etf_bitcoin_inflow"]
+        with pytest.raises(ValueError, match="unsupported_indicators_for_target"):
+            await service.apply(7, 41, 42, preview["revision"])
+
+    asyncio.run(run())
+    session.commit.assert_not_awaited()
+
+
 def test_bot_reads_weights_for_its_exact_pair_and_owner():
     commands = []
 

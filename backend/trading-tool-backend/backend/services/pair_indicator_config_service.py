@@ -11,6 +11,7 @@ from datetime import datetime
 from sqlalchemy import select, text, and_, or_
 
 from backend.infrastructure.models import TradingMarket, UserIndicatorConfig
+from backend.domain.macro_indicator_catalog import macro_indicator_supports_symbol
 from backend.infrastructure.repositories.indicator_config_repository import IndicatorConfigRepository
 from backend.services.indicator_config_service import IndicatorConfigService, FIXED_BUCKETS, _clamp_weight
 from backend.utils.scoring_utils import normalize_indicator_name
@@ -64,6 +65,8 @@ class PairIndicatorConfigService:
 
     async def save(self, user_id: int, market, category: str, indicator: str,
                    *, mode: str, score_mode: str, weight: float, rules: list[dict]):
+        if category == "macro" and not macro_indicator_supports_symbol(indicator, market.asset_symbol):
+            raise ValueError("indicator_only_available_for_btc")
         await self.session.execute(text("SELECT id FROM users WHERE id=:user_id FOR UPDATE"),
                                    {"user_id": user_id})
         rows = await self.rows(user_id, market)

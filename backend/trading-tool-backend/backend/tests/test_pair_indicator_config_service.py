@@ -84,6 +84,17 @@ def test_same_indicator_is_allowed_on_second_pair_but_not_twice_on_same_pair():
     session.commit.assert_awaited_once()
 
 
+def test_btc_etf_inflow_cannot_be_saved_on_eth_pair():
+    session = SimpleNamespace(execute=AsyncMock(), commit=AsyncMock())
+    service = PairIndicatorConfigService(session)
+    market = SimpleNamespace(id=52, asset_symbol="ETH", quote_currency="EUR")
+    with pytest.raises(ValueError, match="indicator_only_available_for_btc"):
+        asyncio.run(service.save(7, market, "macro", "etf_bitcoin_inflow",
+                                 mode="add", score_mode="standard", weight=1, rules=[]))
+    session.execute.assert_not_awaited()
+    session.commit.assert_not_awaited()
+
+
 def test_removing_one_pair_keeps_the_other_pair_selected():
     session = SimpleNamespace(add=lambda _row: None, commit=AsyncMock(), execute=AsyncMock())
     service = PairIndicatorConfigService(session)

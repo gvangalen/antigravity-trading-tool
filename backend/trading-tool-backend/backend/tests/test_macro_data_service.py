@@ -3,8 +3,12 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
+from fastapi import HTTPException
+
 from backend.domain.macro_indicator_catalog import get_active_macro_indicator_definitions
 from backend.services.macro_data_service import MacroDataService
+from backend.services.indicator_config_service import IndicatorConfigService
 
 
 def test_add_macro_indicator_normalizes_name_before_scoring_and_preference_save():
@@ -76,7 +80,31 @@ def test_get_all_macro_indicators_merges_canonical_catalog_with_db_rows():
     assert "us10y" in names
     assert "us02y" in names
     assert "etf_bitcoin_inflow" in names
+    assert next(row for row in rows if row.name == "etf_bitcoin_inflow").asset_symbols == ["BTC"]
     assert "google_trends" not in names
+
+
+def test_btc_etf_inflow_cannot_be_added_to_eth_before_any_preference_write():
+    service = MacroDataService(AsyncMock())
+    service.preference_repository.ensure_user_config = AsyncMock()
+    service._get_asset_scope = AsyncMock()
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(service.add_macro_indicator(7, "etf_bitcoin_inflow", None, symbol="ETH"))
+    assert error.value.status_code == 422
+    assert "BTC" in error.value.detail
+    service.preference_repository.ensure_user_config.assert_not_awaited()
+    service._get_asset_scope.assert_not_awaited()
+
+
+def test_btc_etf_inflow_cannot_be_saved_as_eth_base_indicator_settings():
+    repository = SimpleNamespace(db=AsyncMock())
+    service = IndicatorConfigService(repository)
+    service.product_repository.set_indicator_config_metadata = AsyncMock()
+    with pytest.raises(ValueError, match="indicator_only_available_for_btc"):
+        asyncio.run(service.update_indicator_settings("macro", "etf_bitcoin_inflow", 7, "ETH", "standard", 1))
+    with pytest.raises(ValueError, match="indicator_only_available_for_btc"):
+        asyncio.run(service.save_custom_rules("macro", "etf_bitcoin_inflow", 7, "ETH", [], 1))
+    service.product_repository.set_indicator_config_metadata.assert_not_awaited()
 
 
 def test_add_macro_indicator_uses_canonical_macro_source_when_db_row_is_stale():

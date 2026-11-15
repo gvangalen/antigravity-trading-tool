@@ -87,6 +87,7 @@ MACRO_INDICATOR_DEFINITIONS: List[dict] = [
     {
         "name": "etf_bitcoin_inflow",
         "display_name": "BTC Spot ETF Inflow",
+        "asset_symbols": ["BTC"],
         "source": "custom",
         "link": "https://bitbo.io/treasuries/etf-flows/",
         "category": "macro",
@@ -101,6 +102,12 @@ def get_macro_indicator_definition(name: str) -> Optional[Dict[str, object]]:
         if definition["name"] == normalized:
             return dict(definition)
     return None
+
+
+def macro_indicator_supports_symbol(name: str, symbol: str) -> bool:
+    definition = get_macro_indicator_definition(name)
+    allowed = definition.get("asset_symbols") if definition else None
+    return not allowed or str(symbol or "").strip().upper() in allowed
 
 
 def get_active_macro_indicator_definitions() -> List[Dict[str, object]]:
