@@ -15,9 +15,23 @@ import {
   normalizeCommandText,
   openFinnContext,
   resolveFeedDraftQuery,
+  resolveFeedItemContext,
   shouldAttachFeedContext,
   updateFeedDiscussionDraftIfCurrent,
 } from "../lib/finnCommandSearch.js";
+
+test("feed discussion keeps the selected asset and exact market", () => {
+  assert.deepEqual(resolveFeedItemContext({ symbol: "BTC", evidence: {
+    trading_pair: "BTC/EUR", market_id: 17,
+  } }), { symbol: "BTC", quote_currency: "EUR", market_id: 17 });
+  assert.deepEqual(resolveFeedItemContext({ symbol: "ETH", evidence: {
+    trading_pair: "ETH/USDT", market_id: 29,
+  } }), { symbol: "ETH", quote_currency: "USDT", market_id: 29 });
+  assert.deepEqual(resolveFeedItemContext({ symbol: "AAPL", evidence: {} }), { symbol: "AAPL" });
+  assert.deepEqual(resolveFeedItemContext({ symbol: "BTC", evidence: {
+    trading_pair: "ETH/USDT", market_id: 29,
+  } }), { symbol: "BTC" });
+});
 
 test("asset picker lists exact EUR and USDT markets as separate results", () => {
   const markets = {

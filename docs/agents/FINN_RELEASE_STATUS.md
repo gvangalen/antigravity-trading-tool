@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0 actieve plancontrole, eerste release (15 november 2026)
 
-Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Branch `codex/finn-active-coach-mvp`
+Phase: `REPAIR_CANDIDATE_LOCAL_VALIDATED`. Branch `codex/finn-active-coach-mvp`
 contains product commit `a42a7b88a` on main base
 `cd8b52a97814c173c20c8df8a10a81957b55162e`. PR #1070 merged as
 `40167176010e4f7875db7aa321117f789fb109a2`. Its final PR-CI
@@ -14,8 +14,25 @@ contains product commit `a42a7b88a` on main base
 five jobs. Auto Deploy `43696229149` succeeded on that merge SHA. On
 15 November 2026, public backend health and frontend build-info both returned
 HTTP 200 and the same `40167176010e4f7875db7aa321117f789fb109a2` SHA.
-This status update creates a new main SHA; its last main-CI, Auto Deploy,
-public SHA parity and independent live QA are pending.
+The release-status PR #1071 passed all five PR-CI jobs in `43696396277`
+and merged as `d4f705166d0a5f6a3bef4cf745977f2366e5d6cd`. Its main-CI
+`43696760980` passed all five jobs and Auto Deploy `43697188603` succeeded.
+GitHub main, public backend health and frontend build-info then matched that
+SHA; both public endpoints returned HTTP 200, with no newer deploy pending.
+Independent read-only QA on this SHA returned `NOT_ACCEPTED` for full release
+acceptance: FINN correctly read the BTC/EUR saved score band 61–75 and score
+35 without an entry signal, treated an old AAPL quote as stale, and kept
+BTC/EUR separate from BTC/USDT. No new plan-review event appeared during the
+test, so the automatic trigger and its `Bespreek` route were not observed;
+that absence alone does not prove a product defect. Mobile runtime was not
+tested. QA did find that a BTC/EUR plan question retained AAPL in the chat
+header, although the answer used BTC/EUR. Branch
+`codex/finn-feed-context-header` repairs that generic feed-to-chat context
+handoff for all assets and exact pairs. Its focused frontend tests passed
+25/25 and command tests 75/75; typecheck, i18n lint, production build and
+high dependency audit passed. CI, deployment and independent retest for this
+repair remain pending. Protected event generation remains unavailable until
+QA has an explicit goal and an approved, isolated plan-review fixture profile.
 The prior Paper-bot blocker received an independent targeted browser
 `ACCEPTED` verdict on public SHA `45beb85bf62b9453e2c3466db2c059a5c0278e83`;
 there was no active protected QA goal for a full matrix.

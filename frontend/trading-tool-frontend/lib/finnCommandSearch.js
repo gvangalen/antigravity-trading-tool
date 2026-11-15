@@ -10,6 +10,19 @@ export function updateFeedDiscussionDraftIfCurrent(current, nonce, draft) {
   return current?.request.nonce === nonce ? { ...current, draft } : current;
 }
 
+export function resolveFeedItemContext(item) {
+  const symbol = String(item?.symbol || "").trim().toUpperCase();
+  const pair = String(item?.evidence?.trading_pair || "").trim().toUpperCase();
+  const [pairSymbol, quoteCurrency, extra] = pair.split("/");
+  const exactPair = !extra && pairSymbol === symbol && /^[A-Z]{3,5}$/.test(quoteCurrency || "");
+  const marketId = item?.evidence?.market_id;
+  return {
+    ...(symbol ? { symbol } : {}),
+    ...(exactPair ? { quote_currency: quoteCurrency } : {}),
+    ...(exactPair && Number.isSafeInteger(marketId) && marketId > 0 ? { market_id: marketId } : {}),
+  };
+}
+
 export const isDirectCommandSearchMode = (mode) => mode !== "chat";
 
 export function isWorkspaceIndicatorConfigured(workspace, category, indicator) {

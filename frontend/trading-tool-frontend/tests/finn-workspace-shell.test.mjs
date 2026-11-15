@@ -64,6 +64,9 @@ test("feed discussion enters the persistent FINN panel with its event identity",
   assert.match(shellSource, /closeFeedDiscussion\(feedDiscussion\.request\.nonce\)/);
   assert.match(shellSource, /closeLabel=\{workspaceCopy\.closeBackdrop\}/);
   assert.match(feedSource, /onDiscuss\?\.\(item\.id,/);
+  assert.match(shellSource, /resolveFeedItemContext\(item\)/);
+  assert.match(assistantSource, /feedContextSymbol = commandRequest\?\.context\?\.feed_item_id/);
+  assert.match(assistantSource, /value=\{displayedContextSymbol\}/);
   assert.match(assistantSource, /resolveFeedDraftQuery\(/);
   assert.match(assistantSource, /aria-label=\{closeLabel \|\| at\("uiText\.closeChat"\)\}/);
 });

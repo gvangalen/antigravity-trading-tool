@@ -36,6 +36,7 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 import {
   FINN_COMMAND_OPEN_EVENT,
   closeFeedDiscussionIfCurrent,
+  resolveFeedItemContext,
   updateFeedDiscussionDraftIfCurrent,
 } from "@/lib/finnCommandSearch";
 import { normalizeScopedAssetSymbol } from "@/lib/finnAssetIsolation";
@@ -125,12 +126,12 @@ export default function FinnWorkspaceShell({ children }) {
     setAssistantOpen(true);
   };
 
-  const discussFeedItem = (itemId, question) => {
+  const discussFeedItem = (itemId, question, item) => {
     commandNonceRef.current += 1;
     const nextQuery = String(question || "").trim();
     const handoff = {
       mode: "chat", query: nextQuery,
-      context: { feed_item_id: itemId },
+      context: { feed_item_id: itemId, ...resolveFeedItemContext(item) },
       autoSubmit: false, newConversation: true,
       nonce: `feed:${itemId}:${commandNonceRef.current}:${Date.now()}`,
     };
