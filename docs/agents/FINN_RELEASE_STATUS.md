@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0 actieve plancontrole, eerste release (15 november 2026)
 
-Phase: `REPAIR_CANDIDATE_LOCAL_VALIDATED`. Branch `codex/finn-active-coach-mvp`
+Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Branch `codex/finn-active-coach-mvp`
 contains product commit `a42a7b88a` on main base
 `cd8b52a97814c173c20c8df8a10a81957b55162e`. PR #1070 merged as
 `40167176010e4f7875db7aa321117f789fb109a2`. Its final PR-CI
@@ -30,8 +30,11 @@ header, although the answer used BTC/EUR. Branch
 `codex/finn-feed-context-header` repairs that generic feed-to-chat context
 handoff for all assets and exact pairs. Its focused frontend tests passed
 25/25 and command tests 75/75; typecheck, i18n lint, production build and
-high dependency audit passed. CI, deployment and independent retest for this
-repair remain pending. Protected event generation remains unavailable until
+high dependency audit passed. PR #1072 passed five CI jobs in `43697967586`
+and merged as `2c4f80cd9f728e19b0e5403287e020f8faaef4e5`. Main-CI
+`43698399056` passed five jobs and Auto Deploy `43698851410` succeeded;
+backend and frontend publicly matched the merge SHA with HTTP 200. Protected
+event generation remains unavailable until
 QA has an explicit goal and an approved, isolated plan-review fixture profile.
 QA clarified that its AAPL header finding arose from `/setup` → a BTC/EUR
 plan card → `Beoordeel plan`, not from a feed card. The first repair branch
@@ -40,8 +43,15 @@ observed path. The follow-up branch `codex/finn-plan-chat-context` makes the
 visible chat asset follow any explicit card context, carries the clicked
 plan's quote currency, and makes the automatically submitted request prefer
 that selected plan over an older chat asset. Focused context tests passed
-35/35, frontend typecheck and production build passed; this follow-up's
-CI, deployment and independent read-only retest remain pending.
+35/35, frontend typecheck, i18n lint, command and i18n tests, production
+build and high dependency audit passed. PR #1073 passed five CI jobs in
+`43698663488` and merged as `73fb079b6cfedccd6ab5b07114fc7e8fa597ff31`.
+Its main-CI `43699113793` passed five jobs and Auto Deploy `43699456151`
+succeeded. GitHub main and both public build surfaces showed exactly that
+SHA, with backend and frontend HTTP 200 and no newer deploy pending. This
+status-only update creates a new final SHA; its last main-CI, Auto Deploy
+and public SHA parity remain pending before the read-only QA retest. The
+automatic feed trigger still lacks independent live event evidence.
 The prior Paper-bot blocker received an independent targeted browser
 `ACCEPTED` verdict on public SHA `45beb85bf62b9453e2c3466db2c059a5c0278e83`;
 there was no active protected QA goal for a full matrix.
