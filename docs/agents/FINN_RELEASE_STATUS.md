@@ -4,6 +4,48 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN brede coachvraag: overlappende concepten en strategiebedrag (15 november 2026)
+
+Phase: `LOCAL_VALIDATED_PR_PENDING`. Independent read-only browser QA gave
+**NOT ACCEPTED** on final public SHA `950884eae2005f0376c4dd08e90c4795e602cac2`.
+The same broad BTC/EUR question still said the visible concept setup and its
+linked €10 strategy could not be verified. The shorter question read the
+strategy correctly, and the AAPL/BTC comparison now reported joint Paper cash
+as €10.005,45 without adding the bot cash again. All three chats completed
+without a confirmed action; the UI exposed no run ID or typed trace. The
+protected QA matrix remains unrun because the existing QA task has no active
+goal or manifest binding. No claim about the exact live tool step follows
+from the answer text alone.
+
+The first local fixture had two same-pair setups but only one concept and one
+61–75 score band. A stronger isolated fixture now gives both owner-scoped
+BTC/EUR setups a concept name and the same 61–75 band. Their linked saved
+strategy amounts differ: €10 and €100. On the previous code, the exact broad
+question selected `evaluate_plan`, but both setup and strategy reads remained
+`setup_ambiguous` (artifact SHA-256
+`fa3c411d840e635cfccb6f46b476b9d896474e708382d9da0a473ff9b4b44a3e`).
+The new generic tie-breaker uses a single EUR trade amount stated in the
+question only after exact pair, score band and concept label still leave
+multiple owner-scoped candidates. It selects a setup only when exactly one
+linked saved strategy has that amount; equal or conflicting matches remain
+unresolved. The same local FastAPI/prefork-Celery/real-Responses question then
+completed the concept setup and linked-strategy reads in one dispatch, with
+no proposal or order (artifact SHA-256
+`d4643938ada93088ddebec2b7ce8d20c9e059fcb65b9d21cb4c52fc41e02df27`).
+This synthetic fixture has unavailable live quote and indicator sources.
+The root backend suite passed **4,884** with **7 skipped** (log SHA-256
+`9880cb020792964abdb0772dba3d029ac9601f1c2aec7e1f91827f4aafa3af69`).
+The final isolated worker action matrix passed **17/17** with zero broker
+orders, Live bots, Live calls or production connections (artifact SHA-256
+`90ce9d3bfec7c8aa1083cff5618d5f6b562a488b148df261bcccded1feede4f5`).
+Real-provider selector development passed **20/20** with zero provider,
+schema, parse, validation or timeout failures (artifact SHA-256
+`e03d9922ffb9217662c8d749f95417c903aa92c3fb9ae2dfb2dc7e42128d9f48`).
+The full real-provider regression passed **109/109** with the same zero
+failure categories (artifact SHA-256
+`ef209b58ec424f77b26c36df85a022da182854e408ce19050d433e82e906cb8d`).
+CI, deployment and independent live QA remain pending for this repair.
+
 ## FINN brede coachvraag: meerdere setups en Paper-kastotaal (15 november 2026)
 
 Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Independent read-only browser QA rejected

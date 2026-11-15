@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from dataclasses import replace
 from datetime import date, datetime, timedelta
+from decimal import Decimal, InvalidOperation
 import json
 import logging
 import os
@@ -3851,6 +3852,40 @@ class FinnResponsesFrontDoor:
                                 ]
                                 if named_concepts:
                                     candidates = named_concepts
+                            if len(candidates) > 1:
+                                # A user-stated EUR trade amount can identify
+                                # the linked saved strategy when pair, band and
+                                # a broad label still name several setups.
+                                amount_tokens = re.findall(
+                                    r"€\s*(\d+(?:[.,]\d{1,2})?)\b"
+                                    r"|\b(\d+(?:[.,]\d{1,2})?)\s*(?:EUR|euro)\b",
+                                    message, re.I,
+                                )
+                                requested_amounts = {
+                                    Decimal(next(value for value in values if value).replace(",", "."))
+                                    for values in amount_tokens
+                                }
+                                if len(requested_amounts) == 1:
+                                    requested_amount = next(iter(requested_amounts))
+                                    def saved_amount_matches(row: dict[str, Any]) -> bool:
+                                        for strategy in row.get("linked_strategies") or []:
+                                            if not isinstance(strategy, dict):
+                                                continue
+                                            if str(strategy.get("currency") or "EUR").upper() != "EUR":
+                                                continue
+                                            try:
+                                                amount = Decimal(str(strategy.get("base_amount")))
+                                            except (InvalidOperation, ValueError):
+                                                continue
+                                            if amount == requested_amount:
+                                                return True
+                                        return False
+
+                                    amount_matches = [
+                                        row for row in candidates if saved_amount_matches(row)
+                                    ]
+                                    if amount_matches:
+                                        candidates = amount_matches
                             if len(candidates) == 1:
                                 resolved = await self.reads(replace(
                                     call, name="get_active_plan_and_strategy",

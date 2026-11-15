@@ -29,8 +29,11 @@ def main() -> None:
     parser.add_argument("--linked-concept", action="store_true")
     parser.add_argument("--live-like-plan-names", action="store_true")
     parser.add_argument("--ambiguous-pair-bot", action="store_true")
+    parser.add_argument("--overlapping-concepts", action="store_true")
     parser.add_argument("--comparison", action="store_true")
     args = parser.parse_args()
+    if args.overlapping_concepts and not args.ambiguous_pair_bot:
+        parser.error("--overlapping-concepts requires --ambiguous-pair-bot")
     if not args.base_url.startswith(("http://127.0.0.1:", "http://localhost:")):
         raise SystemExit("This regression is local-only")
 
@@ -54,7 +57,12 @@ def main() -> None:
             """), {"quote": quote, "provider_symbol": f"BTC{quote}",
                    "tradingview_symbol": f"BINANCE:BTC{quote}"})
         for symbol, cash in (("BTC", 9599.97), ("AAPL", 405.48)):
-            setup_id = _insert_setup(connection, user["id"], f"{symbol} Paper Scope")
+            setup_id = _insert_setup(
+                connection, user["id"],
+                "BTC long — hogere benchmarkscore (concept)"
+                if args.overlapping_concepts and symbol == "BTC"
+                else f"{symbol} Paper Scope",
+            )
             connection.execute(text("""
                 UPDATE setups SET symbol = :symbol WHERE id = :setup_id AND user_id = :user_id
             """), {"symbol": symbol, "setup_id": setup_id, "user_id": user["id"]})
@@ -83,10 +91,20 @@ def main() -> None:
                             SELECT id FROM trading_markets
                             WHERE asset_symbol = :symbol AND quote_currency = 'EUR'
                             ORDER BY id LIMIT 1
-                        ) WHERE id = :setup_id AND user_id = :user_id
-                    """), {"symbol": symbol, "setup_id": setup_id, "user_id": user["id"]})
+                        ), min_benchmark_score = :min_score,
+                           max_benchmark_score = :max_score
+                        WHERE id = :setup_id AND user_id = :user_id
+                    """), {"symbol": symbol, "setup_id": setup_id, "user_id": user["id"],
+                           "min_score": 61 if args.overlapping_concepts else None,
+                           "max_score": 75 if args.overlapping_concepts else None})
             strategy_id = _insert_strategy(connection, user["id"], setup_id,
                                            f"{symbol} Paper Scope Strategy")
+            if args.overlapping_concepts and symbol == "BTC":
+                connection.execute(text("""
+                    UPDATE strategies SET base_amount = 100,
+                        data = jsonb_set(data, '{base_amount}', '100'::jsonb)
+                    WHERE id = :strategy_id AND user_id = :user_id
+                """), {"strategy_id": strategy_id, "user_id": user["id"]})
             if args.linked_concept and symbol == "BTC":
                 concept_strategy_id = _insert_strategy(
                     connection, user["id"], concept_id,

@@ -389,8 +389,11 @@ def test_broad_evaluation_completes_named_setup_strategy_relation(
         )
 
 
-@pytest.mark.parametrize("asset,quote", [("ETH", "EUR"), ("SOL", "USDT")])
-def test_broad_evaluation_resolves_unique_saved_score_band_with_two_pair_setups(asset, quote):
+@pytest.mark.parametrize("asset,quote,overlap", [
+    ("ETH", "EUR", False), ("SOL", "USDT", False),
+    ("ETH", "EUR", True), ("SOL", "USDT", True),
+])
+def test_broad_evaluation_resolves_unique_saved_score_band_or_amount(asset, quote, overlap):
     question = (
         f"Beoordeel mijn {asset}/{quote}-conceptsetup en aparte Paper-bot: "
         "actuele score versus 61–75. Is een koop van €10 geldig? Wijzig niets."
@@ -421,10 +424,15 @@ def test_broad_evaluation_resolves_unique_saved_score_band_with_two_pair_setups(
                     {"setup_id": 41, "name": "Manual concept", "symbol": asset,
                      "quote_currency": quote,
                      "min_benchmark_score": "61" if asset == "ETH" else 61,
-                     "max_benchmark_score": "75" if asset == "ETH" else 75},
+                     "max_benchmark_score": "75" if asset == "ETH" else 75,
+                     "linked_strategies": [{"strategy_id": 51, "base_amount": "10.00",
+                                            "currency": "EUR"}]},
                     {"setup_id": 42, "name": "Bot concept", "symbol": asset,
-                     "quote_currency": quote, "min_benchmark_score": 80,
-                     "max_benchmark_score": 95},
+                     "quote_currency": quote,
+                     "min_benchmark_score": "61" if overlap else 80,
+                     "max_benchmark_score": "75" if overlap else 95,
+                     "linked_strategies": [{"strategy_id": 52, "base_amount": "100",
+                                            "currency": "EUR"}]},
                 ]},
             }]}
         if call.name == "get_active_plan_and_strategy":
@@ -453,12 +461,15 @@ def test_broad_evaluation_resolves_unique_saved_score_band_with_two_pair_setups(
                    and item.get("status") == "unavailable" for item in items)
 
 
-@pytest.mark.parametrize("score_bounds,names,question", [
-    ((61, 75), ("Swing", "Trend"), "Beoordeel mijn ETH/EUR-setup met score 61–75. Wijzig niets."),
-    ((80, 95), ("Swing concept", "Trend"),
+@pytest.mark.parametrize("score_bounds,names,amounts,question", [
+    ((61, 75), ("Swing", "Trend"), (None, None),
+     "Beoordeel mijn ETH/EUR-setup met score 61–75. Wijzig niets."),
+    ((80, 95), ("Swing concept", "Trend"), (None, None),
      "Beoordeel mijn ETH/EUR-conceptsetup met score 61–75. Wijzig niets."),
+    ((61, 75), ("Swing concept", "Trend concept"), ("10", "10.00"),
+     "Beoordeel mijn ETH/EUR-conceptsetup met score 61–75 en koop €10. Wijzig niets."),
 ])
-def test_broad_evaluation_keeps_ambiguous_saved_pair_unresolved(score_bounds, names, question):
+def test_broad_evaluation_keeps_ambiguous_saved_pair_unresolved(score_bounds, names, amounts, question):
     fake = FakeResponses(
         response("evaluation", calls=[tool_call("eval", "evaluate_plan", {"asset": "ETH"})]),
         response("answer", text="Welke van de twee ETH/EUR-setups bedoel je?"),
@@ -477,8 +488,12 @@ def test_broad_evaluation_keeps_ambiguous_saved_pair_unresolved(score_bounds, na
                 "data": {"complete": True, "setups": [
                     {"setup_id": setup_id, "name": name, "symbol": "ETH",
                      "quote_currency": "EUR", "min_benchmark_score": score_bounds[0],
-                     "max_benchmark_score": score_bounds[1]}
-                    for setup_id, name in ((41, names[0]), (42, names[1]))
+                     "max_benchmark_score": score_bounds[1],
+                     "linked_strategies": (
+                         [{"base_amount": amounts[index], "currency": "EUR"}]
+                         if amounts[index] is not None else []
+                     )}
+                    for index, (setup_id, name) in enumerate(((41, names[0]), (42, names[1])))
                 ]},
             }]}
         if call.name in {"evaluate_plan", "get_active_plan_and_strategy"}:
