@@ -92,6 +92,7 @@ function commandCopy(locale) {
       openPlan: "Open My Plan",
       addTechnical: "Configure for Technical",
       addMacro: "Configure for Macro",
+      onlyForAssets: (symbols) => `Only for ${symbols}`,
       addMarket: "Configure for Market",
       loading: "Loading indicators...",
       noResults: "No direct actions found",
@@ -120,6 +121,7 @@ function commandCopy(locale) {
       openPlan: "Mein Plan öffnen",
       addTechnical: "Für Technik konfigurieren",
       addMacro: "Für Makro konfigurieren",
+      onlyForAssets: (symbols) => `Nur für ${symbols}`,
       addMarket: "Für Markt konfigurieren",
       loading: "Indikatoren werden geladen...",
       noResults: "Keine direkte Aktion gefunden",
@@ -147,6 +149,7 @@ function commandCopy(locale) {
     openPlan: "Open Mijn Plan",
     addTechnical: "Configureren voor Technisch",
     addMacro: "Configureren voor Macro",
+    onlyForAssets: (symbols) => `Alleen voor ${symbols}`,
     addMarket: "Configureren voor Markt",
     loading: "Indicatoren laden...",
     noResults: "Geen directe actie gevonden",
@@ -346,15 +349,20 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
             id: `indicator:${source.key}:${indicator.name}`,
             type: "indicator",
             title: indicator.display_name || indicator.label || indicator.name,
-            subtitle: isWorkspaceIndicatorConfigured(configuredWorkspace, source.key, indicator.name)
-              ? copy.editIndicator : source.label,
+            subtitle: Array.isArray(indicator.asset_symbols) && indicator.asset_symbols.length > 0 &&
+              !indicator.asset_symbols.includes(activeSymbol)
+              ? copy.onlyForAssets(indicator.asset_symbols.join(", "))
+              : isWorkspaceIndicatorConfigured(configuredWorkspace, source.key, indicator.name)
+                ? copy.editIndicator : source.label,
             category: source.key,
             indicatorName: indicator.name,
             icon: Sparkles,
+            disabled: Array.isArray(indicator.asset_symbols) && indicator.asset_symbols.length > 0 &&
+              !indicator.asset_symbols.includes(activeSymbol),
           }))
       )
       .slice(0, 12);
-  }, [catalog, configuredWorkspace, copy.addMacro, copy.addMarket, copy.addTechnical, copy.editIndicator, hasQuery, mode.category, mode.kind, query]);
+  }, [activeSymbol, catalog, configuredWorkspace, copy.addMacro, copy.addMarket, copy.addTechnical, copy.editIndicator, copy.onlyForAssets, hasQuery, mode.category, mode.kind, query]);
 
   const directResults = useMemo(
     () => mode.kind === "asset"
@@ -366,7 +374,7 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
     () => (hasQuery && !["asset", "asset_market"].includes(mode.kind) ? [...directResults, { id: "ask-finn", type: "ask", title: `${copy.askFinn}: “${query.trim()}”`, subtitle: copy.askDescription, icon: MessageSquare }] : directResults).filter((result) => !result.disabled),
     [copy.askDescription, copy.askFinn, directResults, hasQuery, mode.kind, query]
   );
-  const displayResults = ["asset", "asset_market"].includes(mode.kind) ? directResults : selectableResults;
+  const displayResults = ["asset", "asset_market", "indicator"].includes(mode.kind) ? directResults : selectableResults;
 
   const closeCommand = () => {
     onQueryChange("");
@@ -375,7 +383,7 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
   };
 
   const selectResult = async (result) => {
-    if (!result) return;
+    if (!result || result.disabled) return;
     if (result.type === "ask") {
       onAskFinn();
       return;
@@ -551,7 +559,7 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
                         <Star size={15} fill={watchlist.isInWatchlist(result.asset.symbol) ? "currentColor" : "none"} />
                       </button>
                     ) : null}
-                    <ArrowRight size={14} className="text-slate-300" />
+                    {!result.disabled ? <ArrowRight size={14} className="text-slate-300" /> : null}
                   </div>
                 </div>
               );

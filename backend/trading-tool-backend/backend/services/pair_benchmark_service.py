@@ -16,7 +16,7 @@ from backend.infrastructure.models import User, UserIndicatorConfig
 from backend.services.pair_indicator_config_service import PairIndicatorConfigService, effective_pair_configs
 from backend.services.indicator_config_service import FIXED_BUCKETS
 from backend.domain.market_indicator_catalog import get_market_indicator_definition
-from backend.domain.macro_indicator_catalog import get_macro_indicator_definition
+from backend.domain.macro_indicator_catalog import get_macro_indicator_definition, macro_indicator_supports_symbol
 from backend.domain.technical_indicator_catalog import get_technical_indicator_definition
 from backend.utils.scoring_utils import normalize_indicator_name
 
@@ -129,7 +129,8 @@ class PairBenchmarkCopyService:
                        "technical": get_technical_indicator_definition}
         unsupported = [f"{category}:{indicator}" for category, indicator in source_items
                        if category not in definitions or
-                       not (definition := definitions[category](indicator)) or not definition.get("active")]
+                       not (definition := definitions[category](indicator)) or not definition.get("active") or
+                       (category == "macro" and not macro_indicator_supports_symbol(indicator, target.asset_symbol))]
         for (category, indicator), item in source_items.items():
             mode = item["score_mode"]
             weight = item["weight"]

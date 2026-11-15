@@ -54,3 +54,4 @@ class MacroIndicatorRuleResponse(BaseModel):
 class MacroIndicatorNamesResponse(BaseModel):
     name: str
     display_name: str
+    asset_symbols: Optional[List[str]] = None

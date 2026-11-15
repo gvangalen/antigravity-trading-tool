@@ -11,7 +11,7 @@ from math import isfinite
 from sqlalchemy import select, text
 
 from backend.domain.market_indicator_catalog import get_market_indicator_definition
-from backend.domain.macro_indicator_catalog import get_macro_indicator_definition
+from backend.domain.macro_indicator_catalog import get_macro_indicator_definition, macro_indicator_supports_symbol
 from backend.domain.technical_indicator_catalog import get_technical_indicator_definition
 from backend.infrastructure.models import TradingMarket, UserIndicatorConfig
 from backend.infrastructure.repositories.indicator_config_repository import IndicatorConfigRepository
@@ -120,7 +120,7 @@ class AssetBenchmarkCopyService:
         definition = DEFINITIONS.get(category, lambda _: None)(indicator)
         if not definition or not definition.get("active"):
             return "indicator_unavailable"
-        if category == "macro" and indicator == "etf_bitcoin_inflow" and target["symbol"] != "BTC":
+        if category == "macro" and not macro_indicator_supports_symbol(indicator, target["symbol"]):
             return "btc_only_source"
         if category == "technical" and target["asset_class"] not in {"crypto", "stock", "etf", "index"}:
             return "technical_provider_unavailable"

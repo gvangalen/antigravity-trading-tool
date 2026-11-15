@@ -2,6 +2,7 @@ from backend.infrastructure.repositories.indicator_config_repository import Indi
 from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
 from backend.schemas.indicator_config_schema import IndicatorConfigResponse, IndicatorBucketRule
 from backend.services.indicator_score_refresh_service import queue_indicator_score_refresh
+from backend.domain.macro_indicator_catalog import macro_indicator_supports_symbol
 
 FIXED_BUCKETS = [
     (0.0, 20.0),
@@ -121,6 +122,8 @@ class IndicatorConfigService:
         )
 
     async def update_indicator_settings(self, category: str, indicator: str, user_id: int, symbol: str, score_mode: str, weight: float):
+        if category == "macro" and not macro_indicator_supports_symbol(indicator, symbol):
+            raise ValueError("indicator_only_available_for_btc")
         score_mode = (score_mode or "").strip().lower()
         weight = _clamp_weight(weight)
         metadata = {"score_mode": score_mode, "weight": weight}
@@ -147,6 +150,8 @@ class IndicatorConfigService:
         queue_indicator_score_refresh(user_id, symbol)
 
     async def save_custom_rules(self, category: str, indicator: str, user_id: int, symbol: str, rules: list, weight: float, create_only: bool = False):
+        if category == "macro" and not macro_indicator_supports_symbol(indicator, symbol):
+            raise ValueError("indicator_only_available_for_btc")
         weight = _clamp_weight(weight)
         if len(rules) != 5:
             raise ValueError("Exact 5 buckets verplicht")
