@@ -3794,13 +3794,95 @@ class FinnResponsesFrontDoor:
                             evaluation_operation_id=None,
                         ))
                         plan_items = plan_result.get("results") or []
+                        if any(
+                            isinstance(item, dict)
+                            and item.get("reason") == "setup_ambiguous"
+                            for item in plan_items
+                        ):
+                            # A pair can have more than one saved setup. Use
+                            # the complete owner inventory to bind only a
+                            # unique pair/name or user-stated score band;
+                            # never let the active bot pick the plan.
+                            inventory_result = await self.reads(replace(
+                                call, name="get_saved_setup_inventory", inputs={},
+                                read_tools=("read_saved_setup_inventory",),
+                                evaluation_operation_id=None,
+                            ))
+                            inventory_items = [
+                                item for item in inventory_result.get("results") or []
+                                if isinstance(item, dict)
+                                and item.get("scope") == "read_saved_setup_inventory"
+                                and item.get("status") == "completed"
+                                and isinstance(item.get("data"), dict)
+                                and item["data"].get("complete") is True
+                            ]
+                            pair_rows = [
+                                row for item in inventory_items
+                                for row in item["data"].get("setups") or []
+                                if isinstance(row, dict)
+                                and isinstance(row.get("setup_id"), int)
+                                and str(row.get("symbol") or "").upper() == asset
+                                and (
+                                    str(row.get("quote_currency") or "").upper() == quote
+                                    or str(row.get("pair") or "").upper() == f"{asset}/{quote}"
+                                )
+                            ]
+                            candidates = pair_rows
+                            score_band = re.search(
+                                r"\b(?:score|benchmark\w*)\b[^.!?\n]{0,50}?"
+                                r"\b(\d{1,3})\s*[–-]\s*(\d{1,3})\b",
+                                message, re.I,
+                            )
+                            if score_band and len(candidates) > 1:
+                                bounds = tuple(int(value) for value in score_band.groups())
+                                def saved_score_bound(value: Any) -> int | None:
+                                    raw = str(value).strip()
+                                    return int(raw) if raw.isdecimal() else None
+
+                                candidates = [
+                                    row for row in candidates
+                                    if (saved_score_bound(row.get("min_benchmark_score")),
+                                        saved_score_bound(row.get("max_benchmark_score"))) == bounds
+                                ]
+                            if len(candidates) > 1 and re.search(r"\bconcept\w*\b", message, re.I):
+                                named_concepts = [
+                                    row for row in candidates
+                                    if re.search(r"\bconcept\b", str(row.get("name") or ""), re.I)
+                                ]
+                                if named_concepts:
+                                    candidates = named_concepts
+                            if len(candidates) == 1:
+                                resolved = await self.reads(replace(
+                                    call, name="get_active_plan_and_strategy",
+                                    inputs={"setup_id": candidates[0]["setup_id"]},
+                                    read_tools=("read_active_setup", "read_linked_strategy"),
+                                    evaluation_operation_id=None,
+                                ))
+                                plan_items = resolved.get("results") or []
+                            else:
+                                # The filtered inventory gives FINN enough
+                                # evidence to ask which saved setup is meant.
+                                extra_results.extend({
+                                    **item,
+                                    "data": {**item["data"], "setups": pair_rows,
+                                             "setup_count": len(pair_rows)},
+                                } for item in inventory_items)
                         extra_results.extend(plan_items)
-                        if len(matching_setup_ids) == 1 and any(
+                        resolved_plan_ids = {
+                            item["data"]["setup_id"]
+                            for item in plan_items
+                            if isinstance(item, dict)
+                            and item.get("scope") == "read_active_setup"
+                            and item.get("status") == "completed"
+                            and isinstance(item.get("data"), dict)
+                            and isinstance(item["data"].get("setup_id"), int)
+                        }
+                        if len(resolved_plan_ids) == 1 and any(
                             isinstance(item, dict)
                             and item.get("scope") == "read_linked_strategy"
                             and item.get("status") == "completed"
                             and isinstance(item.get("data"), dict)
-                            and item["data"].get("setup_id") in matching_setup_ids
+                            and item["data"].get("setup_id") in resolved_plan_ids
                             for item in plan_items
                         ):
                             # The later owner-bound read supersedes an earlier
@@ -3811,11 +3893,13 @@ class FinnResponsesFrontDoor:
                                 item for item in read_result.get("results") or []
                                 if not (
                                     isinstance(item, dict)
-                                    and item.get("scope") == "read_linked_strategy"
+                                    and item.get("scope") in {
+                                        "read_active_setup", "read_linked_strategy",
+                                    }
                                     and item.get("status") != "completed"
                                     and (
                                         not isinstance(item.get("data"), dict)
-                                        or item["data"].get("setup_id") in matching_setup_ids
+                                        or item["data"].get("setup_id") in resolved_plan_ids
                                     )
                                 )
                             ]

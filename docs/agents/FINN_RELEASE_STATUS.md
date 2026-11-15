@@ -4,6 +4,54 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN brede coachvraag: meerdere setups en Paper-kastotaal (15 november 2026)
+
+Phase: `LOCAL_VALIDATED_PR_PENDING`. Independent read-only browser QA rejected
+the previous public SHA `13940d25b2cd583890882b6a12264bdc65730bfa`:
+the exact broad BTC/EUR question denied access to the saved concept setup and
+linked €10 strategy, although the shorter question found them. The AAPL/BTC
+comparison called €10.010,90 the joint Paper cash and then listed €10.005,45
+general cash plus bot cash rows. The quoted figures neither sum to that claim
+nor justify adding bot cash to the account total. The browser turn supplied
+no typed run trace, so the exact live failing read step remains unobserved.
+Protected runtime QA remains unavailable in the existing QA task because its
+active goal and manifest binding are missing.
+
+An isolated local PostgreSQL/Redis/FastAPI/prefork-Celery/real-Responses
+fixture with two owner-scoped BTC/EUR setups reproduced the broad failure:
+both setup and strategy reads returned `setup_ambiguous` (artifact SHA-256
+`a60efd1145a7533aea90253cb080b8c61aae07dcc5706a48f849cee6a8c5aa3a`).
+The complete inventory exposes saved score bounds as strings (`"61"`, `"75"`),
+which the earlier candidate compared with integers. The repair resolves a
+unique exact-pair setup by a score band stated in the question, rereads its
+linked strategy by owner-scoped setup ID, and leaves that evaluation read
+unresolved when the band selects no unique setup. This applies to all assets and pairs; it
+does not change a setup, bot or trade. The Paper evidence boundary now states
+that `global.cash_balance` is already the account-wide total. The typed
+answer contract rejects a conflicting explicitly claimed aggregate even if
+the correct cash figure also appears elsewhere in the answer.
+
+Final-code evidence: the exact Dutch broad question completed in one local
+dispatch, read the concept and linked €10 strategy separately from the active
+Paper bot, and made no proposal or order (artifact SHA-256
+`69442a2fcfecc941a1b373cc25fd4b3d3ad9dca72a490ae67937d3b76f4cb7ab`).
+The exact AAPL/BTC comparison also completed in one local dispatch, kept the
+two plans and market reads separate, reported joint Paper cash as €10.005,45,
+and made no proposal (artifact SHA-256
+`8c356b7cf4731c4aac29cec3e401854b106092434619a6f911b4969d4d02c023`).
+The synthetic market fixture had unavailable current quote and indicator
+sources, so it does not prove live market data. The root backend suite passed
+**4,881** with **7 skipped** (log SHA-256
+`7c2580c9edae959c3c112062e11981d01d8d55c6df3eb42a9bdada05df8b4f96`).
+The isolated worker action matrix passed **17/17** with zero broker orders,
+Live bots, Live calls or production connections (artifact SHA-256
+`88e944a4058c9fe94907a39a3ed53efae62d4ac4d9c2ec6ebc522e62a7d8099c`).
+Real-provider selector development passed **20/20** and regression **109/109**,
+both with zero provider, schema, parse, validation or timeout failures
+(artifact SHA-256 `0804413bee0089ac29ae0e2105ea2cfc8dfd365d18c30bb5d8516808b840080c`
+and `68859dd3e774832fe545c39bdd70978dd92bb2f176d29dfc02603713c9b354eb`).
+CI, deployment identity and independent live QA for this candidate are pending.
+
 ## FINN brede coachvraag: gekoppelde strategie bij planbeoordeling (15 november 2026)
 
 Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. The previous public revision
