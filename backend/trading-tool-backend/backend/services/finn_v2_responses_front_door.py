@@ -223,6 +223,18 @@ def _is_read_only_coach_turn(
     )
 
 
+def _explicit_discussion_only(message: str) -> bool:
+    """A direct no-change instruction overrides mutation verbs quoted in a question."""
+    return bool(
+        re.search(
+            r"\b(?:wijzig niets|verander niets|pas niets aan|do not change anything|"
+            r"don't change anything|make no changes|ändere nichts)\b",
+            message, re.I,
+        )
+        and not re.search(r"\b(?:behalve|uitgezonderd|except|außer)\b", message, re.I)
+    )
+
+
 def _explicit_create_operation_request(message: str) -> str | None:
     """Recognize a fresh registry creation request across draft domains.
 
@@ -639,6 +651,11 @@ class FinnResponsesFrontDoor:
             "read each relevant source before saying that one of them is missing. "
             "For the latest bot decision, use the persisted bot decision history. "
             "A portfolio snapshot alone does not prove a bot decision. "
+            "When the trader asks about a setup and an active bot separately, a missing linked bot "
+            "means only that the setup has no linked bot. Check the owner-scoped Paper portfolio "
+            "for an independently active bot on the named asset; report its saved status and "
+            "setup relation separately from the selected setup. Do not call a saved active bot "
+            "unverified solely because it is not linked to that setup. "
             "When that history reports a blocked or error safety state, describe "
             "the trade as blocked with no order and report its saved reason if "
             "available. A hold action alone does not describe the safety outcome. "
@@ -2109,11 +2126,13 @@ class FinnResponsesFrontDoor:
             (request_facts.action_polarity == "read" and not imperative_operation and not explicit_create_request)
             or explicit_closed_review_read
         )
-        is_read_only_turn = guided_draft_question or (not explicit_create_request and _is_read_only_coach_turn(
-            polarity=request_facts.action_polarity,
-            imperative_operation=imperative_operation,
-            explicit_closed_review_read=explicit_closed_review_read,
-        ))
+        is_read_only_turn = guided_draft_question or _explicit_discussion_only(message) or (
+            not explicit_create_request and _is_read_only_coach_turn(
+                polarity=request_facts.action_polarity,
+                imperative_operation=imperative_operation,
+                explicit_closed_review_read=explicit_closed_review_read,
+            )
+        )
         scheduled_revision = dict(conversation_context.get("proposal_correction_result") or {})
         if (
             scheduled_revision.get("scheduled_dca_revision") is True
@@ -3787,6 +3806,34 @@ class FinnResponsesFrontDoor:
                             *(portfolio_result.get("results") or []),
                         ],
                     }
+                if (is_read_only_turn and account_state_bundle
+                        and len(mentioned_assets) == 1):
+                    asset = next(iter(mentioned_assets))
+                    active_bots = [
+                        bot
+                        for item in read_result.get("results") or []
+                        if isinstance(item, dict) and item.get("scope") == "read_portfolio"
+                        and item.get("status") == "completed"
+                        for bot in (item.get("data") or {}).get("bots") or []
+                        if isinstance(bot, dict)
+                        and str(bot.get("symbol") or "").upper() == asset
+                        and bot.get("is_live") is False and bot.get("is_active") is True
+                    ]
+                    unique_bots = {bot.get("bot_id"): bot for bot in active_bots}
+                    if len(unique_bots) == 1:
+                        bot = next(iter(unique_bots.values()))
+                        read_result["independent_active_bot"] = {
+                            key: bot.get(key) for key in (
+                                "bot_id", "name", "symbol", "setup_id", "setup_name",
+                                "strategy_id", "strategy_name", "mode", "operational_status",
+                            )
+                        }
+                        read_result["independent_bot_boundary"] = (
+                            "This is the one independently active owner-scoped Paper bot for "
+                            "the named asset. Its status is verified by read_portfolio even "
+                            "when read_linked_bot for the selected setup is unavailable. "
+                            "A saved bot decision still requires read_review_history."
+                        )
                 if collection_score_match:
                     pair_quotes: dict[str, set[str]] = {}
                     for pair_asset, pair_quote in mentioned_pairs:
@@ -4537,7 +4584,7 @@ class FinnResponsesFrontDoor:
                 if previous_response and use_verified_turn else None
             ),
             guided_operation_id=(
-                None if unsupported_pair or guided_draft_question
+                None if unsupported_pair or guided_draft_question or _explicit_discussion_only(message)
                 else pending_operation or explicit_create_request or imperative_operation
             ),
             resuming_clarification=resuming_clarification,
