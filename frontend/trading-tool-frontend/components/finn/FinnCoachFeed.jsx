@@ -87,7 +87,7 @@ export default function FinnCoachFeed({ onDiscuss }) {
   };
 
   const discuss = (item) => {
-    onDiscuss?.(item.id, `${copy.discussQuery} ${item.evidence?.subject || item.title}`);
+    onDiscuss?.(item.id, `${copy.discussQuery} ${item.evidence?.subject || item.title}`, item);
     void setStatus(item.id, "read");
   };
 

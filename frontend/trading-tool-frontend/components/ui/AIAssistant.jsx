@@ -2527,13 +2527,17 @@ function AIAssistantContent({
   const progress = activeState ? getFlowProgress(activeState) : null;
   const activeStep = progress ? Math.min(progress.filled + 1, progress.total) : 1;
   const workspaceContextLabel = getFinnWorkspaceLabel(pathname, locale) || humanizeFinnContextValue(context.page_type, "Workspace");
-  const finnContextLabel = [workspaceContextLabel, context.symbol || "BTC"]
+  const feedContextSymbol = commandRequest?.context?.feed_item_id
+    ? normalizeScopedAssetSymbol(commandRequest.context.symbol) : null;
+  const displayedContextSymbol = (pathname === "/bot" && context.bot_id ? context.symbol
+    : chatAssetOverride || feedContextSymbol || context.symbol) || globalSymbol || "BTC";
+  const finnContextLabel = [workspaceContextLabel, displayedContextSymbol]
     .filter(Boolean)
     .join(" · ");
   const compactFinnHeader = [
     "FINN",
     workspaceContextLabel,
-    String((pathname === "/bot" && context.bot_id ? context.symbol : chatAssetOverride || context.symbol) || globalSymbol || "BTC").toUpperCase(),
+    String(displayedContextSymbol).toUpperCase(),
   ].filter(Boolean);
   const finnModeLabel =
     activeState?.current_flow && activeState.current_flow !== "none"
@@ -2611,6 +2615,7 @@ function AIAssistantContent({
     // Selecting a feed item starts a separate discussion. It cannot inherit
     // an older conversation's pending proposal or selected plan.
     if (isFeedHandoff && commandRequest.newConversation) {
+      setChatAssetOverride(null);
       forceNewFinnConversationRef.current = true;
       activeFinnSessionIdRef.current = null;
       sharedSessionRestoreRef.current = true;
@@ -2670,13 +2675,13 @@ function AIAssistantContent({
                   <span aria-hidden="true">·</span>
                   <select
                     aria-label={at("uiText.assetContext")}
-                    value={(pathname === "/bot" && context.bot_id ? context.symbol : chatAssetOverride || context.symbol) || globalSymbol || ""}
+                    value={displayedContextSymbol}
                     disabled={pathname === "/bot" && Boolean(context.bot_id)}
                     onChange={(event) => { void changeChatAsset(event.target.value || null); }}
                     className="max-w-24 cursor-pointer bg-transparent font-semibold text-slate-600 outline-none disabled:cursor-default dark:text-slate-300"
                   >
-                    {!FINN_ASSETS.some((asset) => asset.symbol === (pathname === "/bot" && context.bot_id ? context.symbol : chatAssetOverride || context.symbol || globalSymbol)) ? (
-                      <option value={(pathname === "/bot" && context.bot_id ? context.symbol : chatAssetOverride || context.symbol) || globalSymbol || ""}>{(pathname === "/bot" && context.bot_id ? context.symbol : chatAssetOverride || context.symbol) || globalSymbol || "—"}</option>
+                    {!FINN_ASSETS.some((asset) => asset.symbol === displayedContextSymbol) ? (
+                      <option value={displayedContextSymbol}>{displayedContextSymbol || "—"}</option>
                     ) : null}
                     {FINN_ASSETS.map((asset) => <option key={asset.symbol} value={asset.symbol}>{asset.symbol}</option>)}
                   </select>
