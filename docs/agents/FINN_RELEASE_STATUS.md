@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN brede coachvraag: meerdere setups en Paper-kastotaal (15 november 2026)
 
-Phase: `LOCAL_VALIDATED_PR_PENDING`. Independent read-only browser QA rejected
+Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Independent read-only browser QA rejected
 the previous public SHA `13940d25b2cd583890882b6a12264bdc65730bfa`:
 the exact broad BTC/EUR question denied access to the saved concept setup and
 linked €10 strategy, although the shorter question found them. The AAPL/BTC
@@ -50,7 +50,15 @@ Real-provider selector development passed **20/20** and regression **109/109**,
 both with zero provider, schema, parse, validation or timeout failures
 (artifact SHA-256 `0804413bee0089ac29ae0e2105ea2cfc8dfd365d18c30bb5d8516808b840080c`
 and `68859dd3e774832fe545c39bdd70978dd92bb2f176d29dfc02603713c9b354eb`).
-CI, deployment identity and independent live QA for this candidate are pending.
+Product PR #1087 passed all five required CI jobs in run `43750983084` on
+commit `2e9dd1dfb3cb8b8c25c4f6d2aee35b3f3a6f0ad6` and merged as
+`2b75188f4751c78fdd8164e163346225467af50b`. Main CI `43751479102`
+passed all five jobs; Auto Deploy `43752003012` succeeded on that merge SHA.
+Public `https://tradamind.com/api/health` and
+`https://tradamind.com/build-info.json` both returned HTTP 200 with that exact
+SHA, matching GitHub `main`. This status update creates a later main SHA; its
+final CI, Auto Deploy, public SHA parity and independent live QA verdict are
+still pending.
 
 ## FINN brede coachvraag: gekoppelde strategie bij planbeoordeling (15 november 2026)
 
