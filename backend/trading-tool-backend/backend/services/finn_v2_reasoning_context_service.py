@@ -289,9 +289,11 @@ class FinnV2ReasoningContextService:
         if event_type != "proposal_pending":
             recorded = item.get("evidence") or {}
             historical = {}
-            for key in ("status", "match_status", "change_24h", "benchmark_score",
+            for key in ("status", "match_status", "plan_status", "source_status",
+                        "market_id", "trading_pair", "direction", "change_24h", "benchmark_score",
                         "score_as_of", "conditions", "components",
                         "component_source_status", "source_observed_at",
+                        "quote_source_observed_at",
                         "setup_ids", "action", "decision_id"):
                 value = recorded.get(key)
                 if value is not None and len(json.dumps(value, default=str)) <= 1500:
@@ -305,7 +307,7 @@ class FinnV2ReasoningContextService:
             subject = item.get("subject_type")
             symbol = item.get("symbol")
             current_facts = None
-            if symbol and event_type in {"plan_match", "data_blocked", "market_move"}:
+            if symbol and event_type in {"plan_match", "plan_review", "data_blocked", "market_move"}:
                 from backend.services.setup_market_match_service import SetupMarketMatchService
                 matcher = SetupMarketMatchService(self.session)
                 if subject == "setup" and item.get("subject_id"):
