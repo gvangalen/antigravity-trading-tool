@@ -3115,8 +3115,9 @@ class FinnResponsesAnswerVerifier:
                 "latest_quote_conflicts_with_source", evidence,
                 rejection_details={"fact_mismatch": "latest_market_quote"},
             )
+        source_moment_diagnostics: list[str] = []
         if result.answer_kind == "free_text" and not current_source_moments_supported(
-            result.text, evidence, question=message,
+            result.text, evidence, question=message, diagnostics=source_moment_diagnostics,
         ):
             return FinnResponsesVerifiedAnswer(
                 "unavailable",
@@ -3124,6 +3125,7 @@ class FinnResponsesAnswerVerifier:
                 "source_moment_conflicts_with_source", evidence,
                 rejection_details={
                     "fact_mismatch": "current_source_moment",
+                    "source_moment_rule": source_moment_diagnostics[0] if source_moment_diagnostics else "unknown",
                     "source_moment_facts": source_moment_repair_facts(evidence),
                 },
             )

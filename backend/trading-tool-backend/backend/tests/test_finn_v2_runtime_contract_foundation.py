@@ -127,6 +127,38 @@ def test_owner_account_projection_has_server_provenance_without_provider_answer_
     }
 
 
+def test_rejected_source_moment_exposes_only_safe_rule_code():
+    run = SimpleNamespace(
+        id="moment-turn", conversation_id=None, trace_id="trace-1",
+        user_id=7, status="planned", message="Vergelijk mijn plannen.",
+        client_context_json={},
+    )
+    service = FinnV2RunService.__new__(FinnV2RunService)
+    service.runs = SimpleNamespace(
+        get_by_id_for_user=AsyncMock(return_value=run), update_status=AsyncMock(),
+    )
+    service.runtime_contracts = SimpleNamespace(
+        get_for_run=AsyncMock(return_value=SimpleNamespace(state_json={})),
+        record_verified_setup_subject=AsyncMock(),
+        materialize_terminal=AsyncMock(return_value=SimpleNamespace(terminal_projection_json={})),
+    )
+    service.traces = SimpleNamespace(append_event=AsyncMock())
+    service._trace_payload = lambda *_args, **_kwargs: {}
+    service._commit_session_if_possible = AsyncMock()
+    asyncio.run(service.complete_responses_read(
+        run_id=run.id, user_id=7, response_id="response-moment",
+        answer=FinnResponsesVerifiedAnswer(
+            "unavailable", "Ik kan de bronmomenten niet verifiëren.",
+            "source_moment_conflicts_with_source", (),
+            rejection_details={"source_moment_rule": "current_quote_source_prose_mismatch",
+                               "source_moment_facts": [{"source": "private"}]},
+        ),
+    ))
+    response = service.runtime_contracts.materialize_terminal.call_args.kwargs["response"]
+    assert response["reasoning_provenance"]["source_moment_rule"] == "current_quote_source_prose_mismatch"
+    assert "private" not in json.dumps(response)
+
+
 def test_completed_owner_review_read_persists_only_verified_dossier_references():
     run = SimpleNamespace(
         id="review-turn", conversation_id="conversation-1", trace_id="trace-1",

@@ -142,8 +142,14 @@ def source_moment_repair_facts(evidence: tuple[dict[str, Any], ...]) -> list[dic
 
 def current_source_moments_supported(
     answer: str, evidence: tuple[dict[str, Any], ...], *, question: str | None = None,
+    diagnostics: list[str] | None = None,
 ) -> bool:
     """Check stated quote, portfolio and report times against their own reads."""
+    def reject(rule: str) -> bool:
+        if diagnostics is not None:
+            diagnostics.append(rule)
+        return False
+
     market_rows: dict[tuple[str, str], datetime] = {}
     portfolio_reads: list[datetime] = []
     report_generations: list[datetime] = []
@@ -194,7 +200,7 @@ def current_source_moments_supported(
             for match in _DATED_MOMENT.finditer(answer)
             for claim in (_claimed_moment(match.group(0)),)
         ):
-            return False
+            return reject("requested_report_quote_local_time_missing")
 
     # A report's UTC and Amsterdam times must describe the same instant. The
     # model may put the local clock in parentheses without a repeated date,
@@ -226,9 +232,9 @@ def current_source_moments_supported(
                 actual = (expected.hour, expected.minute,
                           expected.second if clock["second"] is not None else 0)
                 if claimed != actual:
-                    return False
+                    return reject("report_generation_clock_mismatch")
                 if zone != "UTC" and zone != local.tzname():
-                    return False
+                    return reject("report_generation_zone_mismatch")
 
     # A table can claim a current source time without giving a price. The
     # sentence-level price verifier cannot see such a claim.
@@ -261,7 +267,7 @@ def current_source_moments_supported(
             candidates = [moment for (asset, unit), moment in market_rows.items()
                           if asset == symbol and (not quoted or unit == quoted)]
             if claim is None or not candidates or not _same_moment(claim, max(candidates)):
-                return False
+                return reject("quote_source_table_row_mismatch")
 
     for sentence in re.split(r"(?<=[.!?])\s+|\n+", answer):
         market_claim = re.search(
@@ -315,7 +321,7 @@ def current_source_moments_supported(
                 if claim is None or len(candidates) != 1 or len(symbols) > 1 or not _same_moment(
                     claim, candidates[0],
                 ):
-                    return False
+                    return reject("current_quote_source_prose_mismatch")
 
     # A concise answer to a latest-price question may consist only of a price,
     # provider and timestamp. It has no "bronmoment" label or asset name to
@@ -376,7 +382,7 @@ def current_source_moments_supported(
                     continue
                 claim = _claimed_moment(sentence)
                 if claim is None or not _same_moment(claim, candidates[0]):
-                    return False
+                    return reject("latest_price_context_clock_mismatch")
 
     # "Fresh portfolio read" refers to read_at, not the oldest valuation
     # quote. Check its declared zone as well as its wall clock.
@@ -406,5 +412,5 @@ def current_source_moments_supported(
                 _same_moment(claim, observed) for observed in portfolio_reads
             )
         ):
-            return False
+            return reject("portfolio_read_clock_mismatch")
     return True

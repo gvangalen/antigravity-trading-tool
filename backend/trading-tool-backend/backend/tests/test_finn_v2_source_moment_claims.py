@@ -337,6 +337,13 @@ def test_source_moment_claim_uses_its_own_pair_in_multi_plan_sentence():
         prefix + "15 november 2026 om 09:59 CET.", evidence,
     )
 
+    diagnostics = []
+    assert not current_source_moments_supported(
+        prefix + "15 november 2026 om 09:59 CET.", evidence,
+        diagnostics=diagnostics,
+    )
+    assert diagnostics == ["current_quote_source_prose_mismatch"]
+
 
 def test_unrelated_second_table_is_not_treated_as_a_quote_source_table():
     answer = (
