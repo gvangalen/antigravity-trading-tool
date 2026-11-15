@@ -263,6 +263,18 @@ def _fallback(kind: str, subject: str, evidence: dict, *, focus: str = "brief") 
     name = str(subject or "").strip()[:120]
     if kind == "bot_decision":
         return _bot_fallback(name, evidence)
+    if kind == "position_risk":
+        pair = str(evidence.get("trading_pair") or evidence.get("symbol") or "").strip()[:30]
+        exposure = evidence.get("exposure_pct")
+        limit = evidence.get("limit_pct")
+        return {
+            "nl": {"title": "Hoge huidige positieconcentratie · Paper",
+                   "body": f"{name} ({pair}): de positie is op het vermelde waarderingsmoment {exposure}% van de botwaarde. Je opgeslagen blootstellingsinstelling is {limit}%. Dit is een vergelijking met de huidige botwaarde, geen oordeel over eerdere orders. Er is niets gewijzigd."},
+            "en": {"title": "High current position concentration · Paper",
+                   "body": f"{name} ({pair}): at the stated valuation time, the position is {exposure}% of bot equity. Your saved exposure setting is {limit}%. This compares current bot equity and does not judge earlier orders. Nothing was changed."},
+            "de": {"title": "Hohe aktuelle Positionskonzentration · Paper",
+                   "body": f"{name} ({pair}): Zum angegebenen Bewertungszeitpunkt beträgt die Position {exposure}% des Bot-Werts. Deine gespeicherte Exposure-Einstellung beträgt {limit}%. Dies vergleicht den aktuellen Bot-Wert und bewertet keine früheren Orders. Nichts wurde geändert."},
+        }
     if kind == "plan_review":
         pair = str(evidence.get("trading_pair") or evidence.get("symbol") or "").strip()[:30]
         market = f" ({pair})" if pair else ""
@@ -457,7 +469,7 @@ class FinnCoachFeedService:
                       expires_at: datetime | None = None,
                       revision: str | None = None) -> str | None:
         """One row per owner/event. Unchanged evidence never reopens or regenerates."""
-        if not event_key or event_type not in {"plan_match", "plan_review", "data_blocked", "proposal_pending", "market_move", "bot_decision", "live_bot_paused", "daily_report_ready", "periodic_report_ready"}:
+        if not event_key or event_type not in {"plan_match", "plan_review", "position_risk", "data_blocked", "proposal_pending", "market_move", "bot_decision", "live_bot_paused", "daily_report_ready", "periodic_report_ready"}:
             raise ValueError("feed_event_invalid")
         facts = {**evidence, "subject": str(subject or "")[:120]}
         digest = hashlib.sha256(str(revision or _json(facts)).encode()).hexdigest()
@@ -468,11 +480,77 @@ class FinnCoachFeedService:
             "key": f"finn-feed:{user_id}:{event_key}",
         })
         previous = await self.session.execute(text("""
-            SELECT id, fingerprint, status FROM finn_coach_feed_items
+            SELECT id, fingerprint, status, source_observed_at, updated_at, evidence
+            FROM finn_coach_feed_items
             WHERE user_id=:user_id AND event_key=:event_key
             ORDER BY created_at DESC, id DESC LIMIT 1 FOR UPDATE
         """), {"user_id": user_id, "event_key": event_key})
         current = previous.mappings().first()
+        if current:
+            previous_source = current.get("source_observed_at")
+            if event_type == "position_risk" and previous_source and source_observed_at:
+                previous_utc = (previous_source.replace(tzinfo=timezone.utc)
+                                if previous_source.tzinfo is None else previous_source.astimezone(timezone.utc))
+                observed_utc = (source_observed_at.replace(tzinfo=timezone.utc)
+                                if source_observed_at.tzinfo is None else source_observed_at.astimezone(timezone.utc))
+                if observed_utc < previous_utc:
+                    return None
+            if event_type == "position_risk":
+                evaluated_at = facts.get("evaluated_at")
+                previous_updated = current.get("updated_at")
+                if evaluated_at and previous_updated:
+                    evaluated_utc = (evaluated_at.replace(tzinfo=timezone.utc)
+                                     if evaluated_at.tzinfo is None else evaluated_at.astimezone(timezone.utc))
+                    updated_utc = (previous_updated.replace(tzinfo=timezone.utc)
+                                   if previous_updated.tzinfo is None else previous_updated.astimezone(timezone.utc))
+                    if evaluated_utc < updated_utc:
+                        return None
+                old_facts = current.get("evidence") or {}
+                if isinstance(old_facts, str):
+                    try:
+                        old_facts = json.loads(old_facts)
+                    except ValueError:
+                        old_facts = {}
+                try:
+                    previous_peak = float(old_facts.get("alert_peak_pct") or old_facts.get("exposure_pct") or 0)
+                    current_exposure = float(facts["exposure_pct"])
+                except (TypeError, ValueError, KeyError):
+                    return None
+                if not all(value == value and 0 <= value <= 10000
+                           for value in (previous_peak, current_exposure)):
+                    return None
+                facts["alert_peak_pct"] = max(previous_peak, current_exposure)
+                if current["status"] in VISIBLE:
+                    # Keep one active card current, even when concentration
+                    # improves. Deterministic copy cannot race AI text.
+                    await self.session.execute(text("""
+                        UPDATE finn_coach_feed_items
+                        SET evidence=CAST(:evidence AS JSONB),
+                            copy_json=CAST(:copy_json AS JSONB),
+                            copy_source='verified_facts',
+                            source_observed_at=:source_observed_at,
+                            expires_at=:expires_at, updated_at=NOW()
+                        WHERE id=CAST(:id AS UUID) AND user_id=:user_id
+                          AND status IN ('unread','read')
+                    """), {"id": str(current["id"]), "user_id": user_id,
+                           "evidence": _json(facts),
+                           "copy_json": _json(_fallback(event_type, subject, facts)),
+                           "source_observed_at": source_observed_at,
+                           "expires_at": expires_at})
+                    return None
+                if str(current["fingerprint"]).startswith("resolved:"):
+                    # A cleared limit starts a new episode, even if the last
+                    # card had been acknowledged at a higher prior peak.
+                    facts["alert_peak_pct"] = current_exposure
+                elif current["status"] in {"handled", "archived"}:
+                    if current_exposure < previous_peak + 10:
+                        return None
+                    digest = hashlib.sha256(
+                        f"{revision}:{current_exposure:.2f}:{source_observed_at}".encode()).hexdigest()
+                else:
+                    facts["alert_peak_pct"] = current_exposure
+        elif event_type == "position_risk":
+            facts["alert_peak_pct"] = facts.get("exposure_pct")
         if current:
             # A handled, archived or expired observation remains acknowledged.
             # Only changed facts, or a prior condition-cleared transition, reopens it.
@@ -484,11 +562,11 @@ class FinnCoachFeedService:
             INSERT INTO finn_coach_feed_items
               (id, user_id, event_key, event_type, subject_type, subject_id, symbol,
                priority, status, fingerprint, evidence, source_observed_at,
-               copy_json, expires_at)
+               copy_json, copy_source, expires_at)
             VALUES (CAST(:id AS UUID), :user_id, :event_key, :event_type,
                     :subject_type, :subject_id, :symbol, :priority, 'unread',
                     :fingerprint, CAST(:evidence AS JSONB), :source_observed_at,
-                    CAST(:copy_json AS JSONB), :expires_at)
+                    CAST(:copy_json AS JSONB), :copy_source, :expires_at)
             RETURNING id
         """), {
             "id": item_id, "user_id": user_id, "event_key": event_key,
@@ -497,6 +575,7 @@ class FinnCoachFeedService:
             "fingerprint": digest, "evidence": _json(facts),
             "source_observed_at": source_observed_at,
             "copy_json": _json(_fallback(event_type, subject, facts)),
+            "copy_source": "verified_facts" if event_type == "position_risk" else "fact_fallback",
             "expires_at": expires_at,
         })
         row = result.first()
@@ -514,6 +593,69 @@ class FinnCoachFeedService:
                 fingerprint=CONCAT('resolved:', f.fingerprint), updated_at=NOW()
             FROM latest WHERE f.id=latest.id AND f.fingerprint NOT LIKE 'resolved:%'
         """), {"user_id": user_id, "event_key": event_key})
+
+    async def resolve_position_risk(self, *, user_id: int, event_key: str,
+                                    evaluated_at: datetime) -> None:
+        """Resolve only a risk card that predates this owner valuation read."""
+        await self.session.execute(text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {
+            "key": f"finn-feed:{user_id}:{event_key}",
+        })
+        await self.session.execute(text("""
+            WITH latest AS (
+              SELECT id FROM finn_coach_feed_items
+              WHERE user_id=:user_id AND event_key=:event_key
+              ORDER BY created_at DESC, id DESC LIMIT 1 FOR UPDATE
+            )
+            UPDATE finn_coach_feed_items f
+            SET status=CASE WHEN f.status IN ('unread','read') THEN 'resolved' ELSE f.status END,
+                fingerprint=CONCAT('resolved:', f.fingerprint), updated_at=NOW()
+            FROM latest WHERE f.id=latest.id AND f.fingerprint NOT LIKE 'resolved:%'
+              AND f.updated_at <= :evaluated_at
+        """), {"user_id": user_id, "event_key": event_key,
+               "evaluated_at": evaluated_at})
+
+    async def reconcile_paper_position_risks(self, *, user_id: int) -> list[str]:
+        """Check valued Paper positions against each bot's saved exposure limit.
+
+        This observer never changes the bot, position or trading rules. An
+        unavailable valuation clears an earlier alert rather than presenting
+        its old percentage as current.
+        """
+        from backend.services.paper_position_risk_service import PaperPositionRiskService
+
+        review_started_at = datetime.now(timezone.utc)
+        assessments = await PaperPositionRiskService(self.session).evaluate(user_id)
+        previous = await self.session.execute(text("""
+            SELECT DISTINCT event_key FROM finn_coach_feed_items
+            WHERE user_id=:user_id AND event_type='position_risk'
+              AND status IN ('unread','read')
+        """), {"user_id": user_id})
+        active_keys = {f"position-risk:{bot_id}" for bot_id in assessments}
+        for row in previous.mappings().all():
+            key = str(row["event_key"])
+            if key not in active_keys:
+                await self.resolve_position_risk(user_id=user_id, event_key=key,
+                                                 evaluated_at=review_started_at)
+        created = []
+        for bot_id, evidence in assessments.items():
+            key = f"position-risk:{bot_id}"
+            if evidence["status"] != "above_saved_limit":
+                await self.resolve_position_risk(user_id=user_id, event_key=key,
+                                                 evaluated_at=evidence["evaluated_at"])
+                continue
+            item_id = await self.publish(
+                user_id=user_id, event_key=key, event_type="position_risk",
+                subject_type="bot", subject_id=str(bot_id),
+                subject=evidence["bot_name"] or evidence["trading_pair"] or "Paper-bot",
+                symbol=evidence["symbol"], priority=4,
+                source_observed_at=evidence["valuation_as_of"],
+                evidence=evidence,
+                expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+                revision=f"{bot_id}:{evidence['limit_pct']:.2f}:above_saved_limit",
+            )
+            if item_id:
+                created.append(item_id)
+        return created
 
     async def reconcile_plan_reviews(self, *, user_id: int, symbol: str,
                                      market_id: int | None = None) -> list[str]:
@@ -534,6 +676,18 @@ class FinnCoachFeedService:
         setups = [dict(row) for row in await SetupRepository(self.session).get_all_setups(user_id)
                   if str(row.get("symbol") or "").upper() == asset
                   and row.get("market_id") == market_id]
+        active_keys = {f"plan-review:{setup['id']}" for setup in setups}
+        previous = await self.session.execute(text("""
+            SELECT DISTINCT event_key FROM finn_coach_feed_items
+            WHERE user_id=:user_id AND event_type='plan_review' AND symbol=:symbol
+              AND evidence->>'market_id' IS NOT DISTINCT FROM :market_id
+              AND status IN ('unread','read')
+        """), {"user_id": user_id, "symbol": asset,
+               "market_id": str(market_id) if market_id is not None else None})
+        for row in previous.mappings().all():
+            key = str(row["event_key"])
+            if key not in active_keys:
+                await self.resolve(user_id=user_id, event_key=key)
         if not setups:
             return []
         assessment = await SetupMarketMatchService(self.session).for_asset(

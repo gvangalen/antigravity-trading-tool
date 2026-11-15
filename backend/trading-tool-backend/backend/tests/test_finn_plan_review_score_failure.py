@@ -89,3 +89,38 @@ def test_setup_change_dispatches_exact_pair_scope(monkeypatch):
     SetupService._notify_coach_feed(7, "AAPL")
 
     assert calls == [(7, "BTC", 23), (7, "AAPL")]
+
+
+def test_deleted_pair_setup_resolves_its_active_plan_card(monkeypatch):
+    from backend.infrastructure.repositories.setup_repository import SetupRepository
+    from backend.services.finn_coach_feed_service import FinnCoachFeedService
+
+    class Session:
+        async def execute(self, statement, params):
+            assert params == {"user_id": 7, "symbol": "BTC", "market_id": "23"}
+            assert "event_type='plan_review'" in str(statement)
+            return self
+
+        def mappings(self):
+            return self
+
+        def all(self):
+            return [{"event_key": "plan-review:81"}]
+
+    async def setups(self, user_id):
+        assert user_id == 7
+        return []
+
+    resolved = []
+
+    async def resolve(self, **kwargs):
+        resolved.append(kwargs)
+
+    monkeypatch.setattr(SetupRepository, "get_all_setups", setups)
+    monkeypatch.setattr(FinnCoachFeedService, "resolve", resolve)
+
+    result = asyncio.run(FinnCoachFeedService(Session()).reconcile_plan_reviews(
+        user_id=7, symbol="BTC", market_id=23))
+
+    assert result == []
+    assert resolved == [{"user_id": 7, "event_key": "plan-review:81"}]

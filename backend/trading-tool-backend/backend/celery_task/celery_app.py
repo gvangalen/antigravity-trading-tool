@@ -250,6 +250,10 @@ celery_app.conf.beat_schedule = {
         "backend.celery_task.portfolio_snapshot_task.run_portfolio_snapshot",
         crontab(minute="*/15"),
     ),
+    "dispatch_paper_position_risks": build_dispatch_schedule_entry(
+        "backend.celery_task.portfolio_snapshot_task.reconcile_paper_position_risk",
+        crontab(minute="5-59/15"),
+    ),
 
     "dispatch_trading_bot": build_dispatch_schedule_entry(
         "backend.celery_task.trading_bot_task.run_daily_trading_bot",

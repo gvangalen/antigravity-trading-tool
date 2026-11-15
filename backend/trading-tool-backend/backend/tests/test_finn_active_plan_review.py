@@ -68,7 +68,17 @@ def test_move_creates_owner_scoped_plan_review_for_each_market(
     monkeypatch.setattr("backend.services.setup_market_match_service.SetupMarketMatchService", Matcher)
     monkeypatch.setattr("backend.infrastructure.repositories.market_data_repository.MarketDataRepository", Market)
     monkeypatch.setattr("backend.utils.scoring_utils.score_source_is_fresh", lambda *_args, **_kwargs: True)
-    coach = feed.FinnCoachFeedService(object())
+    class EmptyActiveFeed:
+        async def execute(self, *_args, **_kwargs):
+            return self
+
+        def mappings(self):
+            return self
+
+        def all(self):
+            return []
+
+    coach = feed.FinnCoachFeedService(EmptyActiveFeed())
     coach.publish = AsyncMock(return_value="new-item")
     coach.resolve = AsyncMock()
 
@@ -118,7 +128,17 @@ def test_old_quote_resolves_plan_review_without_new_advice(monkeypatch):
     monkeypatch.setattr("backend.services.setup_market_match_service.SetupMarketMatchService", Matcher)
     monkeypatch.setattr("backend.infrastructure.repositories.market_data_repository.MarketDataRepository", Market)
     monkeypatch.setattr("backend.utils.scoring_utils.score_source_is_fresh", lambda *_args, **_kwargs: False)
-    coach = feed.FinnCoachFeedService(object())
+    class EmptyActiveFeed:
+        async def execute(self, *_args, **_kwargs):
+            return self
+
+        def mappings(self):
+            return self
+
+        def all(self):
+            return []
+
+    coach = feed.FinnCoachFeedService(EmptyActiveFeed())
     coach.publish = AsyncMock()
     coach.resolve = AsyncMock()
 

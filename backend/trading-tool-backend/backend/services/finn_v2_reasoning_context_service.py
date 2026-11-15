@@ -294,7 +294,8 @@ class FinnV2ReasoningContextService:
                         "score_as_of", "conditions", "components",
                         "component_source_status", "source_observed_at",
                         "quote_source_observed_at",
-                        "setup_ids", "action", "decision_id"):
+                        "setup_ids", "action", "decision_id", "bot_id",
+                        "exposure_pct", "limit_pct", "valuation_as_of"):
                 value = recorded.get(key)
                 if value is not None and len(json.dumps(value, default=str)) <= 1500:
                     historical[key] = value
@@ -307,6 +308,9 @@ class FinnV2ReasoningContextService:
             subject = item.get("subject_type")
             symbol = item.get("symbol")
             current_facts = None
+            current_available = False
+            current_source = "owner_scoped_current_score"
+            current_as_of = datetime.now(timezone.utc)
             if symbol and event_type in {"plan_match", "plan_review", "data_blocked", "market_move"}:
                 from backend.services.setup_market_match_service import SetupMarketMatchService
                 matcher = SetupMarketMatchService(self.session)
@@ -333,6 +337,23 @@ class FinnV2ReasoningContextService:
                                                if current else None)
                 if event_type == "data_blocked":
                     current_facts["current_component_source_status"] = assessment.get("component_source_status")
+                current_available = assessment.get("source_status") == "available"
+            elif event_type == "position_risk" and subject == "bot" and item.get("subject_id"):
+                from backend.services.paper_position_risk_service import PaperPositionRiskService
+                try:
+                    bot_id = int(item["subject_id"])
+                except (TypeError, ValueError):
+                    bot_id = None
+                current = (await PaperPositionRiskService(self.session).evaluate(run.user_id)).get(bot_id)
+                current_facts = {
+                    "feed_item_id": item_id, "current_trade_signal_confirmed": False,
+                    "current_position_risk": current or {"status": "bot_unavailable"},
+                }
+                current_available = bool(current and current["status"] in {
+                    "within_limit", "above_saved_limit"})
+                current_source = "owner_scoped_current_paper_portfolio"
+                if current and current.get("valuation_as_of"):
+                    current_as_of = self._parse_feed_moment(current["valuation_as_of"])
             source_moment = self._parse_feed_moment(item.get("source_observed_at") or item.get("created_at"))
             historical_item = ReasoningEvidenceItem(
                 evidence_id="E0", artifact_id=f"feed-item:{item_id}",
@@ -350,11 +371,11 @@ class FinnV2ReasoningContextService:
                 tool_name="read_feed_current_state", domain="plan_context",
                 entity_type=str(subject or "unknown"),
                 entity_id=str(item.get("subject_id") or "") or None,
-                asset=symbol, source="owner_scoped_current_score",
-                as_of=datetime.now(timezone.utc),
-                freshness="fresh" if assessment.get("source_status") == "available" else "stale",
+                asset=symbol, source=current_source,
+                as_of=current_as_of,
+                freshness="fresh" if current_available else "stale",
                 availability="available",
-                confidence="high" if assessment.get("source_status") == "available" else "medium",
+                confidence="high" if current_available else "medium",
                 facts=current_facts,
             )
             return [historical_item, current_item]
