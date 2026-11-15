@@ -376,3 +376,29 @@ def test_latest_quote_check_keeps_indicator_source_moment_separate():
         answer.replace("15 november 2026 om 15:24:51 CET", "15 november 2026 om 16:24:51 CET"),
         evidence, question=question,
     )
+
+
+def test_broad_coach_keeps_paper_valuation_clock_separate_from_quote_source():
+    evidence = (
+        {"scope": "read_market_snapshot", "status": "completed", "data": {
+            "symbol": "ETH", "quote_currency": "EUR", "price": 3000,
+            "source_observed_at_utc": "2026-11-15T09:02:06+00:00",
+        }},
+        {"scope": "read_portfolio", "status": "completed", "data": {
+            "read_at": "2026-11-15T21:31:53+00:00",
+        }},
+    )
+    question = (
+        "Beoordeel mijn ETH/EUR-conceptsetup: actuele score, koers- en "
+        "indicatorbronmoment, botbeslissing en Paper-kas. Wijzig niets."
+    )
+    answer = (
+        "De ETH/EUR-koersbron gaf €3.000, waargenomen op 15 november 2026 om "
+        "10:02:06 CET. De bot besliste op 15 november 2026 om 22:31:41 CET "
+        "om te wachten. De Paper-waardering van 15 november 2026 om 22:31:53 CET "
+        "toont €9.599,97 kas en geen positie."
+    )
+    assert current_source_moments_supported(answer, evidence, question=question)
+    assert not current_source_moments_supported(
+        answer.replace("22:31:53 CET", "22:31:53 UTC"), evidence, question=question,
+    )

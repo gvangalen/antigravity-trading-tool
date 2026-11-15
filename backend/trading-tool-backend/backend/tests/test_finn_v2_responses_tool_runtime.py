@@ -350,7 +350,8 @@ def test_broad_evaluation_completes_named_setup_strategy_relation(
                     "quote_currency": quote,
                 }},
                 ({"scope": "read_linked_strategy", "status": "completed",
-                  "data": {"setup_id": initial_strategy_setup, "strategy_id": 51}}
+                  "data": {"setup_id": initial_strategy_setup, "strategy_id": 51,
+                           "base_amount": 10 if initial_strategy_setup == 41 else 100}}
                  if initial_strategy_setup is not None else
                  {"scope": "read_linked_strategy", "status": "unavailable",
                   "reason": "strategy_not_resolved"}),
@@ -459,6 +460,77 @@ def test_broad_evaluation_resolves_unique_saved_score_band_or_amount(asset, quot
                and (item.get("data") or {}).get("setup_id") == 41 for item in items)
     assert not any(item.get("scope") == "read_active_setup"
                    and item.get("status") == "unavailable" for item in items)
+
+
+@pytest.mark.parametrize("asset,quote", [("ETH", "EUR"), ("SOL", "USDT")])
+def test_broad_evaluation_does_not_accept_separate_bot_plan_as_requested_amount(asset, quote):
+    question = (
+        f"Beoordeel mijn {asset}/{quote}-conceptsetup en actieve Paper-bot apart: "
+        "actuele score versus 61–75. Is een koop van €10 volgens het plan geldig? "
+        "Bespreek alleen; wijzig niets."
+    )
+    fake = FakeResponses(
+        response("evaluation", calls=[tool_call("eval", "evaluate_plan", {"asset": asset})]),
+        response("answer", text="De gevraagde €10-conceptstrategie is apart van de bot gelezen."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="wrong-successful-bot-plan", model_led_coach=True,
+    )
+    calls = []
+
+    async def read(call):
+        calls.append(call)
+        if call.name == "get_saved_setup_inventory":
+            return {"status": "completed", "results": [{
+                "scope": "read_saved_setup_inventory", "status": "completed", "data": {
+                    "complete": True, "setups": [
+                        {"setup_id": 41, "name": f"{asset}/{quote} handmatig concept",
+                         "symbol": asset, "quote_currency": quote,
+                         "min_benchmark_score": 61, "max_benchmark_score": 75,
+                         "linked_strategies": [{"strategy_id": 51, "base_amount": 10,
+                                                "currency": "EUR"}]},
+                        {"setup_id": 42, "name": f"{asset} bot concept",
+                         "symbol": asset, "quote_currency": quote,
+                         "min_benchmark_score": 61, "max_benchmark_score": 75,
+                         "linked_strategies": [{"strategy_id": 52, "base_amount": 100,
+                                                "currency": "EUR"}]},
+                    ],
+                },
+            }]}
+        setup_id = 41 if call.inputs.get("setup_id") == 41 else 42
+        return {"status": "completed", "results": [
+            {"scope": "read_active_setup", "status": "completed", "data": {
+                "setup_id": setup_id, "name": f"{asset}/{quote} handmatig concept"
+                if setup_id == 41 else f"{asset} bot concept",
+                "symbol": asset, "quote_currency": quote,
+                "min_benchmark_score": 61, "max_benchmark_score": 75,
+            }},
+            {"scope": "read_linked_strategy", "status": "completed", "data": {
+                "setup_id": setup_id, "strategy_id": 51 if setup_id == 41 else 52,
+                "base_amount": 10 if setup_id == 41 else 100,
+            }},
+        ]}
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset=asset,
+    ))
+    assert [call.name for call in calls if call.name in {
+        "evaluate_plan", "get_active_plan_and_strategy", "get_saved_setup_inventory",
+    }] == [
+        "evaluate_plan", "get_active_plan_and_strategy", "get_saved_setup_inventory",
+        "get_active_plan_and_strategy",
+    ]
+    assert [call for call in calls if call.name == "get_active_plan_and_strategy"][-1].inputs == {
+        "setup_id": 41,
+    }
+    assert any(
+        item.get("scope") == "read_linked_strategy" and item.get("status") == "completed"
+        and (item.get("data") or {}).get("setup_id") == 41
+        for item in result.response.tool_trace[0]["result"]["results"]
+    )
 
 
 @pytest.mark.parametrize("score_bounds,names,amounts,question", [

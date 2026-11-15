@@ -334,7 +334,8 @@ def current_source_moments_supported(
             quote_cue = re.compile(r"\b(?:koers|prijs|price|quote|USD|EUR|USDT)\b|[$€]", re.I)
             unrelated_moment = re.compile(
                 r"\b(?:oud(?:e|er)?|vorige|historisch(?:e)?|older|previous|"
-                r"dagrapport|rapport|report|portefeuille\w*|portfolio\w*|plan|setup|"
+                r"dagrapport|rapport|report|portefeuille\w*|portfolio\w*|"
+                r"Paper[- ]?(?:waardering|kas(?:stand)?|saldo|balans)|plan|setup|"
                 r"strategie|bot|order|indicator\w*|technisch\w*|rsi|macd|"
                 r"ma\d+|candle\w*)\b|\banalyse\s+is\s+(?:aangemaakt|bijgewerkt)\b",
                 re.I,
@@ -371,7 +372,8 @@ def current_source_moments_supported(
     for sentence in re.split(r"(?<=[.!?])\s+|\n+", answer):
         mentioned = re.search(
             r"\b(?:Paper[- ]?)?portefeuille(?:uit)?lezing\b|"
-            r"\b(?:Paper[- ]?)?portefeuille\b|\bPaper[- ]?snapshot\b",
+            r"\b(?:Paper[- ]?)?portefeuille\b|\bPaper[- ]?snapshot\b|"
+            r"\bPaper[- ]?(?:waardering|kas(?:stand)?|saldo|balans)\b",
             sentence, re.I,
         )
         if not mentioned:
@@ -382,7 +384,7 @@ def current_source_moments_supported(
             continue
         if not re.search(
             r"\b(?:vers(?:e)?|actueel|actuele|huidige|nieuwste|opgehaald|uitgelezen|"
-            r"uitlezing|portefeuille(?:uit)?lezing|snapshot|read|retrieved|current|latest)\b",
+            r"uitlezing|waardering|portefeuille(?:uit)?lezing|snapshot|read|retrieved|current|latest)\b",
             sentence, re.I,
         ):
             continue

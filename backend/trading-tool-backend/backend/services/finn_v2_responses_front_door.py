@@ -3765,12 +3765,39 @@ class FinnResponsesFrontDoor:
                             == "/".join(named_plan_pair)
                         )
                     }
+                    amount_tokens = re.findall(
+                        r"€\s*(\d+(?:[.,]\d{1,2})?)\b"
+                        r"|\b(\d+(?:[.,]\d{1,2})?)\s*(?:EUR|euro)\b",
+                        message, re.I,
+                    )
+                    requested_amounts = {
+                        Decimal(next(value for value in values if value).replace(",", "."))
+                        for values in amount_tokens
+                    }
+                    requested_amount = (
+                        next(iter(requested_amounts)) if len(requested_amounts) == 1 else None
+                    )
+
+                    def matches_requested_strategy_amount(item: dict[str, Any]) -> bool:
+                        if requested_amount is None:
+                            return True
+                        data = item.get("data")
+                        if not isinstance(data, dict):
+                            return False
+                        if str(data.get("currency") or "EUR").upper() != "EUR":
+                            return False
+                        try:
+                            return Decimal(str(data.get("base_amount"))) == requested_amount
+                        except (InvalidOperation, ValueError):
+                            return False
+
                     matching_plan_read = bool(matching_setup_ids and any(
                         isinstance(item, dict)
                         and item.get("scope") == "read_linked_strategy"
                         and item.get("status") == "completed"
                         and isinstance(item.get("data"), dict)
                         and item["data"].get("setup_id") in matching_setup_ids
+                        and matches_requested_strategy_amount(item)
                         for item in read_result.get("results") or []
                     ))
                     if (
@@ -3799,7 +3826,13 @@ class FinnResponsesFrontDoor:
                             isinstance(item, dict)
                             and item.get("reason") == "setup_ambiguous"
                             for item in plan_items
-                        ):
+                        ) or (requested_amount is not None and not any(
+                            isinstance(item, dict)
+                            and item.get("scope") == "read_linked_strategy"
+                            and item.get("status") == "completed"
+                            and matches_requested_strategy_amount(item)
+                            for item in plan_items
+                        )):
                             # A pair can have more than one saved setup. Use
                             # the complete owner inventory to bind only a
                             # unique pair/name or user-stated score band;
@@ -3856,17 +3889,7 @@ class FinnResponsesFrontDoor:
                                 # A user-stated EUR trade amount can identify
                                 # the linked saved strategy when pair, band and
                                 # a broad label still name several setups.
-                                amount_tokens = re.findall(
-                                    r"€\s*(\d+(?:[.,]\d{1,2})?)\b"
-                                    r"|\b(\d+(?:[.,]\d{1,2})?)\s*(?:EUR|euro)\b",
-                                    message, re.I,
-                                )
-                                requested_amounts = {
-                                    Decimal(next(value for value in values if value).replace(",", "."))
-                                    for values in amount_tokens
-                                }
-                                if len(requested_amounts) == 1:
-                                    requested_amount = next(iter(requested_amounts))
+                                if requested_amount is not None:
                                     def saved_amount_matches(row: dict[str, Any]) -> bool:
                                         for strategy in row.get("linked_strategies") or []:
                                             if not isinstance(strategy, dict):
