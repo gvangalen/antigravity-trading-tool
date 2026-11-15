@@ -6,6 +6,7 @@ This contract checks answer coverage. It never chooses a tool or writes data.
 from __future__ import annotations
 
 import re
+from decimal import Decimal, InvalidOperation
 from typing import Any, Mapping
 
 from backend.services.finn_v2_verified_setup_reference import references_selected_setup
@@ -62,6 +63,7 @@ def _requested_fields(message: str) -> list[str]:
                         r"(?:instap|entry)\w*(?:bevestig|confirm)\w*)\b",
         "stop_distance": r"\b(?:stop\w*|exit\w*)\b",
         "position_size": r"\b(?:positie\w*|position\w*|inzet|size)\b",
+        "cash": r"\b(?:kas|cash|saldo|balance)\b",
     }
     return [field for field, pattern in fields.items() if re.search(pattern, message, re.I)]
 
@@ -81,6 +83,7 @@ def build_turn_contract(
     resolved_target_ids: list[int] = []
     focused_strategy_id: int | None = None
     focused_setup_id: int | None = None
+    paper_cash_total: float | None = None
     for call in tool_trace:
         turn_request = (call.get("result") or {}).get("turn_request") or {}
         if isinstance(turn_request, dict):
@@ -104,6 +107,10 @@ def build_turn_contract(
             data = item.get("data")
             if not isinstance(data, dict):
                 continue
+            if item.get("scope") == "read_portfolio" and re.search(r"\bPaper\b", message, re.I):
+                global_cash = (data.get("global") or {}).get("cash_balance")
+                if isinstance(global_cash, (int, float)) and not isinstance(global_cash, bool):
+                    paper_cash_total = float(global_cash)
             evidence_fields.append({
                 "scope": item.get("scope"), "fields": sorted(data.keys()),
             })
@@ -197,6 +204,7 @@ def build_turn_contract(
         "focused_strategy_id": focused_strategy_id,
         "evidence_fields": evidence_fields,
         "attempted_scopes": sorted(attempted_scopes),
+        "paper_cash_total": paper_cash_total,
         "saved_subject_reference": bool(
             (isinstance(prior_id, int)
              and references_selected_setup(message, prior_asset))
@@ -211,6 +219,28 @@ def build_turn_contract(
 
 def turn_contract_gap(contract: Mapping[str, Any], answer: str) -> str | None:
     """Only reject objectively missing selected objects or strategy fields."""
+    expected_cash = contract.get("paper_cash_total")
+    if isinstance(expected_cash, (int, float)) and {"cash", "position_size"} <= set(
+        contract.get("requested_fields") or []
+    ):
+        values = []
+        for raw in re.findall(r"\b\d[\d.,]*\b", answer):
+            raw = raw.rstrip(".,")
+            if not raw:
+                continue
+            last_dot, last_comma = raw.rfind("."), raw.rfind(",")
+            last_separator = max(last_dot, last_comma)
+            decimal_separator = raw[last_separator] if last_separator >= 0 and len(raw) - last_separator <= 3 else ""
+            normalized = "".join(
+                "." if char == decimal_separator else char
+                for char in raw if char.isdigit() or char == decimal_separator
+            )
+            try:
+                values.append(Decimal(normalized))
+            except InvalidOperation:
+                continue
+        if not any(abs(value - Decimal(str(expected_cash))) < Decimal("0.005") for value in values):
+            return "paper_cash_total_missing"
     targets = contract.get("targets") or []
     if contract.get("answer_type") == "compare" and len(targets) >= 2:
         strategy_name_counts: dict[str, int] = {}

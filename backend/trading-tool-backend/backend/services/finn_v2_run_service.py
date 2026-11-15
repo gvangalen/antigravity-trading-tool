@@ -8,6 +8,7 @@ from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 import asyncio
 from dataclasses import replace
+from decimal import Decimal
 from time import monotonic
 from types import SimpleNamespace
 from typing import Any, Dict, Optional
@@ -1590,6 +1591,35 @@ def _minimal_read_answer(
             "price_relation_conflicts_with_source", evidence,
             rejection_details={"fact_mismatch": "typed_plan_price_relation"},
         )
+    if turn_contract := getattr(prepared.response, "turn_contract", None):
+        from backend.services.finn_v2_turn_contract import turn_contract_gap
+        gap = turn_contract_gap(turn_contract, text)
+        if gap == "paper_cash_total_missing":
+            cash = turn_contract.get("paper_cash_total")
+            if isinstance(cash, (int, float)) and any(
+                item.get("scope") == "read_portfolio"
+                and item.get("status") == "completed"
+                and isinstance(item.get("data"), dict)
+                and isinstance((item["data"].get("global") or {}).get("cash_balance"), (int, float))
+                and abs(item["data"]["global"]["cash_balance"] - cash) < 0.005
+                for item in evidence
+            ):
+                amount = f"{Decimal(str(cash)):,.2f}"
+                language = str(getattr(prepared, "locale", "nl") or "nl").split("-")[0].lower()
+                if language in {"nl", "de"}:
+                    amount = amount.replace(",", "_").replace(".", ",").replace("_", ".")
+                sentence = {
+                    "en": f"The total Paper cash across the account is €{amount} in the verified portfolio snapshot.",
+                    "de": f"Der gesamte Paper-Kassenbestand beträgt laut geprüftem Portfolio €{amount}.",
+                }.get(language, f"De gezamenlijke Paper-kas is €{amount} volgens de uitgelezen portefeuille.")
+                text = f"{text}\n\n{sentence}"
+                gap = turn_contract_gap(turn_contract, text)
+        if gap:
+            return FinnResponsesVerifiedAnswer(
+                "unavailable", "Ik heb je vraag nog niet volledig beantwoord.",
+                "turn_contract_mismatch", evidence,
+                rejection_details={"gap": gap, "turn_contract": turn_contract},
+            )
     return FinnResponsesVerifiedAnswer(
         "completed", text, None, evidence,
         used_previous_response=prepared.response.uses_previous_response,
@@ -1864,6 +1894,11 @@ class FinnV2RunService:
     def _read_only_repair_eligible(tool_trace: tuple[dict[str, Any], ...]) -> bool:
         return not tool_trace or all(
             str(call.get("name") or "").startswith(("get_", "evaluate_"))
+            or (
+                str(call.get("name") or "").endswith("_proposal")
+                and call.get("status") == "retry"
+                and (call.get("result") or {}).get("reason") == "tool_not_relevant_to_request"
+            )
             for call in tool_trace
         )
 

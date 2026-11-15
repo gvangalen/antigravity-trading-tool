@@ -28,6 +28,7 @@ from backend.services.finn_v2_responses_front_door import (
     FinnResponsesFrontDoor, _verified_listed_setup_reference, _explicit_rule_transfer_assets,
     _explicit_strategy_proposal_request, _explicit_create_operation_request,
     _explicit_fresh_create_operation_request, _is_read_only_coach_turn,
+    _explicit_discussion_only,
     _unspecified_setup_overview,
 )
 from backend.services.finn_v2_verified_setup_reference import (
@@ -277,6 +278,48 @@ def test_model_led_read_answers_cannot_be_switched_back_to_legacy_verifier(monke
     assert _minimal_read_answers_enabled() is True
     monkeypatch.setenv("FINN_MINIMAL_READ_ANSWERS", "0")
     assert _minimal_read_answers_enabled() is True
+
+
+def test_read_repair_remains_available_after_rejected_irrelevant_proposal():
+    rejected = {"name": "manage_paper_bot_proposal", "status": "retry",
+                "result": {"reason": "tool_not_relevant_to_request"}}
+    read = {"name": "evaluate_plan", "status": "partial", "result": {}}
+    assert FinnV2RunService._read_only_repair_eligible((rejected, read))
+    assert not FinnV2RunService._read_only_repair_eligible((
+        {"name": "manage_paper_bot_proposal", "status": "completed", "result": {}}, read,
+    ))
+
+
+def test_explicit_discussion_only_keeps_hypothetical_bot_changes_read_only():
+    assert _explicit_discussion_only(
+        "Moet ik mijn indicatoren aanpassen of de bot wijzigen? Bespreek alleen; wijzig niets."
+    )
+    assert not _explicit_discussion_only("Wijzig niets behalve mijn bot.")
+
+
+def test_exact_coach_question_offers_reads_without_guided_mutation(monkeypatch):
+    captured = {}
+
+    async def capture_loop(_self, **kwargs):
+        captured.update(kwargs)
+        return FinnResponsesResult("Ik controleer de bronnen.", "answer", ())
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run", capture_loop,
+    )
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="read-only-broad")
+    front.model_led_coach = True
+    asyncio.run(front.run(
+        message=("Beoordeel mijn ETH/EUR-conceptsetup en actieve ETH Paper-bot apart: "
+                 "score, laatste botbeslissing, Paper-kas en positie. "
+                 "Is een koop volgens het plan geldig? Moet ik de bot wijzigen? "
+                 "Bespreek alleen; wijzig niets."),
+        instructions="Lees de gevraagde feiten.", conversation_context={}, verified_asset="AAPL",
+        workspace_hints={"page": "/setup", "symbol": "AAPL"},
+    ))
+    assert captured["guided_operation_id"] is None
+    assert captured["read_only_turn"] is True
+    assert captured["required_read_tool_name"] == "evaluate_plan"
 
 
 def test_raw_coach_keeps_general_answer_but_rejects_unread_saved_strategy_claim():
@@ -13833,6 +13876,118 @@ def test_broad_evaluation_binds_requested_sources_and_pairs(monkeypatch, asset, 
     decision_call = next(call for call in selected_calls if call.name == "get_decision_history")
     assert decision_call.inputs == {"asset": asset, "_latest_bot_decisions_only": True}
     assert all(call.operation_id is None for call in selected_calls)
+
+
+@pytest.mark.parametrize("asset,other_asset", [("BTC", "AAPL"), ("ETH", "AAPL")])
+def test_single_pair_plan_and_bot_review_reads_all_requested_sources(monkeypatch, asset, other_asset):
+    question = (
+        f"{asset} is hard gedaald. Beoordeel mijn {asset}/EUR-conceptsetup en actieve "
+        f"{asset} Paper-bot apart: actuele score versus 61–75, koers- en indicatorbronmoment, "
+        "laatste botbeslissing, Paper-kas en positie. Is een koop van €10 volgens het plan "
+        "geldig? Moet ik indicatoren of weging aanpassen, of de bot wijzigen? "
+        "Geef één veilige vervolgstap. Bespreek alleen; wijzig niets."
+    )
+
+    @asynccontextmanager
+    async def session_factory():
+        yield SimpleNamespace(commit=AsyncMock())
+
+    selected_calls = []
+
+    class FakeRead:
+        async def __call__(self, call):
+            selected_calls.append(call)
+            if call.name == "get_setup_market_matches":
+                return {"status": "completed", "results": [{
+                    "scope": "read_setup_market_matches", "status": "completed",
+                    "data": {"matches": [
+                        {"symbol": asset, "trading_pair": f"{asset}/EUR"},
+                        {"symbol": asset, "trading_pair": f"{asset}/USDT"},
+                        {"symbol": other_asset, "trading_pair": f"{other_asset}/EUR"},
+                    ]},
+                }]}
+            return {"status": "completed", "results": [
+                {"scope": scope, "status": "completed", "data": {
+                    "global": {"cash_balance": 10005.45},
+                    "bots": [
+                        {"bot_id": 101, "symbol": asset, "is_live": False,
+                         "is_active": True, "operational_status": "active", "setup_id": 55},
+                        {"bot_id": 102, "symbol": other_asset, "is_live": False,
+                         "is_active": True, "operational_status": "active", "setup_id": 56},
+                    ],
+                } if scope == "read_portfolio" else {}}
+                for scope in call.read_tools
+            ]}
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnV2RuntimeContractRepository.record_responses_progress",
+        AsyncMock(),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=FakeResponses(
+            response("read", calls=[tool_call("call-evaluate", "evaluate_plan", {})]),
+            response("answer", text="Ik heb de gevraagde bronnen apart gelezen."),
+        )), session_factory=session_factory, user_id=7, run_id="single-pair-plan-bot-review",
+        model_led_coach=True,
+    )
+    front.reads = FakeRead()
+    result = asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset=other_asset,
+        workspace_hints={"page": "/asset", "symbol": other_asset},
+    ))
+    rows = result.response.tool_trace[0]["result"]["results"]
+    assert {row["scope"] for row in rows} >= {
+        "read_portfolio", "read_review_history", "read_setup_market_matches",
+        "read_market_snapshot", "read_technical_snapshot", "read_asset_scores",
+    }
+    assert {row["trading_pair"] for item in rows if item["scope"] == "read_setup_market_matches"
+            for row in item["data"]["matches"]} == {f"{asset}/EUR"}
+    assert [call.inputs for call in selected_calls if call.name == "get_market_snapshot"] == [
+        {"asset": asset, "quote_currency": "EUR"},
+    ]
+    assert next(call for call in selected_calls if call.name == "get_portfolio_and_exposure").inputs == {
+        "environment": "paper",
+    }
+    decision_call = next(call for call in selected_calls if call.name == "get_decision_history")
+    assert decision_call.inputs == {"asset": asset, "_latest_bot_decisions_only": True}
+    assert all(call.operation_id is None for call in selected_calls)
+    assert result.response.tool_trace[0]["result"]["independent_active_bot"]["bot_id"] == 101
+    assert result.response.tool_trace[0]["result"]["independent_active_bot"]["setup_id"] == 55
+
+
+def test_paper_cash_and_position_answer_must_include_read_account_balance():
+    contract = build_turn_contract(
+        message="Beoordeel mijn ETH/EUR-plan, Paper-kas en positie. Wijzig niets.",
+        tool_trace=({"name": "evaluate_plan", "result": {"results": [{
+            "scope": "read_portfolio", "status": "completed",
+            "data": {"global": {"cash_balance": 10005.45}, "bots": [
+                {"symbol": "ETH"}, {"symbol": "AAPL"},
+            ]},
+        }]}},),
+    )
+    assert contract["paper_cash_total"] == 10005.45
+    assert turn_contract_gap(contract, "De ETH-botkas is €9.599,97 en er is geen positie.") == "paper_cash_total_missing"
+    assert turn_contract_gap(
+        contract, "De gezamenlijke Paper-kas is €10.005,45; er is geen positie."
+    ) is None
+    assert turn_contract_gap(
+        contract, "The Paper balance is EUR 10,005.45 and there is no position."
+    ) is None
+    prepared = SimpleNamespace(response=SimpleNamespace(
+        text="De ETH-botkas is €9.599,97 en er is geen positie.",
+        uses_previous_response=False, tool_trace=(), turn_contract=contract,
+    ))
+    rejected = _minimal_read_answer(message=contract["question"], prepared=prepared)
+    assert rejected.reason == "turn_contract_mismatch"
+    assert rejected.rejection_details["gap"] == "paper_cash_total_missing"
+    prepared.response.tool_trace = ({"result": {"results": [{
+        "scope": "read_portfolio", "status": "completed",
+        "data": {"global": {"cash_balance": 10005.45}},
+    }]}},)
+    completed = _minimal_read_answer(message=contract["question"], prepared=prepared)
+    assert completed.status == "completed"
+    assert "De gezamenlijke Paper-kas is €10.005,45" in completed.text
 
 
 def test_open_position_question_reads_owner_portfolio_without_bot_page(monkeypatch):

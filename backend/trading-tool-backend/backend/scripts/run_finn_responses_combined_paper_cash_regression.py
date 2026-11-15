@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 
 from sqlalchemy import text
@@ -24,6 +25,7 @@ def main() -> None:
     parser.add_argument("--question")
     parser.add_argument("--followup")
     parser.add_argument("--blocked-decision", action="store_true")
+    parser.add_argument("--unlinked-concept", action="store_true")
     args = parser.parse_args()
     if not args.base_url.startswith(("http://127.0.0.1:", "http://localhost:")):
         raise SystemExit("This regression is local-only")
@@ -35,11 +37,26 @@ def main() -> None:
             WHERE id = :user_id
         """), {"user_id": user["id"],
                "preferences": json.dumps({"selected_asset": "BTC"})})
+        for quote in ("EUR", "USDT"):
+            connection.execute(text("""
+                INSERT INTO trading_markets
+                    (asset_symbol, quote_currency, venue, provider, provider_symbol,
+                     tradingview_symbol, source_verified_at, is_active)
+                VALUES ('BTC', :quote, 'BINANCE', 'binance', :provider_symbol,
+                        :tradingview_symbol, NOW(), TRUE)
+                ON CONFLICT (asset_symbol, quote_currency, venue) DO UPDATE SET
+                    source_verified_at = EXCLUDED.source_verified_at, is_active = TRUE
+            """), {"quote": quote, "provider_symbol": f"BTC{quote}",
+                   "tradingview_symbol": f"BINANCE:BTC{quote}"})
         for symbol, cash in (("BTC", 9599.97), ("AAPL", 405.48)):
             setup_id = _insert_setup(connection, user["id"], f"{symbol} Paper Scope")
             connection.execute(text("""
                 UPDATE setups SET symbol = :symbol WHERE id = :setup_id AND user_id = :user_id
             """), {"symbol": symbol, "setup_id": setup_id, "user_id": user["id"]})
+            concept_id = (
+                _insert_setup(connection, user["id"], "BTC/EUR-conceptsetup")
+                if args.unlinked_concept and symbol == "BTC" else setup_id
+            )
             if args.question and symbol == "BTC":
                 connection.execute(text("""
                     UPDATE setups SET
@@ -48,7 +65,7 @@ def main() -> None:
                                      ORDER BY id LIMIT 1),
                         min_benchmark_score = 61, max_benchmark_score = 75
                     WHERE id = :setup_id AND user_id = :user_id
-                """), {"symbol": symbol, "setup_id": setup_id, "user_id": user["id"]})
+                """), {"symbol": symbol, "setup_id": concept_id, "user_id": user["id"]})
             strategy_id = _insert_strategy(connection, user["id"], setup_id,
                                            f"{symbol} Paper Scope Strategy")
             bot_id = _insert_bot(connection, user["id"], strategy_id,
@@ -138,7 +155,8 @@ def main() -> None:
     }
     if args.question:
         checks["saved_score_band_answer"] = "61–75" in answer or "61-75" in answer
-        checks["both_pairs_answered"] = "BTC/EUR" in answer and "BTC/USDT" in answer
+        requested_pairs = set(re.findall(r"\bBTC/(?:EUR|USDT)\b", question, re.I))
+        checks["requested_pairs_answered"] = all(pair.upper() in answer.upper() for pair in requested_pairs)
     if args.blocked_decision:
         checks["blocked_decision_read"] = any(
             row.get("safety_state") in {"blocked", "error"}
