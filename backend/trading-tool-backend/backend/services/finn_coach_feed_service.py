@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -228,10 +229,80 @@ def _move_phrase(evidence: dict, locale: str) -> str:
     }[locale]
 
 
+def _plan_score_phrase(evidence: dict, locale: str) -> str:
+    """Render only verified score and saved inclusive bounds."""
+    if evidence.get("source_status") != "available":
+        return ""
+    try:
+        score = Decimal(str(evidence.get("benchmark_score")))
+        bounds = (evidence.get("conditions") or {}).get("benchmark") or {}
+        minimum = Decimal(str(bounds["minimum"])) if bounds.get("minimum") is not None else None
+        maximum = Decimal(str(bounds["maximum"])) if bounds.get("maximum") is not None else None
+    except (InvalidOperation, TypeError, ValueError, KeyError, AttributeError):
+        return ""
+    if not score.is_finite() or not 0 <= score <= 100:
+        return ""
+    if any(value is not None and (not value.is_finite() or not 0 <= value <= 100)
+           for value in (minimum, maximum)):
+        return ""
+    displayed = int(score + Decimal("0.5"))
+    score_text = {"nl": " Gemeten score", "en": " Measured score", "de": " Gemessener Score"}[locale]
+    if minimum is None and maximum is None:
+        return f"{score_text}: {displayed}."
+    if minimum is not None and maximum is not None:
+        condition = f"{minimum:g}–{maximum:g}"
+    elif minimum is not None:
+        condition = f"≥{minimum:g}"
+    else:
+        condition = f"≤{maximum:g}"
+    bound_text = {"nl": "opgeslagen grens", "en": "saved range", "de": "gespeicherter Bereich"}[locale]
+    return f"{score_text}: {displayed}; {bound_text}: {condition}."
+
+
 def _fallback(kind: str, subject: str, evidence: dict, *, focus: str = "brief") -> dict:
     name = str(subject or "").strip()[:120]
     if kind == "bot_decision":
         return _bot_fallback(name, evidence)
+    if kind == "plan_review":
+        pair = str(evidence.get("trading_pair") or evidence.get("symbol") or "").strip()[:30]
+        market = f" ({pair})" if pair else ""
+        movement = {
+            "up": ("steeg sterk", "rose sharply", "stieg stark"),
+            "down": ("daalde sterk", "fell sharply", "fiel stark"),
+        }.get(evidence.get("direction"), ("bewoog sterk", "moved sharply", "bewegte sich stark"))
+        status = evidence.get("plan_status")
+        if evidence.get("source_status") != "available":
+            titles = ("Plancontrole: bronnen ontbreken", "Plan check: sources missing", "Planprüfung: Quellen fehlen")
+            bodies = (
+                f"{name}{market}: de koers {movement[0]}, maar de actuele score is niet verifieerbaar. Wacht met een nieuwe instap en controleer de bronnen van je setup.",
+                f"{name}{market}: the price {movement[1]}, but the current score is not verifiable. Wait before a new entry and check your setup sources.",
+                f"{name}{market}: Der Kurs {movement[2]}, aber der aktuelle Score ist nicht verifizierbar. Warte vor einem neuen Einstieg und prüfe die Quellen deines Setups.",
+            )
+        elif status not in {"matches", "outside_conditions"}:
+            titles = ("Plancontrole: voorwaarden onzeker", "Plan check: conditions unclear", "Planprüfung: Bedingungen unklar")
+            bodies = (
+                f"{name}{market}: de koers {movement[0]}, maar de opgeslagen voorwaarden zijn niet betrouwbaar te toetsen. Wacht met een nieuwe instap en bekijk je setup.",
+                f"{name}{market}: the price {movement[1]}, but the saved conditions cannot be checked reliably. Wait before a new entry and review your setup.",
+                f"{name}{market}: Der Kurs {movement[2]}, aber die gespeicherten Bedingungen lassen sich nicht zuverlässig prüfen. Warte vor einem neuen Einstieg und prüfe dein Setup.",
+            )
+        elif status == "outside_conditions":
+            titles = ("Plancontrole: wacht met instappen", "Plan check: wait before entry", "Planprüfung: Einstieg abwarten")
+            bodies = (
+                f"{name}{market}: de koers {movement[0]} en de gemeten score valt buiten je opgeslagen voorwaarden. Wacht met een nieuwe instap; bekijk de score en botbeslissing.",
+                f"{name}{market}: the price {movement[1]} and the measured score is outside your saved conditions. Wait before a new entry; review the score and bot decision.",
+                f"{name}{market}: Der Kurs {movement[2]} und der gemessene Score liegt außerhalb deiner gespeicherten Bedingungen. Warte vor einem neuen Einstieg; prüfe Score und Botentscheidung.",
+            )
+        else:
+            titles = ("Plancontrole na koersbeweging", "Plan check after price move", "Planprüfung nach Kursbewegung")
+            bodies = (
+                f"{name}{market}: de koers {movement[0]} en de gemeten score past bij je opgeslagen voorwaarden. Dit is nog geen instapsignaal; controleer bot, positie en risico.",
+                f"{name}{market}: the price {movement[1]} and the measured score fits your saved conditions. This is not an entry signal; review bot, position and risk.",
+                f"{name}{market}: Der Kurs {movement[2]} und der gemessene Score passt zu deinen gespeicherten Bedingungen. Das ist kein Einstiegssignal; prüfe Bot, Position und Risiko.",
+            )
+        return {locale: {"title": titles[index], "body": bodies[index]
+                         + _move_phrase(evidence, locale)
+                         + _plan_score_phrase(evidence, locale)}
+                for index, locale in enumerate(LOCALES)}
     if kind == "daily_report_ready":
         return {
             "nl": {"title": "Je dagrapport staat klaar", "body": "Lees wat er is veranderd en wat volgens je plan aandacht vraagt."},
@@ -386,7 +457,7 @@ class FinnCoachFeedService:
                       expires_at: datetime | None = None,
                       revision: str | None = None) -> str | None:
         """One row per owner/event. Unchanged evidence never reopens or regenerates."""
-        if not event_key or event_type not in {"plan_match", "data_blocked", "proposal_pending", "market_move", "bot_decision", "live_bot_paused", "daily_report_ready", "periodic_report_ready"}:
+        if not event_key or event_type not in {"plan_match", "plan_review", "data_blocked", "proposal_pending", "market_move", "bot_decision", "live_bot_paused", "daily_report_ready", "periodic_report_ready"}:
             raise ValueError("feed_event_invalid")
         facts = {**evidence, "subject": str(subject or "")[:120]}
         digest = hashlib.sha256(str(revision or _json(facts)).encode()).hexdigest()
@@ -443,6 +514,112 @@ class FinnCoachFeedService:
                 fingerprint=CONCAT('resolved:', f.fingerprint), updated_at=NOW()
             FROM latest WHERE f.id=latest.id AND f.fingerprint NOT LIKE 'resolved:%'
         """), {"user_id": user_id, "event_key": event_key})
+
+    async def reconcile_plan_reviews(self, *, user_id: int, symbol: str,
+                                     market_id: int | None = None) -> list[str]:
+        """Coach each owned setup after a measured move in its exact market scope.
+
+        This observer never changes a setup, bot or portfolio. A quote cannot
+        substitute for a verified benchmark score, and a pair quote cannot be
+        borrowed from another pair or the legacy asset scope.
+        """
+        from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
+        from backend.infrastructure.repositories.setup_repository import SetupRepository
+        from backend.services.setup_market_match_service import SetupMarketMatchService
+        from backend.utils.scoring_utils import score_source_is_fresh
+
+        asset = str(symbol or "").strip().upper()
+        if not asset or (market_id is not None and (type(market_id) is not int or market_id <= 0)):
+            raise ValueError("exact_market_scope_required")
+        setups = [dict(row) for row in await SetupRepository(self.session).get_all_setups(user_id)
+                  if str(row.get("symbol") or "").upper() == asset
+                  and row.get("market_id") == market_id]
+        if not setups:
+            return []
+        assessment = await SetupMarketMatchService(self.session).for_asset(
+            user_id, asset, setups=setups, market_id=market_id,
+        )
+        market = MarketDataRepository(self.session)
+        quote = (await market.get_latest_exact_market_snapshot(market_id) if market_id is not None
+                 else await market.get_latest_quoted_snapshot(asset))
+        observed = getattr(quote, "source_observed_at", None) if quote else None
+        try:
+            change = float(quote.change_24h) if quote is not None else None
+        except (TypeError, ValueError):
+            change = None
+        try:
+            configured_threshold = float(os.getenv("FINN_COACH_MOVE_THRESHOLD_PCT", "10"))
+        except (TypeError, ValueError):
+            configured_threshold = 10.0
+        threshold = configured_threshold if 0 < configured_threshold <= 100 else 10.0
+        try:
+            configured_age = float(os.getenv("FINN_COACH_QUOTE_MAX_AGE_MINUTES", "60"))
+        except (TypeError, ValueError):
+            configured_age = 60.0
+        max_age = configured_age if 0 < configured_age <= 1440 else 60.0
+        quote_age = (datetime.now(timezone.utc) - (
+            observed.replace(tzinfo=timezone.utc) if observed and observed.tzinfo is None else observed
+        )) if observed else None
+        scope = f"{asset}:{market_id or 'asset'}"
+        if (change is None or not (-10000 < change < 10000)
+                or abs(change) < threshold
+                or quote_age is None or not timedelta(0) <= quote_age <= timedelta(minutes=max_age)
+                or not score_source_is_fresh("market", "price", observed, symbol=asset)):
+            for setup in setups:
+                await self.resolve(user_id=user_id, event_key=f"plan-review:{setup['id']}")
+            return []
+        matches = {str(match["setup_id"]): match for match in assessment.get("matches") or []}
+        created = []
+        for setup in setups:
+            match = matches.get(str(setup["id"]))
+            if not match or match.get("status") == "unconfigured":
+                await self.resolve(user_id=user_id, event_key=f"plan-review:{setup['id']}")
+                continue
+            pair = match.get("trading_pair") or (
+                f"{asset}/{setup['quote_currency']}" if market_id is not None and setup.get("quote_currency") else None)
+            source_status = assessment.get("source_status")
+            plan_status = match.get("status") if source_status == "available" else "insufficient_data"
+            try:
+                score_value = Decimal(str(assessment.get("benchmark_score")))
+                score_point = int(score_value + Decimal("0.5")) if (
+                    source_status == "available" and score_value.is_finite()
+                    and 0 <= score_value <= 100) else None
+            except (InvalidOperation, TypeError, ValueError):
+                score_point = None
+            if score_point is None:
+                plan_status = "insufficient_data"
+            direction = "up" if change > 0 else "down"
+            evidence = {
+                "status": "measured_move", "symbol": asset,
+                "market_id": market_id, "trading_pair": pair,
+                "setup_id": setup["id"], "plan_status": plan_status,
+                "source_status": source_status,
+                "benchmark_score": assessment.get("benchmark_score") if score_point is not None else None,
+                "conditions": match.get("conditions"),
+                "component_source_status": assessment.get("component_source_status"),
+                "score_as_of": assessment.get("as_of"),
+                "source_observed_at": assessment.get("component_source_observed_at"),
+                "quote_source_observed_at": observed,
+                "change_24h": change, "direction": direction,
+            }
+            item = await self.publish(
+                user_id=user_id, event_key=f"plan-review:{setup['id']}",
+                event_type="plan_review", subject_type="setup",
+                subject_id=str(setup["id"]), subject=setup.get("name") or pair or asset,
+                symbol=asset, priority=4 if plan_status != "matches" else 2,
+                source_observed_at=observed,
+                expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+                evidence=evidence,
+                revision=_json({"scope": scope, "setup_id": setup["id"],
+                                "name": setup.get("name"), "plan_status": plan_status,
+                                "source_status": source_status,
+                                "score_band": score_point // 5 if score_point is not None else None,
+                                "conditions": match.get("conditions"),
+                                "direction": direction, "move_band": int(abs(change) // 5)}),
+            )
+            if item:
+                created.append(item)
+        return created
 
     async def reconcile_score_asset(self, *, user_id: int, symbol: str) -> list[str]:
         """Emit transitions from the same verified assessment as Analyse and FINN."""
@@ -514,6 +691,11 @@ class FinnCoachFeedService:
             )
             if item:
                 created.append(item)
+        # Configured setups receive the per-setup plan review below. Keep the
+        # legacy generic move only for an owner without score conditions.
+        if any(match.get("status") != "unconfigured" for match in matches):
+            await self.resolve(user_id=user_id, event_key=f"market-move:{asset}")
+            return created
         # A market move is informational and tied to at least one owned plan.
         # It is never interpreted as a plan condition or order eligibility.
         snapshot = await MarketDataRepository(self.session).get_latest_quoted_snapshot(asset)

@@ -127,10 +127,11 @@ export type MobileCoachFeedItem = {
   symbol?: string | null;
   title: string;
   description: string;
-  evidence?: { subject?: string; report_date?: string; report_type?: 'daily' | 'weekly' | 'monthly' | 'quarterly' };
+  evidence?: { subject?: string; trading_pair?: string; report_date?: string; report_type?: 'daily' | 'weekly' | 'monthly' | 'quarterly' };
   status: 'unread' | 'read' | 'handled' | 'archived' | 'resolved';
   priority: number;
   created_at: string;
+  source_observed_at?: string | null;
   updated_at: string;
 };
 

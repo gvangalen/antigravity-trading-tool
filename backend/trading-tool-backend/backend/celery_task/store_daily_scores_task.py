@@ -281,6 +281,11 @@ def build_daily_scores_for_market(user_id: int, market_id: int) -> dict:
                 _jsonb({category: result.get("scores", {}) for category, result in results.items()}),
             ))
         conn.commit()
+        # Score and quote are both committed before the coach reads them.
+        try:
+            reconcile_coach_feed_score.delay(user_id, symbol, market_id)
+        except Exception:
+            logger.warning("FINN pair plan-check dispatch failed for market %s", market_id, exc_info=True)
         return {"user_id": user_id, "symbol": symbol, "market_id": market_id,
                 "scores": scores}
     except Exception:
@@ -291,21 +296,25 @@ def build_daily_scores_for_market(user_id: int, market_id: int) -> dict:
 
 
 @shared_task(name="backend.celery_task.store_daily_scores_task.reconcile_coach_feed_score")
-def reconcile_coach_feed_score(user_id: int, symbol: str):
+def reconcile_coach_feed_score(user_id: int, symbol: str, market_id: int | None = None):
     """Observe completed Score 2.0 output, never generate on a feed GET."""
-    from backend.infrastructure.database import async_session_factory, run_celery_coroutine
+    from backend.infrastructure.database import async_session_factory
+    from backend.celery_task.finn_v2_task import _run_async
     from backend.services.finn_coach_feed_service import FinnCoachFeedService
 
     async def run():
         async with async_session_factory() as session:
-            item_ids = await FinnCoachFeedService(session).reconcile_score_asset(
-                user_id=user_id, symbol=symbol,
+            coach = FinnCoachFeedService(session)
+            item_ids = (await coach.reconcile_score_asset(user_id=user_id, symbol=symbol)
+                        if market_id is None else [])
+            item_ids += await coach.reconcile_plan_reviews(
+                user_id=user_id, symbol=symbol, market_id=market_id,
             )
             await session.commit()
             return item_ids
 
     try:
-        for item_id in run_celery_coroutine(run()):
+        for item_id in _run_async(run()):
             generate_coach_feed_copy.delay(user_id, item_id)
     except Exception:
         logger.warning("FINN feed reconciliation failed for %s", symbol, exc_info=True)
@@ -314,7 +323,8 @@ def reconcile_coach_feed_score(user_id: int, symbol: str):
 @shared_task(name="backend.celery_task.store_daily_scores_task.generate_coach_feed_copy")
 def generate_coach_feed_copy(user_id: int, item_id: str):
     """One bounded Luna/Responses attempt with a stored factual fallback."""
-    from backend.infrastructure.database import async_session_factory, run_celery_coroutine
+    from backend.infrastructure.database import async_session_factory
+    from backend.celery_task.finn_v2_task import _run_async
     from backend.services.finn_coach_feed_service import FinnCoachFeedService
 
     async def run():
@@ -326,7 +336,7 @@ def generate_coach_feed_copy(user_id: int, item_id: str):
             return result
 
     try:
-        return run_celery_coroutine(run())
+        return _run_async(run())
     except Exception:
         logger.warning("FINN feed copy failed", exc_info=True)
         return False
@@ -336,7 +346,8 @@ def generate_coach_feed_copy(user_id: int, item_id: str):
 def publish_coach_bot_decision(user_id: int, decision_id: int):
     """Only a persisted owner-owned Paper decision can enter the feed."""
     from sqlalchemy import text
-    from backend.infrastructure.database import async_session_factory, run_celery_coroutine
+    from backend.infrastructure.database import async_session_factory
+    from backend.celery_task.finn_v2_task import _run_async
     from backend.services.finn_coach_feed_service import FinnCoachFeedService
 
     async def run():
@@ -387,7 +398,7 @@ def publish_coach_bot_decision(user_id: int, decision_id: int):
             return item_id
 
     try:
-        item_id = run_celery_coroutine(run())
+        item_id = _run_async(run())
         if item_id:
             generate_coach_feed_copy.delay(user_id, item_id)
     except Exception:

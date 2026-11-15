@@ -32,10 +32,13 @@ export function MobileFINNFeed({ events, onArchive, onDiscuss, onViewReport, onT
         <View key={item.id} style={styles.item}>
           <View style={styles.row}>
             <Text style={styles.title}>{item.title}</Text>
-            {item.symbol ? <Text style={styles.symbol}>{item.symbol}</Text> : null}
+            {item.symbol ? <Text style={styles.symbol}>{item.event_type === 'plan_review' && item.evidence?.trading_pair ? item.evidence.trading_pair : item.symbol}</Text> : null}
           </View>
           <Text style={styles.description}>{item.description}</Text>
           <Text style={styles.time}>{new Date(item.created_at).toLocaleString(language)}</Text>
+          {item.event_type === 'plan_review' && item.source_observed_at ? (
+            <Text style={styles.time}>{translate(language, 'finn.feedQuoteSource')}: {new Date(item.source_observed_at).toLocaleString(language, { timeZone: 'UTC' })} UTC</Text>
+          ) : null}
           {item.status === 'unread' || item.status === 'read' ? (
             <View style={styles.actions}>
               <Pressable onPress={async () => {
