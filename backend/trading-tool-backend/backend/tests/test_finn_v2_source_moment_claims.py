@@ -318,6 +318,26 @@ def test_current_market_source_in_prose_keeps_exact_quote_pair():
     )
 
 
+def test_source_moment_claim_uses_its_own_pair_in_multi_plan_sentence():
+    evidence = (
+        {"scope": "read_market_snapshot", "status": "completed", "data": {
+            "symbol": "ETH", "quote_currency": "EUR", "price": 3000,
+            "source_observed_at_utc": "2026-11-15T09:02:06+00:00",
+        }},
+        {"scope": "read_market_snapshot", "status": "completed", "data": {
+            "symbol": "ETH", "quote_currency": "USDT", "price": 3500,
+            "source_observed_at_utc": "2026-11-15T08:59:00+00:00",
+        }},
+    )
+    prefix = "De ETH/EUR-setup en ETH/USDT-bot zijn apart en het actuele ETH/EUR-koersbronmoment is "
+    assert current_source_moments_supported(
+        prefix + "15 november 2026 om 10:02:06 CET.", evidence,
+    )
+    assert not current_source_moments_supported(
+        prefix + "15 november 2026 om 09:59 CET.", evidence,
+    )
+
+
 def test_unrelated_second_table_is_not_treated_as_a_quote_source_table():
     answer = (
         "| Instrument | Benchmark | Koersbronmoment |\n"

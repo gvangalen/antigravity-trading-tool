@@ -288,14 +288,25 @@ def current_source_moments_supported(
                 ):
                     continue
                 claim = _claimed_moment(suffix)
-                pairs = {(match.group("symbol").upper(), match.group("quote").upper())
-                         for match in re.finditer(
-                             r"\b(?P<symbol>[A-Z][A-Z0-9]*)/(?P<quote>EUR|USD|USDT)\b",
-                             sentence, re.I,
-                         )}
-                symbols = {symbol for symbol, _ in market_rows if re.search(
-                    rf"\b{re.escape(symbol)}\b", sentence, re.I,
-                )}
+                pair_pattern = (
+                    r"\b(?P<symbol>[A-Z][A-Z0-9]*)/(?P<quote>EUR|USD|USDT)\b"
+                )
+                # A sentence may compare a setup and a separate bot before
+                # naming the quote whose source time follows. Scope the pair
+                # to the actual source-time claim when that claim names one.
+                claim_pairs = {
+                    (match.group("symbol").upper(), match.group("quote").upper())
+                    for match in re.finditer(pair_pattern, market_claim.group(0), re.I)
+                }
+                pairs = claim_pairs or {
+                    (match.group("symbol").upper(), match.group("quote").upper())
+                    for match in re.finditer(pair_pattern, sentence, re.I)
+                }
+                symbols = {symbol for symbol, _ in pairs} if claim_pairs else {
+                    symbol for symbol, _ in market_rows if re.search(
+                        rf"\b{re.escape(symbol)}\b", sentence, re.I,
+                    )
+                }
                 candidates = [moment for key, moment in market_rows.items()
                               if key in pairs] if pairs else [
                                   moment for (symbol, _), moment in market_rows.items()
