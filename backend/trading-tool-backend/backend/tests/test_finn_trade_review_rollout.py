@@ -166,13 +166,62 @@ def test_weekly_reflection_worker_paginates_past_first_500_owners(monkeypatch):
             start = params["last_user_id"] + 1
             return Result(list(range(start, min(start + 500, 502))))
 
+        async def commit(self):
+            pass
+
     async def save_week(_self, user_id, _monday):
         completed.append(user_id)
+        return {"trades": 0}
 
     monkeypatch.setattr(task, "async_session_factory", lambda: Session())
     monkeypatch.setattr(task.FinnTradeReviewService, "weekly_report", save_week)
     assert asyncio.run(task._finalize_weekly_trade_reflections()) == 501
     assert completed == list(range(1, 502))
+
+
+def test_completed_week_publishes_owner_scoped_coaching_card(monkeypatch):
+    monkeypatch.setenv("FINN_TRADE_REVIEW_ROLLOUT", "allowlist")
+    monkeypatch.setenv("FINN_TRADE_REVIEW_USER_IDS", "7")
+    published = []
+
+    class Result:
+        def __init__(self, ids):
+            self.ids = ids
+
+        def fetchall(self):
+            return [type("Row", (), {"user_id": value})() for value in self.ids]
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            pass
+
+        async def execute(self, _sql, params):
+            return Result([7] if params["last_user_id"] == 0 else [])
+
+        async def commit(self):
+            pass
+
+    async def save_week(_self, _user_id, monday):
+        return {"week_start": monday.isoformat(), "week_end": "2026-11-16",
+                "trades": 3, "plans": 2, "notes": 1, "analyzed": 2,
+                "pending": 1, "unavailable": 0, "patterns": [],
+                "confirmed_lesson_repetitions": [],
+                "generated_at": "2026-11-16T05:15:00+00:00"}
+
+    async def publish(_self, **kwargs):
+        published.append(kwargs)
+
+    monkeypatch.setattr(task, "async_session_factory", lambda: Session())
+    monkeypatch.setattr(task.FinnTradeReviewService, "weekly_report", save_week)
+    monkeypatch.setattr(task.FinnCoachFeedService, "publish", publish)
+    assert asyncio.run(task._finalize_weekly_trade_reflections()) == 1
+    assert len(published) == 1
+    assert published[0]["user_id"] == 7
+    assert published[0]["event_type"] == "weekly_reflection"
+    assert published[0]["evidence"]["plans"] == 2
 
 
 def test_scheduled_derivative_sync_uses_owner_scoped_bounded_candidates(monkeypatch):

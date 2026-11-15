@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from hashlib import sha256
 from typing import Any, Dict, Optional
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.domain.plan_price_comparison import compare_plan_entry_with_market
 
@@ -295,10 +296,22 @@ class FinnV2ReasoningContextService:
                         "component_source_status", "source_observed_at",
                         "quote_source_observed_at",
                         "setup_ids", "action", "decision_id", "bot_id",
-                        "exposure_pct", "limit_pct", "valuation_as_of"):
+                        "exposure_pct", "limit_pct", "valuation_as_of",
+                        "week_start", "week_end", "trades", "plans", "notes",
+                        "analyzed", "pending", "unavailable",
+                        "confirmed_repeated_lessons", "suggestion_kind",
+                        "affected_categories", "indicator_revision",
+                        "weight_revision", "order_status", "amount_eur",
+                        "decision_kind"):
                 value = recorded.get(key)
                 if value is not None and len(json.dumps(value, default=str)) <= 1500:
                     historical[key] = value
+            if event_type == "bot_decision":
+                reasons = recorded.get("reasons")
+                if isinstance(reasons, list):
+                    historical["recorded_reason_text_untrusted"] = [
+                        value.strip()[:240] for value in reasons[:2]
+                        if isinstance(value, str) and value.strip()]
             historical_facts = {"feed_item_id": item_id, "event_type": event_type,
                      "notification_status": item.get("status"),
                      "historical_notification": True,
@@ -311,7 +324,8 @@ class FinnV2ReasoningContextService:
             current_available = False
             current_source = "owner_scoped_current_score"
             current_as_of = datetime.now(timezone.utc)
-            if symbol and event_type in {"plan_match", "plan_review", "data_blocked", "market_move"}:
+            if symbol and event_type in {"plan_match", "plan_review", "data_blocked", "market_move",
+                                         "improvement_suggestion"}:
                 from backend.services.setup_market_match_service import SetupMarketMatchService
                 matcher = SetupMarketMatchService(self.session)
                 if subject == "setup" and item.get("subject_id"):
@@ -324,7 +338,14 @@ class FinnV2ReasoningContextService:
                         market_id=owned_setup.get("market_id") if owned_setup else None,
                     )
                 else:
-                    assessment = await matcher.for_asset(run.user_id, symbol)
+                    if event_type == "improvement_suggestion":
+                        market_id = recorded.get("market_id")
+                        if type(market_id) is not int or market_id <= 0:
+                            market_id = None
+                        assessment = await matcher.for_asset(run.user_id, symbol,
+                                                             market_id=market_id)
+                    else:
+                        assessment = await matcher.for_asset(run.user_id, symbol)
                 current_facts = {"feed_item_id": item_id,
                                  "current_source_status": assessment.get("source_status"),
                                  "current_trade_signal_confirmed": False}
@@ -335,9 +356,12 @@ class FinnV2ReasoningContextService:
                                                 "name": current.get("name"),
                                                 "status": current.get("status")}
                                                if current else None)
-                if event_type == "data_blocked":
+                if event_type in {"data_blocked", "improvement_suggestion"}:
                     current_facts["current_component_source_status"] = assessment.get("component_source_status")
                 current_available = assessment.get("source_status") == "available"
+                if event_type == "improvement_suggestion":
+                    score_row = getattr(matcher, "last_source_row", None) or {}
+                    current_as_of = self._parse_feed_moment(score_row.get("calculated_at"))
             elif event_type == "position_risk" and subject == "bot" and item.get("subject_id"):
                 from backend.services.paper_position_risk_service import PaperPositionRiskService
                 try:
@@ -354,6 +378,98 @@ class FinnV2ReasoningContextService:
                 current_source = "owner_scoped_current_paper_portfolio"
                 if current and current.get("valuation_as_of"):
                     current_as_of = self._parse_feed_moment(current["valuation_as_of"])
+            elif event_type == "bot_decision" and subject == "bot":
+                try:
+                    decision_id = int(recorded.get("decision_id"))
+                except (TypeError, ValueError):
+                    decision_id = None
+                saved = None
+                if decision_id and decision_id > 0:
+                    result = await self.session.execute(text("""
+                        SELECT d.id, d.action, d.status, d.decision_ts,
+                               d.amount_eur, d.reason_json,
+                               o.status AS order_status,
+                               o.quote_amount_eur AS filled_amount_eur
+                        FROM bot_decisions d JOIN bot_configs b
+                          ON b.id=d.bot_id AND b.user_id=d.user_id
+                        LEFT JOIN LATERAL (
+                          SELECT status, quote_amount_eur FROM bot_orders o
+                          WHERE o.user_id=d.user_id AND o.bot_id=d.bot_id
+                            AND o.decision_id=d.id AND o.execution_environment='paper'
+                          ORDER BY o.id DESC LIMIT 1
+                        ) o ON TRUE
+                        WHERE d.user_id=:user_id AND d.id=:decision_id
+                          AND COALESCE(b.is_live,FALSE)=FALSE
+                    """), {"user_id": run.user_id, "decision_id": decision_id})
+                    saved = result.mappings().first()
+                current_facts = {"feed_item_id": item_id,
+                                 "current_trade_signal_confirmed": False,
+                                 "current_bot_decision": ({
+                                     "action": saved["action"], "status": saved["status"],
+                                     "order_status": saved["order_status"],
+                                     "decision_amount_eur": saved["amount_eur"],
+                                     "filled_amount_eur": (saved["filled_amount_eur"]
+                                                           if saved["order_status"] == "filled" else None),
+                                 } if saved else {"status": "unavailable"})}
+                if saved:
+                    reasons = saved["reason_json"]
+                    if isinstance(reasons, str):
+                        try:
+                            reasons = json.loads(reasons)
+                        except ValueError:
+                            reasons = []
+                    if isinstance(reasons, list):
+                        current_facts["current_bot_decision"]["recorded_reason_text_untrusted"] = [
+                            value.strip()[:240] for value in reasons[:2]
+                            if isinstance(value, str) and value.strip()]
+                current_available = bool(saved)
+                current_source = "owner_scoped_persisted_paper_decision"
+                current_as_of = self._parse_feed_moment(saved["decision_ts"]) if saved else None
+            elif event_type == "weekly_reflection" and subject == "reflection":
+                try:
+                    week_start = date.fromisoformat(str(recorded.get("week_start") or ""))
+                except ValueError:
+                    week_start = None
+                saved = None
+                if week_start:
+                    result = await self.session.execute(text("""
+                        SELECT summary, generated_at FROM finn_weekly_trade_reflections
+                        WHERE user_id=:user_id AND week_start=:week_start
+                    """), {"user_id": run.user_id, "week_start": week_start})
+                    saved = result.mappings().first()
+                summary = saved["summary"] if saved else None
+                if isinstance(summary, str):
+                    try:
+                        summary = json.loads(summary)
+                    except ValueError:
+                        summary = None
+                current_facts = {"feed_item_id": item_id,
+                                 "current_trade_signal_confirmed": False,
+                                 "current_weekly_reflection": ({
+                                     key: summary.get(key) for key in (
+                                         "trades", "plans", "notes", "analyzed",
+                                         "pending", "unavailable")
+                                 } if isinstance(summary, dict) else {"status": "unavailable"})}
+                if isinstance(summary, dict):
+                    allowed_themes = {"plan_followed", "risk", "timing", "exit_process",
+                                      "evidence_gap", "missing_plan", "plan_not_recorded"}
+                    current_facts["current_weekly_reflection"]["observed_patterns"] = [
+                        {"theme": row["theme"], "count": row["count"],
+                         "basis": row.get("basis")}
+                        for row in (summary.get("patterns") or [])[:7]
+                        if isinstance(row, dict) and row.get("theme") in allowed_themes
+                        and type(row.get("count")) is int and 1 <= row["count"] <= 500]
+                    current_facts["current_weekly_reflection"]["confirmed_repeated_lessons"] = [
+                        {"count": row["count"],
+                         "basis": "user_confirmed_exact_wording",
+                         "scope": "repeated_wording_does_not_prove_repeated_behavior"}
+                        for row in (summary.get("confirmed_lesson_repetitions") or [])[:5]
+                        if isinstance(row, dict) and row.get("basis") == "user_confirmed_exact_wording"
+                        and type(row.get("count")) is int and 2 <= row["count"] <= 500]
+                current_available = isinstance(summary, dict)
+                current_source = "owner_scoped_weekly_trade_reflection"
+                if saved:
+                    current_as_of = self._parse_feed_moment(saved["generated_at"])
             source_moment = self._parse_feed_moment(item.get("source_observed_at") or item.get("created_at"))
             historical_item = ReasoningEvidenceItem(
                 evidence_id="E0", artifact_id=f"feed-item:{item_id}",

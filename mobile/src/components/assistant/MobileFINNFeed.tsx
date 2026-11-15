@@ -32,7 +32,7 @@ export function MobileFINNFeed({ events, onArchive, onDiscuss, onViewReport, onT
         <View key={item.id} style={styles.item}>
           <View style={styles.row}>
             <Text style={styles.title}>{item.title}</Text>
-            {item.symbol ? <Text style={styles.symbol}>{['plan_review', 'position_risk'].includes(item.event_type) && item.evidence?.trading_pair ? item.evidence.trading_pair : item.symbol}</Text> : null}
+            {item.symbol ? <Text style={styles.symbol}>{['plan_review', 'position_risk', 'improvement_suggestion'].includes(item.event_type) && item.evidence?.trading_pair ? item.evidence.trading_pair : item.symbol}</Text> : null}
           </View>
           <Text style={styles.description}>{item.description}</Text>
           <Text style={styles.time}>{new Date(item.created_at).toLocaleString(language)}</Text>

@@ -83,10 +83,12 @@ def test_move_creates_owner_scoped_plan_review_for_each_market(
     coach.resolve = AsyncMock()
 
     assert asyncio.run(coach.reconcile_plan_reviews(
-        user_id=42, symbol=asset.lower(), market_id=market_id)) == ["new-item"]
+        user_id=42, symbol=asset.lower(), market_id=market_id)) == (
+            ["new-item", "new-item"] if status == "outside_conditions" and source_status == "available"
+            else ["new-item"])
     assert matcher_calls == [(42, asset, [7], market_id)]
     assert quote_calls == [(("exact", market_id) if market_id else ("asset", asset))]
-    event = coach.publish.await_args.kwargs
+    event = coach.publish.await_args_list[0].kwargs
     assert event["event_key"] == "plan-review:7"
     assert event["subject_type"] == "setup"
     assert event["evidence"]["trading_pair"] == pair
@@ -99,7 +101,12 @@ def test_move_creates_owner_scoped_plan_review_for_each_market(
     if source_status == "available":
         assert "61–75" in body
     assert "trade" not in event
-    coach.resolve.assert_not_awaited()
+    if status == "outside_conditions" and source_status == "available":
+        suggestion = coach.publish.await_args_list[1].kwargs
+        assert suggestion["event_type"] == "improvement_suggestion"
+        assert suggestion["evidence"]["trading_pair"] == pair
+    else:
+        coach.resolve.assert_awaited_with(user_id=42, event_key="improvement:setup:7")
 
 
 def test_old_quote_resolves_plan_review_without_new_advice(monkeypatch):
@@ -144,7 +151,9 @@ def test_old_quote_resolves_plan_review_without_new_advice(monkeypatch):
 
     assert asyncio.run(coach.reconcile_plan_reviews(user_id=42, symbol="AAPL")) == []
     coach.publish.assert_not_awaited()
-    coach.resolve.assert_awaited_once_with(user_id=42, event_key="plan-review:7")
+    assert coach.resolve.await_count == 2
+    coach.resolve.assert_any_await(user_id=42, event_key="plan-review:7")
+    coach.resolve.assert_any_await(user_id=42, event_key="improvement:setup:7")
 
 
 def test_discussing_plan_review_rechecks_exact_pair_before_answer(monkeypatch):
@@ -210,6 +219,10 @@ def test_pair_score_worker_routes_only_the_exact_plan_review(monkeypatch):
             calls.append(kwargs)
             return ["item-1"]
 
+        async def reconcile_improvement_suggestions(self, **kwargs):
+            calls.append(("improvement", kwargs))
+            return []
+
     monkeypatch.setattr("backend.infrastructure.database.async_session_factory", Context)
     monkeypatch.setattr(feed, "FinnCoachFeedService", Coach)
     monkeypatch.setattr("backend.celery_task.finn_v2_task._run_async", lambda coro: asyncio.run(coro))
@@ -217,6 +230,7 @@ def test_pair_score_worker_routes_only_the_exact_plan_review(monkeypatch):
 
     tasks.reconcile_coach_feed_score.run(42, "BTC", 11)
     assert calls == [{"user_id": 42, "symbol": "BTC", "market_id": 11},
+                     ("improvement", {"user_id": 42, "symbol": "BTC", "market_id": 11}),
                      "commit", (42, "item-1")]
 
 

@@ -98,14 +98,16 @@ def test_deleted_pair_setup_resolves_its_active_plan_card(monkeypatch):
     class Session:
         async def execute(self, statement, params):
             assert params == {"user_id": 7, "symbol": "BTC", "market_id": "23"}
-            assert "event_type='plan_review'" in str(statement)
+            self.event_type = ("plan_review" if "event_type='plan_review'" in str(statement)
+                               else "improvement_suggestion")
             return self
 
         def mappings(self):
             return self
 
         def all(self):
-            return [{"event_key": "plan-review:81"}]
+            return ([{"event_key": "plan-review:81"}] if self.event_type == "plan_review"
+                    else [])
 
     async def setups(self, user_id):
         assert user_id == 7

@@ -1,5 +1,7 @@
 from backend.celery_task.store_daily_scores_task import run_rule_based_daily_scores
+import asyncio
 import threading
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 
@@ -264,7 +266,7 @@ def test_daily_score_storage_keeps_missing_macro_as_null(monkeypatch):
     assert events[-1][1] == (7, "AAPL")
 
 
-def test_feed_recovery_only_dispatches_new_persisted_paper_decisions(monkeypatch):
+def test_feed_recovery_dispatches_new_or_changed_paper_decisions(monkeypatch):
     import backend.celery_task.store_daily_scores_task as task_module
 
     statements = []
@@ -301,10 +303,73 @@ def test_feed_recovery_only_dispatches_new_persisted_paper_decisions(monkeypatch
     assert len(statements) == 1
     assert "initial_decision_id" in statements[0]
     assert "f.user_id=d.user_id" in statements[0]
+    assert "f.evidence->>'status' IS DISTINCT FROM d.status" in statements[0]
+    assert "f.evidence->>'order_status' IS DISTINCT FROM o.status" in statements[0]
+    assert "'hold'" in statements[0]
     assert "setups" not in statements[0]
     assert task_module._confirmed_component_score({
         "total_score": 10, "scores": {"unused": {"weight": 0}},
     }) is None
+
+
+def test_saved_hold_publishes_dated_paper_review_without_ai_or_order(monkeypatch):
+    import backend.celery_task.store_daily_scores_task as task_module
+    from backend.services.finn_coach_feed_service import FinnCoachFeedService
+
+    published = []
+    ai_jobs = []
+    decision_time = datetime(2026, 11, 15, 19, 0)
+
+    class Result:
+        def mappings(self):
+            return self
+
+        def first(self):
+            return {"id": 91, "bot_id": 12, "symbol": "BTC", "market_id": 7,
+                    "decision_kind": "assessment", "action": "hold",
+                    "status": "planned", "decision_ts": decision_time,
+                    "amount_eur": 0, "reason_json": ["Score buiten zone"],
+                    "filled_amount_eur": None, "order_status": None,
+                    "bot_name": "BTC Paper", "is_live": False}
+
+    class Session:
+        def __init__(self):
+            self.locked = False
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            pass
+
+        async def execute(self, sql, params):
+            if "pg_advisory_xact_lock" in str(sql):
+                assert params == {"key": "finn-feed:42:bot-decision:91"}
+                self.locked = True
+                return None
+            assert self.locked, "decision and order must be read under the feed lock"
+            assert "d.user_id=:user_id" in str(sql)
+            assert params == {"decision_id": 91, "user_id": 42}
+            return Result()
+
+        async def commit(self):
+            pass
+
+    async def publish(_self, **kwargs):
+        published.append(kwargs)
+        return "card"
+
+    monkeypatch.setattr("backend.infrastructure.database.async_session_factory", lambda: Session())
+    monkeypatch.setattr("backend.celery_task.finn_v2_task._run_async", lambda coro: asyncio.run(coro))
+    monkeypatch.setattr(FinnCoachFeedService, "publish", publish)
+    monkeypatch.setattr(task_module.generate_coach_feed_copy, "delay",
+                        lambda *args: ai_jobs.append(args))
+    task_module.publish_coach_bot_decision.run(42, 91)
+    assert published[0]["event_key"] == "bot-decision:91"
+    assert published[0]["evidence"]["action"] == "hold"
+    assert published[0]["source_observed_at"] == decision_time.replace(tzinfo=timezone.utc)
+    assert published[0]["expires_at"] > published[0]["source_observed_at"]
+    assert ai_jobs == []
 
 
 def test_overlapping_owner_rebuilds_write_newest_source_evidence_last(monkeypatch):

@@ -2938,7 +2938,7 @@ def run_trading_bot_execution(
         conn.commit()
 
         for recorded in results:
-            if recorded.get("decision_id") and str(recorded.get("action") or "").lower() not in {"hold", "houd_vast", "none"}:
+            if recorded.get("decision_id"):
                 try:
                     from backend.celery_task.store_daily_scores_task import publish_coach_bot_decision
                     publish_coach_bot_decision.delay(user_id, int(recorded["decision_id"]))

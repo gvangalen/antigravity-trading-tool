@@ -2,6 +2,7 @@ import logging
 import json
 import math
 import os
+from datetime import timedelta, timezone
 from celery import shared_task
 
 from backend.utils.db import get_db_connection
@@ -310,6 +311,9 @@ def reconcile_coach_feed_score(user_id: int, symbol: str, market_id: int | None 
             item_ids += await coach.reconcile_plan_reviews(
                 user_id=user_id, symbol=symbol, market_id=market_id,
             )
+            item_ids += await coach.reconcile_improvement_suggestions(
+                user_id=user_id, symbol=symbol, market_id=market_id,
+            )
             await session.commit()
             return item_ids
 
@@ -352,8 +356,14 @@ def publish_coach_bot_decision(user_id: int, decision_id: int):
 
     async def run():
         async with async_session_factory() as session:
+            # Serialize the read with publish for this logical decision. A queued
+            # planned task must never overwrite a newer filled outcome.
+            await session.execute(text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {
+                "key": f"finn-feed:{user_id}:bot-decision:{decision_id}",
+            })
             result = await session.execute(text("""
-                SELECT d.id, d.bot_id, d.symbol, d.action, d.status, d.decision_ts,
+                SELECT d.id, d.bot_id, d.symbol, d.market_id, d.decision_kind,
+                       d.action, d.status, d.decision_ts,
                        d.amount_eur, d.reason_json, o.quote_amount_eur AS filled_amount_eur,
                        o.status AS order_status,
                        b.name AS bot_name, b.is_live
@@ -368,7 +378,8 @@ def publish_coach_bot_decision(user_id: int, decision_id: int):
                 WHERE d.id=:decision_id AND d.user_id=:user_id
             """), {"decision_id": decision_id, "user_id": user_id})
             row = result.mappings().first()
-            if not row or row["is_live"] or str(row["action"] or "").lower() in {"hold", "houd_vast", "none"}:
+            if not row or row["is_live"] or str(row["action"] or "").lower() not in {
+                "buy", "sell", "hold", "houd_vast"}:
                 return None
             raw_reasons = row["reason_json"]
             if isinstance(raw_reasons, str):
@@ -380,27 +391,34 @@ def publish_coach_bot_decision(user_id: int, decision_id: int):
                        if isinstance(reason, str) and reason.strip()][:2]
             amount = (row["filled_amount_eur"] if row["status"] == "executed"
                       and row["order_status"] == "filled" else row["amount_eur"])
+            decision_at = row["decision_ts"]
+            if decision_at is None:
+                return None
+            if decision_at is not None and decision_at.tzinfo is None:
+                decision_at = decision_at.replace(tzinfo=timezone.utc)
             item_id = await FinnCoachFeedService(session).publish(
                 user_id=user_id, event_key=f"bot-decision:{decision_id}",
                 event_type="bot_decision", subject_type="bot",
                 subject_id=str(row["bot_id"]), subject=row["bot_name"],
                 symbol=row["symbol"], priority=2,
-                source_observed_at=row["decision_ts"],
+                source_observed_at=decision_at,
                 evidence={"status": row["status"], "action": row["action"],
-                          "symbol": row["symbol"], "amount_eur": amount,
+                          "symbol": row["symbol"], "market_id": row["market_id"],
+                          "decision_kind": row["decision_kind"], "amount_eur": amount,
                           "order_status": row["order_status"],
                           "reasons": reasons,
                           "decision_id": row["id"], "bot_id": row["bot_id"],
-                          "source_observed_at": row["decision_ts"]},
-                revision=f"{row['action']}:{row['status']}:{amount}:{reasons}",
+                          "source_observed_at": decision_at},
+                expires_at=(decision_at + timedelta(days=2)
+                            if str(row["action"]).lower() in {"hold", "houd_vast"}
+                            and decision_at else None),
+                revision=f"{row['action']}:{row['status']}:{row['order_status']}:{amount}:{reasons}",
             )
             await session.commit()
             return item_id
 
     try:
-        item_id = _run_async(run())
-        if item_id:
-            generate_coach_feed_copy.delay(user_id, item_id)
+        _run_async(run())
     except Exception:
         logger.warning("FINN Paper decision feed dispatch failed", exc_info=True)
 
@@ -458,12 +476,25 @@ def recover_coach_feed_events():
                 SELECT d.user_id, d.id FROM bot_decisions d
                 JOIN bot_configs b ON b.id=d.bot_id AND b.user_id=d.user_id
                 CROSS JOIN finn_coach_feed_runtime r
+                LEFT JOIN LATERAL (
+                    SELECT status FROM bot_orders o
+                    WHERE o.decision_id=d.id AND o.bot_id=d.bot_id
+                      AND o.user_id=d.user_id AND o.execution_environment='paper'
+                    ORDER BY o.id DESC LIMIT 1
+                ) o ON TRUE
+                LEFT JOIN LATERAL (
+                    SELECT evidence FROM finn_coach_feed_items f
+                    WHERE f.user_id=d.user_id
+                      AND f.event_key='bot-decision:' || d.id::TEXT
+                    ORDER BY f.created_at DESC, f.id DESC LIMIT 1
+                ) f ON TRUE
                 WHERE r.singleton=TRUE AND d.id > r.initial_decision_id
                   AND COALESCE(b.is_live, FALSE)=FALSE
-                  AND LOWER(COALESCE(d.action, '')) NOT IN ('hold', 'houd_vast', 'none', '')
-                  AND NOT EXISTS (
-                    SELECT 1 FROM finn_coach_feed_items f
-                    WHERE f.user_id=d.user_id AND f.event_key='bot-decision:' || d.id::TEXT)
+                  AND LOWER(COALESCE(d.action, '')) IN ('buy', 'sell', 'hold', 'houd_vast')
+                  AND (f.evidence IS NULL
+                       OR f.evidence->>'status' IS DISTINCT FROM d.status
+                       OR f.evidence->>'action' IS DISTINCT FROM d.action
+                       OR f.evidence->>'order_status' IS DISTINCT FROM o.status)
                 ORDER BY d.id LIMIT 12
             """)
             decisions = cur.fetchall()

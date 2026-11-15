@@ -24,10 +24,13 @@ LOCALES = ("nl", "en", "de")
 def _bot_state(evidence: dict) -> str:
     action = str(evidence.get("action") or "").lower()
     status = str(evidence.get("status") or "").lower()
+    if action in {"hold", "houd_vast"}:
+        return "hold_recorded"
     if action not in {"buy", "sell"}:
         return "unknown"
     if status == "executed":
-        return f"{action}_executed"
+        return (f"{action}_executed" if evidence.get("order_status") == "filled"
+                else f"{action}_unverified")
     if status in {"failed", "failed_execution", "cancelled", "unknown_exchange_state"}:
         return f"{action}_failed"
     if status == "skipped":
@@ -94,6 +97,21 @@ def _bot_fallback(subject: str, evidence: dict) -> dict:
             "en": (f"Your {label} bot did not sell · Paper", "This sell decision was skipped. Check the bot details for the reason."),
             "de": (f"Dein {label}-Bot hat nicht verkauft · Paper", "Diese Verkaufsentscheidung wurde übersprungen. Prüfe die Botdetails für den Grund."),
         },
+        "buy_unverified": {
+            "nl": (f"Uitvoering van {label} niet bevestigd · Paper", "De beslissing staat als uitgevoerd, maar een gevulde Paper-order ontbreekt in deze controle. Controleer de botdetails; FINN bevestigt hier geen aankoop."),
+            "en": (f"{label} execution not verified · Paper", "The decision is marked executed, but this check has no filled Paper order. Check the bot details; FINN does not confirm a purchase here."),
+            "de": (f"Ausführung von {label} nicht verifiziert · Paper", "Die Entscheidung ist als ausgeführt markiert, aber eine gefüllte Paper-Order fehlt in dieser Prüfung. Prüfe die Botdetails; FINN bestätigt hier keinen Kauf."),
+        },
+        "sell_unverified": {
+            "nl": (f"Uitvoering van {label} niet bevestigd · Paper", "De beslissing staat als uitgevoerd, maar een gevulde Paper-order ontbreekt in deze controle. Controleer de botdetails; FINN bevestigt hier geen verkoop."),
+            "en": (f"{label} execution not verified · Paper", "The decision is marked executed, but this check has no filled Paper order. Check the bot details; FINN does not confirm a sale here."),
+            "de": (f"Ausführung von {label} nicht verifiziert · Paper", "Die Entscheidung ist als ausgeführt markiert, aber eine gefüllte Paper-Order fehlt in dieser Prüfung. Prüfe die Botdetails; FINN bestätigt hier keinen Verkauf."),
+        },
+        "hold_recorded": {
+            "nl": (f"Je {label}-bot wacht · Paper", "De opgeslagen beoordeling leidde niet tot een order. Bekijk de botdetails voor de vastgelegde reden. Dit bewijst geen gemiste winst."),
+            "en": (f"Your {label} bot waited · Paper", "The saved assessment did not lead to an order. Check the bot details for the recorded reason. This does not prove a missed gain."),
+            "de": (f"Dein {label}-Bot wartet · Paper", "Die gespeicherte Bewertung führte zu keiner Order. Prüfe den gespeicherten Grund in den Botdetails. Das beweist keinen entgangenen Gewinn."),
+        },
     }
     if state not in lines:
         return {locale: {"title": {"nl": "Botstatus gewijzigd · Paper", "en": "Bot status changed · Paper", "de": "Botstatus geändert · Paper"}[locale],
@@ -105,7 +123,7 @@ def _bot_fallback(subject: str, evidence: dict) -> dict:
     for locale in LOCALES:
         title, body = lines[state][locale]
         amount = _bot_amount(evidence, locale)
-        if amount and not state.endswith("_skipped"):
+        if amount and not state.endswith(("_skipped", "_unverified")):
             if state.endswith("_executed"):
                 body += {"nl": f" Uitgevoerd bedrag: {amount}.", "en": f" Executed amount: {amount}.",
                          "de": f" Ausgeführter Betrag: {amount}."}[locale]
@@ -321,6 +339,88 @@ def _fallback(kind: str, subject: str, evidence: dict, *, focus: str = "brief") 
             "en": {"title": "Your daily report is ready", "body": "See what changed and what needs attention in your plan."},
             "de": {"title": "Dein Tagesbericht ist bereit", "body": "Lies, was sich geändert hat und was in deinem Plan Aufmerksamkeit braucht."},
         }
+    if kind == "weekly_reflection":
+        try:
+            trades = int(evidence.get("trades") or 0)
+            plans = int(evidence.get("plans") or 0)
+            notes = int(evidence.get("notes") or 0)
+            repeated = int(evidence.get("confirmed_repeated_lessons") or 0)
+        except (TypeError, ValueError):
+            trades = plans = notes = repeated = 0
+        week = str(evidence.get("week_start") or "")[:10]
+        if not 0 <= plans <= trades <= 10000 or not 0 <= notes <= trades or not 0 <= repeated <= trades:
+            trades = plans = notes = repeated = 0
+        repeated_text = {
+            "nl": f" {repeated} lesformuleringen kwamen in meerdere bevestigde reviews terug." if repeated else "",
+            "en": f" {repeated} lesson wordings recurred in multiple confirmed reviews." if repeated else "",
+            "de": f" {repeated} Lehren wurden in mehreren bestätigten Reviews gleich formuliert." if repeated else "",
+        }
+        if plans < trades:
+            next_step = {
+                "nl": "Bespreek hoe je vóór een volgende trade het plan vastlegt.",
+                "en": "Discuss how to record your plan before a future trade.",
+                "de": "Besprich, wie du vor einem künftigen Trade deinen Plan festhältst.",
+            }
+        elif notes < trades:
+            next_step = {
+                "nl": "Bespreek welke trade je nog wilt toelichten.",
+                "en": "Discuss which trade still needs a note.",
+                "de": "Besprich, welcher Trade noch eine Notiz braucht.",
+            }
+        else:
+            next_step = {
+                "nl": "Bespreek één concrete les voor je volgende handelsweek.",
+                "en": "Discuss one concrete lesson for your next trading week.",
+                "de": "Besprich eine konkrete Lehre für deine nächste Handelswoche.",
+            }
+        return {
+            "nl": {"title": "Terugblik op je afgesloten handelsweek",
+                   "body": f"Week van {week}: {trades} gesloten trades, {plans} met vastgelegd plan en {notes} met notitie.{repeated_text['nl']} {next_step['nl']}"},
+            "en": {"title": "Review your completed trading week",
+                   "body": f"Week of {week}: {trades} closed trades, {plans} with a recorded plan and {notes} with a note.{repeated_text['en']} {next_step['en']}"},
+            "de": {"title": "Rückblick auf deine abgeschlossene Handelswoche",
+                   "body": f"Woche ab {week}: {trades} geschlossene Trades, {plans} mit festgehaltenem Plan und {notes} mit Notiz.{repeated_text['de']} {next_step['de']}"},
+        }
+    if kind == "improvement_suggestion":
+        pair = str(evidence.get("trading_pair") or evidence.get("symbol") or "").strip()[:30]
+        checked = str(evidence.get("checked_date") or "")[:10]
+        checked_prefix = {"nl": f"Bij de controle van {checked}",
+                          "en": f"At the {checked} check",
+                          "de": f"Bei der Prüfung vom {checked}"}
+        suggestion = evidence.get("suggestion_kind")
+        if suggestion == "weights":
+            body = {
+                "nl": f"{checked_prefix['nl']} waren de opgeslagen benchmarkwegingen voor {pair} niet verifieerbaar. Controleer ze voordat je een nieuwe score gebruikt. FINN heeft niets gewijzigd.",
+                "en": f"{checked_prefix['en']}, the saved benchmark weights for {pair} could not be verified. Review them before using a new score. FINN changed nothing.",
+                "de": f"{checked_prefix['de']} waren die gespeicherten Benchmark-Gewichte für {pair} nicht verifizierbar. Prüfe sie vor der nächsten Score-Nutzung. FINN hat nichts geändert.",
+            }
+        elif suggestion == "setup":
+            body = {
+                "nl": f"Bij de vastgelegde controle viel de verifieerbare benchmark voor {name} ({pair}) buiten je opgeslagen scorevoorwaarden. Bespreek of je setup nog bij je doel past; deze meting alleen rechtvaardigt geen ruimere grens.",
+                "en": f"At the recorded check, the verified benchmark for {name} ({pair}) was outside your saved score conditions. Discuss whether your setup still fits your goal; this reading alone does not justify a wider range.",
+                "de": f"Bei der gespeicherten Prüfung lag die verifizierte Benchmark für {name} ({pair}) außerhalb deiner gespeicherten Score-Bedingungen. Besprich, ob dein Setup noch zum Ziel passt; diese Messung allein rechtfertigt keine weitere Grenze.",
+            }
+        else:
+            categories = [category for category in evidence.get("affected_categories") or []
+                          if category in {"market", "macro", "technical"}]
+            names = {
+                "nl": {"market": "Markt", "macro": "Macro", "technical": "Technisch"},
+                "en": {"market": "Market", "macro": "Macro", "technical": "Technical"},
+                "de": {"market": "Markt", "macro": "Makro", "technical": "Technisch"},
+            }
+            category_text = {locale: ", ".join(names[locale][category] for category in categories)
+                             or {"nl": "de meetlat", "en": "the benchmark",
+                                 "de": "die Benchmark"}[locale] for locale in LOCALES}
+            body = {
+                "nl": f"{checked_prefix['nl']} was bij {category_text['nl']} voor {pair} een gekozen indicatorbron of scoreregel niet verifieerbaar. Controleer de bron voordat je de indicator of weging aanpast. FINN heeft niets gewijzigd.",
+                "en": f"{checked_prefix['en']}, a selected indicator source or scoring rule in {category_text['en']} for {pair} could not be verified. Check the source before changing an indicator or weight. FINN changed nothing.",
+                "de": f"{checked_prefix['de']} war bei {category_text['de']} für {pair} eine gewählte Indikatorquelle oder Scoring-Regel nicht verifizierbar. Prüfe die Quelle, bevor du Indikator oder Gewicht änderst. FINN hat nichts geändert.",
+            }
+        titles = {"nl": "Voorstel om je meetlat te controleren",
+                  "en": "Suggestion to review your benchmark",
+                  "de": "Vorschlag zur Prüfung deiner Benchmark"}
+        return {locale: {"title": titles[locale], "body": body[locale]}
+                for locale in LOCALES}
     if kind == "periodic_report_ready":
         report_type = evidence.get("report_type")
         titles = {
@@ -469,7 +569,7 @@ class FinnCoachFeedService:
                       expires_at: datetime | None = None,
                       revision: str | None = None) -> str | None:
         """One row per owner/event. Unchanged evidence never reopens or regenerates."""
-        if not event_key or event_type not in {"plan_match", "plan_review", "position_risk", "data_blocked", "proposal_pending", "market_move", "bot_decision", "live_bot_paused", "daily_report_ready", "periodic_report_ready"}:
+        if not event_key or event_type not in {"plan_match", "plan_review", "position_risk", "weekly_reflection", "improvement_suggestion", "data_blocked", "proposal_pending", "market_move", "bot_decision", "live_bot_paused", "daily_report_ready", "periodic_report_ready"}:
             raise ValueError("feed_event_invalid")
         facts = {**evidence, "subject": str(subject or "")[:120]}
         digest = hashlib.sha256(str(revision or _json(facts)).encode()).hexdigest()
@@ -575,7 +675,10 @@ class FinnCoachFeedService:
             "fingerprint": digest, "evidence": _json(facts),
             "source_observed_at": source_observed_at,
             "copy_json": _json(_fallback(event_type, subject, facts)),
-            "copy_source": "verified_facts" if event_type == "position_risk" else "fact_fallback",
+            "copy_source": ("verified_facts" if event_type in {
+                                "position_risk", "weekly_reflection", "improvement_suggestion",
+                                "bot_decision"}
+                            else "fact_fallback"),
             "expires_at": expires_at,
         })
         row = result.first()
@@ -657,6 +760,71 @@ class FinnCoachFeedService:
                 created.append(item_id)
         return created
 
+    async def reconcile_improvement_suggestions(self, *, user_id: int, symbol: str,
+                                                market_id: int | None = None) -> list[str]:
+        """Suggest a review of verified configuration gaps, without editing it."""
+        from backend.services.setup_market_match_service import SetupMarketMatchService
+
+        asset = str(symbol or "").strip().upper()
+        if not asset or market_id is not None and (type(market_id) is not int or market_id <= 0):
+            raise ValueError("exact_market_scope_required")
+        pair = asset
+        if market_id is not None:
+            market = await self.session.execute(text("""
+                SELECT asset_symbol, quote_currency FROM trading_markets
+                WHERE id=:market_id AND is_active=TRUE
+            """), {"market_id": market_id})
+            market_row = market.mappings().first()
+            if not market_row or str(market_row["asset_symbol"]).upper() != asset:
+                return []
+            pair = f"{asset}/{market_row['quote_currency']}"
+        scope = f"{asset}:{market_id or 'asset'}"
+        key = f"improvement:{scope}:configuration"
+        matcher = SetupMarketMatchService(self.session)
+        assessment = await matcher.for_asset(user_id, asset, market_id=market_id)
+        statuses = assessment.get("component_source_status") or {}
+        serious = {"configuration_unverified", "rule_unverified", "missing_indicator_reading"}
+        affected = [category for category in ("market", "macro", "technical")
+                    if statuses.get(f"{category}_score") in serious]
+        kind = ("weights" if assessment.get("source_status") == "invalid_weights"
+                else "indicators" if affected else None)
+        if kind is None:
+            await self.resolve(user_id=user_id, event_key=key)
+            return []
+        revisions = await self.session.execute(text("""
+            SELECT
+              (SELECT MAX(updated_at) FROM user_indicator_configs c
+               WHERE c.user_id=:user_id AND c.symbol=:symbol AND c.enabled=TRUE
+                 AND (c.market_id=:market_id OR (c.market_id IS NULL AND (
+                   :market_id IS NULL OR NOT EXISTS (
+                     SELECT 1 FROM user_market_benchmark_weights w
+                     WHERE w.user_id=:user_id AND w.market_id=:market_id
+                       AND w.indicators_isolated=TRUE))))) AS indicator_revision,
+              (SELECT updated_at FROM user_market_benchmark_weights
+               WHERE user_id=:user_id AND market_id=:market_id) AS weight_revision
+        """), {"user_id": user_id, "symbol": asset, "market_id": market_id})
+        revisions_row = revisions.mappings().first() or {}
+        evidence = {
+            "suggestion_kind": kind, "symbol": asset, "market_id": market_id,
+            "trading_pair": pair, "source_status": assessment.get("source_status"),
+            "affected_categories": affected,
+            "component_source_status": {category: statuses.get(f"{category}_score")
+                                        for category in affected},
+            "score_as_of": assessment.get("as_of"),
+            "checked_date": datetime.now(timezone.utc).date().isoformat(),
+            "indicator_revision": revisions_row.get("indicator_revision"),
+            "weight_revision": revisions_row.get("weight_revision"),
+        }
+        revision = _json({key: value for key, value in evidence.items()
+                          if key not in {"score_as_of"}})
+        item = await self.publish(
+            user_id=user_id, event_key=key, event_type="improvement_suggestion",
+            subject_type="asset", subject_id=scope, subject=pair,
+            symbol=asset, priority=2, source_observed_at=None,
+            evidence=evidence, revision=revision,
+        )
+        return [item] if item else []
+
     async def reconcile_plan_reviews(self, *, user_id: int, symbol: str,
                                      market_id: int | None = None) -> list[str]:
         """Coach each owned setup after a measured move in its exact market scope.
@@ -687,6 +855,19 @@ class FinnCoachFeedService:
         for row in previous.mappings().all():
             key = str(row["event_key"])
             if key not in active_keys:
+                await self.resolve(user_id=user_id, event_key=key)
+        previous_suggestions = await self.session.execute(text("""
+            SELECT DISTINCT event_key FROM finn_coach_feed_items
+            WHERE user_id=:user_id AND event_type='improvement_suggestion'
+              AND subject_type='setup' AND symbol=:symbol
+              AND evidence->>'market_id' IS NOT DISTINCT FROM :market_id
+              AND status IN ('unread','read')
+        """), {"user_id": user_id, "symbol": asset,
+               "market_id": str(market_id) if market_id is not None else None})
+        active_suggestions = {f"improvement:setup:{setup['id']}" for setup in setups}
+        for row in previous_suggestions.mappings().all():
+            key = str(row["event_key"])
+            if key not in active_suggestions:
                 await self.resolve(user_id=user_id, event_key=key)
         if not setups:
             return []
@@ -721,6 +902,7 @@ class FinnCoachFeedService:
                 or not score_source_is_fresh("market", "price", observed, symbol=asset)):
             for setup in setups:
                 await self.resolve(user_id=user_id, event_key=f"plan-review:{setup['id']}")
+                await self.resolve(user_id=user_id, event_key=f"improvement:setup:{setup['id']}")
             return []
         matches = {str(match["setup_id"]): match for match in assessment.get("matches") or []}
         created = []
@@ -728,6 +910,7 @@ class FinnCoachFeedService:
             match = matches.get(str(setup["id"]))
             if not match or match.get("status") == "unconfigured":
                 await self.resolve(user_id=user_id, event_key=f"plan-review:{setup['id']}")
+                await self.resolve(user_id=user_id, event_key=f"improvement:setup:{setup['id']}")
                 continue
             pair = match.get("trading_pair") or (
                 f"{asset}/{setup['quote_currency']}" if market_id is not None and setup.get("quote_currency") else None)
@@ -773,6 +956,32 @@ class FinnCoachFeedService:
             )
             if item:
                 created.append(item)
+            improvement_key = f"improvement:setup:{setup['id']}"
+            if plan_status == "outside_conditions" and source_status == "available":
+                improvement = await self.publish(
+                    user_id=user_id, event_key=improvement_key,
+                    event_type="improvement_suggestion", subject_type="setup",
+                    subject_id=str(setup["id"]),
+                    subject=setup.get("name") or pair or asset,
+                    symbol=asset, priority=2, source_observed_at=observed,
+                    expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+                    evidence={"suggestion_kind": "setup", "symbol": asset,
+                              "market_id": market_id, "trading_pair": pair,
+                              "setup_id": setup["id"], "source_status": source_status,
+                              "plan_status": plan_status,
+                              "conditions": match.get("conditions"),
+                              "benchmark_score": assessment.get("benchmark_score"),
+                              "quote_source_observed_at": observed,
+                              "score_as_of": assessment.get("as_of")},
+                    revision=_json({"kind": "setup", "setup_id": setup["id"],
+                                    "market_id": market_id,
+                                    "conditions": match.get("conditions"),
+                                    "score_band": score_point // 5 if score_point is not None else None}),
+                )
+                if improvement:
+                    created.append(improvement)
+            else:
+                await self.resolve(user_id=user_id, event_key=improvement_key)
         return created
 
     async def reconcile_score_asset(self, *, user_id: int, symbol: str) -> list[str]:
@@ -909,7 +1118,7 @@ class FinnCoachFeedService:
         for row in rows:
             if row["event_type"] == "bot_decision":
                 state = _bot_state(row.get("evidence") or {})
-                if state.endswith(("_planned", "_failed", "_skipped")):
+                if state.endswith(("_planned", "_failed", "_skipped", "_recorded")):
                     key = (row["subject_id"], state,
                            _json((row.get("evidence") or {}).get("reasons") or []))
                     if key in seen_bot_states:

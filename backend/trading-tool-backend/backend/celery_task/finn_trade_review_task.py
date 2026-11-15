@@ -1,8 +1,10 @@
 """Durably project newly settled bot ledger round trips into review records."""
 
 import asyncio
+import hashlib
+import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from celery import shared_task
 from sqlalchemy import text
@@ -11,6 +13,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend.infrastructure.database import ASYNC_DATABASE_URL, async_session_factory
 from backend.services.finn_trade_review_service import FinnTradeReviewService, completed_reflection_week
+from backend.services.finn_coach_feed_service import FinnCoachFeedService
 from backend.services.finn_trade_analysis_service import ANALYSIS_FORMAT_VERSION, FinnTradeAnalysisService
 from backend.services.finn_trade_review_rollout import allowed_trade_review_users
 from backend.services.finn_exchange_import_service import FinnExchangeImportService
@@ -52,7 +55,29 @@ async def _finalize_weekly_trade_reflections(session_factory=None) -> int:
         for user_id in user_ids:
             try:
                 async with session_factory() as session:
-                    await FinnTradeReviewService(session).weekly_report(user_id, monday)
+                    weekly = await FinnTradeReviewService(session).weekly_report(user_id, monday)
+                    if weekly["trades"] > 0:
+                        facts = {key: weekly[key] for key in (
+                            "week_start", "week_end", "trades", "plans", "notes",
+                            "analyzed", "pending", "unavailable")}
+                        facts["confirmed_repeated_lessons"] = len(
+                            weekly.get("confirmed_lesson_repetitions") or [])
+                        revision = hashlib.sha256(json.dumps(
+                            {"facts": facts, "patterns": weekly.get("patterns"),
+                             "confirmed": weekly.get("confirmed_lesson_repetitions")},
+                            sort_keys=True, default=str).encode()).hexdigest()
+                        generated = datetime.fromisoformat(weekly["generated_at"])
+                        if generated.tzinfo is None:
+                            generated = generated.replace(tzinfo=timezone.utc)
+                        await FinnCoachFeedService(session).publish(
+                            user_id=user_id, event_key=f"weekly-reflection:{monday.isoformat()}",
+                            event_type="weekly_reflection", subject_type="reflection",
+                            subject_id=monday.isoformat(), subject="Weekreflectie",
+                            symbol=None, evidence=facts, source_observed_at=generated,
+                            expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+                            priority=2, revision=revision,
+                        )
+                        await session.commit()
                 completed += 1
             except Exception:
                 logger.exception("FINN weekly reflection failed", extra={"user_id": user_id})
