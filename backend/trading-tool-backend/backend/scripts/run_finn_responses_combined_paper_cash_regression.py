@@ -26,11 +26,14 @@ def main() -> None:
     parser.add_argument("--followup")
     parser.add_argument("--blocked-decision", action="store_true")
     parser.add_argument("--unlinked-concept", action="store_true")
+    parser.add_argument("--linked-concept", action="store_true")
+    parser.add_argument("--comparison", action="store_true")
     args = parser.parse_args()
     if not args.base_url.startswith(("http://127.0.0.1:", "http://localhost:")):
         raise SystemExit("This regression is local-only")
 
     user = _create_local_user()
+    linked_concept_id = None
     with sync_engine.begin() as connection:
         connection.execute(text("""
             UPDATE users SET ai_preferences = CAST(:preferences AS jsonb)
@@ -55,8 +58,10 @@ def main() -> None:
             """), {"symbol": symbol, "setup_id": setup_id, "user_id": user["id"]})
             concept_id = (
                 _insert_setup(connection, user["id"], "BTC/EUR-conceptsetup")
-                if args.unlinked_concept and symbol == "BTC" else setup_id
+                if (args.unlinked_concept or args.linked_concept) and symbol == "BTC" else setup_id
             )
+            if args.linked_concept and symbol == "BTC":
+                linked_concept_id = concept_id
             if args.question and symbol == "BTC":
                 connection.execute(text("""
                     UPDATE setups SET
@@ -68,6 +73,16 @@ def main() -> None:
                 """), {"symbol": symbol, "setup_id": concept_id, "user_id": user["id"]})
             strategy_id = _insert_strategy(connection, user["id"], setup_id,
                                            f"{symbol} Paper Scope Strategy")
+            if args.linked_concept and symbol == "BTC":
+                concept_strategy_id = _insert_strategy(
+                    connection, user["id"], concept_id, "BTC/EUR concept strategy",
+                )
+                connection.execute(text("""
+                    UPDATE strategies
+                    SET base_amount = 10,
+                        data = jsonb_set(data, '{base_amount}', '10'::jsonb)
+                    WHERE id = :strategy_id AND user_id = :user_id
+                """), {"strategy_id": concept_strategy_id, "user_id": user["id"]})
             bot_id = _insert_bot(connection, user["id"], strategy_id,
                                  f"{symbol} Paper Scope Bot")
             connection.execute(text("""
@@ -166,6 +181,21 @@ def main() -> None:
         checks["blocked_decision_answer"] = (
             "geblokkeerd" in answer.lower() and "omrekening" in answer.lower()
         )
+    if args.linked_concept:
+        checks["linked_concept_read"] = any(
+            item.get("scope") == "read_active_setup"
+            and item.get("status") == "completed"
+            and (item.get("data") or {}).get("setup_id") == linked_concept_id
+            for call in trace for item in (call.get("result") or {}).get("results") or []
+            if isinstance(item, dict)
+        ) and any(
+            item.get("scope") == "read_linked_strategy"
+            and item.get("status") == "completed"
+            and (item.get("data") or {}).get("setup_id") == linked_concept_id
+            for call in trace for item in (call.get("result") or {}).get("results") or []
+            if isinstance(item, dict)
+        )
+        checks["linked_concept_amount_answer"] = "€10" in answer or "€ 10" in answer
     followup_trace = (
         (followup_record["runtime_state"].get("responses_exchange") or {}).get("tool_trace") or []
         if followup_record else []
@@ -204,6 +234,24 @@ def main() -> None:
                 "geblokkeerd" in followup_answer.lower()
                 and "omrekening" in followup_answer.lower()
             )
+    if args.comparison:
+        inventory_rows = [
+            row for call in trace for item in (call.get("result") or {}).get("results") or []
+            if isinstance(item, dict) and item.get("scope") == "read_saved_setup_inventory"
+            for row in (item.get("data") or {}).get("setups") or []
+            if isinstance(row, dict)
+        ]
+        market_reads = [
+            item for call in trace for item in (call.get("result") or {}).get("results") or []
+            if isinstance(item, dict) and item.get("scope") == "read_market_snapshot"
+        ]
+        checks = {
+            "completed": observed["status"] == "completed",
+            "single_dispatch": observed["dispatch_count"] == observed["attempt_count"] == 1,
+            "no_proposal": record["proposal"] is None,
+            "two_selected_plans": {row.get("symbol") for row in inventory_rows} == {"AAPL", "BTC"},
+            "each_plan_market_read": len(market_reads) >= 2,
+        }
     artifact = {
         "synthetic_local_only": True, "question": question,
         "run_id": observed["run_id"], "status": observed["status"],
