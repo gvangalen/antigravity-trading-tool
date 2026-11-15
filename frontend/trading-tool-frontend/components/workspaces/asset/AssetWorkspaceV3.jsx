@@ -244,6 +244,7 @@ function getUiCopy(locale = "nl") {
       copyClose: "Close",
       copyEmpty: "No other configured benchmark yet.",
       copyIndicators: "indicators",
+      copyCompatible: "Setting can be copied; this asset's reading and score are assessed separately.",
       copyReplace: "Existing target asset settings will be replaced; readings and scores will be recalculated.",
       copyBotImpact: "Active bots using this benchmark will use the new settings for future decisions.",
       copyReplaced: "To replace",
@@ -464,6 +465,7 @@ function getUiCopy(locale = "nl") {
       copyClose: "Schließen",
       copyEmpty: "Noch keine andere konfigurierte Benchmark vorhanden.",
       copyIndicators: "Indikatoren",
+      copyCompatible: "Die Einstellung kann übernommen werden; Messwert und Score werden für diesen Vermögenswert separat geprüft.",
       copyReplace: "Bestehende Einstellungen des Ziel-Assets werden ersetzt; Messwerte und Scores werden neu berechnet.",
       copyBotImpact: "Aktive Bots mit dieser Benchmark verwenden die neuen Einstellungen bei künftigen Entscheidungen.",
       copyReplaced: "Zu ersetzen",
@@ -683,6 +685,7 @@ function getUiCopy(locale = "nl") {
     copyClose: "Sluiten",
     copyEmpty: "Er is nog geen andere ingestelde benchmark.",
     copyIndicators: "indicatoren",
+    copyCompatible: "Instelling kan mee; meting en score worden voor deze asset apart beoordeeld.",
     copyReplace: "Bestaande instellingen van de doelasset worden vervangen; metingen en scores worden opnieuw berekend.",
     copyBotImpact: "Actieve bots die deze benchmark gebruiken, beoordelen toekomstige beslissingen met de nieuwe instellingen.",
     copyReplaced: "Te vervangen",
@@ -1016,6 +1019,14 @@ function prettifyName(name, ui = getUiCopy("nl")) {
   if (ui.indicatorLabels?.[lowered]) return ui.indicatorLabels[lowered];
   if (INDICATOR_LABELS[lowered]) return INDICATOR_LABELS[lowered];
   return normalized.replace(/_/g, " ").replace(/\b([a-z])/g, (match) => match.toUpperCase());
+}
+
+function copyIndicatorLabel(item, ui) {
+  const reference = typeof item === "string" ? item : `${item?.category || ""}:${item?.indicator || ""}`;
+  const [category, ...indicator] = reference.split(":");
+  const categoryLabel = { market: ui.market, macro: ui.macro, technical: ui.technical }[category];
+  const name = prettifyName(indicator.join(":"), ui);
+  return categoryLabel ? `${categoryLabel} · ${name}` : name;
 }
 
 function localizeSemanticToken(value, ui = getUiCopy("en")) {
@@ -3371,7 +3382,14 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
               {copyPreview ? (
                 <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
                   <p className="font-semibold">{copyPreview.source_pair} → {copyPreview.target_pair}</p>
-                  <p className="mt-1 text-slate-700">{copyPreview.indicators.length} {ui.copyIndicators}: {copyPreview.indicators.map((item) => item.indicator).join(", ") || "—"}</p>
+                  <p className="mt-1 text-slate-700">{copyPreview.indicators.length} {ui.copyIndicators}</p>
+                  <ul className="mt-2 space-y-1 text-slate-700">
+                    {copyPreview.indicators.map((item) => (
+                      <li key={`${item.category}:${item.indicator}`}>
+                        <span className="font-medium">{copyIndicatorLabel(item, ui)}</span> — {ui.copyCompatible}
+                      </li>
+                    ))}
+                  </ul>
                   <p className="mt-1 text-slate-700">{[
                     [ui.market, copyPreview.source_weights.market],
                     [ui.macro, copyPreview.source_weights.macro],
@@ -3379,8 +3397,17 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
                   ].map(([label, weight]) => `${label} ${Math.round(weight * 100)}%`).join(" · ")}</p>
                   <p className="mt-1 text-slate-700">{ui.copyReplace}</p>
                   <p className="mt-1 text-slate-700">{ui.copyBotImpact}</p>
-                  {copyPreview.replace.length ? <p className="mt-1 text-slate-600">{ui.copyReplaced}: {copyPreview.replace.join(", ")}</p> : null}
-                  {copyPreview.unsupported.length ? <p className="mt-1 text-amber-700">{ui.copyUnsupported}: {copyPreview.unsupported.map((item) => `${item.indicator} (${ui.copySkipReasons?.[item.reason] || ui.copySkipReasons?.indicator_unavailable})`).join(", ")}</p> : null}
+                  {copyPreview.replace.length ? <p className="mt-1 text-slate-600">{ui.copyReplaced}: {copyPreview.replace.map((item) => copyIndicatorLabel(item, ui)).join(", ")}</p> : null}
+                  {copyPreview.unsupported.length ? (
+                    <div className="mt-2 text-amber-700">
+                      <p className="font-medium">{ui.copyUnsupported}</p>
+                      <ul className="mt-1 space-y-1">
+                        {copyPreview.unsupported.map((item) => (
+                          <li key={item.indicator}>{copyIndicatorLabel(item.indicator, ui)} — {ui.copySkipReasons?.[item.reason] || ui.copySkipReasons?.indicator_unavailable}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
                   <button type="button" onClick={applyCopy} disabled={copyBusy || copyPreview.indicators.length === 0}
                     className="mt-3 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white disabled:opacity-50">
                     {ui.copyConfirm}
