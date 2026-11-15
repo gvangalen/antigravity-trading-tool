@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN brede coachvraag: gekoppelde strategie bij planbeoordeling (15 november 2026)
 
-Phase: `READY_FOR_CI`. The public revision
+Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. The previous public revision
 `4762b5027b4f232d347d5592e0a6c3911b6970c0` was **NOT_ACCEPTED** by
 independent read-only browser QA. Its broad BTC/EUR coach answer completed and
 read score, bot decision, source moments and Paper cash, but said the saved
@@ -41,7 +41,14 @@ and `01fc2df9892808e1d299c5ca2a3823f17164778102c194931314e9281f26e17d`).
 The complete isolated worker action matrix passed **17/17**, with zero broker
 orders, Live bots, Live calls or production connections (artifact SHA-256
 `fae370d1b8ca40c83ca99d6383924434128c8cad31df9379dd69e993094a99a9`).
-PR, CI, deployment identity and independent QA remain pending.
+Product PR #1085 passed all five required CI jobs in run `43744540123` on
+commit `e99b25513` and merged as `fa20821966860d484ba4d263ca5ca199cdfdb463`.
+Main CI `43745036610` passed all five jobs and Auto Deploy `43745508141`
+succeeded on that merge SHA. Public `https://tradamind.com/api/health` and
+`https://tradamind.com/build-info.json` both returned HTTP 200 and that exact
+SHA, matching GitHub `main`. This status update itself creates a newer SHA;
+its final main CI, Auto Deploy, public SHA parity and independent live QA
+verdict remain pending.
 
 ## FINN brede coachvraag: volledige plan- en koersbronnen (15 november 2026)
 
