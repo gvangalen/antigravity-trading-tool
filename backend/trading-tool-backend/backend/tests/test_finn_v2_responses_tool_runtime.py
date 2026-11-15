@@ -1969,9 +1969,18 @@ def test_named_plan_comparison_also_reads_account_wide_paper_cash_when_asked():
                 "scope": "read_saved_setup_inventory", "status": "completed",
                 "data": {"complete": True, "setups": [
                     {"setup_id": 1, "name": "AAPL Plan", "symbol": "AAPL"},
-                    {"setup_id": 2, "name": "BTC/EUR Concept", "symbol": "BTC", "pair": "BTC/EUR"},
+                    {"setup_id": 2, "name": "BTC/EUR-concept", "symbol": "BTC", "pair": "BTC/EUR"},
+                    {"setup_id": 3, "name": "ETH Other Plan", "symbol": "ETH"},
                 ]},
             }]}
+        if call.name == "get_active_plan_and_strategy":
+            setup_id = call.inputs["setup_id"]
+            return {"status": "completed", "results": [
+                {"scope": "read_active_setup", "status": "completed",
+                 "data": {"setup_id": setup_id}},
+                {"scope": "read_linked_strategy", "status": "completed",
+                 "data": {"setup_id": setup_id}},
+            ]}
         assert call.name == "get_portfolio_and_exposure"
         assert call.inputs == {"environment": "paper"}
         return {"status": "completed", "results": [{
@@ -1981,14 +1990,67 @@ def test_named_plan_comparison_also_reads_account_wide_paper_cash_when_asked():
 
     front.reads = read
     result = asyncio.run(front.run(
-        message="Vergelijk mijn AAPL-plan met mijn BTC/EUR-concept; noem ook de gezamenlijke Paper-kas. Wijzig niets.",
+        message="Vergelijk mijn AAPL-plan met mijn BTC/EUR-concept, niet ETH; noem ook de gezamenlijke Paper-kas. Wijzig niets.",
         instructions=front._model_led_instructions("nl"),
         conversation_context={}, verified_asset="AAPL",
     ))
-    assert [call.name for call in calls] == [
+    assert [call.name for call in calls[:2]] == [
         "get_saved_setup_inventory", "get_portfolio_and_exposure",
     ]
+    assert {call.inputs["setup_id"] for call in calls
+            if call.name == "get_active_plan_and_strategy"} == {1, 2}
     assert result.response.turn_contract["paper_cash_total"] == 10005.45
+    assert {target["setup_id"] for target in result.response.turn_contract["targets"]} == {1, 2}
+
+
+def test_named_plan_price_comparison_reads_each_selected_pair_quote():
+    fake = FakeResponses(
+        response("inventory", calls=[tool_call("plans", "get_saved_setup_inventory", {})]),
+        response("answer", text="ETH/EUR en SOL/USD zijn afzonderlijke plannen."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="plan-comparison-quotes", model_led_coach=True,
+    )
+    calls = []
+
+    async def read(call):
+        calls.append(call)
+        if call.name == "get_saved_setup_inventory":
+            return {"status": "completed", "results": [{
+                "scope": "read_saved_setup_inventory", "status": "completed",
+                "data": {"complete": True, "setups": [
+                    {"setup_id": 1, "name": "ETH EUR Plan", "symbol": "ETH", "pair": "ETH/EUR"},
+                    {"setup_id": 2, "name": "SOL USD Plan", "symbol": "SOL",
+                     "quote_currency": "USD", "pair": "SOL/USD"},
+                    {"setup_id": 3, "name": "ETH USDT Plan", "symbol": "ETH", "pair": "ETH/USDT"},
+                ]},
+            }]}
+        if call.name == "get_active_plan_and_strategy":
+            return {"status": "completed", "results": []}
+        if call.name == "get_market_snapshot":
+            return {"status": "completed", "results": [{
+                "scope": "read_market_snapshot", "status": "completed",
+                "data": {"asset": call.inputs["asset"],
+                         "quote_currency": call.inputs["quote_currency"],
+                         "price": 100},
+            }]}
+        raise AssertionError(call.name)
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message="Vergelijk mijn ETH/EUR-plan met mijn SOL/USD-plan en hun actuele koersbronnen. Wijzig niets.",
+        instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="ETH",
+        workspace_hints={"page": "/asset", "symbol": "ETH", "quote_currency": "USDT"},
+    ))
+    assert [(call.inputs["asset"], call.inputs["quote_currency"])
+            for call in calls if call.name == "get_market_snapshot"] == [
+        ("ETH", "EUR"), ("SOL", "USD"),
+    ]
+    assert {row["data"]["quote_currency"] for row in result.response.tool_trace[0]["result"]["results"]
+            if row.get("scope") == "read_market_snapshot"} == {"EUR", "USD"}
+    assert {target["setup_id"] for target in result.response.turn_contract["targets"]} == {1, 2}
 
 
 def test_direct_match_read_for_two_markets_ignores_open_workspace_pair():
@@ -14018,6 +14080,11 @@ def test_single_pair_plan_and_bot_review_reads_all_requested_sources(monkeypatch
     }
     assert selected_calls[0].inputs["asset"] == asset
     assert selected_calls[0].inputs["quote_currency"] == "EUR"
+    assert [(call.inputs, call.read_tools) for call in selected_calls
+            if call.name == "get_active_plan_and_strategy"] == [
+        ({"asset": asset, "quote_currency": "EUR"},
+         ("read_active_setup", "read_linked_strategy")),
+    ]
     assert {row["trading_pair"] for item in rows if item["scope"] == "read_setup_market_matches"
             for row in item["data"]["matches"]} == {f"{asset}/EUR"}
     assert [call.inputs for call in selected_calls if call.name == "get_market_snapshot"] == [

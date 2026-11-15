@@ -4,6 +4,51 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN brede coachvraag: volledige plan- en koersbronnen (15 november 2026)
+
+Phase: `LOCAL_VALIDATED_PENDING_PR_CI`. The previous public revision was
+`3b2509782e54224aa6620d9b4ea3d19e6db4a65e`. Independent read-only browser
+QA saw substantive answers instead of terminal errors, but did not accept the
+coach flow: the broad BTC/EUR question denied access to a visible concept
+setup, a shorter answer contradicted itself about that setup's link, and an
+AAPL/BTC comparison reported no current quotes although separate BTC answers
+had shown a quote. The comparison's source-level contradiction cannot be
+confirmed without that run's tool trace. The protected QA runner remained
+unavailable in the QA task because its active goal/manifest binding was absent.
+
+This repair uses owner-scoped saved records and the pairs named in the question.
+An evaluation lacking a completed read of the specifically named pair now
+reads its setup and linked strategy. A named comparison completes a second
+asset-plan target only when exactly one owner-scoped setup matches that asset;
+negated assets and previously verified comparison pairs are preserved. When a
+comparison requests current prices, each selected asset/pair receives its own
+dated market read. The answer audit explicitly checks whether a response both
+confirms and denies the same setup/strategy link. No asset-specific trading
+rule or mutation was added.
+
+Measured local evidence on the final code: root backend suite **4,871 passed,
+7 skipped**. The isolated FastAPI/prefork Celery/real Responses run of the
+broad Dutch question completed in one dispatch, read the BTC/EUR concept with
+its linked €10 strategy and the separately linked active BTC Paper bot, and
+made no proposal or order (artifact SHA-256
+`d816a3b5438f92a1f1a549ce09a9fd1428089805b598f171a5aba7ddf3daf9bd`).
+The separate AAPL/BTC plan comparison completed in one dispatch, selected
+both owner-scoped plans, attempted a current market read for each, and made no
+proposal (artifact SHA-256
+`b9ce50eb754f1427549332b700cd02fd5a0c338bfee45ed7afad6e156ab2ba65`).
+The synthetic local market provider returned unavailable quotes in both runs;
+no claim of live quote availability is made. The final-code prefork worker
+action matrix passed **17/17** with zero broker orders, Live bots, Live calls,
+or production connections (artifact SHA-256
+`a85d730a8855651c09fc0149de37a6aa35af9cfbd5ee60ff9cf401c95358fc8f`).
+The real-provider development selector passed **20/20**, with zero provider,
+schema, timeout, parse, or validation failures (artifact SHA-256
+`27480f22283f10e94d89a43f46053cfe0ffec8c8ecca64b72bb0875d73825eaa`).
+The final-code real-provider regression selector passed **109/109** with zero
+provider, schema, timeout, parse, or validation failures (artifact SHA-256
+`a52719a3ab723a4b1d8fe978f59e3a3cd87b64b72f75e38209ad1d255b59c4ef`).
+PR CI, deployment and independent QA remain pending.
+
 ## FINN brede coachvragen: bronmomenten, plannamen en expliciet handelspaar (15 november 2026)
 
 Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Branch `codex/finn-broad-verifier-fix` repairs the

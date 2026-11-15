@@ -3747,6 +3747,36 @@ class FinnResponsesFrontDoor:
                         item.get("scope") for item in read_result.get("results") or []
                         if isinstance(item, dict)
                     }
+                    named_plan_pair = next(iter(mentioned_pairs)) if len(mentioned_pairs) == 1 else None
+                    matching_plan_read = bool(named_plan_pair and any(
+                        isinstance(item, dict)
+                        and item.get("scope") == "read_active_setup"
+                        and item.get("status") == "completed"
+                        and isinstance(item.get("data"), dict)
+                        and str(item["data"].get("symbol") or "").upper() == named_plan_pair[0]
+                        and (
+                            str(item["data"].get("quote_currency") or "").upper() == named_plan_pair[1]
+                            or str(item["data"].get("pair") or "").upper()
+                            == "/".join(named_plan_pair)
+                        )
+                        for item in read_result.get("results") or []
+                    ))
+                    if (
+                        named_plan_pair
+                        and re.search(r"\b(?:plan\w*|setup\w*|concept\w*|strateg\w*)\b", message, re.I)
+                        and not matching_plan_read
+                    ):
+                        # An evaluation can choose score or bot scopes without
+                        # reading the explicitly named saved plan. Bind the
+                        # owner-scoped plan read to the user's exact pair.
+                        asset, quote = named_plan_pair
+                        plan_result = await self.reads(replace(
+                            call, name="get_active_plan_and_strategy",
+                            inputs={"asset": asset, "quote_currency": quote},
+                            read_tools=("read_active_setup", "read_linked_strategy"),
+                            evaluation_operation_id=None,
+                        ))
+                        extra_results.extend(plan_result.get("results") or [])
                     if full_portfolio_requested and "read_portfolio" not in completed_scopes:
                         portfolio_result = await self.reads(replace(
                             call, name="get_portfolio_and_exposure",
@@ -3932,6 +3962,52 @@ class FinnResponsesFrontDoor:
                             rows=available_rows,
                             previous_contract=previous_turn_contract,
                         )
+                        def positive_asset_reference(symbol: str) -> bool:
+                            return not re.search(
+                                rf"\b(?:niet|not|kein|zonder)\s+{re.escape(symbol)}\b",
+                                message, re.I,
+                            )
+                        if (
+                            named_plan_comparison
+                            and not complete_collection_read
+                            and referenced_rows is available_rows
+                        ):
+                            unique_rows = [
+                                candidates[0]
+                                for symbol in sorted(mentioned_assets)
+                                if positive_asset_reference(symbol)
+                                if len(candidates := [
+                                    row for row in available_rows
+                                    if str(row.get("symbol") or "").upper() == symbol
+                                ]) == 1
+                            ]
+                            if len(unique_rows) == len(mentioned_assets):
+                                referenced_rows = unique_rows
+                        if (
+                            requests_comparison(message)
+                            and len(mentioned_assets) >= 2
+                            and referenced_rows is not available_rows
+                            and len(referenced_rows) == 1
+                        ):
+                            # A user can name one saved setup exactly and
+                            # refer to another by its asset ("my AAPL plan").
+                            # Complete the pair only when the other asset has
+                            # exactly one owner-scoped candidate.
+                            selected_symbols = {
+                                str(row.get("symbol") or "").upper()
+                                for row in referenced_rows
+                            }
+                            expanded_rows = list(referenced_rows)
+                            for symbol in sorted(mentioned_assets - selected_symbols):
+                                if not positive_asset_reference(symbol):
+                                    continue
+                                candidates = [
+                                    row for row in available_rows
+                                    if str(row.get("symbol") or "").upper() == symbol
+                                ]
+                                if len(candidates) == 1:
+                                    expanded_rows.extend(candidates)
+                            referenced_rows = expanded_rows
                         if (
                             subject_reference and verified_subject and not collection_cue
                             and not any(
@@ -4120,6 +4196,38 @@ class FinnResponsesFrontDoor:
                         read_result["results"] = [*read_result["results"], *market_evidence]
                         if market_read.get("status") != "completed":
                             read_result["status"] = "partial"
+                    if re.search(r"\b(?:koers\w*|prijs\w*|price\w*|quote\w*)\b", message, re.I):
+                        # The inventory and score match do not contain a
+                        # dated current quote. Read each selected saved
+                        # asset/pair independently, without using page state.
+                        selected_pairs: set[tuple[str, str]] = set()
+                        for result_item in projected_results:
+                            if not isinstance(result_item, dict) or result_item.get("scope") != "read_saved_setup_inventory":
+                                continue
+                            for row in (result_item.get("data") or {}).get("setups") or []:
+                                if not isinstance(row, dict) or not row.get("symbol"):
+                                    continue
+                                symbol = str(row["symbol"]).upper()
+                                if mentioned_assets and symbol not in mentioned_assets:
+                                    continue
+                                quote = str(row.get("quote_currency") or "").upper()
+                                pair = str(row.get("pair") or "").upper()
+                                if not quote and pair.startswith(f"{symbol}/"):
+                                    quote = pair.split("/", 1)[1]
+                                selected_pairs.add((symbol, quote))
+                        for symbol, quote in sorted(selected_pairs):
+                            quote_result = await self.reads(replace(
+                                call, name="get_market_snapshot",
+                                inputs={"asset": symbol, **({"quote_currency": quote} if quote else {})},
+                                read_tools=("read_market_snapshot",),
+                                evaluation_operation_id=None,
+                                answer_mode=None, setup_names=(),
+                            ))
+                            read_result["results"] = [
+                                *read_result["results"], *(quote_result.get("results") or []),
+                            ]
+                            if quote_result.get("status") != "completed":
+                                read_result["status"] = "partial"
                     verified_answer_mode = (
                         call.answer_mode
                         if call.answer_mode != "list" or explicit_list else None
