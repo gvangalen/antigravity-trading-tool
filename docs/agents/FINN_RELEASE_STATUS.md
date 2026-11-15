@@ -6,10 +6,16 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0 actieve plancontrole, eerste release (15 november 2026)
 
-Phase: `LOCAL_VALIDATED_CANDIDATE`. Branch `codex/finn-active-coach-mvp`
+Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Branch `codex/finn-active-coach-mvp`
 contains product commit `a42a7b88a` on main base
-`cd8b52a97814c173c20c8df8a10a81957b55162e`. PR-CI, merge, main-CI,
-Auto Deploy, public SHA parity and independent live QA are still pending.
+`cd8b52a97814c173c20c8df8a10a81957b55162e`. PR #1070 merged as
+`40167176010e4f7875db7aa321117f789fb109a2`. Its final PR-CI
+`43695479881` passed all five jobs, and main-CI `43695850450` passed all
+five jobs. Auto Deploy `43696229149` succeeded on that merge SHA. On
+15 November 2026, public backend health and frontend build-info both returned
+HTTP 200 and the same `40167176010e4f7875db7aa321117f789fb109a2` SHA.
+This status update creates a new main SHA; its last main-CI, Auto Deploy,
+public SHA parity and independent live QA are pending.
 The prior Paper-bot blocker received an independent targeted browser
 `ACCEPTED` verdict on public SHA `45beb85bf62b9453e2c3466db2c059a5c0278e83`;
 there was no active protected QA goal for a full matrix.
