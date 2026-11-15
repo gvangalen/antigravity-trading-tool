@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN brede coachvraag: volledige plan- en koersbronnen (15 november 2026)
 
-Phase: `LOCAL_VALIDATED_PENDING_PR_CI`. The previous public revision was
+Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. The previous public revision was
 `3b2509782e54224aa6620d9b4ea3d19e6db4a65e`. Independent read-only browser
 QA saw substantive answers instead of terminal errors, but did not accept the
 coach flow: the broad BTC/EUR question denied access to a visible concept
@@ -47,7 +47,15 @@ schema, timeout, parse, or validation failures (artifact SHA-256
 The final-code real-provider regression selector passed **109/109** with zero
 provider, schema, timeout, parse, or validation failures (artifact SHA-256
 `a52719a3ab723a4b1d8fe978f59e3a3cd87b64b72f75e38209ad1d255b59c4ef`).
-PR CI, deployment and independent QA remain pending.
+Product PR #1083 passed all five required CI jobs in run `43740155955` on
+product commit `4ee6014b63d2a2c1a1f5db4086af4885fef12aec` and merged as
+`bb1887fa4a281f503a58689c87c4cbcd972048a2`. Main CI `43740620016`
+passed all five jobs; Auto Deploy `43741071488` succeeded on that merge SHA.
+Public `https://tradamind.com/api/health` and
+`https://tradamind.com/build-info.json` both returned HTTP 200 and that exact
+SHA. This status update will create a later main SHA. Its last main-CI, Auto
+Deploy, public SHA parity, and independent authenticated live QA verdict remain
+pending.
 
 ## FINN brede coachvragen: bronmomenten, plannamen en expliciet handelspaar (15 november 2026)
 
