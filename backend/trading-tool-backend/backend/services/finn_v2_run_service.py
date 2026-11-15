@@ -1573,12 +1573,16 @@ def _minimal_read_answer(
     from backend.services.finn_v2_source_moment_claims import (
         current_source_moments_supported, source_moment_repair_facts,
     )
-    if not current_source_moments_supported(text, evidence, question=message):
+    source_moment_diagnostics: list[str] = []
+    if not current_source_moments_supported(
+        text, evidence, question=message, diagnostics=source_moment_diagnostics,
+    ):
         return FinnResponsesVerifiedAnswer(
             "unavailable", "Ik kan de bronmomenten in dit antwoord niet verifiëren.",
             "source_moment_conflicts_with_source", evidence,
             rejection_details={
                 "fact_mismatch": "current_source_moment",
+                "source_moment_rule": source_moment_diagnostics[0] if source_moment_diagnostics else "unknown",
                 "source_moment_facts": source_moment_repair_facts(evidence),
             },
         )
@@ -2024,6 +2028,9 @@ class FinnV2RunService:
             "confirmation_required": False,
             "reasoning_provenance": {
                 "reasoning_source": reasoning_source,
+                **({"source_moment_rule": answer.rejection_details.get("source_moment_rule")}
+                   if status == "unavailable" and answer.reason == "source_moment_conflicts_with_source"
+                   and answer.rejection_details and answer.rejection_details.get("source_moment_rule") else {}),
                 **({"provider_response_id": response_id}
                    if reasoning_source != "owner_scoped_account_projection" else
                    {"answer_boundary": "owner_scoped_account_bundle"}),
