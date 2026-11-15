@@ -27,6 +27,8 @@ def main() -> None:
     parser.add_argument("--blocked-decision", action="store_true")
     parser.add_argument("--unlinked-concept", action="store_true")
     parser.add_argument("--linked-concept", action="store_true")
+    parser.add_argument("--live-like-plan-names", action="store_true")
+    parser.add_argument("--ambiguous-pair-bot", action="store_true")
     parser.add_argument("--comparison", action="store_true")
     args = parser.parse_args()
     if not args.base_url.startswith(("http://127.0.0.1:", "http://localhost:")):
@@ -57,7 +59,11 @@ def main() -> None:
                 UPDATE setups SET symbol = :symbol WHERE id = :setup_id AND user_id = :user_id
             """), {"symbol": symbol, "setup_id": setup_id, "user_id": user["id"]})
             concept_id = (
-                _insert_setup(connection, user["id"], "BTC/EUR-conceptsetup")
+                _insert_setup(
+                    connection, user["id"],
+                    "BTC/EUR 61–75 | Paper handmatig concept"
+                    if args.live_like_plan_names else "BTC/EUR-conceptsetup",
+                )
                 if (args.unlinked_concept or args.linked_concept) and symbol == "BTC" else setup_id
             )
             if args.linked_concept and symbol == "BTC":
@@ -71,11 +77,21 @@ def main() -> None:
                         min_benchmark_score = 61, max_benchmark_score = 75
                     WHERE id = :setup_id AND user_id = :user_id
                 """), {"symbol": symbol, "setup_id": concept_id, "user_id": user["id"]})
+                if args.ambiguous_pair_bot and setup_id != concept_id:
+                    connection.execute(text("""
+                        UPDATE setups SET market_id = (
+                            SELECT id FROM trading_markets
+                            WHERE asset_symbol = :symbol AND quote_currency = 'EUR'
+                            ORDER BY id LIMIT 1
+                        ) WHERE id = :setup_id AND user_id = :user_id
+                    """), {"symbol": symbol, "setup_id": setup_id, "user_id": user["id"]})
             strategy_id = _insert_strategy(connection, user["id"], setup_id,
                                            f"{symbol} Paper Scope Strategy")
             if args.linked_concept and symbol == "BTC":
                 concept_strategy_id = _insert_strategy(
-                    connection, user["id"], concept_id, "BTC/EUR concept strategy",
+                    connection, user["id"], concept_id,
+                    "BTC/EUR Paper handmatig €10 | concept"
+                    if args.live_like_plan_names else "BTC/EUR concept strategy",
                 )
                 connection.execute(text("""
                     UPDATE strategies

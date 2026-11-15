@@ -68,6 +68,23 @@ def _requested_fields(message: str) -> list[str]:
     return [field for field, pattern in fields.items() if re.search(pattern, message, re.I)]
 
 
+def _display_decimal(raw: str) -> Decimal | None:
+    raw = raw.rstrip(".,")
+    last_separator = max(raw.rfind("."), raw.rfind(","))
+    decimal_separator = (
+        raw[last_separator]
+        if last_separator >= 0 and len(raw) - last_separator <= 3 else ""
+    )
+    normalized = "".join(
+        "." if char == decimal_separator else char
+        for char in raw if char.isdigit() or char == decimal_separator
+    )
+    try:
+        return Decimal(normalized)
+    except InvalidOperation:
+        return None
+
+
 def build_turn_contract(
     *, message: str, tool_trace: tuple[dict[str, Any], ...],
     previous_subject: Mapping[str, Any] | None = None,
@@ -226,27 +243,32 @@ def build_turn_contract(
 def turn_contract_gap(contract: Mapping[str, Any], answer: str) -> str | None:
     """Only reject objectively missing selected objects or strategy fields."""
     expected_cash = contract.get("paper_cash_total")
-    if isinstance(expected_cash, (int, float)) and {"cash", "position_size"} <= set(
-        contract.get("requested_fields") or []
-    ):
-        values = []
-        for raw in re.findall(r"\b\d[\d.,]*\b", answer):
-            raw = raw.rstrip(".,")
-            if not raw:
-                continue
-            last_dot, last_comma = raw.rfind("."), raw.rfind(",")
-            last_separator = max(last_dot, last_comma)
-            decimal_separator = raw[last_separator] if last_separator >= 0 and len(raw) - last_separator <= 3 else ""
-            normalized = "".join(
-                "." if char == decimal_separator else char
-                for char in raw if char.isdigit() or char == decimal_separator
-            )
-            try:
-                values.append(Decimal(normalized))
-            except InvalidOperation:
-                continue
-        if not any(abs(value - Decimal(str(expected_cash))) < Decimal("0.005") for value in values):
-            return "paper_cash_total_missing"
+    if isinstance(expected_cash, (int, float)):
+        expected = Decimal(str(expected_cash))
+        total_claims = re.findall(
+            r"\b(?:gezamenlijk\w*|totaal\w*|total|combined|gesamt\w*)"
+            r"[^.!?\n]{0,80}?\bPaper[\s-]*(?:kas\w*|cash|saldo|balance)\b"
+            r"[^.!?\n\d€]{0,80}?(?:€\s*|EUR\s*)?(\d[\d.,]*)",
+            answer, re.I,
+        )
+        if any(
+            value is not None and abs(value - expected) >= Decimal("0.005")
+            for value in map(_display_decimal, total_claims)
+        ):
+            return "paper_cash_total_conflict"
+        requested = set(contract.get("requested_fields") or [])
+        aggregate_requested = bool(re.search(
+            r"\b(?:gezamenlijk\w*|totaal\w*|total|combined|gesamt\w*)\b",
+            str(contract.get("question") or ""), re.I,
+        ))
+        if ({"cash", "position_size"} <= requested or
+                ("cash" in requested and aggregate_requested)):
+            values = [
+                value for raw in re.findall(r"\b\d[\d.,]*\b", answer)
+                if (value := _display_decimal(raw)) is not None
+            ]
+            if not any(abs(value - expected) < Decimal("0.005") for value in values):
+                return "paper_cash_total_missing"
     targets = contract.get("targets") or []
     if contract.get("answer_type") == "compare" and len(targets) >= 2:
         strategy_name_counts: dict[str, int] = {}

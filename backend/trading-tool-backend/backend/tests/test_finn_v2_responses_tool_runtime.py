@@ -389,6 +389,125 @@ def test_broad_evaluation_completes_named_setup_strategy_relation(
         )
 
 
+@pytest.mark.parametrize("asset,quote", [("ETH", "EUR"), ("SOL", "USDT")])
+def test_broad_evaluation_resolves_unique_saved_score_band_with_two_pair_setups(asset, quote):
+    question = (
+        f"Beoordeel mijn {asset}/{quote}-conceptsetup en aparte Paper-bot: "
+        "actuele score versus 61–75. Is een koop van €10 geldig? Wijzig niets."
+    )
+    fake = FakeResponses(
+        response("evaluation", calls=[tool_call("eval", "evaluate_plan", {"asset": asset})]),
+        response("answer", text="De conceptstrategie noemt €10; de andere bot is apart."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="resolve-broad-pair-band", model_led_coach=True,
+    )
+    calls = []
+
+    async def read(call):
+        calls.append(call)
+        if call.name in {"evaluate_plan", "get_active_plan_and_strategy"} and not call.inputs.get("setup_id"):
+            return {"status": "partial", "results": [
+                {"scope": "read_active_setup", "status": "unavailable",
+                 "reason": "setup_ambiguous"},
+                {"scope": "read_linked_strategy", "status": "unavailable",
+                 "reason": "setup_ambiguous"},
+            ]}
+        if call.name == "get_saved_setup_inventory":
+            return {"status": "completed", "results": [{
+                "scope": "read_saved_setup_inventory", "status": "completed",
+                "data": {"complete": True, "setups": [
+                    {"setup_id": 41, "name": "Manual concept", "symbol": asset,
+                     "quote_currency": quote,
+                     "min_benchmark_score": "61" if asset == "ETH" else 61,
+                     "max_benchmark_score": "75" if asset == "ETH" else 75},
+                    {"setup_id": 42, "name": "Bot concept", "symbol": asset,
+                     "quote_currency": quote, "min_benchmark_score": 80,
+                     "max_benchmark_score": 95},
+                ]},
+            }]}
+        if call.name == "get_active_plan_and_strategy":
+            assert call.inputs == {"setup_id": 41}
+            return {"status": "completed", "results": [
+                {"scope": "read_active_setup", "status": "completed",
+                 "data": {"setup_id": 41, "symbol": asset, "quote_currency": quote}},
+                {"scope": "read_linked_strategy", "status": "completed",
+                 "data": {"setup_id": 41, "strategy_id": 51, "base_amount": 10}},
+            ]}
+        return {"status": "completed", "results": []}
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset=asset,
+    ))
+    assert [call.inputs for call in calls if call.name == "get_active_plan_and_strategy"] == [
+        {"asset": asset, "quote_currency": quote}, {"setup_id": 41},
+    ]
+    items = result.response.tool_trace[0]["result"]["results"]
+    assert any(item.get("scope") == "read_linked_strategy"
+               and item.get("status") == "completed"
+               and (item.get("data") or {}).get("setup_id") == 41 for item in items)
+    assert not any(item.get("scope") == "read_active_setup"
+                   and item.get("status") == "unavailable" for item in items)
+
+
+@pytest.mark.parametrize("score_bounds,names,question", [
+    ((61, 75), ("Swing", "Trend"), "Beoordeel mijn ETH/EUR-setup met score 61–75. Wijzig niets."),
+    ((80, 95), ("Swing concept", "Trend"),
+     "Beoordeel mijn ETH/EUR-conceptsetup met score 61–75. Wijzig niets."),
+])
+def test_broad_evaluation_keeps_ambiguous_saved_pair_unresolved(score_bounds, names, question):
+    fake = FakeResponses(
+        response("evaluation", calls=[tool_call("eval", "evaluate_plan", {"asset": "ETH"})]),
+        response("answer", text="Welke van de twee ETH/EUR-setups bedoel je?"),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="ambiguous-broad-pair", model_led_coach=True,
+    )
+    calls = []
+
+    async def read(call):
+        calls.append(call)
+        if call.name == "get_saved_setup_inventory":
+            return {"status": "completed", "results": [{
+                "scope": "read_saved_setup_inventory", "status": "completed",
+                "data": {"complete": True, "setups": [
+                    {"setup_id": setup_id, "name": name, "symbol": "ETH",
+                     "quote_currency": "EUR", "min_benchmark_score": score_bounds[0],
+                     "max_benchmark_score": score_bounds[1]}
+                    for setup_id, name in ((41, names[0]), (42, names[1]))
+                ]},
+            }]}
+        if call.name in {"evaluate_plan", "get_active_plan_and_strategy"}:
+            return {"status": "partial", "results": [
+                {"scope": "read_active_setup", "status": "unavailable",
+                 "reason": "setup_ambiguous"},
+                {"scope": "read_linked_strategy", "status": "unavailable",
+                 "reason": "setup_ambiguous"},
+            ]}
+        return {"status": "completed", "results": []}
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message=question,
+        instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="ETH",
+    ))
+    assert not any(
+        call.name == "get_active_plan_and_strategy" and "setup_id" in call.inputs
+        for call in calls
+    )
+    items = result.response.tool_trace[0]["result"]["results"]
+    assert any(
+        item.get("scope") == "read_saved_setup_inventory"
+        and (item.get("data") or {}).get("setup_count") == 2
+        for item in items
+    )
+
+
 def test_raw_coach_keeps_general_answer_but_rejects_unread_saved_strategy_claim():
     def prepared(text):
         return SimpleNamespace(response=SimpleNamespace(
@@ -14185,6 +14304,26 @@ def test_paper_cash_and_position_answer_must_include_read_account_balance():
     assert turn_contract_gap(
         contract, "The Paper balance is EUR 10,005.45 and there is no position."
     ) is None
+    wrong_total = (
+        "De gezamenlijke Paper-kas is €10.010,90: €10.005,45 in de algemene "
+        "Paper-portefeuille, plus €5,48 bij de AAPL-bot en €9.599,97 "
+        "bij de aparte BTC-bot. Er is geen positie."
+    )
+    assert turn_contract_gap(contract, wrong_total) == "paper_cash_total_conflict"
+    assert turn_contract_gap(
+        contract,
+        "De gezamenlijke Paper-kas is €10.005,45; de aparte ETH-botkas is €9.599,97.",
+    ) is None
+    aggregate_only = build_turn_contract(
+        message="Hoeveel is de gezamenlijke Paper-kas?",
+        tool_trace=({"name": "get_portfolio_and_exposure", "result": {"results": [{
+            "scope": "read_portfolio", "status": "completed",
+            "data": {"global": {"cash_balance": 10005.45}},
+        }]}},),
+    )
+    assert turn_contract_gap(aggregate_only, "De botkas is €9.599,97.") == (
+        "paper_cash_total_missing"
+    )
     prepared = SimpleNamespace(response=SimpleNamespace(
         text="De ETH-botkas is €9.599,97 en er is geen positie.",
         uses_previous_response=False, tool_trace=(), turn_contract=contract,
@@ -14199,6 +14338,10 @@ def test_paper_cash_and_position_answer_must_include_read_account_balance():
     completed = _minimal_read_answer(message=contract["question"], prepared=prepared)
     assert completed.status == "completed"
     assert "De gezamenlijke Paper-kas is €10.005,45" in completed.text
+    prepared.response.text = wrong_total
+    contradicted = _minimal_read_answer(message=contract["question"], prepared=prepared)
+    assert contradicted.status == "unavailable"
+    assert contradicted.rejection_details["gap"] == "paper_cash_total_conflict"
 
 
 def test_open_position_question_reads_owner_portfolio_without_bot_page(monkeypatch):
