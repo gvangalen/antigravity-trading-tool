@@ -6,8 +6,10 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN brede vraag met één handelspaar en aparte Paper-bot (15 november 2026)
 
-Phase: `PR_CI_PENDING`. Branch `codex/finn-broad-question-investigation`,
-PR #1076. The product repair at `14f974b8298425069c21b2d30496fbf157fd9e07`
+Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Branch
+`codex/finn-broad-question-investigation`, PR #1076, merged as
+`0ec96977f1513640b1f5ad2551a78d65394e2d8d`. The product repair at
+`14f974b8298425069c21b2d30496fbf157fd9e07`
 extends the previous broad-question fix to one explicitly named market pair and
 the natural wording “Paper-kas en positie.” An explicit “bespreek alleen;
 wijzig niets” now keeps the full read catalog available without a bot-change
@@ -33,9 +35,13 @@ regression passed **109/109** with zero provider, schema, parse, validation
 or timeout failures, artifact SHA-256
 `43f6d9f9b57149110a5cee412759c97ce62568aea005e2ab6818a25ab502009e`.
 Frontend build, typecheck, i18n lint and **43/43** i18n, **76/76** command,
-**9/9** proposal tests and high-severity audit passed. The public site still
-runs the previous main revision. CI, merge, Auto Deploy, SHA parity and
-independent authenticated live QA are not yet measured for this candidate.
+**9/9** proposal tests and high-severity audit passed. The PR's five CI jobs
+passed on `853401414`; main CI `43716765363` passed all required jobs and
+Auto Deploy `43717231232` succeeded on the merge SHA. Public backend health
+and frontend build-info both returned HTTP 200 and
+`0ec96977f1513640b1f5ad2551a78d65394e2d8d`. This status update will
+create a later main SHA, so final main CI, Auto Deploy, public SHA parity and
+independent authenticated live QA remain pending.
 
 ## FINN 3.0 actieve plancontrole, eerste release (15 november 2026)
 
