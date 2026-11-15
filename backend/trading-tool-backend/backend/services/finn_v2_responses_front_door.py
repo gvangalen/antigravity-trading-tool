@@ -3748,17 +3748,28 @@ class FinnResponsesFrontDoor:
                         if isinstance(item, dict)
                     }
                     named_plan_pair = next(iter(mentioned_pairs)) if len(mentioned_pairs) == 1 else None
-                    matching_plan_read = bool(named_plan_pair and any(
-                        isinstance(item, dict)
+                    matching_setup_ids = {
+                        item["data"]["setup_id"]
+                        for item in read_result.get("results") or []
+                        if named_plan_pair
+                        and isinstance(item, dict)
                         and item.get("scope") == "read_active_setup"
                         and item.get("status") == "completed"
                         and isinstance(item.get("data"), dict)
+                        and isinstance(item["data"].get("setup_id"), int)
                         and str(item["data"].get("symbol") or "").upper() == named_plan_pair[0]
                         and (
                             str(item["data"].get("quote_currency") or "").upper() == named_plan_pair[1]
                             or str(item["data"].get("pair") or "").upper()
                             == "/".join(named_plan_pair)
                         )
+                    }
+                    matching_plan_read = bool(matching_setup_ids and any(
+                        isinstance(item, dict)
+                        and item.get("scope") == "read_linked_strategy"
+                        and item.get("status") == "completed"
+                        and isinstance(item.get("data"), dict)
+                        and item["data"].get("setup_id") in matching_setup_ids
                         for item in read_result.get("results") or []
                     ))
                     if (
@@ -3766,17 +3777,48 @@ class FinnResponsesFrontDoor:
                         and re.search(r"\b(?:plan\w*|setup\w*|concept\w*|strateg\w*)\b", message, re.I)
                         and not matching_plan_read
                     ):
-                        # An evaluation can choose score or bot scopes without
-                        # reading the explicitly named saved plan. Bind the
-                        # owner-scoped plan read to the user's exact pair.
+                        # A setup read alone does not establish its execution
+                        # rules. Complete the owner-scoped strategy relation
+                        # for the same setup, even if the evaluation already
+                        # read a different bot's strategy.
                         asset, quote = named_plan_pair
+                        plan_inputs = (
+                            {"setup_id": next(iter(matching_setup_ids))}
+                            if len(matching_setup_ids) == 1
+                            else {"asset": asset, "quote_currency": quote}
+                        )
                         plan_result = await self.reads(replace(
                             call, name="get_active_plan_and_strategy",
-                            inputs={"asset": asset, "quote_currency": quote},
+                            inputs=plan_inputs,
                             read_tools=("read_active_setup", "read_linked_strategy"),
                             evaluation_operation_id=None,
                         ))
-                        extra_results.extend(plan_result.get("results") or [])
+                        plan_items = plan_result.get("results") or []
+                        extra_results.extend(plan_items)
+                        if len(matching_setup_ids) == 1 and any(
+                            isinstance(item, dict)
+                            and item.get("scope") == "read_linked_strategy"
+                            and item.get("status") == "completed"
+                            and isinstance(item.get("data"), dict)
+                            and item["data"].get("setup_id") in matching_setup_ids
+                            for item in plan_items
+                        ):
+                            # The later owner-bound read supersedes an earlier
+                            # failed strategy lookup for this same sole setup.
+                            # Keep completed reads of other setups: they may
+                            # describe the separately requested bot.
+                            read_result["results"] = [
+                                item for item in read_result.get("results") or []
+                                if not (
+                                    isinstance(item, dict)
+                                    and item.get("scope") == "read_linked_strategy"
+                                    and item.get("status") != "completed"
+                                    and (
+                                        not isinstance(item.get("data"), dict)
+                                        or item["data"].get("setup_id") in matching_setup_ids
+                                    )
+                                )
+                            ]
                     if full_portfolio_requested and "read_portfolio" not in completed_scopes:
                         portfolio_result = await self.reads(replace(
                             call, name="get_portfolio_and_exposure",

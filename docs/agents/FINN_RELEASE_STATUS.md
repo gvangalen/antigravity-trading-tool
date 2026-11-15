@@ -4,6 +4,45 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN brede coachvraag: gekoppelde strategie bij planbeoordeling (15 november 2026)
+
+Phase: `READY_FOR_CI`. The public revision
+`4762b5027b4f232d347d5592e0a6c3911b6970c0` was **NOT_ACCEPTED** by
+independent read-only browser QA. Its broad BTC/EUR coach answer completed and
+read score, bot decision, source moments and Paper cash, but said the saved
+concept's complete execution rules could not be verified and did not name its
+linked fixed-€10 strategy. A shorter question did read that strategy, and the
+AAPL/BTC comparison passed. The rejected browser turn exposed no run ID or
+typed trace, so the precise failing tool step is unproven. Protected runtime
+QA remains unrun because the existing QA task lacks its active goal and
+manifest binding.
+
+The new repair closes a concrete gap in the broad evaluation path: a completed
+setup read only counts as a complete plan relation if a completed linked
+strategy read has the **same saved setup ID**. Otherwise FINN rereads that
+owner-scoped setup and strategy. A successful second read supersedes an earlier
+unavailable strategy result for that same setup; strategy evidence from a
+separate bot remains distinct. The rule uses saved identities and the named
+pair, with no BTC-specific branch or automatic trade.
+
+On this code, six focused ETH/EUR and SOL/USDT cases passed, covering missing,
+wrong-setup and already complete strategy reads. The root backend pytest suite passed
+**4,877 tests** with **7 skipped**. An isolated local FastAPI/prefork
+Celery/real Responses run of the exact rejected Dutch broad question completed
+in one dispatch, read the concept's linked €10 strategy and separate bot,
+returned no proposal and placed no order (artifact SHA-256
+`a2cdb608f7b267fbe4bb85a39a13d983f437a67e18bf7c521ba2a0228666a896`).
+The synthetic local market fixture
+had no current quote, so this is not evidence of live-price correctness. The
+real-provider development selector passed **20/20** and regression **109/109**,
+with zero provider, schema, parse, validation or timeout failures (artifact
+SHA-256 `f1615b8601d5df8d0348c31467d6c2c14e48c73c2e7a0811ef9205c1de24720d`
+and `01fc2df9892808e1d299c5ca2a3823f17164778102c194931314e9281f26e17d`).
+The complete isolated worker action matrix passed **17/17**, with zero broker
+orders, Live bots, Live calls or production connections (artifact SHA-256
+`fae370d1b8ca40c83ca99d6383924434128c8cad31df9379dd69e993094a99a9`).
+PR, CI, deployment identity and independent QA remain pending.
+
 ## FINN brede coachvraag: volledige plan- en koersbronnen (15 november 2026)
 
 Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. The previous public revision was
