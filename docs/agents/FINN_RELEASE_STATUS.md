@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN brede vraag met één handelspaar en aparte Paper-bot (15 november 2026)
 
-Phase: `QA_NOT_ACCEPTED_REPAIR_IN_PROGRESS`. Branch
+Phase: `PR_CI_PENDING`. Branch
 `codex/finn-broad-question-investigation`, PR #1076, merged as
 `0ec96977f1513640b1f5ad2551a78d65394e2d8d`. The product repair at
 `14f974b8298425069c21b2d30496fbf157fd9e07`
@@ -53,7 +53,8 @@ an AAPL/BTC plan comparison failed to read both visible stored plans, and a
 short BTC question missed some account context. No proposal or mutation
 occurred. This was browser QA, not the protected runner matrix.
 
-Repair branch `codex/finn-broad-live-qa-repair` now carries three generic
+Repair branch `codex/finn-broad-live-qa-repair`, PR #1078, product commit
+`b0511632c`, carries three generic
 corrections: a same-run read repair keeps its earlier owner-scoped tool
 evidence available to source-moment verification; a comparison of two
 named assets/plans requires the owner-scoped setup inventory; and a combined
@@ -78,7 +79,7 @@ The final full backend suite passed 4863 tests with 7 skips. Real-provider
 selector regression passed 109/109 with zero provider, schema, parse,
 validation or timeout failures (SHA-256
 `6f74854dd59a29a9d6d15c0693ea5ec4871e9b712844f57140e8a3b5d4cf72d0`).
-The new release candidate and independent live QA are pending. No acceptance
+PR CI, merge, Auto Deploy and independent live QA are pending. No acceptance
 claim applies to this repair until new independent live QA passes.
 
 ## FINN 3.0 actieve plancontrole, eerste release (15 november 2026)
