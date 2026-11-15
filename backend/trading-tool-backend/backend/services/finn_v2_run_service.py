@@ -1570,12 +1570,17 @@ def _minimal_read_answer(
             "latest_quote_conflicts_with_source", evidence,
             rejection_details={"fact_mismatch": "latest_market_quote"},
         )
-    from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
+    from backend.services.finn_v2_source_moment_claims import (
+        current_source_moments_supported, source_moment_repair_facts,
+    )
     if not current_source_moments_supported(text, evidence, question=message):
         return FinnResponsesVerifiedAnswer(
             "unavailable", "Ik kan de bronmomenten in dit antwoord niet verifiëren.",
             "source_moment_conflicts_with_source", evidence,
-            rejection_details={"fact_mismatch": "current_source_moment"},
+            rejection_details={
+                "fact_mismatch": "current_source_moment",
+                "source_moment_facts": source_moment_repair_facts(evidence),
+            },
         )
     if not FinnResponsesAnswerVerifier._saved_entity_type_supported(
         text, evidence, user_message=message,

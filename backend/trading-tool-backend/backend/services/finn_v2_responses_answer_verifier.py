@@ -36,7 +36,9 @@ from backend.services.finn_v2_hard_claim_boundary import FinnV2HardClaimBoundary
 from backend.services.finn_v2_responses_model import finn_responses_model_options
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.services.finn_v2_responses_read_executor import FinnResponsesReadExecutor
-from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
+from backend.services.finn_v2_source_moment_claims import (
+    current_source_moments_supported, source_moment_repair_facts,
+)
 from backend.services.finn_v2_factual_source_answer import (
     render_bot_decision, render_latest_quote, render_portfolio_read_time,
     render_report_and_quote_times, render_report_and_technical_read,
@@ -3120,7 +3122,10 @@ class FinnResponsesAnswerVerifier:
                 "unavailable",
                 self._fallback_copy("responses_evidence_not_verified", message=message, locale=locale),
                 "source_moment_conflicts_with_source", evidence,
-                rejection_details={"fact_mismatch": "current_source_moment"},
+                rejection_details={
+                    "fact_mismatch": "current_source_moment",
+                    "source_moment_facts": source_moment_repair_facts(evidence),
+                },
             )
         if (
             result.answer_kind == "free_text"
