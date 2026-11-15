@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN brede coachvraag: overlappende concepten en strategiebedrag (15 november 2026)
 
-Phase: `LOCAL_VALIDATED_PR_PENDING`. Independent read-only browser QA gave
+Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Independent read-only browser QA gave
 **NOT ACCEPTED** on final public SHA `950884eae2005f0376c4dd08e90c4795e602cac2`.
 The same broad BTC/EUR question still said the visible concept setup and its
 linked €10 strategy could not be verified. The shorter question read the
@@ -44,7 +44,15 @@ schema, parse, validation or timeout failures (artifact SHA-256
 The full real-provider regression passed **109/109** with the same zero
 failure categories (artifact SHA-256
 `ef209b58ec424f77b26c36df85a022da182854e408ce19050d433e82e906cb8d`).
-CI, deployment and independent live QA remain pending for this repair.
+Product PR #1089 passed all five required CI jobs in run `43755703282` on
+commit `9a5a9069c65f70b582d8f268194945a2357b54dd` and merged as
+`48bd3d702c28ba88abcd92a9302b0cea3844691f`. Main CI `43756196551`
+passed all five jobs; Auto Deploy `43756689463` succeeded on that merge SHA.
+Public `https://tradamind.com/api/health` and
+`https://tradamind.com/build-info.json` both returned HTTP 200 with that exact
+SHA, matching GitHub `main`. This status update creates a later main SHA; its
+final CI, Auto Deploy, public SHA parity and independent live QA verdict remain
+pending.
 
 ## FINN brede coachvraag: meerdere setups en Paper-kastotaal (15 november 2026)
 
