@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN brede vraag met één handelspaar en aparte Paper-bot (15 november 2026)
 
-Phase: `PR_CI_PENDING`. Branch
+Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Branch
 `codex/finn-broad-question-investigation`, PR #1076, merged as
 `0ec96977f1513640b1f5ad2551a78d65394e2d8d`. The product repair at
 `14f974b8298425069c21b2d30496fbf157fd9e07`
@@ -79,7 +79,12 @@ The final full backend suite passed 4863 tests with 7 skips. Real-provider
 selector regression passed 109/109 with zero provider, schema, parse,
 validation or timeout failures (SHA-256
 `6f74854dd59a29a9d6d15c0693ea5ec4871e9b712844f57140e8a3b5d4cf72d0`).
-PR CI, merge, Auto Deploy and independent live QA are pending. No acceptance
+PR #1078 passed all five CI jobs at `1cbcb9060` and merged as
+`3e8e3facc1bb7d9d5f90f0149837591a721f2ced`. Main CI `43722044039`
+passed and Auto Deploy `43722514842` succeeded. Public backend health and
+frontend build-info both returned HTTP 200 with that exact merge SHA. This
+status update will create a later main SHA, so its final CI, Auto Deploy,
+public SHA parity and independent live QA remain pending. No acceptance
 claim applies to this repair until new independent live QA passes.
 
 ## FINN 3.0 actieve plancontrole, eerste release (15 november 2026)
