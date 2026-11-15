@@ -4,6 +4,48 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN brede coachvragen: bronmomenten, plannamen en expliciet handelspaar (15 november 2026)
+
+Phase: `LOCAL_VALIDATED_PENDING_CI`. Branch `codex/finn-broad-verifier-fix` repairs the
+two independent live QA failures on run IDs
+`finn-v2-run-a8fd8fbd85ec44bc914741a60b3d3bdb` and
+`finn-v2-run-c0b2702d246247f695030a131c4a5b14`. A user-authorized,
+read-only inspection of those exact run contracts showed completed factual
+reads and substantive drafts before rejection. The broad answer's technical
+indicator and Paper portfolio timestamps were incorrectly compared with the
+preceding market quote timestamp. The plan comparison verifier demanded full
+internal setup names although the drafted answer identified both distinct
+plans with natural asset-plan labels. The broad run also resolved the saved
+setup from the open AAPL page because its explicit `BTC/EUR` tool asset was
+dropped; it consequently could not verify the concept's saved strategy.
+
+The product repair keeps explicit asset/quote pairs attached to plan reads,
+filters owner-scoped setup candidates by a saved quote when present, recognizes
+the pair field in inventory rows, separates technical and Paper read moments
+from market quote moments, and accepts natural plan aliases only when distinct
+among the selected owner-scoped comparison targets. False quote or Paper read
+times and ambiguous aliases remain rejected. No asset-specific trading rule,
+proposal, or mutation was added. Replaying the two failed drafts against their
+own run evidence in memory with the repaired verifier completed both; this is
+diagnostic evidence, not a new live QA verdict.
+
+The exact broad Dutch question completed through the isolated local
+FastAPI/prefork Celery/real Responses stack on a synthetic Paper user with
+one dispatch, the BTC/EUR concept selected, both cash balances, separate bot
+decision and no proposal or mutation. Artifact SHA-256
+`6363f1ee2ac206d4cda0bb368e4603edc19263da18751d91576deb17a86fc893`.
+The real-provider development selector passed 20/20 with zero provider,
+schema, parse, validation or timeout failures; artifact SHA-256
+`6bc1ce2cb69c22720c12524865b085852a30352a7bda3350e57430746ad892c7`.
+The real-provider regression selector passed 109/109 with zero provider,
+schema, parse, validation or timeout failures; artifact SHA-256
+`e7896b73deaa5cda40f23373716fbc0431a38fb58ac2666f39efec55c6a25d4e`.
+The final full backend suite passed **4870 tests, 7 skipped**. The final-code
+prefork worker action matrix passed **17/17**, with zero broker orders, Live
+bots, Live calls, or production connections; artifact SHA-256
+`11ce170d98e93fd462104119757cce3252c921b6f787c519f2cf51e89f4febcb`.
+PR-CI, deployment, and the new independent QA verdict remain pending.
+
 ## FINN brede vraag met één handelspaar en aparte Paper-bot (15 november 2026)
 
 Phase: `QA_NOT_ACCEPTED`. Branch

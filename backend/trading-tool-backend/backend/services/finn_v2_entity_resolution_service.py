@@ -1053,6 +1053,12 @@ class FinnV2EntityResolutionService:
             {key: value for key, value in dict(row).items() if key not in {"is_active", "is_best", "score"}}
             for row in await self.setups.get_user_setups(user_id)
         ]
+        requested_quote = str(selector.get("quote_currency") or "").upper()
+        if requested_quote and any(row.get("quote_currency") for row in candidates):
+            candidates = [
+                row for row in candidates
+                if str(row.get("quote_currency") or "").upper() == requested_quote
+            ]
         matcher = SetupMarketMatchService(self.session)
         pair_candidates = any(row.get("market_id") is not None for row in candidates)
         assessment = (

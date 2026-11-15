@@ -149,6 +149,11 @@ def build_turn_contract(
     bound_ids = [setup_id for setup_id in resolved_target_ids if setup_id in setups]
     target_ids = bound_ids or named_ids or ([next(iter(setups))] if len(setups) == 1 else [])
     targets = []
+    symbol_counts: dict[str, int] = {}
+    for row in all_rows:
+        symbol = str(row.get("symbol") or "").upper()
+        if symbol:
+            symbol_counts[symbol] = symbol_counts.get(symbol, 0) + 1
     for setup_id in target_ids:
         row = setups[setup_id]
         strategy = strategies.get(setup_id) or {}
@@ -156,6 +161,7 @@ def build_turn_contract(
             "setup_id": setup_id,
             "name": row.get("name"),
             "evidence": {key: row[key] for key in ("symbol", "timeframe", "setup_type") if row.get(key) is not None},
+            "asset_alias_unique": symbol_counts.get(str(row.get("symbol") or "").upper(), 0) == 1,
             "strategy": {key: strategy[key] for key in ("name", "entry", "stop_loss") if strategy.get(key) is not None},
         })
     if focused_setup_id not in target_ids or (
@@ -248,15 +254,24 @@ def turn_contract_gap(contract: Mapping[str, Any], answer: str) -> str | None:
             strategy_name = str((target.get("strategy") or {}).get("name") or "").casefold()
             if strategy_name:
                 strategy_name_counts[strategy_name] = strategy_name_counts.get(strategy_name, 0) + 1
-        if any(not any(
-            name and name.casefold() in answer.casefold()
-            for name in (
+        def identifies_target(target: Mapping[str, Any]) -> bool:
+            strategy_name = str((target.get("strategy") or {}).get("name") or "")
+            names = (
                 str(target.get("name") or ""),
-                str((target.get("strategy") or {}).get("name") or "")
-                if strategy_name_counts.get(str((target.get("strategy") or {}).get("name") or "").casefold(), 0) == 1
-                else "",
+                strategy_name if strategy_name_counts.get(strategy_name.casefold(), 0) == 1 else "",
             )
-        ) for target in targets):
+            if any(name and name.casefold() in answer.casefold() for name in names):
+                return True
+            # A natural asset-plan label is unambiguous only when the selected
+            # owner-scoped comparison contains one setup for this asset.
+            symbol = str((target.get("evidence") or {}).get("symbol") or "")
+            return bool(target.get("asset_alias_unique") and symbol and re.search(
+                rf"\b{re.escape(symbol)}\b(?:/[A-Z0-9]+)?[\s-]*"
+                r"(?:concept\w*|setup\w*|plan\w*|strateg\w*)\b",
+                answer, re.I,
+            ))
+
+        if any(not identifies_target(target) for target in targets):
             return "comparison_targets_missing"
         timeframes = [
             str((target.get("evidence") or {}).get("timeframe") or "")

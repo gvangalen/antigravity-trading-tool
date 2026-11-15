@@ -283,8 +283,9 @@ def current_source_moments_supported(
             quote_cue = re.compile(r"\b(?:koers|prijs|price|quote|USD|EUR|USDT)\b|[$€]", re.I)
             unrelated_moment = re.compile(
                 r"\b(?:oud(?:e|er)?|vorige|historisch(?:e)?|older|previous|"
-                r"dagrapport|rapport|report|portefeuille|portfolio|plan|setup|"
-                r"strategie|bot|order)\b|\banalyse\s+is\s+(?:aangemaakt|bijgewerkt)\b",
+                r"dagrapport|rapport|report|portefeuille\w*|portfolio\w*|plan|setup|"
+                r"strategie|bot|order|indicator\w*|technisch\w*|rsi|macd|"
+                r"ma\d+|candle\w*)\b|\banalyse\s+is\s+(?:aangemaakt|bijgewerkt)\b",
                 re.I,
             )
             for index, sentence in enumerate(sentences):
@@ -317,7 +318,11 @@ def current_source_moments_supported(
     # "Fresh portfolio read" refers to read_at, not the oldest valuation
     # quote. Check its declared zone as well as its wall clock.
     for sentence in re.split(r"(?<=[.!?])\s+|\n+", answer):
-        mentioned = re.search(r"\b(?:Paper[- ]?)?portefeuille\b|\bPaper[- ]?snapshot\b", sentence, re.I)
+        mentioned = re.search(
+            r"\b(?:Paper[- ]?)?portefeuille(?:uit)?lezing\b|"
+            r"\b(?:Paper[- ]?)?portefeuille\b|\bPaper[- ]?snapshot\b",
+            sentence, re.I,
+        )
         if not mentioned:
             continue
         nearby_prefix = sentence[max(0, mentioned.start() - 25):mentioned.start()]
@@ -326,7 +331,8 @@ def current_source_moments_supported(
             continue
         if not re.search(
             r"\b(?:vers(?:e)?|actueel|actuele|huidige|nieuwste|opgehaald|uitgelezen|"
-            r"uitlezing|snapshot|read|retrieved|current|latest)\b", sentence, re.I,
+            r"uitlezing|portefeuille(?:uit)?lezing|snapshot|read|retrieved|current|latest)\b",
+            sentence, re.I,
         ):
             continue
         following = sentence[mentioned.end():]
