@@ -327,8 +327,12 @@ def current_source_moments_supported(
     # provider and timestamp. It has no "bronmoment" label or asset name to
     # trigger the prose check above, but the question and tool read identify
     # the current quote unambiguously.
-    if question and re.search(r"\b(?:nieuwste|laatste|actuele|huidige|latest|current)\b", question, re.I) \
-            and re.search(r"\b(?:koers|prijs|price|quote)\b", question, re.I):
+    if question and re.search(
+        r"\b(?:nieuwste|laatste|actuele|huidige|latest|current)\b"
+        r"(?:(?!\b(?:score|indicator\w*|benchmark|setup|bot|plan)\b)[^.!?\n]){0,80}"
+        r"\b(?:koers|prijs|price|quote)\b",
+        question, re.I,
+    ):
         requested_pairs = {(match.group("symbol").upper(), match.group("quote").upper())
                            for match in re.finditer(
                                r"\b(?P<symbol>[A-Z][A-Z0-9]*)/(?P<quote>EUR|USD|USDT)\b",
