@@ -2664,7 +2664,14 @@ class FinnResponsesFrontDoor:
                 message, re.I,
             )
         )
-        normalized_inventory_read = complete_collection_read or setup_relationship_read
+        named_plan_comparison = bool(
+            is_read_only_turn and requests_comparison(message)
+            and len(mentioned_assets) >= 2
+            and re.search(r"\b(?:plan\w*|setup\w*|concept\w*)\b", message, re.I)
+        )
+        normalized_inventory_read = (
+            complete_collection_read or setup_relationship_read or named_plan_comparison
+        )
         query: dict[str, str] | None = None
         if is_read_request and explicit_rule_transfer:
             query = {"kind": "cross_asset_scope", "source_asset": explicit_rule_transfer[0],
@@ -3782,9 +3789,8 @@ class FinnResponsesFrontDoor:
                         ), "results": [
                             *(read_result.get("results") or []), *extra_results,
                         ]}
-                if (position_read_requested or (
-                    aggregate_portfolio_requested and "read_portfolio" in call.read_tools
-                )) and not portfolio_only_read:
+                if (position_read_requested or aggregate_portfolio_requested) \
+                        and not portfolio_only_read:
                     # The selected plan or score read can be correct yet omit an
                     # account-wide Paper balance. Re-read without an asset
                     # filter; other reads keep their selected asset.
@@ -4703,6 +4709,14 @@ class FinnResponsesFrontDoor:
                     locale=locale,
                     model_led_coach=True,
                 )
+        # A repair response can cite reads from the earlier attempt in this
+        # same run. Keep those owner-scoped tool results in the verifier's
+        # evidence as well as the turn contract; otherwise a correct source
+        # moment in the repair answer looks unsupported and fails terminally.
+        if rejection_feedback and prior_tool_trace and selected is None \
+                and result.answer_kind == "free_text":
+            result = replace(result, tool_trace=(*prior_tool_trace, *result.tool_trace))
+            prior_tool_trace = ()
         if (
             getattr(self, "model_led_coach", False)
             and verified_turn is not None
