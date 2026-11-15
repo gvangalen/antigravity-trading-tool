@@ -4,6 +4,39 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN brede vraag met één handelspaar en aparte Paper-bot (15 november 2026)
+
+Phase: `PR_CI_PENDING`. Branch `codex/finn-broad-question-investigation`,
+PR #1076. The product repair at `14f974b8298425069c21b2d30496fbf157fd9e07`
+extends the previous broad-question fix to one explicitly named market pair and
+the natural wording “Paper-kas en positie.” An explicit “bespreek alleen;
+wijzig niets” now keeps the full read catalog available without a bot-change
+proposal. The owner-scoped portfolio identifies an independently active Paper
+bot even when the selected concept setup has no bot link. The minimal read
+answer path includes the verified total Paper cash when a broad answer omits
+it. No asset-specific product rule or trading mutation was added.
+
+Measured local evidence on the product code: root backend suite **4860 passed,
+7 skipped**; exact Dutch question through isolated FastAPI, prefork Celery
+and real Responses provider **completed** with the BTC/EUR 61–75 saved band,
+separate active BTC Paper bot, explicit unavailable market/indicator moments,
+€9,599.97 bot cash and €10,005.45 total Paper cash, with no proposal or
+mutation. Synthetic runtime artifact
+`.local-finn-parity-artifacts/single-pair-unlinked-runtime-typed-bot.json`
+SHA-256 `f7cf7bb23b813c5bebb40a7d62e33b99e86f0cd6992f91ec0cb8f593ee23473a`.
+The complete local worker action matrix passed **17/17**, with zero broker
+orders, Live bots, Live calls or production connections; artifact SHA-256
+`06445ce311073a7fb452f1ba64430761efdbfdcb35bae0491e037c1e4928e2fa`.
+Real-provider selector development passed **20/20**, artifact SHA-256
+`92ac3d85546d75bc74a19aab1573cb1537a694b4acf0704a1219a098175eb94a`;
+regression passed **109/109** with zero provider, schema, parse, validation
+or timeout failures, artifact SHA-256
+`43f6d9f9b57149110a5cee412759c97ce62568aea005e2ab6818a25ab502009e`.
+Frontend build, typecheck, i18n lint and **43/43** i18n, **76/76** command,
+**9/9** proposal tests and high-severity audit passed. The public site still
+runs the previous main revision. CI, merge, Auto Deploy, SHA parity and
+independent authenticated live QA are not yet measured for this candidate.
+
 ## FINN 3.0 actieve plancontrole, eerste release (15 november 2026)
 
 Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Branch `codex/finn-active-coach-mvp`
