@@ -939,9 +939,13 @@ class FinnResponsesFrontDoor:
 
     @staticmethod
     def _asks_about_aggregate_portfolio(message: str) -> bool:
-        """An account-wide balance must not inherit the active asset filter."""
+        """Cash and position questions must not inherit the active asset filter."""
         return bool(
             (
+                re.search(r"\b(?:kas|cash|saldo|balance)\b", message, re.I)
+                and re.search(r"\b(?:positie|posities|position|positions|positionen)\b", message, re.I)
+            )
+            or (
                 re.search(
                     r"\b(?:gezamenlijk\w*|totaal|totale|volledig\w*|overall|"
                     r"combined|total|entire|gesamt\w*)\b", message, re.I,
@@ -3715,7 +3719,7 @@ class FinnResponsesFrontDoor:
                             read_tools=("read_review_history",), evaluation_operation_id=None,
                         ))
                         extra_results.extend(decision_result.get("results") or [])
-                    if len(mentioned_pairs) > 1:
+                    if mentioned_pairs:
                         comparison_result = await self.reads(replace(
                             call, name="get_setup_market_matches", inputs={},
                             read_tools=("read_setup_market_matches",), evaluation_operation_id=None,
