@@ -4,6 +4,52 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN brede coachvraag: herstel van afgewezen bronmomenten (15 november 2026)
+
+Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Independent read-only browser QA
+rejected the preceding public SHA `e1b3ae41ba7b03fbb34b5d67f9b8af5245248dd2`:
+the exact broad BTC/EUR question ended `unavailable` with typed reason
+`source_moment_conflicts_with_source` on run
+`finn-v2-run-06d8feaa25ff445c8bcb7579993b6f4d`. The owner-scoped public
+run envelope contains no rejected draft or source values, so the precise
+conflicting claim in that run is unproven. The shorter BTC question partly
+answered and the AAPL/BTC comparison kept joint Paper cash correct. The full
+protected QA matrix remains unrun because the existing QA task has no active
+goal or manifest binding.
+
+The read-only answer retry now receives controlled UTC and Amsterdam instants
+for each completed quote pair, saved report quote, report generation and
+portfolio read. It is instructed to keep these source types separate and to
+state when a requested moment is unavailable. The hard source-moment verifier
+still rejects incorrect claims. This repair is generic across assets and
+pairs, and changes no action contract or trading execution.
+
+The exact broad question completed on a synthetic local PostgreSQL/Redis/
+FastAPI/prefork-Celery/real-Responses fixture with distinct verified BTC/EUR
+and BTC/USDT quote moments, the overlapping concept setups, linked €10
+strategy, separate active Paper bot and joint Paper cash. It made no proposal
+or order (artifact SHA-256
+`e2f182a9cea2cc96d383778af5be1e86143ce45fd580dc675010ccc329392a33`).
+Focused runtime/verifier tests passed **976**; the root backend suite passed
+**4,885** with **7 skipped** (log SHA-256
+`69278ce846d0c540fef67c0bf09499186454ef60e750ddafed587a4e5cf57175`).
+The final-code worker action matrix passed **17/17**, with zero broker orders,
+Live bots, Live calls or production connections (artifact SHA-256
+`5c207d875b1114e9cdbaccb925f8fc20e77ad25ab090f478c241d40f8808f531`).
+Real-provider selector development passed **20/20** and regression **109/109**,
+both with zero provider, schema, timeout, parse or validation failures
+(artifact SHA-256 `27bc61c62fe1452a4aa8a347196a2dd438a54ea3b228667a5a48c4fbeca62c08`
+and `69c17930179f1a37a140396cbb76278271333a8cb3098b2b4a5580307c71ea`).
+Product [PR #1091](https://github.com/gvangalen/antigravity-trading-tool/pull/1091)
+passed all five candidate CI jobs in run `43760334013` on commit
+`b2652c6a911b73191448acc481caf130b734b139` and merged as
+`ba18a9afa4d53554bb6325072cf7ea01f8b3b3ab`. Main CI `43761068247`
+passed all five jobs; Auto Deploy `43761595140` succeeded on that merge SHA.
+Public `https://tradamind.com/api/health` and
+`https://tradamind.com/build-info.json` both returned HTTP 200 with that exact
+SHA. This status update creates a later main SHA; its CI, Auto Deploy, public
+SHA parity and independent live QA remain pending.
+
 ## FINN brede coachvraag: overlappende concepten en strategiebedrag (15 november 2026)
 
 Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Independent read-only browser QA gave
