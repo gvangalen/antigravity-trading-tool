@@ -4,6 +4,47 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN brede coachvraag: gerichte live hertest (16 november 2026)
+
+Phase: `TARGETED_LIVE_QA_PASS_FULL_PROTECTED_QA_PENDING`. The first fix on
+public SHA `1ac296f255081d0b1055c861599549e4b58fd5b9` still failed the
+independent broad BTC/EUR coach question with
+`source_moment_conflicts_with_source`. The generic pair-scoping fix on public
+SHA `7622154bda844f3d5cf677973286e47491240c34` also failed that question.
+An instrumented, owner-scoped retry on public SHA
+`05ac6996d68d0f8f0f55b49f2487fe47dab51ab6` completed 3 of 4 identical
+new-conversation questions; the failed run
+`finn-v2-run-520ad8542bb448e2b468d527c923d43a` safely identified
+`latest_price_context_clock_mismatch`. No rejected answer text or private
+source values were exposed in the terminal envelope.
+
+The special latest-price clock check had treated a broad question containing
+“actuele score” and later “koers” as a concise request for the newest quote.
+It could then mistake a separate bot-decision clock for the quote clock. The
+generic fix scopes that check to questions where the freshness word actually
+modifies a quote or price; explicit quote-source claims remain checked. An
+ETH/EUR setup plus separate Paper-bot regression first reproduced the exact
+rule failure, then passed after the fix while still rejecting a wrong explicit
+ETH/EUR quote moment. Product [PR #1096](https://github.com/gvangalen/antigravity-trading-tool/pull/1096)
+merged as `c0c01158aa5d898a8ae3d1e7fc4ea31d0c2b2ad4`. Its full backend
+suite passed **4,891** with **7 skipped**; the local worker action matrix
+passed **17/17** with no broker orders, Live calls or production connections;
+real-provider development passed **20/20** and regression **109/109**, with
+zero provider, schema, timeout, parse or validation failures. All five PR and
+main CI jobs passed, Auto Deploy succeeded, and public backend health and
+frontend build-info both returned HTTP 200 with that exact merge SHA.
+
+Independent read-only browser QA then asked the same broad question in four
+new conversations on that public SHA. All **4/4** completed with the saved
+BTC/EUR 61–75 concept setup, linked fixed €10 strategy, separate active Paper
+bot, score 35 outside the allowed band, and a safe no-buy/no-change step.
+An additional latest-quote question also passed **1/1**, with a quote source
+moment and an explicit limit on the unavailable read time. No source-moment
+fallback appeared in these five turns, and QA confirmed no card, saved change
+or trade. This is targeted live evidence, not acceptance of all FINN contracts
+or a Paper execution. The official protected runtime matrix remains unrun:
+the existing independent QA task has no active goal and manifest binding.
+
 ## FINN brede coachvraag: herstel van afgewezen bronmomenten (15 november 2026)
 
 Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Independent read-only browser QA
