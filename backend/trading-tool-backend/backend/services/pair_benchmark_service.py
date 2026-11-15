@@ -11,7 +11,8 @@ from math import isfinite
 from sqlalchemy import select, text
 
 from backend.domain.finn_dca_plan_contract import normalize_benchmark_weights
-from backend.infrastructure.models import UserIndicatorConfig
+from backend.domain.asset_benchmark_weights import asset_benchmark_weights
+from backend.infrastructure.models import User, UserIndicatorConfig
 from backend.services.pair_indicator_config_service import PairIndicatorConfigService, effective_pair_configs
 from backend.services.indicator_config_service import FIXED_BUCKETS
 from backend.domain.market_indicator_catalog import get_market_indicator_definition
@@ -24,7 +25,8 @@ def _categories(weights):
     return {key.removesuffix("_score"): value for key, value in weights.items()}
 
 
-async def benchmark_weights(session, user_id: int, market_id: int | None = None):
+async def benchmark_weights(session, user_id: int, market_id: int | None = None,
+                            symbol: str | None = None):
     """Pair row wins; old user preference is a read-only migration fallback."""
     if market_id is not None:
         result = await session.execute(text("""
@@ -48,6 +50,8 @@ async def benchmark_weights(session, user_id: int, market_id: int | None = None)
         preferences = json.loads(preferences)
     if not isinstance(preferences, dict):
         return None, "invalid_preferences"
+    if symbol:
+        return asset_benchmark_weights(preferences, symbol)
     custom = preferences.get("intelligence_weights")
     return normalize_benchmark_weights(custom), "legacy_user_preferences" if custom else "equal_default"
 
@@ -68,6 +72,26 @@ async def save_benchmark_weights(session, user_id: int, market_id: int, weights:
             updated_at=EXCLUDED.updated_at
     """), {"user_id": user_id, "market_id": market_id,
            "weights": json.dumps(_categories(normalized), sort_keys=True), "isolated": isolated})
+    if commit:
+        await session.commit()
+    return normalized
+
+
+async def save_asset_benchmark_weights(session, user_id: int, symbol: str, weights: dict,
+                                       *, commit: bool = True):
+    """Persist a base asset's weights without changing another asset or the global default."""
+    normalized = normalize_benchmark_weights(weights)
+    if normalized is None or set(weights) != {"market", "macro", "technical"}:
+        raise ValueError("invalid_benchmark_weights")
+    user = (await session.execute(select(User).where(User.id == user_id).with_for_update())).scalar_one_or_none()
+    if user is None:
+        raise ValueError("user_not_found")
+    preferences = dict(user.ai_preferences or {})
+    by_asset = dict(preferences.get("asset_benchmark_weights") or {})
+    by_asset[symbol.upper()] = _categories(normalized)
+    preferences["asset_benchmark_weights"] = by_asset
+    user.ai_preferences = preferences
+    await session.flush()
     if commit:
         await session.commit()
     return normalized

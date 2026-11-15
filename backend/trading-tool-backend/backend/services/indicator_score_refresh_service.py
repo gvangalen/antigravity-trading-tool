@@ -103,3 +103,21 @@ def queue_indicator_score_refresh(user_id: int, symbol: str,
             exc_info=True,
         )
         return False
+
+
+def queue_asset_benchmark_materialization(user_id: int, symbol: str) -> bool:
+    """Re-read copied base-asset indicators before rebuilding its score."""
+    normalized_symbol = str(symbol or "").strip().upper()
+    if type(user_id) is not int or user_id <= 0 or not normalized_symbol:
+        return False
+    try:
+        from backend.celery_task.celery_app import celery_app
+        celery_app.send_task(
+            "backend.celery_task.market_task.materialize_asset_benchmark",
+            kwargs={"user_id": user_id, "symbol": normalized_symbol},
+        )
+        return True
+    except Exception:
+        logger.warning("Asset benchmark materialization will await periodic refresh: symbol=%s",
+                       normalized_symbol, exc_info=True)
+        return False

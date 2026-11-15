@@ -164,6 +164,7 @@ def test_named_queues_include_default_and_workload_classes():
 
 def test_task_queue_resolution_is_deterministic():
     assert resolve_task_queue("backend.celery_task.market_task.fetch_market_data") == "market_data"
+    assert resolve_task_queue("backend.celery_task.market_task.materialize_asset_benchmark") == "market_data"
     assert resolve_task_queue("backend.celery_task.store_daily_scores_task.run_rule_based_daily_scores") == "scoring"
     assert resolve_task_queue("backend.celery_task.trading_bot_task.run_daily_trading_bot") == "execution_critical"
     assert resolve_task_queue("backend.celery_task.finn_v2_task.warm_finn_v2_interactive_worker") == "finn_interactive"

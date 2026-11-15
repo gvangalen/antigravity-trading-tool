@@ -23,7 +23,7 @@ import { useAssetWorkspaceData } from "@/hooks/useAssetWorkspaceData";
 import { useWatchlist } from "@/hooks/useWatchlist";
 import { ownerScopedWatchlistValues, reconcileWatchlistMembership, watchlistRowKey } from "@/lib/workspace/watchlistMembership.mjs";
 import IndicatorConfigModal from "@/components/scoring/IndicatorConfigModal";
-import { deletePairIndicatorConfig, savePairBenchmarkWeights, getBenchmarkCopySources, previewBenchmarkCopy, confirmBenchmarkCopy } from "@/lib/api/indicatorConfig";
+import { deletePairIndicatorConfig, savePairBenchmarkWeights, saveAssetBenchmarkWeights, getAssetBenchmarkCopySources, previewAssetBenchmarkCopy, confirmAssetBenchmarkCopy } from "@/lib/api/indicatorConfig";
 import MarketForwardReturnTabs from "@/components/market/MarketForwardReturnTabs";
 import {
   fetchForwardReturnsMonth,
@@ -40,7 +40,6 @@ import { mapTechnicalToStudies } from "@/config/indicator_mapping";
 import { removeFromWatchlist } from "@/lib/api/watchlist";
 import { formatAmsterdamTimestamp, formatAmsterdamSourceDate } from "@/lib/time/formatUtcTimestamp.mjs";
 import { fetchTradingMarkets } from "@/lib/api/assets";
-import { updateIntelligenceWeights } from "@/lib/api/scores";
 import { getAssistantPreferences, updateAssistantPreferences } from "@/lib/api/ai";
 import TradingViewSmartChart from "@/components/charts/TradingViewSmartChart";
 import {
@@ -240,15 +239,22 @@ function getUiCopy(locale = "nl") {
       unbalancedWeights: "The weights must add up to 100%.",
       applyWeights: "Apply weights",
       savingWeights: "Saving...",
-      copyBenchmark: "Copy benchmark from another trading pair",
-      copySource: "Choose source pair",
+      copyBenchmark: "Copy benchmark from another asset or trading pair",
+      copySource: "Choose source asset or pair",
       copyClose: "Close",
       copyEmpty: "No other configured benchmark yet.",
       copyIndicators: "indicators",
-      copyReplace: "Existing target settings will be replaced; readings and scores will be recalculated.",
+      copyReplace: "Existing target asset settings will be replaced; readings and scores will be recalculated.",
+      copyBotImpact: "Active bots using this benchmark will use the new settings for future decisions.",
       copyReplaced: "To replace",
       copyConfirm: "Confirm copy",
-      copyUnsupported: "These indicators are unavailable for the target pair",
+      copyUnsupported: "These indicators will be skipped",
+      copySkipReasons: {
+        btc_only_source: "BTC source only", custom_rules_need_review: "custom rules need review for this asset class",
+        score_rules_unavailable: "standard scoring rules unavailable", technical_provider_unavailable: "technical source unavailable",
+        indicator_unavailable: "indicator unavailable", invalid_indicator_weight: "invalid weight",
+        invalid_score_mode: "score mode unavailable", invalid_custom_rules: "custom rules incomplete",
+      },
       day: "Day",
       week: "Week",
       month: "Month",
@@ -453,15 +459,22 @@ function getUiCopy(locale = "nl") {
       unbalancedWeights: "Die Gewichtungen müssen zusammen 100 % ergeben.",
       applyWeights: "Gewichtungen anwenden",
       savingWeights: "Speichern...",
-      copyBenchmark: "Benchmark von anderem Handelspaar kopieren",
-      copySource: "Quellpaar wählen",
+      copyBenchmark: "Benchmark von anderem Asset oder Handelspaar kopieren",
+      copySource: "Quell-Asset oder -Paar wählen",
       copyClose: "Schließen",
       copyEmpty: "Noch keine andere konfigurierte Benchmark vorhanden.",
       copyIndicators: "Indikatoren",
-      copyReplace: "Bestehende Zielkonfigurationen werden ersetzt; Messwerte und Scores werden neu berechnet.",
+      copyReplace: "Bestehende Einstellungen des Ziel-Assets werden ersetzt; Messwerte und Scores werden neu berechnet.",
+      copyBotImpact: "Aktive Bots mit dieser Benchmark verwenden die neuen Einstellungen bei künftigen Entscheidungen.",
       copyReplaced: "Zu ersetzen",
       copyConfirm: "Kopie bestätigen",
-      copyUnsupported: "Diese Indikatoren sind für das Zielpaar nicht verfügbar",
+      copyUnsupported: "Diese Indikatoren werden übersprungen",
+      copySkipReasons: {
+        btc_only_source: "nur für BTC verfügbar", custom_rules_need_review: "eigene Regeln für diese Assetklasse prüfen",
+        score_rules_unavailable: "Standard-Scoreregeln fehlen", technical_provider_unavailable: "technische Datenquelle fehlt",
+        indicator_unavailable: "Indikator nicht verfügbar", invalid_indicator_weight: "ungültige Gewichtung",
+        invalid_score_mode: "Scoremodus nicht verfügbar", invalid_custom_rules: "eigene Regeln unvollständig",
+      },
       day: "Tag",
       week: "Woche",
       month: "Monat",
@@ -665,15 +678,22 @@ function getUiCopy(locale = "nl") {
     unbalancedWeights: "De wegingen moeten samen op 100% uitkomen.",
     applyWeights: "Wegingen toepassen",
     savingWeights: "Opslaan...",
-    copyBenchmark: "Kopieer benchmark van ander handelspaar",
-    copySource: "Kies bronpaar",
+    copyBenchmark: "Kopieer benchmark van andere asset of handelspaar",
+    copySource: "Kies bronasset of handelspaar",
     copyClose: "Sluiten",
     copyEmpty: "Er is nog geen andere ingestelde benchmark.",
     copyIndicators: "indicatoren",
-    copyReplace: "Bestaande instellingen van het doelpaar worden vervangen; metingen en scores worden opnieuw berekend.",
+    copyReplace: "Bestaande instellingen van de doelasset worden vervangen; metingen en scores worden opnieuw berekend.",
+    copyBotImpact: "Actieve bots die deze benchmark gebruiken, beoordelen toekomstige beslissingen met de nieuwe instellingen.",
     copyReplaced: "Te vervangen",
     copyConfirm: "Kopiëren bevestigen",
-    copyUnsupported: "Deze indicatoren zijn niet beschikbaar voor het doelpaar",
+    copyUnsupported: "Deze indicatoren worden overgeslagen",
+    copySkipReasons: {
+      btc_only_source: "alleen voor BTC", custom_rules_need_review: "eigen scoreregels moeten voor deze assetklasse worden beoordeeld",
+      score_rules_unavailable: "standaard-scoreregels ontbreken", technical_provider_unavailable: "technische bron ontbreekt",
+      indicator_unavailable: "indicator niet beschikbaar", invalid_indicator_weight: "ongeldige weging",
+      invalid_score_mode: "scoremodus niet beschikbaar", invalid_custom_rules: "eigen scoreregels zijn onvolledig",
+    },
     day: "Dag",
     week: "Week",
     month: "Maand",
@@ -2562,6 +2582,8 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const [copyPreview, setCopyPreview] = useState(null);
   const [copyBusy, setCopyBusy] = useState(false);
   const [copyOpen, setCopyOpen] = useState(false);
+  const copyRequestRef = useRef(0);
+  const copySelectionRef = useRef({ source: "", target: "" });
   const watchlistOwnerId = user?.id ?? null;
   const watchlistOwnerRef = useRef(watchlistOwnerId);
   watchlistOwnerRef.current = watchlistOwnerId;
@@ -2662,10 +2684,12 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     setExpandedRowKey(null);
   }, [activeSymbol, workspace?.market_id, workspace?.quote_currency]);
   useEffect(() => {
+    copyRequestRef.current += 1;
+    copySelectionRef.current = { source: "", target: "" };
     setCopyOpen(false);
     setCopyPreview(null);
     setCopySourceId("");
-  }, [workspace?.market_id]);
+  }, [activeSymbol, workspace?.market_id]);
   const lastWorkspaceReloadAtRef = useRef(0);
   const scoreRefreshTimersRef = useRef([]);
 
@@ -2781,46 +2805,64 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const saveWeights = async (weights) => {
     const result = workspace?.market_id
       ? await savePairBenchmarkWeights(workspace.market_id, weights)
-      : await updateIntelligenceWeights(weights);
+      : await saveAssetBenchmarkWeights(activeSymbol, weights);
     await refreshWorkspaceOnce();
     return result;
   };
 
   const openCopy = async () => {
-    if (!workspace?.market_id) return;
+    if (!workspace) return;
+    const targetKey = workspace.market_id ? `market:${workspace.market_id}` : `asset:${activeSymbol}`;
+    const requestId = ++copyRequestRef.current;
+    copySelectionRef.current = { source: "", target: targetKey };
     setCopyBusy(true);
     setCopyOpen(true);
     setCopyPreview(null);
     setCopySourceId("");
     try {
-      setCopySources(await getBenchmarkCopySources(workspace.market_id));
+      const sources = await getAssetBenchmarkCopySources(targetKey);
+      if (requestId === copyRequestRef.current) setCopySources(sources);
     } catch (error) {
-      setCopySources([]);
-      showSnackbar(String(error?.message || error), "error");
+      if (requestId === copyRequestRef.current) {
+        setCopySources([]);
+        showSnackbar(String(error?.message || error), "error");
+      }
     } finally {
-      setCopyBusy(false);
+      if (requestId === copyRequestRef.current) setCopyBusy(false);
     }
   };
 
   const chooseCopySource = async (sourceId) => {
+    const requestId = ++copyRequestRef.current;
+    const targetKey = workspace?.market_id ? `market:${workspace.market_id}` : `asset:${activeSymbol}`;
+    copySelectionRef.current = { source: sourceId, target: targetKey };
     setCopySourceId(sourceId);
     setCopyPreview(null);
-    if (!sourceId || !workspace?.market_id) return;
+    if (!sourceId || !workspace) {
+      setCopyBusy(false);
+      return;
+    }
     setCopyBusy(true);
     try {
-      setCopyPreview(await previewBenchmarkCopy(Number(sourceId), workspace.market_id));
+      const preview = await previewAssetBenchmarkCopy(sourceId, targetKey);
+      if (requestId === copyRequestRef.current &&
+          copySelectionRef.current.source === preview.source_key &&
+          copySelectionRef.current.target === preview.target_key) setCopyPreview(preview);
     } catch (error) {
-      showSnackbar(String(error?.message || error), "error");
+      if (requestId === copyRequestRef.current) showSnackbar(String(error?.message || error), "error");
     } finally {
-      setCopyBusy(false);
+      if (requestId === copyRequestRef.current) setCopyBusy(false);
     }
   };
 
   const applyCopy = async () => {
-    if (!copyPreview) return;
+    const targetKey = workspace?.market_id ? `market:${workspace.market_id}` : `asset:${activeSymbol}`;
+    if (!copyPreview || copyBusy || copyPreview.source_key !== copySelectionRef.current.source ||
+        copyPreview.target_key !== copySelectionRef.current.target || copyPreview.target_key !== targetKey) return;
+    const requestId = ++copyRequestRef.current;
     setCopyBusy(true);
     try {
-      await confirmBenchmarkCopy(copyPreview);
+      await confirmAssetBenchmarkCopy(copyPreview);
       setCopyOpen(false);
       setCopyPreview(null);
       await refreshWorkspaceOnce();
@@ -2828,7 +2870,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     } catch (error) {
       showSnackbar(String(error?.message || error), "error");
     } finally {
-      setCopyBusy(false);
+      if (requestId === copyRequestRef.current) setCopyBusy(false);
     }
   };
 
@@ -3310,7 +3352,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         quoteStatus={quoteStatus}
       />
 
-      {workspace?.market_id ? (
+      {workspace ? (
         <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm">
           <button type="button" onClick={openCopy} className="font-semibold text-blue-700 hover:underline">
             {ui.copyBenchmark}
@@ -3321,7 +3363,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
                 <select value={copySourceId} onChange={(event) => chooseCopySource(event.target.value)}
                   aria-label={ui.copySource} className="rounded-lg border border-slate-300 px-3 py-2">
                   <option value="">{ui.copySource}</option>
-                  {copySources.map((source) => <option key={source.market_id} value={source.market_id}>{source.pair}</option>)}
+                  {copySources.map((source) => <option key={source.key} value={source.key}>{source.label}</option>)}
                 </select>
                 <button type="button" onClick={() => setCopyOpen(false)} className="text-slate-600">{ui.copyClose}</button>
               </div>
@@ -3336,9 +3378,10 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
                     [ui.technical, copyPreview.source_weights.technical],
                   ].map(([label, weight]) => `${label} ${Math.round(weight * 100)}%`).join(" · ")}</p>
                   <p className="mt-1 text-slate-700">{ui.copyReplace}</p>
+                  <p className="mt-1 text-slate-700">{ui.copyBotImpact}</p>
                   {copyPreview.replace.length ? <p className="mt-1 text-slate-600">{ui.copyReplaced}: {copyPreview.replace.join(", ")}</p> : null}
-                  {copyPreview.unsupported.length ? <p className="mt-1 text-amber-700">{ui.copyUnsupported}: {copyPreview.unsupported.join(", ")}</p> : null}
-                  <button type="button" onClick={applyCopy} disabled={copyBusy || copyPreview.unsupported.length > 0}
+                  {copyPreview.unsupported.length ? <p className="mt-1 text-amber-700">{ui.copyUnsupported}: {copyPreview.unsupported.map((item) => `${item.indicator} (${ui.copySkipReasons?.[item.reason] || ui.copySkipReasons?.indicator_unavailable})`).join(", ")}</p> : null}
+                  <button type="button" onClick={applyCopy} disabled={copyBusy || copyPreview.indicators.length === 0}
                     className="mt-3 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white disabled:opacity-50">
                     {ui.copyConfirm}
                   </button>

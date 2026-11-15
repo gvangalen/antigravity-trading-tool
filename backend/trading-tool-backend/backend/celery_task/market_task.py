@@ -459,6 +459,40 @@ def sync_configured_market_snapshots():
         logger.exception("Configured market snapshot refresh failed")
         return {"requested": [], "ingested": [], "failed": [{"error": "refresh_failed"}], "success_count": 0, "failure_count": 1}
 
+
+async def _materialize_asset_benchmark(user_id: int, symbol: str):
+    outcomes = {}
+    async with async_session_factory() as session:
+        services = {"market": MarketDataService(session), "macro": MacroDataService(session),
+                    "technical": TechnicalDataService(session)}
+        for category, service in services.items():
+            try:
+                result = await service.sync_effective_indicators(user_id, symbol)
+                if result.get("synced"):
+                    await session.commit()
+                else:
+                    await session.rollback()
+                outcomes[category] = "partial" if result.get("failed") else "complete"
+            except Exception:
+                await session.rollback()
+                logger.exception("Copied %s benchmark source refresh failed for %s", category, symbol)
+                outcomes[category] = "pending_source"
+    return outcomes
+
+
+@shared_task(name="backend.celery_task.market_task.materialize_asset_benchmark",
+             autoretry_for=(Exception,), retry_backoff=True, retry_jitter=True,
+             retry_kwargs={"max_retries": 2})
+def materialize_asset_benchmark(user_id: int, symbol: str):
+    normalized_symbol = str(symbol or "").strip().upper()
+    if type(user_id) is not int or user_id <= 0 or not normalized_symbol:
+        return {"status": "invalid_scope"}
+    outcomes = run_celery_coroutine(_materialize_asset_benchmark(user_id, normalized_symbol))
+    from backend.celery_task.store_daily_scores_task import store_daily_scores_task
+    store_daily_scores_task.apply_async(kwargs={"user_id": user_id, "symbol": normalized_symbol})
+    return {"status": "score_refresh_queued", "symbol": normalized_symbol,
+            "source_status": outcomes}
+
 # =====================================================
 # 🕛 Dagelijkse snapshot (GLOBAAL)
 # =====================================================
