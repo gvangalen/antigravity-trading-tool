@@ -142,6 +142,20 @@ test("pair context follows the visible market and clears on asset switch", () =>
   assert.equal(switched.quote_currency, null);
 });
 
+test("automatic plan review uses the clicked plan over an older chat asset", () => {
+  const question = "Beoordeel dit volledige plan: BTC/EUR Paper handmatig €10.";
+  const submitted = resolveFinnSubmissionContext({
+    pathname: "/setup",
+    livePageContext: { page: "/setup", symbol: "AAPL", quote_currency: "USD" },
+    commandContext: { symbol: "BTC", quote_currency: "EUR", setup_id: 73 },
+    chatAssetOverride: "AAPL",
+    query: question, originalCommandQuery: question, autoSubmitCommand: true,
+  });
+  assert.equal(submitted.symbol, "BTC");
+  assert.equal(submitted.quote_currency, "EUR");
+  assert.equal(submitted.setup_id, 73);
+});
+
 test("explicit bot review button keeps its named target instead of the open bot", () => {
   const submitted = resolveFinnSubmissionContext({
     pathname: "/bot",

@@ -33,6 +33,15 @@ handoff for all assets and exact pairs. Its focused frontend tests passed
 high dependency audit passed. CI, deployment and independent retest for this
 repair remain pending. Protected event generation remains unavailable until
 QA has an explicit goal and an approved, isolated plan-review fixture profile.
+QA clarified that its AAPL header finding arose from `/setup` → a BTC/EUR
+plan card → `Beoordeel plan`, not from a feed card. The first repair branch
+only improved the feed handoff and cannot be counted as a fix for that
+observed path. The follow-up branch `codex/finn-plan-chat-context` makes the
+visible chat asset follow any explicit card context, carries the clicked
+plan's quote currency, and makes the automatically submitted request prefer
+that selected plan over an older chat asset. Focused context tests passed
+35/35, frontend typecheck and production build passed; this follow-up's
+CI, deployment and independent read-only retest remain pending.
 The prior Paper-bot blocker received an independent targeted browser
 `ACCEPTED` verdict on public SHA `45beb85bf62b9453e2c3466db2c059a5c0278e83`;
 there was no active protected QA goal for a full matrix.

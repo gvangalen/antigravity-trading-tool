@@ -589,6 +589,7 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
         page: "/setup",
         page_type: copy.eyebrow,
         symbol: setup?.symbol || strategy?.symbol || activeSymbol,
+        quote_currency: setup?.quote_currency || strategy?.quote_currency || null,
         timeframe: setup?.timeframe || strategy?.timeframe || "1D",
         setup_id: setupId,
         setup_name: setup?.name || null,

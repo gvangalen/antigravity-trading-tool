@@ -2527,10 +2527,10 @@ function AIAssistantContent({
   const progress = activeState ? getFlowProgress(activeState) : null;
   const activeStep = progress ? Math.min(progress.filled + 1, progress.total) : 1;
   const workspaceContextLabel = getFinnWorkspaceLabel(pathname, locale) || humanizeFinnContextValue(context.page_type, "Workspace");
-  const feedContextSymbol = commandRequest?.context?.feed_item_id
-    ? normalizeScopedAssetSymbol(commandRequest.context.symbol) : null;
+  const selectedCommandSymbol = commandRequest?.mode === "chat"
+    ? normalizeScopedAssetSymbol(commandRequest?.context?.symbol) : null;
   const displayedContextSymbol = (pathname === "/bot" && context.bot_id ? context.symbol
-    : chatAssetOverride || feedContextSymbol || context.symbol) || globalSymbol || "BTC";
+    : chatAssetOverride || selectedCommandSymbol || context.symbol) || globalSymbol || "BTC";
   const finnContextLabel = [workspaceContextLabel, displayedContextSymbol]
     .filter(Boolean)
     .join(" · ");
@@ -2614,8 +2614,8 @@ function AIAssistantContent({
     if (!isOpen || !commandRequest?.nonce || commandRequest.mode !== "chat") return;
     // Selecting a feed item starts a separate discussion. It cannot inherit
     // an older conversation's pending proposal or selected plan.
+    if (commandRequest.context?.symbol) setChatAssetOverride(null);
     if (isFeedHandoff && commandRequest.newConversation) {
-      setChatAssetOverride(null);
       forceNewFinnConversationRef.current = true;
       activeFinnSessionIdRef.current = null;
       sharedSessionRestoreRef.current = true;

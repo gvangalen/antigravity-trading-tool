@@ -73,11 +73,13 @@ export function resolveFinnSubmissionContext({
   const base = latestAssistantState?.current_flow
     ? { ...livePageContext, ...latestAssistantState }
     : { ...livePageContext };
+  const selectedCommandSymbol = autoSubmitCommand && originalCommandQuery === query
+    ? normalizeScopedAssetSymbol(commandContext.symbol) : null;
   const request = {
     ...base,
     ...commandContext,
     locale,
-    symbol: chatAssetOverride || commandContext.symbol || base.symbol,
+    symbol: selectedCommandSymbol || chatAssetOverride || commandContext.symbol || base.symbol,
   };
   if (pathname === "/bot") {
     const explicitBotId = Number(commandContext.bot_id);

@@ -65,10 +65,15 @@ test("feed discussion enters the persistent FINN panel with its event identity",
   assert.match(shellSource, /closeLabel=\{workspaceCopy\.closeBackdrop\}/);
   assert.match(feedSource, /onDiscuss\?\.\(item\.id,/);
   assert.match(shellSource, /resolveFeedItemContext\(item\)/);
-  assert.match(assistantSource, /feedContextSymbol = commandRequest\?\.context\?\.feed_item_id/);
+  assert.match(assistantSource, /selectedCommandSymbol = commandRequest\?\.mode === "chat"/);
   assert.match(assistantSource, /value=\{displayedContextSymbol\}/);
   assert.match(assistantSource, /resolveFeedDraftQuery\(/);
   assert.match(assistantSource, /aria-label=\{closeLabel \|\| at\("uiText\.closeChat"\)\}/);
+});
+
+test("plan card opens FINN with its own asset and quote currency", () => {
+  assert.match(planSource, /quote_currency: setup\?\.quote_currency \|\| strategy\?\.quote_currency \|\| null/);
+  assert.match(assistantSource, /chatAssetOverride \|\| selectedCommandSymbol \|\| context\.symbol/);
 });
 
 test("a feed item closed between listing and handling reloads the current feed", async () => {
