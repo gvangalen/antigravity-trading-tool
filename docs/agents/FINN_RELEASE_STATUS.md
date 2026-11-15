@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN brede vraag met één handelspaar en aparte Paper-bot (15 november 2026)
 
-Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Branch
+Phase: `PR_CI_PENDING`. Branch
 `codex/finn-broad-question-investigation`, PR #1076, merged as
 `0ec96977f1513640b1f5ad2551a78d65394e2d8d`. The product repair at
 `14f974b8298425069c21b2d30496fbf157fd9e07`
@@ -42,6 +42,45 @@ and frontend build-info both returned HTTP 200 and
 `0ec96977f1513640b1f5ad2551a78d65394e2d8d`. This status update will
 create a later main SHA, so final main CI, Auto Deploy, public SHA parity and
 independent authenticated live QA remain pending.
+
+The status PR #1077 merged as `086ac5f04c5763572e4ba440c0bd02cc5b19a0b5`.
+Its main CI `43718077169` and Auto Deploy `43718502908` succeeded; GitHub
+main and the public backend/frontend SHA matched, with HTTP 200 on both
+public endpoints. Independent read-only browser QA on that exact SHA returned
+`NOT_ACCEPTED`: the natural broad BTC/EUR question ended with only a source
+moment verification failure (run `finn-v2-run-22e721542f354489abaaf6df15e9f5e1`),
+an AAPL/BTC plan comparison failed to read both visible stored plans, and a
+short BTC question missed some account context. No proposal or mutation
+occurred. This was browser QA, not the protected runner matrix.
+
+Repair branch `codex/finn-broad-live-qa-repair`, PR #1078, product commit
+`b0511632c`, carries three generic
+corrections: a same-run read repair keeps its earlier owner-scoped tool
+evidence available to source-moment verification; a comparison of two
+named assets/plans requires the owner-scoped setup inventory; and a combined
+plan/cash question also reads the account-wide Paper portfolio. Targeted
+regressions passed; the exact broad question completed through isolated
+FastAPI/Celery/real Responses provider with no proposal and both Paper cash
+balances (synthetic fixture artifact SHA-256
+`e2c5bc2f9f115c7fb0e761aacd65c4917ffce68ad0d6f9e2eea33381ba3ec97a`).
+The final local runtime repeated the exact broad question on a fresh synthetic
+owner with completed, no proposal, verified setup/bot separation and both
+cash amounts (SHA-256
+`b0e1572de4a98b52a7fca59772407b09253fcb44ba8e690417671ace795736d6`).
+A second worker run compared AAPL and BTC/EUR owner plans, read both saved
+conditions and both requested Paper cash amounts, completed without proposal
+(SHA-256 `148c13a9e4973641735679e4cd025138df75a2c41582cd1a92ab1ae228d3c5eb`).
+The final local worker action matrix passed 17/17, with zero broker orders,
+Live bots, Live calls or production connections (SHA-256
+`2a46a7e3753204d105e5afbf394bb14089b3f2fe2270fb16924e924b1ccf5ba0`).
+Development selector passed 20/20 (SHA-256
+`f30d43efbb0913aaad45f30e80a4c4ca8de2ca649a029fa104bc296d7c0f4408`).
+The final full backend suite passed 4863 tests with 7 skips. Real-provider
+selector regression passed 109/109 with zero provider, schema, parse,
+validation or timeout failures (SHA-256
+`6f74854dd59a29a9d6d15c0693ea5ec4871e9b712844f57140e8a3b5d4cf72d0`).
+PR CI, merge, Auto Deploy and independent live QA are pending. No acceptance
+claim applies to this repair until new independent live QA passes.
 
 ## FINN 3.0 actieve plancontrole, eerste release (15 november 2026)
 

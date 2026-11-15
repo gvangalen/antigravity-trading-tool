@@ -1422,7 +1422,9 @@ def test_model_owned_comparison_binds_exact_owner_scoped_pair():
         message=question, instructions=front._model_led_instructions("nl"),
         conversation_context={}, verified_asset=None,
     ))
-    assert fake.requests[0]["tool_choice"] == "auto"
+    assert fake.requests[0]["tool_choice"] == {
+        "type": "function", "name": "get_saved_setup_inventory",
+    }
     assert reads[0].inputs == {}
     assert [call.inputs["setup_id"] for call in reads[1:]] == [1, 2]
     trace_result = result.response.tool_trace[0]["result"]
@@ -1890,7 +1892,11 @@ def test_multi_asset_score_read_uses_named_pair_not_workspace_pair():
     assert [row["data"]["benchmark_score"] for row in rows] == [57.3, 40]
 
 
-def test_plan_score_comparison_keeps_aapl_and_btc_eur_separate_from_btc_usdt():
+@pytest.mark.parametrize("question", [
+    "Wat is de ochtendstand van mijn AAPL- en BTC/EUR-plannen en hun scores?",
+    "Vergelijk mijn AAPL-plan met mijn BTC/EUR-concept en hun scores. Bespreek alleen; wijzig niets.",
+])
+def test_plan_score_comparison_keeps_aapl_and_btc_eur_separate_from_btc_usdt(question):
     fake = FakeResponses(
         response("inventory", calls=[tool_call("plans", "get_saved_setup_inventory", {})]),
         response("answer", text="AAPL heeft 57,3 en BTC/EUR 40. Beide liggen buiten 61–75."),
@@ -1933,7 +1939,7 @@ def test_plan_score_comparison_keeps_aapl_and_btc_eur_separate_from_btc_usdt():
 
     front.reads = read
     result = asyncio.run(front.run(
-        message="Wat is de ochtendstand van mijn AAPL- en BTC/EUR-plannen en hun scores?",
+        message=question,
         instructions=front._model_led_instructions("nl"),
         conversation_context={}, verified_asset="BTC",
         workspace_hints={"page": "/asset", "symbol": "BTC", "quote_currency": "USDT"},
@@ -1943,6 +1949,46 @@ def test_plan_score_comparison_keeps_aapl_and_btc_eur_separate_from_btc_usdt():
     scores = next(row["data"]["matches"] for row in evidence if row["scope"] == "read_setup_market_matches")
     assert {row["setup_id"] for row in plans} == {1, 2}
     assert {row["setup_id"]: row["benchmark_score"] for row in scores} == {1: 57.3, 2: 40}
+
+
+def test_named_plan_comparison_also_reads_account_wide_paper_cash_when_asked():
+    fake = FakeResponses(
+        response("inventory", calls=[tool_call("plans", "get_saved_setup_inventory", {})]),
+        response("answer", text="AAPL en BTC/EUR zijn aparte plannen; de gezamenlijke Paper-kas is €10.005,45."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="plan-comparison-cash", model_led_coach=True,
+    )
+    calls = []
+
+    async def read(call):
+        calls.append(call)
+        if call.name == "get_saved_setup_inventory":
+            return {"status": "completed", "results": [{
+                "scope": "read_saved_setup_inventory", "status": "completed",
+                "data": {"complete": True, "setups": [
+                    {"setup_id": 1, "name": "AAPL Plan", "symbol": "AAPL"},
+                    {"setup_id": 2, "name": "BTC/EUR Concept", "symbol": "BTC", "pair": "BTC/EUR"},
+                ]},
+            }]}
+        assert call.name == "get_portfolio_and_exposure"
+        assert call.inputs == {"environment": "paper"}
+        return {"status": "completed", "results": [{
+            "scope": "read_portfolio", "status": "completed",
+            "data": {"global": {"cash_balance": 10005.45}, "bots": []},
+        }]}
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message="Vergelijk mijn AAPL-plan met mijn BTC/EUR-concept; noem ook de gezamenlijke Paper-kas. Wijzig niets.",
+        instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="AAPL",
+    ))
+    assert [call.name for call in calls] == [
+        "get_saved_setup_inventory", "get_portfolio_and_exposure",
+    ]
+    assert result.response.turn_contract["paper_cash_total"] == 10005.45
 
 
 def test_direct_match_read_for_two_markets_ignores_open_workspace_pair():
@@ -10488,6 +10534,35 @@ def test_recovery_clarification_reuses_completed_read_from_same_run():
         prior_tool_trace=({"name": "get_my_profile_and_risk_style", "status": "completed"},),
     ))
     assert result.response.tool_trace[0]["result"]["status"] == "needs_input"
+
+
+def test_read_repair_verifies_source_moment_against_prior_read_in_same_run():
+    prior_read = {"name": "get_market_snapshot", "status": "completed", "result": {
+        "results": [{"scope": "read_market_snapshot", "status": "completed", "data": {
+            "symbol": "BTC", "quote_currency": "EUR", "price": 59000,
+            "source_observed_at_utc": "2026-11-15T09:02:00+00:00",
+        }}],
+    }}
+    fake = FakeResponses(response(
+        "repair-answer",
+        text="Het actuele BTC/EUR-koersbronmoment is 15 november 2026 om 10:02 CET.",
+    ))
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.client = SimpleNamespace(responses=fake)
+    front.reads = SimpleNamespace(session_factory=None)
+    front.user_id = 21
+    front.run_id = "same-run-source-repair"
+    front.model_led_coach = True
+    result = asyncio.run(front.run(
+        message="Wat is het actuele BTC/EUR-koersbronmoment?",
+        instructions="Gebruik gelezen feiten", conversation_context={}, verified_asset="BTC",
+        previous_response_id="rejected-answer", prior_tool_trace=(prior_read,),
+        rejection_feedback={"status": "answer_rejected", "reason": "source_moment_conflicts_with_source"},
+    ))
+    assert result.response.tool_trace == (prior_read,)
+    assert _minimal_read_answer(
+        message="Wat is het actuele BTC/EUR-koersbronmoment?", prepared=result,
+    ).status == "completed"
 
 
 def test_resumed_choice_keeps_evaluation_available_after_identity_read():
