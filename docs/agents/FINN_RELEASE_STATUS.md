@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN brede coachvragen: bronmomenten, plannamen en expliciet handelspaar (15 november 2026)
 
-Phase: `LOCAL_VALIDATED_PENDING_CI`. Branch `codex/finn-broad-verifier-fix` repairs the
+Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Branch `codex/finn-broad-verifier-fix` repairs the
 two independent live QA failures on run IDs
 `finn-v2-run-a8fd8fbd85ec44bc914741a60b3d3bdb` and
 `finn-v2-run-c0b2702d246247f695030a131c4a5b14`. A user-authorized,
@@ -44,7 +44,14 @@ The final full backend suite passed **4870 tests, 7 skipped**. The final-code
 prefork worker action matrix passed **17/17**, with zero broker orders, Live
 bots, Live calls, or production connections; artifact SHA-256
 `11ce170d98e93fd462104119757cce3252c921b6f787c519f2cf51e89f4febcb`.
-PR-CI, deployment, and the new independent QA verdict remain pending.
+PR #1081 passed all five required CI jobs in run `43731759267` on product
+commit `f2ee0d3c92852968af9ab75838d84f3fb86e9cce` and merged as
+`03de7b7bedb3912d0dee4eefb4b85ce90a5abd81`. Main CI `43732250421`
+passed all five jobs; Auto Deploy `43732664876` succeeded. Public backend
+health and frontend build-info both returned HTTP 200 and the exact merge SHA.
+This status update will create a later main SHA. Its last main-CI, Auto Deploy,
+public SHA parity, and the new independent authenticated live QA verdict remain
+pending.
 
 ## FINN brede vraag met één handelspaar en aparte Paper-bot (15 november 2026)
 
