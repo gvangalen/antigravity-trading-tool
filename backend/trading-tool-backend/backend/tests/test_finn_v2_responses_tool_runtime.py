@@ -322,6 +322,73 @@ def test_exact_coach_question_offers_reads_without_guided_mutation(monkeypatch):
     assert captured["required_read_tool_name"] == "evaluate_plan"
 
 
+@pytest.mark.parametrize("asset,quote", [("ETH", "EUR"), ("SOL", "USDT")])
+@pytest.mark.parametrize("initial_strategy_setup", [None, 42, 41])
+def test_broad_evaluation_completes_named_setup_strategy_relation(
+    asset, quote, initial_strategy_setup,
+):
+    question = (
+        f"Beoordeel mijn {asset}/{quote}-conceptsetup en mijn aparte Paper-bot. "
+        "Past een koop van €10 bij mijn plan? Bespreek alleen; wijzig niets."
+    )
+    fake = FakeResponses(
+        response("evaluation", calls=[tool_call("eval", "evaluate_plan", {"asset": asset})]),
+        response("answer", text="Ik heb de gekoppelde strategie apart van de bot gelezen."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="complete-broad-plan-link", model_led_coach=True,
+    )
+    calls = []
+
+    async def read(call):
+        calls.append(call)
+        if call.name == "evaluate_plan":
+            return {"status": "partial", "results": [
+                {"scope": "read_active_setup", "status": "completed", "data": {
+                    "setup_id": 41, "name": "Concept plan", "symbol": asset,
+                    "quote_currency": quote,
+                }},
+                ({"scope": "read_linked_strategy", "status": "completed",
+                  "data": {"setup_id": initial_strategy_setup, "strategy_id": 51}}
+                 if initial_strategy_setup is not None else
+                 {"scope": "read_linked_strategy", "status": "unavailable",
+                  "reason": "strategy_not_resolved"}),
+                {"scope": "read_bot_status", "status": "completed",
+                 "data": {"bot_id": 99, "setup_id": 42}},
+            ]}
+        if call.name == "get_active_plan_and_strategy":
+            return {"status": "completed", "results": [
+                {"scope": "read_active_setup", "status": "completed",
+                 "data": {"setup_id": 41, "symbol": asset, "quote_currency": quote}},
+                {"scope": "read_linked_strategy", "status": "completed",
+                 "data": {"setup_id": 41, "strategy_id": 51, "base_amount": 10}},
+            ]}
+        return {"status": "completed", "results": []}
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset=asset,
+    ))
+    plan_reads = [call for call in calls if call.name == "get_active_plan_and_strategy"]
+    assert len(plan_reads) == (0 if initial_strategy_setup == 41 else 1)
+    if plan_reads:
+        assert plan_reads[0].inputs == {"setup_id": 41}
+    assert any(
+        item.get("scope") == "read_linked_strategy"
+        and item.get("status") == "completed"
+        and (item.get("data") or {}).get("setup_id") == 41
+        for item in result.response.tool_trace[0]["result"]["results"]
+    )
+    if initial_strategy_setup is None:
+        assert not any(
+            item.get("scope") == "read_linked_strategy"
+            and item.get("status") == "unavailable"
+            for item in result.response.tool_trace[0]["result"]["results"]
+        )
+
+
 def test_raw_coach_keeps_general_answer_but_rejects_unread_saved_strategy_claim():
     def prepared(text):
         return SimpleNamespace(response=SimpleNamespace(
