@@ -303,3 +303,32 @@ def test_live_read_answer_rejects_wrong_zone_before_delivery():
     rejected = _minimal_read_answer(message="Hoe staat mijn Paper-kas?", prepared=prepared)
     assert rejected.status == "unavailable"
     assert rejected.reason == "source_moment_conflicts_with_source"
+
+
+def test_latest_quote_check_keeps_indicator_source_moment_separate():
+    evidence = (
+        {"scope": "read_market_snapshot", "status": "completed", "data": {
+            "symbol": "ETH", "quote_currency": "EUR", "price": 3000,
+            "source_observed_at_utc": "2026-11-15T14:19:59+00:00",
+        }},
+        {"scope": "read_portfolio", "status": "completed", "data": {
+            "read_at": "2026-11-15T14:24:51+00:00",
+        }},
+    )
+    question = "Wat is de actuele ETH/EUR-koers en wat zijn de indicatorbronmomenten?"
+    answer = (
+        "De koersbron voor ETH/EUR registreerde €3.000 op 15 november 2026 om 14:19:59 UTC. "
+        "De technische metingen zijn van 14 november 2026 om 23:59:59 UTC: "
+        "RSI 26,81 en MACD-histogram −1,4673%. "
+        "De Paper-portefeuillelezing van 15 november 2026 om 15:24:51 CET "
+        "vermeldt €9.599,97 kas en geen positie."
+    )
+    assert current_source_moments_supported(answer, evidence, question=question)
+    assert not current_source_moments_supported(
+        answer.replace("15 november 2026 om 14:19:59 UTC", "14 november 2026 om 14:19:59 UTC"),
+        evidence, question=question,
+    )
+    assert not current_source_moments_supported(
+        answer.replace("15 november 2026 om 15:24:51 CET", "15 november 2026 om 16:24:51 CET"),
+        evidence, question=question,
+    )

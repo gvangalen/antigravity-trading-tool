@@ -290,6 +290,50 @@ def test_entity_resolution_selects_the_asset_specific_active_setup_before_other_
     }
 
 
+def test_explicit_pair_selects_only_matching_owner_setup(monkeypatch):
+    class _MatchService:
+        def __init__(self, _session):
+            pass
+
+        async def for_all_assets(self, _user_id, *, setups):
+            assert [row["id"] for row in setups] == [294]
+            return {"matches": [{"setup_id": 294, "symbol": "ETH", "market_id": 1,
+                                "is_active": True}]}
+
+    monkeypatch.setattr("backend.services.finn_v2_entity_resolution_service.SetupMarketMatchService", _MatchService)
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    service.setups.get_user_setups = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 294, "symbol": "ETH", "quote_currency": "EUR", "market_id": 1},
+        {"id": 295, "symbol": "ETH", "quote_currency": "USDT", "market_id": 2},
+    ])
+
+    resolved = asyncio.run(service.resolve_setup(
+        user_id=388, selector={"asset": "ETH", "quote_currency": "EUR"}, asset="ETH",
+    ))
+    assert resolved["setup"]["id"] == 294
+
+
+def test_quote_hint_keeps_legacy_single_setup_without_market_pair(monkeypatch):
+    class _MatchService:
+        def __init__(self, _session):
+            pass
+
+        async def for_asset(self, _user_id, _asset, *, setups):
+            return {"matches": []}
+
+    monkeypatch.setattr("backend.services.finn_v2_entity_resolution_service.SetupMarketMatchService", _MatchService)
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    service.setups.get_user_setups = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 294, "symbol": "AAPL", "quote_currency": None},
+    ])
+    resolved = asyncio.run(service.resolve_setup(
+        user_id=389, selector={"asset": "AAPL", "quote_currency": "USD"}, asset="AAPL",
+    ))
+    assert resolved["setup"]["id"] == 294
+
+
 def test_legacy_active_flag_cannot_select_a_setup_without_a_current_match(monkeypatch):
     class _MatchService:
         def __init__(self, _session):

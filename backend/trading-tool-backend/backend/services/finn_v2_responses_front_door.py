@@ -3424,11 +3424,31 @@ class FinnResponsesFrontDoor:
                         })
                 model_asset = call.inputs.get("asset")
                 if model_asset:
-                    symbol = resolve_catalog_symbol(model_asset)
-                    if symbol not in mentioned_catalog_symbols(message):
+                    pair_match = re.fullmatch(r"([A-Z][A-Z0-9]*)/(EUR|USDT)", str(model_asset), re.I)
+                    named_pair = (
+                        (pair_match.group(1).upper(), pair_match.group(2).upper())
+                        if pair_match else None
+                    )
+                    symbol = named_pair[0] if named_pair in mentioned_pairs else resolve_catalog_symbol(model_asset)
+                    if symbol not in mentioned_assets:
                         call = replace(call, inputs={key: value for key, value in call.inputs.items() if key != "asset"})
                     else:
-                        call = replace(call, inputs={**call.inputs, "asset": symbol})
+                        call = replace(call, inputs={
+                            **call.inputs, "asset": symbol,
+                            **({"quote_currency": named_pair[1]} if named_pair in mentioned_pairs else {}),
+                        })
+                if (
+                    len(mentioned_pairs) == 1
+                    and "read_active_setup" in call.read_tools
+                    and not (call.inputs.get("setup_id") or call.inputs.get("setup_name"))
+                    and not multiple_targets
+                ):
+                    # The explicitly named pair outranks a selected page or a
+                    # model's base-asset-only selector for the saved plan read.
+                    asset, quote = next(iter(mentioned_pairs))
+                    call = replace(call, inputs={
+                        **call.inputs, "asset": asset, "quote_currency": quote,
+                    })
                 if (
                     "read_active_setup" in call.read_tools
                     and not FinnV2EntityResolutionService.is_setup_collection_request(message)
@@ -3901,6 +3921,9 @@ class FinnResponsesFrontDoor:
                                 if str(row.get("symbol") or "").upper() not in pair_quotes
                                 or str(row.get("quote_currency") or "").upper()
                                 in pair_quotes[str(row.get("symbol") or "").upper()]
+                                or str(row.get("pair") or "").upper()
+                                in {f"{str(row.get('symbol') or '').upper()}/{quote}"
+                                    for quote in pair_quotes[str(row.get("symbol") or "").upper()]}
                                 or (bool(row.get("name")) and str(row["name"]).casefold()
                                     in message.casefold())
                             ]

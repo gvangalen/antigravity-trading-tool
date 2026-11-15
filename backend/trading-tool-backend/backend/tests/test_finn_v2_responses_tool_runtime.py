@@ -1914,9 +1914,9 @@ def test_plan_score_comparison_keeps_aapl_and_btc_eur_separate_from_btc_usdt(que
                     {"setup_id": 1, "name": "Apple Plan", "symbol": "AAPL",
                      "quote_currency": "USD", "pair": "AAPL/USD"},
                     {"setup_id": 2, "name": "BTC EUR Plan", "symbol": "BTC",
-                     "quote_currency": "EUR", "pair": "BTC/EUR"},
+                     "pair": "BTC/EUR"},
                     {"setup_id": 3, "name": "BTC USDT Plan", "symbol": "BTC",
-                     "quote_currency": "USDT", "pair": "BTC/USDT"},
+                     "pair": "BTC/USDT"},
                 ]},
             }]}
         if call.name == "get_setup_market_matches":
@@ -14000,7 +14000,7 @@ def test_single_pair_plan_and_bot_review_reads_all_requested_sources(monkeypatch
     )
     front = FinnResponsesFrontDoor(
         client=SimpleNamespace(responses=FakeResponses(
-            response("read", calls=[tool_call("call-evaluate", "evaluate_plan", {})]),
+            response("read", calls=[tool_call("call-evaluate", "evaluate_plan", {"asset": f"{asset}/EUR"})]),
             response("answer", text="Ik heb de gevraagde bronnen apart gelezen."),
         )), session_factory=session_factory, user_id=7, run_id="single-pair-plan-bot-review",
         model_led_coach=True,
@@ -14016,6 +14016,8 @@ def test_single_pair_plan_and_bot_review_reads_all_requested_sources(monkeypatch
         "read_portfolio", "read_review_history", "read_setup_market_matches",
         "read_market_snapshot", "read_technical_snapshot", "read_asset_scores",
     }
+    assert selected_calls[0].inputs["asset"] == asset
+    assert selected_calls[0].inputs["quote_currency"] == "EUR"
     assert {row["trading_pair"] for item in rows if item["scope"] == "read_setup_market_matches"
             for row in item["data"]["matches"]} == {f"{asset}/EUR"}
     assert [call.inputs for call in selected_calls if call.name == "get_market_snapshot"] == [
@@ -18479,3 +18481,59 @@ def test_factual_source_reads_omit_unrelated_optional_dependencies():
     )
     assert decision.read_tools == ("read_review_history",)
     assert decision.inputs["_latest_bot_decisions_only"] is True
+def test_comparison_accepts_unambiguous_asset_plan_aliases_only():
+    trace = ({"result": {"results": [{
+        "scope": "read_saved_setup_inventory", "status": "completed", "data": {"setups": [
+            {"setup_id": 1, "name": "ETH/EUR discipline 61–75", "symbol": "ETH"},
+            {"setup_id": 2, "name": "SOL long baseline", "symbol": "SOL"},
+        ]},
+    }]}},)
+    contract = build_turn_contract(
+        message="Vergelijk ETH/EUR discipline 61–75 en SOL long baseline.", tool_trace=trace,
+    )
+    assert turn_contract_gap(contract, "Het ETH/EUR-concept verschilt van het SOL-plan.") is None
+    assert turn_contract_gap(contract, "ETH verschilt van SOL.") == "comparison_targets_missing"
+    ambiguous_trace = ({"result": {"results": [{
+        "scope": "read_saved_setup_inventory", "status": "completed", "data": {"setups": [
+            {"setup_id": 1, "name": "ETH/EUR discipline 61–75", "symbol": "ETH"},
+            {"setup_id": 2, "name": "SOL long baseline", "symbol": "SOL"},
+            {"setup_id": 3, "name": "ETH/USDT second concept", "symbol": "ETH"},
+        ]},
+    }]}},)
+    ambiguous = build_turn_contract(
+        message="Vergelijk ETH/EUR discipline 61–75 en SOL long baseline.",
+        tool_trace=ambiguous_trace,
+    )
+    assert turn_contract_gap(ambiguous, "Het ETH/EUR-concept verschilt van het SOL-plan.") == "comparison_targets_missing"
+
+
+@pytest.mark.parametrize("tool_asset", ["ETH", "ETH/EUR", None])
+def test_named_single_asset_plan_read_ignores_other_open_page_asset(tool_asset):
+    fake = FakeResponses(
+        response("plan", calls=[tool_call("plan", "get_active_plan_and_strategy",
+                                          {"asset": tool_asset} if tool_asset else {})]),
+        response("answer", text="Het ETH/EUR-concept heeft een opgeslagen scorefilter."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="single-plan-page-asset", model_led_coach=True,
+    )
+    calls = []
+
+    async def read(call):
+        calls.append(call)
+        assert call.name == "get_active_plan_and_strategy"
+        assert call.inputs == {"asset": "ETH", "quote_currency": "EUR"}
+        return {"status": "completed", "results": [{
+            "scope": "read_active_setup", "status": "completed",
+            "data": {"setup_id": 5, "name": "ETH/EUR concept", "symbol": "ETH", "pair": "ETH/EUR"},
+        }]}
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message="Beoordeel mijn ETH/EUR-conceptsetup en actieve Paper-bot apart. Bespreek alleen; wijzig niets.",
+        instructions=front._model_led_instructions("nl"), conversation_context={},
+        verified_asset="AAPL", workspace_hints={"page": "/asset", "symbol": "AAPL"},
+    ))
+    assert len(calls) == 1
+    assert result.response.turn_contract["targets"][0]["name"] == "ETH/EUR concept"
