@@ -4,6 +4,51 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 actieve plancontrole, eerste release (15 november 2026)
+
+Phase: `LOCAL_VALIDATED_CANDIDATE`. Branch `codex/finn-active-coach-mvp`
+contains product commit `a42a7b88a` on main base
+`cd8b52a97814c173c20c8df8a10a81957b55162e`. PR-CI, merge, main-CI,
+Auto Deploy, public SHA parity and independent live QA are still pending.
+The prior Paper-bot blocker received an independent targeted browser
+`ACCEPTED` verdict on public SHA `45beb85bf62b9453e2c3466db2c059a5c0278e83`;
+there was no active protected QA goal for a full matrix.
+
+The first proactive coach increment runs after a completed owner score refresh.
+For an owner setup and a newly observed move above the global configurable
+threshold (default 10% over 24 hours; quote at most 60 minutes old), it reads
+the setup, exact market quote and verified benchmark from the same asset/pair
+scope. It stores one dated plan-review card per setup with the price move,
+score/source state and saved score band. The card advises waiting when the
+score is outside the saved band or not verifiable and calls a positive match
+only a plan fit, never an entry signal. Web and mobile show the exact pair and
+quote source moment. Discussion rechecks the current owner setup and exact
+market; no bot, setup, portfolio or trade mutation is offered. This first
+increment does not yet inspect the open position or latest bot guardrail to
+make a position-specific intervention, recommend indicator/weight changes, or
+send push notifications.
+
+Local evidence: final pre-rebase backend suite **4850 passed, 7 skipped**
+(log SHA-256 `8082e5daa1b80d67bc6c984a76a4eaaae5fcca78289d79e1dbc3ed33e45d7de4`).
+After rebasing onto #1069, the backend suite passed **4854 passed, 7 skipped**
+(log SHA-256 `dd08262d348e17f8ac2126ff81c9751475112afb8e1b9cf667c6cb70e685b143`)
+and 72 relevant tests passed. The local HTTP/Celery worker test with a
+synthetic owner and two BTC market IDs persisted one `BTC/EUR` and one
+`BTC/USDT` plan review; repeat processing left two cards and zero orders.
+That probe first exposed a mixed-worker asyncpg loop failure; the feed tasks
+now use FINN's existing worker-owned loop and the repeat passed.
+The final local worker action matrix passed **17/17** and adapters **26/26**
+(artifact SHA-256 `98824a0684ed25d64fd22d1bf8a17f0f4637d93f28368a4d03d941e59bc5c33d`),
+with zero broker orders, Live calls or production connections. The real
+provider development and regression selectors passed **20/20** and
+**109/109**, with no case errors (artifact SHA-256
+`9d14f709b8fd737832763c3d9cf14e9f6e081d0285f9df9363830083210f49ae`
+and `dcd5c22b548f66af8d4173f01a319b1e2db64273ecf649cfdf1372f02015f166`).
+Frontend typecheck, i18n lint, i18n/commands/proposals, build and high audit
+passed; mobile typecheck, lint (warnings only), chat tests and web/iOS/Android
+bundle smoke passed. The provider and worker matrix ran before the unrelated
+#1069 rebase; the rebased code passed the complete backend and frontend suites.
+
 ## FINN botblokkade als laatste besluit in Paper-coach (14 november 2026)
 
 Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Branch
