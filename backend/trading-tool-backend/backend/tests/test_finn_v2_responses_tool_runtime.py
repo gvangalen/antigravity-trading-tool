@@ -10820,8 +10820,19 @@ def test_read_repair_verifies_source_moment_against_prior_read_in_same_run():
         message="Wat is het actuele BTC/EUR-koersbronmoment?",
         instructions="Gebruik gelezen feiten", conversation_context={}, verified_asset="BTC",
         previous_response_id="rejected-answer", prior_tool_trace=(prior_read,),
-        rejection_feedback={"status": "answer_rejected", "reason": "source_moment_conflicts_with_source"},
+        rejection_feedback={
+            "status": "answer_rejected", "reason": "source_moment_conflicts_with_source",
+            "source_moment_facts": [{
+                "kind": "quote_source", "source": "BTC/EUR",
+                "utc": "2026-11-15T09:02:00+00:00",
+                "amsterdam": "2026-11-15T10:02:00+01:00",
+            }],
+        },
     ))
+    repair_prompt = fake.requests[0]["input"][-1]["content"]
+    assert "BTC/EUR" in repair_prompt
+    assert "2026-11-15T10:02:00+01:00" in repair_prompt
+    assert "Keep quote, report and portfolio read times separate" in repair_prompt
     assert result.response.tool_trace == (prior_read,)
     assert _minimal_read_answer(
         message="Wat is het actuele BTC/EUR-koersbronmoment?", prepared=result,

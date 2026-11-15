@@ -31,6 +31,7 @@ def main() -> None:
     parser.add_argument("--ambiguous-pair-bot", action="store_true")
     parser.add_argument("--overlapping-concepts", action="store_true")
     parser.add_argument("--comparison", action="store_true")
+    parser.add_argument("--verified-market", action="store_true")
     args = parser.parse_args()
     if args.overlapping_concepts and not args.ambiguous_pair_bot:
         parser.error("--overlapping-concepts requires --ambiguous-pair-bot")
@@ -56,6 +57,19 @@ def main() -> None:
                     source_verified_at = EXCLUDED.source_verified_at, is_active = TRUE
             """), {"quote": quote, "provider_symbol": f"BTC{quote}",
                    "tradingview_symbol": f"BINANCE:BTC{quote}"})
+            if args.verified_market:
+                connection.execute(text("""
+                    INSERT INTO market_data
+                        (symbol, market_id, quote_currency, price, is_final_candle,
+                         timestamp, source_observed_at, price_provider)
+                    SELECT 'BTC', id, :quote, :price, FALSE, :observed, :observed,
+                           'local_verified_fixture'
+                    FROM trading_markets
+                    WHERE asset_symbol = 'BTC' AND quote_currency = :quote
+                      AND venue = 'BINANCE' AND is_active = TRUE
+                """), {"quote": quote, "price": 59398.27 if quote == "EUR" else 68500,
+                       "observed": "2026-11-15T09:02:06+00:00" if quote == "EUR"
+                       else "2026-11-15T08:59:30+00:00"})
         for symbol, cash in (("BTC", 9599.97), ("AAPL", 405.48)):
             setup_id = _insert_setup(
                 connection, user["id"],

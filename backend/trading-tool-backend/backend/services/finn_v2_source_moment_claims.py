@@ -89,6 +89,57 @@ def _same_moment(claim: tuple[datetime, bool], observed: datetime) -> bool:
     return stated == (expected if has_seconds else expected.replace(second=0))
 
 
+def source_moment_repair_facts(evidence: tuple[dict[str, Any], ...]) -> list[dict[str, str]]:
+    """Give a read-only answer retry the exact, source-scoped clock facts.
+
+    The verifier still decides whether a claim is valid. This projection only
+    includes observed instants, never prices, portfolio balances or identities.
+    """
+    moments: dict[tuple[str, str], datetime] = {}
+    for item in evidence:
+        if item.get("status") != "completed" or not isinstance(item.get("data"), dict):
+            continue
+        data = item["data"]
+        scope = str(item.get("scope") or "")
+        if scope == "read_market_snapshot":
+            symbol = str(data.get("symbol") or "").upper()
+            quote = str(data.get("quote_currency") or "").upper()
+            if not symbol or not quote or data.get("price") is None:
+                continue
+            label = f"{symbol}/{quote}"
+            value = data.get("source_observed_at_utc") or data.get("source_observed_at") or data.get("as_of")
+            kind = "quote_source"
+        elif scope == "read_portfolio":
+            label, value, kind = "portfolio", data.get("read_at"), "read_time"
+        elif scope == "read_latest_report":
+            label, value, kind = "report", data.get("generated_at"), "generation_time"
+            snapshot = data.get("score_source_snapshot")
+            for asset in snapshot.get("assets", []) if isinstance(snapshot, dict) else []:
+                if not isinstance(asset, dict):
+                    continue
+                market = asset.get("market_snapshot")
+                report_observed = _utc(market.get("as_of")) if isinstance(market, dict) else None
+                pair = str(asset.get("pair") or asset.get("display_symbol") or "").upper()
+                if report_observed and pair:
+                    key = ("report_quote_source", pair)
+                    moments[key] = max(report_observed, moments.get(key, report_observed))
+        else:
+            continue
+        observed = _utc(value)
+        if observed is None:
+            continue
+        key = (kind, label)
+        moments[key] = max(observed, moments.get(key, observed))
+    facts = []
+    for (kind, label), observed in list(moments.items())[:16]:
+        facts.append({
+            "kind": kind, "source": label,
+            "utc": observed.isoformat(timespec="seconds"),
+            "amsterdam": observed.astimezone(_AMSTERDAM).isoformat(timespec="seconds"),
+        })
+    return facts
+
+
 def current_source_moments_supported(
     answer: str, evidence: tuple[dict[str, Any], ...], *, question: str | None = None,
 ) -> bool:

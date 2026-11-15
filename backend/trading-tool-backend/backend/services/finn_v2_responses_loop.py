@@ -466,6 +466,13 @@ class FinnResponsesLoop:
                     "You may call an available read tool if it can supply the missing evidence, "
                     "or answer with the supported limitation and one useful question. "
                     "Do not present user-proposed values as saved facts. "
+                    + (
+                        "For a source-moment rejection, the typed facts below give exact UTC "
+                        "and Amsterdam instants for each source and pair. Keep quote, report "
+                        "and portfolio read times separate. If a requested source has no fact, "
+                        "state that its moment is unavailable. "
+                        if rejection_feedback.get("source_moment_facts") else ""
+                    )
                     + json.dumps(rejection_feedback, ensure_ascii=False, default=str)
                 ),
             })

@@ -1,4 +1,6 @@
-from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
+from backend.services.finn_v2_source_moment_claims import (
+    current_source_moments_supported, source_moment_repair_facts,
+)
 from backend.services.finn_v2_run_service import _minimal_read_answer
 from types import SimpleNamespace
 
@@ -17,6 +19,43 @@ def _evidence():
             "read_at": "2026-11-13T21:03:00+00:00",
         }},
     )
+
+
+def test_source_moment_retry_facts_keep_pairs_and_clocks_separate():
+    evidence = (
+        {"scope": "read_market_snapshot", "status": "completed", "data": {
+            "symbol": "ETH", "quote_currency": "EUR", "price": 3000,
+            "source_observed_at": "2026-11-15T09:02:06+00:00",
+        }},
+        {"scope": "read_market_snapshot", "status": "completed", "data": {
+            "symbol": "ETH", "quote_currency": "USDT", "price": 3500,
+            "source_observed_at": "2026-11-15T08:59:30+00:00",
+        }},
+        {"scope": "read_portfolio", "status": "completed", "data": {
+            "read_at": "2026-11-15T09:04:00+00:00", "cash_balance": 10000,
+        }},
+        {"scope": "read_latest_report", "status": "completed", "data": {
+            "generated_at": "2026-11-15T05:00:00+00:00",
+            "score_source_snapshot": {"assets": [{
+                "pair": "ETH/EUR", "market_snapshot": {
+                    "as_of": "2026-11-15T04:59:00+00:00",
+                },
+            }]},
+        }},
+        {"scope": "read_market_snapshot", "status": "unavailable", "data": {
+            "symbol": "SOL", "quote_currency": "EUR", "price": 100,
+            "source_observed_at": "2026-11-15T09:00:00+00:00",
+        }},
+    )
+    facts = source_moment_repair_facts(evidence)
+    assert [(fact["kind"], fact["source"]) for fact in facts] == [
+        ("quote_source", "ETH/EUR"), ("quote_source", "ETH/USDT"),
+        ("read_time", "portfolio"), ("report_quote_source", "ETH/EUR"),
+        ("generation_time", "report"),
+    ]
+    assert facts[0]["amsterdam"] == "2026-11-15T10:02:06+01:00"
+    assert facts[1]["utc"] == "2026-11-15T08:59:30+00:00"
+    assert "cash_balance" not in str(facts)
 
 
 def test_multi_asset_quote_table_requires_the_current_source_for_each_row():
@@ -303,6 +342,11 @@ def test_live_read_answer_rejects_wrong_zone_before_delivery():
     rejected = _minimal_read_answer(message="Hoe staat mijn Paper-kas?", prepared=prepared)
     assert rejected.status == "unavailable"
     assert rejected.reason == "source_moment_conflicts_with_source"
+    assert rejected.rejection_details["source_moment_facts"][-1] == {
+        "kind": "read_time", "source": "portfolio",
+        "utc": "2026-11-13T21:03:00+00:00",
+        "amsterdam": "2026-11-13T22:03:00+01:00",
+    }
 
 
 def test_latest_quote_check_keeps_indicator_source_moment_separate():
