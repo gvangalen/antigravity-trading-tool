@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN brede vraag met één handelspaar en aparte Paper-bot (15 november 2026)
 
-Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. Branch
+Phase: `QA_NOT_ACCEPTED`. Branch
 `codex/finn-broad-question-investigation`, PR #1076, merged as
 `0ec96977f1513640b1f5ad2551a78d65394e2d8d`. The product repair at
 `14f974b8298425069c21b2d30496fbf157fd9e07`
@@ -83,9 +83,24 @@ PR #1078 passed all five CI jobs at `1cbcb9060` and merged as
 `3e8e3facc1bb7d9d5f90f0149837591a721f2ced`. Main CI `43722044039`
 passed and Auto Deploy `43722514842` succeeded. Public backend health and
 frontend build-info both returned HTTP 200 with that exact merge SHA. This
-status update will create a later main SHA, so its final CI, Auto Deploy,
-public SHA parity and independent live QA remain pending. No acceptance
-claim applies to this repair until new independent live QA passes.
+status update merged as `f75266dd25d03c8784bde0902a3a765b4acc6510`.
+Its final main CI `43723438977` and Auto Deploy `43723914685` succeeded;
+GitHub main, public backend and public frontend matched that SHA, both
+endpoints HTTP 200, with no newer deploy pending. Independent read-only
+browser QA on the final SHA returned `NOT_ACCEPTED`. The exact broad BTC/EUR
+question still ended only in `source_moment_conflicts_with_source` (run
+`finn-v2-run-a8fd8fbd85ec44bc914741a60b3d3bdb`). The shorter BTC question
+passed with score 35 versus 61–75, correct concept/bot separation, both
+Paper cash amounts and zero position. A named AAPL/BTC comparison ended in
+`turn_contract_mismatch` (run
+`finn-v2-run-c0b2702d246247f695030a131c4a5b14`). No proposal, order or
+mutation occurred. QA could see only the terminal reasons; the rejected
+concept answers, exact claimed timestamps, completed tool scopes and
+turn-contract gap were unavailable in the trader UI, and admin telemetry was
+unavailable. Build did not access protected QA fixture storage. A limited,
+authorized product runtrace for these two run IDs is needed to diagnose the
+remaining failures without weakening the source or coverage checks. This
+status-only update records the verdict; it does not change product behavior.
 
 ## FINN 3.0 actieve plancontrole, eerste release (15 november 2026)
 
