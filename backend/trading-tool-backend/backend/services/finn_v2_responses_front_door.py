@@ -1525,6 +1525,39 @@ class FinnResponsesFrontDoor:
             and os.getenv("FINN_PER_OPERATION_TOOLS_EXPERIMENT") == "1"
         )
         catalog = FinnResponsesToolCatalog(individual_proposals=individual_proposals)
+        # Resolve an explicit, read-only Paper account question before guided
+        # drafts or workspace shortcuts can intercept the request.
+        named_paper_assets = mentioned_catalog_symbols(message)
+        if (getattr(self, "model_led_coach", False)
+                and locale.lower().startswith("nl")
+                and len(named_paper_assets) == 1
+                and re.search(r"\b(?:hoeveel|wat is|betekent)\b", message, re.I)
+                and re.search(r"\bbotbudget\b", message, re.I)
+                and re.search(r"\b(?:positie|posities)\b", message, re.I)
+                and re.search(r"\b(?:kas|kassaldo|cash|saldo)\b", message, re.I)
+                and not re.search(r"\b(?:koop|plaats|voer|bestel)\s+(?:nu|meteen|direct|alvast|\d)", message, re.I)
+                and not _explicit_create_operation_request(message)):
+            call = replace(
+                catalog.validate("get_portfolio_and_exposure", {"environment": "paper"}),
+                read_tools=("read_portfolio",),
+            )
+            try:
+                paper_read = await self.reads(call)
+            except Exception:
+                logger.exception("FINN Paper position read failed")
+                paper_read = {"status": "unavailable", "results": []}
+            trace = ({"name": call.name, "status": paper_read.get("status", "unavailable"),
+                      "arguments": call.inputs, "result": paper_read},)
+            answer = render_paper_position_cash_answer(
+                message, trace, asset=next(iter(named_paper_assets)), locale=locale,
+            ) or PAPER_POSITION_CASH_UNAVAILABLE
+            return FinnResponsesFrontDoorResult(
+                FinnResponsesResult(
+                    text=answer, response_id=f"paper-position-{self.run_id}",
+                    tool_trace=trace, answer_kind="factual_source",
+                    model_led_coach=True, response_id_reusable=False,
+                ), None, previous_response, locale=locale,
+            )
         discussing_paper_card = bool(re.search(
             r"\b(?:dit|deze|this|diese)\b.{0,35}\b(?:Paper[- ]?botbesluit|Paper[- ]?botbeslissing|Paper bot decision|Paper[- ]?Botentscheidung)\b",
             message, re.I,
@@ -2251,38 +2284,6 @@ class FinnResponsesFrontDoor:
         )
         if paper_position_cash_question and not explicit_create_request and not imperative_operation:
             is_read_only_turn = True
-            named_assets = mentioned_catalog_symbols(message)
-            if (getattr(self, "model_led_coach", False) and pending_operation is None
-                    and len(named_assets) == 1
-                    and re.search(r"\bbotbudget\b", message, re.I)
-                    and re.search(r"\b(?:positie|posities)\b", message, re.I)
-                    and re.search(r"\b(?:kas|kassaldo|cash|saldo)\b", message, re.I)
-                    and locale.lower().startswith("nl")):
-                # This is an exact account-state question. Read the owner's
-                # Paper portfolio directly so a model choice cannot omit it.
-                call = replace(
-                    catalog.validate("get_portfolio_and_exposure", {"environment": "paper"}),
-                    read_tools=("read_portfolio",),
-                )
-                try:
-                    paper_read = await self.reads(call)
-                except Exception:
-                    logger.exception("FINN Paper position read failed")
-                    paper_read = {"status": "unavailable", "results": []}
-                trace = ({"name": call.name, "status": paper_read.get("status", "unavailable"),
-                          "arguments": call.inputs, "result": paper_read},)
-                answer = render_paper_position_cash_answer(
-                    message, trace, asset=next(iter(named_assets)), locale=locale,
-                )
-                if answer is None:
-                    answer = PAPER_POSITION_CASH_UNAVAILABLE
-                return FinnResponsesFrontDoorResult(
-                    FinnResponsesResult(
-                        text=answer, response_id=f"paper-position-{self.run_id}",
-                        tool_trace=trace, answer_kind="factual_source",
-                        model_led_coach=True, response_id_reusable=False,
-                    ), None, previous_response, locale=locale,
-                )
         scheduled_revision = dict(conversation_context.get("proposal_correction_result") or {})
         if (
             scheduled_revision.get("scheduled_dca_revision") is True

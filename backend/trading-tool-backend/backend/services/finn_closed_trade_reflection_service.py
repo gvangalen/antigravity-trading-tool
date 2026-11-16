@@ -145,11 +145,17 @@ class FinnClosedTradeReflectionService:
 
     @staticmethod
     def _order_plan_evidence(snapshot: Any, provenance: Any,
-                             entry_at: datetime | None = None) -> dict | None:
+                             entry_at: datetime | None = None,
+                             source_plan: Any = None) -> dict | None:
         """Expose only recorded price fields, never arbitrary plan JSON text."""
         if not isinstance(snapshot, dict) or not isinstance(provenance, dict):
             return None
         currency = snapshot.get("price_currency")
+        if (currency is None and provenance.get("source") == "bot_order_context"
+                and isinstance(source_plan, dict)
+                and source_plan.get("source_evidence") == "linked_entry_decision"
+                and source_plan.get("order_plan_price_currency") in {"EUR", "USD", "USDT"}):
+            currency = source_plan["order_plan_price_currency"]
         targets = snapshot.get("targets")
         if currency not in {"EUR", "USD", "USDT"} or not isinstance(targets, list) or not targets:
             return None
@@ -277,7 +283,8 @@ class FinnClosedTradeReflectionService:
             "has_plan": has_proven_plan,
             "plan_source_evidence": row.get("entry_decision_source_plan") if has_proven_plan else None,
             "order_plan_evidence": FinnClosedTradeReflectionService._order_plan_evidence(
-                row.get("plan_snapshot"), row.get("plan_provenance"), row.get("entry_at"))
+                row.get("plan_snapshot"), row.get("plan_provenance"), row.get("entry_at"),
+                row.get("entry_decision_source_plan"))
                 if has_proven_plan else None,
             "confirmed_lesson": confirmed_lesson,
             "analysis_status": str(row["analysis_status"]),
