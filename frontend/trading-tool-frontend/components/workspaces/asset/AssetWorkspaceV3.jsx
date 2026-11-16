@@ -2000,12 +2000,12 @@ function ActiveAssetCard({
           <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <strong className="text-lg font-black text-slate-950">{situation}</strong>
             <span className="text-xs font-bold text-slate-600">
-              {isDailyBenchmark ? ui.benchmarkScore : ui.selectedPeriodScore}: {combinedSummary.score === null ? "—" : `${formatBenchmarkScore(combinedSummary.score, locale)}/100`}
+              {partialScore !== null ? ui.indicativeBenchmark : isDailyBenchmark ? ui.benchmarkScore : ui.selectedPeriodScore}: {combinedSummary.score === null && partialScore === null ? "—" : `${formatBenchmarkScore(combinedSummary.score ?? partialScore, locale)}/100`}
             </span>
           </div>
           {partialScore !== null ? (
             <p className="mt-1 text-[11px] font-semibold text-amber-700">
-              {ui.indicativeBenchmark}: {formatBenchmarkScore(partialScore, locale)}/100
+              {ui.indicativeNotForBots}
             </p>
           ) : null}
           <p className="mt-1 text-[11px] leading-relaxed text-slate-600">{ui.benchmarkExplanation}</p>
