@@ -740,8 +740,29 @@ class FinnV2ToolExecutionService:
         if tool_name == "read_review_history":
             message_review_id = self.review_adapter.requested_review_id(getattr(run, "message", ""))
             verified_review_id = selector.get("_verified_review_id")
+            feed_context = getattr(run, "client_context_json", {}) or {}
+            feed_item_id = str(feed_context.get("feed_item_id") or "").strip()
+            if not feed_item_id and getattr(run, "conversation_id", None):
+                from backend.infrastructure.repositories.finn_v2_conversation_repository import FinnV2ConversationRepository
+                saved_context = await FinnV2ConversationRepository(self.session).get_context(
+                    conversation_id=run.conversation_id, user_id=user_id,
+                )
+                selected_event = saved_context.get("feed_event") or {}
+                if isinstance(selected_event, dict) and selected_event.get("read_only_context") is True:
+                    feed_item_id = str(selected_event.get("item_id") or "").strip()
+            selected_decision_id = None
+            if feed_item_id:
+                from backend.services.finn_coach_feed_service import FinnCoachFeedService
+                feed_item = await FinnCoachFeedService(self.session).detail(
+                    user_id=user_id, item_id=feed_item_id,
+                )
+                if feed_item and feed_item.get("event_type") == "bot_decision":
+                    raw_id = (feed_item.get("evidence") or {}).get("decision_id")
+                    if str(raw_id).isdigit() and 0 < int(raw_id) <= 999999999999:
+                        selected_decision_id = int(raw_id)
             return await self.review_adapter.execute(
                 user_id=user_id, asset=selector.get("asset"), selector=selector,
+                selected_feed_decision_id=selected_decision_id,
                 include_weekly_reflection=bool(re.search(
                     r"weekreflectie|wekelijkse reflectie|weekly reflection|wochenreflexion",
                     str(getattr(run, "message", "") or ""), re.I)),

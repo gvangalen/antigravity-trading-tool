@@ -55,6 +55,34 @@ def test_weekly_reflection_copy_uses_closed_week_coverage():
     assert "vóór een volgende trade" in copy["nl"]["body"]
 
 
+def test_weekly_feed_evidence_names_inclusive_sunday(monkeypatch):
+    item_id = "00000000-0000-0000-0000-000000000091"
+
+    async def detail(_self, *, user_id, item_id: str):
+        return {"id": item_id, "event_type": "weekly_reflection", "subject_type": "reflection",
+                "subject_id": "2026-11-09", "symbol": None, "status": "read",
+                "source_observed_at": "2026-11-16T05:15:00Z",
+                "evidence": {"week_start": "2026-11-09", "week_end": "2026-11-16"}}
+
+    class Session:
+        async def execute(self, _query, params):
+            assert params == {"user_id": 7, "week_start": __import__("datetime").date(2026, 11, 9)}
+            class Result:
+                def mappings(self):
+                    return self
+                def first(self):
+                    return {"summary": {"trades": 1, "plans": 1},
+                            "generated_at": datetime(2026, 11, 16, 5, 15, tzinfo=timezone.utc)}
+            return Result()
+
+    monkeypatch.setattr(module.FinnCoachFeedService, "detail", detail)
+    historical, current = asyncio.run(FinnV2ReasoningContextService(Session())._current_feed_evidence(
+        SimpleNamespace(user_id=7, client_context_json={"feed_item_id": item_id})))
+    assert historical.facts["historical_event_facts"]["week_end"] == "2026-11-15"
+    assert historical.facts["historical_event_facts"]["week_end_exclusive"] == "2026-11-16"
+    assert current.facts["current_weekly_reflection"]["trades"] == 1
+
+
 def test_paper_bot_fallback_distinguishes_decision_from_execution():
     planned = module._fallback("bot_decision", "AAPL plan", {
         "symbol": "AAPL", "action": "buy", "status": "planned", "amount_eur": 400,
@@ -95,6 +123,21 @@ def test_historical_paper_card_uses_owner_verified_filled_order_on_read():
     assert "heeft gekocht" in rendered["title"]
     assert "€393,01" in rendered["description"]
     assert rendered["evidence"]["order_status"] == "filled"
+
+
+def test_setup_feed_uses_owner_saved_pair_or_marks_pair_unset():
+    base = {"id": "11111111-1111-1111-1111-111111111111", "event_type": "plan_review",
+            "subject_type": "setup", "symbol": "BTC", "evidence": {},
+            "copy_json": {"nl": {"title": "Beoordeling beperkt", "body": "Planupdate"}}}
+    paired = module.FinnCoachFeedService._serialize({**base, "verified_setup_name": "BTC plan",
+        "verified_setup_market_id": 17, "verified_setup_quote_currency": "EUR"}, "nl")
+    assert paired["evidence"]["trading_pair"] == "BTC/EUR"
+    assert paired["evidence"]["setup_name"] == "BTC plan"
+    unpaired = module.FinnCoachFeedService._serialize({**base, "verified_setup_name": "BTC concept",
+        "verified_setup_market_id": None, "verified_setup_quote_currency": None,
+        "evidence": {"trading_pair": "BTC/USDT"}}, "nl")
+    assert "trading_pair" not in unpaired["evidence"]
+    assert unpaired["evidence"]["trading_pair_status"] == "not_saved_on_setup"
 
 
 def test_historical_paper_card_does_not_claim_execution_without_filled_order():

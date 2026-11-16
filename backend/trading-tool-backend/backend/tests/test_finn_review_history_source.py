@@ -48,9 +48,52 @@ def test_owner_saved_week_reflection_is_read_with_review_history():
     result = asyncio.run(adapter.execute(user_id=42, include_weekly_reflection=True))
     weekly = result["data"].weekly_reflection
     assert weekly["week_start"] == "2026-11-09"
+    assert weekly["week_end"] == "2026-11-15"
+    assert weekly["week_end_exclusive"] == "2026-11-16"
     assert weekly["trades"] == 1
     assert weekly["observed_patterns"] == [{"theme": "risk", "count": 1}]
     assert "raw_instruction" not in str(result["data"])
+
+
+def test_selected_historical_paper_decision_survives_newer_bot_decision():
+    class Empty:
+        async def get_latest_bot_decisions_for_owner(self, user_id):
+            return [{"bot_name": "AAPL Paper", "symbol": "AAPL", "is_live": False,
+                     "action": "hold", "status": "planned",
+                     "decision_ts": datetime(2026, 11, 16, 7, tzinfo=timezone.utc)}]
+        async def get_bot_history(self, user_id, days):
+            return []
+        async def recent(self, user_id, *, days, limit, symbol=None):
+            return {"status": "no_data", "coverage": {"trades": 0,
+                "analyzed": 0, "pending": 0, "unavailable": 0}, "reviews": []}
+
+    class Session:
+        async def execute(self, _query, params):
+            assert params == {"user_id": 42, "decision_id": 813}
+            class Result:
+                def mappings(self):
+                    return self
+                def first(self):
+                    return {"id": 813, "bot_name": "AAPL Paper", "symbol": "AAPL",
+                            "quote_currency": None,
+                            "action": "buy", "status": "executed",
+                            "decision_ts": datetime(2026, 11, 10, 14, tzinfo=timezone.utc),
+                            "order_status": "filled", "filled_amount_eur": 393.01}
+            return Result()
+
+    adapter = object.__new__(ReviewToolAdapter)
+    adapter.session = Session()
+    adapter.repository = Empty()
+    adapter.bot_service = Empty()
+    adapter.closed_trades = Empty()
+    from backend.domain.finn_v2_source_registry import FinnV2InformationSourceRegistry
+    adapter.sources = FinnV2InformationSourceRegistry()
+    result = asyncio.run(adapter.execute(user_id=42, asset="AAPL",
+        selector={"_latest_bot_decisions_only": True}, selected_feed_decision_id=813))
+    assert result["data"].selected_feed_decision["decision_at_amsterdam"] == "2026-11-10 15:00:00 CET"
+    assert result["data"].selected_feed_decision["paper_executed"] is True
+    assert result["data"].latest_bot_decisions == []
+    assert "Geselecteerde historische Paper-feedbeslissing" in result["data"].items[0]
 
 
 def test_review_history_separates_owner_bot_decisions_from_closed_trade_evidence():

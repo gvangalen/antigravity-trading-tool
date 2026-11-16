@@ -6,7 +6,40 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0 live QA repair batch (16 november 2026)
 
-Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA_AND_QA`. Independent authenticated read-only QA
+Phase: `LOCAL_GATES_PASSED_DEPLOY_PENDING`. The latest public
+backend/frontend SHA is `14f29355f02b2eaa100b5cefef8a7a4c29055334`.
+The isolated repair branch is `codex/finn-coach-live-qa-repair2-20261116`.
+Independent QA's second read-only live retest found the two historical AAPL
+Paper card outcomes corrected. The saved weekly reflection was read, but FINN
+misstated the exclusive database week end (16 Nov) as the user's inclusive
+week end instead of Sunday 15 Nov. Discuss on the 10 Nov confirmed AAPL Paper
+buy wrongly denied that historical purchase and closed review after consulting
+latest-per-bot history. A BTC wait card selected the latest 08:00 decision
+instead of its own 07:00 event. The BTC plan card carried only BTC; QA could
+not identify its setup or pair from the card, though a separate BTC/EUR draft
+setup was visible. No new feed trigger, protected runtime matrix, polling/SSE,
+or account isolation was proven in this second retest. The current local repair
+anchors review history to the selected owner-verified Paper decision, exposes
+an inclusive weekly end alongside the exclusive storage boundary, and adds
+the saved setup name and pair to feed reads when the setup has an exact market.
+An asset-only setup is explicitly marked as having no saved pair. Focused
+backend and frontend regressions passed. The final local backend suite passed
+**4,925** with **7 skipped**. Frontend i18n/typecheck/commands/build/audit
+passed; mobile typecheck/lint/web smoke passed (lint warnings only). The
+real-provider development selector passed **20/20**, artifact SHA-256
+`00b0e6befcd444276c514848f321a1dde0416ec404541253be9e346e09853b85`,
+and regression passed **109/109**, artifact SHA-256
+`34abfe268702b04d931a34d360f506609fd4ff320b706a2f5bbb3eb14e3c3529`;
+provider, schema, parse, validation and timeout failure rates were zero.
+Feed and selected-decision queries executed against isolated PostgreSQL.
+The final local worker matrix passed **17/17** action contracts and **26/26**
+adapter tests, artifact SHA-256
+`dff2812e74ba095c2408f5c81d6d97117f70494a8dfe31c1a1d609d147ddcce3`,
+with zero broker orders, Live trading calls, or production connections. The
+deployment and independent QA retest remain pending. This is not an accepted
+live release.
+
+Independent authenticated read-only QA earlier
 tested public SHA `75ad6ac4d9c2f7a0af74e41bb77e4f6f711e2cc8` and returned
 `NOT_ACCEPTED`. GitHub main, backend health and frontend build info matched.
 QA observed five issues: old AAPL Paper cards still said execution was unverified

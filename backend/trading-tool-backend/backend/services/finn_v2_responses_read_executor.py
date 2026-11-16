@@ -216,6 +216,12 @@ class FinnResponsesReadExecutor:
             )
         if call.name == "get_decision_history":
             output["evidence_boundary"] = (
+                "If read_review_history.selected_feed_decision is present, it is the exact "
+                "owner-verified historical Paper decision selected by the trader. Discuss that "
+                "decision first, with its decision_at_amsterdam and paper_order_status. "
+                "A later latest_bot_decisions row does not negate it. A closed_trades row is "
+                "separate proof of a completed trade, not proof that the selected decision "
+                "never occurred when absent. "
                 "A saved daily report is a historical snapshot, not the latest market quote. "
                 "When comparing its price with a current market read, give each source "
                 "moment with the full date including year, clock time and the user's "

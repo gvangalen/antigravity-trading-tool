@@ -24,6 +24,11 @@ import {
 test("feed discussion names the selected event and exact pair", () => {
   assert.match(coachFeedDiscussionQuestion({ event_type: "plan_review", symbol: "BTC",
     title: "Plan herzien", evidence: { trading_pair: "BTC/USDT" } }), /BTC\/USDT/);
+  const unpaired = coachFeedDiscussionQuestion({ event_type: "plan_review", symbol: "BTC",
+    title: "Beoordeling beperkt", evidence: { setup_name: "BTC concept",
+      trading_pair_status: "not_saved_on_setup" } });
+  assert.match(unpaired, /BTC concept/);
+  assert.match(unpaired, /geen handelspaar is opgeslagen/);
   const bot = coachFeedDiscussionQuestion({ event_type: "bot_decision", symbol: "BTC",
     title: "Bot wacht", evidence: {} });
   assert.match(bot, /Paper-botbesluit/);

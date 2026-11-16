@@ -496,7 +496,8 @@ def _feed_evidence_instruction(facts: list[dict[str, Any]] | None) -> str:
         "Explain the difference from saved fields; discussion never confirms a proposal."
         + (" This is a historical Paper bot decision. Explain the saved decision and "
            "owner-verified filled order, if present. Do not add or label a current market "
-           "quote as evidence of that historical execution."
+           "quote as evidence of that historical execution. If a tool returns only the latest "
+           "decision per bot, it cannot contradict the selected older decision."
            if historical_bot else "")
     )
 
