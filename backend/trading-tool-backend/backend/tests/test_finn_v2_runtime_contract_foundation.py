@@ -159,6 +159,45 @@ def test_rejected_source_moment_exposes_only_safe_rule_code():
     assert "private" not in json.dumps(response)
 
 
+def test_completed_plan_read_persists_verified_strategy_amount_source():
+    run = SimpleNamespace(
+        id="amount-turn", conversation_id=None, trace_id="trace-1",
+        user_id=7, status="planned",
+        message="Is een koop van €10 volgens mijn ETH/EUR-conceptsetup geldig?",
+        client_context_json={},
+    )
+    service = FinnV2RunService.__new__(FinnV2RunService)
+    service.runs = SimpleNamespace(
+        get_by_id_for_user=AsyncMock(return_value=run), update_status=AsyncMock(),
+    )
+    service.runtime_contracts = SimpleNamespace(
+        get_for_run=AsyncMock(return_value=SimpleNamespace(state_json={})),
+        record_verified_setup_subject=AsyncMock(),
+        materialize_terminal=AsyncMock(return_value=SimpleNamespace(terminal_projection_json={})),
+    )
+    service.traces = SimpleNamespace(append_event=AsyncMock())
+    service._trace_payload = lambda *_args, **_kwargs: {}
+    service._commit_session_if_possible = AsyncMock()
+    evidence = (
+        {"scope": "read_active_setup", "status": "completed", "data": {
+            "setup_id": 41, "symbol": "ETH", "quote_currency": "EUR",
+        }},
+        {"scope": "read_linked_strategy", "status": "completed", "data": {
+            "setup_id": 41, "strategy_id": 51, "base_amount": 10, "currency": "EUR",
+        }},
+    )
+    asyncio.run(service.complete_responses_read(
+        run_id=run.id, user_id=7, response_id="response-amount", locale="nl",
+        answer=FinnResponsesVerifiedAnswer(
+            "completed", "De score is te laag voor een koop van €10.", None, evidence,
+        ),
+    ))
+    response = service.runtime_contracts.materialize_terminal.call_args.kwargs["response"]
+    assert response["content"].endswith(
+        "De gekoppelde opgeslagen strategie heeft €10 als basisbedrag."
+    )
+
+
 def test_completed_owner_review_read_persists_only_verified_dossier_references():
     run = SimpleNamespace(
         id="review-turn", conversation_id="conversation-1", trace_id="trace-1",

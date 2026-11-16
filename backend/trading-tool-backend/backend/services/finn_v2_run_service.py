@@ -2003,6 +2003,13 @@ class FinnV2RunService:
         if is_terminal_status(run.status):
             raise RuntimeContractConflictError("runtime_contract_already_terminal")
         validate_run_transition(run.status, status)
+        if status == "completed":
+            from backend.services.finn_v2_saved_amount_provenance import append_saved_amount_provenance
+
+            answer = replace(answer, text=append_saved_amount_provenance(
+                message=run.message, answer=answer.text, evidence=answer.evidence,
+                mentioned_assets=mentioned_catalog_symbols(run.message), locale=locale,
+            ))
         if status == "clarification_required":
             clarification = answer.clarification or {}
             await self.runtime_contracts.record_responses_clarification(
