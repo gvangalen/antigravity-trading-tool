@@ -18,6 +18,30 @@ from backend.scripts.run_finn_production_qa import profile_error_category
 NAMESPACE = "qa-123-1-ad9fe0d3-deadbeef"
 
 
+@pytest.mark.parametrize("status,response,policy,category", [
+    ("failed", None, None, "paper_exit_mixed_finn_run_incomplete"),
+    ("completed", None, None, "paper_exit_mixed_finn_response_absent"),
+    ("completed", SimpleNamespace(proposal_id="private-id", confirmation_required=True),
+     None, "paper_exit_mixed_finn_proposal_present"),
+    ("completed", SimpleNamespace(proposal_id=None, confirmation_required=True),
+     None, "paper_exit_mixed_finn_confirmation_required"),
+    ("completed", SimpleNamespace(proposal_id=None, confirmation_required=False),
+     SimpleNamespace(execute_allowed=True), "paper_exit_mixed_finn_execute_allowed"),
+    ("completed", SimpleNamespace(proposal_id=None, confirmation_required=False),
+     SimpleNamespace(execute_allowed=False), None),
+])
+def test_mixed_finn_read_failure_is_allowlisted_without_private_data(
+        status, response, policy, category):
+    answer = SimpleNamespace(status=status, response=response, policy=policy)
+    assert probe._mixed_finn_read_failure_category(answer) == category
+    if category:
+        assert profile_error_category("trader_paper_exit_review_chain", RuntimeError(category)) == category
+        assert "private-id" not in category
+        assert profile_error_category(
+            "trader_paper_exit_review_chain", RuntimeError(f"{category}:private-id")
+        ) == "paper_exit_probe_runtime_error"
+
+
 @pytest.mark.parametrize("tool_name,source_evidence,typed_fx,generic_answer,rendered_present,error_code", [
     ("get_closed_trade_review", "linked_entry_decision", 0.92, False, True, None),
     ("get_active_plan_and_strategy", "linked_entry_decision", 0.92, False, True,

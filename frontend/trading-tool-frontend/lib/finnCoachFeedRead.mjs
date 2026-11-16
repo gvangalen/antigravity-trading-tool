@@ -4,6 +4,11 @@ const TRANSIENT_GATEWAY_STATUSES = new Set([502, 503, 504]);
 // that handover while still surfacing a sustained outage after 31 seconds.
 const RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 16000];
 
+export function coachFeedHistoryCursor(last) {
+  if (!last?.id || !(last.activity_at || last.created_at)) return null;
+  return { before_created_at: last.activity_at || last.created_at, before_id: last.id };
+}
+
 export async function readCoachFeedWithRetry(read, { isCurrent = () => true, wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) } = {}) {
   for (let attempt = 0; ; attempt += 1) {
     if (!isCurrent()) return null;

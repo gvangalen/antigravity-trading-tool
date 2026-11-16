@@ -52,6 +52,7 @@ from backend.services.finn_manual_trade_suggestion_service import ManualTradeSet
 from backend.services.watchlist_conversation_service import ambiguous_asset_change_scope, asks_for_watchlist_inventory, replacement_mentions
 from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
 from backend.services.finn_v2_account_bundle_answer import render_account_bundle_answer
+from backend.services.finn_v2_paper_position_answer import render_paper_position_cash_answer
 from backend.services.finn_v2_factual_source_answer import (
     is_report_technical_comparison_request, render_bot_decision, render_closed_paper_exit_facts,
     render_selected_paper_feed_decision, render_latest_quote,
@@ -974,7 +975,7 @@ class FinnResponsesFrontDoor:
         """Cash and position questions must not inherit the active asset filter."""
         return bool(
             (
-                re.search(r"\b(?:kas|cash|saldo|balance)\b", message, re.I)
+                re.search(r"\b(?:kas|kassaldo|cash|saldo|balance)\b", message, re.I)
                 and re.search(r"\b(?:positie|posities|position|positions|positionen)\b", message, re.I)
             )
             or (
@@ -2238,6 +2239,16 @@ class FinnResponsesFrontDoor:
                 explicit_closed_review_read=explicit_closed_review_read,
             )
         )
+        # "Kan ik extra kopen?" in a quantified position/cash/budget question
+        # asks for verified capacity, not an instruction to place an order.
+        paper_position_cash_question = bool(
+            re.search(r"\b(?:hoeveel|wat is|betekent)\b", message, re.I)
+            and re.search(r"\b(?:botbudget|budget)\b", message, re.I)
+            and self._asks_about_aggregate_portfolio(message)
+            and not re.search(r"\b(?:koop|plaats|voer|bestel)\s+(?:nu|meteen|direct|alvast|\d)", message, re.I)
+        )
+        if paper_position_cash_question and not explicit_create_request and not imperative_operation:
+            is_read_only_turn = True
         scheduled_revision = dict(conversation_context.get("proposal_correction_result") or {})
         if (
             scheduled_revision.get("scheduled_dca_revision") is True
@@ -5081,7 +5092,10 @@ class FinnResponsesFrontDoor:
                 if normalized_inventory_read and pending_operation is None
                 and not resuming_clarification
                 else "get_portfolio_and_exposure"
-                if is_read_only_turn and self._asks_about_open_position(message)
+                if is_read_only_turn and (
+                    self._asks_about_open_position(message)
+                    or self._asks_about_aggregate_portfolio(message)
+                )
                 and pending_operation is None and not resuming_clarification
                 else "get_active_plan_and_strategy"
                 if is_read_only_turn and request_facts.action_polarity == "evaluate"
@@ -5202,6 +5216,16 @@ class FinnResponsesFrontDoor:
                 result = replace(
                     result, text=canonical_answer, model_owned_repair=False,
                     response_id_reusable=False, account_source_projection=True,
+                )
+        if (is_read_only_turn and result.answer_kind == "free_text" and result.tool_trace
+                and len(mentioned_assets) == 1):
+            position_answer = render_paper_position_cash_answer(
+                message, result.tool_trace, asset=next(iter(mentioned_assets)), locale=locale,
+            )
+            if position_answer is not None:
+                result = replace(
+                    result, text=position_answer, answer_kind="factual_source",
+                    model_owned_repair=False, response_id_reusable=False,
                 )
         if is_read_only_turn and result.answer_kind == "free_text" and result.tool_trace:
             exit_facts = render_closed_paper_exit_facts(message, result.tool_trace)

@@ -1210,6 +1210,9 @@ class FinnCoachFeedService:
                      THEN 'resolved' ELSE f.status END AS status,
                    f.evidence, f.source_observed_at, f.copy_json,
                    f.copy_source, f.expires_at, f.created_at, f.updated_at,
+                   CASE WHEN f.event_type='bot_decision'
+                     THEN GREATEST(f.created_at, COALESCE(f.source_observed_at, f.created_at))
+                     ELSE f.created_at END AS activity_at,
                    d.status AS verified_decision_status,
                    d.decision_ts AS verified_decision_ts,
                    o.status AS verified_order_status,
@@ -1241,8 +1244,12 @@ class FinnCoachFeedService:
             ) o ON TRUE
             WHERE f.user_id=:user_id
               AND (CAST(:before_created_at AS TIMESTAMPTZ) IS NULL
-                   OR f.created_at < CAST(:before_created_at AS TIMESTAMPTZ)
-                   OR (f.created_at = CAST(:before_created_at AS TIMESTAMPTZ)
+                   OR (CASE WHEN f.event_type='bot_decision'
+                         THEN GREATEST(f.created_at, COALESCE(f.source_observed_at, f.created_at))
+                         ELSE f.created_at END) < CAST(:before_created_at AS TIMESTAMPTZ)
+                   OR ((CASE WHEN f.event_type='bot_decision'
+                          THEN GREATEST(f.created_at, COALESCE(f.source_observed_at, f.created_at))
+                          ELSE f.created_at END) = CAST(:before_created_at AS TIMESTAMPTZ)
                        AND f.id < CAST(:before_id AS UUID)))
               AND (:history OR f.status IN ('unread','read'))
               AND (:history OR f.expires_at IS NULL OR f.expires_at > NOW())
@@ -1252,7 +1259,7 @@ class FinnCoachFeedService:
                       AND p.user_id=:user_id AND p.status IN ('draft','pending_confirmation')
                       AND p.expires_at > NOW()))
             ORDER BY CASE
-                WHEN NOT :history AND f.event_type='bot_decision'
+                WHEN f.event_type='bot_decision'
                   THEN GREATEST(f.created_at, COALESCE(f.source_observed_at, f.created_at))
                 ELSE f.created_at
               END DESC, f.id DESC LIMIT :limit
@@ -1401,7 +1408,7 @@ class FinnCoachFeedService:
             factual = _bot_fallback(str((row.get("evidence") or {}).get("subject") or row["symbol"] or ""),
                                     row.get("evidence") or {})[row["locale"]]
             row["title"], row["description"] = factual["title"], factual["body"]
-        for key in ("created_at", "updated_at", "source_observed_at", "expires_at"):
+        for key in ("created_at", "updated_at", "source_observed_at", "expires_at", "activity_at"):
             if row.get(key) is not None:
                 row[key] = row[key].isoformat()
         return row

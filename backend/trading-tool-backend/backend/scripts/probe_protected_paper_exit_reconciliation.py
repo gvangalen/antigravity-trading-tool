@@ -632,6 +632,22 @@ def _mentions_level(answer: str, value: object) -> bool:
     return False
 
 
+def _mixed_finn_read_failure_category(answer: object) -> str | None:
+    """Return only a fixed, public category; never include response or fixture data."""
+    if answer.status != "completed":
+        return "paper_exit_mixed_finn_run_incomplete"
+    response = answer.response
+    if response is None:
+        return "paper_exit_mixed_finn_response_absent"
+    if response.proposal_id:
+        return "paper_exit_mixed_finn_proposal_present"
+    if response.confirmation_required:
+        return "paper_exit_mixed_finn_confirmation_required"
+    if answer.policy and answer.policy.execute_allowed:
+        return "paper_exit_mixed_finn_execute_allowed"
+    return None
+
+
 async def _public_polling_sse_match(user_id: int, run_id: str) -> bool:
     """Compare the same owner-bound terminal run through both public transports."""
     from backend.utils.auth_utils import create_access_token
@@ -881,10 +897,9 @@ async def _review_chain(user_id: int, bot_id: int, expected: dict) -> dict:
                 or target not in numbers or fx not in numbers):
             raise RuntimeError("paper_exit_finn_answer_incomplete")
         mixed_response = mixed_answer.response
-        if (mixed_answer.status != "completed" or mixed_response is None
-                or mixed_response.proposal_id or mixed_response.confirmation_required
-                or (mixed_answer.policy and mixed_answer.policy.execute_allowed)):
-            raise RuntimeError("paper_exit_mixed_finn_read_failed")
+        mixed_failure = _mixed_finn_read_failure_category(mixed_answer)
+        if mixed_failure:
+            raise RuntimeError(mixed_failure)
         if (not any(item.entity_type == "review_history" for item in mixed_response.evidence)
                 or len(mixed_response.content.strip()) < 50
                 or not await review_probe._has_responses_exchange(

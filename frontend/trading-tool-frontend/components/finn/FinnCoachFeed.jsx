@@ -6,7 +6,7 @@ import { ArrowRight, Bell, Check, History } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { fetchAuth } from "@/lib/api/auth";
-import { readCoachFeedWithRetry } from "@/lib/finnCoachFeedRead.mjs";
+import { coachFeedHistoryCursor, readCoachFeedWithRetry } from "@/lib/finnCoachFeedRead.mjs";
 import { coachFeedDetailsHref } from "@/lib/finnCoachFeedLinks.mjs";
 import { canDiscussFeedItem, canUpdateFeedStatus } from "@/lib/finnCoachFeedActions.mjs";
 import { coachFeedDiscussionQuestion } from "@/lib/finnCommandSearch";
@@ -65,15 +65,15 @@ export default function FinnCoachFeed({ onDiscuss }) {
 
   const loadMore = async () => {
     const last = items[items.length - 1];
-    if (!history || !hasMore || loadingMore || !last?.id || !last?.created_at) return;
+    const cursor = coachFeedHistoryCursor(last);
+    if (!history || !hasMore || loadingMore || !cursor) return;
     const requestedOwner = user?.id;
     const requestedLocale = locale;
     const generation = ++requestGenerationRef.current;
     setLoadingMore(true);
     setMoreError(false);
     try {
-      const params = new URLSearchParams({ history: "true", limit: String(FEED_PAGE_SIZE + 1),
-        before_created_at: last.created_at, before_id: last.id });
+      const params = new URLSearchParams({ history: "true", limit: String(FEED_PAGE_SIZE + 1), ...cursor });
       const page = await fetchAuth(`/api/assistant/feed?${params.toString()}`, {
         method: "GET", forceFresh: true,
       });

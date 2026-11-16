@@ -4,6 +4,54 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 Paper-portefeuille en feedgeschiedenis (16 november 2026)
+
+Phase: `LOCAL_BUILD_VALIDATED_PR_CI_PENDING`. Branch
+`codex/finn-live-qa-followup-20261116`. De bestaande
+onafhankelijke QA-agent testte de vorige definitieve publieke SHA
+`3e46b03337f79e16923f9ceae3dc204763fda2a3` uitgebreid in de ingelogde
+browser en met beschermde Paper-fixtures. Het oordeel was **NOT_ACCEPTED**.
+De gecontroleerde virtuele Paper-koop/verkoop en aparte exit-reconciliatie
+slaagden zonder Live-order. De eerste expliciete vraag over de gesloten
+Paper-exit noemde de opgeslagen reden, bronvaluta, eerste doel en FX. De
+gecombineerde vervolgvraag over Reflectie, plan, botbeslissing en positie
+faalde vóór de inhoudscontrole met de toenmalige generieke code
+`paper_exit_mixed_finn_read_failed`; de oude artifact bevat geen bewijs welke
+van vijf terminaltoestanden dit veroorzaakte. De natuurlijke AAPL-Paper-koop
+bleef terecht geblokkeerd op een koers met bronmoment 13 november. In de
+browser noemde FINN de AAPL-positie en Paper-kas onbekend terwijl de botpagina
+€405,48 Paper-kas liet zien. De compacte feed toonde een beslissing van 21:30
+CET; ‘Alle updates’ miste die op de eerste pagina.
+
+Deze lokale reparatie verplicht voor een feitelijke vraag naar positie,
+Paper-kassaldo en botbudget een owner-scoped portefeuillelezing. Als precies
+één geverifieerde Paper-bot voor het genoemde asset bestaat, noemt FINN de
+opgeslagen hoeveelheid, diens kas en budget zonder het budget als extra
+koopruimte te presenteren. De feedgeschiedenis sorteert en pagineert
+botbeslissingen op hetzelfde effectieve activiteitsmoment als de compacte
+feed. De QA-verifier onderscheidt in een volgende run vijf allowlisted
+faalcategorieën voor de gecombineerde FINN-read; hij publiceert geen
+fixturewaarden of ruwe antwoorden.
+
+Gemeten Build-validatie op de samengevoegde code: volledige backend-suite
+**4.985 passed, 7 skipped** (testlog SHA-256
+`7fe8b469628b1f375d7241deabb82fc383e2f93ff3e262c7f649147f2c35b0da`);
+gerichte QA-verifier- en Paper-antwoordtests **60 passed, 3 skipped**;
+frontend build, typecheck, i18n-lint/-tests, command-/voorsteltests en
+`audit:high` groen (nul hoge kwetsbaarheden). De lokale FastAPI/Celery/
+PostgreSQL/Redis/Responses-actiematrix slaagde **17/17** met adaptertests
+**26/26** (artifact SHA-256
+`724b39efdef0c2b02e5e7d5caece563d473f2b829a4fd37097226e570b019ec7`);
+nul brokerorders, Live-bots, Live-aanroepen en productieverbindingen. Echte
+Responses-providerontwikkeling slaagde **20/20** (artifact SHA-256
+`51e6b8b135871a2371d252310b1a32c44bf413fd350ecd613f96273028d210bb`)
+met nul provider-, schema-, timeout-, parse- of validatiefouten. De volledige
+providerregressie slaagde **109/109** (artifact SHA-256
+`4897e28ad18993c6eadd31b008bbcdcdff7218a4cc2a6be07e80be8902465ad9`)
+met nul provider-, schema-, timeout-, parse- of validatiefouten. PR-CI,
+main-CI, Auto Deploy en onafhankelijke hertest zijn nog niet afgerond voor
+deze kandidaat.
+
 ## Indicatieve benchmark bij ontbrekende indicatoren (16 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_FINAL_STATUS_PENDING_QA`. Branch

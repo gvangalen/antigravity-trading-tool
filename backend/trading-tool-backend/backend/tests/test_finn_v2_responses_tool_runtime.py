@@ -14617,6 +14617,71 @@ def test_open_position_question_requires_portfolio_read_before_model_answer(monk
     assert captured["required_read_tool_name"] == "get_portfolio_and_exposure"
 
 
+def test_paper_cash_position_budget_question_requires_portfolio_read(monkeypatch):
+    question = (
+        "Hoeveel AAPL-positie heb ik nu werkelijk open, wat is mijn Paper-kassaldo, "
+        "en betekent mijn botbudget van €400 dat ik €400 extra kan kopen? "
+        "Geef alleen bevestigde bedragen en benoem ontbrekende risico-informatie."
+    )
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="cash-read-required")
+    front.model_led_coach = True
+    captured = {}
+
+    async def capture_loop(_self, **kwargs):
+        captured.update(kwargs)
+        return FinnResponsesResult("Ik lees de Paper-portefeuille.", "answer", ())
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run", capture_loop,
+    )
+    asyncio.run(front.run(
+        message=question, instructions="Lees feiten", conversation_context={}, verified_asset="AAPL",
+        workspace_hints={"page": "/bot", "symbol": "AAPL"},
+    ))
+    assert captured["read_only_turn"] is True
+    assert captured["required_read_tool_name"] == "get_portfolio_and_exposure"
+
+
+def test_paper_cash_position_budget_question_renders_verified_bot_facts():
+    question = (
+        "Hoeveel AAPL-positie heb ik nu werkelijk open, wat is mijn Paper-kassaldo, "
+        "en betekent mijn botbudget van €400 dat ik €400 extra kan kopen? "
+        "Geef alleen bevestigde bedragen en benoem ontbrekende risico-informatie."
+    )
+    fake = FakeResponses(
+        response("portfolio-read", calls=[tool_call("call-portfolio", "get_portfolio_and_exposure", {})]),
+        response("portfolio-answer", text="Ik kan de bedragen niet bevestigen."),
+    )
+
+    class FakeRead:
+        async def __call__(self, call):
+            assert call.name == "get_portfolio_and_exposure"
+            assert call.inputs == {"environment": "paper"}
+            return {"status": "completed", "results": [{
+                "scope": "read_portfolio", "status": "completed", "data": {
+                    "environment": "paper", "bots": [{
+                        "symbol": "AAPL", "is_live": False, "position_qty": 0,
+                        "paper_cash_eur": 405.48, "budget_total_eur": 400,
+                    }],
+                },
+            }]}
+
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="cash-verified-answer", model_led_coach=True,
+    )
+    front.reads = FakeRead()
+    result = asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="AAPL",
+        workspace_hints={"page": "/bot", "symbol": "AAPL"},
+    ))
+    assert result.response.answer_kind == "factual_source"
+    assert "0 AAPL open" in result.response.text
+    assert "€405,48 Paper-kas" in result.response.text
+    assert "geen extra koopruimte" in result.response.text
+
+
 def test_bot_decision_question_binds_persisted_history_even_for_portfolio_tool():
     catalog = FinnResponsesToolCatalog()
     selected = catalog.validate("get_saved_bots", {"asset": "AAPL"})
