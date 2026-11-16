@@ -273,15 +273,17 @@ async function fetchAuthInternal(
     error.body = text;
     error.path = path;
 
-    let expectedRiskAcknowledgement = false;
+    let expectedHandledConflict = false;
     if (res.status === 409) {
       try {
-        expectedRiskAcknowledgement = JSON.parse(text)?.detail?.code === "BOT_RISK_ACK_REQUIRED";
+        expectedHandledConflict = [
+          "BOT_RISK_ACK_REQUIRED", "PAPER_TRADE_QUOTE_UNAVAILABLE",
+        ].includes(JSON.parse(text)?.detail?.code);
       } catch {
-        // Other 409 responses keep their normal error logging.
+        // Unexpected 409 responses keep their normal error logging.
       }
     }
-    if (res.status !== 401 && !expectedRiskAcknowledgement) {
+    if (res.status !== 401 && !expectedHandledConflict) {
       console.error(`❌ fetchAuth ${path} failed:`, res.status, text);
     }
     throw error;

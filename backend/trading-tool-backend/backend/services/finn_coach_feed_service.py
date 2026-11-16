@@ -596,6 +596,13 @@ class FinnCoachFeedService:
         current = previous.mappings().first()
         if current:
             previous_source = current.get("source_observed_at")
+            if event_type == "bot_decision" and previous_source and source_observed_at:
+                previous_utc = (previous_source.replace(tzinfo=timezone.utc)
+                                if previous_source.tzinfo is None else previous_source.astimezone(timezone.utc))
+                observed_utc = (source_observed_at.replace(tzinfo=timezone.utc)
+                                if source_observed_at.tzinfo is None else source_observed_at.astimezone(timezone.utc))
+                if observed_utc < previous_utc:
+                    return None
             if event_type == "position_risk" and previous_source and source_observed_at:
                 previous_utc = (previous_source.replace(tzinfo=timezone.utc)
                                 if previous_source.tzinfo is None else previous_source.astimezone(timezone.utc))
@@ -663,6 +670,23 @@ class FinnCoachFeedService:
             # A handled, archived or expired observation remains acknowledged.
             # Only changed facts, or a prior condition-cleared transition, reopens it.
             if current["fingerprint"] == digest:
+                if (event_type == "bot_decision" and current["status"] in VISIBLE
+                        and source_observed_at
+                        and not _same_utc_moment(source_observed_at, previous_source)):
+                    # Today's assessment row is updated in place. Keep one
+                    # feed card for an unchanged bot state, but show its latest
+                    # verified decision time instead of the first poll time.
+                    await self.session.execute(text("""
+                        UPDATE finn_coach_feed_items
+                        SET evidence=CAST(:evidence AS JSONB),
+                            source_observed_at=:source_observed_at,
+                            expires_at=:expires_at, updated_at=NOW()
+                        WHERE id=CAST(:id AS UUID) AND user_id=:user_id
+                          AND status IN ('unread','read')
+                    """), {"id": str(current["id"]), "user_id": user_id,
+                           "evidence": _json(facts),
+                           "source_observed_at": source_observed_at,
+                           "expires_at": expires_at})
                 return None
             if current["status"] in VISIBLE:
                 await self.resolve(user_id=user_id, event_key=event_key)

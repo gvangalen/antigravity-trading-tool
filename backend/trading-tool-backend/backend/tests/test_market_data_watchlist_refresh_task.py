@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -6,6 +7,28 @@ import pytest
 
 from backend.celery_task import market_task
 from backend.celery_task.store_daily_scores_task import store_daily_scores_task
+
+
+@pytest.fixture(autouse=True)
+def _existing_refresh_cases_use_open_session(monkeypatch):
+    async def due(_session, symbols, *, now):
+        return symbols
+
+    monkeypatch.setattr(market_task, "_due_scheduled_symbols", due)
+
+
+@pytest.mark.parametrize("instant,expected", [
+    (datetime(2026, 11, 16, 14, 29, tzinfo=timezone.utc), False),
+    (datetime(2026, 11, 16, 14, 30, tzinfo=timezone.utc), True),
+    (datetime(2026, 11, 16, 21, 5, tzinfo=timezone.utc), False),
+    (datetime(2026, 7, 16, 13, 30, tzinfo=timezone.utc), True),
+    (datetime(2026, 11, 14, 15, 0, tzinfo=timezone.utc), False),
+])
+def test_us_stock_scheduled_quote_respects_new_york_standard_and_summer_hours(instant, expected):
+    asset = {"asset_class": "stock", "market_region": "us", "timezone": "America/New_York"}
+    assert market_task._scheduled_quote_due(asset, now=instant) is expected
+    assert market_task._scheduled_quote_due({**asset, "asset_class": "etf"}, now=instant) is expected
+    assert market_task._scheduled_quote_due({"asset_class": "crypto"}, now=instant) is True
 
 
 class _Scalars:
@@ -80,6 +103,65 @@ def test_configured_snapshot_refresh_does_not_call_provider_without_watchlist_as
 
     assert result["requested"] == []
     assert result["success_count"] == 0
+
+
+def test_closed_us_session_defers_quote_and_indicator_provider_calls(monkeypatch):
+    config = SimpleNamespace(user_id=7, symbol="AAPL", category="technical", enabled=True)
+
+    async def due(_session, _symbols, *, now):
+        return []
+
+    monkeypatch.setattr(market_task, "_due_scheduled_symbols", due)
+    monkeypatch.setattr(market_task, "async_session_factory", lambda: _SessionContext(["AAPL"], [config]))
+    monkeypatch.setattr(market_task, "MarketDataIngestionService", lambda _session: (_ for _ in ()).throw(AssertionError("provider must not be called")))
+    monkeypatch.setattr(market_task, "TechnicalDataService", lambda _session: (_ for _ in ()).throw(AssertionError("indicator provider must not be called")))
+
+    result = asyncio.run(market_task._sync_configured_market_snapshots())
+
+    assert result["requested"] == []
+    assert result["deferred_closed_session_symbols"] == 1
+
+
+def test_closed_stock_scopes_do_not_displace_due_crypto_scope(monkeypatch):
+    rows = [SimpleNamespace(user_id=user_id, symbol="AAPL", category="technical",
+                            updated_at=datetime(2026, 11, 16, tzinfo=timezone.utc))
+            for user_id in range(1, 5)]
+    rows.append(SimpleNamespace(user_id=9, symbol="BTC", category="technical",
+                                updated_at=datetime(2026, 11, 16, tzinfo=timezone.utc)))
+    captured = {}
+
+    async def due(_session, _symbols, *, now):
+        return ["BTC"]
+
+    class Ingestion:
+        def __init__(self, _session):
+            pass
+
+        async def ingest_latest_snapshots(self, symbols, **_kwargs):
+            captured["symbols"] = symbols
+            return {"requested": symbols, "ingested": [], "failed": [],
+                    "success_count": 0, "failure_count": 0}
+
+    class CategoryService:
+        def __init__(self, _session):
+            pass
+
+        async def sync_effective_indicators(self, user_id, symbol):
+            captured["scope"] = (user_id, symbol)
+            return {"failed": [], "synced": []}
+
+    monkeypatch.setattr(market_task, "_due_scheduled_symbols", due)
+    monkeypatch.setattr(market_task, "async_session_factory", lambda: _SessionContext([], rows))
+    monkeypatch.setattr(market_task, "MarketDataIngestionService", Ingestion)
+    monkeypatch.setattr(market_task, "MarketDataService", CategoryService)
+    monkeypatch.setattr(market_task, "MacroDataService", CategoryService)
+    monkeypatch.setattr(market_task, "TechnicalDataService", CategoryService)
+
+    result = asyncio.run(market_task._sync_configured_market_snapshots())
+
+    assert captured == {"symbols": ["BTC"], "scope": (9, "BTC")}
+    assert result["deferred_closed_session_symbols"] == 1
+    assert result["deferred_scope_count"] == 0
 
 
 @pytest.mark.parametrize("market_id", [None, 73])

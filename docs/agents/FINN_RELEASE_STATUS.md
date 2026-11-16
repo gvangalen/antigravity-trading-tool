@@ -4,6 +4,50 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 Paper-flow vervolg na live QA (16 november 2026)
+
+Phase: `LOCAL_VALIDATED_PR_PENDING`. De bestaande onafhankelijke QA-agent testte
+de ingelogde Paper-flow op publieke SHA `455638f4a9206073679152dc3214b796fb626f7f`.
+De AAPL-prijsafwijzing verliet nu wel de laadstatus: de API gaf gecontroleerd
+`PAPER_TRADE_QUOTE_UNAVAILABLE / market_price_stale`, met een AAPL-koersbron
+van 13 november en een FX-bron van 16 november. Een botwissel hergebruikte
+geen koers van de andere bot. FINN vergeleek de AAPL-benchmark 52,7 correct
+met de opgeslagen setupzone 61–75. Bestaande botgeschiedenis, verkoop en
+reflectie bleven na refresh leesbaar. Een nieuwe Paper-aankoop, positierisico
+en exit zijn **niet aangetoond**: de vereiste AAPL-koers was verouderd en BTC
+had geen complete actuele score of bruikbare FX-route. De vijf-fasen-
+acceptatie is daarom nog **niet groen**. De geteste QA-account had AAPL al
+op de watchlist; ook MSFT had een koersbron van 13 november en COIN toonde
+geen koersmoment. Dit wijst op een breder koersbronprobleem, maar de exacte
+productieprovider, diens quota en oorzaak zijn niet vastgesteld.
+
+Een tweede gemeten afwijking: de botgeschiedenis toonde een opgeslagen
+19:00 CET-beoordeling, terwijl de jongste FINN-botfeedkaart op 16:15 CET
+bleef. De oorzaak in code is dat dezelfde dagelijkse botbeoordelingsrij een
+nieuwer `decision_ts` krijgt, maar de feed een onveranderde actie/status als
+dezelfde fingerprint afwijst zonder het bronmoment bij te werken. De huidige
+Build-batch werkt bij een nieuwere gelijke beslissing de bestaande zichtbare
+feedkaart in place bij, zonder duplicaat of heropening van afgehandelde
+kaarten; de UI toont bij botkaarten het beslismoment expliciet in CET/CEST.
+De periodieke marktverversing slaat geplande US-stock/ETF-koersaanvragen
+buiten de reguliere New York-beursuren over om onnodige providerverzoeken te
+verminderen. Expliciete gebruikersreads en Paper-veiligheidsblokkades blijven
+intact. Deze aanpassing alleen bewijst niet dat de productiebron weer actuele
+koersen levert. De volledige lokale backend suite slaagde met **4.963 passed,
+7 skipped**; frontend build, typecheck, i18n lint/test, command/proposal-tests
+en productie-dependency-audit slaagden. De worker-actiematrix slaagde **17/17**
+(artifact SHA-256 `85311d9befa0ff630601bf291311b415c0ce7c55a8ff83ee5756052d2d4c35df`)
+en de adaptertests **26/26**; de matrix registreerde nul brokerorders,
+Live-aanroepen en productieverbindingen. De echte-providerontwikkelingsevaluatie
+slaagde **20/20** (artifact SHA-256
+`c2ccdf11fdcc6887c9fbe0567234b83e136c9c21423580719e9028562ad8cb1c`),
+zonder provider-, schema-, timeout-, parse- of validatiefouten. De echte-
+providerregressie slaagde **109/109** (artifact SHA-256
+`92fcb6491fb680e960f6623e8877deb47f79e15ab923fd8a01897c2900834ec9`),
+eveneens zonder provider-, schema-, timeout-, parse- of validatiefouten.
+Release-CI, deployment en onafhankelijke live QA zijn nog niet afgerond;
+er is nog geen nieuwe publieke kandidaat.
+
 ## FINN 3.0 volledige Paper-flow hertest (16 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_QA_PENDING`. De bestaande onafhankelijke QA-agent

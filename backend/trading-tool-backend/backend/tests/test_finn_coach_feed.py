@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -874,6 +875,43 @@ def test_same_observation_does_not_reopen_after_acknowledgement_or_expiry(previo
     assert created is None
     assert len(statements) == 2
     assert not any("INSERT INTO finn_coach_feed_items" in sql for sql in statements)
+
+
+@pytest.mark.parametrize("newer", [True, False])
+def test_repeated_paper_decision_refreshes_only_newer_visible_assessment(newer):
+    first_at = datetime(2026, 11, 16, 15, 15, tzinfo=timezone.utc)
+    observed_at = first_at + (timedelta(hours=2, minutes=45) if newer else -timedelta(minutes=15))
+    digest = hashlib.sha256("hold:planned:None:0:[]".encode()).hexdigest()
+    statements = []
+
+    class Result:
+        def mappings(self):
+            return self
+
+        def first(self):
+            return {"id": "11111111-1111-1111-1111-111111111111", "fingerprint": digest,
+                    "status": "unread", "source_observed_at": first_at}
+
+    class Session:
+        async def execute(self, sql, params):
+            statements.append((str(sql), params))
+            return Result()
+
+    created = asyncio.run(module.FinnCoachFeedService(Session()).publish(
+        user_id=7, event_key="bot-decision:23", event_type="bot_decision",
+        subject_type="bot", subject_id="9", subject="AAPL bot", symbol="AAPL",
+        evidence={"action": "hold", "status": "planned", "decision_id": 23,
+                  "source_observed_at": observed_at},
+        source_observed_at=observed_at, expires_at=observed_at + timedelta(days=2),
+        revision="hold:planned:None:0:[]",
+    ))
+    assert created is None
+    updates = [(sql, params) for sql, params in statements if "UPDATE finn_coach_feed_items" in sql]
+    assert len(updates) == int(newer)
+    if newer:
+        assert updates[0][1]["source_observed_at"] == observed_at
+        assert json.loads(updates[0][1]["evidence"])["decision_id"] == 23
+    assert not any("INSERT INTO finn_coach_feed_items" in sql for sql, _ in statements)
 
 
 def test_cleared_condition_can_reopen_after_same_score_returns():
