@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 import math
 import re
@@ -79,9 +79,55 @@ class ReviewToolAdapter:
 
     async def execute(self, *, user_id: int, asset: str | None = None, selector: dict | None = None,
                       review_id: int | None = None,
+                      selected_feed_decision_id: int | None = None,
                       include_weekly_reflection: bool = False, **_kwargs):
         self.sources.get("review_history").validate_request(user_id=user_id)
-        latest_rows = [] if review_id is not None else await self.repository.get_latest_bot_decisions_for_owner(user_id)
+        selected_feed_decision = None
+        if type(selected_feed_decision_id) is int and selected_feed_decision_id > 0:
+            selected_result = await self.session.execute(text("""
+                SELECT d.id, d.bot_id, d.action, d.status, d.decision_ts,
+                       d.amount_eur, b.name AS bot_name,
+                       COALESCE(d.symbol, s.symbol, s.data->>'symbol', st.symbol, b.symbol) AS symbol,
+                       tm.quote_currency,
+                       COALESCE(b.is_live,FALSE) AS is_live,
+                       o.status AS order_status, o.quote_amount_eur AS filled_amount_eur
+                FROM bot_decisions d JOIN bot_configs b
+                  ON b.id=d.bot_id AND b.user_id=d.user_id
+                LEFT JOIN strategies s ON s.id=b.strategy_id AND s.user_id=b.user_id
+                LEFT JOIN setups st ON st.id=s.setup_id AND st.user_id=b.user_id
+                LEFT JOIN trading_markets tm ON tm.id=b.market_id
+                LEFT JOIN LATERAL (
+                  SELECT status, quote_amount_eur FROM bot_orders o
+                  WHERE o.user_id=d.user_id AND o.bot_id=d.bot_id
+                    AND o.decision_id=d.id AND o.execution_environment='paper'
+                  ORDER BY o.id DESC LIMIT 1
+                ) o ON TRUE
+                WHERE d.user_id=:user_id AND d.id=:decision_id
+                  AND COALESCE(b.is_live,FALSE)=FALSE
+            """), {"user_id": user_id, "decision_id": selected_feed_decision_id})
+            selected = selected_result.mappings().first()
+            selected_symbol = str(selected["symbol"] or "").upper() if selected else ""
+            selected_pair = (selected_symbol if "/" in selected_symbol else
+                             f"{selected_symbol}/{selected['quote_currency']}"
+                             if selected and selected["quote_currency"] else None)
+            if selected and (not asset or (selected_pair == asset.upper() if "/" in asset
+                             else selected_symbol.split("/", 1)[0] == asset.upper())):
+                selected_feed_decision = {
+                    "bot_name": selected["bot_name"],
+                    "symbol": selected["symbol"], "action": selected["action"],
+                    "pair": selected_pair,
+                    "persistence_status": selected["status"],
+                    "decision_at": self._utc_instant(selected["decision_ts"]).isoformat(),
+                    "decision_at_amsterdam": amsterdam_source_moment(selected["decision_ts"]),
+                    "paper_order_status": selected["order_status"],
+                    "paper_executed": selected["status"] == "executed" and selected["order_status"] == "filled",
+                    "filled_amount_eur": (selected["filled_amount_eur"]
+                                          if selected["order_status"] == "filled" else None),
+                }
+        # A selected feed card asks about that event. A newer per-bot summary
+        # would compete with it and can wrongly replace its historical time.
+        latest_rows = ([] if review_id is not None or selected_feed_decision else
+                       await self.repository.get_latest_bot_decisions_for_owner(user_id))
         if asset:
             requested = asset.upper()
             latest_rows = [row for row in latest_rows if (
@@ -138,7 +184,7 @@ class ReviewToolAdapter:
             if row.get("symbol") and row.get("quote_currency") and "/" not in str(row["symbol"]):
                 decision["pair"] = f'{row["symbol"]}/{row["quote_currency"]}'
             latest_decisions.append(decision)
-        if selector and selector.get("_latest_bot_decisions_only") and review_id is None:
+        if selector and selector.get("_latest_bot_decisions_only") and review_id is None and not selected_feed_decision:
             return {
                 "data": ReviewHistoryData(latest_bot_decisions=latest_decisions),
                 "summary": {"title": "review_history", "kind": "latest_bot_decisions",
@@ -266,6 +312,11 @@ class ReviewToolAdapter:
                 f"review {review['review_url']}{lesson_context}"
             )
         items.extend(decision_items)
+        if selected_feed_decision:
+            items.insert(0, "Geselecteerde historische Paper-feedbeslissing: "
+                         + json.dumps(selected_feed_decision, ensure_ascii=False, default=str)
+                         + ". Een nieuwere botcontrole vervangt dit besluit niet; "
+                         "een bevestigde gesloten trade blijft afzonderlijk dossierbewijs.")
         items.append(
             f"Gesloten-tradedekking: {closed['status']}; {closed['coverage']['trades']} "
             f"bevestigde trades {'voor review #' + str(review_id) if review_id else 'in 30 dagen'}. "
@@ -292,7 +343,8 @@ class ReviewToolAdapter:
                 if isinstance(summary, dict):
                     weekly_reflection = {
                         "week_start": row["week_start"].isoformat(),
-                        "week_end": row["week_end"].isoformat(),
+                        "week_end": (row["week_end"] - timedelta(days=1)).isoformat(),
+                        "week_end_exclusive": row["week_end"].isoformat(),
                         "generated_at": self._utc_instant(row["generated_at"]).isoformat(),
                         **{key: summary[key] for key in
                            ("trades", "plans", "notes", "analyzed", "pending", "unavailable")
@@ -319,6 +371,7 @@ class ReviewToolAdapter:
                 items=[item for item in items if item],
                 weekly_reflection=weekly_reflection,
                 latest_bot_decisions=latest_decisions,
+                selected_feed_decision=selected_feed_decision,
                 closed_trade_status=closed["status"],
                 closed_trade_coverage=closed["coverage"],
                 closed_trade_review_ids=[r["review_id"] for r in closed_reviews],

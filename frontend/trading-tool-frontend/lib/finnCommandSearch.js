@@ -28,23 +28,25 @@ export function coachFeedDiscussionQuestion(item, locale = "nl") {
   const pair = String(item?.evidence?.trading_pair || "").trim().toUpperCase();
   const asset = pair.startsWith(`${symbol}/`) ? pair : symbol;
   const title = String(item?.title || "").trim();
+  const setupName = String(item?.evidence?.setup_name || "").trim();
+  const setup = setupName ? `'${setupName}'` : asset;
   const week = String(item?.evidence?.week_start || "").trim();
   const labels = {
     nl: {
       bot: `Bespreek dit opgeslagen Paper-botbesluit voor ${asset}: ${title}. Controleer de beslissing en eventuele uitvoering in de botgeschiedenis. Gebruik geen actuele koers als bewijs voor een historische uitvoering.`,
-      plan: `Bespreek deze planupdate voor ${asset}: ${title}. Lees de actuele setup en score van dit exacte handelspaar.`,
+      plan: `Bespreek deze planupdate voor setup ${setup} (${asset}): ${title}. Lees de opgeslagen setup en bijbehorende score.${pair ? " Gebruik dit exacte handelspaar." : " Als bij de setup geen handelspaar is opgeslagen, zeg dat expliciet en kies er niet zelf een."}`,
       weekly: `Bespreek mijn opgeslagen weekreflectie${week ? ` van ${week}` : ""}. Lees de afgesloten trades en noem alleen patronen die door de dossiers zijn onderbouwd.`,
       other: `Bespreek deze melding voor ${asset || "mijn account"}: ${title}. Lees de bijbehorende bron en actuele status opnieuw.`,
     },
     en: {
       bot: `Discuss this saved Paper bot decision for ${asset}: ${title}. Check the decision and any execution in bot history. Do not use a current quote as proof of a historical execution.`,
-      plan: `Discuss this plan update for ${asset}: ${title}. Read the current setup and score for this exact trading pair.`,
+      plan: `Discuss this plan update for setup ${setup} (${asset}): ${title}. Read the saved setup and related score.${pair ? " Use this exact trading pair." : " If no trading pair is saved on the setup, say so explicitly and do not choose one."}`,
       weekly: `Discuss my saved weekly reflection${week ? ` for ${week}` : ""}. Read the closed trades and mention only patterns supported by the records.`,
       other: `Discuss this update for ${asset || "my account"}: ${title}. Recheck its source and current status.`,
     },
     de: {
       bot: `Besprich diese gespeicherte Paper-Botentscheidung für ${asset}: ${title}. Prüfe Entscheidung und Ausführung in der Bot-Historie. Verwende keinen aktuellen Kurs als Beleg für eine historische Ausführung.`,
-      plan: `Besprich diese Planaktualisierung für ${asset}: ${title}. Lies Setup und Score für dieses genaue Handelspaar.`,
+      plan: `Besprich diese Planaktualisierung für Setup ${setup} (${asset}): ${title}. Lies das gespeicherte Setup und den zugehörigen Score.${pair ? " Verwende dieses genaue Handelspaar." : " Wenn kein Handelspaar gespeichert ist, sage dies ausdrücklich und wähle keines selbst."}`,
       weekly: `Besprich meine gespeicherte Wochenreflexion${week ? ` vom ${week}` : ""}. Lies die abgeschlossenen Trades und nenne nur belegte Muster.`,
       other: `Besprich diese Meldung für ${asset || "mein Konto"}: ${title}. Prüfe Quelle und aktuellen Status erneut.`,
     },

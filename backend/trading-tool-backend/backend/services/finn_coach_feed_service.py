@@ -1099,8 +1099,14 @@ class FinnCoachFeedService:
                    f.copy_source, f.expires_at, f.created_at, f.updated_at,
                    d.status AS verified_decision_status,
                    o.status AS verified_order_status,
-                   o.quote_amount_eur AS verified_filled_amount_eur
+                   o.quote_amount_eur AS verified_filled_amount_eur,
+                   st.name AS verified_setup_name, st.market_id AS verified_setup_market_id,
+                   tm.quote_currency AS verified_setup_quote_currency
             FROM finn_coach_feed_items f
+            LEFT JOIN setups st ON f.subject_type='setup'
+              AND st.user_id=f.user_id AND st.id=CASE WHEN f.subject_id ~ '^[0-9]{1,12}$'
+                THEN f.subject_id::BIGINT END
+            LEFT JOIN trading_markets tm ON tm.id=st.market_id
             LEFT JOIN bot_decisions d
               ON f.event_type='bot_decision'
              AND d.user_id=f.user_id
@@ -1162,8 +1168,14 @@ class FinnCoachFeedService:
                    f.copy_source, f.expires_at, f.created_at, f.updated_at,
                    d.status AS verified_decision_status,
                    o.status AS verified_order_status,
-                   o.quote_amount_eur AS verified_filled_amount_eur
+                   o.quote_amount_eur AS verified_filled_amount_eur,
+                   st.name AS verified_setup_name, st.market_id AS verified_setup_market_id,
+                   tm.quote_currency AS verified_setup_quote_currency
             FROM finn_coach_feed_items f
+            LEFT JOIN setups st ON f.subject_type='setup'
+              AND st.user_id=f.user_id AND st.id=CASE WHEN f.subject_id ~ '^[0-9]{1,12}$'
+                THEN f.subject_id::BIGINT END
+            LEFT JOIN trading_markets tm ON tm.id=st.market_id
             LEFT JOIN bot_decisions d
               ON f.event_type='bot_decision'
              AND d.user_id=f.user_id
@@ -1213,6 +1225,9 @@ class FinnCoachFeedService:
         verified_decision_status = row.pop("verified_decision_status", None)
         verified_order_status = row.pop("verified_order_status", None)
         verified_amount = row.pop("verified_filled_amount_eur", None)
+        verified_setup_name = row.pop("verified_setup_name", None)
+        verified_setup_market_id = row.pop("verified_setup_market_id", None)
+        verified_setup_quote_currency = row.pop("verified_setup_quote_currency", None)
         copy = row.pop("copy_json") or {}
         row.pop("fingerprint", None)
         row.pop("copy_source", None)
@@ -1222,6 +1237,17 @@ class FinnCoachFeedService:
         row["locale"] = locale if locale in LOCALES else "nl"
         row["title"] = (copy.get(row["locale"]) or copy.get("nl") or {}).get("title", "")
         row["description"] = (copy.get(row["locale"]) or copy.get("nl") or {}).get("body", "")
+        if row.get("subject_type") == "setup" and verified_setup_name:
+            facts = dict(row.get("evidence") or {})
+            facts["setup_name"] = verified_setup_name
+            if (verified_setup_market_id and verified_setup_quote_currency and row.get("symbol")):
+                facts["market_id"] = verified_setup_market_id
+                facts["trading_pair"] = f"{row['symbol']}/{verified_setup_quote_currency}"
+            else:
+                facts.pop("market_id", None)
+                facts.pop("trading_pair", None)
+                facts["trading_pair_status"] = "not_saved_on_setup"
+            row["evidence"] = facts
         if (row["event_type"] == "bot_decision" and verified_decision_status == "executed"
                 and verified_order_status == "filled"):
             # An older notification may have been published before the Paper

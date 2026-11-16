@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from hashlib import sha256
 from typing import Any, Dict, Optional
 
@@ -292,6 +292,7 @@ class FinnV2ReasoningContextService:
             historical = {}
             for key in ("status", "match_status", "plan_status", "source_status",
                         "market_id", "trading_pair", "direction", "change_24h", "benchmark_score",
+                        "setup_name", "trading_pair_status",
                         "score_as_of", "conditions", "components",
                         "component_source_status", "source_observed_at",
                         "quote_source_observed_at",
@@ -312,6 +313,14 @@ class FinnV2ReasoningContextService:
                     historical["recorded_reason_text_untrusted"] = [
                         value.strip()[:240] for value in reasons[:2]
                         if isinstance(value, str) and value.strip()]
+            if event_type == "weekly_reflection" and historical.get("week_end"):
+                try:
+                    historical["week_end_exclusive"] = historical["week_end"]
+                    historical["week_end"] = (
+                        date.fromisoformat(str(historical["week_end_exclusive"])) - timedelta(days=1)
+                    ).isoformat()
+                except ValueError:
+                    pass
             historical_facts = {"feed_item_id": item_id, "event_type": event_type,
                      "notification_status": item.get("status"),
                      "historical_notification": True,
@@ -354,7 +363,15 @@ class FinnV2ReasoningContextService:
                                     if str(match.get("setup_id")) == str(item["subject_id"])), None)
                     current_facts["current_setup"] = ({"id": current.get("setup_id"),
                                                 "name": current.get("name"),
-                                                "status": current.get("status")}
+                                                "status": current.get("status"),
+                                                "trading_pair": (
+                                                    f"{symbol}/{owned_setup['quote_currency']}"
+                                                    if owned_setup and owned_setup.get("market_id")
+                                                    and owned_setup.get("quote_currency") else None),
+                                                "trading_pair_status": (
+                                                    "saved" if owned_setup and owned_setup.get("market_id")
+                                                    and owned_setup.get("quote_currency")
+                                                    else "not_saved_on_setup")}
                                                if current else None)
                 if event_type in {"data_blocked", "improvement_suggestion"}:
                     current_facts["current_component_source_status"] = assessment.get("component_source_status")
@@ -788,6 +805,7 @@ class FinnV2ReasoningContextService:
             return {
                 "items": payload.get("items", [])[:10],
                 "latest_bot_decisions": payload.get("latest_bot_decisions", [])[:20],
+                "selected_feed_decision": payload.get("selected_feed_decision"),
                 "closed_trade_status": payload.get("closed_trade_status", "no_data"),
                 "closed_trade_coverage": payload.get("closed_trade_coverage", {}),
                 "closed_trade_review_ids": payload.get("closed_trade_review_ids", [])[:5],
