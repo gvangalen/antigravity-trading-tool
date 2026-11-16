@@ -6,6 +6,7 @@ import math
 import re
 
 from fastapi import HTTPException
+from sqlalchemy import text
 
 from backend.domain.finn_v2_source_registry import FinnV2InformationSourceRegistry
 from backend.services.bot_service import BotService
@@ -17,6 +18,7 @@ from backend.services.finn_v2_tool_adapters.display_source_moment import amsterd
 
 class ReviewToolAdapter:
     def __init__(self, session):
+        self.session = session
         self.bot_service = BotService(session)
         self.repository = BotRepository(session)
         self.sources = FinnV2InformationSourceRegistry()
@@ -76,7 +78,8 @@ class ReviewToolAdapter:
         return "; " + "; ".join(facts)
 
     async def execute(self, *, user_id: int, asset: str | None = None, selector: dict | None = None,
-                      review_id: int | None = None, **_kwargs):
+                      review_id: int | None = None,
+                      include_weekly_reflection: bool = False, **_kwargs):
         self.sources.get("review_history").validate_request(user_id=user_id)
         latest_rows = [] if review_id is not None else await self.repository.get_latest_bot_decisions_for_owner(user_id)
         if asset:
@@ -269,9 +272,52 @@ class ReviewToolAdapter:
             "Exchange-uitvoeringen tellen alleen na bewezen sluiting of expliciete gebruikersbevestiging als gesloten trade; oudere trades kunnen ontbreken; "
             "botbeslissingen hierboven zijn geen trade-uitkomsten."
         )
+        weekly_reflection = None
+        weekly_as_of = None
+        if include_weekly_reflection and review_id is None:
+            saved = await self.session.execute(text("""
+                SELECT week_start, week_end, summary, generated_at
+                FROM finn_weekly_trade_reflections
+                WHERE user_id=:user_id
+                ORDER BY week_start DESC LIMIT 1
+            """), {"user_id": user_id})
+            row = saved.mappings().first()
+            if row:
+                summary = row["summary"]
+                if isinstance(summary, str):
+                    try:
+                        summary = json.loads(summary)
+                    except ValueError:
+                        summary = None
+                if isinstance(summary, dict):
+                    weekly_reflection = {
+                        "week_start": row["week_start"].isoformat(),
+                        "week_end": row["week_end"].isoformat(),
+                        "generated_at": self._utc_instant(row["generated_at"]).isoformat(),
+                        **{key: summary[key] for key in
+                           ("trades", "plans", "notes", "analyzed", "pending", "unavailable")
+                           if type(summary.get(key)) is int and 0 <= summary[key] <= 100000},
+                        "observed_patterns": [
+                            {"theme": pattern["theme"], "count": pattern["count"]}
+                            for pattern in (summary.get("patterns") or [])[:7]
+                            if isinstance(pattern, dict)
+                            and pattern.get("theme") in {"plan_followed", "risk", "timing",
+                                "exit_process", "evidence_gap", "missing_plan", "plan_not_recorded"}
+                            and type(pattern.get("count")) is int and 1 <= pattern["count"] <= 500
+                        ],
+                    }
+                    weekly_as_of = self._utc_instant(row["generated_at"])
+                    items.append(
+                        f"Opgeslagen weekreflectie {weekly_reflection['week_start']} tot "
+                        f"{weekly_reflection['week_end']}: {weekly_reflection.get('trades', 0)} "
+                        f"gesloten trades; {weekly_reflection.get('plans', 0)} met plan; "
+                        f"{weekly_reflection.get('analyzed', 0)} geanalyseerd. "
+                        "De thematelling is een observatie, geen bewezen terugkerend gedrag."
+                    )
         return {
             "data": ReviewHistoryData(
                 items=[item for item in items if item],
+                weekly_reflection=weekly_reflection,
                 latest_bot_decisions=latest_decisions,
                 closed_trade_status=closed["status"],
                 closed_trade_coverage=closed["coverage"],
@@ -314,7 +360,8 @@ class ReviewToolAdapter:
             "as_of": max(
                 [self._utc_instant(row["decision_ts"]) for row in rows if row.get("decision_ts") is not None]
                 + [self._utc_instant(row["decision_ts"]) for row in latest_rows if row.get("decision_ts") is not None]
-                + [self._utc_instant(review["exit_at"]) for review in closed_reviews],
+                + [self._utc_instant(review["exit_at"]) for review in closed_reviews]
+                + ([weekly_as_of] if weekly_as_of else []),
                 default=None,
             ),
             "source": "bot_decisions_and_finn_trade_reviews",

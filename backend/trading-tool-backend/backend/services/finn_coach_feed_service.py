@@ -1086,27 +1086,42 @@ class FinnCoachFeedService:
     async def list(self, *, user_id: int, locale: str = "nl", history: bool = False,
                    limit: int = 50) -> list[dict]:
         result = await self.session.execute(text("""
-            SELECT id, event_key, event_type, subject_type, subject_id, symbol, fingerprint,
-                   priority, CASE WHEN expires_at <= NOW() OR
-                     (event_type='proposal_pending' AND NOT EXISTS (
+            SELECT f.id, f.event_key, f.event_type, f.subject_type, f.subject_id, f.symbol, f.fingerprint,
+                   f.priority, CASE WHEN f.expires_at <= NOW() OR
+                     (f.event_type='proposal_pending' AND NOT EXISTS (
                        SELECT 1 FROM finn_v2_proposals p
-                       WHERE p.id=finn_coach_feed_items.subject_id
+                       WHERE p.id=f.subject_id
                          AND p.user_id=:user_id
                          AND p.status IN ('draft','pending_confirmation')
                          AND p.expires_at > NOW()))
-                     THEN 'resolved' ELSE status END AS status,
-                   evidence, source_observed_at, copy_json,
-                   copy_source, expires_at, created_at, updated_at
-            FROM finn_coach_feed_items
-            WHERE user_id=:user_id
-              AND (:history OR status IN ('unread','read'))
-              AND (:history OR expires_at IS NULL OR expires_at > NOW())
-              AND (:history OR event_type <> 'proposal_pending' OR EXISTS (
+                     THEN 'resolved' ELSE f.status END AS status,
+                   f.evidence, f.source_observed_at, f.copy_json,
+                   f.copy_source, f.expires_at, f.created_at, f.updated_at,
+                   d.status AS verified_decision_status,
+                   o.status AS verified_order_status,
+                   o.quote_amount_eur AS verified_filled_amount_eur
+            FROM finn_coach_feed_items f
+            LEFT JOIN bot_decisions d
+              ON f.event_type='bot_decision'
+             AND d.user_id=f.user_id
+             AND d.bot_id::TEXT=f.subject_id
+             AND d.id=CASE WHEN f.evidence->>'decision_id' ~ '^[0-9]{1,12}$'
+               THEN (f.evidence->>'decision_id')::BIGINT END
+            LEFT JOIN LATERAL (
+              SELECT status, quote_amount_eur FROM bot_orders
+              WHERE user_id=d.user_id AND bot_id=d.bot_id AND decision_id=d.id
+                AND execution_environment='paper'
+              ORDER BY id DESC LIMIT 1
+            ) o ON TRUE
+            WHERE f.user_id=:user_id
+              AND (:history OR f.status IN ('unread','read'))
+              AND (:history OR f.expires_at IS NULL OR f.expires_at > NOW())
+              AND (:history OR f.event_type <> 'proposal_pending' OR EXISTS (
                     SELECT 1 FROM finn_v2_proposals p
-                    WHERE p.id=finn_coach_feed_items.subject_id
+                    WHERE p.id=f.subject_id
                       AND p.user_id=:user_id AND p.status IN ('draft','pending_confirmation')
                       AND p.expires_at > NOW()))
-            ORDER BY created_at DESC, priority DESC, id DESC LIMIT :limit
+            ORDER BY f.created_at DESC, f.priority DESC, f.id DESC LIMIT :limit
         """), {"user_id": user_id, "history": history, "limit": min(max(limit, 1), 100)})
         rows = [self._serialize(dict(row), locale) for row in result.mappings().all()]
         if history:
@@ -1134,18 +1149,35 @@ class FinnCoachFeedService:
         except (ValueError, TypeError):
             return None
         result = await self.session.execute(text("""
-            SELECT id, event_key, event_type, subject_type, subject_id, symbol, fingerprint,
-                   priority, CASE WHEN expires_at <= NOW() OR
-                     (event_type='proposal_pending' AND NOT EXISTS (
+            SELECT f.id, f.event_key, f.event_type, f.subject_type, f.subject_id, f.symbol, f.fingerprint,
+                   f.priority, CASE WHEN f.expires_at <= NOW() OR
+                     (f.event_type='proposal_pending' AND NOT EXISTS (
                        SELECT 1 FROM finn_v2_proposals p
-                       WHERE p.id=finn_coach_feed_items.subject_id
+                       WHERE p.id=f.subject_id
                          AND p.user_id=:user_id
                          AND p.status IN ('draft','pending_confirmation')
                          AND p.expires_at > NOW()))
-                     THEN 'resolved' ELSE status END AS status,
-                   evidence, source_observed_at, copy_json,
-                   copy_source, expires_at, created_at, updated_at
-            FROM finn_coach_feed_items WHERE id=CAST(:id AS UUID) AND user_id=:user_id
+                     THEN 'resolved' ELSE f.status END AS status,
+                   f.evidence, f.source_observed_at, f.copy_json,
+                   f.copy_source, f.expires_at, f.created_at, f.updated_at,
+                   d.status AS verified_decision_status,
+                   o.status AS verified_order_status,
+                   o.quote_amount_eur AS verified_filled_amount_eur
+            FROM finn_coach_feed_items f
+            LEFT JOIN bot_decisions d
+              ON f.event_type='bot_decision'
+             AND d.user_id=f.user_id
+             AND d.bot_id::TEXT=f.subject_id
+             AND d.id=CASE WHEN f.evidence->>'decision_id' ~ '^[0-9]{1,12}$'
+               THEN (f.evidence->>'decision_id')::BIGINT END
+            LEFT JOIN LATERAL (
+              SELECT status, quote_amount_eur FROM bot_orders
+              WHERE user_id=d.user_id AND bot_id=d.bot_id AND decision_id=d.id
+                AND execution_environment='paper'
+              ORDER BY id DESC LIMIT 1
+            ) o ON TRUE
+            WHERE f.id=CAST(:id AS UUID)
+              AND f.user_id=:user_id
         """), {"id": item_id, "user_id": user_id})
         row = result.mappings().first()
         item = self._serialize(dict(row), locale) if row else None
@@ -1178,6 +1210,9 @@ class FinnCoachFeedService:
 
     @staticmethod
     def _serialize(row: dict, locale: str) -> dict:
+        verified_decision_status = row.pop("verified_decision_status", None)
+        verified_order_status = row.pop("verified_order_status", None)
+        verified_amount = row.pop("verified_filled_amount_eur", None)
         copy = row.pop("copy_json") or {}
         row.pop("fingerprint", None)
         row.pop("copy_source", None)
@@ -1187,6 +1222,15 @@ class FinnCoachFeedService:
         row["locale"] = locale if locale in LOCALES else "nl"
         row["title"] = (copy.get(row["locale"]) or copy.get("nl") or {}).get("title", "")
         row["description"] = (copy.get(row["locale"]) or copy.get("nl") or {}).get("body", "")
+        if (row["event_type"] == "bot_decision" and verified_decision_status == "executed"
+                and verified_order_status == "filled"):
+            # An older notification may have been published before the Paper
+            # order settled. Show the owner-scoped ledger outcome on every read.
+            facts = {**(row.get("evidence") or {}), "status": "executed",
+                     "order_status": "filled", "amount_eur": verified_amount}
+            row["evidence"] = facts
+            factual = _bot_fallback(str(facts.get("subject") or row["symbol"] or ""), facts)[row["locale"]]
+            row["title"], row["description"] = factual["title"], factual["body"]
         if row["event_type"] == "bot_decision" and any(phrase in row["description"] for phrase in (
                 "Paper-beslissing vastgelegd", "Paper decision was recorded",
                 "Paper-Entscheidung gespeichert")):

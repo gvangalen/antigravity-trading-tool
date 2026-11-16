@@ -404,6 +404,7 @@ class ReviewHistoryData(BaseModel):
     closed_trade_coverage: Dict[str, int] = Field(default_factory=dict)
     closed_trade_review_ids: List[int] = Field(default_factory=list)
     closed_trades: List[ClosedTradeEvidenceData] = Field(default_factory=list)
+    weekly_reflection: Optional[Dict[str, Any]] = None
 
 
 ToolDataUnion = Union[

@@ -792,6 +792,7 @@ class FinnV2ReasoningContextService:
                 "closed_trade_coverage": payload.get("closed_trade_coverage", {}),
                 "closed_trade_review_ids": payload.get("closed_trade_review_ids", [])[:5],
                 "closed_trades": payload.get("closed_trades", [])[:5],
+                "weekly_reflection": payload.get("weekly_reflection"),
             }
         return {}
 

@@ -79,6 +79,49 @@ def test_paper_bot_fallback_distinguishes_decision_from_execution():
     assert "geen gemiste winst" in held["nl"]["body"]
 
 
+def test_historical_paper_card_uses_owner_verified_filled_order_on_read():
+    row = {
+        "id": "11111111-1111-1111-1111-111111111111", "event_type": "bot_decision",
+        "symbol": "AAPL", "evidence": {"symbol": "AAPL", "action": "buy",
+            "status": "executed", "order_status": None, "amount_eur": 400},
+        "copy_json": module._bot_fallback("AAPL", {"symbol": "AAPL",
+            "action": "buy", "status": "executed", "order_status": None}),
+        "verified_decision_status": "executed", "verified_order_status": "filled",
+        "verified_filled_amount_eur": 393.01, "created_at": None,
+        "updated_at": None, "source_observed_at": None, "expires_at": None,
+        "fingerprint": "old", "copy_source": "verified_facts",
+    }
+    rendered = module.FinnCoachFeedService._serialize(row, "nl")
+    assert "heeft gekocht" in rendered["title"]
+    assert "€393,01" in rendered["description"]
+    assert rendered["evidence"]["order_status"] == "filled"
+
+
+def test_historical_paper_card_does_not_claim_execution_without_filled_order():
+    row = {
+        "id": "11111111-1111-1111-1111-111111111111", "event_type": "bot_decision",
+        "symbol": "AAPL", "evidence": {"symbol": "AAPL", "action": "buy",
+            "status": "executed", "order_status": None, "amount_eur": 400},
+        "copy_json": module._bot_fallback("AAPL", {"symbol": "AAPL",
+            "action": "buy", "status": "executed", "order_status": None}),
+        "verified_decision_status": "executed", "verified_order_status": None,
+        "verified_filled_amount_eur": None, "created_at": None,
+        "updated_at": None, "source_observed_at": None, "expires_at": None,
+        "fingerprint": "old", "copy_source": "verified_facts",
+    }
+    rendered = module.FinnCoachFeedService._serialize(row, "nl")
+    assert "niet bevestigd" in rendered["title"]
+
+
+def test_paper_feed_discussion_separates_historical_execution_from_current_quote():
+    instruction = _feed_evidence_instruction([{
+        "source": "owner_scoped_feed", "facts": {"event_type": "bot_decision",
+            "historical_event_facts": {"status": "executed"}},
+    }])
+    assert "historical Paper bot decision" in instruction
+    assert "Do not add or label a current market quote" in instruction
+
+
 def test_paper_bot_fallback_covers_other_persisted_outcomes():
     for status in ("ready", "approved", "awaiting_exchange"):
         assert "wil kopen" in module._bot_fallback("AAPL plan", {

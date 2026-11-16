@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from time import monotonic
 from types import SimpleNamespace
@@ -741,6 +742,9 @@ class FinnV2ToolExecutionService:
             verified_review_id = selector.get("_verified_review_id")
             return await self.review_adapter.execute(
                 user_id=user_id, asset=selector.get("asset"), selector=selector,
+                include_weekly_reflection=bool(re.search(
+                    r"weekreflectie|wekelijkse reflectie|weekly reflection|wochenreflexion",
+                    str(getattr(run, "message", "") or ""), re.I)),
                 review_id=message_review_id or (
                     verified_review_id if type(verified_review_id) is int and verified_review_id > 0 else None
                 ),
