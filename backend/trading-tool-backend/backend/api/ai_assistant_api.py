@@ -288,7 +288,7 @@ async def assistant_chat(
         # Keep the entry boundary limited to client state and transport
         # controls. The durable FINN V2 run selects its contract before it
         # reads personalized context in the lifecycle worker.
-        context_payload = _feed_context_boundary(_assistant_context_payload(request.context))
+        context_payload = _selected_feed_context(request)
         runtime_selection = _preflight_v2_runtime_selection(
             user_id=user_id,
             query=request.query,
@@ -391,6 +391,13 @@ def _feed_context_boundary(payload: Optional[dict]) -> dict:
         for key in ("feed_item_id", "locale", "session_id")
         if key in context
     }
+
+
+def _selected_feed_context(request: AssistantChatRequest) -> dict:
+    context = _assistant_context_payload(request.context)
+    if request.feed_item_id:
+        context["feed_item_id"] = request.feed_item_id
+    return _feed_context_boundary(context)
 
 
 def _safe_request_path(raw_request: Request, fallback: str) -> str:
@@ -604,7 +611,7 @@ async def assistant_chat_stream(
         try:
             # Match the non-streaming boundary exactly. Selection and any
             # contract-required context collection happen after run creation.
-            context_payload = _feed_context_boundary(_assistant_context_payload(request.context))
+            context_payload = _selected_feed_context(request)
             runtime_selection = _preflight_v2_runtime_selection(
                 user_id=user_id,
                 query=request.query,

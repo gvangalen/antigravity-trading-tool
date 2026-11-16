@@ -17,9 +17,17 @@ import {
   openFinnContext,
   resolveFeedDraftQuery,
   resolveFeedItemContext,
+  selectedFeedItemForSubmission,
   shouldAttachFeedContext,
   updateFeedDiscussionDraftIfCurrent,
 } from "../lib/finnCommandSearch.js";
+
+test("feed click stays explicit for the first submission even when command state changes", () => {
+  const selection = { itemId: "clicked-card", nonce: "feed:clicked-card:2" };
+  assert.equal(selectedFeedItemForSubmission(selection, null, "Bespreek deze kaart"), "clicked-card");
+  assert.equal(selectedFeedItemForSubmission(selection, selection.nonce, "Vervolgvraag"), null);
+  assert.equal(selectedFeedItemForSubmission(selection, null, "  "), null);
+});
 
 test("feed discussion names the selected event and exact pair", () => {
   assert.match(coachFeedDiscussionQuestion({ event_type: "plan_review", symbol: "BTC",

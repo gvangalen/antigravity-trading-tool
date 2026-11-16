@@ -3087,7 +3087,8 @@ class FinnResponsesAnswerVerifier:
                 )
             elif scopes == {"read_review_history"} and symbol:
                 if args.get("_selected_paper_feed_decision") is True:
-                    expected = render_selected_paper_feed_decision(read, symbol=symbol)
+                    expected = render_selected_paper_feed_decision(
+                        read, symbol=symbol, expected_source_at=args.get("_selected_feed_source_at"))
                 else:
                     mode = False if re.search(r"\bPaper\b", message, re.I) else (
                         True if re.search(r"\bLive\b", message, re.I) else None)

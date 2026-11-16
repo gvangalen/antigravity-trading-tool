@@ -270,6 +270,7 @@ class FinnV2ReasoningContextService:
     async def _current_feed_evidence(self, run) -> list[ReasoningEvidenceItem]:
         context = getattr(run, "client_context_json", {}) or {}
         item_id = str(context.get("feed_item_id") or "").strip()
+        selection_origin = "current_run" if item_id else "conversation"
         if not item_id and getattr(run, "conversation_id", None):
             from backend.infrastructure.repositories.finn_v2_conversation_repository import FinnV2ConversationRepository
             saved = await FinnV2ConversationRepository(self.session).get_context(
@@ -323,6 +324,7 @@ class FinnV2ReasoningContextService:
                     pass
             historical_facts = {"feed_item_id": item_id, "event_type": event_type,
                      "symbol": item.get("symbol"),
+                     "selection_origin": selection_origin,
                      "notification_status": item.get("status"),
                      "historical_notification": True,
                      "current_trade_signal_confirmed": False,

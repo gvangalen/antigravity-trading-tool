@@ -90,6 +90,11 @@ export function shouldAttachFeedContext(request, submittedQuery, usedNonce) {
   );
 }
 
+export function selectedFeedItemForSubmission(selection, usedNonce, submittedQuery) {
+  return selection?.itemId && selection?.nonce && selection.nonce !== usedNonce
+    && String(submittedQuery || "").trim() ? selection.itemId : null;
+}
+
 export function openFinnContext({ query, context = {}, autoSubmit = true } = {}) {
   if (typeof window === "undefined") return;
   window.dispatchEvent(

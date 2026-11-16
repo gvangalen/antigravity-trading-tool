@@ -24,6 +24,9 @@ class AssistantContextSchema(BaseModel):
 class AssistantChatRequest(BaseModel):
     query: str
     context: Optional[AssistantContextSchema] = None
+    # A clicked feed card carries its opaque selection independently of the
+    # mutable workspace context. Ownership is checked on every request.
+    feed_item_id: Optional[str] = Field(default=None, max_length=64)
     timeframe: Optional[str] = None
     history: Optional[List[Dict[str, Any]]] = None
     session_id: Optional[str] = None  # Optional session ID for persistent chats

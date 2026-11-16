@@ -4,6 +4,40 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 clicked feed identity repair (16 november 2026)
+
+Phase: `LOCAL_REPAIR_VALIDATION`. Independent authenticated browser QA returned
+`NOT_ACCEPTED` on public SHA `3ecbf7e0db808dc1680240680f82b16a79cecc29`.
+BTC and AAPL Paper wait cards displayed 07:00 CET but FINN answered about a
+11:45:17 CET decision. AAPL Paper buy/sell discussions lost their existing
+bot and execution evidence. The BTC missing-score setup card, saved weekly
+reflection and AAPL follow-up after BTC passed. The browser did not expose
+the sent chat request or internal tool trace. A separate read-only feed GET
+confirmed that the historical BTC and AAPL card rows themselves have source
+moments of 07:00:18 CET and creation moments near 07:00:42 CET. The failure
+therefore lies after feed listing, but its exact layer is not yet proven.
+
+The current repair carries the clicked feed ID as an explicit chat request
+field independent of mutable workspace context, and the server owner-verifies
+it. A historical Paper card answer requires selection in the current run and
+a saved decision matching that card's source moment. Buy and sell cards use
+their selected saved Paper decision and owner-verified fill status and amount.
+When identity or evidence cannot be verified, FINN does not substitute a
+later decision. The full backend suite passed **4,936** with **7 skipped**.
+Frontend build, typecheck, i18n lint and tests, command tests (80), proposal
+tests, and high severity dependency audit passed. On a freshly restarted
+local server and worker, the action matrix passed **17/17** contracts and
+**26/26** adapter tests (SHA-256
+`2b270c65d52dc79b80f83791c9235184af78c93b8473099d21d25b10c652bfd8`),
+with zero broker orders, Live trading calls or production connections. The
+real-provider development selector passed **20/20** (SHA-256
+`b9a03c413826da92a54b7f821d161bc8606260327280e93d20635aae544d79a1`),
+with zero provider, schema, parse or validation failures. The real-provider
+regression selector passed **109/109** (SHA-256
+`dc290f85c0cc912d0cf50c2e8f50628194e8961b837eda275a5673c5f0d31440`),
+also with zero provider, schema, parse or validation failures. CI, deployment
+and independent QA remain pending; this is not an accepted live release.
+
 ## FINN 3.0 selected historical Paper wait card (16 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_STATUS_SHA_PENDING_LIVE_QA`. Independent authenticated live QA returned

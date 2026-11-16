@@ -541,6 +541,7 @@ def test_discuss_setup_rechecks_current_match_and_marks_old_notification_histori
     assert current.facts["current_setup"]["name"] == "ETH Eigen Plan"
     assert current.facts["current_setup"]["status"] == "insufficient_data"
     assert historical.facts["historical_notification"] is True
+    assert historical.facts["selection_origin"] == "current_run"
     assert historical.facts["current_trade_signal_confirmed"] is False
     assert historical.facts["historical_event_facts"]["benchmark_score"] == 72
     assert historical.facts["historical_source_observed_at"] == "2026-10-10T10:00:00Z"

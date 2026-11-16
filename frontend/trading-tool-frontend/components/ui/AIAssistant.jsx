@@ -19,7 +19,7 @@ import { normalizeScopedAssetSymbol, resolveFinnBotPageContext, resolveFinnConte
 import { normalizeTraderProfilePreferences } from "@/lib/traderProfileOptions";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import FinnCommandCenter from "@/components/finn/FinnCommandCenter";
-import { FINN_ASSETS, resolveFeedDraftQuery, shouldAttachFeedContext } from "@/lib/finnCommandSearch";
+import { FINN_ASSETS, resolveFeedDraftQuery, selectedFeedItemForSubmission, shouldAttachFeedContext } from "@/lib/finnCommandSearch";
 import { getActiveSetupId } from "@/lib/setup/activeSetup";
 import { indicatorDisplayName } from "@/lib/indicators/configuredIndicatorRows.mjs";
 import { formatDraftCardValue, formatExecutionMode } from "@/lib/contractValueFormatter.mjs";
@@ -450,6 +450,7 @@ function AIAssistantContent({
   onQueryChange,
   autoFocusComposer = false,
   commandRequest = null,
+  feedSelection = null,
   closeLabel = null,
 }) {
   const pathname = usePathname();
@@ -1530,11 +1531,18 @@ function AIAssistantContent({
       // selection when sending, since the last chat render may predate it.
       const livePageContext = getContext();
       const commandContext = { ...(commandRequest?.context || {}) };
+      const selectedFeedItemId = selectedFeedItemForSubmission(
+        feedSelection, usedFeedRequestRef.current, nextQuery,
+      );
+      if (selectedFeedItemId) commandContext.feed_item_id = selectedFeedItemId;
       if (commandContext.feed_item_id) {
         const attachFeed = shouldAttachFeedContext(
-          commandRequest, nextQuery, usedFeedRequestRef.current,
+          selectedFeedItemId
+            ? { context: { feed_item_id: selectedFeedItemId }, nonce: feedSelection.nonce }
+            : commandRequest,
+          nextQuery, usedFeedRequestRef.current,
         );
-        usedFeedRequestRef.current = commandRequest?.nonce;
+        usedFeedRequestRef.current = feedSelection?.nonce || commandRequest?.nonce;
         if (!attachFeed) delete commandContext.feed_item_id;
       }
       // The language selector updates <html lang> synchronously. Read it at
@@ -1749,6 +1757,7 @@ function AIAssistantContent({
         },
         2,
         chatSessionId,
+        selectedFeedItemId,
       );
     } catch (err) {
       if (activeStreamIdRef.current !== streamId) return;

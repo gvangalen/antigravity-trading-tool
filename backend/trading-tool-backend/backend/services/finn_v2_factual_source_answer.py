@@ -90,7 +90,9 @@ def render_bot_decision(
             f"marktbeoordeling. Opslagstatus: {status}.{safety_text}")
 
 
-def render_selected_paper_feed_decision(result: dict[str, Any], *, symbol: str) -> str:
+def render_selected_paper_feed_decision(
+    result: dict[str, Any], *, symbol: str, expected_source_at: str | None = None,
+) -> str:
     """Answer a clicked Paper card only from its owner-verified decision row."""
     data, reason = _read(result, "read_review_history")
     if data is None:
@@ -102,6 +104,15 @@ def render_selected_paper_feed_decision(result: dict[str, Any], *, symbol: str) 
                 "niet aan een opgeslagen beslissing koppelen. Ik gebruik geen later botbesluit als vervanging.")
     action = str(selected.get("action") or "").lower()
     at = _moment(selected.get("decision_at"))
+    if expected_source_at:
+        try:
+            expected = datetime.fromisoformat(str(expected_source_at).replace("Z", "+00:00"))
+            actual = datetime.fromisoformat(str(selected.get("decision_at")).replace("Z", "+00:00"))
+            if expected.tzinfo is None or actual.tzinfo is None or abs((actual - expected).total_seconds()) > 2:
+                raise ValueError("selected_feed_source_mismatch")
+        except (TypeError, ValueError):
+            return (f"Het geselecteerde Paper-botbesluit voor {symbol} hoort niet bij "
+                    "het bronmoment van de aangeklikte kaart. Ik gebruik geen later besluit als vervanging.")
     if action not in {"hold", "houd_vast", "buy", "sell"} or not at:
         return (f"Het geselecteerde Paper-botbesluit voor {symbol} mist een "
                 "controleerbare actie of tijd. Ik kan de uitkomst niet bevestigen.")

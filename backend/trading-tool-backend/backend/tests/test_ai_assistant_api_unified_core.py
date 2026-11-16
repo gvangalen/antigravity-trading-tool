@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 
 from starlette.requests import Request
 
-from backend.api.ai_assistant_api import assistant_chat, _audit_context_summary, router
+from backend.api.ai_assistant_api import assistant_chat, _audit_context_summary, _selected_feed_context, router
 from backend.schemas.assistant_schema import AssistantChatRequest
 from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
 
@@ -15,6 +15,13 @@ def test_finn_routes_retire_the_separate_insight_endpoint():
     assert "/assistant/chat" in paths
     assert "/assistant/mission-control" not in paths
     assert "/assistant/insight" not in paths
+
+
+def test_explicit_feed_selection_overrides_mutable_workspace_context():
+    request = AssistantChatRequest(query="Bespreek dit Paper-botbesluit", context={
+        "feed_item_id": "older-card", "symbol": "BTC", "bot_id": 12,
+    }, feed_item_id="clicked-card")
+    assert _selected_feed_context(request) == {"feed_item_id": "clicked-card"}
 
 def test_audit_context_summary_includes_profile_match_metadata():
     summary = _audit_context_summary(
