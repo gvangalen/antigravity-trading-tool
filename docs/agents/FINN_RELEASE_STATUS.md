@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN report bot clocks and correction identity (16 november 2026)
 
-Phase: `LIVE_QA_NOT_ACCEPTED_LOCAL_REPAIR`. Independent authenticated browser
+Phase: `PRODUCT_DEPLOYED_STATUS_SHA_PENDING_LIVE_QA`. Independent authenticated browser
 QA on final public SHA `820e34e41082d67f4d5784791579049613d511ff`
 returned `NOT_ACCEPTED` for this bot-clock scope. The existing 16 November
 report was generated before the repair, so new report generation was
@@ -36,10 +36,16 @@ connections. Real-provider development passed **20/20** (artifact SHA-256
 `bc36b51cdc7070758ae451814dad1049f981ae82c0e9b0ee193fe3c359442821`)
 and regression **109/109** (artifact SHA-256
 `104437c1f1877cfa50d10d7a3401913f2efb9fd02351ac56ea13b487fb4daa16`),
-with zero provider, schema, timeout, parse, or validation failures. This is
-local repair evidence; PR CI, deployment and independent live retest of this
-new candidate remain pending. A new daily report is still needed to test the
-report-generation prose on live without changing an existing saved report.
+with zero provider, schema, timeout, parse, or validation failures. Product
+[PR #1120](https://github.com/gvangalen/antigravity-trading-tool/pull/1120)
+passed all five PR CI jobs and merged as
+`ece35f355e05e6454106aac63d5532ff04da1bd2`. Main CI `43893992985`
+passed all five jobs and Auto Deploy `43895072320` succeeded. Public backend
+health and frontend build-info both returned HTTP 200 with that exact SHA,
+matching GitHub main. This status update creates a later final SHA; its own
+main CI, Auto Deploy, public SHA parity and independent authenticated live QA
+remain pending. A new daily report is still needed to test report-generation
+prose on live without changing an existing saved report.
 
 The Paper Test morning logbook records three distinct defects: the saved
 daily report wrote a bot decision at 04:15 without a zone while its detail
