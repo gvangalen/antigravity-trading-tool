@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readCoachFeedWithRetry } from "../lib/finnCoachFeedRead.mjs";
+import { coachFeedHistoryCursor, readCoachFeedWithRetry } from "../lib/finnCoachFeedRead.mjs";
+
+test("history cursor follows the same activity clock as bot decision ordering", () => {
+  assert.deepEqual(coachFeedHistoryCursor({ id: "bot-1", created_at: "2026-11-16T00:45:00Z",
+    activity_at: "2026-11-16T21:30:00Z" }), {
+    before_created_at: "2026-11-16T21:30:00Z", before_id: "bot-1",
+  });
+  assert.deepEqual(coachFeedHistoryCursor({ id: "plan-1", created_at: "2026-11-16T20:00:00Z" }), {
+    before_created_at: "2026-11-16T20:00:00Z", before_id: "plan-1",
+  });
+  assert.equal(coachFeedHistoryCursor({ id: "missing-clock" }), null);
+});
 
 test("feed recovers from a short backend restart without changing stored items", async () => {
   let calls = 0;
