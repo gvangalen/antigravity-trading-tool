@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0 selected feed event repair (16 november 2026)
 
-Phase: `PRODUCT_DEPLOYED_STATUS_SHA_PENDING_LIVE_QA`. Independent authenticated
+Phase: `LIVE_QA_NOT_ACCEPTED_REPAIR_IN_PROGRESS`. Independent authenticated
 read-only QA tested the prior public SHA
 `b362b59eba221070672259114166b0832d3160e6` and returned
 `NOT_ACCEPTED`: the BTC 07:00 wait card discussed a later 09:00 bot decision,
@@ -42,9 +42,19 @@ passed all five jobs and Auto Deploy `43833590219` succeeded. Public backend
 health and frontend build info both returned HTTP 200 and that exact SHA,
 matching GitHub main. This status update creates a later SHA: its final main
 CI, Auto Deploy, public SHA parity and independent authenticated live QA
-verdict remain pending. The existing QA Agent will retest the two BTC cards
-and prior AAPL/weekly passes on the final public SHA. This is not an accepted
-live release yet.
+verdict remained pending at this entry's merge. The existing QA Agent then
+tested final public SHA `422ade6e4d0a2f18b46bdcb4468a0098bbbb8a5a` after
+a hard browser refresh and returned `NOT_ACCEPTED`: BTC and AAPL Paper wait
+cards from 07:00 CET both discussed a later 10:00 decision. The BTC
+missing-score setup card, saved AAPL Paper buy and sell, closed weekly
+reflection, and a later AAPL question after BTC passed. Browser tooling did
+not expose the exact sent request or tool trace, so the competing source is
+a code-based diagnosis, not a proven production trace. Branch
+`codex/finn-historical-feed-isolation-20261116` now removes later bot-history
+rows when one owner-verified Paper feed decision is selected, and excludes
+unrelated closed trades for unexecuted wait cards. This is not an accepted
+live release yet; the new candidate requires full gates, deployment and
+independent live QA.
 
 ## FINN 3.0 live QA repair batch (16 november 2026)
 
