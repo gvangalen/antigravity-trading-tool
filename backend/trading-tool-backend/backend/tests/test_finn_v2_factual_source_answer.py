@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor
 from backend.services.finn_v2_responses_answer_verifier import FinnResponsesAnswerVerifier
-from backend.services.finn_v2_factual_source_answer import mentions_technical_indicator
+from backend.services.finn_v2_factual_source_answer import mentions_technical_indicator, render_bot_decision
 from backend.services.asset_catalog_service import requested_catalog_trading_pair
 
 
@@ -26,6 +26,22 @@ def _run(message, results, *, verified_asset=None):
     assert checked.status == "completed", (checked.reason, checked.rejection_details)
     assert checked.text == prepared.response.text
     return prepared.response, calls[0]
+
+
+def test_explicit_bot_id_selects_only_its_saved_decision():
+    result = {"results": [{"scope": "read_review_history", "status": "completed",
+                           "data": {"latest_bot_decisions": [
+                               {"bot_id": 129, "symbol": "BTC", "is_live": False,
+                                "action": "hold", "persistence_status": "completed",
+                                "decision_at": "2026-11-16T08:45:18+00:00"},
+                               {"bot_id": 131, "symbol": "BTC", "is_live": False,
+                                "action": "buy", "persistence_status": "completed",
+                                "decision_at": "2026-11-16T09:00:18+00:00"},
+                           ]}}]}
+    answer = render_bot_decision(result, symbol="BTC", paper=False, bot_id=129)
+    assert "bot 129" in answer
+    assert "09:45:18 CET" in answer
+    assert "10:00:18 CET" not in answer
 
 
 def test_clicked_paper_wait_card_uses_selected_decision_not_later_history():

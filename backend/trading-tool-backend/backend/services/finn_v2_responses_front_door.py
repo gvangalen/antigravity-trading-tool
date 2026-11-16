@@ -35,6 +35,7 @@ from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCat
 from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolError
 from backend.services.finn_v2_responses_tool_relevance import FinnResponsesToolRelevanceGuard
 from backend.services.finn_v2_verified_turn_context import project_verified_turn
+from backend.services.finn_v2_bot_subject_claims import focused_bot_id
 from backend.services.finn_v2_verified_setup_reference import (
     listed_setup_ordinal, references_selected_setup, verified_selected_setup,
     verified_selected_setup_asset,
@@ -1610,6 +1611,7 @@ class FinnResponsesFrontDoor:
                     fact_text = render_bot_decision(
                         read_result, symbol=symbol, paper=mode,
                         pair=f"{pair[0]}/{pair[1]}" if pair and pair[0] == symbol else None,
+                        bot_id=focused_bot_id(message, previous_response),
                     )
                 elif fact_kind == "portfolio_read_time":
                     fact_text = render_portfolio_read_time(read_result)
@@ -4878,6 +4880,7 @@ class FinnResponsesFrontDoor:
 
         use_verified_turn = not resuming_clarification or getattr(self, "model_led_coach", False)
         verified_turn = project_verified_turn(previous_response) if use_verified_turn else None
+        continued_bot_id = focused_bot_id(message, previous_response)
         loop_started = monotonic()
         loop = FinnResponsesLoop(
             client=self.client, executor=execute, on_tool_result=checkpoint,
@@ -4891,6 +4894,13 @@ class FinnResponsesFrontDoor:
             message=model_message or message,
             instructions=(
                 self._model_led_instructions(locale, feed_evidence=feed_evidence)
+                + (
+                    f" The user's question or correction refers to saved bot ID {continued_bot_id}. "
+                    "Keep that exact bot as the subject. Match its owner-read bot_id before "
+                    "describing a decision, and ask for clarification if the row is absent. "
+                    "A different asset's bot is not a substitute."
+                    if continued_bot_id is not None else ""
+                )
                 + (
                     " The last confirmed action in this conversation changed the saved strategy '"
                     + str(confirmed_strategy.get("canonical_name") or "")

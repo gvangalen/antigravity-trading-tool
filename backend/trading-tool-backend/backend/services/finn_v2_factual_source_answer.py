@@ -44,7 +44,7 @@ def _number(value: Any) -> str | None:
 
 def render_bot_decision(
     result: dict[str, Any], *, symbol: str, paper: bool | None,
-    pair: str | None = None,
+    pair: str | None = None, bot_id: int | None = None,
 ) -> str:
     data, reason = _read(result, "read_review_history")
     if data is None:
@@ -52,10 +52,12 @@ def render_bot_decision(
     decisions = [row for row in data.get("latest_bot_decisions") or []
                  if isinstance(row, dict)
                  and str(row.get("symbol") or "").upper().split("/", 1)[0] == symbol
+                 and (bot_id is None or row.get("bot_id") == bot_id)
                  and (pair is None or str(row.get("pair") or row.get("symbol") or "").upper() == pair)
                  and (paper is None or bool(row.get("is_live")) is paper)]
     if not decisions:
-        return f"Ik vind geen opgeslagen besluit voor een {symbol}-bot in dit account."
+        label = f"bot {bot_id} ({symbol})" if bot_id is not None else f"{symbol}-bot"
+        return f"Ik vind geen opgeslagen besluit voor {label} in dit account."
     if len(decisions) != 1:
         names = ", ".join(str(row.get("bot_name") or "onbekend") for row in decisions[:5])
         return f"Ik vind meerdere {symbol}-bots ({names}). Welke bot bedoel je?"
@@ -84,7 +86,7 @@ def render_bot_decision(
     except (TypeError, ValueError):
         historical = True
     kind = "historische opgeslagen beoordeling" if historical else "opgeslagen beoordeling"
-    label = pair or symbol
+    label = f"bot {bot_id} ({pair or symbol})" if bot_id is not None else pair or symbol
     return (f"Het laatst opgeslagen besluit van je {label} {mode}-bot is {action_text}, "
             f"op {at} (Europe/Amsterdam). Dit is een {kind}, geen actuele "
             f"marktbeoordeling. Opslagstatus: {status}.{safety_text}")

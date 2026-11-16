@@ -317,7 +317,8 @@ def test_latest_owner_bot_decisions_do_not_depend_on_active_setup_or_history_win
         async def get_latest_bot_decisions_for_owner(self, user_id):
             assert user_id == 42
             return [
-                {"bot_name": "BTC Paper", "is_live": False, "symbol": "BTC",
+                {"bot_id": 129, "decision_id": 5001,
+                 "bot_name": "BTC Paper", "is_live": False, "symbol": "BTC",
                  "action": "hold", "status": "completed",
                  "decision_ts": datetime(2026, 10, 18, 7, 48, 54, tzinfo=timezone.utc)},
                 {"bot_name": "AAPL Paper", "is_live": False, "symbol": "AAPL",
@@ -341,6 +342,7 @@ def test_latest_owner_bot_decisions_do_not_depend_on_active_setup_or_history_win
     adapter.closed_trades = ClosedTrades()
     result = asyncio.run(adapter.execute(user_id=42, asset="BTC"))
     assert result["data"].latest_bot_decisions[0] == {
+        "bot_id": 129, "decision_id": 5001,
         "bot_name": "BTC Paper", "symbol": "BTC", "is_live": False,
         "action": "hold", "persistence_status": "completed",
         "decision_kind": "assessment", "decision_at": "2026-10-18T07:48:54+00:00",

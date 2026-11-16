@@ -196,6 +196,8 @@ class ReviewToolAdapter:
                 "strategy_reason": scores.get("strategy_reason"),
             }, bool(row.get("is_live")))
             decision = {
+                **({"bot_id": row["bot_id"]} if row.get("bot_id") is not None else {}),
+                **({"decision_id": row["decision_id"]} if row.get("decision_id") is not None else {}),
                 "bot_name": str(row.get("bot_name") or "onbekend")[:100],
                 "symbol": row.get("symbol"),
                 "is_live": bool(row.get("is_live")),
