@@ -4,6 +4,38 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 volledige Paper-flow hertest (16 november 2026)
+
+Phase: `BUILD_VALIDATION_IN_PROGRESS`. De bestaande onafhankelijke QA-agent
+testte de publieke FINN 3.0-flow op SHA `f08e66a22284355a4545195feba8b973edb1a2a5`.
+Historische botkaarten en account-readouts werkten, maar een nieuwe Paper-koop
+kon niet worden bewezen: BTC miste een complete actuele score en de AAPL-
+Paper-prijsaanvraag gaf HTTP 409. De orderkaart bleef daarna ten onrechte op
+`Marktprijs laden…` staan. De volledige vijf-fasen-acceptatie is dus **niet groen**.
+
+Deze Build-batch maakt de Paper-prijsafwijzing onderscheidbaar naar gecontroleerde
+koers, EUR-omrekening en bronmomenten; de orderkaart verlaat de laadstatus, toont
+de foutreden en biedt een nieuwe controle. Bij een botwissel start de kaart met
+de koers van de gekozen bot. Een mislukte broncontrole blijft een blokkade voor
+Paper-orders. De FX-verversingsfrequentie blijft ongewijzigd (elk uur op minuut
+4); de eerdere aanname dat deze elke minuut liep was onjuist. De volledige
+lokale backend suite slaagde met **4.954 passed, 7 skipped**. De frontend
+productiebouw en de gerichte foutrespons-test slaagden. De worker-actiematrix
+slaagde **17/17** (SHA-256 `f4d7eba5daa4948d85445360c7cd009153c97624cd66abce9abd13536a03c666`)
+en de adaptertests **26/26**. De echte provider-ontwikkelingsevaluatie slaagde
+**20/20** (artifact SHA-256 `47e5dc3b61691883d7a99a8a36345fb41b31a3ca95921e4bdd164e658593ff10`);
+de echte providerregressie slaagde **109/109** (artifact SHA-256
+`19f1cdf6b8adb01bd82de44dfba3c8246603d1f3eea7019b159386fb1b2f803f`),
+zonder provider-, schema-, timeout-, parse- of validatiefouten. Product
+[PR #1123](https://github.com/gvangalen/antigravity-trading-tool/pull/1123)
+slaagde op alle vijf CI-jobs en is gemerged als
+`2f6404ecffafd90c51a5f1da842bccce5c12bb8b`. Main CI `43921490202`
+slaagde op alle vijf jobs en Auto Deploy `43922542388` slaagde. GitHub main,
+de publieke backend-health en frontend-build-info identificeerden alle drie
+deze SHA; beide publieke endpoints gaven HTTP 200. De onafhankelijke
+ingelogde Paper-flow QA volgt op de uiteindelijke statusrevision na diens
+eigen succesvolle main-CI, Auto Deploy en publieke SHA-pariteit.
+
 ## FINN report bot clocks and correction identity (16 november 2026)
 
 Phase: `TARGETED_LIVE_QA_ACCEPTED_REPORT_GENERATION_NOT_TESTABLE`. Independent authenticated browser
