@@ -10,6 +10,8 @@ import { readCoachFeedWithRetry } from "@/lib/finnCoachFeedRead.mjs";
 import { coachFeedDetailsHref } from "@/lib/finnCoachFeedLinks.mjs";
 import { coachFeedDiscussionQuestion } from "@/lib/finnCommandSearch";
 
+const FEED_PAGE_SIZE = 50;
+
 export default function FinnCoachFeed({ onDiscuss }) {
   const { user, sessionChecked } = useAuth();
   const { t, locale } = useTranslation();
@@ -19,6 +21,9 @@ export default function FinnCoachFeed({ onDiscuss }) {
   const [itemsLocale, setItemsLocale] = useState(null);
   const [history, setHistory] = useState(false);
   const [error, setError] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState(false);
   const requestGenerationRef = useRef(0);
   const ownerRef = useRef(user?.id);
   const localeRef = useRef(locale);
@@ -32,7 +37,7 @@ export default function FinnCoachFeed({ onDiscuss }) {
     const generation = ++requestGenerationRef.current;
     try {
       const response = await readCoachFeedWithRetry(
-        () => fetchAuth(`/api/assistant/feed?history=${history ? "true" : "false"}&limit=50`, {
+        () => fetchAuth(`/api/assistant/feed?history=${history ? "true" : "false"}&limit=${history ? FEED_PAGE_SIZE + 1 : FEED_PAGE_SIZE}`, {
           method: "GET", forceFresh: true,
         }),
         { isCurrent: () => generation === requestGenerationRef.current &&
@@ -40,7 +45,10 @@ export default function FinnCoachFeed({ onDiscuss }) {
       );
       if (generation === requestGenerationRef.current &&
           ownerRef.current === requestedOwner && localeRef.current === requestedLocale) {
-        setItems(Array.isArray(response) ? response : []);
+        const page = Array.isArray(response) ? response : [];
+        setItems(history ? page.slice(0, FEED_PAGE_SIZE) : page);
+        setHasMore(history && page.length > FEED_PAGE_SIZE);
+        setMoreError(false);
         setItemsOwner(requestedOwner);
         setItemsLocale(requestedLocale);
         setError(false);
@@ -53,7 +61,38 @@ export default function FinnCoachFeed({ onDiscuss }) {
     }
   }, [history, locale, sessionChecked, user?.id]);
 
+  const loadMore = async () => {
+    const last = items[items.length - 1];
+    if (!history || !hasMore || loadingMore || !last?.id || !last?.created_at) return;
+    const requestedOwner = user?.id;
+    const requestedLocale = locale;
+    const generation = ++requestGenerationRef.current;
+    setLoadingMore(true);
+    setMoreError(false);
+    try {
+      const params = new URLSearchParams({ history: "true", limit: String(FEED_PAGE_SIZE + 1),
+        before_created_at: last.created_at, before_id: last.id });
+      const page = await fetchAuth(`/api/assistant/feed?${params.toString()}`, {
+        method: "GET", forceFresh: true,
+      });
+      if (generation !== requestGenerationRef.current || ownerRef.current !== requestedOwner ||
+          localeRef.current !== requestedLocale) return;
+      const rows = Array.isArray(page) ? page : [];
+      setItems((current) => {
+        const known = new Set(current.map((item) => item.id));
+        return [...current, ...rows.slice(0, FEED_PAGE_SIZE).filter((item) => !known.has(item.id))];
+      });
+      setHasMore(rows.length > FEED_PAGE_SIZE);
+    } catch {
+      if (generation === requestGenerationRef.current) setMoreError(true);
+    } finally {
+      if (generation === requestGenerationRef.current) setLoadingMore(false);
+    }
+  };
+
   useEffect(() => {
+    setLoadingMore(false);
+    setMoreError(false);
     if (!user?.id) {
       setItems([]);
       setItemsOwner(null);
@@ -62,7 +101,7 @@ export default function FinnCoachFeed({ onDiscuss }) {
     }
     void refresh();
     const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") void refresh();
+      if (!history && document.visibilityState === "visible") void refresh();
     }, 60000);
     return () => {
       requestGenerationRef.current += 1;
@@ -75,7 +114,9 @@ export default function FinnCoachFeed({ onDiscuss }) {
       await fetchAuth(`/api/assistant/feed/${encodeURIComponent(id)}/${action}`, {
         method: "POST", body: JSON.stringify({}),
       });
-      await refresh();
+      if (history) setItems((current) => current.map((item) => item.id === id
+        ? { ...item, status: action === "read" ? "read" : action } : item));
+      else await refresh();
     } catch (error) {
       if (error?.status === 404) {
         // A score refresh or expired proposal can close an item between the
@@ -150,6 +191,13 @@ export default function FinnCoachFeed({ onDiscuss }) {
           </article>
         ))}
       </div>
+      {history && hasMore && !error ? (
+        <button type="button" onClick={() => void loadMore()} disabled={loadingMore}
+          className="mt-4 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-blue-600 disabled:opacity-50 dark:border-slate-700">
+          {loadingMore ? copy.loading : copy.loadMore}
+        </button>
+      ) : null}
+      {moreError ? <p role="status" className="mt-2 text-sm text-amber-700">{copy.error}</p> : null}
     </section>
   );
 }

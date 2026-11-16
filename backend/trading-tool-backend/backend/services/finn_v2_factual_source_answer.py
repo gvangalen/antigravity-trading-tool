@@ -125,9 +125,12 @@ def render_selected_paper_feed_decision(
                      + (f" voor €{amount}" if amount else "") + ".")
     else:
         execution = "Bij dit besluit is geen gevulde Paper-order bevestigd."
+    revision_note = (" De huidige botrij is later bijgewerkt; dit antwoord gebruikt de "
+                     "opgeslagen momentopname van de aangeklikte kaart."
+                     if selected.get("source_row_changed") is True else "")
     return (f"Het geselecteerde historische Paper-botbesluit voor {label} was "
             f"{action_text} op {at} (Europe/Amsterdam). {execution} "
-            "Een latere botcontrole verandert dit opgeslagen besluit niet.")
+            f"Een latere botcontrole verandert dit opgeslagen besluit niet.{revision_note}")
 
 
 def render_report_and_quote_times(
