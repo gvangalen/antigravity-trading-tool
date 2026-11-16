@@ -1171,7 +1171,11 @@ class FinnCoachFeedService:
                     WHERE p.id=f.subject_id
                       AND p.user_id=:user_id AND p.status IN ('draft','pending_confirmation')
                       AND p.expires_at > NOW()))
-            ORDER BY f.created_at DESC, f.id DESC LIMIT :limit
+            ORDER BY CASE
+                WHEN NOT :history AND f.event_type='bot_decision'
+                  THEN GREATEST(f.created_at, COALESCE(f.source_observed_at, f.created_at))
+                ELSE f.created_at
+              END DESC, f.id DESC LIMIT :limit
         """), {"user_id": user_id, "history": history, "limit": min(max(limit, 1), 100),
                 "before_created_at": before_created_at, "before_id": before_id})
         rows = [self._serialize(dict(row), locale) for row in result.mappings().all()]

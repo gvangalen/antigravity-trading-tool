@@ -42,6 +42,59 @@ def _number(value: Any) -> str | None:
     return format(amount.normalize(), "f") if amount.is_finite() else None
 
 
+def render_closed_paper_exit_facts(message: str, tool_trace: Any) -> str | None:
+    """Read an explicitly named Paper exit from its owner-scoped review row.
+
+    The Responses model still performs the read. For this narrow question the
+    exact stored currency, target and FX factor are rendered from typed facts,
+    so the final answer cannot silently omit one of them.
+    """
+    match = re.search(r"\b(?:trade[- ]?reflectie|reflectie)\s*#\s*(\d{1,12})\b", message, re.I)
+    if (not match or not re.search(r"Paper[- ]?exitreden", message, re.I)
+            or not re.search(r"oorspronkelijke koersvaluta", message, re.I)
+            or not re.search(r"eerste doel", message, re.I)
+            or not re.search(r"wisselkoers bij uitvoering", message, re.I)):
+        return None
+    review_id = int(match.group(1))
+    rows = [row for call in (tool_trace or ()) if isinstance(call, dict)
+            for row in ((call.get("result") or {}).get("results") or ())
+            if isinstance(row, dict) and row.get("scope") == "read_review_history"
+            and row.get("status") == "completed" and isinstance(row.get("data"), dict)]
+    if len(rows) != 1:
+        return None
+    reviews = [row for row in rows[0]["data"].get("closed_trades") or ()
+               if isinstance(row, dict) and row.get("review_id") == review_id
+               and str(row.get("environment") or "").lower() == "paper"]
+    if len(reviews) != 1:
+        return None
+    facts = reviews[0].get("paper_exit_evidence")
+    if not isinstance(facts, dict):
+        return None
+    trigger = facts.get("trigger")
+    currency = str(facts.get("source_price_currency") or "").upper()
+    if trigger not in {"stop_loss", "first_target"} or currency not in {"EUR", "USD", "USDT"}:
+        return None
+
+    def positive_number(key: str) -> str | None:
+        try:
+            value = Decimal(str(facts.get(key)))
+        except (InvalidOperation, TypeError, ValueError):
+            return None
+        if not value.is_finite() or value <= 0:
+            return None
+        return format(value.normalize(), "f")
+
+    target = positive_number("saved_first_target")
+    fx = positive_number("execution_fx_eur_per_unit")
+    if not target or not fx:
+        return None
+    reason = "stop-loss" if trigger == "stop_loss" else "eerste koersdoel"
+    return (f"Bij trade-reflectie #{review_id} was de vastgelegde Paper-exitreden {reason}. "
+            f"De oorspronkelijke koersvaluta was {currency}. Het opgeslagen eerste doel "
+            f"was {target} {currency}. De wisselkoers bij uitvoering was {fx} EUR per {currency}. "
+            "Dit zijn de opgeslagen virtuele uitvoeringsgegevens, geen actuele koers of nieuw handelssignaal.")
+
+
 def render_bot_decision(
     result: dict[str, Any], *, symbol: str, paper: bool | None,
     pair: str | None = None, bot_id: int | None = None,

@@ -53,7 +53,8 @@ from backend.services.watchlist_conversation_service import ambiguous_asset_chan
 from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
 from backend.services.finn_v2_account_bundle_answer import render_account_bundle_answer
 from backend.services.finn_v2_factual_source_answer import (
-    is_report_technical_comparison_request, render_bot_decision, render_selected_paper_feed_decision, render_latest_quote,
+    is_report_technical_comparison_request, render_bot_decision, render_closed_paper_exit_facts,
+    render_selected_paper_feed_decision, render_latest_quote,
     render_portfolio_read_time, render_report_and_quote_times,
     render_report_and_technical_read,
 )
@@ -5201,6 +5202,17 @@ class FinnResponsesFrontDoor:
                 result = replace(
                     result, text=canonical_answer, model_owned_repair=False,
                     response_id_reusable=False, account_source_projection=True,
+                )
+        if is_read_only_turn and result.answer_kind == "free_text" and result.tool_trace:
+            exit_facts = render_closed_paper_exit_facts(message, result.tool_trace)
+            if exit_facts is not None:
+                # The model and owner-scoped read have already run. A narrow
+                # stored-exit question needs every requested numeric fact;
+                # render that final fact list from the same verified review.
+                result = replace(
+                    result, text=exit_facts, answer_kind="factual_source",
+                    model_owned_repair=False,
+                    response_id_reusable=False,
                 )
         recent_action_result = dict(conversation_context.get("previous_action_result") or {})
         if recent_action_result.get("owner_user_id") != self.user_id or recent_action_result.get("result_status") != "succeeded":
