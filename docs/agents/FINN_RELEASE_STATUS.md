@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Indicatieve benchmark bij ontbrekende indicatoren (16 november 2026)
 
-Phase: `LOCAL_BUILD_VALIDATED_PR_PENDING`. Branch
+Phase: `LOCAL_BUILD_VALIDATED_PR_CI_PENDING`. Branch
 `codex/macro-yield-partial-benchmark-20261116`. De gedateerde US02Y- en
 US10Y-metingen komen eerst van de officiële Treasury-rentecurve, met FRED
 voor dezelfde looptijd als terugval. Analyse toont een uit de overige
@@ -20,17 +20,19 @@ vereist expliciete bevestiging; bestaande preview-, prijs-, risico- en
 Live-preflightcontroles blijven verplicht. De melding claimt geen vastgelegde
 koopbeslissing.
 
-Gemeten lokale Build-validatie op de geïsoleerde branch: volledige backend
-**4.971 passed, 7 skipped**; frontend productiebouw, typecheck, i18n-lint,
+Gemeten lokale Build-validatie na rebase op `cf2594e02`: volledige backend
+**4.975 passed, 7 skipped** (testlog SHA-256
+`7c843837bf00d86f5a016aede669388c552dc8f414de48e9c707e5911ed6ae81`);
+frontend productiebouw inclusief bijgewerkte `out/`-export, typecheck, i18n-lint,
 i18n-tests, command-tests, gerichte feedlinktest en `audit:high` groen.
 De aparte lokale FastAPI/Celery/PostgreSQL/Redis/Responses-actiematrix
 slaagde **17/17** met adaptertests **26/26**; artifact SHA-256
-`11567dc4db6255800ee0cd94779e219966b7414f29e11ee2ac977f5826c632dd`.
+`ef16e320b95471dcf8537d61a202926c6eaef99d70de4e0fb5f94914d23cf0a1`.
 De matrix registreerde nul brokerorders, Live-aanroepen en
-productieverbindingen. Echte-providerontwikkeling slaagde **20/20**
-(artifact SHA-256 `855f974bbec994623d36c37d466d910b3cfdfef96cdd8746e63262712755ca76`),
+productieverbindingen. Echte-providerontwikkeling op de herbaseerde kandidaat slaagde **20/20**
+(artifact SHA-256 `25427daaac9990e07dffffa8a158bde81ddbb0ff93fc8e98b76a73ec0b9ade47`),
 regressie **109/109** (artifact SHA-256
-`29e420f8ada53d4086bab1d3cf05d3c8dc9fa0f2cb657c4982a5986c53818ddc`),
+`565faa0e65df8d6492e9a67ed0ef966971e9c8ce114febe3430b6bc01a688d73`),
 zonder provider-, schema-, timeout-, parse- of validatiefouten. Dit is
 lokale Build-evidence; PR-CI, main-CI, Auto Deploy en onafhankelijke live QA
 zijn nog niet uitgevoerd voor deze kandidaat.
