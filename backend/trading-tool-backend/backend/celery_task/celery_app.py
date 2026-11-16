@@ -169,7 +169,7 @@ celery_app.conf.beat_schedule = {
     ),
     "finalize_finn_weekly_trade_reflections": build_task_schedule_entry(
         "backend.celery_task.finn_trade_review_task.finalize_weekly_trade_reflections",
-        crontab(day_of_week=1, hour=6, minute=15),
+        crontab(hour=6, minute=15),
     ),
     "reconcile_live_bot_orders": build_task_schedule_entry(
         "backend.celery_task.bot_reconciliation_task.reconcile_live_bot_orders",
@@ -249,6 +249,10 @@ celery_app.conf.beat_schedule = {
     "dispatch_portfolio_snapshots": build_dispatch_schedule_entry(
         "backend.celery_task.portfolio_snapshot_task.run_portfolio_snapshot",
         crontab(minute="*/15"),
+    ),
+    "dispatch_paper_position_risks": build_dispatch_schedule_entry(
+        "backend.celery_task.portfolio_snapshot_task.reconcile_paper_position_risk",
+        crontab(minute="5-59/15"),
     ),
 
     "dispatch_trading_bot": build_dispatch_schedule_entry(

@@ -46,17 +46,37 @@ def test_periodic_report_notification_names_the_saved_period(report_type, expect
     assert all(row["body"] for row in copy.values())
 
 
+def test_weekly_reflection_copy_uses_closed_week_coverage():
+    copy = module._fallback("weekly_reflection", "Weekreflectie", {
+        "week_start": "2026-11-09", "trades": 3, "plans": 2, "notes": 1,
+    })
+    assert "3 gesloten trades" in copy["nl"]["body"]
+    assert "2 met vastgelegd plan" in copy["nl"]["body"]
+    assert "vóór een volgende trade" in copy["nl"]["body"]
+
+
 def test_paper_bot_fallback_distinguishes_decision_from_execution():
     planned = module._fallback("bot_decision", "AAPL plan", {
         "symbol": "AAPL", "action": "buy", "status": "planned", "amount_eur": 400,
     })
     executed = module._fallback("bot_decision", "AAPL plan", {
-        "symbol": "AAPL", "action": "buy", "status": "executed", "amount_eur": 400,
+        "symbol": "AAPL", "action": "buy", "status": "executed",
+        "order_status": "filled", "amount_eur": 400,
     })
     assert "wil kopen" in planned["nl"]["title"]
     assert "nog niet bevestigd" in planned["nl"]["body"]
     assert "heeft gekocht" in executed["nl"]["title"]
     assert "€400,00" in executed["nl"]["body"]
+    unverified = module._fallback("bot_decision", "AAPL plan", {
+        "symbol": "AAPL", "action": "buy", "status": "executed",
+        "order_status": None, "amount_eur": 400,
+    })
+    assert "gevulde Paper-order ontbreekt" in unverified["nl"]["body"]
+    held = module._fallback("bot_decision", "AAPL plan", {
+        "symbol": "AAPL", "action": "hold", "status": "planned",
+    })
+    assert "wacht" in held["nl"]["title"]
+    assert "geen gemiste winst" in held["nl"]["body"]
 
 
 def test_paper_bot_fallback_covers_other_persisted_outcomes():
@@ -114,7 +134,7 @@ def test_luna_writes_paper_outcome_from_typed_decision(monkeypatch):
         return {"event_type": "bot_decision", "copy_source": "fact_fallback",
                 "status": "unread", "fingerprint": "fingerprint", "source_observed_at": None,
                 "evidence": {"subject": "AAPL plan", "symbol": "AAPL", "action": "buy",
-                             "status": "executed", "amount_eur": 400,
+                             "status": "executed", "order_status": "filled", "amount_eur": 400,
                              "reasons": ["Planvoorwaarden bereikt"]}}
 
     async def provider(**kwargs):

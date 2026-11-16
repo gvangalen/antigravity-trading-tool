@@ -465,7 +465,9 @@ export default function FinnTradeReviews() {
   const [total, setTotal] = useState(0);
   const [weekly, setWeekly] = useState({ trades: 0, plans: 0, notes: 0 });
   const [weeks, setWeeks] = useState([]);
-  const [selectedWeek, setSelectedWeek] = useState(null);
+  const reflectionWeekParam = useSearchParams().get('reflection_week');
+  const [selectedWeek, setSelectedWeek] = useState(
+    /^\d{4}-\d{2}-\d{2}$/.test(reflectionWeekParam || '') ? reflectionWeekParam : null);
   const [excluded, setExcluded] = useState({});
   const [projectionPending, setProjectionPending] = useState(false);
   const [selected, setSelected] = useState(null);
@@ -490,6 +492,12 @@ export default function FinnTradeReviews() {
   const openRequest = useRef(0);
   const detailRef = useRef(null);
   const reviewIdParam = useSearchParams().get('trade_review_id');
+
+  useEffect(() => {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(reflectionWeekParam || '')) {
+      setSelectedWeek(reflectionWeekParam);
+    }
+  }, [reflectionWeekParam]);
 
   const load = useCallback(async ({ quiet = false } = {}) => {
     if (!quiet) setLoading(true);

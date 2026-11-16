@@ -160,7 +160,9 @@ async def _sync_exact_market_snapshots(market_id: int | None = None) -> dict:
     from backend.services.exact_market_indicator_service import ExactMarketIndicatorService
     from backend.services.pair_indicator_config_service import PairIndicatorConfigService, effective_pair_configs
     from backend.services.trading_market_service import TradingMarket
-    from backend.celery_task.store_daily_scores_task import build_daily_scores_for_market
+    from backend.celery_task.store_daily_scores_task import (
+        build_daily_scores_for_market, reconcile_coach_feed_score,
+    )
 
     async with async_session_factory() as session:
         result = await session.execute(text("""
@@ -247,6 +249,15 @@ async def _sync_exact_market_snapshots(market_id: int | None = None) -> dict:
                     except Exception as score_exc:
                         logger.warning("Exact market score pending: market_id=%s user_id=%s code=%s",
                                        market.id, user_id, type(score_exc).__name__)
+                        # The quote is already committed. Let FINN review a
+                        # measured move even when its benchmark is unavailable;
+                        # a successful score build dispatches this itself.
+                        try:
+                            reconcile_coach_feed_score.delay(
+                                user_id, market.asset_symbol, market.id)
+                        except Exception:
+                            logger.warning("FINN pair plan-check dispatch pending: market_id=%s user_id=%s",
+                                           market.id, user_id, exc_info=True)
                 outcomes.append({"market_id": market.id, "status": "ready",
                                  "observed_at": snapshot.get("observed_at"),
                                  "history_status": history["status"],

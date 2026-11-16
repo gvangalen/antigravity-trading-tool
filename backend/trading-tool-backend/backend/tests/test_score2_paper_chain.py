@@ -406,4 +406,4 @@ def test_source_to_score2_to_setup_match_to_paper_amount(monkeypatch, unavailabl
     assert persisted["scores"]["_setup_match"]["status"] == expected_match_status
     if not price_ready:
         assert persisted["decision"]["guardrail_reason"] == "paper_market_price_eur_unavailable"
-    assert feed_decisions == ([] if worker_hold else [(7, 13)])
+    assert feed_decisions == [(7, 13)]

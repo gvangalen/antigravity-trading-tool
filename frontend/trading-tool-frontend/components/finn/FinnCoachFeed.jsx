@@ -7,6 +7,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { fetchAuth } from "@/lib/api/auth";
 import { readCoachFeedWithRetry } from "@/lib/finnCoachFeedRead.mjs";
+import { coachFeedDetailsHref } from "@/lib/finnCoachFeedLinks.mjs";
 
 export default function FinnCoachFeed({ onDiscuss }) {
   const { user, sessionChecked } = useAuth();
@@ -118,15 +119,15 @@ export default function FinnCoachFeed({ onDiscuss }) {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="font-bold text-slate-950 dark:text-slate-50">{item.title}</h3>
-                {item.symbol ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">{item.event_type === "plan_review" && item.evidence?.trading_pair ? item.evidence.trading_pair : item.symbol}</span> : null}
+                {item.symbol ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">{["plan_review", "position_risk", "improvement_suggestion"].includes(item.event_type) && item.evidence?.trading_pair ? item.evidence.trading_pair : item.symbol}</span> : null}
               </div>
               <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{item.description}</p>
               <time className="mt-1 block text-xs text-slate-400" dateTime={item.created_at}>
                 {new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.created_at))}
               </time>
-              {item.event_type === "plan_review" && item.source_observed_at ? (
+              {["plan_review", "position_risk"].includes(item.event_type) && item.source_observed_at ? (
                 <time className="mt-1 block text-xs text-slate-400" dateTime={item.source_observed_at}>
-                  {copy.quoteSource}: {new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(new Date(item.source_observed_at))} UTC
+                  {item.event_type === "position_risk" ? copy.valuationSource : copy.quoteSource}: {new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(new Date(item.source_observed_at))} UTC
                 </time>
               ) : null}
             </div>
@@ -138,13 +139,7 @@ export default function FinnCoachFeed({ onDiscuss }) {
                   </button>
                 ) : null}
                 {item.event_type !== "proposal_pending" ? (
-                  <a href={item.subject_type === "report"
-                    ? `/report?type=${encodeURIComponent(item.evidence?.report_type || "daily")}&date=${encodeURIComponent(item.evidence?.report_date || "")}`
-                    : item.subject_type === "setup"
-                    ? `/setup?symbol=${encodeURIComponent(item.symbol || "")}&setup_id=${encodeURIComponent(item.subject_id || "")}`
-                    : item.subject_type === "bot"
-                      ? `/bot?symbol=${encodeURIComponent(item.symbol || "")}&bot_id=${encodeURIComponent(item.subject_id || "")}`
-                      : `/asset?symbol=${encodeURIComponent(item.symbol || "")}`}
+                  <a href={coachFeedDetailsHref(item)}
                     className="text-sm text-slate-600 hover:underline dark:text-slate-300">{item.event_type.endsWith("_report_ready") ? copy.viewReport : copy.details}</a>
                 ) : null}
                 <button type="button" onClick={() => void setStatus(item.id, "handled")}

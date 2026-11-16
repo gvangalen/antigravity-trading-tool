@@ -2507,6 +2507,13 @@ class BotService:
             
         await self.repository.cancel_orders_for_decision(user_id, bot_id, decision_id)
         await self.session.commit()
+        try:
+            bot = await self.repository.get_bot_config(user_id, bot_id)
+            if bot and not bot.get("is_live"):
+                from backend.celery_task.store_daily_scores_task import publish_coach_bot_decision
+                publish_coach_bot_decision.delay(user_id, decision_id)
+        except Exception:
+            logger.warning("FINN Paper decision feed dispatch failed after skip", exc_info=True)
         return {"ok": True, "status": "skipped"}
 
     # ==========================
