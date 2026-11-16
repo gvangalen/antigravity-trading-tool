@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0 selected historical Paper wait card (16 november 2026)
 
-Phase: `LOCAL_GATES_GREEN_CANDIDATE_PENDING_CI`. Independent authenticated live QA returned
+Phase: `PRODUCT_DEPLOYED_STATUS_SHA_PENDING_LIVE_QA`. Independent authenticated live QA returned
 `NOT_ACCEPTED` on public SHA `39e81915b775fc8647c59a40f3ce2edaf9a9b037`.
 For both BTC and AAPL, discussing a saved 07:00 CET Paper wait card led FINN
 to name a later 10:45:18 CET decision. The selected BTC missing-score setup
@@ -31,9 +31,15 @@ selector passed **20/20** (SHA-256
 `d780f9adc16fc92a158136e0fb29a7dbb545226992f183c0d454eebb31f20bab`)
 and regression passed **109/109** (SHA-256
 `88fb9e1f578c61f8bfe2dba0ca5e547cb0d02a7637474968d00e396c305de3d1`),
-both with zero provider, schema, parse or validation failures. CI,
-deployment and independent live QA gates are pending. This is
-not an accepted live release.
+both with zero provider, schema, parse or validation failures. Product
+[PR #1110](https://github.com/gvangalen/antigravity-trading-tool/pull/1110)
+passed all five PR CI jobs and merged as
+`0ccef3086c1fbbd8db178ce837afe7e6b02f498f`. Main CI `43849322538`
+passed all five jobs and Auto Deploy `43850241690` succeeded. Public backend
+health and frontend build info returned HTTP 200 with that exact SHA, matching
+GitHub main. This status update will produce a later SHA; its final main CI,
+Auto Deploy, public SHA parity and independent authenticated live QA verdict
+remain pending. This is not an accepted live release.
 
 ## FINN 3.0 historical Paper feed isolation (16 november 2026)
 
