@@ -8,6 +8,7 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 import { fetchAuth } from "@/lib/api/auth";
 import { readCoachFeedWithRetry } from "@/lib/finnCoachFeedRead.mjs";
 import { coachFeedDetailsHref } from "@/lib/finnCoachFeedLinks.mjs";
+import { coachFeedDiscussionQuestion } from "@/lib/finnCommandSearch";
 
 export default function FinnCoachFeed({ onDiscuss }) {
   const { user, sessionChecked } = useAuth();
@@ -88,7 +89,7 @@ export default function FinnCoachFeed({ onDiscuss }) {
   };
 
   const discuss = (item) => {
-    onDiscuss?.(item.id, `${copy.discussQuery} ${item.evidence?.subject || item.title}`, item);
+    onDiscuss?.(item.id, coachFeedDiscussionQuestion(item, locale), item);
     void setStatus(item.id, "read");
   };
 

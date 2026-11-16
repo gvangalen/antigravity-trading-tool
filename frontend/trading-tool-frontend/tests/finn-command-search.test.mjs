@@ -5,6 +5,7 @@ import {
   FINN_ASSETS,
   buildExactPairOptions,
   closeFeedDiscussionIfCurrent,
+  coachFeedDiscussionQuestion,
   getCommandTokens,
   getDefaultIndicatorCategory,
   isDirectCommandSearchMode,
@@ -19,6 +20,17 @@ import {
   shouldAttachFeedContext,
   updateFeedDiscussionDraftIfCurrent,
 } from "../lib/finnCommandSearch.js";
+
+test("feed discussion names the selected event and exact pair", () => {
+  assert.match(coachFeedDiscussionQuestion({ event_type: "plan_review", symbol: "BTC",
+    title: "Plan herzien", evidence: { trading_pair: "BTC/USDT" } }), /BTC\/USDT/);
+  const bot = coachFeedDiscussionQuestion({ event_type: "bot_decision", symbol: "BTC",
+    title: "Bot wacht", evidence: {} });
+  assert.match(bot, /Paper-botbesluit/);
+  assert.doesNotMatch(bot, /planupdate/);
+  assert.match(coachFeedDiscussionQuestion({ event_type: "weekly_reflection",
+    title: "Weekreflectie", evidence: { week_start: "2026-11-09" } }), /2026-11-09/);
+});
 
 test("feed discussion keeps the selected asset and exact market", () => {
   assert.deepEqual(resolveFeedItemContext({ symbol: "BTC", evidence: {

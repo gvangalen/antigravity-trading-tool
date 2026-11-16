@@ -116,6 +116,7 @@ class FinnV2RequestPreprocessorService:
         ),
         "bot": ("bot", "robot", "automation", "automatisering"),
         "review": (
+            "weekreflectie", "wekelijkse reflectie", "weekly reflection", "wochenreflexion",
             "gesloten trade", "gesloten trades", "afgesloten trade", "afgesloten trades",
             "papertrade", "papertrades", "paper-trade", "paper-trades", "trade-review", "tradereview", "trade-reflectie",
             "trade reflection", "closed trade", "closed trades", "trade review",

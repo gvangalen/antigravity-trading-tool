@@ -4,9 +4,46 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 live QA repair batch (16 november 2026)
+
+Phase: `BUILD_REPAIR_LOCAL_VALIDATION`. Independent authenticated read-only QA
+tested public SHA `75ad6ac4d9c2f7a0af74e41bb77e4f6f711e2cc8` and returned
+`NOT_ACCEPTED`. GitHub main, backend health and frontend build info matched.
+QA observed five issues: old AAPL Paper cards still said execution was unverified
+after bot-history execution, FINN missed an owner-saved weekly reflection,
+Discuss for a confirmed Paper buy returned `latest_quote_conflicts_with_source`,
+a bot card opened a generic plan question, and a BTC plan card omitted its exact
+EUR/USDT pair. QA did not test a newly triggered feed event, polling/SSE parity,
+account isolation, protected fixture actions, or a visible improvement card.
+In a follow-up read, QA confirmed that both historical bot rows have visible
+executed Paper trades with quantity, EUR price and amount. The older exit's
+expanded evidence still lacks some original execution fields; this repair
+does not invent those historical fields.
+
+The current repair candidate rechecks the owner-scoped filled Paper order when
+reading an old bot card; makes Discuss questions specific to bot decisions,
+exact-pair plan reviews and saved weekly reflections; exposes the latest
+owner-saved weekly reflection through the read-only review source; and tells
+FINN to discuss historical execution without using a current quote as its
+evidence. These changes do not mark an order filled without its persisted
+owner-matched Paper order. Focused regression tests cover the read boundary,
+copy and question classification. Build's full local backend run passed
+**4,921** with **7 skipped**, frontend i18n/typecheck/commands/build/audit
+passed, and mobile typecheck/lint/web smoke passed (lint warnings only).
+The local worker action matrix passed **17/17** with adapter tests **26/26**;
+artifact SHA-256 `a3d13c8052151c96fce6acd34064a2d3586c88e5bbf36a5244c3c5224b5eb934`.
+Real-provider selector development passed **20/20** (SHA-256
+`46f812a451ed98c45f065ee6c0ded6d787190de3425d935dfb831e84114712dd`)
+and regression passed **109/109** (SHA-256
+`e9b39ce35ced9c07650fdaa4d61bdc8a241fe4c3b11a687518c7676fbaaedda9`),
+with zero provider, schema, timeout, parse or validation failures. Deployment
+identity is pending. QA must independently retest
+the same five failures on the eventual final public SHA and report remaining
+coverage gaps separately.
+
 ## FINN 3.0 proactieve coach: fasen 1–5 (16 november 2026)
 
-Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. The user's request to deploy this coach
+Phase: `LIVE_QA_NOT_ACCEPTED_REPAIR_IN_PROGRESS`. The user's request to deploy this coach
 batch and have the existing QA Agent test it supersedes the previous targeted
 broad-question candidate for release scheduling. That earlier targeted pass
 does not constitute full FINN acceptance; no official protected QA matrix was
