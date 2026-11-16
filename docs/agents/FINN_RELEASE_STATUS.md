@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0 live QA repair batch (16 november 2026)
 
-Phase: `BUILD_REPAIR_LOCAL_VALIDATION`. Independent authenticated read-only QA
+Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA_AND_QA`. Independent authenticated read-only QA
 tested public SHA `75ad6ac4d9c2f7a0af74e41bb77e4f6f711e2cc8` and returned
 `NOT_ACCEPTED`. GitHub main, backend health and frontend build info matched.
 QA observed five issues: old AAPL Paper cards still said execution was unverified
@@ -36,8 +36,15 @@ Real-provider selector development passed **20/20** (SHA-256
 `46f812a451ed98c45f065ee6c0ded6d787190de3425d935dfb831e84114712dd`)
 and regression passed **109/109** (SHA-256
 `e9b39ce35ced9c07650fdaa4d61bdc8a241fe4c3b11a687518c7676fbaaedda9`),
-with zero provider, schema, timeout, parse or validation failures. Deployment
-identity is pending. QA must independently retest
+with zero provider, schema, timeout, parse or validation failures. Product
+[PR #1102](https://github.com/gvangalen/antigravity-trading-tool/pull/1102)
+passed all five CI jobs in run `43817986573` and merged to `main` as
+`757e66d5aadae54014b9d644c5469640bd7ae569`. Main CI `43818699702`
+passed all five jobs; Auto Deploy `43819349458` succeeded. Public backend
+health and frontend build info both returned HTTP 200 with that exact SHA,
+matching GitHub main. This status update creates a later SHA, so final CI,
+Auto Deploy, public SHA parity and the independent live QA verdict remain
+pending. QA must independently retest
 the same five failures on the eventual final public SHA and report remaining
 coverage gaps separately.
 
