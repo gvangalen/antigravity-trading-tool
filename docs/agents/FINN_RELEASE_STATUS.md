@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN report bot clocks and correction identity (16 november 2026)
 
-Phase: `LOCAL_VALIDATED_PENDING_CI`. This is the next FINN candidate after the
+Phase: `PRODUCT_DEPLOYED_STATUS_SHA_PENDING_LIVE_QA`. This FINN candidate follows the
 independent targeted browser retest of public SHA
 `687092f5167ce0b708b67e5c5fd521da78833296`: seven of seven visible
 feed discussion cases passed. That retest did not constitute full runtime or
@@ -36,8 +36,16 @@ and regression **109/109** (artifact SHA-256
 with zero provider, schema, timeout, parse, or validation failures. An
 additional 38-case nonsealed route diagnostic passed **36/38**: unrelated
 `evaluate_bot` and `read_bot` selector expectations differed. It is not
-reported as green. PR CI, merge, deploy, public SHA parity and independent
-live QA for this candidate remain pending.
+reported as green. Product
+[PR #1118](https://github.com/gvangalen/antigravity-trading-tool/pull/1118)
+passed all five PR CI jobs and merged as
+`2e441a1fbe8d466c37e74a50b498bb8d91c69ce4`. Main CI `43883816255`
+passed all five jobs and Auto Deploy `43884765464` succeeded. Public backend
+health and frontend build-info both returned HTTP 200 with that exact SHA,
+matching GitHub main. The optional Report 2.0 real-provider step in main CI
+was skipped; the separate local real-provider selector runs above passed.
+This status update creates a later final SHA. Its main CI, Auto Deploy,
+public SHA parity and independent authenticated live QA remain pending.
 
 ## FINN 3.0 historical missing-score discussion (16 november 2026)
 
