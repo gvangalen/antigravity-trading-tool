@@ -95,6 +95,11 @@ def attach_entry_decision_plan_evidence(row: dict) -> dict:
                  "source_levels": {key: levels[key] for key in ("entry", "stop_loss", "targets")},
                  "source_evidence": "linked_entry_decision", "source_decision_id": decision_id,
                  "source_decision_at": _utc_instant(decision_at).isoformat()}
+    # Legacy order snapshots omitted their own currency. The linked entry
+    # decision records the currency of the converted order plan separately
+    # from the original quote currency and is identity/chronology checked above.
+    if recorded.get("price_currency") in {"EUR", "USD", "USDT"}:
+        additions["order_plan_price_currency"] = recorded["price_currency"]
     if recorded.get("market_quote_currency") in {"EUR", "USD", "USDT"}:
         additions["market_quote_currency"] = recorded["market_quote_currency"]
     try:

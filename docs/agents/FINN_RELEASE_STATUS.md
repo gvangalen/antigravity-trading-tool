@@ -4,6 +4,45 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 Paper-browser hertest: eigenaargegevens en planvaluta (16 november 2026)
+
+Phase: `LOCAL_VALIDATION_COMPLETE_CI_PENDING`. De bestaande onafhankelijke QA-agent
+oordeelde **NOT_ACCEPTED** op de definitieve publieke SHA
+`8e0c67c5edf443cb91a8ff6a6ddd45d919f45592`. De beschermde virtuele
+Paper-koop/verkoop, één exit zonder dubbele verkoop, kas/ledger/Reflectie,
+owner-scoped read en polling/SSE waren groen; de ingelogde feedgeschiedenis
+bleef chronologisch. In de browser bleven twee P1-fouten: een exacte vraag
+naar AAPL-positie, Paper-kas en botbudget kreeg geen bevestigde rekeningfeiten,
+en de gecombineerde Reflectie-read noemde wel het USD-brondoel maar niet het
+afzonderlijke EUR-orderplandoel. De natuurlijke AAPL-aankoop was terecht
+geblokkeerd op een niet actuele koers. De interne tooltraces van die
+browservragen waren niet zichtbaar; hun precieze runtime-oorzaak is daarom
+niet bewezen.
+
+De nieuwe kandidaat plaatst de smalle, alleen-lezen Paper-accountvraag vóór
+de begeleide concept- en workspace-routes. Daardoor is de eigenaargebonden
+Paper-portefeuillelezing verplicht, ook als de chat een onafgemaakte conceptactie
+heeft; zonder eenduidige bot of complete velden blijft het antwoord expliciet
+onbevestigd. Een oude Reflectie-plansnapshot zonder valutaveld mag de
+orderplanvaluta alleen overnemen uit de op identiteit en tijd gecontroleerde
+instapbeslissing; bronvaluta en orderplanvaluta blijven aparte feiten.
+
+Gemeten tot nu toe: gerichte regressies **16 passed**; volledige backend-suite
+**4.988 passed, 7 skipped** (testlog SHA-256
+`2378d34360187343d2d5c6caf28860e0fa87e50892e91566dff66a98bf0b0b93`);
+frontend build, typecheck, i18n-lint/-tests, command-/voorsteltests en
+`audit:high` groen, nul hoge kwetsbaarheden; lokale worker-actiematrix
+**17/17** en adaptertests **26/26** (artifact SHA-256
+`a77b110c1463cc7e9aeb6c2df7ad8885f8be2854c3f749d235abc3f148ed3bcf`),
+nul brokerorders, Live-bots, Live-aanroepen en productieverbindingen.
+Echte-providerontwikkeling **20/20** (artifact SHA-256
+`cf9684f10b798cfba6dc98f6ff32197b069a7a32ce385e4a4657b85c047d23a3`)
+en volledige providerregressie **109/109** (artifact SHA-256
+`12fe2466de31ef2baebbdb27c101424882d0dee446cbfa62e329058f2023a2d8`),
+beide zonder provider-, schema-, timeout-, parse- of validatiefouten.
+CI, Auto Deploy, publieke SHA-pariteit en onafhankelijke ingelogde QA zijn
+nog niet afgerond voor deze kandidaat.
+
 ## FINN 3.0 Paper-flow vervolg: accountread en kaartvolgorde (16 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_FINAL_STATUS_PENDING_QA`. De bestaande onafhankelijke QA-agent gaf op

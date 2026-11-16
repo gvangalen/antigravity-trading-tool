@@ -14667,6 +14667,33 @@ def test_paper_cash_position_budget_question_reads_portfolio_directly():
     assert checked.text == result.response.text
 
 
+def test_paper_cash_question_preempts_pending_guided_draft_without_mutation():
+    question = (
+        "Hoeveel AAPL-positie heb ik nu werkelijk open, wat is mijn Paper-kassaldo, "
+        "en betekent mijn botbudget van €400 dat ik €400 extra kan kopen? "
+        "Geef alleen bevestigde bedragen en benoem ontbrekende risico-informatie."
+    )
+    class FakeRead:
+        async def __call__(self, call):
+            assert call.name == "get_portfolio_and_exposure"
+            assert call.read_tools == ("read_portfolio",)
+            return {"status": "unavailable", "results": []}
+
+    front = FinnResponsesFrontDoor(
+        client=object(), session=object(), user_id=7,
+        run_id="cash-pending-draft", model_led_coach=True,
+    )
+    front.reads = FakeRead()
+    result = asyncio.run(front.run(
+        message=question, instructions="Lees feiten", verified_asset="AAPL",
+        conversation_context={"active_guided_operation": {
+            "operation_id": "create_bot", "requested_slot": "name",
+        }},
+    ))
+    assert result.response.answer_kind == "factual_source"
+    assert "niet eenduidig verifiëren" in result.response.text
+
+
 def test_paper_cash_position_budget_question_renders_verified_bot_facts():
     question = (
         "Hoeveel AAPL-positie heb ik nu werkelijk open, wat is mijn Paper-kassaldo, "
