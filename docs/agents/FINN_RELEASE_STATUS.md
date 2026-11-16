@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN report bot clocks and correction identity (16 november 2026)
 
-Phase: `PRODUCT_DEPLOYED_STATUS_SHA_PENDING_LIVE_QA`. Independent authenticated browser
+Phase: `TARGETED_LIVE_QA_ACCEPTED_REPORT_GENERATION_NOT_TESTABLE`. Independent authenticated browser
 QA on final public SHA `820e34e41082d67f4d5784791579049613d511ff`
 returned `NOT_ACCEPTED` for this bot-clock scope. The existing 16 November
 report was generated before the repair, so new report generation was
@@ -42,10 +42,29 @@ passed all five PR CI jobs and merged as
 `ece35f355e05e6454106aac63d5532ff04da1bd2`. Main CI `43893992985`
 passed all five jobs and Auto Deploy `43895072320` succeeded. Public backend
 health and frontend build-info both returned HTTP 200 with that exact SHA,
-matching GitHub main. This status update creates a later final SHA; its own
-main CI, Auto Deploy, public SHA parity and independent authenticated live QA
-remain pending. A new daily report is still needed to test report-generation
-prose on live without changing an existing saved report.
+matching GitHub main. That status update created a later final SHA whose
+measured CI, deploy and targeted QA results are recorded below. A new daily
+report is still needed to test report-generation prose on live without
+changing an existing saved report.
+
+The final status revision merged as
+`7e01b80c9f671a2df66032a9c50eb298e19a258b`. Its main CI
+`43896701773` passed all five jobs and Auto Deploy `43897680243` succeeded.
+GitHub main, public backend health and frontend build-info all identified
+that exact SHA; both public endpoints returned HTTP 200 and no newer deploy
+was pending at QA handoff. Independent authenticated browser QA then returned
+`ACCEPTED` for the targeted historical bot-clock scope on that public SHA:
+the exact first report question preserved 04:15:18 UTC = 05:15:18 CET and
+distinguished later 16:30 CET decisions; the exact correction stayed on BTC
+bot 129, explained the saved `hold` decision and excluded AAPL bot 130; the
+Paper portfolio answer kept €10.005,45 and its 05:21:20 CET read moment
+without a future measurement. A newly generated daily report was
+`NOT_TESTABLE`: only the old 05:21 CET report existed, and QA made no product
+state changes. This verdict is a targeted browser retest, not a full
+protected runtime or score-parity acceptance. This verdict-recording commit
+will create a later documentation-only SHA; its CI, deploy and public SHA
+parity remain pending. The product SHA tested by QA remains the authority for
+the targeted verdict.
 
 The Paper Test morning logbook records three distinct defects: the saved
 daily report wrote a bot decision at 04:15 without a zone while its detail
