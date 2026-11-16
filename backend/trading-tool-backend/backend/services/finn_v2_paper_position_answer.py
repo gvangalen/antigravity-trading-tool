@@ -7,6 +7,13 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 
+PAPER_POSITION_CASH_UNAVAILABLE = (
+    "Ik kan de actuele Paper-positie en kas voor deze bot niet eenduidig "
+    "verifiëren. Het botbudget is geen extra koopruimte; controleer de "
+    "Paper-portefeuille en risicogrenzen voordat je een aankoop beoordeelt."
+)
+
+
 def _amount(value: Any) -> str | None:
     try:
         number = Decimal(str(value))
@@ -37,6 +44,16 @@ def render_paper_position_cash_answer(
             rows = [row for row in data["bots"] if isinstance(row, dict)
                     and str(row.get("symbol") or "").upper() == asset.upper()
                     and row.get("is_live") is False]
+            if len(rows) > 1:
+                named_budget = re.search(r"\bbotbudget\b[^.!?]{0,25}?€\s*(\d+(?:[.,]\d+)?)", message, re.I)
+                if named_budget:
+                    try:
+                        requested_budget = Decimal(named_budget.group(1).replace(",", "."))
+                    except InvalidOperation:
+                        requested_budget = None
+                    if requested_budget is not None:
+                        rows = [row for row in rows if _amount(row.get("budget_total_eur")) ==
+                                format(requested_budget.normalize(), "f").replace(".", ",")]
             if len(rows) != 1:
                 continue
             row = rows[0]

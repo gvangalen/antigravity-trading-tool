@@ -4,6 +4,49 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 Paper-flow vervolg: accountread en kaartvolgorde (16 november 2026)
+
+Phase: `LOCAL_REPAIR_VALIDATING`. De bestaande onafhankelijke QA-agent gaf op
+publieke SHA `62732a8c87c82e7dafe1038f6020e24eb3abfb8a` het oordeel
+**NOT_ACCEPTED**. De beschermde virtuele Paper-koop/verkoop en exit-reconciliatie
+bleven veilig, maar de gecombineerde FINN-read eindigde als `run_incomplete`.
+In de ingelogde browser kon FINN de AAPL-positie en botkas niet noemen terwijl
+de Paper-botpagina de kas en nul positie toonde. In ‘Alle updates’ kwamen na
+pagineren botkaarten met een zichtbaar besluitmoment in oktober vóór echte
+novemberkaarten. QA las de twee feed-API-pagina's alleen-lezen: de API sorteerde
+op `activity_at=created_at` voor achteraf aangemaakte oktoberkaarten, terwijl
+de kaart zelf `source_observed_at` toonde. De precieze interne tooltrace van de
+gecombineerde browserread is niet beschikbaar; een lokale contractreproductie
+toonde wel dat `instapbeslissing` onterecht als vraag naar het huidige
+strategie-instapniveau werd geclassificeerd.
+
+Deze lokale reparatie leest een expliciete Paper-vraag naar één genoemd asset,
+positie, kassaldo en botbudget rechtstreeks via de eigenaargebonden
+portefeuilletool en laat de volledige antwoordverificatie de exacte feiten
+opnieuw uit die read opbouwen. Als de read geen eenduidige bot geeft, noemt
+FINN geen onbewezen bedrag. Een genoemd botbudget kan binnen hetzelfde asset
+de bedoelde bot onderscheiden, zonder twee botkassen te mengen. Het
+turncontract behandelt een historische `instapbeslissing` als beslisfeit. De
+feed sorteert en pagineert botbesluiten op hun getoonde bronmoment; andere
+kaartsoorten blijven op aanmaaktijd.
+
+Gemeten lokale Build-validatie: volledige backend-suite **4.987 passed,
+7 skipped** (testlog SHA-256
+`1deab293f748a55f2c8a067902d6c05090a589c61e08a42b018bd35b832dadff`);
+frontend productiebouw, typecheck, i18n-lint/-tests, command-/voorsteltests
+en `audit:high` groen met nul hoge kwetsbaarheden. De geïsoleerde
+FastAPI/Celery/PostgreSQL/Redis/Responses-actiematrix slaagde **17/17** en de
+adaptertests **26/26** (artifact SHA-256
+`95f573007b1669f58b98bff83abb0e4e7b290b59a9a4a28cc232a26b5cac9239`),
+met nul brokerorders, Live-bots, Live-aanroepen en productieverbindingen.
+Echte-providerontwikkeling slaagde **20/20** (artifact SHA-256
+`0671339c98437c06d9071c25f0812294ce33bd16f596d44fe2bc1a192bc6b624`)
+en de volledige providerregressie **109/109** (artifact SHA-256
+`6739f9e94af2717e02c05166f0de5da04f2d84d20c4d0317e855b81041de9b3e`),
+beide met nul provider-, schema-, timeout-, parse- en validatiefouten.
+Er is voor deze reparatie nog geen
+PR, CI, deployment of onafhankelijke live hertest.
+
 ## FINN 3.0 Paper-portefeuille en feedgeschiedenis (16 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_FINAL_STATUS_PENDING_QA`. Branch

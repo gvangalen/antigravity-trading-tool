@@ -2726,6 +2726,27 @@ def test_saved_entry_question_requires_linked_strategy_read_before_absence_claim
     ) is None
 
 
+def test_historical_entry_decision_in_review_does_not_require_strategy_entry_read():
+    message = (
+        "Lees Reflectie #2127, mijn plan, botbeslissing en huidige AAPL-positie. "
+        "Noem het dossiernummer, het bronkoersdoel bij de instapbeslissing "
+        "en het afzonderlijke EUR-orderplandoel met hun valuta. Alleen teruglezen."
+    )
+    trace = ({"name": "get_closed_trade_review", "result": {"results": [
+        {"scope": "read_review_history", "status": "completed", "data": {
+            "closed_trades": [{"review_id": 2127}],
+        }},
+        {"scope": "read_portfolio", "status": "completed", "data": {
+            "environment": "paper", "bots": [],
+        }},
+    ]}},)
+    contract = build_turn_contract(message=message, tool_trace=trace)
+    assert "entry" not in contract["requested_fields"]
+    assert turn_contract_gap(
+        contract, "Reflectie #2127: bronkoersdoel 350 USD; afzonderlijk orderplandoel 300 EUR.",
+    ) is None
+
+
 def test_saved_multi_strategy_entry_question_accepts_owner_scoped_collection_read():
     contract = {
         "targets": [{"name": "BTC QA Setup", "strategy": {}}],
@@ -14617,7 +14638,7 @@ def test_open_position_question_requires_portfolio_read_before_model_answer(monk
     assert captured["required_read_tool_name"] == "get_portfolio_and_exposure"
 
 
-def test_paper_cash_position_budget_question_requires_portfolio_read(monkeypatch):
+def test_paper_cash_position_budget_question_reads_portfolio_directly():
     question = (
         "Hoeveel AAPL-positie heb ik nu werkelijk open, wat is mijn Paper-kassaldo, "
         "en betekent mijn botbudget van €400 dat ik €400 extra kan kopen? "
@@ -14625,21 +14646,25 @@ def test_paper_cash_position_budget_question_requires_portfolio_read(monkeypatch
     )
     front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="cash-read-required")
     front.model_led_coach = True
-    captured = {}
+    class FakeRead:
+        async def __call__(self, call):
+            assert call.name == "get_portfolio_and_exposure"
+            assert call.inputs == {"environment": "paper"}
+            assert call.read_tools == ("read_portfolio",)
+            return {"status": "unavailable", "results": []}
 
-    async def capture_loop(_self, **kwargs):
-        captured.update(kwargs)
-        return FinnResponsesResult("Ik lees de Paper-portefeuille.", "answer", ())
-
-    monkeypatch.setattr(
-        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run", capture_loop,
-    )
-    asyncio.run(front.run(
+    front.reads = FakeRead()
+    result = asyncio.run(front.run(
         message=question, instructions="Lees feiten", conversation_context={}, verified_asset="AAPL",
         workspace_hints={"page": "/bot", "symbol": "AAPL"},
     ))
-    assert captured["read_only_turn"] is True
-    assert captured["required_read_tool_name"] == "get_portfolio_and_exposure"
+    assert result.response.answer_kind == "factual_source"
+    assert "niet eenduidig verifiëren" in result.response.text
+    checked = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=question, result=result.response, locale="nl",
+    ))
+    assert checked.status == "completed"
+    assert checked.text == result.response.text
 
 
 def test_paper_cash_position_budget_question_renders_verified_bot_facts():
@@ -14648,11 +14673,6 @@ def test_paper_cash_position_budget_question_renders_verified_bot_facts():
         "en betekent mijn botbudget van €400 dat ik €400 extra kan kopen? "
         "Geef alleen bevestigde bedragen en benoem ontbrekende risico-informatie."
     )
-    fake = FakeResponses(
-        response("portfolio-read", calls=[tool_call("call-portfolio", "get_portfolio_and_exposure", {})]),
-        response("portfolio-answer", text="Ik kan de bedragen niet bevestigen."),
-    )
-
     class FakeRead:
         async def __call__(self, call):
             assert call.name == "get_portfolio_and_exposure"
@@ -14667,7 +14687,7 @@ def test_paper_cash_position_budget_question_renders_verified_bot_facts():
             }]}
 
     front = FinnResponsesFrontDoor(
-        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        client=object(), session=object(), user_id=7,
         run_id="cash-verified-answer", model_led_coach=True,
     )
     front.reads = FakeRead()
@@ -14680,6 +14700,11 @@ def test_paper_cash_position_budget_question_renders_verified_bot_facts():
     assert "0 AAPL open" in result.response.text
     assert "€405,48 Paper-kas" in result.response.text
     assert "geen extra koopruimte" in result.response.text
+    checked = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=question, result=result.response, locale="nl",
+    ))
+    assert checked.status == "completed"
+    assert checked.text == result.response.text
 
 
 def test_bot_decision_question_binds_persisted_history_even_for_portfolio_tool():

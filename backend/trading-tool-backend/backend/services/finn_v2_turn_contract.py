@@ -58,7 +58,9 @@ def _requested_fields(message: str) -> list[str]:
         "timeframe": r"\b(?:timeframe|tijdframe|4h|1d|1h|1w|15m|30m)\b",
         "setup_type": r"\b(?:type|soort)\b",
         "strategy_name": r"\b(?:strategienaam|strategy name|welke strategie|which strategy|welche strategie)\b",
-        "entry": r"\b(?:entry\w*|instap(?!pen\b)\w*|entry level)\b",
+        # An historical *instapbeslissing* in a trade dossier describes the
+        # decision event, not the current linked strategy's entry level.
+        "entry": r"\b(?:entry\w*|instap(?!pen\b|beslissing\w*\b)\w*|entry level)\b",
         "confirmation": r"\b(?:trigger\w*|bevestig\w*|confirmation\w*|"
                         r"(?:instap|entry)\w*(?:bevestig|confirm)\w*)\b",
         "stop_distance": r"\b(?:stop\w*|exit\w*)\b",
