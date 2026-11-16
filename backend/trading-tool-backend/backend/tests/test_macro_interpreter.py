@@ -204,6 +204,44 @@ def test_vix_fred_skips_blank_rows(monkeypatch):
     assert result == {"value": 15.15, "observed_at": "2026-08-07"}
 
 
+def test_treasury_yields_use_dated_official_two_and_ten_year_columns(monkeypatch):
+    from datetime import date
+    from backend.utils import macro_interpreter
+
+    macro_interpreter._hourly_treasury_yield_csv.cache_clear()
+    csv_text = (
+        'Date,"1 Yr","2 Yr","10 Yr"\n'
+        '11/12/2026,4.65,4.86,5.10\n'
+        '11/13/2026,4.65,4.88,5.15\n'
+        '11/17/2026,4.70,4.95,5.20\n'
+    )
+    monkeypatch.setattr(macro_interpreter, "_fetch_text", lambda *_args, **_kwargs: csv_text)
+
+    assert macro_interpreter._treasury_yield_reading("us02y", today=date(2026, 11, 16)) == {
+        "value": 4.88, "observed_at": "2026-11-13", "provider": "us_treasury",
+    }
+    assert macro_interpreter._treasury_yield_reading("us10y", today=date(2026, 11, 16)) == {
+        "value": 5.15, "observed_at": "2026-11-13", "provider": "us_treasury",
+    }
+    macro_interpreter._hourly_treasury_yield_csv.cache_clear()
+
+
+def test_yield_falls_back_to_same_maturity_fred_not_yahoo_bill(monkeypatch):
+    from backend.utils import macro_interpreter
+
+    monkeypatch.setattr(macro_interpreter, "_treasury_yield_reading", lambda *_args: {"value": None})
+    requested = []
+    def fred_only(url, timeout=20):
+        requested.append(url)
+        return "observation_date,DGS2\n2026-11-13,4.88\n"
+    monkeypatch.setattr(macro_interpreter, "_fetch_text", fred_only)
+
+    assert fetch_macro_value("us02y", source="yahoo", link=macro_interpreter.YAHOO_US02Y) == {
+        "value": 4.88, "observed_at": "2026-11-13",
+    }
+    assert requested == [_fred_csv_url("DGS2")]
+
+
 def test_inflation_rate_uses_cpi_year_over_year(monkeypatch):
     def fake_fetch_text(url, timeout=20):
         assert url == _fred_csv_url("CPIAUCSL")

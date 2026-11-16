@@ -140,6 +140,7 @@ export default function OrderPreviewModal({
   preview,
   onConfirm,
   onAcknowledgeSetupBlock,
+  onAcknowledgeMissingIndicator,
   onCancel,
   onRefresh,
   loading = false,
@@ -182,6 +183,7 @@ export default function OrderPreviewModal({
   const isLivePreflight = preview?.mode === "manual_order_preflight" || isLive;
   const isBlocked = Boolean(preview?.blocked || preview?.ok === false);
   const requiresSetupBlockAck = preview?.code === "LIVE_SETUP_BLOCK_ACK_REQUIRED";
+  const requiresIndicatorAck = ["PAPER_INDICATOR_ACK_REQUIRED", "LIVE_INDICATOR_ACK_REQUIRED"].includes(preview?.code);
   const isBuy = preview?.side === "buy";
   const orderAmount = preview?.gross_eur ?? preview?.notional_eur ?? (Number(preview?.quantity || 0) * Number(preview?.price || 0));
   const feeRate = Number(preview?.fee_rate);
@@ -418,6 +420,11 @@ export default function OrderPreviewModal({
                     <XCircle size={13} />
                     {copy.orderBlocked}
                   </div>
+                  {requiresIndicatorAck && preview?.message ? (
+                    <p className="mt-2 text-sm leading-relaxed text-rose-900 dark:text-rose-100">
+                      {preview.message}
+                    </p>
+                  ) : null}
                   <p className="mt-2 text-sm font-semibold leading-relaxed text-rose-900 dark:text-rose-100">
                     {preview?.safe_next_step || copy.resolveBlockerFirst}
                   </p>
@@ -430,6 +437,13 @@ export default function OrderPreviewModal({
                     >
                       <ShieldAlert size={13} />
                       {copy.acknowledgeSetupBlock}
+                    </button>
+                  )}
+                  {requiresIndicatorAck && (
+                    <button type="button" onClick={onAcknowledgeMissingIndicator} disabled={loading}
+                      className="mt-4 inline-flex items-center gap-2 rounded-xl bg-amber-700 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition hover:bg-amber-800 disabled:opacity-60">
+                      <ShieldAlert size={13} />
+                      {copy.acknowledgeMissingIndicator}
                     </button>
                   )}
                 </div>

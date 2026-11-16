@@ -244,6 +244,7 @@ export default function TradePanelContainer({
       idempotency_key: idempotencyKey,
       risk_acknowledged: Boolean(bot?.is_live),
       setup_block_acknowledged: Boolean(order.setup_block_acknowledged),
+      missing_indicator_acknowledged: Boolean(order.missing_indicator_acknowledged),
       live_preflight_token: preflightToken,
     };
     setDraftOrder(safeOrder);
@@ -268,6 +269,7 @@ export default function TradePanelContainer({
         live_preflight_token: order.live_preflight_token,
         live_preflight_action_id: order.live_preflight_action_id,
         setup_block_acknowledged: order.setup_block_acknowledged,
+        missing_indicator_acknowledged: order.missing_indicator_acknowledged,
       };
       const data = bot?.is_live
         ? await preflightManualOrder(payload)
@@ -328,6 +330,7 @@ export default function TradePanelContainer({
         live_preflight_token: draftOrder.live_preflight_token,
         live_preflight_action_id: draftOrder.live_preflight_action_id,
         setup_block_acknowledged: draftOrder.setup_block_acknowledged,
+        missing_indicator_acknowledged: draftOrder.missing_indicator_acknowledged,
       });
 
       // The exchange may accept an order before any fill exists. Balances come
@@ -366,6 +369,13 @@ export default function TradePanelContainer({
       ...draftOrder,
       setup_block_acknowledged: true,
     };
+    setDraftOrder(acknowledged);
+    await refreshPreview(acknowledged);
+  }
+
+  async function handleAcknowledgeMissingIndicator() {
+    if (!draftOrder) return;
+    const acknowledged = { ...draftOrder, missing_indicator_acknowledged: true };
     setDraftOrder(acknowledged);
     await refreshPreview(acknowledged);
   }
@@ -430,6 +440,7 @@ export default function TradePanelContainer({
           currencySymbol={bot?.is_live && bot?.base_currency === "USD" ? "$" : "€"}
           onConfirm={handleConfirmOrder}
           onAcknowledgeSetupBlock={handleAcknowledgeSetupBlock}
+          onAcknowledgeMissingIndicator={handleAcknowledgeMissingIndicator}
           onCancel={() => setShowPreview(false)}
           onRefresh={refreshPreview}
         />

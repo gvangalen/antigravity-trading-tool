@@ -293,6 +293,42 @@ def test_batch_reader_accepts_previous_day_score_with_fresh_sources():
     asyncio.run(run())
 
 
+def test_partial_benchmark_uses_only_verified_indicators_without_enabling_setup_match():
+    async def run():
+        now = datetime.now(timezone.utc)
+        evidence = {
+            "macro": {
+                "dxy": {"score": 20, "weight": 1},
+                "sp500": {"score": 50, "weight": 1},
+            }
+        }
+        session = SimpleNamespace(execute=AsyncMock(return_value=SimpleNamespace(
+            mappings=lambda: SimpleNamespace(first=lambda: {"ai_preferences": None}),
+        )))
+        service = SetupMarketMatchService(session, daily_rows={
+            "BTC": {"report_date": date.today(), "macro_score": None,
+                    "market_score": 60, "technical_score": 40,
+                    "calculated_at": now, "indicator_evidence": evidence},
+        })
+
+        async def source(_owner, _symbol, category, _row, _moments, diagnostics, **_kwargs):
+            diagnostics[f"{category}_configured_indicators"] = (
+                ["dxy", "sp500", "us02y", "us10y"] if category == "macro" else [category])
+            diagnostics[f"{category}_verified_indicators"] = (
+                ["dxy", "sp500"] if category == "macro" else [category])
+            return category != "macro"
+
+        service._source_is_fresh = source
+        result = await service.for_asset(7, "BTC", setups=[setup(1, min_benchmark_score=35)])
+        assert result["benchmark_score"] is None
+        assert result["indicative_component_scores"] == {"market": 60, "macro": 35, "technical": 40}
+        assert result["indicative_benchmark_score"] == 45.0
+        assert result["missing_indicators"]["macro"] == ["us02y", "us10y"]
+        assert result["matches"][0]["status"] == "insufficient_data"
+
+    asyncio.run(run())
+
+
 def test_empty_new_day_row_does_not_hide_fresh_prior_score():
     async def run():
         complete = {

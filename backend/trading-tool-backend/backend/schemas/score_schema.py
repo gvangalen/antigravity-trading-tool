@@ -46,6 +46,9 @@ class DailyCombinedScoreResponse(BaseModel):
     setup: SetupScoreResponse
     report_date: Optional[date] = None
     benchmark_score: Optional[float] = None
+    indicative_benchmark_score: Optional[float] = None
+    indicative_component_scores: Dict[str, float] = Field(default_factory=dict)
+    missing_indicators: Dict[str, List[str]] = Field(default_factory=dict)
     benchmark_weights: Optional[Dict[str, float]] = None
     calculated_at: Optional[datetime] = None
     indicator_evidence: Dict[str, Any] = Field(default_factory=dict)

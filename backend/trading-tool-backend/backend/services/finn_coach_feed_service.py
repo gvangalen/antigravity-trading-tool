@@ -450,12 +450,24 @@ def _fallback(kind: str, subject: str, evidence: dict, *, focus: str = "brief") 
         }
         title = {"nl": "Planvoorwaarden passen", "en": "Plan conditions match", "de": "Planbedingungen passen"}
     elif kind == "data_blocked":
-        body = {
+        missing = evidence.get("missing_indicators") or {}
+        missing_names = ", ".join(str(name)[:40] for names in missing.values()
+                                  if isinstance(names, list) for name in names)[:160] if isinstance(missing, dict) else ""
+        if evidence.get("bot_id") and missing_names:
+            mode = "Live" if evidence.get("is_live") else "Paper"
+            body = {
+                "nl": f"De overige geverifieerde indicators van {name} passen voorlopig bij je setup, maar {missing_names} heeft geen actuele score. De {mode}-bot koopt niet automatisch. Bekijk de bot om een handmatige koop bewust te beoordelen; dit is geen vastgelegde koopbeslissing.",
+                "en": f"The other verified indicators for {name} provisionally fit your setup, but {missing_names} has no current score. The {mode} bot will not buy automatically. Open the bot to review a manual buy; no buy decision has been recorded.",
+                "de": f"Die übrigen verifizierten Indikatoren für {name} passen vorläufig zur Setup, aber {missing_names} hat keinen aktuellen Score. Der {mode}-Bot kauft nicht automatisch. Öffne den Bot für eine bewusste manuelle Kaufprüfung; es liegt keine Kaufentscheidung vor.",
+            }
+            title = {"nl": "Botcontrole: indicator ontbreekt", "en": "Bot check: indicator missing", "de": "Bot-Prüfung: Indikator fehlt"}
+        else:
+            body = {
             "nl": f"Voor {name} ontbreken complete, actuele markt-, macro- of technische scores. FINN kan de planvoorwaarden nu niet beoordelen.",
             "en": f"Complete, current market, macro or technical scores are missing for {name}. FINN cannot assess the plan conditions yet.",
             "de": f"Für {name} fehlen vollständige, aktuelle Markt-, Makro- oder technische Scores. FINN kann die Planbedingungen noch nicht beurteilen.",
-        }
-        title = {"nl": "Beoordeling beperkt", "en": "Assessment limited", "de": "Bewertung eingeschränkt"}
+            }
+            title = {"nl": "Beoordeling beperkt", "en": "Assessment limited", "de": "Bewertung eingeschränkt"}
     elif kind == "proposal_pending":
         body = {
             "nl": f"Een voorstel voor {name} wacht op jouw afzonderlijke bevestiging. Er is nog niets uitgevoerd.",
@@ -709,7 +721,7 @@ class FinnCoachFeedService:
             "copy_json": _json(_fallback(event_type, subject, facts)),
             "copy_source": ("verified_facts" if event_type in {
                                 "position_risk", "weekly_reflection", "improvement_suggestion",
-                                "bot_decision"}
+                                "bot_decision"} or event_type == "data_blocked" and facts.get("bot_id")
                             else "fact_fallback"),
             "expires_at": expires_at,
         })
@@ -1014,6 +1026,74 @@ class FinnCoachFeedService:
                     created.append(improvement)
             else:
                 await self.resolve(user_id=user_id, event_key=improvement_key)
+        return created
+
+    async def reconcile_missing_indicator_bots(self, *, user_id: int, symbol: str,
+                                               market_id: int | None = None) -> list[str]:
+        """Offer a manual review when a linked bot has a provisional plan fit.
+
+        A provisional fit is not a bot buy decision. The linked manual order
+        still needs a separate preview, explicit acknowledgement and all
+        normal Paper or Live execution controls.
+        """
+        from backend.domain.setup_market_match import match_setup
+        from backend.infrastructure.repositories.setup_repository import SetupRepository
+        from backend.services.setup_market_match_service import SetupMarketMatchService
+
+        asset = str(symbol or "").strip().upper()
+        scope = f"{asset}:{market_id or 'asset'}"
+        bots_result = await self.session.execute(text("""
+            SELECT id, name, setup_id, is_live FROM bot_configs
+            WHERE user_id=:user_id AND symbol=:symbol AND is_active=TRUE
+              AND market_id IS NOT DISTINCT FROM :market_id
+              AND setup_id IS NOT NULL
+        """), {"user_id": user_id, "symbol": asset, "market_id": market_id})
+        bots = list(bots_result.mappings().all())
+        previous = await self.session.execute(text("""
+            SELECT event_key FROM finn_coach_feed_items
+            WHERE user_id=:user_id AND event_type='data_blocked'
+              AND event_key LIKE :prefix AND status IN ('unread','read')
+        """), {"user_id": user_id, "prefix": f"bot-indicator-review:{scope}:%"})
+        current_keys = {f"bot-indicator-review:{scope}:{bot['id']}" for bot in bots}
+        for row in previous.mappings().all():
+            if row["event_key"] not in current_keys:
+                await self.resolve(user_id=user_id, event_key=row["event_key"])
+        if not bots:
+            return []
+        setups = {int(row["id"]): dict(row) for row in
+                  await SetupRepository(self.session).get_all_setups(user_id)
+                  if str(row.get("symbol") or "").upper() == asset
+                  and row.get("market_id") == market_id}
+        assessment = await SetupMarketMatchService(self.session).for_asset(
+            user_id, asset, setups=list(setups.values()), market_id=market_id)
+        missing = {category: list(names) for category, names in
+                   (assessment.get("missing_indicators") or {}).items() if names}
+        indicative = assessment.get("indicative_component_scores") or {}
+        created = []
+        for bot in bots:
+            key = f"bot-indicator-review:{scope}:{bot['id']}"
+            setup = setups.get(int(bot["setup_id"]))
+            provisional = (match_setup(setup, indicative, assessment.get("benchmark_weights"))
+                           if setup and missing and set(indicative) == {"market", "macro", "technical"}
+                           else None)
+            if not provisional or provisional.get("status") != "matches":
+                await self.resolve(user_id=user_id, event_key=key)
+                continue
+            item = await self.publish(
+                user_id=user_id, event_key=key, event_type="data_blocked",
+                subject_type="bot", subject_id=str(bot["id"]),
+                subject=bot["name"] or asset, symbol=asset, priority=4,
+                expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+                evidence={"bot_id": bot["id"], "setup_id": bot["setup_id"],
+                          "market_id": market_id, "is_live": bool(bot["is_live"]),
+                          "missing_indicators": missing,
+                          "indicative_benchmark_score": assessment.get("indicative_benchmark_score"),
+                          "candidate_only": True},
+                revision=_json({"missing": missing, "score": assessment.get("indicative_benchmark_score"),
+                                "setup_id": bot["setup_id"], "mode": bool(bot["is_live"])}),
+            )
+            if item:
+                created.append(item)
         return created
 
     async def reconcile_score_asset(self, *, user_id: int, symbol: str) -> list[str]:
@@ -1330,6 +1410,10 @@ class FinnCoachFeedService:
         """One asynchronous Luna/Responses call for one persisted revision."""
         item = await self.detail(user_id=user_id, item_id=item_id, include_internal=True)
         if not item or item["copy_source"] != "fact_fallback" or item["status"] == "resolved":
+            return False
+        if item["event_type"] == "data_blocked" and (item.get("evidence") or {}).get("bot_id"):
+            # Keep the missing-source warning and manual-action boundary
+            # entirely deterministic; do not let generated copy imply a buy.
             return False
         claimed = await self.session.execute(text("""
             UPDATE finn_coach_feed_items SET copy_attempts=copy_attempts+1,

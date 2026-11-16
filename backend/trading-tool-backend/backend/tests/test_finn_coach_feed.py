@@ -25,6 +25,66 @@ def test_fallback_preserves_subject_and_never_claims_an_entry_signal():
     assert "not an entry signal" in copy["en"]["body"]
 
 
+def test_missing_indicator_bot_review_is_owner_and_pair_scoped(monkeypatch):
+    class Rows:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def mappings(self):
+            return self
+
+        def all(self):
+            return self.rows
+
+    class Session:
+        async def execute(self, query, params):
+            if "FROM bot_configs" in str(query):
+                assert params == {"user_id": 7, "symbol": "BTC", "market_id": 123}
+                return Rows([{"id": 9, "name": "BTC Paper", "setup_id": 42, "is_live": False},
+                             {"id": 10, "name": "BTC Live", "setup_id": 42, "is_live": True}])
+            return Rows([])
+
+    class Setups:
+        def __init__(self, _session):
+            pass
+
+        async def get_all_setups(self, user_id):
+            assert user_id == 7
+            return [{"id": 42, "name": "BTC plan", "symbol": "BTC", "market_id": 123,
+                     "setup_type": "trade", "min_benchmark_score": 40,
+                     "max_benchmark_score": 60}]
+
+    class Match:
+        def __init__(self, _session):
+            pass
+
+        async def for_asset(self, user_id, symbol, **kwargs):
+            assert (user_id, symbol, kwargs["market_id"]) == (7, "BTC", 123)
+            return {"indicative_component_scores": {"market": 60, "macro": 35, "technical": 40},
+                    "indicative_benchmark_score": 45,
+                    "benchmark_weights": {"market_score": 1 / 3, "macro_score": 1 / 3,
+                                          "technical_score": 1 / 3},
+                    "missing_indicators": {"macro": ["us02y", "us10y"]}}
+
+    monkeypatch.setattr("backend.infrastructure.repositories.setup_repository.SetupRepository", Setups)
+    monkeypatch.setattr("backend.services.setup_market_match_service.SetupMarketMatchService", Match)
+    service = module.FinnCoachFeedService(Session())
+    published = []
+
+    async def publish(**kwargs):
+        published.append(kwargs)
+        return "item"
+
+    service.publish = publish
+    service.resolve = AsyncMock()
+    assert asyncio.run(service.reconcile_missing_indicator_bots(
+        user_id=7, symbol="BTC", market_id=123)) == ["item", "item"]
+    assert {item["subject_id"] for item in published} == {"9", "10"}
+    assert all(item["evidence"]["candidate_only"] for item in published)
+    assert "koopt niet automatisch" in module._fallback(
+        "data_blocked", "BTC Live", published[1]["evidence"])["nl"]["body"]
+
+
 def test_daily_report_notification_has_one_factual_translation_per_locale():
     copy = module._fallback("daily_report_ready", "Dagrapport", {"report_date": "2026-11-04"})
     assert set(copy) == {"nl", "en", "de"}

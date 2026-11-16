@@ -311,6 +311,9 @@ def reconcile_coach_feed_score(user_id: int, symbol: str, market_id: int | None 
             item_ids += await coach.reconcile_plan_reviews(
                 user_id=user_id, symbol=symbol, market_id=market_id,
             )
+            item_ids += await coach.reconcile_missing_indicator_bots(
+                user_id=user_id, symbol=symbol, market_id=market_id,
+            )
             item_ids += await coach.reconcile_improvement_suggestions(
                 user_id=user_id, symbol=symbol, market_id=market_id,
             )

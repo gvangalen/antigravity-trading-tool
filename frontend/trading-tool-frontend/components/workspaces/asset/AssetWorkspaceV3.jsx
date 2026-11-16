@@ -160,6 +160,9 @@ function getUiCopy(locale = "nl") {
       benchmarkNoSetup: "No saved setup for this asset.",
       benchmarkNoCondition: "This setup has no benchmark condition. Review its other rules in My Plan.",
       benchmarkMissing: "No complete current benchmark. The missing component scores are shown below.",
+      indicativeBenchmark: "Indicative score from available indicators",
+      indicativeNotForBots: "An incomplete score cannot trigger an automatic order.",
+      missingIndicators: "No current score for",
       benchmarkUpdating: "The setup comparison is updating. No current match can be confirmed yet.",
       benchmarkReadError: "The saved setups could not be loaded. No current match can be confirmed.",
       benchmarkMatches: "Benchmark condition reached. Check the remaining plan rules separately.",
@@ -382,6 +385,9 @@ function getUiCopy(locale = "nl") {
       benchmarkNoSetup: "Für dieses Asset ist kein Setup gespeichert.",
       benchmarkNoCondition: "Dieses Setup hat keine Benchmark-Bedingung. Die übrigen Regeln stehen in Mein Plan.",
       benchmarkMissing: "Kein vollständiger aktueller Benchmark. Die fehlenden Teilwerte stehen unten.",
+      indicativeBenchmark: "Vorläufiger Wert aus verfügbaren Indikatoren",
+      indicativeNotForBots: "Ein unvollständiger Wert löst keine automatische Order aus.",
+      missingIndicators: "Kein aktueller Wert für",
       benchmarkUpdating: "Der Setup-Vergleich wird aktualisiert. Eine aktuelle Übereinstimmung ist noch nicht bestätigt.",
       benchmarkReadError: "Die gespeicherten Setups konnten nicht geladen werden. Eine aktuelle Übereinstimmung ist nicht bestätigt.",
       benchmarkMatches: "Benchmark-Bedingung erreicht. Prüfe die übrigen Planregeln separat.",
@@ -603,6 +609,9 @@ function getUiCopy(locale = "nl") {
     benchmarkNoSetup: "Voor deze asset is geen setup opgeslagen.",
     benchmarkNoCondition: "Deze setup heeft geen benchmarkvoorwaarde. Bekijk de overige regels in Mijn Plan.",
     benchmarkMissing: "Geen complete actuele benchmark. De ontbrekende deelscores staan hieronder.",
+      indicativeBenchmark: "Indicatieve score uit beschikbare indicatoren",
+      indicativeNotForBots: "Een onvolledige score leidt niet automatisch tot een order.",
+      missingIndicators: "Geen actuele score voor",
     benchmarkUpdating: "De setupvergelijking wordt bijgewerkt. Een actuele match is nog niet bevestigd.",
     benchmarkReadError: "De opgeslagen setups konden niet worden geladen. Een actuele match is niet bevestigd.",
     benchmarkMatches: "Benchmarkvoorwaarde bereikt. Controleer de andere planregels afzonderlijk.",
@@ -1609,7 +1618,7 @@ function buildSectionInsight(sectionId, sectionScore, ui, sourceStatus = null, r
   );
 }
 
-function ScoreOverview({ assetSymbol, market, macro, technical, combined, sections, weights, loading, onSaveWeights, onOpenPlan, onSelectSetup, selectedSetupId, setupMatches, setupMatchError, ui, locale, conditionOptions, isDailyBenchmark, quoteStatus }) {
+function ScoreOverview({ assetSymbol, market, macro, technical, combined, indicativeScore, missingIndicators, sections, weights, loading, onSaveWeights, onOpenPlan, onSelectSetup, selectedSetupId, setupMatches, setupMatchError, ui, locale, conditionOptions, isDailyBenchmark, quoteStatus }) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [localWeights, setLocalWeights] = useState(() => normalizeWeights(weights));
@@ -1624,6 +1633,8 @@ function ScoreOverview({ assetSymbol, market, macro, technical, combined, sectio
   }, [isEditing, weights]);
 
   const currentScore = normalizeScore(combined?.score);
+  const partialScore = currentScore === null && isDailyBenchmark ? normalizeScore(indicativeScore) : null;
+  const shownScore = currentScore ?? partialScore;
   const eligibleMatches = isDailyBenchmark && Array.isArray(setupMatches) ? setupMatches.filter((match) =>
     String(match?.symbol || "").toUpperCase() === assetSymbol
   ) : [];
@@ -1710,7 +1721,7 @@ function ScoreOverview({ assetSymbol, market, macro, technical, combined, sectio
       <div className="px-4 py-4">
         <div className="flex flex-wrap items-end gap-x-4 gap-y-1">
           <strong className="text-[42px] font-black leading-none tracking-tight text-slate-950">
-            {loading && currentScore === null ? "…" : formatBenchmarkScore(currentScore, locale)}
+            {loading && shownScore === null ? "…" : formatBenchmarkScore(shownScore, locale)}
           </strong>
           <div className="pb-0.5">
             <div className="text-[16px] font-bold text-slate-950">
@@ -1721,6 +1732,17 @@ function ScoreOverview({ assetSymbol, market, macro, technical, combined, sectio
             </div>
           </div>
         </div>
+
+        {partialScore !== null ? (
+          <p role="status" className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
+            {ui.indicativeBenchmark}: {formatBenchmarkScore(partialScore, locale)}/100. {ui.indicativeNotForBots}
+            {Object.entries(missingIndicators || {}).flatMap(([category, names]) =>
+              (names || []).map((name) => `${category}: ${name}`)
+            ).length ? ` ${ui.missingIndicators}: ${Object.entries(missingIndicators || {}).flatMap(([category, names]) =>
+              (names || []).map((name) => `${category}: ${name}`)
+            ).join(", ")}.` : null}
+          </p>
+        ) : null}
 
         {isDailyBenchmark && currentScore !== null && quoteStatus === "closed_session" ? (
           <p className="mt-2 text-xs text-amber-700">{ui.closedSessionScore}</p>
@@ -1909,6 +1931,7 @@ function ActiveAssetCard({
   statusLabel,
   quoteStatus,
   combinedSummary,
+  indicativeScore,
   conditionOptions,
   isDailyBenchmark,
   locale,
@@ -1923,6 +1946,8 @@ function ActiveAssetCard({
     : "text-slate-400";
   const condition = marketConditionForScore(combinedSummary.score);
   const situation = condition ? conditionOptions?.[condition.id]?.title : ui.unavailable;
+  const partialScore = isDailyBenchmark && combinedSummary.score === null
+    ? normalizeScore(indicativeScore) : null;
 
   return (
     <section className="relative overflow-hidden rounded-[24px] border border-slate-200/80 bg-white px-4 py-3.5 shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
@@ -1978,6 +2003,11 @@ function ActiveAssetCard({
               {isDailyBenchmark ? ui.benchmarkScore : ui.selectedPeriodScore}: {combinedSummary.score === null ? "—" : `${formatBenchmarkScore(combinedSummary.score, locale)}/100`}
             </span>
           </div>
+          {partialScore !== null ? (
+            <p className="mt-1 text-[11px] font-semibold text-amber-700">
+              {ui.indicativeBenchmark}: {formatBenchmarkScore(partialScore, locale)}/100
+            </p>
+          ) : null}
           <p className="mt-1 text-[11px] leading-relaxed text-slate-600">{ui.benchmarkExplanation}</p>
           {quoteStatus === "closed_session" && combinedSummary.score !== null ? (
             <p className="mt-1 text-[11px] text-amber-700">{ui.closedSessionScore}</p>
@@ -3306,6 +3336,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         statusLabel={isFallbackWorkspace ? ui.fallbackData : quoteStatus === "closed_session" ? ui.closedMarketQuote : quoteStatus === "stale" ? ui.staleData : null}
         quoteStatus={quoteStatus}
         combinedSummary={combinedSummary}
+        indicativeScore={workspace?.daily?.indicative_benchmark_score}
         conditionOptions={t?.setups?.marketConditions?.options}
         isDailyBenchmark={Object.values(periods).every((period) => period === "day")}
         locale={locale}
@@ -3346,6 +3377,8 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
             ? { ...combinedSummary, bias: ui.fallbackData, tone: scoreTone(50, ui) }
             : combinedSummary
         }
+        indicativeScore={workspace?.daily?.indicative_benchmark_score}
+        missingIndicators={workspace?.daily?.missing_indicators}
         weights={master?.weights}
         sections={sections}
         locale={locale}

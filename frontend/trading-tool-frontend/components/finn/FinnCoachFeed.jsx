@@ -186,7 +186,7 @@ export default function FinnCoachFeed({ onDiscuss }) {
                 ) : null}
                 {canUpdateFeedStatus(item) && item.event_type !== "proposal_pending" ? (
                   <a href={coachFeedDetailsHref(item)}
-                    className="text-sm text-slate-600 hover:underline dark:text-slate-300">{item.event_type.endsWith("_report_ready") ? copy.viewReport : copy.details}</a>
+                    className="text-sm text-slate-600 hover:underline dark:text-slate-300">{item.event_type === "data_blocked" && item.subject_type === "bot" && item.evidence?.missing_indicators ? copy.reviewManualBuy : item.event_type.endsWith("_report_ready") ? copy.viewReport : copy.details}</a>
                 ) : null}
                 {canUpdateFeedStatus(item) ? (
                   <button type="button" onClick={() => void setStatus(item.id, "handled")}
