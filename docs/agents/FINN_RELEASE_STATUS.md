@@ -6,11 +6,40 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN report bot clocks and correction identity (16 november 2026)
 
-Phase: `PRODUCT_DEPLOYED_STATUS_SHA_PENDING_LIVE_QA`. This FINN candidate follows the
-independent targeted browser retest of public SHA
-`687092f5167ce0b708b67e5c5fd521da78833296`: seven of seven visible
-feed discussion cases passed. That retest did not constitute full runtime or
-score-parity acceptance. No live QA has tested this report/chat repair yet.
+Phase: `LIVE_QA_NOT_ACCEPTED_LOCAL_REPAIR`. Independent authenticated browser
+QA on final public SHA `820e34e41082d67f4d5784791579049613d511ff`
+returned `NOT_ACCEPTED` for this bot-clock scope. The existing 16 November
+report was generated before the repair, so new report generation was
+`NOT_TESTABLE`. FINN correctly avoided a future Paper portfolio measurement
+and kept current BTC bot 129 distinct from AAPL bot 130. But on a report
+comparison it claimed no 05:15 CET bot decision existed despite the saved
+report snapshot showing it; it substituted the newer 15:30 CET checks. A
+follow-up explicitly naming bot 129 and excluding bot 130 ended in a generic
+source-moment verification failure. No bot, plan or order was changed by QA.
+
+The local follow-up repair rejects denials of a decision present in an
+owner-read report snapshot and gives the answer retry both historical report
+and current bot decision clocks. A corrective follow-up re-reads that one
+owner-owned report by date when the prior turn established the bot and report;
+an explicitly excluded second bot no longer makes the intended bot identity
+ambiguous. This uses bot IDs and source instants, not BTC-specific rules.
+
+Focused regressions use QA's exact correction wording and the denied 05:15
+claim; they also cover owner isolation, conflicting bot IDs, and an answer
+retry with both historical and current clock facts. The final full backend
+suite passed **4,952** with **7 skipped**. The freshly rebuilt isolated
+FastAPI/Celery matrix passed **17/17** action contracts and adapter tests
+**26/26**; matrix artifact SHA-256
+`490309853fa8e20e6a533296580378caf1b964ccefa0b62fcbafb0da8f86adb4`.
+It recorded zero broker orders, Live trading calls, or production
+connections. Real-provider development passed **20/20** (artifact SHA-256
+`bc36b51cdc7070758ae451814dad1049f981ae82c0e9b0ee193fe3c359442821`)
+and regression **109/109** (artifact SHA-256
+`104437c1f1877cfa50d10d7a3401913f2efb9fd02351ac56ea13b487fb4daa16`),
+with zero provider, schema, timeout, parse, or validation failures. This is
+local repair evidence; PR CI, deployment and independent live retest of this
+new candidate remain pending. A new daily report is still needed to test the
+report-generation prose on live without changing an existing saved report.
 
 The Paper Test morning logbook records three distinct defects: the saved
 daily report wrote a bot decision at 04:15 without a zone while its detail

@@ -40,6 +40,7 @@ from backend.services.finn_v2_turn_contract import (
 )
 from backend.services.finn_v2_responses_tool_relevance import FinnResponsesToolRelevanceGuard
 from backend.services.finn_v2_responses_answer_verifier import FinnResponsesAnswerVerifier, FinnResponsesVerifiedAnswer
+from backend.services.finn_v2_source_moment_claims import source_moment_repair_facts
 from backend.services.finn_v2_hard_claim_boundary import FinnV2HardClaimBoundary, HardClaimBoundaryResult
 from backend.services.finn_v2_verified_turn_context import project_verified_turn
 from backend.services.finn_v2_responses_loop import FinnResponsesResult
@@ -10911,6 +10912,52 @@ def test_read_repair_verifies_source_moment_against_prior_read_in_same_run():
     ).status == "completed"
 
 
+def test_read_repair_keeps_saved_bot_clock_distinct_from_newer_decision():
+    report = {"name": "get_decision_history", "status": "completed", "result": {
+        "results": [
+            {"scope": "read_latest_report", "status": "completed", "data": {
+                "report_date": "2026-11-16", "generated_at": "2026-11-16T04:21:39+00:00",
+                "score_source_snapshot": {"report_v2": {"automation": {"bots": [{
+                    "bot_id": 129, "symbol": "BTC",
+                    "latest_decision": {"at": "2026-11-16T04:15:18"},
+                }]}}},
+            }},
+            {"scope": "read_review_history", "status": "completed", "data": {
+                "latest_bot_decisions": [{"bot_id": 129, "symbol": "BTC",
+                                         "decision_at": "2026-11-16T14:30:17+00:00"}],
+            }},
+        ],
+    }}
+    fake = FakeResponses(response(
+        "bot-clock-repair",
+        text="Het opgeslagen rapport bewaart voor BTC-bot 129 04:15 UTC, "
+             "oftewel 05:15 CET. De huidige botbeoordeling is van 15:30 CET; "
+             "dat is een later besluit, geen tegenspraak.",
+    ))
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.client = SimpleNamespace(responses=fake)
+    front.reads = SimpleNamespace(session_factory=None)
+    front.user_id = 21
+    front.run_id = "saved-bot-clock-repair"
+    front.model_led_coach = True
+    message = "Corrigeer het rapportmoment voor BTC-bot 129; laat bot 130 buiten beschouwing."
+    result = asyncio.run(front.run(
+        message=message, instructions="Gebruik gelezen feiten", conversation_context={},
+        verified_asset="BTC", previous_response_id="rejected-answer", prior_tool_trace=(report,),
+        rejection_feedback={
+            "status": "answer_rejected", "reason": "source_moment_conflicts_with_source",
+            "source_moment_rule": "bot_decision_clock_mismatch",
+            "source_moment_facts": source_moment_repair_facts(tuple(report["result"]["results"])),
+        },
+    ))
+    repair_prompt = fake.requests[0]["input"][-1]["content"]
+    assert "report_bot_decision" in repair_prompt
+    assert "current_bot_decision" in repair_prompt
+    assert "2026-11-16T05:15:18+01:00" in repair_prompt
+    assert "2026-11-16T15:30:17+01:00" in repair_prompt
+    assert _minimal_read_answer(message=message, prepared=result).status == "completed"
+
+
 def test_resumed_choice_keeps_evaluation_available_after_identity_read():
     fake = FakeResponses(
         response("r1", calls=(tool_call("c1", "get_active_plan_and_strategy", {
@@ -14688,6 +14735,43 @@ def test_explicit_report_comparison_binds_owner_report_read(monkeypatch):
     ) == selected
     assert FinnResponsesFrontDoor._bind_explicit_report_evidence(
         selected, message="Wijzig het rapport", read_only=False,
+    ) == selected
+
+
+def test_bot_clock_correction_rebinds_one_owner_saved_report():
+    selected = FinnResponsesToolCatalog().validate(
+        "get_decision_history", {"asset": "BTC"},
+    )
+    prior = {
+        "owner_user_id": 7, "terminal_status": "completed",
+        "user_message": "Vergelijk het dagrapport met BTC-bot 129.",
+        "tool_trace": [{"result": {"results": [{
+            "scope": "read_latest_report", "status": "completed",
+            "data": {"report_type": "daily_reports", "report_date": "2026-11-16",
+                     "score_source_snapshot": {"report_v2": {"automation": {"bots": [{
+                         "bot_id": 129, "symbol": "BTC",
+                         "latest_decision": {"at": "2026-11-16T04:15:18"},
+                     }]}}}},
+        }]}}],
+    }
+    message = ("Ik bedoel specifiek BTC Paper-bot 129 en zijn beoordeling van 16 november "
+               "om 04:15 UTC (= 05:15 CET), niet zijn nieuwste beoordeling van 15:30 CET. "
+               "Lees de geschiedenis van bot 129 opnieuw. Welke beslissing was dit, en klopt het "
+               "dat die twee tijden hetzelfde moment zijn? Laat AAPL-bot 130 buiten beschouwing.")
+    rebound = FinnResponsesFrontDoor._bind_explicit_report_evidence(
+        selected, message=message, read_only=True,
+        previous_response=prior, owner_user_id=7,
+    )
+    assert "read_latest_report" in rebound.read_tools
+    assert rebound.inputs["report_date"] == "2026-11-16"
+    assert rebound.inputs["report_type"] == "daily_reports"
+    assert FinnResponsesFrontDoor._bind_explicit_report_evidence(
+        selected, message=message, read_only=True,
+        previous_response=prior, owner_user_id=8,
+    ) == selected
+    assert FinnResponsesFrontDoor._bind_explicit_report_evidence(
+        selected, message=message.replace("bot 129", "bot 130"), read_only=True,
+        previous_response=prior, owner_user_id=7,
     ) == selected
 
 
