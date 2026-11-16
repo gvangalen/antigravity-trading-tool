@@ -28,6 +28,80 @@ def _run(message, results, *, verified_asset=None):
     return prepared.response, calls[0]
 
 
+def test_clicked_paper_wait_card_uses_selected_decision_not_later_history():
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7,
+                                   run_id="selected-feed-test", model_led_coach=True)
+    calls = []
+
+    async def read(call):
+        calls.append(call)
+        return {"status": "completed", "results": [{"scope": "read_review_history",
+            "status": "completed", "data": {
+                "selected_feed_decision": {"symbol": "BTC", "pair": "BTC/USDT",
+                    "action": "hold", "decision_at": "2026-11-16T06:00:18+00:00",
+                    "paper_executed": False},
+                "latest_bot_decisions": [{"symbol": "BTC", "action": "hold",
+                    "decision_at": "2026-11-16T09:45:18+00:00"}],
+            }}]}
+
+    front.reads = read
+    message = ("Bespreek dit opgeslagen Paper-botbesluit voor BTC: Je BTC-bot wacht · Paper. "
+               "Controleer de beslissing en eventuele uitvoering in de botgeschiedenis.")
+    result = asyncio.run(front.run(message=message, instructions="", conversation_context={},
+        verified_asset="BTC", locale="nl", feed_evidence=[{"source": "owner_scoped_feed",
+            "facts": {"event_type": "bot_decision", "historical_notification": True,
+                      "symbol": "BTC", "historical_event_facts": {"action": "hold"}}}]))
+    assert len(calls) == 1 and calls[0].read_tools == ("read_review_history",)
+    assert "2026-11-16 07:00:18 CET" in result.response.text
+    assert "10:45" not in result.response.text
+    assert "geen gevulde Paper-order" in result.response.text
+    checked = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=message, result=result.response, locale="nl"))
+    assert checked.status == "completed", (checked.reason, checked.rejection_details)
+
+
+def test_clicked_paper_card_without_owner_feed_context_fails_closed():
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7,
+                                   run_id="missing-feed-test", model_led_coach=True)
+    result = asyncio.run(front.run(
+        message="Bespreek dit opgeslagen Paper-botbesluit voor AAPL: Je AAPL-bot wacht · Paper.",
+        instructions="", conversation_context={}, verified_asset="AAPL", locale="nl",
+    ))
+    assert "kaart niet verifiëren" in result.response.text
+
+
+def test_clicked_paper_card_without_matching_saved_decision_never_uses_latest():
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7,
+                                   run_id="unmatched-feed-test", model_led_coach=True)
+
+    async def read(_call):
+        return {"status": "completed", "results": [{"scope": "read_review_history",
+            "status": "completed", "data": {"selected_feed_decision": None,
+                "latest_bot_decisions": [{"symbol": "AAPL", "action": "hold",
+                    "decision_at": "2026-11-16T09:45:18+00:00"}]}}]}
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message="Bespreek dit opgeslagen Paper-botbesluit voor AAPL.", instructions="",
+        conversation_context={}, verified_asset="AAPL", locale="nl",
+        feed_evidence=[{"source": "owner_scoped_feed", "facts": {
+            "event_type": "bot_decision", "historical_notification": True, "symbol": "AAPL",
+            "historical_event_facts": {"action": "hold"}}}],
+    ))
+    assert "niet aan een opgeslagen beslissing koppelen" in result.response.text
+    assert "10:45" not in result.response.text
+
+
+def test_legacy_houd_vast_action_is_a_selected_wait_card():
+    from backend.services.finn_v2_factual_source_answer import render_selected_paper_feed_decision
+    text = render_selected_paper_feed_decision({"results": [{"scope": "read_review_history",
+        "status": "completed", "data": {"selected_feed_decision": {
+            "symbol": "AAPL", "action": "houd_vast",
+            "decision_at": "2026-11-16T06:00:18+00:00", "paper_executed": False}}}]}, symbol="AAPL")
+    assert "wachten (hold)" in text
+    assert "2026-11-16 07:00:18 CET" in text
+
+
 def test_latest_btc_paper_decision_uses_the_persisted_row():
     message = ("Wat is het laatste opgeslagen besluit van mijn BTC Paper-bot? "
                "Noem actie, besluitmoment met CET/CEST en of dit een historische of actuele beoordeling is.")

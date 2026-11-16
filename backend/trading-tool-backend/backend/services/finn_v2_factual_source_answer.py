@@ -90,6 +90,35 @@ def render_bot_decision(
             f"marktbeoordeling. Opslagstatus: {status}.{safety_text}")
 
 
+def render_selected_paper_feed_decision(result: dict[str, Any], *, symbol: str) -> str:
+    """Answer a clicked Paper card only from its owner-verified decision row."""
+    data, reason = _read(result, "read_review_history")
+    if data is None:
+        return (f"Ik kan het geselecteerde historische Paper-botbesluit voor {symbol} "
+                f"nu niet verifiëren ({reason}). Probeer de kaart later opnieuw.")
+    selected = data.get("selected_feed_decision")
+    if not isinstance(selected, dict):
+        return (f"Ik kan het geselecteerde historische Paper-botbesluit voor {symbol} "
+                "niet aan een opgeslagen beslissing koppelen. Ik gebruik geen later botbesluit als vervanging.")
+    action = str(selected.get("action") or "").lower()
+    at = _moment(selected.get("decision_at"))
+    if action not in {"hold", "houd_vast", "buy", "sell"} or not at:
+        return (f"Het geselecteerde Paper-botbesluit voor {symbol} mist een "
+                "controleerbare actie of tijd. Ik kan de uitkomst niet bevestigen.")
+    label = str(selected.get("pair") or selected.get("symbol") or symbol).upper()
+    action_text = {"hold": "wachten (hold)", "houd_vast": "wachten (hold)", "buy": "kopen (buy)",
+                   "sell": "verkopen (sell)"}[action]
+    if selected.get("paper_executed") is True:
+        amount = _number(selected.get("filled_amount_eur"))
+        execution = (f"De gekoppelde Paper-order is als gevuld opgeslagen"
+                     + (f" voor €{amount}" if amount else "") + ".")
+    else:
+        execution = "Bij dit besluit is geen gevulde Paper-order bevestigd."
+    return (f"Het geselecteerde historische Paper-botbesluit voor {label} was "
+            f"{action_text} op {at} (Europe/Amsterdam). {execution} "
+            "Een latere botcontrole verandert dit opgeslagen besluit niet.")
+
+
 def render_report_and_quote_times(
     result: dict[str, Any], *, symbol: str, quote_currency: str,
 ) -> str:

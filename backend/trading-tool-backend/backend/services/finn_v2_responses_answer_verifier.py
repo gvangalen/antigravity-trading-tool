@@ -40,7 +40,7 @@ from backend.services.finn_v2_source_moment_claims import (
     current_source_moments_supported, source_moment_repair_facts,
 )
 from backend.services.finn_v2_factual_source_answer import (
-    render_bot_decision, render_latest_quote, render_portfolio_read_time,
+    render_bot_decision, render_selected_paper_feed_decision, render_latest_quote, render_portfolio_read_time,
     render_report_and_quote_times, render_report_and_technical_read,
 )
 
@@ -3086,13 +3086,16 @@ class FinnResponsesAnswerVerifier:
                     pair=f"{symbol}/{quote}" if quote else None,
                 )
             elif scopes == {"read_review_history"} and symbol:
-                mode = False if re.search(r"\bPaper\b", message, re.I) else (
-                    True if re.search(r"\bLive\b", message, re.I) else None)
-                requested_pair = requested_catalog_trading_pair(message)
-                expected = render_bot_decision(
-                    read, symbol=symbol, paper=mode,
-                    pair=f"{requested_pair[0]}/{requested_pair[1]}" if requested_pair and requested_pair[0] == symbol else None,
-                )
+                if args.get("_selected_paper_feed_decision") is True:
+                    expected = render_selected_paper_feed_decision(read, symbol=symbol)
+                else:
+                    mode = False if re.search(r"\bPaper\b", message, re.I) else (
+                        True if re.search(r"\bLive\b", message, re.I) else None)
+                    requested_pair = requested_catalog_trading_pair(message)
+                    expected = render_bot_decision(
+                        read, symbol=symbol, paper=mode,
+                        pair=f"{requested_pair[0]}/{requested_pair[1]}" if requested_pair and requested_pair[0] == symbol else None,
+                    )
             elif scopes == {"read_portfolio"} and args.get("environment") == "paper":
                 expected = render_portfolio_read_time(read)
             elif scopes == {"read_market_snapshot"} and symbol:

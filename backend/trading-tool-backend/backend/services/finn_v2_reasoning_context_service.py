@@ -322,6 +322,7 @@ class FinnV2ReasoningContextService:
                 except ValueError:
                     pass
             historical_facts = {"feed_item_id": item_id, "event_type": event_type,
+                     "symbol": item.get("symbol"),
                      "notification_status": item.get("status"),
                      "historical_notification": True,
                      "current_trade_signal_confirmed": False,

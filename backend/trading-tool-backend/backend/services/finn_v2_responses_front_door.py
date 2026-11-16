@@ -52,7 +52,7 @@ from backend.services.watchlist_conversation_service import ambiguous_asset_chan
 from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
 from backend.services.finn_v2_account_bundle_answer import render_account_bundle_answer
 from backend.services.finn_v2_factual_source_answer import (
-    is_report_technical_comparison_request, render_bot_decision, render_latest_quote,
+    is_report_technical_comparison_request, render_bot_decision, render_selected_paper_feed_decision, render_latest_quote,
     render_portfolio_read_time, render_report_and_quote_times,
     render_report_and_technical_read,
 )
@@ -1477,6 +1477,50 @@ class FinnResponsesFrontDoor:
             and os.getenv("FINN_PER_OPERATION_TOOLS_EXPERIMENT") == "1"
         )
         catalog = FinnResponsesToolCatalog(individual_proposals=individual_proposals)
+        discussing_paper_card = bool(re.search(
+            r"\b(?:dit|deze|this|diese)\b.{0,35}\b(?:Paper[- ]?botbesluit|Paper[- ]?botbeslissing|Paper bot decision|Paper[- ]?Botentscheidung)\b",
+            message, re.I,
+        ))
+        selected_paper_feed = next((item.get("facts") for item in (feed_evidence or [])
+            if isinstance(item, dict) and isinstance(item.get("facts"), dict)
+            and item["facts"].get("event_type") == "bot_decision"
+            and item["facts"].get("historical_notification") is True
+            and str((item["facts"].get("historical_event_facts") or {}).get("action") or "").lower()
+                in {"hold", "houd_vast"}), None)
+        if discussing_paper_card and selected_paper_feed is not None:
+            # The card is a precise historical event. A model-led answer can
+            # substitute a newer per-bot decision even after the correct row
+            # was read. Render the owner-verified selected row directly.
+            symbol = str(selected_paper_feed.get("symbol") or verified_asset or "deze bot").upper()
+            call = replace(catalog.validate("get_decision_history", {"asset": symbol}),
+                           read_tools=("read_review_history",),
+                           inputs={"asset": symbol, "_latest_bot_decisions_only": True,
+                                   "_selected_paper_feed_decision": True})
+            try:
+                read_result = await self.reads(call)
+            except Exception:
+                logger.exception("FINN selected Paper feed decision read failed")
+                read_result = {"status": "unavailable", "results": []}
+            return FinnResponsesFrontDoorResult(
+                FinnResponsesResult(
+                    text=render_selected_paper_feed_decision(read_result, symbol=symbol),
+                    response_id=f"selected-paper-feed-{self.run_id}",
+                    tool_trace=({"name": call.name, "status": read_result.get("status", "unavailable"),
+                                 "arguments": call.inputs, "result": read_result},),
+                    answer_kind="factual_source", model_led_coach=True,
+                    response_id_reusable=False,
+                ), None, previous_response, locale=locale,
+            )
+        if discussing_paper_card:
+            # A deictic request without the selected feed evidence cannot be
+            # answered safely from the latest bot decision.
+            return FinnResponsesFrontDoorResult(
+                FinnResponsesResult(
+                    text="Ik kan de geselecteerde Paper-kaart niet verifiëren. Open de kaart opnieuw via Bespreek.",
+                    response_id=f"missing-paper-feed-{self.run_id}",
+                    tool_trace=(), answer_kind="free_text", response_id_reusable=False,
+                ), None, previous_response, locale=locale,
+            )
         # Narrow factual source questions have a server-owned answer. The
         # source read and its dated facts must not depend on a model deciding
         # to call a tool or transcribing UTC/CET correctly in a later round.
