@@ -1103,9 +1103,15 @@ class FinnCoachFeedService:
                    st.name AS verified_setup_name, st.market_id AS verified_setup_market_id,
                    tm.quote_currency AS verified_setup_quote_currency
             FROM finn_coach_feed_items f
-            LEFT JOIN setups st ON f.subject_type='setup'
-              AND st.user_id=f.user_id AND st.id=CASE WHEN f.subject_id ~ '^[0-9]{1,12}$'
-                THEN f.subject_id::BIGINT END
+            LEFT JOIN setups st ON st.user_id=f.user_id AND st.id=CASE
+              WHEN f.subject_type='setup' AND f.subject_id ~ '^[0-9]{1,12}$'
+                THEN f.subject_id::BIGINT
+              WHEN f.event_type='data_blocked'
+                AND jsonb_typeof(f.evidence->'setup_ids')='array' THEN CASE
+                  WHEN jsonb_array_length(f.evidence->'setup_ids')=1
+                    AND (f.evidence->'setup_ids'->>0) ~ '^[0-9]{1,12}$'
+                  THEN (f.evidence->'setup_ids'->>0)::BIGINT END
+              END
             LEFT JOIN trading_markets tm ON tm.id=st.market_id
             LEFT JOIN bot_decisions d
               ON f.event_type='bot_decision'
@@ -1172,9 +1178,15 @@ class FinnCoachFeedService:
                    st.name AS verified_setup_name, st.market_id AS verified_setup_market_id,
                    tm.quote_currency AS verified_setup_quote_currency
             FROM finn_coach_feed_items f
-            LEFT JOIN setups st ON f.subject_type='setup'
-              AND st.user_id=f.user_id AND st.id=CASE WHEN f.subject_id ~ '^[0-9]{1,12}$'
-                THEN f.subject_id::BIGINT END
+            LEFT JOIN setups st ON st.user_id=f.user_id AND st.id=CASE
+              WHEN f.subject_type='setup' AND f.subject_id ~ '^[0-9]{1,12}$'
+                THEN f.subject_id::BIGINT
+              WHEN f.event_type='data_blocked'
+                AND jsonb_typeof(f.evidence->'setup_ids')='array' THEN CASE
+                  WHEN jsonb_array_length(f.evidence->'setup_ids')=1
+                    AND (f.evidence->'setup_ids'->>0) ~ '^[0-9]{1,12}$'
+                  THEN (f.evidence->'setup_ids'->>0)::BIGINT END
+              END
             LEFT JOIN trading_markets tm ON tm.id=st.market_id
             LEFT JOIN bot_decisions d
               ON f.event_type='bot_decision'
@@ -1237,7 +1249,7 @@ class FinnCoachFeedService:
         row["locale"] = locale if locale in LOCALES else "nl"
         row["title"] = (copy.get(row["locale"]) or copy.get("nl") or {}).get("title", "")
         row["description"] = (copy.get(row["locale"]) or copy.get("nl") or {}).get("body", "")
-        if row.get("subject_type") == "setup" and verified_setup_name:
+        if (row.get("subject_type") == "setup" or row.get("event_type") == "data_blocked") and verified_setup_name:
             facts = dict(row.get("evidence") or {})
             facts["setup_name"] = verified_setup_name
             if (verified_setup_market_id and verified_setup_quote_currency and row.get("symbol")):

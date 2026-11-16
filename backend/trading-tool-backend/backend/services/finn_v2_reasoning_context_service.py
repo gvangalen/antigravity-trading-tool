@@ -337,10 +337,16 @@ class FinnV2ReasoningContextService:
                                          "improvement_suggestion"}:
                 from backend.services.setup_market_match_service import SetupMarketMatchService
                 matcher = SetupMarketMatchService(self.session)
-                if subject == "setup" and item.get("subject_id"):
+                selected_setup_id = (item.get("subject_id") if subject == "setup" else None)
+                if event_type == "data_blocked" and not selected_setup_id:
+                    setup_ids = recorded.get("setup_ids")
+                    if isinstance(setup_ids, list) and len(setup_ids) == 1:
+                        selected_setup_id = setup_ids[0]
+                owned_setup = None
+                if str(selected_setup_id or "").isdigit():
                     from backend.infrastructure.repositories.setup_repository import SetupRepository
                     owned_setup = await SetupRepository(self.session).get_setup_by_id(
-                        int(item["subject_id"]), run.user_id)
+                        int(selected_setup_id), run.user_id)
                     assessment = await matcher.for_asset(
                         run.user_id, symbol,
                         setups=[dict(owned_setup)] if owned_setup else [],
@@ -358,12 +364,12 @@ class FinnV2ReasoningContextService:
                 current_facts = {"feed_item_id": item_id,
                                  "current_source_status": assessment.get("source_status"),
                                  "current_trade_signal_confirmed": False}
-                if subject == "setup" and item.get("subject_id"):
+                if selected_setup_id:
                     current = next((match for match in assessment.get("matches", [])
-                                    if str(match.get("setup_id")) == str(item["subject_id"])), None)
-                    current_facts["current_setup"] = ({"id": current.get("setup_id"),
-                                                "name": current.get("name"),
-                                                "status": current.get("status"),
+                                    if str(match.get("setup_id")) == str(selected_setup_id)), None)
+                    current_facts["current_setup"] = ({"id": current.get("setup_id") if current else owned_setup.get("id"),
+                                                "name": current.get("name") if current else owned_setup.get("name"),
+                                                "status": current.get("status") if current else "not_assessed",
                                                 "trading_pair": (
                                                     f"{symbol}/{owned_setup['quote_currency']}"
                                                     if owned_setup and owned_setup.get("market_id")
@@ -372,7 +378,7 @@ class FinnV2ReasoningContextService:
                                                     "saved" if owned_setup and owned_setup.get("market_id")
                                                     and owned_setup.get("quote_currency")
                                                     else "not_saved_on_setup")}
-                                               if current else None)
+                                               if (current or owned_setup) else None)
                 if event_type in {"data_blocked", "improvement_suggestion"}:
                     current_facts["current_component_source_status"] = assessment.get("component_source_status")
                 current_available = assessment.get("source_status") == "available"
