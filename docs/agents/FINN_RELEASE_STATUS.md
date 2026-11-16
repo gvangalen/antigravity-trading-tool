@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0 Paper-flow vervolg na live QA (16 november 2026)
 
-Phase: `LOCAL_VALIDATED_PR_PENDING`. De bestaande onafhankelijke QA-agent testte
+Phase: `PRODUCT_DEPLOYED_FINAL_STATUS_PENDING_QA`. De bestaande onafhankelijke QA-agent testte
 de ingelogde Paper-flow op publieke SHA `455638f4a9206073679152dc3214b796fb626f7f`.
 De AAPL-prijsafwijzing verliet nu wel de laadstatus: de API gaf gecontroleerd
 `PAPER_TRADE_QUOTE_UNAVAILABLE / market_price_stale`, met een AAPL-koersbron
@@ -45,8 +45,17 @@ zonder provider-, schema-, timeout-, parse- of validatiefouten. De echte-
 providerregressie slaagde **109/109** (artifact SHA-256
 `92fcb6491fb680e960f6623e8877deb47f79e15ab923fd8a01897c2900834ec9`),
 eveneens zonder provider-, schema-, timeout-, parse- of validatiefouten.
-Release-CI, deployment en onafhankelijke live QA zijn nog niet afgerond;
-er is nog geen nieuwe publieke kandidaat.
+Product [PR #1125](https://github.com/gvangalen/antigravity-trading-tool/pull/1125)
+slaagde op alle vijf PR-CI-jobs en is gemerged als
+`dcb3165947d8b57b0638a42969bab31a2b1c17dc`. De main CI-run
+`43933126769` slaagde op alle vijf jobs en Auto Deploy `43934160898`
+slaagde. GitHub main, publieke backend-health en frontend-build-info
+identificeerden alle drie exact die SHA; beide endpoints gaven HTTP 200.
+Deze statusaanvulling creëert een latere documentatierevisie. De bestaande
+QA-agent krijgt pas de definitieve publieke SHA nadat ook diens main-CI,
+Auto Deploy en publieke SHA-pariteit zijn bevestigd. Onafhankelijke live QA
+van de vijf fasen en een gecontroleerde Paper-koop/positie/exit is nog niet
+afgerond; geen Live-order is geautoriseerd.
 
 ## FINN 3.0 volledige Paper-flow hertest (16 november 2026)
 
