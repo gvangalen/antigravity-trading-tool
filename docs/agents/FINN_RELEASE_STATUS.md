@@ -4,6 +4,48 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 selected feed event repair (16 november 2026)
+
+Phase: `PRODUCT_DEPLOYED_STATUS_SHA_PENDING_LIVE_QA`. Independent authenticated
+read-only QA tested the prior public SHA
+`b362b59eba221070672259114166b0832d3160e6` and returned
+`NOT_ACCEPTED`: the BTC 07:00 wait card discussed a later 09:00 bot decision,
+and a BTC `data_blocked` card did not identify its saved setup or trading pair.
+The same QA retest accepted the two earlier AAPL Paper cases and the saved
+weekly reflection. This verdict does not cover a newly triggered feed event,
+polling/SSE parity, protected fixture actions, or account isolation.
+
+Product [PR #1106](https://github.com/gvangalen/antigravity-trading-tool/pull/1106)
+binds the selected owner-scoped bot decision despite a legacy base-only BTC
+symbol, while excluding that saved BTC selection from a later AAPL question.
+It resolves an owner-scoped setup from a `data_blocked` card only when the card
+references exactly one setup, and exposes the saved exact pair or its explicit
+absence. FINN's discussion draft now names missing score evidence and does
+not infer a pair from BTC alone. Focused regressions cover these paths.
+
+The final local backend suite passed **4,929** with **7 skipped**. Frontend
+i18n/typecheck/commands/proposals/setups/build/audit passed; mobile
+typecheck/lint/web smoke passed (lint warnings only). The isolated local feed
+list/detail SQL smoke passed. The final local worker action matrix passed
+**17/17** contracts and **26/26** adapter tests, with zero broker orders,
+Live trading calls or production connections; artifact SHA-256
+`daf6aeff5cbc61b07e347c127121565fc84a0abd855cbed627e9142c406b443d`.
+Real-provider development selector passed **20/20** (SHA-256
+`27ccc7126870362a76ef93e6e3d36f5989bf9f82d79b94cc7f2c16a14d5ab0d8`)
+and regression passed **109/109** (SHA-256
+`915552a5003e96d21fe5cf3b2db7006e25e23fa82332ab904db4e98e5bf564ba`),
+with zero provider, schema, parse or validation failures.
+
+PR CI passed all five jobs. Product merged as
+`a7481f4fd0975a5e6f08c72ee858c69a3f3cf8b0`; main CI `43832741049`
+passed all five jobs and Auto Deploy `43833590219` succeeded. Public backend
+health and frontend build info both returned HTTP 200 and that exact SHA,
+matching GitHub main. This status update creates a later SHA: its final main
+CI, Auto Deploy, public SHA parity and independent authenticated live QA
+verdict remain pending. The existing QA Agent will retest the two BTC cards
+and prior AAPL/weekly passes on the final public SHA. This is not an accepted
+live release yet.
+
 ## FINN 3.0 live QA repair batch (16 november 2026)
 
 Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA_AND_QA`. Product
