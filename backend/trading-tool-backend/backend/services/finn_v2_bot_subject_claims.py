@@ -7,6 +7,14 @@ from typing import Any
 
 
 _BOT_ID = re.compile(r"\bbot\s*#?\s*(\d+)\b", re.I)
+_EXCLUDED_BOT = re.compile(
+    r"\b(?:laat|negeer|exclude|ignore|zonder)\b[^.!?\n]{0,80}"
+    r"\bbot\s*#?\s*(\d+)\b[^.!?\n]{0,40}"
+    r"\b(?:buiten\s+beschouwing|weg|eruit|out|niet\s+meenemen)\b"
+    r"|\b(?:niet|not|ohne)\b[^.!?\n]{0,25}\bbot\s*#?\s*(\d+)\b"
+    r"|\bbot\s*#?\s*(\d+)\b[^.!?\n]{0,25}\b(?:buiten\s+beschouwing|uitsluiten|exclude)\b",
+    re.I,
+)
 _CORRECTION = re.compile(
     r"\b(?:corrigeer|correct(?:ie|ion)?|klopt\s+niet|onjuist|fout|verkeerd|"
     r"wrong|incorrect|mistake|korrigier\w*|falsch)\b",
@@ -15,7 +23,9 @@ _CORRECTION = re.compile(
 
 
 def focused_bot_id(message: str, previous_response: dict[str, Any] | None = None) -> int | None:
-    ids = {int(match.group(1)) for match in _BOT_ID.finditer(message)}
+    excluded = {int(group) for match in _EXCLUDED_BOT.finditer(message)
+                for group in match.groups() if group is not None}
+    ids = {int(match.group(1)) for match in _BOT_ID.finditer(message)} - excluded
     if len(ids) == 1:
         return next(iter(ids))
     if ids or not _CORRECTION.search(message):
@@ -42,7 +52,9 @@ def bot_subject_supported(
     selected = [row for row in rows if row.get("bot_id") == bot_id]
     if len(selected) != 1:
         return False
-    other_ids = {int(match.group(1)) for match in _BOT_ID.finditer(answer)} - {bot_id}
+    excluded = {int(group) for match in _EXCLUDED_BOT.finditer(answer)
+                for group in match.groups() if group is not None}
+    other_ids = {int(match.group(1)) for match in _BOT_ID.finditer(answer)} - excluded - {bot_id}
     if other_ids:
         return False
     symbol = str(selected[0].get("symbol") or "").upper().split("/", 1)[0]

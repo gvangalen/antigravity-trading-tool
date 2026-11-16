@@ -1068,8 +1068,51 @@ class FinnResponsesFrontDoor:
     ) -> FinnResponsesToolCall:
         """Read the owner's saved report when its facts are explicitly compared."""
         report_mention = re.search(r"\b(?:dagrapport|ochtendrapport|rapport|report)\b", message, re.I)
-        if not read_only or not call.read_tools or not report_mention:
+        if not read_only or not call.read_tools:
             return call
+        if not report_mention:
+            # A correction can name the historical bot clock without saying
+            # "report" again. Re-read the one owner-verified saved report from
+            # the preceding turn; the latest per-bot row may have changed.
+            bot_id = focused_bot_id(message, previous_response)
+            prior = previous_response or {}
+            if (bot_id is None or owner_user_id is None
+                    or prior.get("owner_user_id") != owner_user_id
+                    or prior.get("terminal_status") != "completed"
+                    or not FinnResponsesFrontDoor._asks_about_bot_decision(message)
+                    or not re.search(r"\b(?:ik\s+bedoel|corrigeer|correctie|correct|wrong|onjuist|"
+                                     r"fout|verkeerd|niet\s+zijn)\b", message, re.I)
+                    or not re.search(r"\b\d{1,2}:\d{2}(?::\d{2})?\s*(?:UTC|CET|CEST)\b", message, re.I)):
+                return call
+            reports = []
+            for prior_call in prior.get("tool_trace") or []:
+                for item in (prior_call.get("result") or {}).get("results") or []:
+                    if (not isinstance(item, dict) or item.get("scope") != "read_latest_report"
+                            or item.get("status") != "completed"
+                            or not isinstance(item.get("data"), dict)):
+                        continue
+                    data = item["data"]
+                    snapshot = data.get("score_source_snapshot")
+                    report = snapshot.get("report_v2") if isinstance(snapshot, dict) else None
+                    automation = report.get("automation") if isinstance(report, dict) else None
+                    bots = automation.get("bots") if isinstance(automation, dict) else None
+                    if (not isinstance(bots, list) or not any(
+                            isinstance(bot, dict) and str(bot.get("bot_id")) == str(bot_id)
+                            and isinstance(bot.get("latest_decision"), dict)
+                            and bot["latest_decision"].get("at")
+                            for bot in bots)):
+                        continue
+                    report_date = data.get("report_date")
+                    if report_date:
+                        reports.append((str(data.get("report_type") or "daily_reports"), str(report_date)))
+            if len(set(reports)) != 1:
+                return call
+            report_type, report_date = reports[0]
+            return replace(
+                call,
+                inputs={**call.inputs, "report_type": report_type, "report_date": report_date},
+                read_tools=tuple(dict.fromkeys((*call.read_tools, "read_latest_report"))),
+            )
         # A message may also date the *market quote*. Stop at the transition
         # to that clause; an undated report must not inherit the quote date.
         report_clause = message[report_mention.end():]

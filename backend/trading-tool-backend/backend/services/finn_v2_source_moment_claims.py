@@ -139,6 +139,11 @@ def _bot_decision_clocks_supported(answer: str, evidence: tuple[dict[str, Any], 
                              r"rapport\w*|score\w*)\b", following[:match.start()], re.I):
                     continue
                 claim = _claimed_moment(match.group(0))
+                if (claim and re.search(r"\b(?:geen|no|nicht|none)\b", clause[:match.start() + subject.end()], re.I)
+                        and not re.search(r"\b(?:geen|no|nicht)\s+(?:nieuwe?|actuele?|latest|current)\b",
+                                          clause[:match.start() + subject.end()], re.I)
+                        and any(_same_moment(claim, at) for _, _, at in relevant)):
+                    return False
                 if claim and any(_same_moment(claim, at) for _, _, at in relevant):
                     continue
                 if invalid.search(following[match.end():match.end() + 55]):
@@ -154,6 +159,17 @@ def _bot_decision_clocks_supported(answer: str, evidence: tuple[dict[str, Any], 
                                  match.group(0), re.I)
                 if clock is None:
                     continue
+                if (re.search(r"\b(?:geen|no|nicht|none)\b", clause[:match.start() + subject.end()], re.I)
+                        and not re.search(r"\b(?:geen|no|nicht)\s+(?:nieuwe?|actuele?|latest|current)\b",
+                                          clause[:match.start() + subject.end()], re.I)
+                        and any(
+                            local.hour == int(clock["hour"]) and local.minute == int(clock["minute"])
+                            and (clock["second"] is None or local.second == int(clock["second"]))
+                            and local.tzname() == clock["zone"].upper()
+                            for _, _, at in relevant
+                            for local in (at if clock["zone"].upper() == "UTC" else at.astimezone(_AMSTERDAM),)
+                        )):
+                    return False
                 if any(
                     local.hour == int(clock["hour"]) and local.minute == int(clock["minute"])
                     and (clock["second"] is None or local.second == int(clock["second"]))
@@ -193,6 +209,16 @@ def source_moment_repair_facts(evidence: tuple[dict[str, Any], ...]) -> list[dic
         elif scope == "read_latest_report":
             label, value, kind = "report", data.get("generated_at"), "generation_time"
             snapshot = data.get("score_source_snapshot")
+            report = snapshot.get("report_v2") if isinstance(snapshot, dict) else None
+            automation = report.get("automation") if isinstance(report, dict) else None
+            for bot in automation.get("bots", []) if isinstance(automation, dict) else []:
+                if not isinstance(bot, dict):
+                    continue
+                decision = bot.get("latest_decision")
+                observed = _utc(decision.get("at")) if isinstance(decision, dict) else None
+                if observed:
+                    bot_label = str(bot.get("bot_id") or bot.get("bot_name") or bot.get("symbol") or "bot")
+                    moments[("report_bot_decision", bot_label)] = observed
             for asset in snapshot.get("assets", []) if isinstance(snapshot, dict) else []:
                 if not isinstance(asset, dict):
                     continue
@@ -202,6 +228,15 @@ def source_moment_repair_facts(evidence: tuple[dict[str, Any], ...]) -> list[dic
                 if report_observed and pair:
                     key = ("report_quote_source", pair)
                     moments[key] = max(report_observed, moments.get(key, report_observed))
+        elif scope == "read_review_history":
+            for row in data.get("latest_bot_decisions") or []:
+                if not isinstance(row, dict):
+                    continue
+                observed = _utc(row.get("decision_at"))
+                if observed:
+                    bot_label = str(row.get("bot_id") or row.get("bot_name") or row.get("symbol") or "bot")
+                    moments[("current_bot_decision", bot_label)] = observed
+            continue
         else:
             continue
         observed = _utc(value)

@@ -46,6 +46,27 @@ def test_bot_decision_clocks_match_saved_report_or_latest_owner_read():
         "De BTC-bot gaf geen order; de oudste indicatorbron was 15 november 2026 om 23:59 UTC.",
         evidence,
     )
+    assert not current_source_moments_supported(
+        "In het gelezen bewijs staat geen BTC-botbesluit om 05:15 CET.", evidence,
+    )
+    assert not current_source_moments_supported(
+        "Er is geen BTC-botbesluit op 16 november 2026 om 05:15 CET.", evidence,
+    )
+    assert not current_source_moments_supported(
+        "04:15 is UTC, niet CET. De gelezen BTC-botbesluiten zijn nu om 09:45:18 CET. "
+        "In het gelezen bewijs staat geen BTC-botbesluit om 05:15 CET.", evidence,
+    )
+    assert not current_source_moments_supported(
+        "In het gelezen bewijs staat geen BTC- of AAPL-besluit om 05:15 CET.", evidence,
+    )
+    assert current_source_moments_supported(
+        "Er is geen nieuw BTC-botbesluit om 05:15 CET; het rapport bewaart het oude besluit.", evidence,
+    )
+    facts = source_moment_repair_facts(evidence)
+    assert {fact["kind"]: fact["amsterdam"] for fact in facts if "bot_decision" in fact["kind"]} == {
+        "report_bot_decision": "2026-11-16T05:15:18+01:00",
+        "current_bot_decision": "2026-11-16T09:45:18+01:00",
+    }
 from backend.services.finn_v2_run_service import _minimal_read_answer
 from types import SimpleNamespace
 
@@ -419,6 +440,39 @@ def test_live_read_answer_rejects_wrong_zone_before_delivery():
         "utc": "2026-11-13T21:03:00+00:00",
         "amsterdam": "2026-11-13T22:03:00+01:00",
     }
+
+
+def test_live_read_answer_rejects_denial_of_saved_historical_bot_decision():
+    evidence = (
+        {"scope": "read_latest_report", "status": "completed", "data": {
+            "generated_at": "2026-11-16T04:21:39+00:00",
+            "score_source_snapshot": {"report_v2": {"automation": {"bots": [{
+                "bot_id": 129, "symbol": "BTC",
+                "latest_decision": {"at": "2026-11-16T04:15:18"},
+            }]}}},
+        }},
+        {"scope": "read_review_history", "status": "completed", "data": {
+            "latest_bot_decisions": [{"bot_id": 129, "symbol": "BTC",
+                                     "decision_at": "2026-11-16T14:30:17+00:00"}],
+        }},
+    )
+    prepared = SimpleNamespace(
+        response=SimpleNamespace(
+            text="De nieuwste BTC-botbeoordeling is van 15:30 CET. "
+                 "In het gelezen bewijs staat geen BTC-botbesluit om 05:15 CET.",
+            tool_trace=({"name": "get_decision_history", "result": {"results": list(evidence)}},),
+            uses_previous_response=False,
+        ),
+        previous_response=None,
+    )
+    rejected = _minimal_read_answer(
+        message="Vergelijk mijn dagrapport met de BTC-botbesluiten.", prepared=prepared,
+    )
+    assert rejected.status == "unavailable"
+    assert rejected.reason == "source_moment_conflicts_with_source"
+    assert rejected.rejection_details["source_moment_rule"] == "bot_decision_clock_mismatch"
+    assert any(fact["kind"] == "report_bot_decision" for fact in
+               rejected.rejection_details["source_moment_facts"])
 
 
 def test_latest_quote_check_keeps_indicator_source_moment_separate():
