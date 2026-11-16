@@ -2203,7 +2203,7 @@ function EvidenceRow({
         onClick={onToggle}
         className="w-full px-4 py-3 text-left transition hover:bg-slate-50/80"
       >
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(120px,0.45fr)_minmax(150px,0.5fr)_minmax(220px,0.8fr)] lg:items-center">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(120px,0.4fr)_minmax(150px,0.45fr)_minmax(280px,1fr)] lg:items-center">
           <div className="flex items-start gap-3">
             <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition ${
               expanded ? "border-blue-200 bg-blue-50 text-blue-600" : "border-slate-200 bg-white text-slate-400"
@@ -2216,11 +2216,6 @@ function EvidenceRow({
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[16px] font-bold leading-tight text-slate-950">{row.label}</span>
-                {row.scoreMode ? (
-                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
-                    {ui.scoreModeLabels[row.scoreMode]}
-                  </span>
-                ) : null}
               </div>
             </div>
           </div>
@@ -2250,6 +2245,11 @@ function EvidenceRow({
               <span className="inline-flex items-center rounded-lg border border-slate-300 px-3 py-1.5 text-[12px] font-semibold text-slate-900">
                 {ui.scoreTitle} {row.scoreLabel}
               </span>
+              {row.scoreMode ? (
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                  {ui.scoreModeLabels[row.scoreMode]}
+                </span>
+              ) : null}
             </div>
           </div>
         </div>
