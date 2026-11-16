@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0 volledige Paper-flow hertest (16 november 2026)
 
-Phase: `BUILD_VALIDATION_IN_PROGRESS`. De bestaande onafhankelijke QA-agent
+Phase: `PRODUCT_DEPLOYED_QA_PENDING`. De bestaande onafhankelijke QA-agent
 testte de publieke FINN 3.0-flow op SHA `f08e66a22284355a4545195feba8b973edb1a2a5`.
 Historische botkaarten en account-readouts werkten, maar een nieuwe Paper-koop
 kon niet worden bewezen: BTC miste een complete actuele score en de AAPL-
