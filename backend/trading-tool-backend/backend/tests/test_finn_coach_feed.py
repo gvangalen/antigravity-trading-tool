@@ -140,6 +140,19 @@ def test_setup_feed_uses_owner_saved_pair_or_marks_pair_unset():
     assert unpaired["evidence"]["trading_pair_status"] == "not_saved_on_setup"
 
 
+def test_single_setup_data_blocked_feed_uses_owner_saved_setup_context():
+    row = {"id": "11111111-1111-1111-1111-111111111111", "event_type": "data_blocked",
+           "subject_type": "asset", "subject_id": "BTC", "symbol": "BTC",
+           "evidence": {"setup_ids": ["113"], "source_status": "stale_sources"},
+           "copy_json": {"nl": {"title": "Beoordeling beperkt", "body": "Brondata ontbreekt"}},
+           "verified_setup_name": "BTC basisplan", "verified_setup_market_id": 17,
+           "verified_setup_quote_currency": "EUR"}
+    rendered = module.FinnCoachFeedService._serialize(row, "nl")
+    assert rendered["evidence"]["setup_name"] == "BTC basisplan"
+    assert rendered["evidence"]["trading_pair"] == "BTC/EUR"
+    assert rendered["evidence"]["setup_ids"] == ["113"]
+
+
 def test_historical_paper_card_does_not_claim_execution_without_filled_order():
     row = {
         "id": "11111111-1111-1111-1111-111111111111", "event_type": "bot_decision",
@@ -533,6 +546,43 @@ def test_discuss_setup_rechecks_current_match_and_marks_old_notification_histori
     assert historical.freshness == "historical"
     assert historical.as_of.isoformat() == "2026-10-10T10:00:00+00:00"
     assert current.freshness == "stale"
+
+
+def test_data_blocked_single_saved_setup_keeps_identity_when_match_unavailable(monkeypatch):
+    item_id = "00000000-0000-0000-0000-000000000022"
+
+    async def detail(_self, *, user_id, item_id: str):
+        assert user_id == 7
+        return {"id": item_id, "event_type": "data_blocked", "subject_type": "asset",
+                "subject_id": "BTC", "symbol": "BTC", "status": "read",
+                "source_observed_at": "2026-11-16T06:00:00Z",
+                "evidence": {"setup_ids": [11], "setup_name": "BTC Plan",
+                             "trading_pair": "BTC/USDT"}}
+
+    class MatchService:
+        def __init__(self, _session):
+            pass
+
+        async def for_asset(self, user_id, symbol, *, setups=None, market_id=None):
+            assert (user_id, symbol, market_id) == (7, "BTC", 31)
+            assert setups[0]["id"] == 11
+            return {"source_status": "stale_sources", "matches": [],
+                    "component_source_status": {"macro": "missing"}}
+
+    monkeypatch.setattr(module.FinnCoachFeedService, "detail", detail)
+    monkeypatch.setattr("backend.services.setup_market_match_service.SetupMarketMatchService", MatchService)
+    monkeypatch.setattr(
+        "backend.infrastructure.repositories.setup_repository.SetupRepository.get_setup_by_id",
+        AsyncMock(return_value={"id": 11, "name": "BTC Plan", "symbol": "BTC",
+                                "market_id": 31, "quote_currency": "USDT"}),
+    )
+    historical, current = asyncio.run(FinnV2ReasoningContextService(SimpleNamespace())._current_feed_evidence(
+        SimpleNamespace(user_id=7, client_context_json={"feed_item_id": item_id})))
+    assert historical.facts["historical_event_facts"]["trading_pair"] == "BTC/USDT"
+    assert current.facts["current_setup"] == {
+        "id": 11, "name": "BTC Plan", "status": "not_assessed",
+        "trading_pair": "BTC/USDT", "trading_pair_status": "saved",
+    }
 
 
 def test_feed_selection_replaces_prior_plan_referent_for_this_turn():

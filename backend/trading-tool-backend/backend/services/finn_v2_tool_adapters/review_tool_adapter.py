@@ -110,8 +110,10 @@ class ReviewToolAdapter:
             selected_pair = (selected_symbol if "/" in selected_symbol else
                              f"{selected_symbol}/{selected['quote_currency']}"
                              if selected and selected["quote_currency"] else None)
-            if selected and (not asset or (selected_pair == asset.upper() if "/" in asset
-                             else selected_symbol.split("/", 1)[0] == asset.upper())):
+            # The feed ID has already been resolved for this owner. The active
+            # chart selector may be BTC/USDT while a legacy Paper bot saved
+            # only BTC, so it must never discard the selected decision.
+            if selected:
                 selected_feed_decision = {
                     "bot_name": selected["bot_name"],
                     "symbol": selected["symbol"], "action": selected["action"],

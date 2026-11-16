@@ -30,23 +30,27 @@ export function coachFeedDiscussionQuestion(item, locale = "nl") {
   const title = String(item?.title || "").trim();
   const setupName = String(item?.evidence?.setup_name || "").trim();
   const setup = setupName ? `'${setupName}'` : asset;
+  const pairUnset = item?.evidence?.trading_pair_status === "not_saved_on_setup";
   const week = String(item?.evidence?.week_start || "").trim();
   const labels = {
     nl: {
       bot: `Bespreek dit opgeslagen Paper-botbesluit voor ${asset}: ${title}. Controleer de beslissing en eventuele uitvoering in de botgeschiedenis. Gebruik geen actuele koers als bewijs voor een historische uitvoering.`,
       plan: `Bespreek deze planupdate voor setup ${setup} (${asset}): ${title}. Lees de opgeslagen setup en bijbehorende score.${pair ? " Gebruik dit exacte handelspaar." : " Als bij de setup geen handelspaar is opgeslagen, zeg dat expliciet en kies er niet zelf een."}`,
+      data: `Bespreek deze melding over ontbrekend scorebewijs voor ${setupName ? `setup ${setup}` : asset}: ${title}. Controleer de opgeslagen setup, bronstatus en score.${pair ? ` Gebruik ${pair} als exact handelspaar.` : pairUnset ? " Zeg expliciet dat bij deze setup geen handelspaar is opgeslagen." : " Leid geen handelspaar af uit alleen het assetsymbool."}`,
       weekly: `Bespreek mijn opgeslagen weekreflectie${week ? ` van ${week}` : ""}. Lees de afgesloten trades en noem alleen patronen die door de dossiers zijn onderbouwd.`,
       other: `Bespreek deze melding voor ${asset || "mijn account"}: ${title}. Lees de bijbehorende bron en actuele status opnieuw.`,
     },
     en: {
       bot: `Discuss this saved Paper bot decision for ${asset}: ${title}. Check the decision and any execution in bot history. Do not use a current quote as proof of a historical execution.`,
       plan: `Discuss this plan update for setup ${setup} (${asset}): ${title}. Read the saved setup and related score.${pair ? " Use this exact trading pair." : " If no trading pair is saved on the setup, say so explicitly and do not choose one."}`,
+      data: `Discuss this missing score evidence for ${setupName ? `setup ${setup}` : asset}: ${title}. Check the saved setup, source status and score.${pair ? ` Use ${pair} as the exact trading pair.` : pairUnset ? " State explicitly that this setup has no saved trading pair." : " Do not infer a trading pair from the asset symbol alone."}`,
       weekly: `Discuss my saved weekly reflection${week ? ` for ${week}` : ""}. Read the closed trades and mention only patterns supported by the records.`,
       other: `Discuss this update for ${asset || "my account"}: ${title}. Recheck its source and current status.`,
     },
     de: {
       bot: `Besprich diese gespeicherte Paper-Botentscheidung für ${asset}: ${title}. Prüfe Entscheidung und Ausführung in der Bot-Historie. Verwende keinen aktuellen Kurs als Beleg für eine historische Ausführung.`,
       plan: `Besprich diese Planaktualisierung für Setup ${setup} (${asset}): ${title}. Lies das gespeicherte Setup und den zugehörigen Score.${pair ? " Verwende dieses genaue Handelspaar." : " Wenn kein Handelspaar gespeichert ist, sage dies ausdrücklich und wähle keines selbst."}`,
+      data: `Besprich diese Meldung über fehlende Score-Daten für ${setupName ? `Setup ${setup}` : asset}: ${title}. Prüfe das gespeicherte Setup, den Quellenstatus und den Score.${pair ? ` Verwende ${pair} als genaues Handelspaar.` : pairUnset ? " Sage ausdrücklich, dass für dieses Setup kein Handelspaar gespeichert ist." : " Leite aus dem Assetsymbol allein kein Handelspaar ab."}`,
       weekly: `Besprich meine gespeicherte Wochenreflexion${week ? ` vom ${week}` : ""}. Lies die abgeschlossenen Trades und nenne nur belegte Muster.`,
       other: `Besprich diese Meldung für ${asset || "mein Konto"}: ${title}. Prüfe Quelle und aktuellen Status erneut.`,
     },
@@ -54,6 +58,7 @@ export function coachFeedDiscussionQuestion(item, locale = "nl") {
   const copy = labels[locale] || labels.nl;
   const kind = item?.event_type === "bot_decision" ? "bot"
     : ["plan_review", "plan_match"].includes(item?.event_type) ? "plan"
+      : item?.event_type === "data_blocked" ? "data"
       : item?.event_type === "weekly_reflection" ? "weekly" : "other";
   return copy[kind];
 }

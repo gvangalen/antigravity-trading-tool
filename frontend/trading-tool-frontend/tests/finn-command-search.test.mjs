@@ -29,6 +29,12 @@ test("feed discussion names the selected event and exact pair", () => {
       trading_pair_status: "not_saved_on_setup" } });
   assert.match(unpaired, /BTC concept/);
   assert.match(unpaired, /geen handelspaar is opgeslagen/);
+  const blocked = coachFeedDiscussionQuestion({ event_type: "data_blocked", symbol: "BTC",
+    title: "Beoordeling beperkt", evidence: { setup_name: "BTC basisplan",
+      trading_pair: "BTC/EUR" } });
+  assert.match(blocked, /BTC basisplan/);
+  assert.match(blocked, /BTC\/EUR/);
+  assert.match(blocked, /ontbrekend scorebewijs/);
   const bot = coachFeedDiscussionQuestion({ event_type: "bot_decision", symbol: "BTC",
     title: "Bot wacht", evidence: {} });
   assert.match(bot, /Paper-botbesluit/);
