@@ -4,6 +4,39 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Indicatieve benchmark bij ontbrekende indicatoren (16 november 2026)
+
+Phase: `LOCAL_BUILD_VALIDATED_PR_CI_PENDING`. Branch
+`codex/macro-yield-partial-benchmark-20261116`. De gedateerde US02Y- en
+US10Y-metingen komen eerst van de officiële Treasury-rentecurve, met FRED
+voor dezelfde looptijd als terugval. Analyse toont een uit de overige
+geverifieerde indicatoren herwogen **indicatieve** score en vermeldt de
+ontbrekende indicatoren; de complete beslisscore blijft onbeschikbaar voor
+automatische botorders. De zichtbare score staat ook in de hoofdkaart.
+Standaard, Contrair of Custom staat direct rechts van de indicatorscore.
+Bij een voorlopige setupmatch kan de eigenaar vanuit een FINN-feedmelding
+de handmatige Paper- of Live-koop beoordelen. De ontbrekende indicator
+vereist expliciete bevestiging; bestaande preview-, prijs-, risico- en
+Live-preflightcontroles blijven verplicht. De melding claimt geen vastgelegde
+koopbeslissing.
+
+Gemeten lokale Build-validatie na rebase op `cf2594e02`: volledige backend
+**4.975 passed, 7 skipped** (testlog SHA-256
+`7c843837bf00d86f5a016aede669388c552dc8f414de48e9c707e5911ed6ae81`);
+frontend productiebouw inclusief bijgewerkte `out/`-export, typecheck, i18n-lint,
+i18n-tests, command-tests, gerichte feedlinktest en `audit:high` groen.
+De aparte lokale FastAPI/Celery/PostgreSQL/Redis/Responses-actiematrix
+slaagde **17/17** met adaptertests **26/26**; artifact SHA-256
+`ef16e320b95471dcf8537d61a202926c6eaef99d70de4e0fb5f94914d23cf0a1`.
+De matrix registreerde nul brokerorders, Live-aanroepen en
+productieverbindingen. Echte-providerontwikkeling op de herbaseerde kandidaat slaagde **20/20**
+(artifact SHA-256 `25427daaac9990e07dffffa8a158bde81ddbb0ff93fc8e98b76a73ec0b9ade47`),
+regressie **109/109** (artifact SHA-256
+`565faa0e65df8d6492e9a67ed0ef966971e9c8ce114febe3430b6bc01a688d73`),
+zonder provider-, schema-, timeout-, parse- of validatiefouten. Dit is
+lokale Build-evidence; PR-CI, main-CI, Auto Deploy en onafhankelijke live QA
+zijn nog niet uitgevoerd voor deze kandidaat.
+
 ## FINN 3.0 Paper-koop/exit en feed-hertest (16 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_FINAL_STATUS_PENDING_QA`. De vorige volledige ingelogde browsercontrole op

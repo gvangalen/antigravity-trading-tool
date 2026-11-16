@@ -135,6 +135,7 @@ class SetupMarketMatchService:
                 for item in observations if normalize_indicator_name(str(item[0])) in configured_names
             }
         if diagnostics is not None:
+            diagnostics[f"{category}_configured_indicators"] = sorted(configured_names)
             diagnostics[f"{category}_indicator_sources"] = {
                 str(item[0]): (
                     "fresh" if score_source_is_fresh(
@@ -233,6 +234,7 @@ class SetupMarketMatchService:
         component_source_observed_at: dict[str, dict] = {}
         component_indicator_source_status: dict[str, dict] = {}
         score_diagnostics: dict[str, object] = {}
+        saved_evidence = {}
         if weights is None:
             source_status = "invalid_weights"
         if row:
@@ -279,6 +281,47 @@ class SetupMarketMatchService:
             key: _SCORE_STATUS_EXPLANATIONS.get(status, "The score is currently unavailable.")
             for key, status in component_source_status.items()
         }
+        # A partial score is useful coaching context, but is never the
+        # decision-grade benchmark consumed by setup matching or automation.
+        # Reweight only verified indicator contributions and disclose exactly
+        # which configured indicators were excluded.
+        indicative_components = {}
+        missing_indicators = {}
+        for category in ("market", "macro", "technical"):
+            score_key = f"{category}_score"
+            configured_names = set(score_diagnostics.get(f"{category}_configured_indicators", []))
+            verified_names = set(score_diagnostics.get(f"{category}_verified_indicators", []))
+            missing_indicators[category] = sorted(configured_names - verified_names)
+            if component_source_status[score_key] == "fresh":
+                indicative_components[category] = stored_scores[score_key]
+                continue
+            entries = saved_evidence.get(category, {}) if isinstance(saved_evidence, dict) else {}
+            if not isinstance(entries, dict):
+                continue
+            contributions = []
+            for name in verified_names:
+                entry = entries.get(name)
+                if not isinstance(entry, dict):
+                    continue
+                score, weight = entry.get("score"), entry.get("weight")
+                if (type(score) in (int, float) and math.isfinite(score) and 0 <= score <= 100
+                        and type(weight) in (int, float) and math.isfinite(weight) and weight > 0):
+                    contributions.append((float(score), float(weight)))
+            if contributions:
+                weight_total = sum(weight for _, weight in contributions)
+                indicative_components[category] = round(
+                    sum(score * weight for score, weight in contributions) / weight_total
+                )
+        indicative_benchmark = None
+        if weights is not None and indicative_components and any(missing_indicators.values()):
+            available = [(indicative_components[category], weights[f"{category}_score"])
+                         for category in indicative_components
+                         if weights.get(f"{category}_score", 0) > 0]
+            if available:
+                indicative_benchmark = round(
+                    sum(score * weight for score, weight in available)
+                    / sum(weight for _, weight in available), 1
+                )
         total_benchmark = None
         if scores is not None and weights is not None:
             weighted_scores = {f"{category}_score": float(value) for category, value in scores.items()}
@@ -297,6 +340,9 @@ class SetupMarketMatchService:
             "as_of": row["report_date"] if row else None,
             "source_status": source_status,
             "benchmark_score": total_benchmark,
+            "indicative_benchmark_score": indicative_benchmark,
+            "indicative_component_scores": indicative_components,
+            "missing_indicators": missing_indicators,
             "benchmark_weights": weights,
             "reported_scores": reported_scores,
             "component_source_status": component_source_status,

@@ -16,3 +16,10 @@ test("pair-scoped suggestion preserves the exact quote", () => {
   assert.equal(coachFeedDetailsHref({subject_type: "asset", symbol: "AAPL",
     evidence: {trading_pair: "AAPL"}}), "/asset?symbol=AAPL");
 });
+
+test("missing-indicator bot notice opens the manual trade review", () => {
+  assert.equal(coachFeedDetailsHref({subject_type: "bot", subject_id: 42,
+    symbol: "ETH", event_type: "data_blocked",
+    evidence: {missing_indicators: {macro: ["US10Y"]}}}),
+  "/bot?symbol=ETH&bot_id=42&focus=trade");
+});

@@ -27,6 +27,11 @@ YAHOO_DXY = "https://query1.finance.yahoo.com/v8/finance/chart/DX-Y.NYB"
 YAHOO_DXY_HEADERS = {"User-Agent": "Mozilla/5.0"}
 ALT_FNG = "https://api.alternative.me/fng/?limit=1"
 FRED_CSV_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}&cosd={start_date}"
+TREASURY_YIELD_CSV_URL = (
+    "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/"
+    "daily-treasury-rates.csv/all/{month}?_format=csv&field_tdr_date_value_month={month}"
+    "&page=&type=daily_treasury_yield_curve"
+)
 CBOE_SP500_HISTORY = "https://cdn.cboe.com/api/global/us_indices/daily_prices/SPX_History.csv"
 YAHOO_SP500_GSPC = "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC"
 YAHOO_SP500_GSPC_ALT = "https://query2.finance.yahoo.com/v8/finance/chart/%5EGSPC"
@@ -127,6 +132,33 @@ def _strip_google_json_prefix(text: str) -> str:
 def _fred_csv_url(series_id: str) -> str:
     start_date = (date.today() - timedelta(days=730)).isoformat()
     return FRED_CSV_URL.format(series_id=series_id, start_date=start_date)
+
+
+@lru_cache(maxsize=2)
+def _hourly_treasury_yield_csv(month: str, hour_bucket: int) -> str:
+    # One official daily table covers both maturities and all owners.
+    return _fetch_text(TREASURY_YIELD_CSV_URL.format(month=month), timeout=20)
+
+
+def _treasury_yield_reading(indicator: str, *, today: date | None = None) -> dict:
+    column = {"us02y": "2 Yr", "us10y": "10 Yr"}.get(indicator)
+    if column is None:
+        return {"value": None}
+    current_day = today or date.today()
+    text = _hourly_treasury_yield_csv(current_day.strftime("%Y%m"), int(time.time() // 3600))
+    readings = []
+    for row in csv.DictReader(StringIO(text)):
+        try:
+            observed = datetime.strptime(str(row["Date"]).strip(), "%m/%d/%Y").date()
+            value = float(row[column])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if observed <= current_day and math.isfinite(value) and 0 <= value <= 20:
+            readings.append((observed, value))
+    if not readings:
+        return {"value": None}
+    observed, value = max(readings, key=lambda reading: reading[0])
+    return {"value": value, "observed_at": observed.isoformat(), "provider": "us_treasury"}
 
 
 def _extract_fred_series_id(link: str) -> str | None:
@@ -526,6 +558,22 @@ def fetch_macro_value(name: str, source: str = None, link: str = None):
     use_twelve_data = source_lower == "twelve_data" or link_lower.startswith("twelve_data:")
     effective_source = source
     effective_link = link
+
+    if normalized in {"us02y", "us10y"}:
+        # FRED republishes Treasury's constant-maturity yields. Its CSV may
+        # lag the official daily table, so use the dated Treasury reading
+        # first. Never substitute Yahoo's ^IRX (a 13-week bill) for US02Y.
+        try:
+            reading = _treasury_yield_reading(normalized)
+            if reading.get("value") is not None:
+                return reading
+        except Exception:
+            logger.warning("Treasury yield unavailable for %s; trying FRED", normalized, exc_info=True)
+        try:
+            series_id = "DGS2" if normalized == "us02y" else "DGS10"
+            return _fred_csv_result(_fetch_text(_fred_csv_url(series_id), timeout=20), inflation=False)
+        except Exception:
+            return {"value": None}
 
     if normalized == "sp500" and source_lower == "fred":
         readings = _sp500_dated_closes()

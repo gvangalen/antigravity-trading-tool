@@ -843,6 +843,94 @@ def test_pair_bound_paper_buy_checks_setup_before_quote_or_execution(route, monk
     assert repo.created_orders == 0
 
 
+def test_paper_partial_indicator_buy_requires_explicit_ack_and_matching_setup(monkeypatch):
+    from backend.infrastructure.repositories.setup_repository import SetupRepository
+    from backend.services.setup_market_match_service import SetupMarketMatchService
+
+    saved = {"id": 42, "name": "BTC plan", "symbol": "BTC", "market_id": 123,
+             "setup_type": "trade", "min_benchmark_score": 40, "max_benchmark_score": 60}
+
+    async def setup_for_owner(_repo, setup_id, owner):
+        assert (setup_id, owner) == (42, 7)
+        return saved
+
+    async def assessment(_service, owner, symbol, **kwargs):
+        assert (owner, symbol, kwargs["market_id"]) == (7, "BTC", 123)
+        return {
+            "matches": [{"setup_id": 42, "status": "insufficient_data"}],
+            "indicative_component_scores": {"market": 60, "macro": 35, "technical": 40},
+            "benchmark_weights": {"market_score": 1 / 3, "macro_score": 1 / 3,
+                                  "technical_score": 1 / 3},
+            "missing_indicators": {"macro": ["us02y", "us10y"]},
+        }
+
+    monkeypatch.setattr(SetupRepository, "get_setup_by_id", setup_for_owner)
+    monkeypatch.setattr(SetupMarketMatchService, "for_asset", assessment)
+    service = BotService(_FakeSession())
+    bot = {"setup_id": 42, "market_id": 123, "is_live": False}
+    payload = BotManualOrderSchema(bot_id=9, symbol="BTC", side="buy", quantity=.001,
+                                   price=50000, idempotency_key="partial-1")
+    blocked = asyncio.run(service._paper_manual_buy_match(7, bot, payload))
+    assert blocked["status"] == "indicator_confirmation_required"
+    assert blocked["missing_indicators"]["macro"] == ["us02y", "us10y"]
+    payload.missing_indicator_acknowledged = True
+    allowed = asyncio.run(service._paper_manual_buy_match(7, bot, payload))
+    assert allowed["allowed"] is True
+    saved["min_benchmark_score"] = 61
+    rejected = asyncio.run(service._paper_manual_buy_match(7, bot, payload))
+    assert rejected["allowed"] is False
+
+
+def test_live_partial_indicator_buy_requires_ack_before_existing_preflight(monkeypatch):
+    from backend.infrastructure.repositories.setup_repository import SetupRepository
+    from backend.services.setup_market_match_service import SetupMarketMatchService
+
+    saved = {"id": 42, "name": "BTC plan", "symbol": "BTC", "market_id": 123,
+             "setup_type": "trade", "min_benchmark_score": 40, "max_benchmark_score": 60}
+
+    async def setup_for_owner(_repo, setup_id, owner):
+        assert (setup_id, owner) == (42, 7)
+        return saved
+
+    async def assessment(_service, owner, symbol, **kwargs):
+        assert (owner, symbol, kwargs["market_id"]) == (7, "BTC", 123)
+        return {
+            "indicative_component_scores": {"market": 60, "macro": 35, "technical": 40},
+            "benchmark_weights": {"market_score": 1 / 3, "macro_score": 1 / 3,
+                                  "technical_score": 1 / 3},
+            "missing_indicators": {"macro": ["us02y", "us10y"]},
+        }
+
+    monkeypatch.setattr(SetupRepository, "get_setup_by_id", setup_for_owner)
+    monkeypatch.setattr(SetupMarketMatchService, "for_asset", assessment)
+    service = BotService(_FakeSession())
+    bot = {"setup_id": 42, "market_id": 123, "is_live": True}
+    payload = BotManualOrderSchema(bot_id=9, symbol="BTC", side="buy", quantity=.001,
+                                   price=50000, idempotency_key="partial-live-1")
+    blocked = asyncio.run(service._live_missing_indicator_buy_ack(7, bot, payload))
+    assert blocked["allowed"] is False
+    assert blocked["missing_indicators"]["macro"] == ["us02y", "us10y"]
+    payload.missing_indicator_acknowledged = True
+    assert asyncio.run(service._live_missing_indicator_buy_ack(7, bot, payload))["allowed"] is True
+
+
+def test_paper_partial_preview_binds_owner_ack_and_missing_sources():
+    payload = BotManualOrderSchema(bot_id=9, symbol="BTC", side="buy", quantity=.001,
+                                   price=50000, price_currency="EUR", value_eur=50,
+                                   idempotency_key="paper-partial-token",
+                                   missing_indicator_acknowledged=True)
+    missing = {"macro": ["us02y", "us10y"]}
+    payload.paper_preview_token = BotService._paper_preview_token(
+        user_id=7, payload=payload, quantity=.001, price=50000, gross_eur=50,
+        source_quote_currency="EUR", missing_indicators=missing)
+    assert BotService._verify_paper_preview(payload, 7, "EUR", missing) == 50
+    with pytest.raises(HTTPException):
+        BotService._verify_paper_preview(payload, 7, "EUR", {"macro": ["us02y"]})
+    payload.missing_indicator_acknowledged = False
+    with pytest.raises(HTTPException):
+        BotService._verify_paper_preview(payload, 7, "EUR", missing)
+
+
 def test_pair_bound_paper_preview_uses_exact_market_quote_and_not_base_quote(monkeypatch):
     service = BotService(_FakeSession())
 

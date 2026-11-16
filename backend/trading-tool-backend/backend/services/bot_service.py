@@ -217,7 +217,8 @@ class BotService:
     @staticmethod
     def _paper_preview_token(*, user_id: int, payload: BotManualOrderSchema,
                              quantity: float, price: float, gross_eur: float,
-                             source_quote_currency: str | None = None) -> str:
+                             source_quote_currency: str | None = None,
+                             missing_indicators: dict | None = None) -> str:
         from backend.utils.auth_utils import create_token
         if not payload.idempotency_key:
             raise HTTPException(400, "Een unieke orderreferentie is vereist voor Paper.")
@@ -227,11 +228,14 @@ class BotService:
             "price_eur": round(price, 8), "gross_eur": round(gross_eur, 2),
             "source_quote_currency": source_quote_currency,
             "idempotency_key": payload.idempotency_key,
+            "missing_indicator_acknowledged": payload.missing_indicator_acknowledged,
+            "missing_indicators": missing_indicators or {},
         }, timedelta(minutes=PAPER_PREVIEW_TTL_MINUTES), "paper_manual_preview")
 
     @staticmethod
     def _verify_paper_preview(payload: BotManualOrderSchema, user_id: int,
-                              source_quote_currency: str | None = None) -> float:
+                              source_quote_currency: str | None = None,
+                              missing_indicators: dict | None = None) -> float:
         from backend.utils.auth_utils import decode_token
         if not payload.idempotency_key:
             raise HTTPException(409, "Paper-orderpreview vereist een unieke orderreferentie.")
@@ -244,6 +248,8 @@ class BotService:
                 and claims.get("symbol") == payload.symbol
                 and claims.get("side") == payload.side
                 and claims.get("idempotency_key") == payload.idempotency_key
+                and claims.get("missing_indicator_acknowledged", False) == payload.missing_indicator_acknowledged
+                and claims.get("missing_indicators", {}) == (missing_indicators or {})
                 and payload.price_currency == "EUR"
                 and round(float(claims.get("quantity")), 8) == round(payload.quantity, 8)
                 and round(float(claims.get("price_eur")), 8) == round(payload.price, 8)
@@ -412,6 +418,23 @@ class BotService:
         status = match.get("status") if match else "unverified_setup"
         if status == "matches":
             return {"allowed": True, "status": status, "setup_id": setup_id}
+        missing = assessment.get("missing_indicators") or {}
+        missing_names = {category: list(names) for category, names in missing.items() if names}
+        indicative = assessment.get("indicative_component_scores") or {}
+        if status == "insufficient_data" and missing_names and set(indicative) == {"market", "macro", "technical"}:
+            from backend.domain.setup_market_match import match_setup
+            provisional = match_setup(setup, indicative, assessment.get("benchmark_weights"))
+            if provisional.get("status") == "matches":
+                names = ", ".join(f"{category}: {name}" for category, entries in missing_names.items() for name in entries)
+                if payload.missing_indicator_acknowledged:
+                    return {"allowed": True, "status": "partial_confirmed", "setup_id": setup_id,
+                            "missing_indicators": missing_names}
+                return {
+                    "allowed": False, "status": "indicator_confirmation_required", "setup_id": setup_id,
+                    "missing_indicators": missing_names,
+                    "message": f"De overige geverifieerde indicators passen voorlopig bij de setup, maar {names} heeft geen actuele score. Wil je deze Paper-koop na controle toch doen?",
+                    "safe_next_step": "Bekijk de ontbrekende bron en bevestig alleen als je bewust zonder die indicator wilt kopen.",
+                }
         if status == "outside_conditions":
             labels = {"benchmark": "Benchmark", "market": "Markt", "macro": "Macro", "technical": "Technisch"}
             outside_details = []
@@ -435,6 +458,40 @@ class BotService:
             "allowed": False, "status": status, "setup_id": setup_id,
             "message": message, "safe_next_step": next_step,
         }
+
+    async def _live_missing_indicator_buy_ack(self, user_id: int, bot: Dict[str, Any],
+                                               payload: BotManualOrderSchema) -> Dict[str, Any]:
+        """Require a conscious choice when a live buy relies on an incomplete score.
+
+        This adds a guard to the existing manual preflight. It never weakens
+        exchange, price, budget, idempotency, or live-decision checks.
+        """
+        if not bot.get("is_live") or payload.side != "buy" or not bot.get("setup_id"):
+            return {"allowed": True}
+        from backend.infrastructure.repositories.setup_repository import SetupRepository
+        from backend.services.setup_market_match_service import SetupMarketMatchService
+        from backend.domain.setup_market_match import match_setup
+
+        setup = await SetupRepository(self.session).get_setup_by_id(bot["setup_id"], user_id)
+        if (not setup or str(setup.get("symbol") or "").upper() != payload.symbol
+                or setup.get("market_id") != bot.get("market_id")):
+            return {"allowed": True}
+        assessment = await SetupMarketMatchService(self.session).for_asset(
+            user_id, payload.symbol, setups=[setup], market_id=bot.get("market_id"))
+        missing = {category: list(names) for category, names in
+                   (assessment.get("missing_indicators") or {}).items() if names}
+        indicative = assessment.get("indicative_component_scores") or {}
+        if not missing or set(indicative) != {"market", "macro", "technical"}:
+            return {"allowed": True}
+        provisional = match_setup(setup, indicative, assessment.get("benchmark_weights"))
+        if provisional.get("status") != "matches":
+            return {"allowed": True}
+        if payload.missing_indicator_acknowledged:
+            return {"allowed": True, "missing_indicators": missing}
+        names = ", ".join(f"{category}: {name}" for category, entries in missing.items() for name in entries)
+        return {"allowed": False, "missing_indicators": missing,
+                "message": f"De overige geverifieerde indicators passen voorlopig bij de setup, maar {names} heeft geen actuele score. Wil je deze Live-koop na controle toch doen?",
+                "safe_next_step": "Bekijk de ontbrekende bron, bevestig bewust en doorloop daarna de volledige Live-preflight."}
 
     def _bot_contract(self, bot: Optional[dict]) -> dict:
         if not bot:
@@ -1643,6 +1700,8 @@ class BotService:
             "idempotency_key": payload.idempotency_key,
             "risk_acknowledged": bool(payload.risk_acknowledged),
             "setup_block_acknowledged": bool(payload.setup_block_acknowledged),
+            "missing_indicator_acknowledged": bool(payload.missing_indicator_acknowledged),
+            "missing_indicators": result.get("missing_indicators"),
             "live_preflight_token": payload.live_preflight_token or payload.live_preflight_action_id,
             "code": code,
             "message": message,
@@ -1984,12 +2043,26 @@ class BotService:
         paper_match = await self._paper_manual_buy_match(user_id, bot, payload)
         if not paper_match["allowed"]:
             return {
-                "ok": False, "blocked": True, "code": "PAPER_SETUP_MATCH_REQUIRED",
+                "ok": False, "blocked": True, "code": ("PAPER_INDICATOR_ACK_REQUIRED"
+                    if paper_match["status"] == "indicator_confirmation_required" else "PAPER_SETUP_MATCH_REQUIRED"),
                 "message": paper_match["message"],
                 "safe_next_step": paper_match["safe_next_step"],
                 "setup_match_status": paper_match["status"],
+                "missing_indicators": paper_match.get("missing_indicators") or {},
                 "bot_id": payload.bot_id, "symbol": payload.symbol,
                 "side": payload.side, "is_live": False,
+                "not_persisted": True, "exchange_order_created": False,
+            }
+
+        live_indicator_gate = await self._live_missing_indicator_buy_ack(user_id, bot, payload)
+        if not live_indicator_gate["allowed"]:
+            return {
+                "ok": False, "blocked": True, "code": "LIVE_INDICATOR_ACK_REQUIRED",
+                "message": live_indicator_gate["message"],
+                "safe_next_step": live_indicator_gate["safe_next_step"],
+                "missing_indicators": live_indicator_gate["missing_indicators"],
+                "bot_id": payload.bot_id, "symbol": payload.symbol,
+                "side": payload.side, "is_live": True,
                 "not_persisted": True, "exchange_order_created": False,
             }
 
@@ -2147,6 +2220,7 @@ class BotService:
                     user_id=user_id, payload=payload, quantity=quantity,
                     price=price, gross_eur=gross_eur,
                     source_quote_currency=quote,
+                    missing_indicators=paper_match.get("missing_indicators"),
                 ) if not bot.get("is_live") and guardrails.get("allowed") else None
             ),
         }
@@ -2173,12 +2247,25 @@ class BotService:
                 "setup_match_status": paper_match["status"],
             })
 
+        if bot.get("is_live") and payload.side == "buy" and bot.get("setup_id") is not None:
+            await self.repository.lock_manual_paper_setup(
+                user_id, int(bot["setup_id"]), payload.symbol, bot.get("market_id"))
+        live_indicator_gate = await self._live_missing_indicator_buy_ack(user_id, bot, payload)
+        if not live_indicator_gate["allowed"]:
+            raise HTTPException(409, {
+                "code": "LIVE_INDICATOR_ACK_REQUIRED",
+                "message": live_indicator_gate["message"],
+                "safe_next_step": live_indicator_gate["safe_next_step"],
+                "missing_indicators": live_indicator_gate["missing_indicators"],
+            })
+
         if bot.get("is_live"):
             notional = round(payload.quantity * payload.price, 2)
         else:
             # Reject a missing or altered signed preview before reading market
             # data. A valid preview still requires a fresh quote after locks.
-            notional = self._verify_paper_preview(payload, user_id)
+            notional = self._verify_paper_preview(
+                payload, user_id, missing_indicators=paper_match.get("missing_indicators"))
         if notional <= 0:
             raise HTTPException(400, "Orderwaarde moet groter zijn dan 0.")
 
@@ -2241,7 +2328,9 @@ class BotService:
                     "setup_match_status": paper_match["status"],
                 })
             current_quote = await self._verified_paper_trade_quote(bot, payload.symbol)
-            self._verify_paper_preview(payload, user_id, current_quote["quote_currency"])
+            self._verify_paper_preview(
+                payload, user_id, current_quote["quote_currency"],
+                missing_indicators=paper_match.get("missing_indicators"))
             if abs(current_quote["market_price_eur"] - payload.price) > payload.price * 0.005:
                 raise HTTPException(409, "De Paper-koers is gewijzigd. Vernieuw de preview voor bevestiging.")
 
@@ -2345,7 +2434,8 @@ class BotService:
                 self._manual_order_audit_payload(
                     "live_manual_order_confirmed", bot=bot, payload=payload,
                     notional=notional, result={**result, "not_persisted": False,
-                    "exchange_order_created": bool(exchange_id)},
+                    "exchange_order_created": bool(exchange_id),
+                    "missing_indicators": live_indicator_gate.get("missing_indicators")},
                     source="manual_order_execute", trace_id=trace_id,
                 ), trace_id=trace_id,
             )
@@ -2358,6 +2448,18 @@ class BotService:
         )
         
         await self.session.commit()
+        if paper_match.get("status") == "partial_confirmed":
+            await self._record_execution_audit_event(
+                user_id, "paper_missing_indicator_acknowledged",
+                self._manual_order_audit_payload(
+                    "paper_missing_indicator_acknowledged", bot=bot, payload=payload,
+                    notional=notional,
+                    result={"order_id": order_id, "not_persisted": False,
+                            "exchange_order_created": False,
+                            "missing_indicators": paper_match.get("missing_indicators")},
+                    source="manual_order_execute", trace_id=trace_id,
+                ), trace_id=trace_id,
+            )
         try:
             await asyncio.to_thread(sync_snapshot_all_for_user, user_id)
         except Exception:
@@ -2398,6 +2500,18 @@ class BotService:
                 "safe_next_step": paper_match["safe_next_step"],
                 "setup_match_status": paper_match["status"],
             })
+
+        live_indicator_gate = await self._live_missing_indicator_buy_ack(user_id, bot, payload)
+        if not live_indicator_gate["allowed"]:
+            return {
+                "ok": False, "blocked": True, "code": "LIVE_INDICATOR_ACK_REQUIRED",
+                "message": live_indicator_gate["message"],
+                "safe_next_step": live_indicator_gate["safe_next_step"],
+                "missing_indicators": live_indicator_gate["missing_indicators"],
+                "bot_id": payload.bot_id, "symbol": payload.symbol,
+                "side": payload.side, "is_live": True,
+                "not_persisted": True, "exchange_order_created": False,
+            }
 
         live_context = await self.require_live_manual_order_preflight_context(user_id, bot, payload, notional)
         stats = await self.repository.get_bot_ledger_stats(user_id, payload.bot_id, date.today())

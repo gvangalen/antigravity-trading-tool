@@ -9,7 +9,10 @@ export function coachFeedDetailsHref(item = {}) {
     return `/setup?symbol=${encodeURIComponent(item.symbol || "")}&setup_id=${encodeURIComponent(item.subject_id || "")}`;
   }
   if (item.subject_type === "bot") {
-    return `/bot?symbol=${encodeURIComponent(item.symbol || "")}&bot_id=${encodeURIComponent(item.subject_id || "")}`;
+    const base = `/bot?symbol=${encodeURIComponent(item.symbol || "")}&bot_id=${encodeURIComponent(item.subject_id || "")}`;
+    return item.event_type === "data_blocked" &&
+      Object.values(item.evidence?.missing_indicators || {}).some((names) => Array.isArray(names) && names.length)
+      ? `${base}&focus=trade` : base;
   }
   const pair = String(item.evidence?.trading_pair || "").toUpperCase();
   const quote = pair.startsWith(`${String(item.symbol || "").toUpperCase()}/`)

@@ -219,6 +219,10 @@ def test_pair_score_worker_routes_only_the_exact_plan_review(monkeypatch):
             calls.append(kwargs)
             return ["item-1"]
 
+        async def reconcile_missing_indicator_bots(self, **kwargs):
+            calls.append(("bot-indicator-review", kwargs))
+            return []
+
         async def reconcile_improvement_suggestions(self, **kwargs):
             calls.append(("improvement", kwargs))
             return []
@@ -230,6 +234,7 @@ def test_pair_score_worker_routes_only_the_exact_plan_review(monkeypatch):
 
     tasks.reconcile_coach_feed_score.run(42, "BTC", 11)
     assert calls == [{"user_id": 42, "symbol": "BTC", "market_id": 11},
+                     ("bot-indicator-review", {"user_id": 42, "symbol": "BTC", "market_id": 11}),
                      ("improvement", {"user_id": 42, "symbol": "BTC", "market_id": 11}),
                      "commit", (42, "item-1")]
 
