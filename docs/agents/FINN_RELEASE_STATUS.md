@@ -4,6 +4,47 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN brede coachvraag: opgeslagen bedrag als bron (16 november 2026)
+
+Phase: `TARGETED_LIVE_QA_PASS_FULL_PROTECTED_QA_PENDING`. After the four broad
+coach turns and one quote turn passed on `c0c01158aa5d898a8ae3d1e7fc4ea31d0c2b2ad4`,
+independent QA checked the documentation-only public SHA
+`1aa3ec7261d6f2a5bf17642cf431b68779789367`. FINN again gave a safe,
+complete broad answer without a source-moment fallback, but did not explicitly
+say that the €10 amount came from the saved linked strategy. The user had
+stated €10 in the question, so that one answer did not independently prove the
+saved amount source. This was a strict evidence failure, not a trade-safety
+failure.
+
+The generic read-only delivery now adds an explicit saved base-amount sentence
+only when exactly one owner-bound completed setup and linked strategy read
+prove the requested amount for the requested asset and pair. A user-stated
+amount alone, missing evidence, a different pair, or multiple saved matches
+cannot establish this fact. Existing correct source wording is not repeated.
+The behavior covers NL, EN and DE and has no BTC-specific branch. Product
+[PR #1098](https://github.com/gvangalen/antigravity-trading-tool/pull/1098)
+merged as `8c99a2f1aced5bd2bac3eab3f6cfbd70eba19edb`. The final backend
+suite passed **4,897** with **7 skipped**; the final isolated worker action
+matrix passed **17/17** without broker orders, Live calls or production
+connections; real-provider development passed **20/20** and the complete
+regression retry **109/109** with zero provider, schema, timeout, parse or
+validation failures. An earlier regression attempt had one external API
+timeout and was not counted as a passing gate. All five PR and main CI jobs
+passed, Auto Deploy succeeded, and public backend health and frontend
+build-info both returned HTTP 200 with the exact merge SHA.
+
+Independent read-only browser QA then repeated the same broad question in
+three new conversations on that public SHA. All **3/3** completed: FINN
+explicitly identified €10 as the saved fixed amount of the linked strategy,
+kept the separate Paper bot on its own setup, stated score 35 outside 61–75,
+gave source moments and Paper cash/position, and advised no purchase or rule
+change. No source-moment fallback, confirmed action, saved change or trade
+occurred. One answer placed the source confirmation as a separate final
+sentence; this is a style follow-up, not a factual failure. This targeted QA
+does not constitute full FINN acceptance or Paper execution. The official
+protected runtime matrix remains unrun because the independent QA task has no
+active goal and manifest binding.
+
 ## FINN brede coachvraag: gerichte live hertest (16 november 2026)
 
 Phase: `TARGETED_LIVE_QA_PASS_FULL_PROTECTED_QA_PENDING`. The first fix on
