@@ -8,6 +8,7 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 import { fetchAuth } from "@/lib/api/auth";
 import { readCoachFeedWithRetry } from "@/lib/finnCoachFeedRead.mjs";
 import { coachFeedDetailsHref } from "@/lib/finnCoachFeedLinks.mjs";
+import { canDiscussFeedItem, canUpdateFeedStatus } from "@/lib/finnCoachFeedActions.mjs";
 import { coachFeedDiscussionQuestion } from "@/lib/finnCommandSearch";
 
 const FEED_PAGE_SIZE = 50;
@@ -131,7 +132,7 @@ export default function FinnCoachFeed({ onDiscuss }) {
 
   const discuss = (item) => {
     onDiscuss?.(item.id, coachFeedDiscussionQuestion(item, locale), item);
-    void setStatus(item.id, "read");
+    if (canUpdateFeedStatus(item)) void setStatus(item.id, "read");
   };
 
   const scopedItems = itemsOwner === user?.id && itemsLocale === locale ? items : [];
@@ -173,19 +174,21 @@ export default function FinnCoachFeed({ onDiscuss }) {
                 </time>
               ) : null}
             </div>
-            {item.status === "unread" || item.status === "read" ? (
+            {canDiscussFeedItem(item, history) || canUpdateFeedStatus(item) ? (
               <div className="flex shrink-0 flex-wrap items-center gap-3">
-                {!item.event_type.endsWith("_report_ready") ? (
+                {canDiscussFeedItem(item, history) ? (
                   <button type="button" onClick={() => discuss(item)} className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 hover:underline">
                     {copy.discuss}<ArrowRight size={15} />
                   </button>
                 ) : null}
-                {item.event_type !== "proposal_pending" ? (
+                {canUpdateFeedStatus(item) && item.event_type !== "proposal_pending" ? (
                   <a href={coachFeedDetailsHref(item)}
                     className="text-sm text-slate-600 hover:underline dark:text-slate-300">{item.event_type.endsWith("_report_ready") ? copy.viewReport : copy.details}</a>
                 ) : null}
-                <button type="button" onClick={() => void setStatus(item.id, "handled")}
-                  className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-900"><Check size={14} />{copy.handled}</button>
+                {canUpdateFeedStatus(item) ? (
+                  <button type="button" onClick={() => void setStatus(item.id, "handled")}
+                    className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-900"><Check size={14} />{copy.handled}</button>
+                ) : null}
               </div>
             ) : null}
           </article>
