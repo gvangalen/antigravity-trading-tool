@@ -4,6 +4,41 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 proactieve coach: fasen 1–5 (16 november 2026)
+
+Phase: `LOCAL_VALIDATED_PR_PENDING`. The user's request to deploy this coach
+batch and have the existing QA Agent test it supersedes the previous targeted
+broad-question candidate for release scheduling. That earlier targeted pass
+does not constitute full FINN acceptance; no official protected QA matrix was
+running when this batch was prepared.
+
+Branch `codex/finn-proactive-coach` contains the plan-review feed repair,
+owner-scoped Paper position-risk cards, persisted Paper bot-decision cards,
+read-only benchmark/setup review suggestions, and weekly reflection cards.
+New bot cards use deterministic copy; a decision marked executed is not
+presented as a filled order without a persisted filled Paper order. The bot
+publisher reads under the same per-event transaction lock used to publish, so
+queued workers cannot regress a newer outcome to an earlier one. FINN Discuss
+re-reads owner-scoped current state, and the UI preserves exact trading pairs
+in details links. No automatic benchmark edit, Live bot action, or order is
+part of this batch.
+
+On code SHA `17af2a38216cfae87fe467c5fda2ad845c978000`, the final local
+backend suite passed **4,917** tests with **7 skipped**; frontend i18n,
+typecheck, command/proposal/setup/PDF tests, build and high-severity audit
+passed; mobile typecheck, lint (warnings only) and web bundle smoke passed.
+The isolated local FastAPI/Celery/PostgreSQL/Redis/real-Responses action
+matrix passed **17/17** and adapter tests **26/26** (artifact SHA-256
+`c5cc10d93b4396d24cc95ae2e494fe8169d9ee41d267bdc3cccf171d088cef54`).
+Real-provider selector development passed **20/20** (SHA-256
+`76435b73c6fea26886d52d4f42bd2c8b2ce9012b5de887962e512739bab61248`)
+and regression **109/109** (SHA-256
+`7f4f19740fa6d7dbc22a47921c2837720a3a6b53d3f6be150bbe66543d4b516b`),
+both with zero provider, schema, timeout, parse or validation failures.
+Independent read-only code QA, Security and Architecture reviews found no
+remaining P0/P1 or security blocker after the bot ordering repair. CI,
+deployment identity and authenticated live QA remain pending.
+
 ## FINN brede coachvraag: opgeslagen bedrag als bron (16 november 2026)
 
 Phase: `TARGETED_LIVE_QA_PASS_FULL_PROTECTED_QA_PENDING`. After the four broad
