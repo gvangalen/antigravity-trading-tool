@@ -132,6 +132,41 @@ def test_selected_base_only_bot_decision_survives_active_exact_pair():
     assert result["data"].selected_feed_decision["action"] == "hold"
 
 
+def test_saved_feed_selection_does_not_bind_an_unrelated_asset_question():
+    class Empty:
+        async def get_latest_bot_decisions_for_owner(self, user_id):
+            return []
+        async def get_bot_history(self, user_id, days):
+            return []
+        async def recent(self, user_id, *, days, limit, symbol=None):
+            return {"status": "no_data", "coverage": {"trades": 0,
+                    "analyzed": 0, "pending": 0, "unavailable": 0}, "reviews": []}
+
+    class Session:
+        async def execute(self, _query, params):
+            assert params == {"user_id": 42, "decision_id": 127266}
+            class Result:
+                def mappings(self):
+                    return self
+                def first(self):
+                    return {"id": 127266, "bot_name": "BTC Paper", "symbol": "BTC",
+                            "quote_currency": None, "action": "hold", "status": "planned",
+                            "decision_ts": datetime(2026, 11, 16, 6, tzinfo=timezone.utc),
+                            "order_status": None, "filled_amount_eur": None}
+            return Result()
+
+    adapter = object.__new__(ReviewToolAdapter)
+    adapter.session = Session()
+    adapter.repository = Empty()
+    adapter.bot_service = Empty()
+    adapter.closed_trades = Empty()
+    from backend.domain.finn_v2_source_registry import FinnV2InformationSourceRegistry
+    adapter.sources = FinnV2InformationSourceRegistry()
+    result = asyncio.run(adapter.execute(user_id=42, asset="AAPL",
+        selector={"_latest_bot_decisions_only": True}, selected_feed_decision_id=127266))
+    assert result["data"].selected_feed_decision is None
+
+
 def test_review_history_separates_owner_bot_decisions_from_closed_trade_evidence():
     instant = datetime(2026, 10, 9, 12, tzinfo=timezone.utc)
 

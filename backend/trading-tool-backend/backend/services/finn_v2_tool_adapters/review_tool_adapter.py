@@ -110,10 +110,12 @@ class ReviewToolAdapter:
             selected_pair = (selected_symbol if "/" in selected_symbol else
                              f"{selected_symbol}/{selected['quote_currency']}"
                              if selected and selected["quote_currency"] else None)
-            # The feed ID has already been resolved for this owner. The active
-            # chart selector may be BTC/USDT while a legacy Paper bot saved
-            # only BTC, so it must never discard the selected decision.
-            if selected:
+            # A legacy Paper bot may save only BTC while the active chart uses
+            # BTC/USDT. Keep that selected event, but do not let a persisted
+            # BTC feed selection contaminate a later AAPL question.
+            selected_base = selected_symbol.split("/", 1)[0]
+            requested_base = str(asset or "").upper().split("/", 1)[0]
+            if selected and (not asset or selected_base == requested_base):
                 selected_feed_decision = {
                     "bot_name": selected["bot_name"],
                     "symbol": selected["symbol"], "action": selected["action"],
