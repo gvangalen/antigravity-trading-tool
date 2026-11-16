@@ -4,6 +4,37 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 historical missing-score discussion (16 november 2026)
+
+Phase: `PRODUCT_MERGED_STATUS_SHA_PENDING_LIVE_QA`. Independent authenticated
+browser QA on public SHA `424cce30ff4e94549948bca55d81ab5344ea04f1`
+returned `NOT_ACCEPTED` for full scope: all six executable cases passed,
+including four historical Paper bot cards, the saved weekly reflection and an
+AAPL follow-up after BTC. The seventh case was `NOT_TESTABLE`: the historical
+BTC missing-score card was visible in Alle updates but had no Bespreek met FINN
+action because its status was no longer unread or read. QA did not substitute
+a manually composed question. The previous product commit passed all five main
+CI jobs and Auto Deploy; public backend and frontend both reported that SHA.
+
+The current repair allows a historical `data_blocked` card to open its
+owner-scoped read-only FINN discussion while preserving the card's handled or
+resolved status. Other completed cards remain unchanged. A targeted frontend
+regression checks this behavior. The frontend build, typecheck, i18n lint and
+tests, 82 command tests, 9 proposal tests and high-severity dependency audit
+passed. The full backend suite passed **4,939** with **7 skipped**. The local
+FastAPI/Celery action matrix passed **17/17** and adapters **26/26** (SHA-256
+`30990c460261ae184ef2ac7f1d03702653b7c04fabc1540d3ce573236d0920d5`),
+without broker orders or Live calls. Real-provider development passed **20/20**
+(SHA-256 `06f69be9171a256deba0ce70ba853a7a4a6e10424340bcb4a07859829d0d96dc`)
+and regression passed **109/109** (SHA-256
+`a3b3ec7358172b4ae77175ed2089dd5f546fcd4806662cb1526570b9ddca8263`),
+with zero provider, schema, timeout, parse or validation failures. Product
+[PR #1116](https://github.com/gvangalen/antigravity-trading-tool/pull/1116)
+passed all five PR CI jobs and merged as
+`51dd2d9eaadced5221cb054d56db07c9b02f7f9c`. Its main CI, Auto Deploy,
+final public SHA parity and independent live retest remain pending. The status
+commit itself will create a later final SHA and must pass those gates too.
+
 ## FINN 3.0 immutable Paper feed snapshot and history navigation (16 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_STATUS_SHA_PENDING_LIVE_QA`. Independent authenticated browser QA returned
