@@ -1,6 +1,51 @@
 from backend.services.finn_v2_source_moment_claims import (
     current_source_moments_supported, source_moment_repair_facts,
 )
+
+
+def test_future_paper_portfolio_measurement_is_not_verified_as_current():
+    evidence = ({"scope": "read_portfolio", "status": "completed",
+                 "data": {"read_at": "2026-11-16T09:00:40+00:00"}},)
+    diagnostics = []
+    assert not current_source_moments_supported(
+        "De actuele Paper-portefeuillemeting is van 16 november 2026 om 20:00:40 CET.",
+        evidence, diagnostics=diagnostics,
+    )
+    assert diagnostics == ["portfolio_read_clock_mismatch"]
+    assert current_source_moments_supported(
+        "De actuele Paper-portefeuillemeting is van 16 november 2026 om 10:00:40 CET.",
+        evidence,
+    )
+
+
+def test_bot_decision_clocks_match_saved_report_or_latest_owner_read():
+    evidence = (
+        {"scope": "read_latest_report", "status": "completed", "data": {
+            "score_source_snapshot": {"report_v2": {"automation": {"bots": [{
+                "bot_id": 129, "symbol": "BTC",
+                "latest_decision": {"at": "2026-11-16T04:15:18"},
+            }]}}},
+        }},
+        {"scope": "read_review_history", "status": "completed", "data": {
+            "latest_bot_decisions": [{"bot_id": 129, "symbol": "BTC",
+                                     "decision_at": "2026-11-16T08:45:18+00:00"}],
+        }},
+    )
+    diagnostics = []
+    assert not current_source_moments_supported(
+        "De BTC-botbeoordeling was op 16 november 2026 om 04:15:18 CET.",
+        evidence, diagnostics=diagnostics,
+    )
+    assert diagnostics == ["bot_decision_clock_mismatch"]
+    assert current_source_moments_supported(
+        "De BTC-botbeoordeling in het rapport was op 16 november 2026 om 05:15:18 CET. "
+        "De huidige BTC-botcheck was op 16 november 2026 om 09:45:18 CET.",
+        evidence,
+    )
+    assert current_source_moments_supported(
+        "De BTC-bot gaf geen order; de oudste indicatorbron was 15 november 2026 om 23:59 UTC.",
+        evidence,
+    )
 from backend.services.finn_v2_run_service import _minimal_read_answer
 from types import SimpleNamespace
 

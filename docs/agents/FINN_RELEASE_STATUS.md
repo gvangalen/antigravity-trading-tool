@@ -4,6 +4,41 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN report bot clocks and correction identity (16 november 2026)
+
+Phase: `LOCAL_VALIDATED_PENDING_CI`. This is the next FINN candidate after the
+independent targeted browser retest of public SHA
+`687092f5167ce0b708b67e5c5fd521da78833296`: seven of seven visible
+feed discussion cases passed. That retest did not constitute full runtime or
+score-parity acceptance. No live QA has tested this report/chat repair yet.
+
+The Paper Test morning logbook records three distinct defects: the saved
+daily report wrote a bot decision at 04:15 without a zone while its detail
+showed 05:15 CET; FINN called that UTC time 04:15 CET and claimed a future
+20:00 Paper portfolio measurement around 10:00; after correction it switched
+from the requested BTC bot to the AAPL bot. This repair normalizes saved bot
+decision instants into explicit UTC and Amsterdam clocks before report prose,
+rejects unsupported bot clocks and future portfolio claims in FINN answers,
+and carries an explicitly named bot ID through a correction. The rules use
+saved evidence and bot identity, without asset-specific exceptions. Existing
+saved report prose is not retroactively rewritten.
+
+On the rebased product code, the full backend suite passed **4,949** with
+**7 skipped**. The freshly rebuilt isolated FastAPI/Celery worker matrix
+passed **17/17** action contracts, and action adapters passed **26/26**;
+the matrix artifact SHA-256 is
+`9f95b454ecfde683e31e3c26260953a18d4e5c7505485ba489f5eca79b5610ca`.
+It recorded zero broker orders, Live trading calls, or production connections.
+Real-provider development passed **20/20** (artifact SHA-256
+`d5e392d488a8de3c105cb54d8e9a6c47123fca2b71b5b43b68ad743c5b37f665`)
+and regression **109/109** (artifact SHA-256
+`42e64cc2a35f4975fb7efebaa0137817518e69418c51aa605b8c8da4a9e28f2a`),
+with zero provider, schema, timeout, parse, or validation failures. An
+additional 38-case nonsealed route diagnostic passed **36/38**: unrelated
+`evaluate_bot` and `read_bot` selector expectations differed. It is not
+reported as green. PR CI, merge, deploy, public SHA parity and independent
+live QA for this candidate remain pending.
+
 ## FINN 3.0 historical missing-score discussion (16 november 2026)
 
 Phase: `PRODUCT_MERGED_STATUS_SHA_PENDING_LIVE_QA`. Independent authenticated

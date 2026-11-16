@@ -109,6 +109,66 @@ def _report_source_times(value: Any) -> Any:
     return value
 
 
+def _report_automation_evidence(raw: Any) -> dict[str, Any]:
+    """Label persisted UTC bot clocks before asking the model to write prose."""
+    source = raw if isinstance(raw, dict) else {}
+    result = _report_source_times(source)
+    for bot in result.get("bots") or []:
+        if not isinstance(bot, dict):
+            continue
+        decision = bot.get("latest_decision")
+        if not isinstance(decision, dict):
+            continue
+        try:
+            instant = datetime.fromisoformat(str(decision.get("at") or "").replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        instant = instant.replace(tzinfo=instant.tzinfo or timezone.utc).astimezone(timezone.utc)
+        decision["at"] = instant.isoformat(timespec="seconds")
+        decision["at_amsterdam"] = instant.astimezone(ZoneInfo("Europe/Amsterdam")).strftime(
+            "%Y-%m-%d %H:%M:%S %Z"
+        )
+    return result
+
+
+def _report_automation_clocks_supported(value: str, raw: Any) -> bool:
+    """A stated bot decision time must identify a real decision and its zone."""
+    decisions = []
+    for bot in _report_automation_evidence(raw).get("bots") or []:
+        decision = bot.get("latest_decision") if isinstance(bot, dict) else None
+        if not isinstance(decision, dict):
+            continue
+        try:
+            instant = datetime.fromisoformat(str(decision.get("at") or ""))
+        except ValueError:
+            continue
+        decisions.append((bot, instant.astimezone(timezone.utc)))
+    for sentence in re.split(r"(?<=[.!?])\s+|\n+", value):
+        if not re.search(r"\b(?:bot\w*|beoordeling\w*|besluit\w*|beslissing\w*|check\w*)\b", sentence, re.I):
+            continue
+        named = [(bot, instant) for bot, instant in decisions if any(
+            re.search(rf"\b{re.escape(str(label))}\b", sentence, re.I)
+            for label in (bot.get("bot_id"), bot.get("symbol"), bot.get("bot_name")) if label
+        )]
+        candidates = named or decisions
+        for clock in re.finditer(r"(?<!\d)(?P<hour>\d{1,2}):(?P<minute>\d{2})"
+                                 r"(?::(?P<second>\d{2}))?\s*(?P<zone>UTC|CET|CEST)?\b",
+                                 sentence, re.I):
+            zone = (clock["zone"] or "").upper()
+            if not zone or not candidates:
+                return False
+            stated = (int(clock["hour"]), int(clock["minute"]))
+            if not any(
+                (local.hour, local.minute) == stated
+                and (clock["second"] is None or local.second == int(clock["second"]))
+                and (zone == "UTC" or local.tzname() == zone)
+                for _, instant in candidates
+                for local in (instant if zone == "UTC" else instant.astimezone(ZoneInfo("Europe/Amsterdam")),)
+            ):
+                return False
+    return True
+
+
 def _regular_session_at(observed_at: Any, asset_class: Any, market_timezone: Any) -> str:
     """Only assert outside hours when the catalog and clock prove it.
 
@@ -904,6 +964,17 @@ def _report_v2_factual_fallbacks(context: dict[str, Any], facts: dict[str, Any],
             else:
                 detail += f" Measured 24-hour price change: {percent}."
         analysis_parts.append(f"{label}: {detail}")
+    dated_decisions = [
+        f"{bot.get('bot_name') or bot.get('symbol') or bot.get('bot_id')}: "
+        f"{bot['latest_decision']['at_amsterdam']}"
+        for bot in _report_automation_evidence(context.get("report_bot_status")).get("bots") or []
+        if isinstance(bot, dict) and isinstance(bot.get("latest_decision"), dict)
+        and bot["latest_decision"].get("at_amsterdam")
+    ]
+    if dated_decisions:
+        prefix = {"nl": "Laatste opgeslagen botbeoordelingen", "de": "Letzte gespeicherte Botbewertungen",
+                  "en": "Latest saved bot assessments"}.get(locale, "Latest saved bot assessments")
+        automation += f" {prefix}: " + "; ".join(dated_decisions) + "."
     return {
         "retrospective": retrospective,
         "portfolio": portfolio,
@@ -918,6 +989,10 @@ def _report_v2_factual_fallbacks(context: dict[str, Any], facts: dict[str, Any],
 def _report_v2_contradicts_facts(section: str, value: str, facts: dict[str, Any],
                                context: dict[str, Any], comparison: dict[str, Any]) -> bool:
     """Reject only concrete contradictions with the frozen report facts."""
+    if section == "automation" and not _report_automation_clocks_supported(
+        value, context.get("report_bot_status")
+    ):
+        return True
     # A report snapshot cannot establish that the owner has never traded. If
     # transactions are absent from this report's evidence, the claim must be
     # limited to its date or period; older closed trades may still exist.
@@ -1014,7 +1089,7 @@ def generate_unified_daily_report_sections(user_id: int, period: str = "daily") 
                   else _report_v2_period_comparison(context, facts, period))
     report_v2_evidence = {
         "portfolio": context.get("report_portfolios") or {},
-        "automation": context.get("report_bot_status") or {},
+        "automation": _report_automation_evidence(context.get("report_bot_status")),
         "comparison": comparison,
     }
     factual_context = {**facts, "assets": [
@@ -1088,6 +1163,8 @@ def generate_unified_daily_report_sections(user_id: int, period: str = "daily") 
             "every monthly DCA plan, name its saved month day. Automation describes the "
             "bot state at the report instant, identifies old decisions as old, and never asserts "
             "that configured exit levels are being watched without execution evidence. "
+            "For bot decision times, use automation.bots.latest_decision.at_amsterdam with its "
+            "CET/CEST label, or explicitly label the UTC time; never write an unzoned bot clock. "
             "The final outlook names concrete checks grounded in these facts, not a trade command."
         ),
         prompt=json.dumps({
@@ -1455,7 +1532,7 @@ def generate_unified_daily_report_sections(user_id: int, period: str = "daily") 
                 "period_end": comparison.get("period_end"),
                 "sections": report_v2_prose,
                 "portfolio": jsonable_encoder(_report_source_times(context.get("report_portfolios") or {})),
-                "automation": jsonable_encoder(_report_source_times(context.get("report_bot_status") or {})),
+                "automation": jsonable_encoder(_report_automation_evidence(context.get("report_bot_status"))),
                 "comparison": comparison,
                 "plans": [{"market_id": item.get("market_id"),
                            "pair": item.get("pair"), "symbol": item.get("symbol"),

@@ -39,6 +39,7 @@ from backend.services.finn_v2_responses_read_executor import FinnResponsesReadEx
 from backend.services.finn_v2_source_moment_claims import (
     current_source_moments_supported, source_moment_repair_facts,
 )
+from backend.services.finn_v2_bot_subject_claims import focused_bot_id, bot_subject_supported
 from backend.services.finn_v2_factual_source_answer import (
     render_bot_decision, render_selected_paper_feed_decision, render_latest_quote, render_portfolio_read_time,
     render_report_and_quote_times, render_report_and_technical_read,
@@ -3096,6 +3097,7 @@ class FinnResponsesAnswerVerifier:
                     expected = render_bot_decision(
                         read, symbol=symbol, paper=mode,
                         pair=f"{requested_pair[0]}/{requested_pair[1]}" if requested_pair and requested_pair[0] == symbol else None,
+                        bot_id=focused_bot_id(message, previous_response),
                     )
             elif scopes == {"read_portfolio"} and args.get("environment") == "paper":
                 expected = render_portfolio_read_time(read)
@@ -3118,6 +3120,14 @@ class FinnResponsesAnswerVerifier:
                 self._fallback_copy("responses_evidence_not_verified", message=message, locale=locale),
                 "latest_quote_conflicts_with_source", evidence,
                 rejection_details={"fact_mismatch": "latest_market_quote"},
+            )
+        if result.answer_kind == "free_text" and not bot_subject_supported(
+            result.text, evidence, bot_id=focused_bot_id(message, previous_response)
+        ):
+            return FinnResponsesVerifiedAnswer(
+                "unavailable",
+                self._fallback_copy("responses_evidence_not_verified", message=message, locale=locale),
+                "bot_subject_conflicts_with_source", evidence,
             )
         source_moment_diagnostics: list[str] = []
         if result.answer_kind == "free_text" and not current_source_moments_supported(
