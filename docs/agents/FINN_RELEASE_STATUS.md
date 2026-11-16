@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0 Paper-portefeuille en feedgeschiedenis (16 november 2026)
 
-Phase: `LOCAL_BUILD_VALIDATED_PR_CI_PENDING`. Branch
+Phase: `PRODUCT_DEPLOYED_FINAL_STATUS_PENDING_QA`. Branch
 `codex/finn-live-qa-followup-20261116`. De bestaande
 onafhankelijke QA-agent testte de vorige definitieve publieke SHA
 `3e46b03337f79e16923f9ceae3dc204763fda2a3` uitgebreid in de ingelogde
@@ -48,9 +48,17 @@ Responses-providerontwikkeling slaagde **20/20** (artifact SHA-256
 met nul provider-, schema-, timeout-, parse- of validatiefouten. De volledige
 providerregressie slaagde **109/109** (artifact SHA-256
 `4897e28ad18993c6eadd31b008bbcdcdff7218a4cc2a6be07e80be8902465ad9`)
-met nul provider-, schema-, timeout-, parse- of validatiefouten. PR-CI,
-main-CI, Auto Deploy en onafhankelijke hertest zijn nog niet afgerond voor
-deze kandidaat.
+met nul provider-, schema-, timeout-, parse- of validatiefouten. Product
+[PR #1132](https://github.com/gvangalen/antigravity-trading-tool/pull/1132)
+slaagde op alle vijf PR-CI-jobs en is gemerged als
+`8199238b5e8239c93609f9864e90afdfb9209a58`. Main CI
+`43957262621` slaagde op alle vijf jobs en Auto Deploy `43958360003`
+slaagde. GitHub main, publieke backend-health en frontend-build-info
+identificeerden alle drie exact die SHA; beide endpoints gaven HTTP 200.
+Deze statusaanvulling creëert een latere documentatierevisie. De bestaande
+QA-agent krijgt pas de definitieve publieke SHA nadat ook diens main-CI,
+Auto Deploy en publieke SHA-pariteit zijn bevestigd. Onafhankelijke live
+QA is nog niet afgerond voor deze kandidaat.
 
 ## Indicatieve benchmark bij ontbrekende indicatoren (16 november 2026)
 
