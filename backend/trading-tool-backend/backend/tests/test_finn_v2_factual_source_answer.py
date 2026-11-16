@@ -50,7 +50,9 @@ def test_clicked_paper_wait_card_uses_selected_decision_not_later_history():
     result = asyncio.run(front.run(message=message, instructions="", conversation_context={},
         verified_asset="BTC", locale="nl", feed_evidence=[{"source": "owner_scoped_feed",
             "facts": {"event_type": "bot_decision", "historical_notification": True,
-                      "symbol": "BTC", "historical_event_facts": {"action": "hold"}}}]))
+                      "selection_origin": "current_run", "symbol": "BTC",
+                      "historical_source_observed_at": "2026-11-16T06:00:18+00:00",
+                      "historical_event_facts": {"action": "hold"}}}]))
     assert len(calls) == 1 and calls[0].read_tools == ("read_review_history",)
     assert "2026-11-16 07:00:18 CET" in result.response.text
     assert "10:45" not in result.response.text
@@ -85,11 +87,33 @@ def test_clicked_paper_card_without_matching_saved_decision_never_uses_latest():
         message="Bespreek dit opgeslagen Paper-botbesluit voor AAPL.", instructions="",
         conversation_context={}, verified_asset="AAPL", locale="nl",
         feed_evidence=[{"source": "owner_scoped_feed", "facts": {
-            "event_type": "bot_decision", "historical_notification": True, "symbol": "AAPL",
+            "event_type": "bot_decision", "historical_notification": True,
+            "selection_origin": "current_run", "symbol": "AAPL",
             "historical_event_facts": {"action": "hold"}}}],
     ))
     assert "niet aan een opgeslagen beslissing koppelen" in result.response.text
     assert "10:45" not in result.response.text
+
+
+def test_clicked_paper_card_rejects_decision_from_later_source_moment():
+    from backend.services.finn_v2_factual_source_answer import render_selected_paper_feed_decision
+    text = render_selected_paper_feed_decision({"results": [{"scope": "read_review_history",
+        "status": "completed", "data": {"selected_feed_decision": {
+            "symbol": "BTC", "action": "hold", "decision_at": "2026-11-16T10:45:17+00:00",
+            "paper_executed": False}}}]}, symbol="BTC",
+        expected_source_at="2026-11-16T06:00:18+00:00")
+    assert "hoort niet bij het bronmoment" in text
+    assert "11:45" not in text
+
+
+def test_clicked_paper_buy_card_keeps_verified_filled_amount():
+    from backend.services.finn_v2_factual_source_answer import render_selected_paper_feed_decision
+    text = render_selected_paper_feed_decision({"results": [{"scope": "read_review_history",
+        "status": "completed", "data": {"selected_feed_decision": {
+            "symbol": "AAPL", "action": "buy", "decision_at": "2026-11-10T14:45:00+00:00",
+            "paper_executed": True, "filled_amount_eur": 393.01}}}]}, symbol="AAPL",
+        expected_source_at="2026-11-10T14:45:00+00:00")
+    assert "kopen (buy)" in text and "€393.01" in text
 
 
 def test_legacy_houd_vast_action_is_a_selected_wait_card():

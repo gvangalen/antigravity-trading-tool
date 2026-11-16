@@ -172,6 +172,7 @@ export const assistantChatStream = async (
   onError,
   maxRetries = 2,
   sessionId = null,
+  feedItemId = null,
 ) => {
   // 1. Cancel previous stream to prevent duplicates & resource leaks
   if (activeAbortController) {
@@ -201,7 +202,8 @@ export const assistantChatStream = async (
         headers,
         credentials: 'include',
         signal,
-        body: JSON.stringify({ query, context, history, session_id: sessionId }),
+        body: JSON.stringify({ query, context, history, session_id: sessionId,
+          ...(feedItemId ? { feed_item_id: feedItemId } : {}) }),
       });
 
       if (!response.ok) {

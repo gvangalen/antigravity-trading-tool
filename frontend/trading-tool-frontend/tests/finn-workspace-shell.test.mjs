@@ -61,6 +61,10 @@ test("feed discussion enters the persistent FINN panel with its event identity",
   assert.match(shellSource, /data-feed-handoff-id=\{feedDiscussion\?\.request\.context\.feed_item_id \|\| undefined\}/);
   assert.match(shellSource, /data-testid="finn-chat-panel"/);
   assert.match(shellSource, /commandRequest=\{feedDiscussion \? feedDiscussion\.request : commandRequest\}/);
+  assert.match(shellSource, /feedSelection=\{feedDiscussion \?/);
+  assert.match(assistantSource, /selectedFeedItemForSubmission\(\s*feedSelection/);
+  assert.match(assistantSource, /chatSessionId,\s*selectedFeedItemId/);
+  assert.match(assistantApiSource, /feed_item_id: feedItemId/);
   assert.match(shellSource, /closeFeedDiscussion\(feedDiscussion\.request\.nonce\)/);
   assert.match(shellSource, /closeLabel=\{workspaceCopy\.closeBackdrop\}/);
   assert.match(feedSource, /onDiscuss\?\.\(item\.id,/);

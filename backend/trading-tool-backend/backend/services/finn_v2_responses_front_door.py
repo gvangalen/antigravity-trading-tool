@@ -1485,8 +1485,7 @@ class FinnResponsesFrontDoor:
             if isinstance(item, dict) and isinstance(item.get("facts"), dict)
             and item["facts"].get("event_type") == "bot_decision"
             and item["facts"].get("historical_notification") is True
-            and str((item["facts"].get("historical_event_facts") or {}).get("action") or "").lower()
-                in {"hold", "houd_vast"}), None)
+            and item["facts"].get("selection_origin") == "current_run"), None)
         if discussing_paper_card and selected_paper_feed is not None:
             # The card is a precise historical event. A model-led answer can
             # substitute a newer per-bot decision even after the correct row
@@ -1495,7 +1494,8 @@ class FinnResponsesFrontDoor:
             call = replace(catalog.validate("get_decision_history", {"asset": symbol}),
                            read_tools=("read_review_history",),
                            inputs={"asset": symbol, "_latest_bot_decisions_only": True,
-                                   "_selected_paper_feed_decision": True})
+                                   "_selected_paper_feed_decision": True,
+                                   "_selected_feed_source_at": selected_paper_feed.get("historical_source_observed_at")})
             try:
                 read_result = await self.reads(call)
             except Exception:
@@ -1503,7 +1503,9 @@ class FinnResponsesFrontDoor:
                 read_result = {"status": "unavailable", "results": []}
             return FinnResponsesFrontDoorResult(
                 FinnResponsesResult(
-                    text=render_selected_paper_feed_decision(read_result, symbol=symbol),
+                    text=render_selected_paper_feed_decision(
+                        read_result, symbol=symbol,
+                        expected_source_at=selected_paper_feed.get("historical_source_observed_at")),
                     response_id=f"selected-paper-feed-{self.run_id}",
                     tool_trace=({"name": call.name, "status": read_result.get("status", "unavailable"),
                                  "arguments": call.inputs, "result": read_result},),

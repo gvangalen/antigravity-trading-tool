@@ -412,6 +412,10 @@ export default function FinnWorkspaceShell({ children }) {
               ? (draft) => setFeedDiscussion((current) => updateFeedDiscussionDraftIfCurrent(current, feedDiscussion.request.nonce, draft))
               : setComposerQuery}
             commandRequest={feedDiscussion ? feedDiscussion.request : commandRequest}
+            feedSelection={feedDiscussion ? {
+              itemId: feedDiscussion.request.context.feed_item_id,
+              nonce: feedDiscussion.request.nonce,
+            } : null}
             autoFocusComposer
             closeLabel={workspaceCopy.closeBackdrop}
           />
