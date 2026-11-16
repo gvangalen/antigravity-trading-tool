@@ -233,7 +233,7 @@ def test_exact_market_rows_show_only_verified_score_evidence(monkeypatch):
 
     assert result["categories"]["market"]["rows"][0]["score"] == 30
     assert result["categories"]["technical"]["rows"] == [{
-        "name": "ma_200", "value": None, "score": None, "trend": None,
+        "name": "ma_200", "score_mode": "standard", "value": None, "score": None, "trend": None,
         "interpretation": None, "action": None, "timestamp": None,
         "sample_size": 0, "period_aggregate": False, "configured": True,
         "data_status": "pending_refresh",
@@ -280,7 +280,7 @@ def test_exact_market_shows_saved_market_indicator_while_source_is_pending(monke
     result = asyncio.run(module.ExactMarketWorkspaceService(session).get(7, "ETH", "EUR"))
 
     assert result["categories"]["market"]["rows"] == [{
-        "name": "price", "value": None, "score": None, "trend": None,
+        "name": "price", "score_mode": "standard", "value": None, "score": None, "trend": None,
         "interpretation": None, "action": None, "timestamp": None,
         "sample_size": 0, "period_aggregate": False, "configured": True,
         "data_status": "pending_refresh",

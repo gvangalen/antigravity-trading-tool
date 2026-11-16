@@ -17,11 +17,31 @@ from backend.services.workspace_data_service import (
     _latest_by_name,
     _current_indicator_rows,
     _enrich_indicator_rows,
+    _include_configured_rows,
     _macro_row,
     _market_row,
     _score_summary,
     _technical_row,
 )
+
+
+def test_indicator_rows_expose_selected_configuration_mode_including_pending_readings():
+    readings = [{"name": "RSI", "value": 24.53, "score": 60}]
+    eur = [
+        SimpleNamespace(indicator="RSI", config_json={"score_mode": "contrarian"}),
+        SimpleNamespace(indicator="MA50", config_json={"score_mode": "custom"}),
+    ]
+    usdt = [SimpleNamespace(indicator="RSI", config_json={"score_mode": "standard"})]
+
+    eur_rows = _include_configured_rows(readings, eur)
+    usdt_rows = _include_configured_rows(readings, usdt)
+
+    assert [(row["name"], row["score_mode"]) for row in eur_rows] == [
+        ("RSI", "contrarian"), ("MA50", "custom"),
+    ]
+    assert eur_rows[1]["data_status"] == "pending_refresh"
+    assert usdt_rows[0]["score_mode"] == "standard"
+    assert "score_mode" not in readings[0]
 
 
 def test_latest_indicator_revision_uses_source_moment_then_record_id_for_every_category():
@@ -519,6 +539,7 @@ def test_workspace_projects_configured_macro_without_live_observation():
 
     assert rows == [{
         "name": "dxy",
+        "score_mode": "standard",
         "value": None,
         "score": None,
         "trend": None,
