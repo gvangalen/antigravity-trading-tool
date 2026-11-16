@@ -751,6 +751,7 @@ class FinnV2ToolExecutionService:
                 if isinstance(selected_event, dict) and selected_event.get("read_only_context") is True:
                     feed_item_id = str(selected_event.get("item_id") or "").strip()
             selected_decision_id = None
+            selected_feed_snapshot = None
             if feed_item_id:
                 from backend.services.finn_coach_feed_service import FinnCoachFeedService
                 feed_item = await FinnCoachFeedService(self.session).detail(
@@ -760,9 +761,11 @@ class FinnV2ToolExecutionService:
                     raw_id = (feed_item.get("evidence") or {}).get("decision_id")
                     if str(raw_id).isdigit() and 0 < int(raw_id) <= 999999999999:
                         selected_decision_id = int(raw_id)
+                        selected_feed_snapshot = feed_item
             return await self.review_adapter.execute(
                 user_id=user_id, asset=selector.get("asset"), selector=selector,
                 selected_feed_decision_id=selected_decision_id,
+                selected_feed_snapshot=selected_feed_snapshot,
                 include_weekly_reflection=bool(re.search(
                     r"weekreflectie|wekelijkse reflectie|weekly reflection|wochenreflexion",
                     str(getattr(run, "message", "") or ""), re.I)),

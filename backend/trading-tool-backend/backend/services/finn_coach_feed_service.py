@@ -21,6 +21,14 @@ VISIBLE = ("unread", "read")
 LOCALES = ("nl", "en", "de")
 
 
+def _same_utc_moment(first: datetime | None, second: datetime | None) -> bool:
+    if first is None or second is None:
+        return False
+    left = first.replace(tzinfo=timezone.utc) if first.tzinfo is None else first.astimezone(timezone.utc)
+    right = second.replace(tzinfo=timezone.utc) if second.tzinfo is None else second.astimezone(timezone.utc)
+    return left == right
+
+
 def _bot_state(evidence: dict) -> str:
     action = str(evidence.get("action") or "").lower()
     status = str(evidence.get("status") or "").lower()
@@ -1084,7 +1092,8 @@ class FinnCoachFeedService:
         return created
 
     async def list(self, *, user_id: int, locale: str = "nl", history: bool = False,
-                   limit: int = 50) -> list[dict]:
+                   limit: int = 50, before_created_at: datetime | None = None,
+                   before_id: str | None = None) -> list[dict]:
         result = await self.session.execute(text("""
             SELECT f.id, f.event_key, f.event_type, f.subject_type, f.subject_id, f.symbol, f.fingerprint,
                    f.priority, CASE WHEN f.expires_at <= NOW() OR
@@ -1098,6 +1107,7 @@ class FinnCoachFeedService:
                    f.evidence, f.source_observed_at, f.copy_json,
                    f.copy_source, f.expires_at, f.created_at, f.updated_at,
                    d.status AS verified_decision_status,
+                   d.decision_ts AS verified_decision_ts,
                    o.status AS verified_order_status,
                    o.quote_amount_eur AS verified_filled_amount_eur,
                    st.name AS verified_setup_name, st.market_id AS verified_setup_market_id,
@@ -1126,6 +1136,10 @@ class FinnCoachFeedService:
               ORDER BY id DESC LIMIT 1
             ) o ON TRUE
             WHERE f.user_id=:user_id
+              AND (CAST(:before_created_at AS TIMESTAMPTZ) IS NULL
+                   OR f.created_at < CAST(:before_created_at AS TIMESTAMPTZ)
+                   OR (f.created_at = CAST(:before_created_at AS TIMESTAMPTZ)
+                       AND f.id < CAST(:before_id AS UUID)))
               AND (:history OR f.status IN ('unread','read'))
               AND (:history OR f.expires_at IS NULL OR f.expires_at > NOW())
               AND (:history OR f.event_type <> 'proposal_pending' OR EXISTS (
@@ -1133,8 +1147,9 @@ class FinnCoachFeedService:
                     WHERE p.id=f.subject_id
                       AND p.user_id=:user_id AND p.status IN ('draft','pending_confirmation')
                       AND p.expires_at > NOW()))
-            ORDER BY f.created_at DESC, f.priority DESC, f.id DESC LIMIT :limit
-        """), {"user_id": user_id, "history": history, "limit": min(max(limit, 1), 100)})
+            ORDER BY f.created_at DESC, f.id DESC LIMIT :limit
+        """), {"user_id": user_id, "history": history, "limit": min(max(limit, 1), 100),
+                "before_created_at": before_created_at, "before_id": before_id})
         rows = [self._serialize(dict(row), locale) for row in result.mappings().all()]
         if history:
             return rows
@@ -1173,6 +1188,7 @@ class FinnCoachFeedService:
                    f.evidence, f.source_observed_at, f.copy_json,
                    f.copy_source, f.expires_at, f.created_at, f.updated_at,
                    d.status AS verified_decision_status,
+                   d.decision_ts AS verified_decision_ts,
                    o.status AS verified_order_status,
                    o.quote_amount_eur AS verified_filled_amount_eur,
                    st.name AS verified_setup_name, st.market_id AS verified_setup_market_id,
@@ -1235,6 +1251,7 @@ class FinnCoachFeedService:
     @staticmethod
     def _serialize(row: dict, locale: str) -> dict:
         verified_decision_status = row.pop("verified_decision_status", None)
+        verified_decision_ts = row.pop("verified_decision_ts", None)
         verified_order_status = row.pop("verified_order_status", None)
         verified_amount = row.pop("verified_filled_amount_eur", None)
         verified_setup_name = row.pop("verified_setup_name", None)
@@ -1261,6 +1278,7 @@ class FinnCoachFeedService:
                 facts["trading_pair_status"] = "not_saved_on_setup"
             row["evidence"] = facts
         if (row["event_type"] == "bot_decision" and verified_decision_status == "executed"
+                and _same_utc_moment(row.get("source_observed_at"), verified_decision_ts)
                 and verified_order_status == "filled"):
             # An older notification may have been published before the Paper
             # order settled. Show the owner-scoped ledger outcome on every read.

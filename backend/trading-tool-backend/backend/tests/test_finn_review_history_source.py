@@ -168,6 +168,51 @@ def test_saved_feed_selection_does_not_bind_an_unrelated_asset_question():
     assert result["data"].selected_feed_decision is None
 
 
+def test_same_day_bot_row_update_preserves_owner_feed_snapshot():
+    class Empty:
+        async def get_latest_bot_decisions_for_owner(self, user_id):
+            raise AssertionError("later decision must not replace selected snapshot")
+        async def get_bot_history(self, user_id, days):
+            raise AssertionError("later history must not replace selected snapshot")
+        async def recent(self, user_id, *, days, limit, symbol=None):
+            raise AssertionError("closed trades do not identify this wait card")
+
+    class Session:
+        async def execute(self, _query, params):
+            assert params == {"user_id": 42, "decision_id": 813}
+            class Result:
+                def mappings(self):
+                    return self
+                def first(self):
+                    return {"id": 813, "bot_id": 130, "bot_name": "AAPL Paper",
+                            "symbol": "AAPL", "quote_currency": None, "action": "hold",
+                            "status": "planned", "decision_ts": datetime(2026, 11, 16, 11, 45, 18,
+                                                                tzinfo=timezone.utc),
+                            "order_status": None, "filled_amount_eur": None}
+            return Result()
+
+    adapter = object.__new__(ReviewToolAdapter)
+    adapter.session = Session()
+    adapter.repository = Empty()
+    adapter.bot_service = Empty()
+    adapter.closed_trades = Empty()
+    from backend.domain.finn_v2_source_registry import FinnV2InformationSourceRegistry
+    adapter.sources = FinnV2InformationSourceRegistry()
+    snapshot = {"event_type": "bot_decision", "subject_id": "130",
+        "source_observed_at": "2026-11-16T06:00:18+00:00",
+        "evidence": {"decision_id": 813, "action": "hold", "status": "planned",
+                     "source_observed_at": "2026-11-16 06:00:18+00:00"}}
+    result = asyncio.run(adapter.execute(user_id=42, asset="AAPL",
+        selector={"_latest_bot_decisions_only": True}, selected_feed_decision_id=813,
+        selected_feed_snapshot=snapshot))
+    selected = result["data"].selected_feed_decision
+    assert selected["decision_at_amsterdam"] == "2026-11-16 07:00:18 CET"
+    assert selected["source_row_changed"] is True
+    assert selected["paper_executed"] is False
+    assert result["as_of"] == datetime(2026, 11, 16, 6, 0, 18, tzinfo=timezone.utc)
+
+
+
 def test_review_history_separates_owner_bot_decisions_from_closed_trade_evidence():
     instant = datetime(2026, 10, 9, 12, tzinfo=timezone.utc)
 

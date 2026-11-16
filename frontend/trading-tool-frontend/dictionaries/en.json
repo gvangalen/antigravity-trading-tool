@@ -38,6 +38,7 @@
     "loading": "Loading updates…",
     "empty": "No updates. FINN will let you know when your plan needs attention.",
     "all": "All updates",
+    "loadMore": "Load older updates",
     "active": "Current updates",
     "discuss": "Discuss with FINN",
     "details": "View details",

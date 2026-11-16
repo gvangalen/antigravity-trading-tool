@@ -115,14 +115,34 @@ def test_historical_paper_card_uses_owner_verified_filled_order_on_read():
         "copy_json": module._bot_fallback("AAPL", {"symbol": "AAPL",
             "action": "buy", "status": "executed", "order_status": None}),
         "verified_decision_status": "executed", "verified_order_status": "filled",
+        "verified_decision_ts": datetime(2026, 11, 10, 14, tzinfo=timezone.utc),
         "verified_filled_amount_eur": 393.01, "created_at": None,
-        "updated_at": None, "source_observed_at": None, "expires_at": None,
+        "updated_at": None, "source_observed_at": datetime(2026, 11, 10, 14, tzinfo=timezone.utc), "expires_at": None,
         "fingerprint": "old", "copy_source": "verified_facts",
     }
     rendered = module.FinnCoachFeedService._serialize(row, "nl")
     assert "heeft gekocht" in rendered["title"]
     assert "€393,01" in rendered["description"]
     assert rendered["evidence"]["order_status"] == "filled"
+
+
+def test_historical_paper_card_does_not_borrow_later_same_day_fill():
+    old = datetime(2026, 11, 16, 6, 0, 18, tzinfo=timezone.utc)
+    row = {
+        "id": "11111111-1111-1111-1111-111111111111", "event_type": "bot_decision",
+        "symbol": "AAPL", "evidence": {"symbol": "AAPL", "action": "hold",
+            "status": "planned", "source_observed_at": old.isoformat()},
+        "copy_json": module._bot_fallback("AAPL", {"symbol": "AAPL", "action": "hold",
+            "status": "planned"}),
+        "verified_decision_status": "executed", "verified_order_status": "filled",
+        "verified_decision_ts": datetime(2026, 11, 16, 11, 45, 18, tzinfo=timezone.utc),
+        "verified_filled_amount_eur": 393.01, "created_at": None,
+        "updated_at": None, "source_observed_at": old, "expires_at": None,
+    }
+    rendered = module.FinnCoachFeedService._serialize(row, "nl")
+    assert rendered["evidence"]["status"] == "planned"
+    assert "wacht" in rendered["title"]
+    assert "€393,01" not in rendered["description"]
 
 
 def test_setup_feed_uses_owner_saved_pair_or_marks_pair_unset():
@@ -277,6 +297,33 @@ def test_active_feed_collapses_repeated_planned_decisions_but_keeps_history():
     service = module.FinnCoachFeedService(SimpleNamespace(execute=execute))
     assert len(asyncio.run(service.list(user_id=7))) == 1
     assert len(asyncio.run(service.list(user_id=7, history=True))) == 2
+
+
+def test_history_cursor_queries_older_owner_items_in_stable_order():
+    before = datetime(2026, 11, 16, 6, tzinfo=timezone.utc)
+    cursor_id = "00000000-0000-0000-0000-000000000050"
+    observed = {}
+
+    class Result:
+        def mappings(self):
+            return self
+        def all(self):
+            return []
+
+    async def execute(query, params):
+        observed["query"] = str(query)
+        observed["params"] = params
+        return Result()
+
+    service = module.FinnCoachFeedService(SimpleNamespace(execute=execute))
+    assert asyncio.run(service.list(user_id=7, history=True, limit=51,
+        before_created_at=before, before_id=cursor_id)) == []
+    assert observed["params"]["user_id"] == 7
+    assert observed["params"]["before_created_at"] == before
+    assert observed["params"]["before_id"] == cursor_id
+    assert "f.created_at < CAST(:before_created_at AS TIMESTAMPTZ)" in observed["query"]
+    assert "f.id < CAST(:before_id AS UUID)" in observed["query"]
+    assert "ORDER BY f.created_at DESC, f.id DESC" in observed["query"]
 
 
 def test_paused_live_bot_feed_explains_deferred_execution_in_each_locale():

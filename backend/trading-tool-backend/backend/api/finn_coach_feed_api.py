@@ -1,5 +1,8 @@
 """Read-only feed and explicit owner-scoped state changes."""
 
+from datetime import datetime
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
 from backend.infrastructure.database import get_db
@@ -16,10 +19,14 @@ def _locale(value: str | None) -> str:
 
 @router.get("/assistant/feed")
 async def list_feed(history: bool = False, limit: int = Query(50, ge=1, le=100),
+                    before_created_at: datetime | None = None, before_id: UUID | None = None,
                     x_locale: str | None = Header(None),
                     current_user: dict = Depends(get_current_user), session=Depends(get_db)):
+    if bool(before_created_at) != bool(before_id) or (before_id and not history):
+        raise HTTPException(status_code=422, detail="Ongeldige feedpaginering")
     return await FinnCoachFeedService(session).list(
         user_id=current_user["id"], locale=_locale(x_locale), history=history, limit=limit,
+        before_created_at=before_created_at, before_id=str(before_id) if before_id else None,
     )
 
 

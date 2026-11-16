@@ -80,6 +80,7 @@ class ReviewToolAdapter:
     async def execute(self, *, user_id: int, asset: str | None = None, selector: dict | None = None,
                       review_id: int | None = None,
                       selected_feed_decision_id: int | None = None,
+                      selected_feed_snapshot: dict | None = None,
                       include_weekly_reflection: bool = False, **_kwargs):
         self.sources.get("review_history").validate_request(user_id=user_id)
         selected_feed_decision = None
@@ -115,18 +116,45 @@ class ReviewToolAdapter:
             # BTC feed selection contaminate a later AAPL question.
             selected_base = selected_symbol.split("/", 1)[0]
             requested_base = str(asset or "").upper().split("/", 1)[0]
-            if selected and (not asset or selected_base == requested_base):
+            snapshot = None
+            if selected and isinstance(selected_feed_snapshot, dict):
+                facts = selected_feed_snapshot.get("evidence") or {}
+                observed = selected_feed_snapshot.get("source_observed_at")
+                try:
+                    source_at = self._utc_instant(observed) if observed else None
+                    evidence_at = self._utc_instant(facts.get("source_observed_at"))
+                except (TypeError, ValueError):
+                    source_at = evidence_at = None
+                action = str(facts.get("action") or "").lower()
+                if (selected_feed_snapshot.get("event_type") == "bot_decision"
+                        and str(selected_feed_snapshot.get("subject_id")) == str(selected["bot_id"])
+                        and str(facts.get("decision_id")) == str(selected["id"])
+                        and source_at is not None and source_at == evidence_at
+                        and action in {"hold", "houd_vast", "buy", "sell"}):
+                    snapshot = {"action": action, "at": source_at,
+                                "status": str(facts.get("status") or "").lower(),
+                                "order_status": str(facts.get("order_status") or "").lower(),
+                                "amount_eur": facts.get("amount_eur")}
+            if selected and (not asset or selected_base == requested_base) and (
+                    selected_feed_snapshot is None or snapshot is not None):
+                # Assessment rows are updated in place within a trading day.
+                # The owner-scoped feed item is the immutable decision snapshot;
+                # a later row revision must not rewrite its historical moment.
+                decision_at = snapshot["at"] if snapshot else self._utc_instant(selected["decision_ts"])
+                paper_executed = (snapshot["status"] == "executed" and snapshot["order_status"] == "filled"
+                                  if snapshot else selected["status"] == "executed" and selected["order_status"] == "filled")
                 selected_feed_decision = {
                     "bot_name": selected["bot_name"],
-                    "symbol": selected["symbol"], "action": selected["action"],
+                    "symbol": selected["symbol"], "action": snapshot["action"] if snapshot else selected["action"],
                     "pair": selected_pair,
-                    "persistence_status": selected["status"],
-                    "decision_at": self._utc_instant(selected["decision_ts"]).isoformat(),
-                    "decision_at_amsterdam": amsterdam_source_moment(selected["decision_ts"]),
-                    "paper_order_status": selected["order_status"],
-                    "paper_executed": selected["status"] == "executed" and selected["order_status"] == "filled",
-                    "filled_amount_eur": (selected["filled_amount_eur"]
-                                          if selected["order_status"] == "filled" else None),
+                    "persistence_status": snapshot["status"] if snapshot else selected["status"],
+                    "decision_at": decision_at.isoformat(),
+                    "decision_at_amsterdam": amsterdam_source_moment(decision_at),
+                    "paper_order_status": snapshot["order_status"] if snapshot else selected["order_status"],
+                    "paper_executed": paper_executed,
+                    "filled_amount_eur": (snapshot["amount_eur"] if snapshot and paper_executed
+                                          else selected["filled_amount_eur"] if paper_executed else None),
+                    "source_row_changed": bool(snapshot and decision_at != self._utc_instant(selected["decision_ts"])),
                 }
         # A selected feed card asks about that event. A newer per-bot summary
         # would compete with it and can wrongly replace its historical time.
