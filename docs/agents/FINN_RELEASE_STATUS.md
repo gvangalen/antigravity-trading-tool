@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0 Paper-flow vervolg: accountread en kaartvolgorde (16 november 2026)
 
-Phase: `LOCAL_REPAIR_VALIDATING`. De bestaande onafhankelijke QA-agent gaf op
+Phase: `PRODUCT_DEPLOYED_FINAL_STATUS_PENDING_QA`. De bestaande onafhankelijke QA-agent gaf op
 publieke SHA `62732a8c87c82e7dafe1038f6020e24eb3abfb8a` het oordeel
 **NOT_ACCEPTED**. De beschermde virtuele Paper-koop/verkoop en exit-reconciliatie
 bleven veilig, maar de gecombineerde FINN-read eindigde als `run_incomplete`.
@@ -20,7 +20,7 @@ gecombineerde browserread is niet beschikbaar; een lokale contractreproductie
 toonde wel dat `instapbeslissing` onterecht als vraag naar het huidige
 strategie-instapniveau werd geclassificeerd.
 
-Deze lokale reparatie leest een expliciete Paper-vraag naar één genoemd asset,
+Deze productreparatie leest een expliciete Paper-vraag naar één genoemd asset,
 positie, kassaldo en botbudget rechtstreeks via de eigenaargebonden
 portefeuilletool en laat de volledige antwoordverificatie de exacte feiten
 opnieuw uit die read opbouwen. Als de read geen eenduidige bot geeft, noemt
@@ -44,8 +44,16 @@ Echte-providerontwikkeling slaagde **20/20** (artifact SHA-256
 en de volledige providerregressie **109/109** (artifact SHA-256
 `6739f9e94af2717e02c05166f0de5da04f2d84d20c4d0317e855b81041de9b3e`),
 beide met nul provider-, schema-, timeout-, parse- en validatiefouten.
-Er is voor deze reparatie nog geen
-PR, CI, deployment of onafhankelijke live hertest.
+[PR #1134](https://github.com/gvangalen/antigravity-trading-tool/pull/1134)
+slaagde op alle vijf PR-CI-jobs en is gemerged als
+`3e424007d0b6d27a598c75a6fea1861927f30542`. Main CI
+`43968291355` slaagde op alle vijf jobs en Auto Deploy `43969206357`
+slaagde op die SHA. GitHub main, publieke backend-health en
+frontend-build-info identificeerden alle drie exact die commit; beide
+publieke endpoints gaven HTTP 200. Deze statusaanvulling creëert een
+latere documentatierevisie. De bestaande QA-agent krijgt pas de definitieve
+publieke SHA nadat ook diens main-CI, Auto Deploy en publieke SHA-pariteit
+zijn bevestigd. Onafhankelijke live hertest is nog niet afgerond.
 
 ## FINN 3.0 Paper-portefeuille en feedgeschiedenis (16 november 2026)
 
