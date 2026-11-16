@@ -4,9 +4,40 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 selected historical Paper wait card (16 november 2026)
+
+Phase: `LOCAL_GATES_GREEN_CANDIDATE_PENDING_CI`. Independent authenticated live QA returned
+`NOT_ACCEPTED` on public SHA `39e81915b775fc8647c59a40f3ce2edaf9a9b037`.
+For both BTC and AAPL, discussing a saved 07:00 CET Paper wait card led FINN
+to name a later 10:45:18 CET decision. The selected BTC missing-score setup
+card, historical AAPL Paper buy/sell, saved weekly reflection and AAPL
+follow-up after BTC passed. Browser evidence could not show the submitted
+`feed_item_id` or backend tool trace, so the exact live loss point remains
+unproven. The earlier removal of competing history rows was insufficient.
+
+The current repair renders a selected historical Paper wait card directly
+from its owner-verified saved decision and has the answer verifier check that
+exact rendering. If the selected event cannot be verified, it does not use
+the latest bot decision as a substitute. Other saved bot decision questions
+and executed buy/sell card discussions retain their existing path. Focused
+backend tests passed **992/992** and the final full backend suite passed
+**4,933** with **7 skipped**. After restarting the local server and worker
+with the final code, the complete worker matrix passed **17/17** contracts
+and **26/26** adapter tests (SHA-256
+`bd2cac9181a6caabd905ea85f9cafcc0f289c33d8d3de37df43ae6deebbc9ad7`),
+with zero broker orders, Live trading calls or production connections.
+Real-provider development
+selector passed **20/20** (SHA-256
+`d780f9adc16fc92a158136e0fb29a7dbb545226992f183c0d454eebb31f20bab`)
+and regression passed **109/109** (SHA-256
+`88fb9e1f578c61f8bfe2dba0ca5e547cb0d02a7637474968d00e396c305de3d1`),
+both with zero provider, schema, parse or validation failures. CI,
+deployment and independent live QA gates are pending. This is
+not an accepted live release.
+
 ## FINN 3.0 historical Paper feed isolation (16 november 2026)
 
-Phase: `PRODUCT_DEPLOYED_STATUS_SHA_PENDING_LIVE_QA`. Independent QA returned
+Phase: `LIVE_QA_NOT_ACCEPTED`. Independent QA returned
 `NOT_ACCEPTED` on public SHA `422ade6e4d0a2f18b46bdcb4468a0098bbbb8a5a`:
 after a hard refresh, 07:00 BTC and AAPL Paper wait cards discussed later
 10:00 decisions. The BTC missing-score setup card, saved AAPL Paper buy/sell,
@@ -35,11 +66,10 @@ with no provider, schema, parse or validation failures.
 Product merged as `4547c53f1fbb6522c69efb58d54a0e8f0700557c`; main CI
 `43839586326` passed all five jobs and Auto Deploy `43840499515` succeeded.
 Public backend health and frontend build info both returned HTTP 200 with
-that exact SHA, matching GitHub main. This status update creates a later SHA;
-its final main CI, Auto Deploy, public SHA parity and independent authenticated
-live QA verdict remain pending. The existing QA Agent will retest the two
-07:00 wait cards and the prior passes on the final public SHA. This is not
-an accepted live release yet.
+that exact SHA, matching GitHub main. The subsequent status merge deployed
+as `39e81915b775fc8647c59a40f3ce2edaf9a9b037` after green main CI and
+Auto Deploy. Independent QA's `NOT_ACCEPTED` verdict on that final SHA is
+recorded in the current section above. This is not an accepted live release.
 
 ## FINN 3.0 selected feed event repair (16 november 2026)
 
