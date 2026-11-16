@@ -3,7 +3,9 @@ from datetime import datetime, timezone
 
 from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor
 from backend.services.finn_v2_responses_answer_verifier import FinnResponsesAnswerVerifier
-from backend.services.finn_v2_factual_source_answer import mentions_technical_indicator, render_bot_decision
+from backend.services.finn_v2_factual_source_answer import (
+    mentions_technical_indicator, render_bot_decision, render_closed_paper_exit_facts,
+)
 from backend.services.asset_catalog_service import requested_catalog_trading_pair
 
 
@@ -26,6 +28,47 @@ def _run(message, results, *, verified_asset=None):
     assert checked.status == "completed", (checked.reason, checked.rejection_details)
     assert checked.text == prepared.response.text
     return prepared.response, calls[0]
+
+
+def test_named_paper_exit_facts_use_exact_owner_review_and_both_currencies():
+    question = ("Wat was bij mijn trade-reflectie #77 de vastgelegde Paper-exitreden? "
+                "Noem de oorspronkelijke koersvaluta, het opgeslagen eerste doel en de "
+                "wisselkoers bij uitvoering. Alleen teruglezen; geen voorstel of actie.")
+    trace = ({"name": "get_closed_trade_review", "result": {"results": [{
+        "scope": "read_review_history", "status": "completed", "data": {"closed_trades": [
+            {"review_id": 76, "environment": "paper", "paper_exit_evidence": {
+                "trigger": "stop_loss", "source_price_currency": "USD",
+                "saved_first_target": 999, "execution_fx_eur_per_unit": 0.5}},
+            {"review_id": 77, "environment": "paper", "paper_exit_evidence": {
+                "trigger": "first_target", "source_price_currency": "USD",
+                "saved_first_target": 320, "execution_fx_eur_per_unit": 0.920000}},
+        ]},
+    }]}},)
+
+    answer = render_closed_paper_exit_facts(question, trace)
+
+    assert "trade-reflectie #77" in answer
+    assert "eerste koersdoel" in answer
+    assert "eerste doel was 320 USD" in answer
+    assert "wisselkoers bij uitvoering was 0.92 EUR per USD" in answer
+    assert "999" not in answer
+    assert render_closed_paper_exit_facts(question.replace("#77", "#78"), trace) is None
+
+
+def test_named_paper_exit_facts_require_verified_fx_and_paper_origin():
+    question = ("Wat was bij mijn trade-reflectie #77 de vastgelegde Paper-exitreden? "
+                "Noem de oorspronkelijke koersvaluta, het opgeslagen eerste doel en de "
+                "wisselkoers bij uitvoering.")
+    row = {"review_id": 77, "environment": "paper", "paper_exit_evidence": {
+        "trigger": "stop_loss", "source_price_currency": "USD",
+        "saved_first_target": 320, "execution_fx_eur_per_unit": None}}
+    trace = ({"result": {"results": [{"scope": "read_review_history",
+              "status": "completed", "data": {"closed_trades": [row]}}]}},)
+
+    assert render_closed_paper_exit_facts(question, trace) is None
+    row["paper_exit_evidence"]["execution_fx_eur_per_unit"] = 0.92
+    row["environment"] = "live"
+    assert render_closed_paper_exit_facts(question, trace) is None
 
 
 def test_explicit_bot_id_selects_only_its_saved_decision():

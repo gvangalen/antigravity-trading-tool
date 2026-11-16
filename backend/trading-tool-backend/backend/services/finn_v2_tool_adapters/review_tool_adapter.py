@@ -429,6 +429,15 @@ class ReviewToolAdapter:
                     "has_original_plan": review["has_plan"],
                     "plan_source_evidence": review.get("plan_source_evidence"),
                     "order_plan_evidence": review.get("order_plan_evidence"),
+                    "paper_exit_evidence": (
+                        {key: review["paper_exit_evidence"].get(key) for key in (
+                            "trigger", "source_price_currency", "saved_first_target",
+                            "execution_fx_eur_per_unit",
+                        )}
+                        if review.get("environment") == "paper"
+                        and isinstance(review.get("paper_exit_evidence"), dict)
+                        else None
+                    ),
                     "evidence_ids": review["evidence_ids"][:20],
                     "confirmed_lesson": (
                         {

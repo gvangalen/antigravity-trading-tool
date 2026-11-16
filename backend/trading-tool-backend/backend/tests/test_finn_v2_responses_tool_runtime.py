@@ -159,6 +159,55 @@ def test_explicit_closed_trade_review_forces_owner_scoped_dossier_read(message):
     assert result.response.tool_trace[0]["result"]["results"][0]["scope"] == "read_review_history"
 
 
+def test_closed_paper_exit_question_renders_all_requested_stored_facts_after_model_read():
+    message = ("Wat was bij mijn trade-reflectie #77 de vastgelegde Paper-exitreden? "
+               "Noem de oorspronkelijke koersvaluta, het opgeslagen eerste doel en de "
+               "wisselkoers bij uitvoering. Alleen teruglezen; geen voorstel of actie.")
+    fake = FakeResponses(
+        response("review-read", calls=[tool_call("review-call", "get_closed_trade_review", {})]),
+        response("review-answer", text="De Paper-positie is gesloten; ik zie de exitreden."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="closed-paper-exit-77", model_led_coach=True,
+    )
+    front.relevance_guard = SimpleNamespace(is_relevant=AsyncMock(return_value=True))
+
+    async def read(_call):
+        return {"status": "completed", "results": [{
+            "scope": "read_review_history", "status": "completed", "data": {
+                "closed_trade_review_ids": [77],
+                "closed_trades": [{"review_id": 77, "environment": "paper",
+                    "paper_exit_evidence": {"trigger": "stop_loss",
+                        "source_price_currency": "USD", "saved_first_target": 320,
+                        "execution_fx_eur_per_unit": 0.92}}],
+            },
+        }, {"scope": "read_portfolio", "status": "completed", "data": {
+            "environment": "paper", "positions": [], "cash_eur": 10000,
+        }}]}
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message=message, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset=None, locale="nl",
+    ))
+
+    assert len(fake.requests) == 2
+    assert "Paper-exitreden stop-loss" in result.response.text
+    assert "eerste doel was 320 USD" in result.response.text
+    assert "wisselkoers bij uitvoering was 0.92 EUR per USD" in result.response.text
+    assert result.response.model_owned_repair is False
+    assert result.response.response_id_reusable is False
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=True, passes=True, reason_codes=[],
+    )))
+    verified = asyncio.run(FinnResponsesAnswerVerifier(semantic=semantic).verify(
+        message=message, result=result.response, locale="nl",
+    ))
+    assert verified.status == "completed", (verified.reason, verified.rejection_details)
+    assert "eerste doel was 320 USD" in verified.text
+
+
 @pytest.mark.parametrize("message", [
     "Lees mijn trade-review #123 en verwijder die daarna.",
     "Verwijder mijn bevestigde les uit die review.",

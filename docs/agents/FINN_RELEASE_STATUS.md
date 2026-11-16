@@ -4,6 +4,56 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 Paper-koop/exit en feed-hertest (16 november 2026)
+
+Phase: `LOCAL_REPAIR_VALIDATION`. De vorige volledige ingelogde browsercontrole op
+publieke SHA `e2bda98d35a2f12cd98888ed1c2337c1b97e2678` was **NOT_ACCEPTED**.
+FINN las de AAPL-benchmark 52,7 en de opgeslagen setupzone 61–75 juist, maar
+een natuurlijke Paper-aankoop werd terecht geblokkeerd wegens een AAPL-koers
+met bronmoment 13 november. BTC miste een complete geverifieerde score.
+De compacte feed toonde na refresh nog een oudere AAPL-botkaart, terwijl de
+geschiedenis een nieuwere beslissing van 20:16 CET had. Automatische plan-,
+positie- en suggestiekaarten zijn in deze proef niet waargenomen.
+
+De bestaande onafhankelijke QA-agent draaide daarnaast de beschermde
+virtuele Paper-runner. Het koop/verkoopprofiel slaagde: één geïsoleerde
+virtuele aankoop en verkoop via de productie-executor, een gesloten dossier
+en twee FINN-chatbeurten, zonder Live-activatie (gesaniteerd rapport SHA-256
+`ed46421ec61cd78d05d3c14b4b71042b3ce29ffaa136a46422350bf6d4c12c1f`).
+Het aparte exit-uitleg/transportprofiel bleef **INCOMPLETE** met code
+`paper_exit_finn_answer_incomplete` (rapport SHA-256
+`24da82b31c786300b0cdf7ba1dbea040de58918e4d0b47cf4771efbc845d6901`).
+Daarmee zijn de natuurlijke marktdataflow, volledige exit-uitleg en
+polling/SSE-pariteit nog niet aanvaard.
+
+De lopende lokale reparatie geeft FINN bij een expliciet genoemde gesloten
+Paper-reflectie de opgeslagen exitreden, oorspronkelijke valuta, eerste doel
+en uitvoeringswisselkoers uit dezelfde owner-scoped reviewread; de verifier
+controleert de samengestelde feiten. De actieve feed sorteert botkaarten op
+hun nieuwste beslisbronmoment, terwijl historie-cursoren op `created_at`
+blijven. Gerichte regressies en de volledige lokale backend suite zijn groen:
+**4.967 passed, 7 skipped** (finale testlog SHA-256
+`90ba51f357257d8fda1da676039fb7b880057435821851ddedbd43be8b57e70b`).
+De toegevoegde reviewadaptertest en de gerichte feed/exit-selectie slaagden
+apart **59/59**. Frontend build, typecheck, i18n-lint/-tests,
+command-/voorsteltests en `audit:high` zijn groen (0 kwetsbaarheden). De echte
+Responses-ontwikkelingsevaluatie slaagde **20/20** (artifact SHA-256
+`9655e0918fdc2b2755c6b06baa192bfa59e6f28104e680363d95f7a08159f2b7`).
+De echte-providerregressie slaagde **109/109** (artifact SHA-256
+`a5ca9286b25b4d371152a5d6179ccca522b396f2e090f734a05640a1604b70d2`),
+met nul provider-, schema-, timeout-, parse- of validatiefouten.
+De lokale FastAPI/Celery/Postgres/Redis-actiematrix slaagde **17/17**
+(artifact SHA-256 `8a7556653a22ac3bd873bf59b1f677af9a32fa4788a0b72f388d7c639ef68a36`)
+en de adaptertests **26/26**; nul brokerorders, Live-aanroepen en
+productieverbindingen. De lokaal ingestelde
+Twelve Data-sleutel gaf op een directe AAPL `/quote`-vraag tijdens beursuren
+HTTP **429** zonder koers; dit is geen bewijs dat de productiesleutel dezelfde
+limiet heeft. Onafhankelijke read-only QA zag op de bestaande live SHA dat
+AAPL en MSFT op 16 november om 20:30 CET nog bronmoment 13 november 22:00
+CET hadden; `/admin/telemetry` was in die sessie niet beschikbaar, dus de
+exacte productieoorzaak blijft onbekend. CI, deploy en een nieuwe
+onafhankelijke live hertest volgen.
+
 ## FINN 3.0 Paper-flow vervolg na live QA (16 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_FINAL_STATUS_PENDING_QA`. De bestaande onafhankelijke QA-agent testte

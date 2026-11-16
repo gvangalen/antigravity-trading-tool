@@ -324,7 +324,10 @@ def test_history_cursor_queries_older_owner_items_in_stable_order():
     assert observed["params"]["before_id"] == cursor_id
     assert "f.created_at < CAST(:before_created_at AS TIMESTAMPTZ)" in observed["query"]
     assert "f.id < CAST(:before_id AS UUID)" in observed["query"]
-    assert "ORDER BY f.created_at DESC, f.id DESC" in observed["query"]
+    assert "WHEN NOT :history AND f.event_type='bot_decision'" in observed["query"]
+    assert "GREATEST(f.created_at, COALESCE(f.source_observed_at, f.created_at))" in observed["query"]
+    assert "ELSE f.created_at" in observed["query"]
+    assert "END DESC, f.id DESC" in observed["query"]
 
 
 def test_paused_live_bot_feed_explains_deferred_execution_in_each_locale():
