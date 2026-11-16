@@ -193,6 +193,7 @@ function getUiCopy(locale = "nl") {
       negative: "Negative",
       neutral: "Neutral",
       indicatorStates: { low: "Little support", mixed: "Mixed", high: "Strong support" },
+      scoreModeLabels: { standard: "Standard", contrarian: "Contrarian", custom: "Custom" },
       unavailable: "Insufficient data",
       scorePendingShort: "Calculating score",
       notConfigured: "No indicators added",
@@ -414,6 +415,7 @@ function getUiCopy(locale = "nl") {
       negative: "Negativ",
       neutral: "Neutral",
       indicatorStates: { low: "Wenig Unterstützung", mixed: "Gemischt", high: "Starke Unterstützung" },
+      scoreModeLabels: { standard: "Standard", contrarian: "Konträr", custom: "Custom" },
       unavailable: "Unzureichende Daten",
       scorePendingShort: "Score wird berechnet",
       notConfigured: "Keine Indikatoren hinzugefügt",
@@ -634,6 +636,7 @@ function getUiCopy(locale = "nl") {
     negative: "Negatief",
     neutral: "Neutraal",
     indicatorStates: { low: "Weinig steun", mixed: "Gemengd", high: "Veel steun" },
+    scoreModeLabels: { standard: "Standaard", contrarian: "Contrair", custom: "Custom" },
     unavailable: "Onvoldoende data",
     scorePendingShort: "Score wordt berekend",
     notConfigured: "Geen indicatoren toegevoegd",
@@ -1568,6 +1571,7 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
       id: `${name}-${index}`,
       name,
       label,
+      scoreMode: ["standard", "contrarian", "custom"].includes(item?.score_mode) ? item.score_mode : null,
       value,
       direction,
       score,
@@ -2180,7 +2184,14 @@ function EvidenceRow({
               <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400 lg:hidden">
                 {ui.indicator}
               </div>
-              <div className="text-[16px] font-bold leading-tight text-slate-950">{row.label}</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[16px] font-bold leading-tight text-slate-950">{row.label}</span>
+                {row.scoreMode ? (
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                    {ui.scoreModeLabels[row.scoreMode]}
+                  </span>
+                ) : null}
+              </div>
             </div>
           </div>
 

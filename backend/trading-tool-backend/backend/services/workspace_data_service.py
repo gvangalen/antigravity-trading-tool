@@ -230,15 +230,28 @@ def _include_configured_rows(
     configured: Iterable[Any],
 ) -> list[dict[str, Any]]:
     """Project saved preferences even while their live observation is pending."""
-    visible = list(rows)
+    configs = {
+        _indicator_key(getattr(config, "indicator", None)): config
+        for config in configured
+        if str(getattr(config, "indicator", "") or "").strip()
+    }
+    visible = []
+    for row in rows:
+        config = configs.get(_indicator_key(row.get("name")))
+        metadata = getattr(config, "config_json", None) or {}
+        mode = metadata.get("score_mode", "standard") if config is not None and isinstance(metadata, dict) else None
+        visible.append({**row, **({"score_mode": mode} if mode in {"standard", "contrarian", "custom"} else {})})
     visible_keys = {_indicator_key(row.get("name")) for row in visible}
-    for config in configured:
+    for config in configs.values():
         name = str(getattr(config, "indicator", "") or "").strip()
         key = _indicator_key(name)
         if not name or key in visible_keys:
             continue
+        metadata = getattr(config, "config_json", None) or {}
+        mode = metadata.get("score_mode", "standard") if isinstance(metadata, dict) else None
         visible.append({
             "name": name,
+            "score_mode": mode if mode in {"standard", "contrarian", "custom"} else None,
             "value": None,
             "score": None,
             "trend": None,
