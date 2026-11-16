@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0 clicked feed identity repair (16 november 2026)
 
-Phase: `LOCAL_REPAIR_VALIDATION`. Independent authenticated browser QA returned
+Phase: `PRODUCT_DEPLOYED_STATUS_SHA_PENDING_LIVE_QA`. Independent authenticated browser QA returned
 `NOT_ACCEPTED` on public SHA `3ecbf7e0db808dc1680240680f82b16a79cecc29`.
 BTC and AAPL Paper wait cards displayed 07:00 CET but FINN answered about a
 11:45:17 CET decision. AAPL Paper buy/sell discussions lost their existing
@@ -35,8 +35,15 @@ real-provider development selector passed **20/20** (SHA-256
 with zero provider, schema, parse or validation failures. The real-provider
 regression selector passed **109/109** (SHA-256
 `dc290f85c0cc912d0cf50c2e8f50628194e8961b837eda275a5673c5f0d31440`),
-also with zero provider, schema, parse or validation failures. CI, deployment
-and independent QA remain pending; this is not an accepted live release.
+also with zero provider, schema, parse or validation failures. Product
+[PR #1112](https://github.com/gvangalen/antigravity-trading-tool/pull/1112)
+passed all five PR CI jobs and merged as
+`9b80331f2700784f2f3759aac7c45d668e762efb`. Main CI `43858038828`
+passed all five jobs and Auto Deploy `43858830092` succeeded. Public backend
+health and frontend build info both returned HTTP 200 with that exact SHA.
+This status update creates a later SHA; its final main CI, Auto Deploy,
+public SHA parity and independent authenticated QA verdict remain pending.
+This is not an accepted live release.
 
 ## FINN 3.0 selected historical Paper wait card (16 november 2026)
 
