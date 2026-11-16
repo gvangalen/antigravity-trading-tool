@@ -6,8 +6,15 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0 live QA repair batch (16 november 2026)
 
-Phase: `LOCAL_GATES_PASSED_DEPLOY_PENDING`. The latest public
-backend/frontend SHA is `14f29355f02b2eaa100b5cefef8a7a4c29055334`.
+Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA_AND_QA`. Product
+[PR #1104](https://github.com/gvangalen/antigravity-trading-tool/pull/1104)
+passed five CI jobs and merged as `7adfb9a9b1bb1a8bce6a0375ce98eb943dabb719`.
+Main CI `43826070673` passed all five jobs and Auto Deploy `43826788362`
+succeeded. Public `https://tradamind.com/api/health` and
+`https://tradamind.com/build-info.json` returned HTTP 200 and both reported
+that exact SHA, matching GitHub main. This status update creates a later SHA;
+its final main CI, Auto Deploy, public SHA parity and independent authenticated
+read-only QA retest remain pending.
 The isolated repair branch is `codex/finn-coach-live-qa-repair2-20261116`.
 Independent QA's second read-only live retest found the two historical AAPL
 Paper card outcomes corrected. The saved weekly reflection was read, but FINN
@@ -36,8 +43,8 @@ The final local worker matrix passed **17/17** action contracts and **26/26**
 adapter tests, artifact SHA-256
 `dff2812e74ba095c2408f5c81d6d97117f70494a8dfe31c1a1d609d147ddcce3`,
 with zero broker orders, Live trading calls, or production connections. The
-deployment and independent QA retest remain pending. This is not an accepted
-live release.
+product deployment succeeded; the final status SHA and independent QA retest
+remain pending. This is not an accepted live release.
 
 Independent authenticated read-only QA earlier
 tested public SHA `75ad6ac4d9c2f7a0af74e41bb77e4f6f711e2cc8` and returned
