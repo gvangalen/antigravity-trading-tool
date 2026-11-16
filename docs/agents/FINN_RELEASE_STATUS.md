@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Indicatieve benchmark bij ontbrekende indicatoren (16 november 2026)
 
-Phase: `LOCAL_BUILD_VALIDATED_PR_CI_PENDING`. Branch
+Phase: `PRODUCT_DEPLOYED_FINAL_STATUS_PENDING_QA`. Branch
 `codex/macro-yield-partial-benchmark-20261116`. De gedateerde US02Y- en
 US10Y-metingen komen eerst van de officiële Treasury-rentecurve, met FRED
 voor dezelfde looptijd als terugval. Analyse toont een uit de overige
@@ -33,9 +33,15 @@ productieverbindingen. Echte-providerontwikkeling op de herbaseerde kandidaat sl
 (artifact SHA-256 `25427daaac9990e07dffffa8a158bde81ddbb0ff93fc8e98b76a73ec0b9ade47`),
 regressie **109/109** (artifact SHA-256
 `565faa0e65df8d6492e9a67ed0ef966971e9c8ce114febe3430b6bc01a688d73`),
-zonder provider-, schema-, timeout-, parse- of validatiefouten. Dit is
-lokale Build-evidence; PR-CI, main-CI, Auto Deploy en onafhankelijke live QA
-zijn nog niet uitgevoerd voor deze kandidaat.
+zonder provider-, schema-, timeout-, parse- of validatiefouten. PR #1130
+(laatste broncommit `8fe6a817e3ea969c427f7083e2bcc0327ffad7f8`)
+is met volledig groene CI gemerged als
+`4931a0921f05680e713297b85e701ab4b7c88a7b`. De daaropvolgende
+main-CI `43952564908` en Auto Deploy `43953598520` slaagden. Publieke
+backend-health gaf HTTP 200 en dezelfde SHA; frontend `build-info.json`
+gaf HTTP 200 en dezelfde SHA. Deze statusupdate creëert een nieuwe
+main-revisie; de laatste main-CI, Auto Deploy en publieke SHA worden
+opnieuw gecontroleerd voordat de onafhankelijke live QA begint.
 
 ## FINN 3.0 Paper-koop/exit en feed-hertest (16 november 2026)
 
