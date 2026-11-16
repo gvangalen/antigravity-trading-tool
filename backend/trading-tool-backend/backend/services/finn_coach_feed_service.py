@@ -1211,7 +1211,7 @@ class FinnCoachFeedService:
                    f.evidence, f.source_observed_at, f.copy_json,
                    f.copy_source, f.expires_at, f.created_at, f.updated_at,
                    CASE WHEN f.event_type='bot_decision'
-                     THEN GREATEST(f.created_at, COALESCE(f.source_observed_at, f.created_at))
+                     THEN COALESCE(f.source_observed_at, f.created_at)
                      ELSE f.created_at END AS activity_at,
                    d.status AS verified_decision_status,
                    d.decision_ts AS verified_decision_ts,
@@ -1245,10 +1245,10 @@ class FinnCoachFeedService:
             WHERE f.user_id=:user_id
               AND (CAST(:before_created_at AS TIMESTAMPTZ) IS NULL
                    OR (CASE WHEN f.event_type='bot_decision'
-                         THEN GREATEST(f.created_at, COALESCE(f.source_observed_at, f.created_at))
+                         THEN COALESCE(f.source_observed_at, f.created_at)
                          ELSE f.created_at END) < CAST(:before_created_at AS TIMESTAMPTZ)
                    OR ((CASE WHEN f.event_type='bot_decision'
-                          THEN GREATEST(f.created_at, COALESCE(f.source_observed_at, f.created_at))
+                          THEN COALESCE(f.source_observed_at, f.created_at)
                           ELSE f.created_at END) = CAST(:before_created_at AS TIMESTAMPTZ)
                        AND f.id < CAST(:before_id AS UUID)))
               AND (:history OR f.status IN ('unread','read'))
@@ -1260,7 +1260,7 @@ class FinnCoachFeedService:
                       AND p.expires_at > NOW()))
             ORDER BY CASE
                 WHEN f.event_type='bot_decision'
-                  THEN GREATEST(f.created_at, COALESCE(f.source_observed_at, f.created_at))
+                  THEN COALESCE(f.source_observed_at, f.created_at)
                 ELSE f.created_at
               END DESC, f.id DESC LIMIT :limit
         """), {"user_id": user_id, "history": history, "limit": min(max(limit, 1), 100),

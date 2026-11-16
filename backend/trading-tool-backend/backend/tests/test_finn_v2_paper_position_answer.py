@@ -31,3 +31,16 @@ def test_answer_never_combines_other_bot_or_unverified_live_rows():
                                              asset="AAPL", locale="nl") is None
     assert render_paper_position_cash_answer(QUESTION, _trace(rows=rows * 2),
                                              asset="AAPL", locale="nl") is None
+
+
+def test_named_budget_selects_only_matching_paper_bot():
+    rows = [
+        {"symbol": "AAPL", "is_live": False, "position_qty": 1,
+         "paper_cash_eur": 50, "budget_total_eur": 500},
+        {"symbol": "AAPL", "is_live": False, "position_qty": 0,
+         "paper_cash_eur": 405.48, "budget_total_eur": 400},
+    ]
+    answer = render_paper_position_cash_answer(QUESTION, _trace(rows=rows),
+                                               asset="AAPL", locale="nl")
+    assert "0 AAPL open" in answer
+    assert "€405,48 Paper-kas" in answer

@@ -40,6 +40,9 @@ from backend.services.finn_v2_source_moment_claims import (
     current_source_moments_supported, source_moment_repair_facts,
 )
 from backend.services.finn_v2_bot_subject_claims import focused_bot_id, bot_subject_supported
+from backend.services.finn_v2_paper_position_answer import (
+    PAPER_POSITION_CASH_UNAVAILABLE, render_paper_position_cash_answer,
+)
 from backend.services.finn_v2_factual_source_answer import (
     render_bot_decision, render_closed_paper_exit_facts, render_selected_paper_feed_decision, render_latest_quote, render_portfolio_read_time,
     render_report_and_quote_times, render_report_and_technical_read,
@@ -3078,7 +3081,19 @@ class FinnResponsesAnswerVerifier:
             scopes = {item.get("scope") for item in evidence}
             symbol = str(args.get("asset") or "").upper()
             exit_facts = render_closed_paper_exit_facts(message, result.tool_trace)
-            if scopes == {"read_latest_report", "read_market_snapshot"} and symbol:
+            named_paper_assets = mentioned_catalog_symbols(message)
+            if (call.get("name") == "get_portfolio_and_exposure"
+                    and args.get("environment") == "paper"
+                    and len(named_paper_assets) == 1
+                    and re.search(r"\bbotbudget\b", message, re.I)
+                    and re.search(r"\b(?:positie|posities)\b", message, re.I)
+                    and re.search(r"\b(?:kas|kassaldo|cash|saldo)\b", message, re.I)
+                    and str(locale or "nl").lower().startswith("nl")):
+                expected = render_paper_position_cash_answer(
+                    message, result.tool_trace,
+                    asset=next(iter(named_paper_assets)), locale=locale or "nl",
+                ) or PAPER_POSITION_CASH_UNAVAILABLE
+            elif scopes == {"read_latest_report", "read_market_snapshot"} and symbol:
                 quote = str(args.get("quote_currency") or "").upper()
                 expected = render_report_and_quote_times(read, symbol=symbol, quote_currency=quote)
             elif scopes == {"read_latest_report", "read_technical_snapshot"} and symbol:
