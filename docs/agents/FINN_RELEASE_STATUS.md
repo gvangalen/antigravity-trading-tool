@@ -4,6 +4,43 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 historical Paper feed isolation (16 november 2026)
+
+Phase: `PRODUCT_DEPLOYED_STATUS_SHA_PENDING_LIVE_QA`. Independent QA returned
+`NOT_ACCEPTED` on public SHA `422ade6e4d0a2f18b46bdcb4468a0098bbbb8a5a`:
+after a hard refresh, 07:00 BTC and AAPL Paper wait cards discussed later
+10:00 decisions. The BTC missing-score setup card, saved AAPL Paper buy/sell,
+closed weekreflection and an AAPL follow-up after BTC passed. The browser did
+not expose the chat request body or tool trace, so the exact production fault
+link is unproven. Code inspection found that `read_review_history` returned
+newer bot-history rows alongside an owner-verified selected historical feed
+decision. Product [PR #1108](https://github.com/gvangalen/antigravity-trading-tool/pull/1108)
+now omits those competing rows. For an unexecuted wait card it omits unrelated
+closed trades too, timestamps the evidence at the selected decision, and
+instructs FINN to name that event before later history. Focused backend
+regressions passed **53/53**.
+
+The final local backend suite passed **4,929** with **7 skipped**. Frontend and
+mobile code did not change; PR CI passed all five backend, frontend, mobile,
+Security and workflow jobs. The final local worker action matrix passed
+**17/17** contracts and **26/26** adapter tests (SHA-256
+`d295d672e88f210399aabddd8b910f0e9289609387964675e9c7e8972e88e4a7`),
+with zero broker orders, Live trading calls or production connections.
+Real-provider development selector passed **20/20** (SHA-256
+`356cad05921a3c0042c140870542f64313f90a2004c279773778a1af519a5665`)
+and regression passed **109/109** (SHA-256
+`4914ffcd3f6f0edf1192f5fd092be344f7f27c811b5c564bbce1ffea334bf9cf`),
+with no provider, schema, parse or validation failures.
+
+Product merged as `4547c53f1fbb6522c69efb58d54a0e8f0700557c`; main CI
+`43839586326` passed all five jobs and Auto Deploy `43840499515` succeeded.
+Public backend health and frontend build info both returned HTTP 200 with
+that exact SHA, matching GitHub main. This status update creates a later SHA;
+its final main CI, Auto Deploy, public SHA parity and independent authenticated
+live QA verdict remain pending. The existing QA Agent will retest the two
+07:00 wait cards and the prior passes on the final public SHA. This is not
+an accepted live release yet.
+
 ## FINN 3.0 selected feed event repair (16 november 2026)
 
 Phase: `LIVE_QA_NOT_ACCEPTED_REPAIR_IN_PROGRESS`. Independent authenticated
