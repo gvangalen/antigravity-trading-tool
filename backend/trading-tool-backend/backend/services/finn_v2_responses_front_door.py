@@ -497,7 +497,9 @@ def _feed_evidence_instruction(facts: list[dict[str, Any]] | None) -> str:
         + (" This is a historical Paper bot decision. Explain the saved decision and "
            "owner-verified filled order, if present. Do not add or label a current market "
            "quote as evidence of that historical execution. If a tool returns only the latest "
-           "decision per bot, it cannot contradict the selected older decision."
+           "decision per bot, it cannot contradict the selected older decision. "
+           "Name the selected event's verified local time and action before any later history. "
+           "A later decision is not the answer to the selected card."
            if historical_bot else "")
     )
 
