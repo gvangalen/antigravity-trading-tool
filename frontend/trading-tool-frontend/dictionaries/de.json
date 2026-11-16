@@ -3376,6 +3376,8 @@
       "placing": "Wird platziert...",
       "placeOrder": "Order prüfen",
       "loadingMarketPrice": "Marktpreis wird geladen...",
+      "marketPriceUnavailable": "Es ist kein aktueller, geprüfter Marktpreis verfügbar. Die Order kann derzeit nicht geprüft werden.",
+      "retryMarketPrice": "Kurs erneut prüfen",
       "previewFailed": "Ordervorschau fehlgeschlagen",
       "orderPlacedSuccess": "Order erfolgreich platziert!",
       "orderAwaitingExchange": "Order gesendet; Ausführung und Guthaben werden nach Bestätigung durch die Börse aktualisiert.",

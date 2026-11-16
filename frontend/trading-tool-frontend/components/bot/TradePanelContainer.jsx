@@ -38,6 +38,8 @@ export default function TradePanelContainer({
   ).toUpperCase();
 
   const [price, setPrice] = useState(null);
+  const [priceLoading, setPriceLoading] = useState(true);
+  const [priceError, setPriceError] = useState(null);
   const priceFetchingRef = useRef(false);
 
   const [availableQuote, setAvailableQuote] = useState(0);
@@ -185,6 +187,8 @@ export default function TradePanelContainer({
   async function loadPrice() {
     if (priceFetchingRef.current) return;
     priceFetchingRef.current = true;
+    setPriceLoading(true);
+    setPriceError(null);
 
     try {
 
@@ -193,18 +197,21 @@ export default function TradePanelContainer({
         : await fetchPaperPriceEur(botId);
 
       const nextPrice = bot?.is_live ? latest?.price : latest?.price_eur;
-      if (nextPrice) {
+      if (Number.isFinite(Number(nextPrice)) && Number(nextPrice) > 0) {
         setPrice(Number(nextPrice));
       } else {
         setPrice(null);
+        setPriceError(copy.marketPriceUnavailable);
       }
 
     } catch (err) {
 
-      console.error("Price load error:", err);
+      if (err?.status !== 409) console.error("Price load error:", err);
       setPrice(null);
+      setPriceError(getBotApiErrorMessage(err, copy.marketPriceUnavailable));
 
     } finally {
+      setPriceLoading(false);
       priceFetchingRef.current = false;
     }
 
@@ -367,7 +374,7 @@ export default function TradePanelContainer({
      PRICE LOADING STATE
   ===================================================== */
 
-  if (!tradeSymbol) {
+  if (!botId || !tradeSymbol) {
     return (
       <div className="p-4 text-sm font-semibold text-amber-700 dark:text-amber-300">
         {copy.missingBotContext}
@@ -377,8 +384,16 @@ export default function TradePanelContainer({
 
   if (!price) {
     return (
-      <div className="p-4 text-sm text-gray-500">
-        {copy.loadingMarketPrice}
+      <div className="space-y-3 p-4 text-sm" role="status">
+        <p className={priceError ? "text-amber-700 dark:text-amber-300" : "text-gray-500"}>
+          {priceLoading ? copy.loadingMarketPrice : priceError || copy.marketPriceUnavailable}
+        </p>
+        {!priceLoading ? (
+          <button type="button" onClick={() => void loadPrice()}
+            className="rounded-lg border border-slate-300 px-3 py-2 font-semibold text-blue-600 hover:bg-blue-50 dark:border-slate-700 dark:hover:bg-slate-800">
+            {copy.retryMarketPrice}
+          </button>
+        ) : null}
       </div>
     );
   }

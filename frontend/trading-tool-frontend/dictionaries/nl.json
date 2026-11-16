@@ -3359,6 +3359,8 @@
       "placing": "Plaatsen...",
       "placeOrder": "Controleer order",
       "loadingMarketPrice": "Marktprijs laden...",
+      "marketPriceUnavailable": "Er is geen recente, gecontroleerde marktprijs beschikbaar. Een order kan nu niet worden gecontroleerd.",
+      "retryMarketPrice": "Koers opnieuw controleren",
       "previewFailed": "Orderpreview mislukt",
       "orderPlacedSuccess": "order succesvol geplaatst!",
       "orderAwaitingExchange": "Order verstuurd; uitvoering en saldo worden na bevestiging door de exchange bijgewerkt.",

@@ -84,6 +84,7 @@ export default function GlobalTradePanel({
       <div className="card">
         <div className="bg-slate-50/10 p-1">
           <TradePanelContainer
+            key={`${activeBot?.id ?? "none"}:${isLive ? "live" : "paper"}`}
             bot={activeBot}
             decision={decision}
             portfolio={portfolio}

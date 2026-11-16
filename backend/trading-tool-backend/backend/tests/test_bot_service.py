@@ -72,6 +72,39 @@ def test_paper_price_rejects_mismatched_exact_market_row():
     assert error.value.status_code == 409
 
 
+@pytest.mark.parametrize("price_age,fx_age,reason", [
+    (timedelta(hours=1), timedelta(minutes=1), "market_price_stale"),
+    (timedelta(minutes=1), timedelta(hours=3), "market_quote_eur_fx_unavailable"),
+])
+def test_paper_price_rejection_exposes_safe_source_reason_and_moments(price_age, fx_age, reason):
+    now = datetime.now(timezone.utc)
+    price_at = now - price_age
+    fx_at = now - fx_age
+    service = BotService(_FakeSession())
+
+    class Repo:
+        async def get_bot_config(self, user_id, bot_id):
+            return {"symbol": "AAPL", "market_id": None, "is_live": False}
+
+        async def get_asset_quote_currencies(self, symbols):
+            return {"AAPL": "USD"}
+
+        async def get_valuatable_market_prices(self, symbols):
+            return {"AAPL": {"price": 350, "quote_currency": "USD", "observed_at": price_at}}
+
+        async def get_portfolio_fx_rates(self):
+            return {"USD": {"eur_per_unit": 0.86, "observed_at": fx_at}}
+
+    service.repository = Repo()
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(service.get_paper_price_eur(7, 9))
+    assert error.value.status_code == 409
+    assert error.value.detail["code"] == "PAPER_TRADE_QUOTE_UNAVAILABLE"
+    assert error.value.detail["reason"] == reason
+    assert error.value.detail["price_source_observed_at"] == price_at.isoformat()
+    assert error.value.detail["fx_source_observed_at"] == fx_at.isoformat()
+
+
 def test_legacy_empty_reason_object_is_not_shown_as_literal_json():
     class Repo:
         async def get_bot_history(self, user_id, start, end):
