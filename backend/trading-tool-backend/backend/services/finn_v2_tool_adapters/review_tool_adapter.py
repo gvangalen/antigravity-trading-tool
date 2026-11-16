@@ -200,7 +200,11 @@ class ReviewToolAdapter:
                 "source": "bot_decisions", "schema_name": "ReviewHistoryData",
                 "entity_type": "review_history",
             }
-        rows = [] if review_id is not None else await self.bot_service.get_bot_history(user_id, 30)
+        # The selected feed card is a question about one persisted decision.
+        # A later bot-history row would compete with its older event time and
+        # has repeatedly caused FINN to answer about that later decision.
+        rows = ([] if review_id is not None or selected_feed_decision else
+                await self.bot_service.get_bot_history(user_id, 30))
         if asset:
             rows = [row for row in rows if str(row.get("symbol") or "").upper() == asset.upper()]
         rows.sort(
@@ -218,7 +222,10 @@ class ReviewToolAdapter:
             f"uitleg {(row.get('safety_check') or {}).get('reason') or 'niet beschikbaar'}"
             for row in rows[:20]
         ]
-        if review_id is None:
+        if selected_feed_decision and not selected_feed_decision["paper_executed"]:
+            closed = {"status": "no_data", "coverage": {"trades": 0, "analyzed": 0,
+                      "pending": 0, "unavailable": 0}, "reviews": []}
+        elif review_id is None:
             closed = await self.closed_trades.recent(user_id, days=30, limit=5,
                                                       symbol=asset.upper() if asset else None)
         else:
@@ -418,6 +425,8 @@ class ReviewToolAdapter:
                 [self._utc_instant(row["decision_ts"]) for row in rows if row.get("decision_ts") is not None]
                 + [self._utc_instant(row["decision_ts"]) for row in latest_rows if row.get("decision_ts") is not None]
                 + [self._utc_instant(review["exit_at"]) for review in closed_reviews]
+                + ([self._utc_instant(selected_feed_decision["decision_at"])]
+                   if selected_feed_decision else [])
                 + ([weekly_as_of] if weekly_as_of else []),
                 default=None,
             ),

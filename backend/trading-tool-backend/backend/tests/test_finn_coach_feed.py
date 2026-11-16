@@ -176,6 +176,7 @@ def test_paper_feed_discussion_separates_historical_execution_from_current_quote
     }])
     assert "historical Paper bot decision" in instruction
     assert "Do not add or label a current market quote" in instruction
+    assert "A later decision is not the answer to the selected card" in instruction
 
 
 def test_paper_bot_fallback_covers_other_persisted_outcomes():

@@ -62,7 +62,7 @@ def test_selected_historical_paper_decision_survives_newer_bot_decision():
                      "action": "hold", "status": "planned",
                      "decision_ts": datetime(2026, 11, 16, 7, tzinfo=timezone.utc)}]
         async def get_bot_history(self, user_id, days):
-            return []
+            raise AssertionError("newer bot history must not compete with selected feed decision")
         async def recent(self, user_id, *, days, limit, symbol=None):
             return {"status": "no_data", "coverage": {"trades": 0,
                 "analyzed": 0, "pending": 0, "unavailable": 0}, "reviews": []}
@@ -94,6 +94,7 @@ def test_selected_historical_paper_decision_survives_newer_bot_decision():
     assert result["data"].selected_feed_decision["paper_executed"] is True
     assert result["data"].latest_bot_decisions == []
     assert "Geselecteerde historische Paper-feedbeslissing" in result["data"].items[0]
+    assert result["as_of"] == datetime(2026, 11, 10, 14, tzinfo=timezone.utc)
 
 
 def test_selected_base_only_bot_decision_survives_active_exact_pair():
@@ -101,10 +102,9 @@ def test_selected_base_only_bot_decision_survives_active_exact_pair():
         async def get_latest_bot_decisions_for_owner(self, user_id):
             raise AssertionError("selected feed decision must not be replaced by latest")
         async def get_bot_history(self, user_id, days):
-            return []
+            raise AssertionError("newer bot history must not compete with selected feed decision")
         async def recent(self, user_id, *, days, limit, symbol=None):
-            return {"status": "no_data", "coverage": {"trades": 0,
-                "analyzed": 0, "pending": 0, "unavailable": 0}, "reviews": []}
+            raise AssertionError("unrelated closed trades must not compete with selected hold")
 
     class Session:
         async def execute(self, _query, params):
@@ -130,6 +130,7 @@ def test_selected_base_only_bot_decision_survives_active_exact_pair():
         selector={"_latest_bot_decisions_only": True}, selected_feed_decision_id=127266))
     assert result["data"].selected_feed_decision["decision_at_amsterdam"] == "2026-11-16 07:00:18 CET"
     assert result["data"].selected_feed_decision["action"] == "hold"
+    assert result["as_of"] == datetime(2026, 11, 16, 6, 0, 18, tzinfo=timezone.utc)
 
 
 def test_saved_feed_selection_does_not_bind_an_unrelated_asset_question():
