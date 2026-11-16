@@ -3,8 +3,9 @@ import logging
 import requests
 import json
 import time
-from datetime import datetime
+from datetime import datetime, time as clock_time, timezone
 from collections import defaultdict
+from zoneinfo import ZoneInfo
 
 from celery import shared_task
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -15,6 +16,7 @@ from backend.utils.scoring_utils import generate_scores_db
 from backend.infrastructure.database import async_session_factory, run_celery_coroutine
 from backend.infrastructure.models import UserIndicatorConfig, Watchlist
 from backend.services.macro_data_service import MacroDataService
+from backend.services.asset_catalog_service import AssetCatalogService
 from backend.services.market_data_ingestion_service import MarketDataIngestionService
 from backend.services.market_data_service import MarketDataService
 from backend.services.technical_data_service import TechnicalDataService
@@ -50,6 +52,29 @@ def _configured_scope_window(scopes: list[tuple[int, str, str]], *, window_index
     ]
 
 
+def _scheduled_quote_due(asset: dict | None, *, now: datetime) -> bool:
+    """Avoid spending stock/ETF quote credits outside US regular trading hours.
+
+    This only controls the periodic refresh. An explicit user read may still
+    request the provider; Paper execution continues to require a recent quote.
+    Exchange holidays remain a provider/source concern, not an open signal.
+    """
+    if not asset or str(asset.get("asset_class") or "").lower() not in {"stock", "etf"}:
+        return True
+    if str(asset.get("market_region") or "").lower() != "us":
+        return True
+    if str(asset.get("timezone") or "") not in {"America/New_York", "US/Eastern"}:
+        return True
+    local = now.astimezone(ZoneInfo("America/New_York"))
+    return local.weekday() < 5 and clock_time(9, 30) <= local.time() < clock_time(16, 5)
+
+
+async def _due_scheduled_symbols(session, symbols: list[str], *, now: datetime) -> list[str]:
+    assets = await AssetCatalogService(session).get_assets(symbols)
+    return [symbol for symbol in symbols
+            if _scheduled_quote_due(assets.get(symbol), now=now)]
+
+
 async def _sync_configured_market_snapshots() -> dict:
     """Refresh quotes and materialize every owner-scoped enabled indicator.
 
@@ -82,19 +107,31 @@ async def _sync_configured_market_snapshots() -> dict:
             updated_at = getattr(row, "updated_at", None) or getattr(row, "created_at", None)
             if scope not in scope_revisions or updated_at > scope_revisions[scope]:
                 scope_revisions[scope] = updated_at
-        configured_scopes = _configured_scope_window(
-            list(scope_revisions),
-            window_index=int(time.time() // 300),
-        )
-        deferred_scope_count = max(0, len(scope_revisions) - len(configured_scopes))
-        symbols = list(
+        candidate_symbols = list(
             dict.fromkeys(
                 str(symbol or "").strip().upper()
-                for symbol in [*watchlist_symbols, *(scope[1] for scope in configured_scopes)]
+                for symbol in [*watchlist_symbols, *(scope[1] for scope in scope_revisions)]
                 if str(symbol or "").strip()
             )
         )
-        if not symbols:
+        due_set = set(await _due_scheduled_symbols(
+            session, candidate_symbols, now=datetime.now(timezone.utc),
+        ))
+        # Choose the limited configured work from symbols due for a refresh,
+        # so closed-session stocks do not occupy every slot for crypto users.
+        due_scopes = [scope for scope in scope_revisions if scope[1] in due_set]
+        configured_scopes = _configured_scope_window(
+            due_scopes, window_index=int(time.time() // 300),
+        )
+        deferred_scope_count = max(0, len(due_scopes) - len(configured_scopes))
+        symbols = list(dict.fromkeys(
+            str(symbol or "").strip().upper()
+            for symbol in [*watchlist_symbols, *(scope[1] for scope in configured_scopes)]
+            if str(symbol or "").strip()
+        ))
+        due_symbols = [symbol for symbol in symbols if symbol in due_set]
+        closed_session_count = len(candidate_symbols) - len(due_set)
+        if not due_symbols:
             return {
                 "requested": [],
                 "ingested": [],
@@ -104,13 +141,14 @@ async def _sync_configured_market_snapshots() -> dict:
                 "rehydrated_scopes": [],
                 "rehydration_failures": [],
                 "deferred_scope_count": deferred_scope_count,
+                "deferred_closed_session_symbols": closed_session_count,
             }
 
         # The configuration read must not keep a transaction open while
         # providers fetch quotes. All values needed below are plain scalars.
         await session.rollback()
         result = await MarketDataIngestionService(session).ingest_latest_snapshots(
-            symbols,
+            due_symbols,
             commit=True,
             continue_on_error=True,
             release_catalog_read_transaction=True,
@@ -145,6 +183,7 @@ async def _sync_configured_market_snapshots() -> dict:
         result["rehydrated_scopes"] = rehydrated_scopes
         result["rehydration_failures"] = rehydration_failures
         result["deferred_scope_count"] = deferred_scope_count
+        result["deferred_closed_session_symbols"] = closed_session_count
         return result
 
 

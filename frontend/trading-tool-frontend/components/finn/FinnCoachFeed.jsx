@@ -10,6 +10,7 @@ import { readCoachFeedWithRetry } from "@/lib/finnCoachFeedRead.mjs";
 import { coachFeedDetailsHref } from "@/lib/finnCoachFeedLinks.mjs";
 import { canDiscussFeedItem, canUpdateFeedStatus } from "@/lib/finnCoachFeedActions.mjs";
 import { coachFeedDiscussionQuestion } from "@/lib/finnCommandSearch";
+import { formatAmsterdamTimestamp } from "@/lib/time/formatUtcTimestamp.mjs";
 
 const FEED_PAGE_SIZE = 50;
 
@@ -165,8 +166,10 @@ export default function FinnCoachFeed({ onDiscuss }) {
                 {item.symbol ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">{["plan_review", "position_risk", "improvement_suggestion"].includes(item.event_type) && item.evidence?.trading_pair ? item.evidence.trading_pair : item.symbol}</span> : null}
               </div>
               <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{item.description}</p>
-              <time className="mt-1 block text-xs text-slate-400" dateTime={item.created_at}>
-                {new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.created_at))}
+              <time className="mt-1 block text-xs text-slate-400" dateTime={item.event_type === "bot_decision" && item.source_observed_at ? item.source_observed_at : item.created_at}>
+                {item.event_type === "bot_decision" && item.source_observed_at
+                  ? formatAmsterdamTimestamp(item.source_observed_at, locale)
+                  : new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.created_at))}
               </time>
               {["plan_review", "position_risk"].includes(item.event_type) && item.source_observed_at ? (
                 <time className="mt-1 block text-xs text-slate-400" dateTime={item.source_observed_at}>
