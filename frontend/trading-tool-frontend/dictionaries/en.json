@@ -3358,6 +3358,8 @@
       "placing": "Placing...",
       "placeOrder": "Review order",
       "loadingMarketPrice": "Loading market price...",
+      "marketPriceUnavailable": "No recent, verified market price is available. The order cannot be checked right now.",
+      "retryMarketPrice": "Check price again",
       "previewFailed": "Order preview failed",
       "orderPlacedSuccess": "order placed successfully!",
       "orderAwaitingExchange": "Order sent; execution and balance will update after exchange confirmation.",

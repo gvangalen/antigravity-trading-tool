@@ -291,14 +291,27 @@ class BotService:
         if quote != str(catalog_quote or "").upper():
             raise HTTPException(409, "De koersvaluta komt niet overeen met de asset. Controleer de bron opnieuw.")
         fx = (await self.repository.get_portfolio_fx_rates()).get(quote)
+        price_at = (market or {}).get("source_observed_at" if market_id is not None else "observed_at")
         checked = trade_quote_context(
             price=(market or {}).get("price"),
-            price_at=(market or {}).get("source_observed_at" if market_id is not None else "observed_at"),
+            price_at=price_at,
             row_quote=quote, catalog_quote=catalog_quote,
             usd_fx=None, quote_fx=fx, require_usd=False,
         )
         if checked.get("reason"):
-            raise HTTPException(409, "Geen recente, gecontroleerde koers en omrekening voor deze Paper-order. Vernieuw de preview.")
+            reason = checked["reason"]
+            messages = {
+                "market_price_stale": "Geen recente, gecontroleerde koers voor deze Paper-order. Controleer de bron en probeer opnieuw.",
+                "market_quote_eur_fx_unavailable": "Geen recente EUR-omrekening voor deze Paper-order. Probeer opnieuw zodra de bron is bijgewerkt.",
+                "trade_quote_sources_out_of_sync": "Koers en EUR-omrekening zijn niet van hetzelfde bronmoment. Probeer later opnieuw.",
+            }
+            raise HTTPException(409, {
+                "code": "PAPER_TRADE_QUOTE_UNAVAILABLE",
+                "reason": reason,
+                "message": messages.get(reason, "Geen gecontroleerde koers en omrekening voor deze Paper-order. Probeer later opnieuw."),
+                "price_source_observed_at": _utc_iso(price_at),
+                "fx_source_observed_at": _utc_iso((fx or {}).get("observed_at")),
+            })
         return checked
 
     @staticmethod
