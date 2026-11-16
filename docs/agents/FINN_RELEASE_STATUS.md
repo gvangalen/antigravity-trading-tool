@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0 proactieve coach: fasen 1–5 (16 november 2026)
 
-Phase: `LOCAL_VALIDATED_PR_PENDING`. The user's request to deploy this coach
+Phase: `DEPLOYED_PENDING_FINAL_STATUS_SHA`. The user's request to deploy this coach
 batch and have the existing QA Agent test it supersedes the previous targeted
 broad-question candidate for release scheduling. That earlier targeted pass
 does not constitute full FINN acceptance; no official protected QA matrix was
@@ -36,8 +36,15 @@ and regression **109/109** (SHA-256
 `7f4f19740fa6d7dbc22a47921c2837720a3a6b53d3f6be150bbe66543d4b516b`),
 both with zero provider, schema, timeout, parse or validation failures.
 Independent read-only code QA, Security and Architecture reviews found no
-remaining P0/P1 or security blocker after the bot ordering repair. CI,
-deployment identity and authenticated live QA remain pending.
+remaining P0/P1 or security blocker after the bot ordering repair. Product
+[PR #1100](https://github.com/gvangalen/antigravity-trading-tool/pull/1100)
+passed all five required CI jobs in run `43811422444` and merged as
+`817236e5448439c80c8a4051322a996f87d679b3`. Main CI `43812022285`
+passed all five jobs; Auto Deploy `43812571305` succeeded. Public backend
+health and frontend build-info both returned HTTP 200 with that exact SHA,
+matching GitHub `main`. This status update creates a later main SHA; its final
+CI, Auto Deploy, public SHA parity and independent authenticated live QA
+verdict are still pending.
 
 ## FINN brede coachvraag: opgeslagen bedrag als bron (16 november 2026)
 
