@@ -3717,6 +3717,14 @@ class FinnResponsesFrontDoor:
                     call, message=message, read_only=call.operation_id is None and not pending_operation,
                     previous_response=previous_response, owner_user_id=self.user_id,
                 )
+                if (call.name == "get_closed_trade_review"
+                        and self._asks_about_bot_decision(message)):
+                    # The dossier selector otherwise suppresses the latest
+                    # bot-decision list in the same owner-scoped review read.
+                    call = replace(call, inputs={**call.inputs,
+                                                 "_include_latest_bot_decisions": True,
+                                                 **({"_latest_bot_decisions_asset": next(iter(mentioned_assets))}
+                                                    if len(mentioned_assets) == 1 else {})})
                 call = self._focus_source_reads(
                     call, message=message, read_only=call.operation_id is None and not pending_operation,
                 )

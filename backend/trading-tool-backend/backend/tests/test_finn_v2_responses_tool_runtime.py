@@ -107,6 +107,9 @@ def test_model_only_coach_experiment_cannot_be_enabled_outside_local_fixture(mon
     "het resultaat? Alleen lezen, geen voorstel of aankoop.",
     "Kun je review #123 teruglezen en de bevestigde les noemen?",
     "Lees Reflectie #2127, mijn plan, botbeslissing en huidige positie.",
+    "Lees Reflectie #2127, mijn plan, botbeslissing en huidige AAPL-positie. "
+    "Noem het dossiernummer, het bronkoersdoel bij de instapbeslissing "
+    "en het afzonderlijke EUR-orderplandoel met hun valuta. Alleen teruglezen; geen actie.",
     "Wat weet je zeker over mijn zojuist gesloten Paper-trade en het resultaat? "
     "Alleen sparren, geen voorstel of aankoop.",
     "What can you verify about my recently closed Paper trade and its result? "
@@ -153,6 +156,10 @@ def test_explicit_closed_trade_review_forces_owner_scoped_dossier_read(message):
         "type": "function", "name": "get_closed_trade_review",
     }
     assert calls[0].name == "get_closed_trade_review"
+    if "botbeslissing" in message:
+        assert calls[0].inputs["_include_latest_bot_decisions"] is True
+        if "AAPL" in message:
+            assert calls[0].inputs["_latest_bot_decisions_asset"] == "AAPL"
     assert {call.name for call in calls} <= {
         "get_closed_trade_review", "get_portfolio_and_exposure",
     }

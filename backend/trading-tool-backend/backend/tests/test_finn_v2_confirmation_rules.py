@@ -176,3 +176,95 @@ def test_owner_can_cancel_draft_proposal_and_replay_is_idempotent():
     assert replay == {"proposal_id": "proposal-1", "status": "cancelled", "already_cancelled": True}
     assert [event["event"] for event in events] == ["cancelled"]
     assert session.commits == 1
+
+
+def test_cancelled_latest_proposal_retires_only_its_own_responses_cursor(monkeypatch):
+    from backend.infrastructure.repositories.finn_v2_conversation_repository import FinnV2ConversationRepository
+    from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2RunRepository
+
+    class Session:
+        async def execute(self, _query):
+            raise AssertionError("owner lookup is stubbed below")
+        async def commit(self):
+            pass
+
+    session = Session()
+    proposal = SimpleNamespace(
+        id="proposal-1", run_id="run-1", user_id=7,
+        payload_hash="hash", operation_type="update_indicator", status="draft",
+    )
+    service = FinnV2ConfirmationService(session=session)
+    service.proposals.get_by_id_for_user = lambda **_kwargs: asyncio.sleep(0, result=proposal)
+    async def update_status(row, *, status):
+        row.status = status
+    service.proposals.update_status = update_status
+    service._record_workflow_event = lambda *_args, **_kwargs: asyncio.sleep(0)
+    service._resolve_feed_proposal = lambda *_args, **_kwargs: asyncio.sleep(0)
+    monkeypatch.setattr(FinnV2RunRepository, "get_by_id_for_user",
+                        lambda _self, **_kwargs: asyncio.sleep(0, result=SimpleNamespace(
+                            id="run-1", conversation_id="conversation-1")))
+    calls = []
+    async def clear(_self, **kwargs):
+        calls.append(kwargs)
+        return True
+    monkeypatch.setattr(FinnV2ConversationRepository, "clear_cancelled_proposal_continuation", clear)
+    asyncio.run(service.cancel(proposal_id="proposal-1", user_id=7))
+    assert calls == [{"conversation_id": "conversation-1", "user_id": 7,
+                      "run_id": "run-1", "proposal_id": "proposal-1"}]
+
+
+def test_cancelled_proposal_cursor_cleanup_keeps_newer_conversation_state():
+    from backend.infrastructure.repositories.finn_v2_conversation_repository import FinnV2ConversationRepository
+    from backend.domain.finn_v2_runtime_contract import RuntimeContractConflictError
+
+    row = SimpleNamespace(last_run_id="run-1", context_json={
+        "session_id": "conversation-session",
+        "responses_cursor": {"run_id": "run-1", "response_id": "old-response"},
+        "proposal_revision": {"proposal_id": "proposal-1"},
+        "active_guided_operation": {"open_proposal_id": "proposal-1"},
+        "operation_state": {"status": "collecting"},
+        "active_conversation_target": {"asset": "AAPL"},
+    }, updated_at=None)
+    repository = FinnV2ConversationRepository(SimpleNamespace())
+    async def get_row(conversation_id, user_id, *, for_update=False):
+        assert (conversation_id, user_id, for_update) == ("conversation-1", 7, True)
+        return row
+    repository.get_by_id_for_user = get_row
+    flushed = []
+    async def flush(**kwargs):
+        flushed.append(kwargs)
+    repository._flush_with_rollback = flush
+    clear = lambda: repository.clear_cancelled_proposal_continuation(
+        conversation_id="conversation-1", user_id=7,
+        run_id="run-1", proposal_id="proposal-1",
+    )
+    assert asyncio.run(clear()) is True
+    assert row.context_json == {"session_id": "conversation-session",
+                                "cancelled_proposal_run_id": "run-1",
+                                "cancelled_proposal_id": "proposal-1",
+                                "active_conversation_target": {"asset": "AAPL"}}
+    assert len(flushed) == 1
+    asyncio.run(repository.update_context(
+        conversation_id="conversation-1", user_id=7,
+        context={"session_id": "conversation-session", "responses_cursor": {
+            "run_id": "run-1", "response_id": "stale-snapshot",
+        }, "proposal_revision": {"proposal_id": "proposal-1"},
+            "active_guided_operation": {"open_proposal_id": "proposal-1"},
+            "operation_state": {"status": "collecting"}},
+    ))
+    assert row.context_json["cancelled_proposal_run_id"] == "run-1"
+    assert row.context_json["cancelled_proposal_id"] == "proposal-1"
+    assert "responses_cursor" not in row.context_json
+    assert "proposal_revision" not in row.context_json
+    assert "active_guided_operation" not in row.context_json
+    with pytest.raises(RuntimeContractConflictError, match="responses_cursor_cancelled_proposal"):
+        asyncio.run(repository.set_responses_cursor(
+            conversation_id="conversation-1", user_id=7,
+            run_id="run-1", response_id="late-provider-response",
+        ))
+    assert "responses_cursor" not in row.context_json
+    row.last_run_id = "run-2"
+    row.context_json = {"responses_cursor": {"run_id": "run-2", "response_id": "new"}}
+    assert asyncio.run(clear()) is False
+    assert row.context_json["responses_cursor"]["response_id"] == "new"
+    assert len(flushed) == 2

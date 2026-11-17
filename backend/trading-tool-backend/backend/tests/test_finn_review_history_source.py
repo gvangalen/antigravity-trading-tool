@@ -93,6 +93,54 @@ def test_owner_paper_exit_review_exposes_only_requested_structured_facts():
     assert "untrusted_field" not in str(result["data"])
 
 
+def test_dossier_and_explicit_bot_question_reads_separate_latest_decision():
+    review = {
+        "review_id": 77, "symbol": "AAPL", "environment": "paper",
+        "bot_id": 130, "bot_name": "AAPL Paper", "origin": "tradamind_ledger",
+        "pnl_eur_before_fees": 12.5, "pnl_status": "calculated",
+        "entry_at": datetime(2026, 11, 16, 14, tzinfo=timezone.utc),
+        "exit_at": datetime(2026, 11, 16, 15, tzinfo=timezone.utc),
+        "execution_sources": ["paper_ledger"], "analysis_status": "ready",
+        "themes": [], "evidence_ids": ["paper:exit"], "review_url": "/reflection/77",
+        "has_plan": True,
+    }
+
+    class Sources:
+        async def get_latest_bot_decisions_for_owner(self, user_id):
+            assert user_id == 42
+            return [
+                {"bot_id": 130, "decision_id": 901, "bot_name": "AAPL Paper",
+                 "symbol": "AAPL", "is_live": False, "action": "hold",
+                 "status": "planned", "decision_ts": datetime(2026, 11, 17, tzinfo=timezone.utc)},
+                {"bot_id": 131, "decision_id": 902, "bot_name": "BTC Paper",
+                 "symbol": "BTC", "is_live": False, "action": "hold",
+                 "status": "planned", "decision_ts": datetime(2026, 11, 17, tzinfo=timezone.utc)},
+            ]
+        async def get_bot_history(self, user_id, days):
+            return []
+        async def review(self, user_id, review_id):
+            assert (user_id, review_id) == (42, 77)
+            return {"review": review}
+
+    adapter = object.__new__(ReviewToolAdapter)
+    adapter.repository = Sources()
+    adapter.bot_service = Sources()
+    adapter.closed_trades = Sources()
+    from backend.domain.finn_v2_source_registry import FinnV2InformationSourceRegistry
+    adapter.sources = FinnV2InformationSourceRegistry()
+    result = asyncio.run(adapter.execute(
+        user_id=42, review_id=77, selected_feed_decision_id=999,
+        selector={
+            "_include_latest_bot_decisions": True,
+            "_latest_bot_decisions_asset": "AAPL",
+        },
+    ))
+    assert result["data"].closed_trades[0].review_id == 77
+    assert [(row["symbol"], row["action"]) for row in result["data"].latest_bot_decisions] == [
+        ("AAPL", "hold"),
+    ]
+
+
 def test_selected_historical_paper_decision_survives_newer_bot_decision():
     class Empty:
         async def get_latest_bot_decisions_for_owner(self, user_id):

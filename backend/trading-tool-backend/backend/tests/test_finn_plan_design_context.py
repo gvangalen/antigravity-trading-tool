@@ -89,6 +89,18 @@ def test_model_capabilities_match_confirmed_dca_amount_contract():
 
 
 def test_generic_capability_questions_include_ma_and_trendline_designs():
+    paper_account_question = (
+        "Hoeveel AAPL-positie heb ik nu werkelijk open, wat is mijn Paper-kassaldo, "
+        "en betekent mijn botbudget van €400 dat ik €400 extra kan kopen? "
+        "Geef alleen bevestigde bedragen en benoem ontbrekende risico-informatie."
+    )
+    assert not requests_execution_capability_question(paper_account_question)
+    assert not requests_execution_capability_question(
+        paper_account_question, {"plan_design_focus": {"kind": "new_separate_setup"}},
+    )
+    assert not requests_execution_capability_question(
+        "Antwoord in het Nederlands. " + paper_account_question,
+    )
     assert not requests_execution_capability_question(
         "Ik bedoel voor de handmatige €10-koop mijn opgeslagen BTC/EUR-plan. "
         "Kun je de actuele score, relevante bronmomenten en laatste BTC-botbeslissing "

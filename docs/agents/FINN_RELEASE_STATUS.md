@@ -4,6 +4,47 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 Paper-flow vervolg: accountread, dossier en annulering (17 november 2026)
+
+Phase: `LOCAL_VALIDATED_RELEASE_CANDIDATE` op branch
+`codex/finn-account-route-followup-20261117`. Onafhankelijke live QA op de
+vorige definitieve SHA `167116fd1e7fc0ef1dc9c5e6b347667a5f46b32d` gaf
+**NOT_ACCEPTED** voor de brede FINN-coach. De beschermde Paper-only proef
+bewees een virtuele koop/verkoop en één exit zonder dubbele verkoop, met
+kas/ledger/Reflectie, eigenaarsscheiding en polling/SSE. In de browser bleef
+de exacte AAPL-vraag over positie, Paper-kas en botbudget onbeantwoord met
+bevestigde bedragen; een gecombineerde Reflectie-read miste de nieuwste
+botbeslissing. Een nieuw setupconcept na annulering van een RSI-concept mislukte
+in hetzelfde gesprek, terwijl het in een nieuw gesprek lukte. De browser bood
+geen run-/tooltrace voor deze beurten.
+
+Lokaal is de accountvraag gereproduceerd als foutieve routering naar de
+planregel-uitlegger vóór de verplichte portefeuillelezing. Een dossierread
+onderdrukte de nieuwste botbesluiten, ook als de gebruiker daar expliciet om
+vroeg; een oude geselecteerde feedkaart kon met dat dossier concurreren. De
+reparatie leest beide eigenaargebonden bronnen apart. Annuleren wist nu de
+bijbehorende Responses-cursor en voorstelverwijzing. Een eigenaargebonden
+annuleringsmarker verhindert dat een late run of verouderde contextupdate die
+velden terugzet. Geannuleerde voorstellen blijven niet uitvoerbaar.
+
+Gemeten Build-validatie: volledige backend-suite **4.992 passed, 7 skipped**
+(log SHA-256 `7ed97f60bf507c758a0e32823480124b4deb1e2b845d83d2f84388e70eff9144`);
+frontend build, typecheck, i18n-lint en -tests, command- en voorsteltests en
+`audit:high` groen (nul hoge kwetsbaarheden). De geïsoleerde lokale
+FastAPI/Celery/PostgreSQL/Redis/Responses-actiematrix slaagde **17/17** en
+adaptertests **26/26** (artifact SHA-256
+`6dae4a7853ce171161af5b457d65f951ed19bc63e4c8dd062bda0d14700ec54f`),
+zonder brokerorders, Live-bots, Live-aanroepen of productieverbindingen. Echte
+providerselectie slaagde **20/20** development en **109/109** regression,
+beide zonder provider-, schema-, timeout-, parse- of validatiefouten (artifact
+SHA-256 respectievelijk
+`63aeb94aa36bdbfabb0039eecaa7d477a9cbc6509e3205e4c41687bac8b1dcf2` en
+`4e176b8eb2e00ea6fea5d3bbd19cd7ffda4ef76a4a5e9bb17d3f71bc5402b6ba`).
+Onafhankelijke gerichte code-QA vond geen nieuwe functionele regressie;
+Security vond na de annuleringsrace-reparatie geen resterende concrete
+account- of uitvoeringsfout. Authentieke browser- en Paper-acceptatie op de
+nieuwe publieke SHA moet nog worden uitgevoerd door de bestaande QA-agent.
+
 ## FINN 3.0 Paper-browser hertest: eigenaargegevens en planvaluta (16 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_FINAL_STATUS_PENDING_QA`. De bestaande onafhankelijke QA-agent

@@ -72,10 +72,26 @@ class FinnV2ConversationRepository(FinnV2RepositoryTransactionMixin):
         return dict(row.context_json or {}) if row is not None else {}
 
     async def update_context(self, *, conversation_id: str, user_id: int, context: Dict[str, Any]) -> None:
-        row = await self.get_by_id_for_user(conversation_id, user_id)
+        row = await self.get_by_id_for_user(conversation_id, user_id, for_update=True)
         if row is None:
             return
-        row.context_json = dict(context)
+        current = dict(row.context_json or {})
+        updated = dict(context)
+        # A run cancellation is a durable cursor boundary. A caller using a
+        # pre-cancel context snapshot must not erase it by replacing JSON.
+        if current.get("cancelled_proposal_run_id"):
+            updated["cancelled_proposal_run_id"] = current["cancelled_proposal_run_id"]
+            if dict(updated.get("responses_cursor") or {}).get("run_id") == current["cancelled_proposal_run_id"]:
+                updated.pop("responses_cursor", None)
+        if current.get("cancelled_proposal_id"):
+            cancelled_id = current["cancelled_proposal_id"]
+            updated["cancelled_proposal_id"] = cancelled_id
+            if dict(updated.get("proposal_revision") or {}).get("proposal_id") == cancelled_id:
+                updated.pop("proposal_revision", None)
+            if dict(updated.get("active_guided_operation") or {}).get("open_proposal_id") == cancelled_id:
+                updated.pop("active_guided_operation", None)
+                updated.pop("operation_state", None)
+        row.context_json = updated
         row.updated_at = datetime.now(timezone.utc)
         await self._flush_with_rollback(
             operation="update_context",
@@ -96,6 +112,10 @@ class FinnV2ConversationRepository(FinnV2RepositoryTransactionMixin):
         # composer identity; the next successful read writes its own cursor.
         row.context_json = {
             **({"session_id": previous["session_id"]} if previous.get("session_id") else {}),
+            **({"cancelled_proposal_run_id": previous["cancelled_proposal_run_id"]}
+               if previous.get("cancelled_proposal_run_id") else {}),
+            **({"cancelled_proposal_id": previous["cancelled_proposal_id"]}
+               if previous.get("cancelled_proposal_id") else {}),
             "feed_event": dict(feed_event),
         }
         row.updated_at = datetime.now(timezone.utc)
@@ -114,6 +134,8 @@ class FinnV2ConversationRepository(FinnV2RepositoryTransactionMixin):
         if row is None or row.last_run_id != run_id or not response_id:
             raise RuntimeContractConflictError("responses_cursor_stale_or_unowned")
         context = dict(row.context_json or {})
+        if context.get("cancelled_proposal_run_id") == run_id:
+            raise RuntimeContractConflictError("responses_cursor_cancelled_proposal")
         context["responses_cursor"] = {
             "run_id": run_id, "response_id": response_id,
             **({"locale": locale} if locale in {"nl", "en", "de"} else {}),
@@ -123,6 +145,34 @@ class FinnV2ConversationRepository(FinnV2RepositoryTransactionMixin):
         await self._flush_with_rollback(
             operation="set_responses_cursor", entity_type="FinnV2Conversation", run_id=run_id,
         )
+
+    async def clear_cancelled_proposal_continuation(
+        self, *, conversation_id: str, user_id: int, run_id: str, proposal_id: str,
+    ) -> bool:
+        """Retire only the canceled card's still-current conversation cursor."""
+        row = await self.get_by_id_for_user(conversation_id, user_id, for_update=True)
+        if row is None or row.last_run_id != run_id:
+            return False
+        context = dict(row.context_json or {})
+        cursor = dict(context.get("responses_cursor") or {})
+        if cursor.get("run_id") == run_id:
+            context.pop("responses_cursor", None)
+        context["cancelled_proposal_run_id"] = run_id
+        context["cancelled_proposal_id"] = proposal_id
+        revision = dict(context.get("proposal_revision") or {})
+        if revision.get("proposal_id") == proposal_id:
+            context.pop("proposal_revision", None)
+        guided = dict(context.get("active_guided_operation") or {})
+        if guided.get("open_proposal_id") == proposal_id:
+            context.pop("active_guided_operation", None)
+            context.pop("operation_state", None)
+        row.context_json = context
+        row.updated_at = datetime.now(timezone.utc)
+        await self._flush_with_rollback(
+            operation="clear_cancelled_proposal_continuation",
+            entity_type="FinnV2Conversation", run_id=run_id,
+        )
+        return True
 
     async def record_verified_action_result(
         self,
