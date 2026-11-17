@@ -4,6 +4,38 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: exacte twee-plan vervolgvragen na live afwijzing (17 november 2026)
+
+Phase: `LOCAL_REPAIR_VALIDATION`. Onafhankelijke QA wees de vorige live kandidaat
+op SHA `3da92b65833c33508a5b477475e88a78692b401b` af. De eerste vraag over
+de opgeslagen AAPL- en BTC/EUR-plannen kreeg een generieke onbewezen melding;
+de vervolgvraag kreeg een dagkaars-/SMA-antwoord zonder de twee setups te lezen.
+De beschermde `coach_feed_triggers`-proef op die SHA eindigde voor beide cases
+met `coach_feed_runtime_failed`; het oude artifact bevat geen oorzaakfase. Deze
+QA-uitkomst is geen acceptatie van de proactieve feed.
+
+De lokale diagnose vond twee afzonderlijke oorzaken. De bestaande verifier
+weigerde de vier eigenaargebonden read-calls van het twee-planantwoord omdat
+de algemene factual-source-route slechts één call toeliet. Daarnaast werd de
+vervolgvraag door de vroege uitvoerbaarheidsrouter onderschept vanwege het
+woord “kan”, voordat de plannen gelezen werden. De reparatie verifieert de
+exacte vier bronnen en laat een expliciete alleen-lezen controle per opgeslagen
+plan door naar de eigenaargebonden read-route. Echte vragen naar automatische
+uitvoering blijven op de capability-route.
+
+Een herstartte lokale FastAPI/Celery-runtime met twee synthetische 4H-tradeplannen
+leverde in één gesprek voor beide exacte QA-vragen `factual_source` met vier
+read-calls en `verifier_status=passed`. Beide antwoorden noemden afzonderlijk
+AAPL en BTC/EUR, de opgeslagen 4H-opzet en het ontbreken van bewijs in deze
+lokale fixture; er ontstond geen voorstel of order. Dit bewijst de routering en
+verificatie, niet actuele productiebronwaarden. De gerichte FINN-router- en
+contexttests leverden **992 passed**; de definitieve volledige backendrun
+leverde **5.011 passed, 7 skipped**. Frontend build, typecheck, i18n-,
+command- en voorsteltests en `audit:high` zijn groen. De echte providerselectie
+in development leverde **20/20** met nul provider-, schema-, timeout-, parse-
+of validatiefouten. Worker-matrix, providerregressie, CI, deployment en
+onafhankelijke live QA volgen nog; deze kandidaat is nog niet live geaccepteerd.
+
 ## FINN 3.0: vervolg over twee plannen na afgekeurde live QA (17 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA`. De onafhankelijke QA op publieke SHA

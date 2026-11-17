@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
+import re
 from typing import Any
+
+from backend.services.asset_catalog_service import mentioned_catalog_symbols
 
 
 def _number(value: Any) -> str | None:
@@ -92,3 +95,52 @@ def render_two_plan_checks(
             check += f" Koersbronmoment: {source_moment}."
         parts.append(f"{prefix} {check}")
     return " ".join(parts) + " Ik heb geen plan gewijzigd en geen order geplaatst."
+
+
+def verified_two_plan_checks(message: str, calls: tuple[dict[str, Any], ...]) -> str | None:
+    """Rebuild the answer only from the exact reads made by the trusted route."""
+    if not calls or calls[0].get("name") != "get_saved_setup_inventory":
+        return None
+    inventory = calls[0].get("result")
+    if not isinstance(inventory, dict) or calls[0].get("arguments") not in ({}, None):
+        return None
+    assets = mentioned_catalog_symbols(message)
+    if len(assets) != 2:
+        return None
+    named_pairs = {
+        (asset.upper(), quote.upper())
+        for asset, quote in re.findall(r"\b([A-Z]{2,10})/(EUR|USDT)\b", message, re.I)
+        if asset.upper() in assets
+    }
+    plans, error = select_named_plans(inventory, assets=assets, named_pairs=named_pairs)
+    if error is not None:
+        return error if len(calls) == 1 else None
+    if len(calls) != 2 + len(plans) or calls[1].get("name") != "get_setup_market_matches":
+        return None
+    market_read = calls[1].get("result")
+    if calls[1].get("arguments") not in ({}, None) or not isinstance(market_read, dict):
+        return None
+    selected_ids = (inventory.get("turn_request") or {}).get("target_ids")
+    if selected_ids != [plan.get("setup_id") for plan in plans]:
+        return None
+    quote_reads = {}
+    expected_pairs = set()
+    for plan in plans:
+        symbol = str(plan.get("symbol") or "").upper()
+        pair = str(plan.get("pair") or "").upper()
+        quote = pair.split("/", 1)[1] if pair.startswith(f"{symbol}/") else str(plan.get("quote_currency") or "").upper()
+        expected_pairs.add((symbol, quote))
+    seen_pairs = set()
+    for call in calls[2:]:
+        if call.get("name") != "get_market_snapshot" or not isinstance(call.get("result"), dict):
+            return None
+        args = call.get("arguments") or {}
+        pair = (str(args.get("asset") or "").upper(), str(args.get("quote_currency") or "").upper())
+        if pair not in expected_pairs or pair in seen_pairs:
+            return None
+        plan = next(row for row in plans if str(row.get("symbol") or "").upper() == pair[0])
+        quote_reads[plan["setup_id"]] = call["result"]
+        seen_pairs.add(pair)
+    if seen_pairs != expected_pairs:
+        return None
+    return render_two_plan_checks(plans, market_read, quote_reads)

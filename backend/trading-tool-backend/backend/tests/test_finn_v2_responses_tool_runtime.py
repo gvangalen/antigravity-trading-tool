@@ -2368,6 +2368,29 @@ def test_each_plan_followup_reopens_both_verified_4h_trade_setups(message, has_p
     assert "dagkaars" not in result.response.text.lower()
     assert "SMA" not in result.response.text
     assert "BTC/USDT" not in result.response.text
+    verified = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=message, result=result.response, locale="nl",
+    ))
+    assert verified.status == "completed"
+    assert verified.reason == "factual_source_verified"
+    altered = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=message,
+        result=replace(result.response, text=result.response.text.replace("4H trade-opzet", "1D DCA-opzet", 1)),
+        locale="nl",
+    ))
+    assert altered.status == "unavailable"
+    assert altered.reason == "factual_source_mismatch"
+    swapped_quote = list(result.response.tool_trace)
+    swapped_quote[3] = {**swapped_quote[3], "arguments": {
+        **swapped_quote[3]["arguments"], "quote_currency": "USDT",
+    }}
+    wrong_pair = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=message,
+        result=replace(result.response, tool_trace=tuple(swapped_quote)),
+        locale="nl",
+    ))
+    assert wrong_pair.status == "unavailable"
+    assert wrong_pair.reason == "factual_source_mismatch"
 
 
 def test_named_plan_comparison_also_reads_account_wide_paper_cash_when_asked():

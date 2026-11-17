@@ -163,6 +163,17 @@ def requests_execution_capability_question(message: str, context: dict[str, Any]
     text = str(message or "")
     if asks_read_only_impulse_plan_coaching(text):
         return False
+    if (
+        re.search(r"\b(?:elk|ieder|per|each|every)\b", text, re.I)
+        and re.search(r"\b(?:opgeslagen|bestaande|saved|existing)\b", text, re.I)
+        and re.search(r"\b(?:plan\w*|setup\w*|opzet\w*)\b", text, re.I)
+        and re.search(r"\b(?:controle\w*|check\w*|controleren|verify)\b", text, re.I)
+        and re.search(r"\b(?:geen|zonder|no|without)\s+(?:wijziging|aanpassing|order|change|execution)\b", text, re.I)
+    ):
+        # Read-only checks for each saved plan need owner-scoped evidence.
+        # The word "kan" in "kan ik mijn voorbereiding verbeteren?" is not
+        # a question about whether a plan rule can execute automatically.
+        return False
     if (re.search(r"\b(?:hoeveel|wat is|betekent)\b", text, re.I)
             and re.search(r"\bbotbudget\b", text, re.I)
             and re.search(r"\b(?:positie|posities|position|positions)\b", text, re.I)
