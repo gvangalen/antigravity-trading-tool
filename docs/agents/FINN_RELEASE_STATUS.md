@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN-chat: subtiele kopieeractie voor beide kanten (17 november 2026)
 
-Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA`. [PR #1165](https://github.com/gvangalen/antigravity-trading-tool/pull/1165)
+Phase: `INDEPENDENT_QA_ACCEPTED`. [PR #1165](https://github.com/gvangalen/antigravity-trading-tool/pull/1165)
 is gemerged als `717787579bfb20a1eea5e24d35c966ecb347df0e`. De bestaande knop staat nu als klein
 icoon onder de eigen berichtballon; een FINN-antwoord krijgt hetzelfde icoon
 links onder de inhoud. Beide knoppen kopiëren de oorspronkelijke berichttekst,
@@ -29,6 +29,11 @@ De eerdere onafhankelijke kopieerknopcontrole op
 `4a7d498ce34c5e89ee52ccd8c01ee115843434f1` was **PASS** voor de
 oorspronkelijke tekst en bediening op 390 px en via Enter; regeleinden konden
 zonder bestaand meerregelig bericht niet live worden afgetekend.
+De bestaande QA-agent heeft de uiteindelijke live SHA
+`8880422374e2641b458272f6f022278fb8714e12` daarna **PASS** gegeven:
+beide kopieerknoppen leverden de originele tekst, een langer FINN-antwoord
+behield zes regeleinden en Markdown, en de knoppen werkten op 390 px met Enter.
+Er zijn geen berichten, fixtureacties of trades uitgevoerd.
 
 ## FINN Smart DCA op benchmarkscore (17 november 2026)
 
