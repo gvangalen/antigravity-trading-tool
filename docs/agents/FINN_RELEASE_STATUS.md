@@ -33,8 +33,20 @@ contexttests leverden **992 passed**; de definitieve volledige backendrun
 leverde **5.011 passed, 7 skipped**. Frontend build, typecheck, i18n-,
 command- en voorsteltests en `audit:high` zijn groen. De echte providerselectie
 in development leverde **20/20** met nul provider-, schema-, timeout-, parse-
-of validatiefouten. Worker-matrix, providerregressie, CI, deployment en
-onafhankelijke live QA volgen nog; deze kandidaat is nog niet live geaccepteerd.
+of validatiefouten (artifact SHA-256
+`d02002617515850d87175a12381dafe85a05805ef0e759df7ef09e0e1a9952b2`).
+De volledige real-providerregressie leverde **109/109** met eveneens nul
+provider-, schema-, timeout-, parse- of validatiefouten (artifact SHA-256
+`4764ea6c8819df890801821a0e25f3b98738a94aebd2100f3eb0574112acdad1`).
+De lokale worker-actiematrix leverde **17/17** contracten en **26/26**
+adaptertests, zonder brokerorders, Live-aanroepen of productieverbindingen
+(artifact SHA-256
+`418bbe71c602319dc4b1a675a3ea7978028dee0fa91f5545ac6a866067f4ead8`).
+[PR #1148](https://github.com/gvangalen/antigravity-trading-tool/pull/1148)
+is de huidige releasekandidaat. CI, deployment en onafhankelijke live QA
+volgen nog; deze kandidaat is nog niet live geaccepteerd. De QA-only
+diagnoseverbetering voor de beschermde feedproef is apart gemerged via
+[PR #1147](https://github.com/gvangalen/antigravity-trading-tool/pull/1147).
 
 ## FINN 3.0: vervolg over twee plannen na afgekeurde live QA (17 november 2026)
 
