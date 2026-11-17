@@ -17,6 +17,28 @@ from backend.services.finn_v2_run_service import FinnV2RunService
 from backend.api.ai_assistant_api import _feed_context_boundary
 
 
+@pytest.mark.parametrize("locale,closed_title", [
+    ("nl", "Voorstel niet meer actief"),
+    ("en", "Proposal no longer active"),
+    ("de", "Vorschlag nicht mehr aktiv"),
+])
+def test_resolved_proposal_history_does_not_keep_waiting_for_confirmation(locale, closed_title):
+    row = {
+        "id": "4b60dd31-963f-42e9-8306-48f38626b118",
+        "event_type": "proposal_pending", "subject_type": "proposal",
+        "subject_id": "old-proposal", "status": "resolved", "symbol": "AAPL",
+        "copy_json": {language: {"title": "Voorstel wacht op jou",
+                               "body": "Wacht op jouw afzonderlijke bevestiging."}
+                      for language in ("nl", "en", "de")},
+        "evidence": {},
+    }
+    item = module.FinnCoachFeedService._serialize(row, locale)
+    assert item["title"] == closed_title
+    assert "wacht op jou" not in item["title"].lower()
+    assert "wacht op jouw afzonderlijke bevestiging" not in item["description"].lower()
+    assert item["status"] == "resolved"
+
+
 def test_fallback_preserves_subject_and_never_claims_an_entry_signal():
     copy = module._fallback("plan_match", "BTC Full Base", {})
     assert set(copy) == {"nl", "en", "de"}

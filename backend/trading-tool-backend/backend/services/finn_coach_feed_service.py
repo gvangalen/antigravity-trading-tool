@@ -1381,6 +1381,14 @@ class FinnCoachFeedService:
         row["locale"] = locale if locale in LOCALES else "nl"
         row["title"] = (copy.get(row["locale"]) or copy.get("nl") or {}).get("title", "")
         row["description"] = (copy.get(row["locale"]) or copy.get("nl") or {}).get("body", "")
+        if row.get("event_type") == "proposal_pending" and row.get("status") == "resolved":
+            # A cancelled, expired or completed proposal remains in history,
+            # but its original invitation to confirm is no longer true.
+            row["title"], row["description"] = {
+                "nl": ("Voorstel niet meer actief", "Dit voorstel wacht niet meer op bevestiging. Je kunt het niet via deze kaart uitvoeren."),
+                "en": ("Proposal no longer active", "This proposal is no longer awaiting confirmation and cannot be executed from this card."),
+                "de": ("Vorschlag nicht mehr aktiv", "Dieser Vorschlag wartet nicht mehr auf Bestätigung und kann über diese Karte nicht ausgeführt werden."),
+            }[row["locale"]]
         if (row.get("subject_type") == "setup" or row.get("event_type") == "data_blocked") and verified_setup_name:
             facts = dict(row.get("evidence") or {})
             facts["setup_name"] = verified_setup_name

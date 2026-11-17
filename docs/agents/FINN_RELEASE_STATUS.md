@@ -4,6 +4,50 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 Paper-flow: FOMO-coach en geannuleerde feedkaart (17 november 2026)
+
+Phase: `LOCAL_VALIDATED_RELEASE_CANDIDATE` op branch
+`codex/finn-paper-coach-context-feed-fix-20261117`. Onafhankelijke QA gaf
+**NOT_ACCEPTED** op definitieve publieke SHA
+`54ad3309546c1a19cf561e4908bb50c092be79c0`. De ingelogde browserreis
+bevestigde de AAPL-accountread, gecombineerde Reflectie-/botbesluitlezing,
+annuleer-vervolgflow, blokkade op een oude Paper-koers en feedvolgorde.
+De beschermde Paper-only proef bevestigde koop/verkoop, exit, Reflectie,
+polling/SSE en geen Live- of brokerorder. De complete coachflow bleef rood:
+een FOMO-vraag over AAPL-plan, scores, positie en botlimiet kreeg eerst een
+ongefundeerd antwoord dat eigen gegevens ontbraken; na een expliciete
+vervolglezing werd de opgeslagen trade-opzet ten onrechte als mogelijke DCA
+geduid. Twee geannuleerde voorstellen bleven in ‘Alle updates’ als wachtend
+getiteld.
+
+De reparatie leest voor een expliciete alleen-lezen FOMO-vraag over één
+aandeel of ETF de eigenaargebonden setup, gekoppelde strategie, scores,
+koersbron en Paper-portefeuille vóór het antwoord. Het antwoord vergelijkt
+een complete score met de opgeslagen zone, benoemt ontbrekende scores en een
+niet bevestigde uitvoeringskoers, en houdt botbudget gescheiden van kas en
+kooptoestemming. Crypto-paren en ongeldige slash-paren vallen buiten deze
+verkorte route. Paper-botwaarden verschijnen alleen bij een passende setup-
+en strategiekoppeling; een uitgeschakelde limiet verschijnt niet als €0
+koopruimte. Afgesloten voorstellen blijven historisch zichtbaar maar krijgen
+een gesloten titel en tekst in plaats van een bevestigingsuitnodiging.
+
+Gemeten lokale Build-validatie: volledige backend-suite **5.001 passed,
+7 skipped** (log SHA-256
+`f4fc22025fa5089e076fae330cffd9126b546642fb830abc24e75cf911d0cd07`),
+frontend build, typecheck, i18n-lint/-tests, command-/voorsteltests en
+`audit:high` groen (nul kwetsbaarheden). Geïsoleerde lokale
+FastAPI/Celery/PostgreSQL/Redis/Responses-actiematrix **17/17** en
+adaptertests **26/26** (artifact SHA-256
+`cad3bfdc3272f0e85d1e754900429c01a82216c8a410a7546769ffccc6ad4c51`),
+zonder productieverbindingen, Live- of brokerorders. Echte-providerselectie
+**20/20** development en **109/109** regression, beide zonder provider-,
+schema-, timeout-, parse- of validatiefouten (artifact SHA-256 respectievelijk
+`ea4b96d298ec21597624dbd827b1ebc4798bfd949ab4252e46bb6d452a003627`
+en `7852c5cbe1686c01a2bd52456c1bec4b81161ce2fc9ef0cc465a07f9ae221e14`).
+Onafhankelijke gerichte code-QA en Security vonden na reparatie geen concrete
+resterende fout. Authentieke browser- en Paper-acceptatie van deze nieuwe
+publieke SHA blijft QA-eigendom en is nog niet uitgevoerd.
+
 ## FINN 3.0 Paper-flow vervolg: accountread, dossier en annulering (17 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_FINAL_STATUS_PENDING_QA`. Productkandidaat op branch

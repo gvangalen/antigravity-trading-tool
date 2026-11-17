@@ -29,6 +29,7 @@ from backend.services.finn_v2_responses_front_door import (
     _explicit_strategy_proposal_request, _explicit_create_operation_request,
     _explicit_fresh_create_operation_request, _is_read_only_coach_turn,
     _explicit_discussion_only,
+    _read_only_impulse_plan_asset,
     _unspecified_setup_overview,
 )
 from backend.services.finn_v2_verified_setup_reference import (
@@ -2331,6 +2332,138 @@ def test_named_plan_comparison_also_reads_account_wide_paper_cash_when_asked():
             if call.name == "get_active_plan_and_strategy"} == {1, 2}
     assert result.response.turn_contract["paper_cash_total"] == 10005.45
     assert {target["setup_id"] for target in result.response.turn_contract["targets"]} == {1, 2}
+
+
+@pytest.mark.parametrize("question", [
+    "Ik wil vandaag uit FOMO extra AAPL bijkopen. Wat zegt mijn opgeslagen plan samen met de huidige Markt-, Macro- en Technisch-bewijzen, mijn Paper-positie en botlimiet? Mag ik dit als instapsignaal zien? Alleen coachen, niets voorstellen of uitvoeren.",
+    "Met deze bevestigde feiten: als ik nu uit FOMO €400 AAPL wil bijkopen, welke stap past bij mijn plan? Leg uit zonder koopvoorstel of uitvoering.",
+])
+def test_impulse_buy_coaching_reads_trade_plan_scores_quote_and_paper_without_dca(question):
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=None), session=object(), user_id=7,
+        run_id="fomo-aapl", model_led_coach=True,
+    )
+    calls = []
+
+    async def read(call):
+        calls.append(call)
+        return {"status": "completed", "results": [
+            {"scope": "read_active_setup", "status": "completed", "data": {
+                "setup_id": 12, "symbol": "AAPL", "name": "AAPL long", "setup_type": "trade",
+                "min_benchmark_score": 61, "max_benchmark_score": 75,
+            }},
+            {"scope": "read_linked_strategy", "status": "completed", "data": {
+                "setup_id": 12, "base_amount": 400, "currency": "EUR",
+            }},
+            {"scope": "read_asset_scores", "status": "completed", "data": {
+                "symbol": "AAPL", "benchmark_score": None,
+                "reported_scores": {"market_score": 80, "macro_score": 20,
+                                    "technical_score": None},
+            }},
+            {"scope": "read_market_snapshot", "status": "completed", "freshness": "stale",
+             "data": {"source_observed_at_amsterdam": "13 november 2026 22:00 CET"}},
+            {"scope": "read_portfolio", "status": "completed", "data": {
+                "environment": "paper", "bots": [{"symbol": "AAPL", "is_live": False,
+                    "setup_id": 12,
+                    "position_qty": 0, "paper_cash_eur": 405.48,
+                    "budget_limit_enabled": True, "budget_total_eur": 400}],
+            }},
+        ]}
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="AAPL", locale="nl",
+    ))
+    assert len(calls) == 1
+    assert calls[0].inputs == {"asset": "AAPL", "environment": "paper"}
+    assert calls[0].read_tools == (
+        "read_active_setup", "read_linked_strategy", "read_asset_scores",
+        "read_market_snapshot", "read_portfolio",
+    )
+    answer = result.response.text
+    assert "trade-opzet" in answer and "DCA" not in answer
+    assert "61–75" in answer and "400 EUR" in answer
+    assert "Markt 80/100" in answer and "Macro 20/100" in answer
+    assert "Technisch zonder bevestigde score" in answer
+    assert "€405,48" in answer and "botlimiet is €400" in answer
+    assert "13 november 2026 22:00 CET" in answer
+    assert "geen instapsignaal" in answer and "niets uitgevoerd" in answer
+    assert result.proposal_analysis is None
+
+
+def test_impulse_coach_shortcut_does_not_collapse_crypto_pairs():
+    assert _read_only_impulse_plan_asset(
+        "Ik wil uit FOMO BTC/USDT bijkopen. Wat zegt mijn plan? Alleen coachen."
+    ) is None
+    assert _read_only_impulse_plan_asset(
+        "Ik wil uit FOMO BTC bijkopen. Wat zegt mijn plan? Alleen coachen."
+    ) is None
+    assert _read_only_impulse_plan_asset(
+        "Ik wil uit FOMO AAPL/EUR bijkopen. Wat zegt mijn plan? Alleen coachen."
+    ) is None
+
+
+def test_impulse_coach_does_not_attach_paper_bot_from_another_setup():
+    from backend.services.finn_v2_fomo_plan_answer import render_fomo_plan_answer
+
+    answer = render_fomo_plan_answer({"results": [
+        {"scope": "read_active_setup", "status": "completed", "data": {
+            "setup_id": 12, "symbol": "AAPL", "setup_type": "trade"}},
+        {"scope": "read_linked_strategy", "status": "completed", "data": {
+            "setup_id": 12, "strategy_id": 33}},
+        {"scope": "read_asset_scores", "status": "completed", "data": {
+            "symbol": "AAPL", "reported_scores": {"technical_score": None}}},
+        {"scope": "read_portfolio", "status": "completed", "data": {
+            "environment": "paper", "bots": [{"symbol": "AAPL", "is_live": False,
+                "setup_id": 99, "strategy_id": 88, "position_qty": 4,
+                "paper_cash_eur": 800, "budget_total_eur": 900},
+                {"symbol": "AAPL", "is_live": False, "setup_id": 99,
+                 "strategy_id": 33, "position_qty": 2,
+                 "paper_cash_eur": 700, "budget_total_eur": 600}]}}],
+    }, asset="AAPL")
+    assert "geen unieke Paper-botpositie voor deze setup" in answer
+    assert all(amount not in answer for amount in ("€800", "€900", "€700", "€600"))
+
+
+def test_impulse_coach_does_not_present_disabled_zero_cap_as_bot_limit():
+    from backend.services.finn_v2_fomo_plan_answer import render_fomo_plan_answer
+
+    answer = render_fomo_plan_answer({"results": [
+        {"scope": "read_active_setup", "status": "completed", "data": {
+            "setup_id": 12, "symbol": "AAPL", "setup_type": "trade"}},
+        {"scope": "read_linked_strategy", "status": "completed", "data": {
+            "setup_id": 12}},
+        {"scope": "read_asset_scores", "status": "completed", "data": {
+            "symbol": "AAPL", "reported_scores": {"technical_score": None}}},
+        {"scope": "read_portfolio", "status": "completed", "data": {
+            "environment": "paper", "bots": [{"symbol": "AAPL", "is_live": False,
+                "setup_id": 12, "position_qty": 0, "paper_cash_eur": 405.48,
+                "budget_limit_enabled": False, "budget_total_eur": 0}]}}],
+    }, asset="AAPL")
+    assert "€405,48" in answer
+    assert "botlimiet is €0" not in answer
+
+
+def test_impulse_coach_compares_complete_score_with_saved_zone():
+    from backend.services.finn_v2_fomo_plan_answer import render_fomo_plan_answer
+
+    answer = render_fomo_plan_answer({"results": [
+        {"scope": "read_active_setup", "status": "completed", "data": {
+            "setup_id": 12, "symbol": "AAPL", "setup_type": "trade",
+            "min_benchmark_score": 61, "max_benchmark_score": 75}},
+        {"scope": "read_linked_strategy", "status": "completed", "data": {
+            "setup_id": 12}},
+        {"scope": "read_asset_scores", "status": "completed", "data": {
+            "symbol": "AAPL", "benchmark_score": 80,
+            "reported_scores": {"market_score": 90, "macro_score": 70,
+                                "technical_score": 80}}},
+        {"scope": "read_portfolio", "status": "completed", "data": {
+            "environment": "paper", "bots": []}}],
+    }, asset="AAPL")
+    assert "buiten de opgeslagen setupzone 61–75" in answer
+    assert "scorevoorwaarde is niet voldaan" in answer
+    assert "DCA" not in answer
 
 
 def test_named_plan_price_comparison_reads_each_selected_pair_quote():
