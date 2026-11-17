@@ -4,6 +4,25 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN-chat: eigen berichten kopiëren (17 november 2026)
+
+Phase: `BUILD_VALIDATED_PENDING_CI`. Branch
+`codex/finn-copy-own-message-20261117`, codecommit
+`c6fee9f098b7fd2fc5b1fb2b861dacb9f2495a3f`; de uiteindelijke
+release-SHA volgt uit de Git-branch na deze statuswijziging. Onder elk eigen
+chatbericht staat nu een zichtbare kopieerknop. De knop schrijft de volledige
+oorspronkelijke tekst naar het klembord en bevestigt kort de actie; bij een
+klembordfout verschijnt een foutmelding. De labels zijn vertaald in NL/EN/DE.
+
+Lokale Build-controle: frontend-build en typecheck geslaagd; `lint:i18n`
+geslaagd; `test:i18n` **43/43** en `test:commands` **85/85**. Alleen de
+frontendweergave en vertalingen zijn gewijzigd; geen action contract, backend,
+provider, bot of handelspad is geraakt. CI, Auto Deploy en publieke SHA-controle
+volgen nog. De eerdere onafhankelijke beschermde FINN 3.0-hertest op
+`d35bd3c888c364ff9edf681da291c2e9d40c2b47` gaf **PASS** in
+[QA-run 44153564120](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44153564120),
+zonder Live calls; de QA-agent rapporteerde één gecontroleerde Paper-executie.
+
 ## FINN 3.0: herstelde proactieve verbeterkaart (17 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA`. De onafhankelijke proef op
