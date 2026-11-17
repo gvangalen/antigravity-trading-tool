@@ -2943,7 +2943,7 @@ class FinnResponsesFrontDoor:
                                                  if quote in {"EUR", "USDT"} else {})}
                     quote_call = FinnResponsesToolCall(
                         name="get_market_snapshot", operation_id=None, inputs=inputs,
-                        read_tools=("read_market_snapshot",),
+                        read_tools=("read_market_snapshot", "read_asset_scores"),
                         required_inputs=(), missing_inputs=(),
                     )
                     try:
