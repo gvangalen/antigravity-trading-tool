@@ -6,8 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN-chat: subtiele kopieeractie voor beide kanten (17 november 2026)
 
-Phase: `BUILD_VALIDATED_PENDING_CI`. Branch
-`codex/finn-copy-subtle-both-20261117`. De bestaande knop staat nu als klein
+Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA`. [PR #1165](https://github.com/gvangalen/antigravity-trading-tool/pull/1165)
+is gemerged als `717787579bfb20a1eea5e24d35c966ecb347df0e`. De bestaande knop staat nu als klein
 icoon onder de eigen berichtballon; een FINN-antwoord krijgt hetzelfde icoon
 links onder de inhoud. Beide knoppen kopiëren de oorspronkelijke berichttekst,
 tonen kort een vinkje en houden de bestaande toegankelijke labels en
@@ -17,8 +17,15 @@ antwoord compleet is.
 Lokale Build-controle: frontend-build, typecheck en `lint:i18n` geslaagd;
 `test:i18n` **43/43** en `test:commands` **85/85**. Alleen de FINN-chatweergave en
 bijbehorende statische frontend-export zijn gewijzigd. Geen action contract,
-backend, provider, bot of handelspad is geraakt. CI, Auto Deploy en publieke
-SHA-controle volgen nog. De eerdere onafhankelijke kopieerknopcontrole op
+backend, provider, bot of handelspad is geraakt. De PR had vijf groene
+CI-jobs. [Main-CI 44184362824](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44184362824)
+en [Auto Deploy 44185238636](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44185238636)
+zijn geslaagd. GitHub main, backend-health (HTTP 200) en frontend-buildinfo
+(HTTP 200) meldden exact product-SHA
+`717787579bfb20a1eea5e24d35c966ecb347df0e`. Deze statuswijziging
+creëert zelf nog een nieuwe main-SHA; de laatste main-CI, Auto Deploy en
+publieke identiteit worden daarop opnieuw gecontroleerd vóór de QA-handoff.
+De eerdere onafhankelijke kopieerknopcontrole op
 `4a7d498ce34c5e89ee52ccd8c01ee115843434f1` was **PASS** voor de
 oorspronkelijke tekst en bediening op 390 px en via Enter; regeleinden konden
 zonder bestaand meerregelig bericht niet live worden afgetekend.
