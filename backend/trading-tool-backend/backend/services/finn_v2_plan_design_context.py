@@ -143,9 +143,26 @@ def remember_unsaved_design(context: dict[str, Any]) -> bool:
     return context.get("plan_design_focus") != before
 
 
+def asks_read_only_impulse_plan_coaching(message: str) -> bool:
+    """A buy impulse review needs saved owner facts, not plan-rule capability copy."""
+    text = str(message or "")
+    return bool(
+        re.search(r"\b(?:FOMO|impulsief)\b", text, re.I)
+        and re.search(r"\b(?:plan|setup)\b", text, re.I)
+        and re.search(r"\b(?:bijkopen|kopen|aankoop|instapsignaal)\b", text, re.I)
+        and re.search(
+            r"\b(?:alleen coachen|niets voorstellen|niets.{0,20}uitvoeren|"
+            r"zonder koopvoorstel|zonder uitvoering|leg uit zonder)\b",
+            text, re.I,
+        )
+    )
+
+
 def requests_execution_capability_question(message: str, context: dict[str, Any] | None = None) -> bool:
     """Route explicit feasibility questions through the executable contracts."""
     text = str(message or "")
+    if asks_read_only_impulse_plan_coaching(text):
+        return False
     if (re.search(r"\b(?:hoeveel|wat is|betekent)\b", text, re.I)
             and re.search(r"\bbotbudget\b", text, re.I)
             and re.search(r"\b(?:positie|posities|position|positions)\b", text, re.I)

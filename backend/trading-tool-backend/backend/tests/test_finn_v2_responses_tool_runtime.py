@@ -2390,6 +2390,19 @@ def test_impulse_buy_coaching_reads_trade_plan_scores_quote_and_paper_without_dc
     assert "13 november 2026 22:00 CET" in answer
     assert "geen instapsignaal" in answer and "niets uitgevoerd" in answer
     assert result.proposal_analysis is None
+    verified = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=question, result=result.response, locale="nl",
+    ))
+    assert verified.status == "completed"
+    assert verified.reason == "factual_source_verified"
+    assert verified.text == answer
+    altered = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=question,
+        result=replace(result.response, text=answer.replace("trade-opzet", "DCA-opzet")),
+        locale="nl",
+    ))
+    assert altered.status == "unavailable"
+    assert altered.reason == "factual_source_mismatch"
 
 
 def test_impulse_coach_shortcut_does_not_collapse_crypto_pairs():
