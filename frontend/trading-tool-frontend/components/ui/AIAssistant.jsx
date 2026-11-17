@@ -519,7 +519,7 @@ function AIAssistantContent({
   useEffect(() => { messagesRef.current = messages; }, [messages]);
   useEffect(() => () => clearTimeout(copyFeedbackTimerRef.current), []);
   const at = createAssistantTranslator(t);
-  const handleCopyUserMessage = async (messageText, index) => {
+  const handleCopyMessage = async (messageText, index) => {
     try {
       await navigator.clipboard.writeText(messageText);
       clearTimeout(copyFeedbackTimerRef.current);
@@ -2855,7 +2855,8 @@ function AIAssistantContent({
 
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-              <div className={`${m.role === "user" ? "max-w-[90%] rounded-2xl px-4 py-3" : "w-full"} ${
+              <div className={m.role === "user" ? "max-w-[90%]" : "w-full"}>
+                <div className={`${m.role === "user" ? "rounded-2xl px-4 py-3" : "w-full"} ${
                 m.role === "user"
                   ? "bg-blue-600 text-white shadow-lg shadow-blue-600/10"
                   : m.isError
@@ -2869,20 +2870,6 @@ function AIAssistantContent({
                       : <React.Fragment key={index}>{part.text}</React.Fragment>)
                     : m.text}
                 </p>
-                {m.role === "user" && (
-                  <div className="mt-2 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => handleCopyUserMessage(m.text, i)}
-                      aria-label={copiedMessageIndex === i ? uiText.messageCopied : uiText.copyMessage}
-                      title={copiedMessageIndex === i ? uiText.messageCopied : uiText.copyMessage}
-                      className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-white/85 hover:bg-white/15 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                    >
-                      {copiedMessageIndex === i ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
-                      {copiedMessageIndex === i ? uiText.messageCopied : uiText.copyMessage}
-                    </button>
-                  </div>
-                )}
                 {m.role === "assistant" && m.isComplete !== false && Array.isArray(m.reviewLinks) && m.reviewLinks.length > 0 && (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {m.reviewLinks.filter((link) => Number.isSafeInteger(link?.review_id) && link.review_id > 0).slice(0, 5).map((link) => (
@@ -2958,6 +2945,20 @@ function AIAssistantContent({
                   >
                     {uiText.retry}
                   </button>
+                )}
+                </div>
+                {(m.role === "user" || (m.role === "assistant" && m.isComplete !== false)) && m.text && (
+                  <div className={`mt-1 flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyMessage(m.text, i)}
+                      aria-label={copiedMessageIndex === i ? uiText.messageCopied : uiText.copyMessage}
+                      title={copiedMessageIndex === i ? uiText.messageCopied : uiText.copyMessage}
+                      className={`inline-flex h-9 w-9 items-center justify-center rounded-lg transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${copiedMessageIndex === i ? "text-blue-600 dark:text-blue-400" : "text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200"}`}
+                    >
+                      {copiedMessageIndex === i ? <Check size={17} aria-hidden="true" /> : <Copy size={17} aria-hidden="true" />}
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
