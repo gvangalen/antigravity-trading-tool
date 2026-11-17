@@ -53,6 +53,9 @@ from backend.services.watchlist_conversation_service import ambiguous_asset_chan
 from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
 from backend.services.finn_v2_account_bundle_answer import render_account_bundle_answer
 from backend.services.finn_v2_fomo_plan_answer import render_fomo_plan_answer
+from backend.services.finn_v2_two_plan_checks_answer import (
+    render_two_plan_checks, select_named_plans,
+)
 from backend.services.finn_v2_plan_design_context import asks_read_only_impulse_plan_coaching
 from backend.services.finn_v2_paper_position_answer import (
     PAPER_POSITION_CASH_UNAVAILABLE, render_paper_position_cash_answer,
@@ -251,7 +254,9 @@ def _explicit_discussion_only(message: str) -> bool:
     return bool(
         re.search(
             r"\b(?:wijzig niets|verander niets|pas niets aan|do not change anything|"
-            r"don't change anything|make no changes|ändere nichts)\b",
+            r"don't change anything|make no changes|ändere nichts|"
+            r"geen wijziging(?:en)?(?: of (?:een )?order)?|"
+            r"geen order (?:of|en) (?:een )?wijziging(?:en)?)\b",
             message, re.I,
         )
         and not re.search(r"\b(?:behalve|uitgezonderd|except|außer)\b", message, re.I)
@@ -2884,6 +2889,82 @@ class FinnResponsesFrontDoor:
         normalized_inventory_read = (
             complete_collection_read or setup_relationship_read or named_plan_comparison
         )
+        if (
+            getattr(self, "model_led_coach", False)
+            and locale.lower().startswith("nl")
+            and is_read_only_turn and per_asset_plan_advice
+            and len(mentioned_assets) == 2 and named_plan_comparison
+            and pending_operation is None and not resuming_clarification
+        ):
+            # The answer must be grounded in each exact owner-scoped plan.
+            # A free-text continuation previously invented daily-candle rules
+            # for two saved 4H trades after an otherwise correct first turn.
+            inventory_call = FinnResponsesToolCall(
+                name="get_saved_setup_inventory", operation_id=None, inputs={},
+                read_tools=("read_saved_setup_inventory",),
+                required_inputs=(), missing_inputs=(),
+            )
+            try:
+                inventory_read = await self.reads(inventory_call)
+            except Exception:
+                logger.warning("FINN two-plan inventory read failed", exc_info=True)
+                inventory_read = {"status": "unavailable", "results": []}
+            trace = [{"name": inventory_call.name, "status": inventory_read.get("status", "unavailable"),
+                      "arguments": {}, "result": inventory_read}]
+            plans, selection_error = select_named_plans(
+                inventory_read, assets=mentioned_assets, named_pairs=mentioned_pairs,
+            )
+            if selection_error is None:
+                inventory_read = {**inventory_read, "turn_request": {
+                    "target_ids": [plan["setup_id"] for plan in plans],
+                    "answer_type": "compare",
+                }}
+                trace[0]["result"] = inventory_read
+                market_call = FinnResponsesToolCall(
+                    name="get_setup_market_matches", operation_id=None, inputs={},
+                    read_tools=("read_setup_market_matches",),
+                    required_inputs=(), missing_inputs=(),
+                )
+                try:
+                    market_read = await self.reads(market_call)
+                except Exception:
+                    logger.warning("FINN two-plan market read failed", exc_info=True)
+                    market_read = {"status": "unavailable", "results": []}
+                trace.append({"name": market_call.name, "status": market_read.get("status", "unavailable"),
+                              "arguments": {}, "result": market_read})
+                quote_reads = {}
+                for plan in plans:
+                    symbol = str(plan.get("symbol") or "").upper()
+                    pair = str(plan.get("pair") or "").upper()
+                    quote = pair.split("/", 1)[1] if pair.startswith(f"{symbol}/") else str(plan.get("quote_currency") or "").upper()
+                    inputs = {"asset": symbol, **({"quote_currency": quote} if quote else {})}
+                    quote_call = FinnResponsesToolCall(
+                        name="get_market_snapshot", operation_id=None, inputs=inputs,
+                        read_tools=("read_market_snapshot",),
+                        required_inputs=(), missing_inputs=(),
+                    )
+                    try:
+                        quote_read = await self.reads(quote_call)
+                    except Exception:
+                        logger.warning("FINN two-plan quote read failed", exc_info=True)
+                        quote_read = {"status": "unavailable", "results": []}
+                    quote_reads[plan["setup_id"]] = quote_read
+                    trace.append({"name": quote_call.name, "status": quote_read.get("status", "unavailable"),
+                                  "arguments": inputs, "result": quote_read})
+                answer = render_two_plan_checks(plans, market_read, quote_reads)
+            else:
+                answer = selection_error
+            return FinnResponsesFrontDoorResult(
+                FinnResponsesResult(
+                    text=answer, response_id=f"two-plan-checks-{self.run_id}",
+                    tool_trace=tuple(trace), answer_kind="factual_source",
+                    model_led_coach=True, response_id_reusable=False,
+                    turn_contract=build_turn_contract(
+                        message=message, tool_trace=tuple(trace),
+                        previous_contract=previous_turn_contract,
+                    ),
+                ), selected, previous_response, locale=locale,
+            )
         query: dict[str, str] | None = None
         if is_read_request and explicit_rule_transfer:
             query = {"kind": "cross_asset_scope", "source_asset": explicit_rule_transfer[0],

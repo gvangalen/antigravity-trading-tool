@@ -4,6 +4,43 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: vervolg over twee plannen na afgekeurde live QA (17 november 2026)
+
+Phase: `BUILD_VALIDATING`. De onafhankelijke QA op publieke SHA
+`4e6dac4ab0339340f43a32546f3e4f4992263846` gaf `NOT_ACCEPTED`.
+In een ingelogd gesprek beschreef FINN AAPL en BTC/EUR eerst als afzonderlijke
+4H-tradeplannen. Op de directe vraag om per plan één concrete voorbereiding
+zei hij dat hij de opgeslagen plannen niet kon inzien en gaf hij ongevraagd
+advies over dagkaarsen en een SMA van 2–219 dagen. Er ontstond geen voorstel
+of order. De beschermde `coach_feed_triggers`-run werd niet uitgevoerd omdat
+de QA-sessie geen GitHub-authenticatie had; er is dus geen triggerbewijs.
+
+De reparatie herkent nu ook “geen wijziging of order” als expliciete
+alleen-lezen bedoeling. Voor precies twee genoemde opgeslagen plannen leest
+FINN vervolgens eigenaargebonden setupregels, de exacte marktbeoordeling per
+setup en de bijbehorende koersbron. Het antwoord noemt de opgeslagen
+timeframe, de verifieerbare score of specifieke ontbrekende deelgroep, de
+ingestelde scorezone en het beschikbare bronmoment. Een onbekende of
+meervoudige setup wordt benoemd zonder de actieve BTC/USDT-workspace als
+vervanger te gebruiken. De geselecteerde twee setup-ID’s blijven in het
+beurtcontract bewaard. Er worden geen voorstellen of orders gemaakt.
+
+De exacte eerste vraag en vervolgvraag slagen in de gerichte regressie.
+De volledige FINN-routertest heeft **979 passed**; de volledige backendrun
+heeft **5.010 passed, 7 skipped**. De lokale FastAPI/Celery-actiematrix heeft
+**17/17** en de adaptertests **26/26**; artifact SHA-256
+`669c8f45df9b1f91b60bc3ba3cf9236a1e2d8b95c7838f211cf3602c49d3a3a9`.
+De frontend build, typecheck, i18n-, command- en voorsteltests en
+`audit:high` zijn groen. Een providerontwikkelrun had één externe
+`invalid_prompt`-afwijzing op een algemene RSI-vraag; de ongewijzigde herhaling
+was **20/20** met nul provider-, schema-, parse- of validatiefouten
+(artifact SHA-256 `17fe63e0ce0a7f0aa4a94e57e951f410447a6ea2befc7fc419686f5ff813337d`).
+De volledige providerregressie was **109/109** met eveneens nul provider-,
+schema-, parse- of validatiefouten (artifact SHA-256
+`0c41dd9395b26f74a755c86621155b8c7e1e9811a580d112b5e4a92b7cee49fd`).
+Deze kandidaat is **niet**
+gedeployed of live geaccepteerd; de eerdere QA-bevinding blijft van kracht.
+
 ## FINN 3.0: proactieve feed en concreet advies per opgeslagen plan (17 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA` op branch

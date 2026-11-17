@@ -2282,12 +2282,15 @@ def test_plan_score_comparison_keeps_aapl_and_btc_eur_separate_from_btc_usdt(que
     assert {row["setup_id"]: row["benchmark_score"] for row in scores} == {1: 57.3, 2: 40}
 
 
-def test_each_plan_followup_reopens_both_verified_4h_trade_setups():
-    message = (
-        "Dus moet ik alleen wachten, of kan ik mijn voorbereiding vandaag zinvol verbeteren? "
-        "Geef voor AAPL en BTC/EUR elk één concrete controle die past bij mijn opgeslagen "
-        "trade-opzet. Ik wil geen wijziging of order."
-    )
+@pytest.mark.parametrize(("message", "has_previous"), [
+    ("Ik zie in mijn dagrapport geen geldige nieuwe trade. Wat zeggen mijn opgeslagen "
+     "AAPL-plan en BTC/EUR-plan daar concreet over, en wat controleer ik per plan als eerste? "
+     "Verander niets.", False),
+    ("Dus moet ik alleen wachten, of kan ik mijn voorbereiding vandaag zinvol verbeteren? "
+     "Geef voor AAPL en BTC/EUR elk één concrete controle die past bij mijn opgeslagen "
+     "trade-opzet. Ik wil geen wijziging of order.", True),
+])
+def test_each_plan_followup_reopens_both_verified_4h_trade_setups(message, has_previous):
     fake = FakeResponses(
         response("inventory", calls=[tool_call("plans", "get_saved_setup_inventory", {})]),
         response("answer", text=(
@@ -2308,9 +2311,11 @@ def test_each_plan_followup_reopens_both_verified_4h_trade_setups():
                 "scope": "read_saved_setup_inventory", "status": "completed",
                 "data": {"complete": True, "setups": [
                     {"setup_id": 1, "name": "AAPL 4H trade", "symbol": "AAPL",
-                     "timeframe": "4H", "setup_type": "trade", "pair": "AAPL/USD"},
+                     "timeframe": "4H", "setup_type": "trade", "pair": "AAPL/USD",
+                     "min_benchmark_score": 61, "max_benchmark_score": 75},
                     {"setup_id": 2, "name": "BTC EUR 4H trade", "symbol": "BTC",
-                     "timeframe": "4H", "setup_type": "trade", "pair": "BTC/EUR"},
+                     "timeframe": "4H", "setup_type": "trade", "pair": "BTC/EUR",
+                     "min_benchmark_score": 61, "max_benchmark_score": 75},
                     {"setup_id": 3, "name": "BTC USDT DCA", "symbol": "BTC",
                      "timeframe": "1D", "setup_type": "dca", "pair": "BTC/USDT"},
                 ]},
@@ -2343,7 +2348,8 @@ def test_each_plan_followup_reopens_both_verified_4h_trade_setups():
     ]}}
     result = asyncio.run(front.run(
         message=message, instructions=front._model_led_instructions("nl"),
-        conversation_context={}, verified_asset="BTC", previous_response=previous,
+        conversation_context={}, verified_asset="BTC",
+        previous_response=previous if has_previous else None,
         workspace_hints={"page": "/asset", "symbol": "BTC", "quote_currency": "USDT"},
     ))
     assert calls[0].name == "get_saved_setup_inventory"
@@ -2353,6 +2359,14 @@ def test_each_plan_followup_reopens_both_verified_4h_trade_setups():
                 ("AAPL", "USD"), ("BTC", "EUR"),
             }
     assert {target["setup_id"] for target in result.response.turn_contract["targets"]} == {1, 2}
+    assert result.response.answer_kind == "factual_source"
+    assert "AAPL/USD" in result.response.text
+    assert "BTC/EUR" in result.response.text
+    assert "4H trade-opzet" in result.response.text
+    assert "ontbrekende" in result.response.text
+    assert "35/100" in result.response.text and "61–75" in result.response.text
+    assert "dagkaars" not in result.response.text.lower()
+    assert "SMA" not in result.response.text
     assert "BTC/USDT" not in result.response.text
 
 
