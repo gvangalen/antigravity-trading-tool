@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: exacte twee-plan vervolgvragen na live afwijzing (17 november 2026)
 
-Phase: `LOCAL_REPAIR_VALIDATION`. Onafhankelijke QA wees de vorige live kandidaat
+Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA`. Onafhankelijke QA wees de vorige live kandidaat
 op SHA `3da92b65833c33508a5b477475e88a78692b401b` af. De eerste vraag over
 de opgeslagen AAPL- en BTC/EUR-plannen kreeg een generieke onbewezen melding;
 de vervolgvraag kreeg een dagkaars-/SMA-antwoord zonder de twee setups te lezen.
@@ -43,8 +43,16 @@ adaptertests, zonder brokerorders, Live-aanroepen of productieverbindingen
 (artifact SHA-256
 `418bbe71c602319dc4b1a675a3ea7978028dee0fa91f5545ac6a866067f4ead8`).
 [PR #1148](https://github.com/gvangalen/antigravity-trading-tool/pull/1148)
-is de huidige releasekandidaat. CI, deployment en onafhankelijke live QA
-volgen nog; deze kandidaat is nog niet live geaccepteerd. De QA-only
+is met vijf groene PR-CI-jobs gemerged als
+`f84365050fd164f4f5e287e17ab81545b602549c`. De vijf jobs van
+[main-CI 44107182561](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44107182561)
+en [Auto Deploy 44108263519](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44108263519)
+zijn geslaagd. GitHub main en de publieke backend-health en frontend-build-info
+meldden exact `f84365050fd164f4f5e287e17ab81545b602549c`; beide publieke
+URLs gaven HTTP 200. Deze statusaanvulling maakt zelf een nieuwe documentatie-SHA;
+QA start pas nadat ook daarvan de laatste main-CI, Auto Deploy en publieke
+SHA-pariteit zijn vastgesteld. Onafhankelijke live QA volgt nog; de kandidaat
+is nog niet live geaccepteerd. De QA-only
 diagnoseverbetering voor de beschermde feedproef is apart gemerged via
 [PR #1147](https://github.com/gvangalen/antigravity-trading-tool/pull/1147).
 
