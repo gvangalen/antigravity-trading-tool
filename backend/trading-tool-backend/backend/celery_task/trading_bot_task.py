@@ -1,8 +1,9 @@
 # backend/celery_task/trading_bot_task.py
 
 import logging
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from celery import shared_task
 
@@ -24,9 +25,9 @@ logger.setLevel(logging.INFO)
 def run_daily_trading_bot(self, user_id: int, report_date: Optional[str] = None):
 
     try:
-        run_date = date.fromisoformat(report_date) if report_date else date.today()
+        run_date = date.fromisoformat(report_date) if report_date else datetime.now(ZoneInfo("Europe/Amsterdam")).date()
     except Exception:
-        run_date = date.today()
+        run_date = datetime.now(ZoneInfo("Europe/Amsterdam")).date()
 
     logger.info(f"🤖 START | user={user_id} | date={run_date}")
 

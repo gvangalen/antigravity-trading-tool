@@ -2,7 +2,7 @@
 
 import json
 import sqlite3
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
@@ -34,7 +34,9 @@ class _OrderCursor:
     def execute(self, sql, params=()):
         self.connection.statements.append((sql, params))
         self.row = None
-        if "FROM bot_configs" in sql:
+        if "FROM bot_decisions d" in sql and "JOIN setups st" in sql:
+            self.row = (date.today(), "trade", "calendar", None)
+        elif "FROM bot_configs" in sql:
             self.row = ("auto", False, True, 100, 1000, 200, 1, 200, None)
         elif "SELECT cash_eur FROM bot_portfolios" in sql:
             self.row = (1000,)

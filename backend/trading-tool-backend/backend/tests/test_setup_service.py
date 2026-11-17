@@ -51,6 +51,26 @@ def test_weekly_dca_rejects_invalid_day():
     assert "dca_day" in exc.value.detail
 
 
+@pytest.mark.parametrize("frequency,day_field", [
+    ("weekly", "dca_day"), ("monthly", "dca_month_day"),
+])
+def test_calendar_dca_requires_day_after_benchmark_transition(frequency, day_field):
+    service = SetupService(None)
+    payload = {
+        "name": "BTC DCA", "symbol": "BTC", "timeframe": "1D",
+        "setup_type": "dca", "dca_frequency": frequency,
+        "dca_trigger_mode": "calendar", "dca_day": None,
+        "dca_month_day": None,
+    }
+    with pytest.raises(HTTPException) as exc:
+        service.validate_setup_payload(payload, is_update=True)
+    assert exc.value.status_code == 400
+    assert "koopdag" in exc.value.detail
+
+    payload[day_field] = 1
+    service.validate_setup_payload(payload, is_update=True)
+
+
 def test_setup_description_is_optional_trimmed_and_bounded():
     service = SetupService(None)
     payload = _weekly_payload("monday") | {"description": "  Wait for a pullback.  "}

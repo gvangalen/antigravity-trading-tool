@@ -248,6 +248,8 @@ class SetupService:
             # Check weekly day
             if dca_freq.lower() == "weekly":
                 dca_day = raw_payload.get("dca_day")
+                if raw_payload.get("dca_trigger_mode") == "calendar" and dca_day is None:
+                    raise HTTPException(400, "Kies een koopdag voor wekelijkse kalender-DCA.")
                 if dca_day is not None:
                     try:
                         dca_day_int = int(dca_day)
@@ -259,6 +261,8 @@ class SetupService:
             # Check monthly day
             if dca_freq.lower() == "monthly":
                 dca_m_day = raw_payload.get("dca_month_day")
+                if raw_payload.get("dca_trigger_mode") == "calendar" and dca_m_day is None:
+                    raise HTTPException(400, "Kies een koopdag voor maandelijkse kalender-DCA.")
                 if dca_m_day is not None:
                     try:
                         dca_m_day_int = int(dca_m_day)

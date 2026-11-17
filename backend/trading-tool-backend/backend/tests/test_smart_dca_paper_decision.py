@@ -147,6 +147,53 @@ def test_smart_dca_missing_score_cannot_turn_placeholder_into_a_buy(paper_engine
     assert result["amount_eur"] == 0
 
 
+def test_score_trigger_rechecks_other_fills_for_same_week_before_execution():
+    from backend.engine.trading_bot_execution import (
+        BotSafetyBlock, _require_smart_dca_period_available,
+    )
+
+    class Cursor:
+        def __init__(self, prior_fill):
+            self.prior_fill = prior_fill
+            self.calls = []
+        def __enter__(self):
+            return self
+        def __exit__(self, *_args):
+            return None
+        def execute(self, query, params):
+            self.calls.append((query, params))
+        def fetchone(self):
+            if len(self.calls) == 1:
+                return (date(2026, 11, 17), "dca", "benchmark", "weekly")
+            return (1,) if self.prior_fill else None
+
+    class Connection:
+        def __init__(self, prior_fill):
+            self.cursor_instance = Cursor(prior_fill)
+        def cursor(self):
+            return self.cursor_instance
+
+    available = Connection(False)
+    _require_smart_dca_period_available(
+        available, user_id=3, bot_id=4, decision_id=5,
+        as_of=date(2026, 11, 18),
+    )
+    query, params = available.cursor_instance.calls[1]
+    assert "id<>%s" in query and "executed" in query
+    assert params == (3, 4, 5, date(2026, 11, 16), date(2026, 11, 23))
+
+    with pytest.raises(BotSafetyBlock):
+        _require_smart_dca_period_available(
+            Connection(True), user_id=3, bot_id=4, decision_id=5,
+            as_of=date(2026, 11, 18),
+        )
+    with pytest.raises(BotSafetyBlock, match="verstreken periode"):
+        _require_smart_dca_period_available(
+            Connection(False), user_id=3, bot_id=4, decision_id=5,
+            as_of=date(2026, 11, 23),
+        )
+
+
 @pytest.mark.parametrize("score,expected", [(20, 300), (50, 200), (80, 100)])
 def test_inverse_smart_dca_paper_amounts_decrease_as_benchmark_rises(paper_engines, score, expected):
     _, strategy = split_confirmed_dca_plan({
