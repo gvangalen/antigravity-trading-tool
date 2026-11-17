@@ -4,6 +4,55 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: herstelde proactieve verbeterkaart (17 november 2026)
+
+Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA`. De onafhankelijke proef op
+`f7b0526a6684212a7554af5db27b45c7d9e2e987` gaf `NOT_ACCEPTED`.
+De ingelogde AAPL/BTC-EUR-vragen waren **groen**: FINN noemde AAPL Markt
+**80**, Macro **20**, Technisch ontbrekend; BTC/EUR Markt **50**, Macro
+**20**, Technisch **35** en benchmark **35/100**, in overeenstemming met
+Analyse en de gecontroleerde DXY-/RSI-bronmomenten. De antwoorden gaven
+afzonderlijke controles zonder DCA-afdwaling of actie.
+
+De beschermde Paper-feedproef
+[44140997117](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44140997117)
+vond na 45 seconden geen verbeterkaart (`coach_feed_improvement_card_missing`),
+hoewel Celery de taak als `success` rapporteerde. Daardoor werd de planreview
+niet bereikt en bleef de geïsoleerde QA-fixture in quarantaine. Een andere
+Paper-risicokaart met read-only *Bespreek* slaagde en werd opgeruimd. QA
+rapporteerde één Paper-uitvoeringspoging en nul Live-aanroepen, Live-handel of
+Live-botactivaties. Gesaniteerd artifact SHA-256
+`fe05922b595fc57c3f9f1080e9fd310d4a0926d7cf8880d7c673e272ce0c60a1`.
+
+De oorzaak is lokaal met een wegwerp-PostgreSQL gereproduceerd: de score-feedtaak
+vroeg `bot_configs.setup_id` op, terwijl die relatie in `strategies.setup_id`
+staat. De SQL-fout stopte de task vóór `reconcile_improvement_suggestions`;
+de brede except liet Celery ten onrechte `success` rapporteren. [PR #1159](https://github.com/gvangalen/antigravity-trading-tool/pull/1159)
+is als `abc85c86355d3684e08359589e2479c4b47b55fd` gemerged. De query
+gebruikt nu de eigenaargebonden strategy-join en echte taskfouten blijven
+zichtbaar als taskfouten. In dezelfde lokale casus creëert de gerepareerde
+task een ongelezen `improvement_suggestion` voor ongeldige ETH-gewichten;
+de lokale testgebruiker en kaart zijn daarna verwijderd. Twee regressies
+bewaken de join en foutpropagatie.
+
+Lokale Build-validatie: volledige backend **5.021 passed, 7 skipped**;
+FastAPI/Celery-actiematrix **17/17** en adaptertests **26/26**, zonder
+brokerorders, productieverbindingen of Live-aanroepen (artifact SHA-256
+`205b3c2162f8e52bc19459a7c76f9077512745ff237b9dc2e44f1eea13f6024d`).
+De echte providerontwikkelset slaagde **20/20** (SHA-256
+`b99682d8790338a5ede624e683ff4dac2f7f8c8aeaebccd4948ad58e4ed3d07a`);
+de echte providerregressie **109/109** (SHA-256
+`67132ee95b88048ad35f050f1757793e870a44d5b2a7e43ade0627f59933a03b`),
+beide zonder provider-, schema-, parse-, timeout- of validatiefouten. De
+product-PR had vijf groene CI-jobs. [Main-CI 44144565343](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44144565343)
+en [Auto Deploy 44145668914](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44145668914)
+zijn geslaagd. GitHub main, publieke backend-health (HTTP 200) en
+frontend-build-info (HTTP 200) meldden exact product-SHA
+`abc85c86355d3684e08359589e2479c4b47b55fd`. Deze statuswijziging
+creëert zelf nog een nieuwe main-SHA; ook daarvan worden de laatste main-CI,
+Auto Deploy en publieke backend/frontend-identiteit geverifieerd vóór een
+nieuwe onafhankelijke ingelogde en Paper-only QA-proef.
+
 ## FINN 3.0: exacte scorelezing en meetbare Paper-feedproef (17 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA`. De vorige onafhankelijke
