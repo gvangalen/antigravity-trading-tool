@@ -6,10 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN-chat: eigen berichten kopiëren (17 november 2026)
 
-Phase: `BUILD_VALIDATED_PENDING_CI`. Branch
-`codex/finn-copy-own-message-20261117`, codecommit
-`c6fee9f098b7fd2fc5b1fb2b861dacb9f2495a3f`; de uiteindelijke
-release-SHA volgt uit de Git-branch na deze statuswijziging. Onder elk eigen
+Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA`. [PR #1162](https://github.com/gvangalen/antigravity-trading-tool/pull/1162)
+is gemerged als `0dcd8a96d5f38c0a2c15204a889c9d385e50371d`. Onder elk eigen
 chatbericht staat nu een zichtbare kopieerknop. De knop schrijft de volledige
 oorspronkelijke tekst naar het klembord en bevestigt kort de actie; bij een
 klembordfout verschijnt een foutmelding. De labels zijn vertaald in NL/EN/DE.
@@ -17,8 +15,15 @@ klembordfout verschijnt een foutmelding. De labels zijn vertaald in NL/EN/DE.
 Lokale Build-controle: frontend-build en typecheck geslaagd; `lint:i18n`
 geslaagd; `test:i18n` **43/43** en `test:commands` **85/85**. Alleen de
 frontendweergave en vertalingen zijn gewijzigd; geen action contract, backend,
-provider, bot of handelspad is geraakt. CI, Auto Deploy en publieke SHA-controle
-volgen nog. De eerdere onafhankelijke beschermde FINN 3.0-hertest op
+provider, bot of handelspad is geraakt. De PR had vijf groene CI-jobs.
+[Main-CI 44169057914](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44169057914)
+en [Auto Deploy 44170110401](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44170110401)
+zijn geslaagd. GitHub main, backend-health (HTTP 200) en frontend-buildinfo
+(HTTP 200) rapporteerden alle drie product-SHA
+`0dcd8a96d5f38c0a2c15204a889c9d385e50371d`. Deze statuswijziging
+creëert zelf nog een nieuwe main-SHA; de laatste main-CI, Auto Deploy en
+publieke identiteit worden daarop opnieuw gecontroleerd vóór de QA-handoff.
+De eerdere onafhankelijke beschermde FINN 3.0-hertest op
 `d35bd3c888c364ff9edf681da291c2e9d40c2b47` gaf **PASS** in
 [QA-run 44153564120](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44153564120),
 zonder Live calls; de QA-agent rapporteerde één gecontroleerde Paper-executie.
