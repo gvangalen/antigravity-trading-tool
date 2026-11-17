@@ -32,7 +32,7 @@ zonder bestaand meerregelig bericht niet live worden afgetekend.
 
 ## FINN Smart DCA op benchmarkscore (17 november 2026)
 
-Phase: `BUILD_LOCAL_VALIDATION`. [PR #1164](https://github.com/gvangalen/antigravity-trading-tool/pull/1164)
+Phase: `BUILD_CANDIDATE_CI`. [PR #1164](https://github.com/gvangalen/antigravity-trading-tool/pull/1164)
 voegt een wekelijkse Smart DCA toe zonder vaste koopdag: bij een volledige
 benchmarkscore hoogstens één Paper-aankoop per periode, met afzonderlijke
 bedragsschalen voor lage, middelste en hoge scores. Een setup en gekoppelde
@@ -65,8 +65,13 @@ bijgewerkte SQL-stubs zijn daarna **40/40**. De real-provider selector developme
 De definitieve lokale worker-actiematrix was **17/17** via echte Responses,
 FastAPI en Celery, met adaptertests **27/27** en artifact SHA-256
 `dd87a47c432d5e7b6f688c45afe3d8cbb49ba6042aa6e9ec13105191762a6bae`.
-De volledige backend-suite wordt na de bijgewerkte SQL-teststubs nog eenmaal
-afgerond; live SHA en onafhankelijke QA volgen pas na deployment.
+De volledige backend-suite is na de bijgewerkte SQL-teststubs afgerond:
+**5.035 geslaagd, 7 bestaande skips**. De frontend-build na rebase op de
+nieuwste `main`, typecheck en `lint:i18n` zijn geslaagd; `test:i18n` **43/43**,
+`test:commands` **85/85**, `test:proposals` **9/9** en `test:setups` **20/20**.
+De kandidaat blijft een draft totdat zijn CI groen
+is en de voorafgaande FINN-chatrelease is afgerond. Live SHA en onafhankelijke
+QA volgen pas na deployment.
 
 ## FINN-chat: eigen berichten kopiëren (17 november 2026)
 
