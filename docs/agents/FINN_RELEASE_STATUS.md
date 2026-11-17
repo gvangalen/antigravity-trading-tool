@@ -6,8 +6,10 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0 Paper-flow: brongebonden FOMO-antwoord verifiëren (17 november 2026)
 
-Phase: `BUILD_VALIDATED_PENDING_RELEASE` op branch
-`codex/finn-coach-verifier-fix-20261117`. Onafhankelijke QA gaf
+Phase: `PRODUCT_DEPLOYED_FINAL_STATUS_PENDING_QA` op productbranch
+`codex/finn-coach-verifier-fix-20261117`. [PR #1142](https://github.com/gvangalen/antigravity-trading-tool/pull/1142)
+slaagde op alle vijf PR-CI-jobs en is gemerged als
+`15b2dc5b3b6f84ee4cbf94c953e26a4a883c77ca`. Onafhankelijke QA gaf
 **NOT_ACCEPTED** op de vorige definitieve publieke SHA
 `78a57b1a519ac83cdfdcb8444743a49b33b307ca`: de beschermde
 Paper-only proef met twee virtuele executions, één exit, owner-scope,
@@ -46,11 +48,18 @@ De lokale FastAPI/Celery/PostgreSQL/Redis/Responses-actiematrix slaagde
 met nul brokerorders, Live-aanroepen en productieverbindingen.
 De echte-providerontwikkeling slaagde **20/20** zonder casefouten (artifact
 SHA-256 `55009b35df376cfd56126eaa0ca721c8a6b726ca92fadc513ef0ed3d087adb5a`).
+De volledige echte-providerregressie slaagde **109/109** zonder casefouten
+(artifact SHA-256 `47167928e8d84eb10ca456a06efddaa1cfaff762c579a2c50d28ee82ff5c872e`).
 
-De volledige providerregressie, CI, Auto Deploy, publieke SHA-pariteit en
-onafhankelijke ingelogde browserhertest staan voor
-deze kandidaat nog open. De vorige Paper-proef bewijst de uitvoering van die
-vorige SHA; zij is geen acceptatie van deze reparatie.
+Main CI `44003908637` slaagde op alle vijf jobs en Auto Deploy
+`44004641916` slaagde. GitHub main, publieke backend-health en
+frontend-build-info identificeerden op dat moment exact de productcommit;
+beide publieke endpoints gaven HTTP 200. Deze statusaanvulling creëert een
+latere documentatie-SHA. De bestaande QA-agent krijgt pas die definitieve
+publieke SHA nadat diens main-CI, Auto Deploy en SHA-pariteit zijn bevestigd.
+De vorige Paper-proef bewijst de uitvoering van de vorige SHA; zij is geen
+acceptatie van deze reparatie. Onafhankelijke ingelogde browser- en
+Paper-acceptatie voor deze kandidaat staat nog open.
 
 ## FINN 3.0 Paper-flow: FOMO-coach en geannuleerde feedkaart (17 november 2026)
 
