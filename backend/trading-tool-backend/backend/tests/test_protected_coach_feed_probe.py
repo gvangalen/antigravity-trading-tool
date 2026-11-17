@@ -240,3 +240,56 @@ def test_coach_probe_includes_only_allowlisted_improvement_diagnostic(monkeypatc
         },
     }
     assert "private worker error" not in str(result)
+
+
+def test_coach_discuss_diagnostic_reports_only_fixed_response_conditions():
+    turn = SimpleNamespace(
+        status="completed", error_code=None,
+        response=SimpleNamespace(content="Je BTC Paper-bot wacht op controle.",
+                                 proposal_id=None, confirmation_required=False),
+    )
+    assert probe._discuss_diagnostic(turn, symbol="BTC") == {
+        "turn_status": "completed", "response_present": True,
+        "content_present": True, "proposal_present": False,
+        "confirmation_required": False, "expected_symbol_mentioned": True,
+        "error_code": "none",
+    }
+    turn.status = "private status"
+    turn.error_code = "private database value"
+    turn.response = None
+    assert probe._discuss_diagnostic(turn, symbol="BTC") == {
+        "turn_status": "unknown", "response_present": False,
+        "content_present": False, "proposal_present": False,
+        "confirmation_required": False, "expected_symbol_mentioned": False,
+        "error_code": "other",
+    }
+
+
+def test_coach_probe_sanitizes_failed_risk_discuss_diagnostic(monkeypatch):
+    monkeypatch.setattr(probe, "_require_run", lambda namespace: 123)
+    monkeypatch.setattr(probe, "_score_case", lambda namespace, bound, *, trace, run_async: {})
+
+    def risk_case(namespace, bound, *, trace, run_async):
+        trace["stage"] = "discuss"
+        trace["risk_discuss_diagnostic"] = {
+            "turn_status": "completed", "response_present": True,
+            "content_present": True, "proposal_present": False,
+            "confirmation_required": False, "expected_symbol_mentioned": False,
+            "error_code": "private database value",
+            "content": "private response", "run_id": "private id",
+        }
+        raise RuntimeError("coach_feed_discuss_failed")
+
+    monkeypatch.setattr(probe, "_risk_case", risk_case)
+    result = probe.run("qa-44006750736-1-12345678-abcdef12")
+    assert result["paper_risk"] == {
+        "result": "FAIL", "reason": "coach_feed_discuss_failed",
+        "failure_stage": "discuss", "fixture_state": "not_created",
+        "risk_discuss_diagnostic": {
+            "turn_status": "completed", "response_present": True,
+            "content_present": True, "proposal_present": False,
+            "confirmation_required": False, "expected_symbol_mentioned": False,
+            "error_code": "other",
+        },
+    }
+    assert "private" not in str(result)
