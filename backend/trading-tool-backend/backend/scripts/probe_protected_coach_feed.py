@@ -32,6 +32,18 @@ TASK_STATES = {
     "STARTED": "started", "SUCCESS": "success", "FAILURE": "failure",
     "RETRY": "retry", "REVOKED": "revoked",
 }
+TURN_STATUSES = frozenset({
+    "created", "queued", "collecting", "planned", "reasoning", "verifying",
+    "clarification_required", "unavailable", "downgraded", "rejected",
+    "blocked", "completed", "failed", "canceled",
+})
+SAFE_TURN_ERROR_CODES = frozenset({
+    "dispatch_claim_timeout", "lifecycle_deadline_exceeded",
+    "lifecycle_owner_failed", "orchestrator_failed",
+    "responses_context_length_exceeded", "responses_provider_quota_unavailable",
+    "responses_tool_round_limit", "run_canceled",
+    "runtime_contract_terminal_projection_missing", "selector_phase_timeout",
+})
 
 
 def _safe_task_status(task) -> str:
@@ -39,6 +51,23 @@ def _safe_task_status(task) -> str:
         return TASK_STATES.get(task.state, "unknown")
     except Exception:
         return "unknown"
+
+
+def _discuss_diagnostic(turn, *, symbol: str) -> dict:
+    response = turn.response
+    content = response.content if response is not None else ""
+    error_code = turn.error_code
+    return {
+        "turn_status": turn.status if turn.status in TURN_STATUSES else "unknown",
+        "response_present": response is not None,
+        "content_present": bool(content),
+        "proposal_present": bool(response and response.proposal_id),
+        "confirmation_required": bool(response and response.confirmation_required),
+        "expected_symbol_mentioned": bool(content and symbol.casefold() in content.casefold()),
+        "error_code": error_code if error_code in SAFE_TURN_ERROR_CODES else (
+            "other" if error_code else "none"
+        ),
+    }
 
 
 def _require_run(namespace: str) -> int:
@@ -129,7 +158,8 @@ def _verified_plan_evidence(evidence: dict) -> bool:
     )
 
 
-async def _discuss(user_id: int, item_id: str, *, symbol: str, question: str) -> dict:
+async def _discuss(user_id: int, item_id: str, *, symbol: str, question: str,
+                   diagnostic: dict | None = None) -> dict:
     """Use the real FINN task body with the same selected-feed context as UI."""
     import uuid
 
@@ -157,6 +187,8 @@ async def _discuss(user_id: int, item_id: str, *, symbol: str, question: str) ->
         persisted = await gateway.get_run(run_id=run.id, user_id=user_id)
         turn = await gateway.run_service.envelope_from_run(persisted)
     response = turn.response
+    if diagnostic is not None:
+        diagnostic.update(_discuss_diagnostic(turn, symbol=symbol))
     if (turn.status != "completed" or response is None or response.proposal_id
             or response.confirmation_required or not response.content
             or symbol.casefold() not in response.content.casefold()):
@@ -380,11 +412,14 @@ def _risk_case(namespace: str, bound: int, *, trace: dict, run_async) -> dict:
         if card["evidence"].get("status") != "above_saved_limit":
             raise RuntimeError("coach_feed_risk_card_missing")
         trace["stage"] = "discuss"
+        diagnostic = {}
+        trace["risk_discuss_diagnostic"] = diagnostic
         discussed = run_async(_discuss(
             user_id, card["id"], symbol="BTC",
             question="Bespreek dit positierisico voor mijn BTC Paper-bot. "
                      "Welke opgeslagen limiet is overschreden en wat controleer ik? "
                      "Wijzig niets en plaats geen order.",
+            diagnostic=diagnostic,
         ))
         trace["stage"] = "safety_check"
         if _counts(user_id) != (1, 1, 0, 0):
@@ -438,6 +473,20 @@ def run(namespace: str) -> dict:
                         "timed_out": diagnostic.get("timed_out") is True,
                     }
                 if name == "paper_risk":
+                    if "risk_discuss_diagnostic" in trace:
+                        diagnostic = trace["risk_discuss_diagnostic"]
+                        results[name]["risk_discuss_diagnostic"] = {
+                            "turn_status": diagnostic.get("turn_status")
+                            if diagnostic.get("turn_status") in TURN_STATUSES else "unknown",
+                            "response_present": diagnostic.get("response_present") is True,
+                            "content_present": diagnostic.get("content_present") is True,
+                            "proposal_present": diagnostic.get("proposal_present") is True,
+                            "confirmation_required": diagnostic.get("confirmation_required") is True,
+                            "expected_symbol_mentioned": diagnostic.get("expected_symbol_mentioned") is True,
+                            "error_code": diagnostic.get("error_code")
+                            if diagnostic.get("error_code") in SAFE_TURN_ERROR_CODES | {"none", "other"}
+                            else "other",
+                        }
                     results["paper_execution_attempts"] = int(trace["paper_execution_attempted"])
         from backend.infrastructure.database import engine
 
