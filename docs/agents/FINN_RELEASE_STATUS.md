@@ -29,7 +29,23 @@ apart onderzocht: een lokale synthetische verbeterkaart verscheen correct,
 terwijl opeenvolgende `asyncio.run`-loops op één globale asyncpg-pool een
 `Event loop is closed`-fout veroorzaakten. QA controleert of zijn beschermde
 probe dit patroon bevat; dit is nog geen bewezen productoorzaak. Brede Build-
-validatie, CI, deployment en nieuwe onafhankelijke live QA volgen nog.
+validatie leverde **992 passed** voor de gerichte FINN-router/contexttests en
+**5.013 passed, 7 skipped** voor de volledige backendrun. De lokale
+FastAPI/Celery-actiematrix leverde **17/17** contracten en **26/26**
+adaptertests zonder brokerorders, Live-aanroepen of productieverbindingen
+(artifact SHA-256
+`0c5a7612fe201df3d373919af7d161aa0f18875cfdd60e63efc3fb76f03d7e24`).
+De echte providerontwikkelset leverde **20/20** met nul provider-, schema-,
+parse- of validatiefouten (artifact SHA-256
+`e03b88da72bd1a736fe5a4df4931507f2b549a96e15e1d368d2181ff7c61d695`).
+De volledige echte providerregressie leverde **109/109** met eveneens nul
+provider-, schema-, timeout-, parse- of validatiefouten (artifact SHA-256
+`6e1ed40cc7eb91b5a2658b1b5b5c987d061e1150f8368a88cd062d22e7f5c9d7`).
+Definitieve CI, deployment en nieuwe onafhankelijke live QA volgen nog.
+[PR #1150](https://github.com/gvangalen/antigravity-trading-tool/pull/1150)
+is de huidige productkandidaat; de QA-only probe-reparatie loopt apart.
+Die probe-reparatie staat in [PR #1151](https://github.com/gvangalen/antigravity-trading-tool/pull/1151)
+en moet eveneens CI doorlopen vóór de beschermde hertest.
 
 ## FINN 3.0: exacte twee-plan vervolgvragen na live afwijzing (17 november 2026)
 
