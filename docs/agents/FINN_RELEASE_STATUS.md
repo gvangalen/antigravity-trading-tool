@@ -6,9 +6,11 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: proactieve feed en concreet advies per opgeslagen plan (17 november 2026)
 
-Phase: `LOCAL_VALIDATED_PENDING_CI` op branch
-`codex/finn-proactive-feed-acceptance`. Deze kandidaat verandert nog geen
-productieaccount en heeft nog geen onafhankelijke live-QA-acceptatie.
+Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA` op branch
+`codex/finn-proactive-feed-acceptance`. [PR #1145](https://github.com/gvangalen/antigravity-trading-tool/pull/1145)
+is na vijf groene PR-CI-jobs gemerged als
+`b2b4cac96de35998559b145e24a75556441fa51e`. De kandidaat heeft nog
+geen onafhankelijke ingelogde live-QA-acceptatie.
 
 De eerdere ingelogde QA-diagnose vond een concreet P1-vervolggesprek: FINN
 las eerst de afzonderlijke AAPL- en BTC/EUR-tradeplannen, maar gaf op de
@@ -28,14 +30,13 @@ de onafhankelijke browser-QA moet de leesbaarheid en juistheid op het echte
 account nog beoordelen. De synthetische brondata bewijzen geen actuele
 productiekoersen.
 
-Er is tevens een afgeschermd, apart te autoriseren `coach_feed_triggers`
+Er is tevens een afgeschermd, door de gebruiker geautoriseerd `coach_feed_triggers`
 QA-profiel toegevoegd. Het maakt twee inactieve kinderen onder de gebonden
 QA-eigenaar: één test met een actuele ETH-bron de planherbeoordeling en een
 configuratieverbetering, het andere test met één virtuele BTC-Paper-aankoop
 een positierisicokaart. Het profiel controleert eigenaarsscheiding,
 feed-detaillering, FINN’s alleen-lezen Bespreek-route, nul process-local
-Live-aanroepen en
-opruimen of quarantaine. Verbetering en positierisico gaan via hun canonieke
+Live-aanroepen en opruimen of quarantaine. Verbetering en positierisico gaan via hun canonieke
 Celery-workerqueue; planherbeoordeling gebruikt de observer rechtstreeks.
 Het verlaagt de bewegingsgrens uitsluitend binnen
 de geïsoleerde QA-proef en bewijst dus geen natuurlijke beweging boven de
@@ -63,6 +64,16 @@ bewijst workeraflevering voor verbetering en positierisico, maar **niet**
 de periodieke beat-schedule of de score-job-dispatch voor planherbeoordeling.
 QA moet die automatische triggers afzonderlijk live toetsen of expliciet
 als nog onbewezen rapporteren.
+
+Main-CI [`44088806310`](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44088806310)
+slaagde op alle vijf jobs. Auto Deploy
+[`44089790436`](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44089790436)
+slaagde. GitHub main, de publieke backend-health en frontend-build-info
+meldden daarna dezelfde product-SHA
+`b2b4cac96de35998559b145e24a75556441fa51e`; beide publieke endpoints
+gaven HTTP 200. Deze statusaanvulling creëert een latere documentatie-SHA.
+De definitieve publieke identiteit daarvan moet na zijn eigen main-CI en
+Auto Deploy nog apart worden geverifieerd voordat QA start.
 
 ## FINN 3.0 Paper-flow: brongebonden FOMO-antwoord verifiëren (17 november 2026)
 
