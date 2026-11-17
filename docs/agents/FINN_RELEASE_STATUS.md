@@ -112,8 +112,14 @@ nul provider- of schemafouten. De lokale FastAPI/Celery/Responses-actiematrix
 is **17/17** met adaptertests **27/27** en artifact SHA-256
 `d972c37e0c87871b9b716297c78b73992860fb45cb28587f74a5e7798d78013c`.
 De echte providerregressie is **109/109** met alle gemeten accuracies 1,0 en
-nul provider- of schemafouten. CI, deployment en onafhankelijke live hertest
-volgen.
+nul provider- of schemafouten. De eerste reparatie-PR-CI
+[44196946173](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44196946173)
+was rood op één tijdzonegevoelige Paper-bottest: de bot gebruikt de huidige
+Amsterdamse datum, maar de test verwachtte `date.today()` op de UTC-runner.
+De test vergelijkt nu met de Amsterdamse dag en vangt een dagwisseling
+tijdens de test op. De gerichte test en de volledige hertest zijn groen:
+**5.038 geslaagd, 7 bestaande skips**. Nieuwe CI, deployment en
+onafhankelijke live hertest volgen.
 
 ## FINN-chat: eigen berichten kopiëren (17 november 2026)
 

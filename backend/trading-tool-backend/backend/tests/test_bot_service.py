@@ -2036,14 +2036,19 @@ def test_paper_only_worker_does_not_assess_live_bot(monkeypatch):
 
 
 def test_paper_reassessment_uses_server_today_even_with_caller_date(monkeypatch):
-    from datetime import date
+    from zoneinfo import ZoneInfo
     from backend.services import bot_service as module
+
+    amsterdam = ZoneInfo("Europe/Amsterdam")
+    before = datetime.now(amsterdam).date()
+    assessment_dates = []
 
     class Repo:
         async def get_bot_config(self, user_id, bot_id):
             return {"is_live": False, "is_active": True}
         async def record_paper_assessment(self, user_id, bot_id, decision_date, outcome, trace_id):
-            assert (user_id, bot_id, decision_date, outcome) == (1, 9, date.today(), "no_new_decision")
+            assert (user_id, bot_id, outcome) == (1, 9, "no_new_decision")
+            assessment_dates.append(decision_date)
             return {"outcome": outcome, "checked_at": datetime.now(timezone.utc)}
 
     calls = []
@@ -2056,7 +2061,11 @@ def test_paper_reassessment_uses_server_today_even_with_caller_date(monkeypatch)
     service.repository = Repo()
     monkeypatch.setattr(module, "sync_run_trading_bot_execution", worker)
     asyncio.run(service.run_bot_agent_generate(9, "2030-01-15", user_id=1, paper_only=True))
-    assert calls == [(1, date.today(), 9, True)]
+    after = datetime.now(amsterdam).date()
+    assert len(calls) == len(assessment_dates) == 1
+    assert calls[0][0] == 1 and calls[0][2:] == (9, True)
+    assert calls[0][1] == assessment_dates[0]
+    assert before <= calls[0][1] <= after
 
 
 def test_manual_paper_order_rechecks_budget_after_bot_lock(monkeypatch):
