@@ -67,3 +67,12 @@ def test_coach_probe_reports_missing_quote_as_inconclusive(monkeypatch):
     assert result["score_and_plan"] == {
         "result": "FAIL", "reason": "coach_feed_source_unavailable",
     }
+
+
+def test_plan_review_requires_a_verified_benchmark_not_only_a_moving_quote():
+    valid = {"status": "measured_move", "symbol": "ETH",
+             "source_status": "available", "plan_status": "matches",
+             "quote_source_observed_at": "2026-11-17T12:00:00Z"}
+    assert probe._verified_plan_evidence(valid)
+    assert not probe._verified_plan_evidence({**valid, "source_status": "invalid_weights"})
+    assert not probe._verified_plan_evidence({**valid, "plan_status": "insufficient_data"})

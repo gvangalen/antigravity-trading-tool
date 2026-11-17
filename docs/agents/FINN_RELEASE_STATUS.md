@@ -33,15 +33,19 @@ QA-profiel toegevoegd. Het maakt twee inactieve kinderen onder de gebonden
 QA-eigenaar: één test met een actuele ETH-bron de planherbeoordeling en een
 configuratieverbetering, het andere test met één virtuele BTC-Paper-aankoop
 een positierisicokaart. Het profiel controleert eigenaarsscheiding,
-feed-detaillering, FINN’s alleen-lezen Bespreek-route, nul Live-aanroepen en
-opruimen of quarantaine. Het verlaagt de bewegingsgrens uitsluitend binnen
+feed-detaillering, FINN’s alleen-lezen Bespreek-route, nul process-local
+Live-aanroepen en
+opruimen of quarantaine. Verbetering en positierisico gaan via hun canonieke
+Celery-workerqueue; planherbeoordeling gebruikt de observer rechtstreeks.
+Het verlaagt de bewegingsgrens uitsluitend binnen
 de geïsoleerde QA-proef en bewijst dus geen natuurlijke beweging boven de
 productiedrempel. Een ontbrekende of stilstaande ETH-bron wordt als
 `INCONCLUSIVE` gerapporteerd. Build heeft dit beschermde productieprofiel
 niet uitgevoerd; dat is exclusief aan QA.
 
 De gerichte regressies voor de exacte vervolgvraag en de profielguards
-slagen. De definitieve volledige backendrun leverde **5.008 passed,
+slagen; de afgeschermde runner heeft **132/132** gerichte tests. De
+definitieve volledige backendrun leverde **5.009 passed,
 7 skipped**. De frontend build, typecheck, i18n-lint en tests, command- en
 voorsteltests en `audit:high` zijn groen; er is geen frontendcode gewijzigd.
 Na een herstart op de definitieve code slaagde de lokale worker-actiematrix
@@ -53,10 +57,12 @@ De echte-provider ontwikkelset slaagde **20/20**
 en de regressieset **109/109** zonder provider-, schema-, parse- of
 validatiefouten (artifact SHA-256
 `b3f0f7c6f958ded340b7328bddec8dc2c7e0160771d2cf7d52165137c7d4519a`).
-Onafhankelijke lokale QA- en Security-codecontroles vonden geen concrete
-blokkade. De afgeschermde probe roept de feed-observers wel rechtstreeks aan:
-een PASS bewijst **niet** de automatische Celery/beat-dispatch. QA moet die
-afzonderlijk live toetsen of expliciet als nog onbewezen rapporteren.
+Onafhankelijke lokale QA- en Security-codecontroles en de hercontrole na
+de worker-queueaanpassing vonden geen concrete blokkade. Een PASS van het profiel
+bewijst workeraflevering voor verbetering en positierisico, maar **niet**
+de periodieke beat-schedule of de score-job-dispatch voor planherbeoordeling.
+QA moet die automatische triggers afzonderlijk live toetsen of expliciet
+als nog onbewezen rapporteren.
 
 ## FINN 3.0 Paper-flow: brongebonden FOMO-antwoord verifiëren (17 november 2026)
 

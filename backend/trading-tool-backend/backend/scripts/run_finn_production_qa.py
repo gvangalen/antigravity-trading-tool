@@ -3951,9 +3951,13 @@ def main() -> int:
                     raise ValueError("coach_feed_fixture_not_authorized")
                 from backend.scripts.probe_protected_coach_feed import run as run_coach_feed_probe
 
-                report[args.profile] = run_coach_feed_probe(fixture_namespace or "")
                 report["protected_profile_attempted"] = True
+                report["qa_status"] = "INCOMPLETE"
+                report["outcome"] = "incomplete"
                 report["safety"]["read_only_profile"] = False
+                report["safety"]["execution_calls"] = None
+                report["safety"]["live_trading_calls"] = None
+                report[args.profile] = run_coach_feed_probe(fixture_namespace or "")
                 report["safety"]["execution_calls"] = 1
                 report["safety"]["live_trading_calls"] = report[args.profile]["live_calls"]
                 report["outcome"] = (

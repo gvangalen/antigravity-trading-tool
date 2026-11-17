@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import time
 from datetime import datetime, timedelta, timezone
 
 from backend.scripts import probe_protected_portfolio_paper_fx as paper
@@ -80,6 +81,31 @@ async def _feed(user_id: int, expected: str, *, subject: str | None = None) -> d
                 "status": detail.get("status")}
 
 
+async def _await_feed(user_id: int, expected: str, *, subject: str | None = None,
+                      timeout_seconds: float = 45) -> dict:
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        try:
+            return await _feed(user_id, expected, subject=subject)
+        except RuntimeError as error:
+            if str(error) != {
+                "improvement_suggestion": "coach_feed_improvement_card_missing",
+                "position_risk": "coach_feed_risk_card_missing",
+            }.get(expected) or time.monotonic() >= deadline:
+                raise
+            await asyncio.sleep(2)
+
+
+def _verified_plan_evidence(evidence: dict) -> bool:
+    return bool(
+        evidence.get("status") == "measured_move"
+        and evidence.get("symbol") == "ETH"
+        and evidence.get("source_status") == "available"
+        and evidence.get("plan_status") == "matches"
+        and evidence.get("quote_source_observed_at") is not None
+    )
+
+
 async def _discuss(user_id: int, item_id: str, *, symbol: str, question: str) -> dict:
     """Use the real FINN task body with the same selected-feed context as UI."""
     import uuid
@@ -120,6 +146,64 @@ async def _observe_score_feed(user_id: int, *, threshold: float) -> dict:
     from backend.infrastructure.database import async_session_factory
     from backend.services.finn_coach_feed_service import FinnCoachFeedService
 
+    # Only this isolated child's category weights become invalid. This proves
+    # that a real configuration gap yields an advice card, not an automatic edit.
+    connection = score._connection()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("""UPDATE users SET ai_preferences=jsonb_set(ai_preferences,
+                '{asset_benchmark_weights}',
+                '{\"ETH\":{\"market\":0,\"macro\":0,\"technical\":0}}'::jsonb)
+                WHERE id=%s AND is_active=FALSE AND ai_preferences->>'qa_fixture'=%s""",
+                (user_id, score.FIXTURE_MARKER))
+            if cursor.rowcount != 1:
+                raise RuntimeError("coach_feed_owner_scope_failed")
+        connection.commit()
+    finally:
+        connection.close()
+    from backend.celery_task.store_daily_scores_task import reconcile_coach_feed_score
+    reconcile_coach_feed_score.delay(user_id, "ETH")
+    improvement = await _await_feed(user_id, "improvement_suggestion", subject="asset")
+    if improvement["evidence"].get("suggestion_kind") != "weights":
+        raise RuntimeError("coach_feed_improvement_card_missing")
+    improvement_discuss = await _discuss(
+        user_id, improvement["id"], symbol="ETH",
+        question="Bespreek dit verbeteringsvoorstel voor ETH. Welke opgeslagen "
+                 "benchmarkweging verdient controle? Wijzig niets.",
+    )
+
+    # Restore this child's original valid weights before evaluating its plan.
+    # The improvement card remains a dated record of the preceding gap.
+    connection = score._connection()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("""UPDATE users SET ai_preferences=ai_preferences-
+                'asset_benchmark_weights' WHERE id=%s AND is_active=FALSE
+                AND ai_preferences->>'qa_fixture'=%s""",
+                (user_id, score.FIXTURE_MARKER))
+            if cursor.rowcount != 1:
+                raise RuntimeError("coach_feed_owner_scope_failed")
+        connection.commit()
+    finally:
+        connection.close()
+
+    async with async_session_factory() as session:
+        reopened = await FinnCoachFeedService(session).reconcile_improvement_suggestions(
+            user_id=user_id, symbol="ETH")
+        await session.commit()
+    if reopened:
+        raise RuntimeError("coach_feed_improvement_card_missing")
+    try:
+        await _feed(user_id, "improvement_suggestion", subject="asset")
+    except RuntimeError as error:
+        if str(error) != "coach_feed_improvement_card_missing":
+            raise
+    else:
+        raise RuntimeError("coach_feed_improvement_card_missing")
+
+    # Observe the move last: the normal-threshold worker above would resolve
+    # a synthetic below-threshold plan card. The earlier improvement card is
+    # now resolved because the test-only invalid weights were restored.
     previous = os.environ.get("FINN_COACH_MOVE_THRESHOLD_PCT")
     os.environ["FINN_COACH_MOVE_THRESHOLD_PCT"] = str(threshold)
     try:
@@ -136,46 +220,16 @@ async def _observe_score_feed(user_id: int, *, threshold: float) -> dict:
         raise RuntimeError("coach_feed_plan_card_missing")
     card = await _feed(user_id, "plan_review", subject="setup")
     evidence = card["evidence"]
-    if (evidence.get("status") != "measured_move" or evidence.get("symbol") != "ETH"
-            or evidence.get("quote_source_observed_at") is None):
+    if not _verified_plan_evidence(evidence):
         raise RuntimeError("coach_feed_plan_card_missing")
     plan_discuss = await _discuss(
         user_id, card["id"], symbol="ETH",
         question="Bespreek deze planherbeoordeling. Welke gemeten beweging en "
                  "opgeslagen setup zijn relevant, en wat controleer ik nu? Wijzig niets.",
     )
-
-    # Only this isolated child's category weights become invalid. This proves
-    # that a real configuration gap yields an advice card, not an automatic edit.
-    connection = score._connection()
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute("""UPDATE users SET ai_preferences=jsonb_set(ai_preferences,
-                '{asset_benchmark_weights}',
-                '{\"ETH\":{\"market\":0,\"macro\":0,\"technical\":0}}'::jsonb)
-                WHERE id=%s AND is_active=FALSE AND ai_preferences->>'qa_fixture'=%s""",
-                (user_id, score.FIXTURE_MARKER))
-            if cursor.rowcount != 1:
-                raise RuntimeError("coach_feed_owner_scope_failed")
-        connection.commit()
-    finally:
-        connection.close()
-    async with async_session_factory() as session:
-        suggestions = await FinnCoachFeedService(session).reconcile_improvement_suggestions(
-            user_id=user_id, symbol="ETH")
-        await session.commit()
-    if len(suggestions) != 1:
-        raise RuntimeError("coach_feed_improvement_card_missing")
-    improvement = await _feed(user_id, "improvement_suggestion", subject="asset")
-    if improvement["evidence"].get("suggestion_kind") != "weights":
-        raise RuntimeError("coach_feed_improvement_card_missing")
-    improvement_discuss = await _discuss(
-        user_id, improvement["id"], symbol="ETH",
-        question="Bespreek dit verbeteringsvoorstel voor ETH. Welke opgeslagen "
-                 "benchmarkweging verdient controle? Wijzig niets.",
-    )
     return {"plan_review": "passed", "improvement_suggestion": "passed",
             "plan_source_timestamp_present": True, "production_move_threshold_tested": False,
+            "plan_dispatch_tested": False, "improvement_worker_dispatch_tested": True,
             "plan_discuss": plan_discuss, "improvement_discuss": improvement_discuss}
 
 
@@ -266,10 +320,8 @@ def _risk_case(namespace: str, bound: int) -> dict:
         finally:
             connection.close()
         from backend.celery_task.portfolio_snapshot_task import reconcile_paper_position_risk
-        result = reconcile_paper_position_risk(user_id)
-        if result.get("status") != "ok" or result.get("created_count") != 1:
-            raise RuntimeError("coach_feed_risk_card_missing")
-        card = asyncio.run(_feed(user_id, "position_risk", subject="bot"))
+        reconcile_paper_position_risk.delay(user_id)
+        card = asyncio.run(_await_feed(user_id, "position_risk", subject="bot"))
         if card["evidence"].get("status") != "above_saved_limit":
             raise RuntimeError("coach_feed_risk_card_missing")
         discussed = asyncio.run(_discuss(
@@ -282,6 +334,7 @@ def _risk_case(namespace: str, bound: int) -> dict:
             raise RuntimeError("coach_feed_unexpected_order")
         passed = True
         return {"position_risk": "passed", "paper_only": True,
+                "risk_worker_dispatch_tested": True,
                 "valuation_source_timestamp_present": bool(card["evidence"].get("valuation_as_of")),
                 "risk_discuss": discussed}
     finally:
