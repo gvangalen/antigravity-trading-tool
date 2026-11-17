@@ -2367,7 +2367,13 @@ def test_each_plan_followup_reopens_both_verified_4h_trade_setups(message, has_p
     assert "35/100" in result.response.text and "61–75" in result.response.text
     assert "dagkaars" not in result.response.text.lower()
     assert "SMA" not in result.response.text
+    assert "DCA" not in result.response.text
     assert "BTC/USDT" not in result.response.text
+    if has_previous:
+        assert result.response.text.startswith("Je kunt je voorbereiding vandaag verbeteren")
+        assert "bij de volgende scoreverversing" in result.response.text
+    else:
+        assert not result.response.text.startswith("Je kunt je voorbereiding vandaag verbeteren")
     verified = asyncio.run(FinnResponsesAnswerVerifier().verify(
         message=message, result=result.response, locale="nl",
     ))

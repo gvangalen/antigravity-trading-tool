@@ -4,6 +4,33 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: vervolgvraag en feedharnas na live afwijzing (17 november 2026)
+
+Phase: `LOCAL_REPAIR_VALIDATION`. Onafhankelijke QA wees live SHA
+`8774a26f045af3f722c2e2dccd1e12874b3329b6` af. De eerste ingelogde
+AAPL/BTC-EUR-vraag las de afzonderlijke 4H-plannen en benoemde AAPL's
+ontbrekende technische score en BTC/EUR-benchmark 31,7 buiten de opgeslagen
+zone 61–75. De vervolgvraag over zinvolle voorbereiding kreeg echter exact
+dezelfde antwoordtekst. De beschermde Paper-only feedproef bereikte een
+risicokaart maar faalde bij de FINN-bespreking; de verbeterkaart werd niet
+zichtbaar tijdens de wachtfase. Beide tijdelijke QA-kinderen zijn volgens QA
+in quarantaine geplaatst; één Paper-uitvoeringspoging en nul Live-aanroepen
+zijn gerapporteerd. De onafhankelijke uitkomst blijft `NOT_ACCEPTED`.
+
+De productreparatie onderscheidt nu een vervolgvraag over voorbereiding van
+de eerste planbeoordeling. Ze leest nog steeds de twee exacte eigenaargebonden
+4H-plannen, scores en koersbronnen, maar geeft per plan een nieuwe controle
+voor vandaag of voor de volgende scoreverversing. Een lokale tweebeurtige
+FastAPI/Celery-proef op synthetische plannen leverde voor beide vragen vier
+read-calls, `factual_source` en `verifier_status=passed`; de antwoorden waren
+verschillend en maakten geen voorstel of order. De lokale fixture bewijst
+geen actuele productiebronwaarde. De oorzaak van de feedproeffouten wordt
+apart onderzocht: een lokale synthetische verbeterkaart verscheen correct,
+terwijl opeenvolgende `asyncio.run`-loops op één globale asyncpg-pool een
+`Event loop is closed`-fout veroorzaakten. QA controleert of zijn beschermde
+probe dit patroon bevat; dit is nog geen bewezen productoorzaak. Brede Build-
+validatie, CI, deployment en nieuwe onafhankelijke live QA volgen nog.
+
 ## FINN 3.0: exacte twee-plan vervolgvragen na live afwijzing (17 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA`. Onafhankelijke QA wees de vorige live kandidaat
