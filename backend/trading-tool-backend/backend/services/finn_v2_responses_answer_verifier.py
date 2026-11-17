@@ -44,6 +44,7 @@ from backend.services.finn_v2_paper_position_answer import (
     PAPER_POSITION_CASH_UNAVAILABLE, render_paper_position_cash_answer,
 )
 from backend.services.finn_v2_fomo_plan_answer import render_fomo_plan_answer
+from backend.services.finn_v2_two_plan_checks_answer import verified_two_plan_checks
 from backend.services.finn_v2_factual_source_answer import (
     render_bot_decision, render_closed_paper_exit_facts, render_selected_paper_feed_decision, render_latest_quote, render_portfolio_read_time,
     render_report_and_quote_times, render_report_and_technical_read,
@@ -3071,6 +3072,14 @@ class FinnResponsesAnswerVerifier:
         )
         if result.answer_kind == "factual_source":
             calls = result.tool_trace
+            if result.response_id.startswith("two-plan-checks-"):
+                expected = verified_two_plan_checks(message, calls)
+                if expected is None or expected != result.text:
+                    return FinnResponsesVerifiedAnswer(
+                        "unavailable", self._fallback_copy("responses_evidence_not_verified", message=message, locale=locale),
+                        "factual_source_mismatch", evidence,
+                    )
+                return FinnResponsesVerifiedAnswer("completed", expected, "factual_source_verified", evidence)
             if len(calls) != 1 or not isinstance(calls[0].get("result"), dict):
                 return FinnResponsesVerifiedAnswer(
                     "unavailable", self._fallback_copy("responses_evidence_not_verified", message=message, locale=locale),

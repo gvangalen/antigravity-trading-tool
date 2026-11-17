@@ -75,6 +75,21 @@ def test_read_only_fomo_plan_questions_bypass_capability_explainer():
     )
 
 
+def test_two_saved_plan_checks_bypass_capability_explainer():
+    question = (
+        "Dus moet ik alleen wachten, of kan ik mijn voorbereiding vandaag zinvol verbeteren? "
+        "Geef voor AAPL en BTC/EUR elk één concrete controle die past bij mijn opgeslagen "
+        "trade-opzet. Ik wil geen wijziging of order."
+    )
+    assert not requests_execution_capability_question(question, {})
+    assert not requests_execution_capability_question(
+        question, {"plan_design_focus": {"kind": "unsaved_capability_design"}},
+    )
+    assert requests_execution_capability_question(
+        "Kan mijn opgeslagen BTC-plan automatisch een order plaatsen?", {},
+    )
+
+
 def test_unsaved_design_remains_separate_from_saved_plan_until_scope_is_chosen():
     context = {}
     assert remember_unsaved_design(context)
