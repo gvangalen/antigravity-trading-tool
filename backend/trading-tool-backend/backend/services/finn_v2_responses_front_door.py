@@ -2937,7 +2937,10 @@ class FinnResponsesFrontDoor:
                     symbol = str(plan.get("symbol") or "").upper()
                     pair = str(plan.get("pair") or "").upper()
                     quote = pair.split("/", 1)[1] if pair.startswith(f"{symbol}/") else str(plan.get("quote_currency") or "").upper()
-                    inputs = {"asset": symbol, **({"quote_currency": quote} if quote else {})}
+                    # Equity USD quotes use the base-asset read. Only crypto
+                    # EUR/USDT pairs resolve through exact TradingMarket IDs.
+                    inputs = {"asset": symbol, **({"quote_currency": quote}
+                                                 if quote in {"EUR", "USDT"} else {})}
                     quote_call = FinnResponsesToolCall(
                         name="get_market_snapshot", operation_id=None, inputs=inputs,
                         read_tools=("read_market_snapshot",),
