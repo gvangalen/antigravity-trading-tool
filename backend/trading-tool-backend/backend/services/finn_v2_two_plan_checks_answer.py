@@ -9,6 +9,15 @@ from typing import Any
 from backend.services.asset_catalog_service import mentioned_catalog_symbols
 
 
+def is_preparation_followup(message: str) -> bool:
+    """Distinguish today's preparation from an initial plan assessment."""
+    return bool(re.search(
+        r"\b(?:voorbereiding|voorbereiden|alleen\s+wachten)\b.*\b(?:vandaag|verbeter\w*|controle\w*)\b"
+        r"|\b(?:vandaag|verbeter\w*)\b.*\bvoorbereid\w*\b",
+        str(message or ""), re.I | re.S,
+    ))
+
+
 def _number(value: Any) -> str | None:
     try:
         number = Decimal(str(value))
@@ -51,6 +60,7 @@ def select_named_plans(
 def render_two_plan_checks(
     plans: list[dict[str, Any]], market_read: dict[str, Any],
     quote_reads: dict[int, dict[str, Any]],
+    *, preparation: bool = False,
 ) -> str:
     """One check per owner-bound plan, with no invented timeframe or entry rule."""
     market = _scope(market_read, "read_setup_market_matches")
@@ -80,21 +90,32 @@ def render_two_plan_checks(
                 ("technical_score", "Technisch"),
             ) if components.get(key) != "fresh"] if isinstance(components, dict) else []
             detail = ", ".join(missing) if missing else "benchmarkdeelscore of bronmeting"
-            check = f"Controleer de ontbrekende of nog niet geverifieerde {detail}; de planmatch is nog niet bevestigd."
+            check = (f"Controleer vandaag in Analyse of de ontbrekende of nog niet geverifieerde {detail} "
+                     "voor dit exacte plan een "
+                     "geverifieerde score en bronmoment heeft; de planmatch is nog niet bevestigd."
+                     if preparation else
+                     f"Controleer de ontbrekende of nog niet geverifieerde {detail}; de planmatch is nog niet bevestigd.")
         elif low is not None and high is not None:
             value = Decimal(score.replace(",", "."))
             lower, upper = Decimal(low.replace(",", ".")), Decimal(high.replace(",", "."))
             relation = "binnen" if lower <= value <= upper else "buiten"
-            check = (f"Controleer de uitgelezen benchmark {score}/100 tegenover je opgeslagen zone "
+            check = (f"Controleer bij de volgende scoreverversing voor dit exacte plan of "
+                     f"de benchmark van {score}/100 naar je opgeslagen zone {low}–{high} beweegt; "
+                     f"hij ligt nu {relation} de zone. Dit bevestigt geen instap."
+                     if preparation else
+                     f"Controleer de uitgelezen benchmark {score}/100 tegenover je opgeslagen zone "
                      f"{low}–{high}: die ligt {relation} de zone. Dit is op zichzelf geen instapsignaal.")
         else:
-            check = f"Controleer de uitgelezen benchmark {score}/100 tegen je overige opgeslagen voorwaarden. Dit is geen instapsignaal."
+            check = (f"Controleer vandaag de benchmark {score}/100 tegen de overige opgeslagen "
+                     "planvoorwaarden. Dit bevestigt geen instap." if preparation else
+                     f"Controleer de uitgelezen benchmark {score}/100 tegen je overige opgeslagen voorwaarden. Dit is geen instapsignaal.")
         if quote_item is None or quote_data.get("source_status") in {"unavailable", "missing", "no_data"}:
             check += " Een actuele koersbron voor dit exacte instrument kon ik niet bevestigen."
         elif source_moment:
             check += f" Koersbronmoment: {source_moment}."
         parts.append(f"{prefix} {check}")
-    return " ".join(parts) + " Ik heb geen plan gewijzigd en geen order geplaatst."
+    intro = "Je kunt je voorbereiding vandaag verbeteren zonder een trade te forceren. " if preparation else ""
+    return intro + " ".join(parts) + " Ik heb geen plan gewijzigd en geen order geplaatst."
 
 
 def verified_two_plan_checks(message: str, calls: tuple[dict[str, Any], ...]) -> str | None:
@@ -143,4 +164,5 @@ def verified_two_plan_checks(message: str, calls: tuple[dict[str, Any], ...]) ->
         seen_pairs.add(pair)
     if seen_pairs != expected_pairs:
         return None
-    return render_two_plan_checks(plans, market_read, quote_reads)
+    return render_two_plan_checks(plans, market_read, quote_reads,
+                                  preparation=is_preparation_followup(message))

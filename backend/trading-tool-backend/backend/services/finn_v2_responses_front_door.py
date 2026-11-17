@@ -54,7 +54,7 @@ from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToo
 from backend.services.finn_v2_account_bundle_answer import render_account_bundle_answer
 from backend.services.finn_v2_fomo_plan_answer import render_fomo_plan_answer
 from backend.services.finn_v2_two_plan_checks_answer import (
-    render_two_plan_checks, select_named_plans,
+    render_two_plan_checks, select_named_plans, is_preparation_followup,
 )
 from backend.services.finn_v2_plan_design_context import asks_read_only_impulse_plan_coaching
 from backend.services.finn_v2_paper_position_answer import (
@@ -2951,7 +2951,10 @@ class FinnResponsesFrontDoor:
                     quote_reads[plan["setup_id"]] = quote_read
                     trace.append({"name": quote_call.name, "status": quote_read.get("status", "unavailable"),
                                   "arguments": inputs, "result": quote_read})
-                answer = render_two_plan_checks(plans, market_read, quote_reads)
+                answer = render_two_plan_checks(
+                    plans, market_read, quote_reads,
+                    preparation=is_preparation_followup(message),
+                )
             else:
                 answer = selection_error
             return FinnResponsesFrontDoorResult(
