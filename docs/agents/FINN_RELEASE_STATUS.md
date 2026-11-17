@@ -37,7 +37,8 @@ Er zijn geen berichten, fixtureacties of trades uitgevoerd.
 
 ## FINN Smart DCA op benchmarkscore (17 november 2026)
 
-Phase: `BUILD_CANDIDATE_CI`. [PR #1164](https://github.com/gvangalen/antigravity-trading-tool/pull/1164)
+Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA`. [PR #1164](https://github.com/gvangalen/antigravity-trading-tool/pull/1164)
+is gemerged als `3be93ca80660e1a5e5507e4c5600c7efd0508d06`.
 voegt een wekelijkse Smart DCA toe zonder vaste koopdag: bij een volledige
 benchmarkscore hoogstens één Paper-aankoop per periode, met afzonderlijke
 bedragsschalen voor lage, middelste en hoge scores. Een setup en gekoppelde
@@ -74,9 +75,15 @@ De volledige backend-suite is na de bijgewerkte SQL-teststubs afgerond:
 **5.035 geslaagd, 7 bestaande skips**. De frontend-build na rebase op de
 nieuwste `main`, typecheck en `lint:i18n` zijn geslaagd; `test:i18n` **43/43**,
 `test:commands` **85/85**, `test:proposals` **9/9** en `test:setups` **20/20**.
-De kandidaat blijft een draft totdat zijn CI groen
-is en de voorafgaande FINN-chatrelease is afgerond. Live SHA en onafhankelijke
-QA volgen pas na deployment.
+De product-PR had vijf groene CI-jobs; de voorafgaande FINN-chatrelease kreeg
+onafhankelijk **PASS**. [Main-CI 44189643713](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44189643713)
+en [Auto Deploy 44190544955](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44190544955)
+zijn geslaagd. GitHub main, publieke backend-health (HTTP 200) en
+frontend-buildinfo (HTTP 200) meldden alle drie product-SHA
+`3be93ca80660e1a5e5507e4c5600c7efd0508d06`. Deze statuswijziging
+creëert zelf nog een nieuwe main-SHA; de laatste main-CI, Auto Deploy en
+publieke identiteit worden daarop opnieuw gecontroleerd vóór de QA-handoff.
+De onafhankelijke ingelogde Smart DCA-proef is nog niet uitgevoerd.
 
 ## FINN-chat: eigen berichten kopiëren (17 november 2026)
 
