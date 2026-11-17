@@ -384,14 +384,16 @@ def run(namespace: str) -> dict:
     from backend.scripts.probe_protected_paper_exit_reconciliation import _guard_live_exchange
 
     results = {}
-    with asyncio.Runner() as async_runner:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
         with _guard_live_exchange() as live_attempts:
             for name, procedure in (("score_and_plan", _score_case), ("paper_risk", _risk_case)):
                 trace = {"stage": "preflight", "fixture_state": "not_created",
                          "paper_execution_attempted": False}
                 try:
                     results[name] = procedure(namespace, bound, trace=trace,
-                                              run_async=async_runner.run)
+                                              run_async=loop.run_until_complete)
                     results[name]["fixture_state"] = trace["fixture_state"]
                 except Exception as error:
                     code = str(error)
@@ -404,9 +406,16 @@ def run(namespace: str) -> dict:
         from backend.infrastructure.database import engine
 
         try:
-            async_runner.run(engine.dispose())
+            loop.run_until_complete(engine.dispose())
         except Exception:
             results["resource_cleanup"] = {"result": "FAIL", "reason": "coach_feed_runtime_failed"}
+    finally:
+        try:
+            loop.run_until_complete(loop.shutdown_asyncgens())
+            loop.run_until_complete(loop.shutdown_default_executor())
+        finally:
+            asyncio.set_event_loop(None)
+            loop.close()
     results["live_calls"] = len(live_attempts)
     if live_attempts:
         results["safety"] = {"result": "FAIL", "reason": "coach_feed_unexpected_order"}

@@ -127,7 +127,7 @@ def test_plan_review_requires_a_verified_benchmark_not_only_a_moving_quote():
     assert not probe._verified_plan_evidence({**valid, "plan_status": "insufficient_data"})
 
 
-def test_coach_probe_reuses_one_loop_and_disposes_pool_before_closing(monkeypatch):
+def test_coach_probe_reuses_one_loop_without_asyncio_runner(monkeypatch):
     from backend.infrastructure import database
 
     loops = []
@@ -146,6 +146,7 @@ def test_coach_probe_reuses_one_loop_and_disposes_pool_before_closing(monkeypatc
     monkeypatch.setattr(probe, "_score_case", case)
     monkeypatch.setattr(probe, "_risk_case", case)
     monkeypatch.setattr(database, "engine", SimpleNamespace(dispose=dispose))
+    monkeypatch.delattr(asyncio, "Runner", raising=False)
 
     result = probe.run("qa-44006750736-1-12345678-abcdef12")
     assert result["result"] == "PASS"
