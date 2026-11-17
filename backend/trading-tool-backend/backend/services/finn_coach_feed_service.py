@@ -1043,10 +1043,12 @@ class FinnCoachFeedService:
         asset = str(symbol or "").strip().upper()
         scope = f"{asset}:{market_id or 'asset'}"
         bots_result = await self.session.execute(text("""
-            SELECT id, name, setup_id, is_live FROM bot_configs
-            WHERE user_id=:user_id AND symbol=:symbol AND is_active=TRUE
-              AND market_id IS NOT DISTINCT FROM :market_id
-              AND setup_id IS NOT NULL
+            SELECT b.id, b.name, s.setup_id, b.is_live
+            FROM bot_configs b
+            JOIN strategies s ON s.id=b.strategy_id AND s.user_id=b.user_id
+            WHERE b.user_id=:user_id AND b.symbol=:symbol AND b.is_active=TRUE
+              AND b.market_id IS NOT DISTINCT FROM :market_id
+              AND s.setup_id IS NOT NULL
         """), {"user_id": user_id, "symbol": asset, "market_id": market_id})
         bots = list(bots_result.mappings().all())
         previous = await self.session.execute(text("""

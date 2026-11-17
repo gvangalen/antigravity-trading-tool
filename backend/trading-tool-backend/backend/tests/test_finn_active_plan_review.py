@@ -239,6 +239,31 @@ def test_pair_score_worker_routes_only_the_exact_plan_review(monkeypatch):
                      "commit", (42, "item-1")]
 
 
+def test_score_feed_worker_does_not_report_success_after_reconciliation_error(monkeypatch):
+    from backend.celery_task import store_daily_scores_task as tasks
+
+    class Context:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+    class Coach:
+        def __init__(self, _session):
+            pass
+
+        async def reconcile_score_asset(self, **_kwargs):
+            raise RuntimeError("score_observer_failed")
+
+    monkeypatch.setattr("backend.infrastructure.database.async_session_factory", Context)
+    monkeypatch.setattr(feed, "FinnCoachFeedService", Coach)
+    monkeypatch.setattr("backend.celery_task.finn_v2_task._run_async", lambda coro: asyncio.run(coro))
+
+    with pytest.raises(RuntimeError, match="score_observer_failed"):
+        tasks.reconcile_coach_feed_score.run(42, "ETH")
+
+
 def test_completed_pair_score_dispatches_coach_after_commit(monkeypatch):
     from backend.celery_task import store_daily_scores_task as tasks
 
