@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: vervolg over twee plannen na afgekeurde live QA (17 november 2026)
 
-Phase: `BUILD_VALIDATING`. De onafhankelijke QA op publieke SHA
+Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA`. De onafhankelijke QA op publieke SHA
 `4e6dac4ab0339340f43a32546f3e4f4992263846` gaf `NOT_ACCEPTED`.
 In een ingelogd gesprek beschreef FINN AAPL en BTC/EUR eerst als afzonderlijke
 4H-tradeplannen. Op de directe vraag om per plan één concrete voorbereiding
@@ -38,8 +38,18 @@ was **20/20** met nul provider-, schema-, parse- of validatiefouten
 De volledige providerregressie was **109/109** met eveneens nul provider-,
 schema-, parse- of validatiefouten (artifact SHA-256
 `0c41dd9395b26f74a755c86621155b8c7e1e9811a580d112b5e4a92b7cee49fd`).
-Deze kandidaat is **niet**
-gedeployed of live geaccepteerd; de eerdere QA-bevinding blijft van kracht.
+De kandidaat is gemerged via [PR #1146](https://github.com/gvangalen/antigravity-trading-tool/pull/1146)
+als `359613c05965b58e875d299324715d2813a48515`. Alle vijf PR-CI-jobs
+en alle vijf main-CI-jobs zijn geslaagd; main-CI
+[`44098409873`](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44098409873)
+en Auto Deploy
+[`44099347796`](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44099347796)
+zijn groen. GitHub main, de publieke backend-health (HTTP 200) en de
+frontend-build-info (HTTP 200) meldden alle drie exact deze SHA.
+Deze statusaanvulling maakt zelf een nieuwe documentatie-SHA. QA mag pas
+starten nadat ook diens main-CI, Auto Deploy en publieke SHA-pariteit zijn
+geverifieerd. De kandidaat heeft nog **geen** onafhankelijke ingelogde
+live-acceptatie; de eerdere QA-bevinding blijft van kracht tot de hertest.
 
 ## FINN 3.0: proactieve feed en concreet advies per opgeslagen plan (17 november 2026)
 
