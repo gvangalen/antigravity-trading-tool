@@ -3958,7 +3958,7 @@ def main() -> int:
                 report["safety"]["execution_calls"] = None
                 report["safety"]["live_trading_calls"] = None
                 report[args.profile] = run_coach_feed_probe(fixture_namespace or "")
-                report["safety"]["execution_calls"] = 1
+                report["safety"]["execution_calls"] = report[args.profile]["paper_execution_attempts"]
                 report["safety"]["live_trading_calls"] = report[args.profile]["live_calls"]
                 report["outcome"] = (
                     "passed" if report[args.profile]["result"] == "PASS" else
