@@ -1,6 +1,6 @@
 1:"$Sreact.fragment"
-a:I[57150,[],""]
-:HL["/_next/static/css/2a245e559996cf00.css","style"]
+a:I[61465,[],""]
+:HL["/_next/static/css/e3df6f43a33c2c65.css","style"]
 2:T1293,
 (function () {
   var VERSION = "static-export";
@@ -118,21 +118,21 @@ a:I[57150,[],""]
     if (shouldRecover(reason)) clearStaleApp(reason);
     else recoverMixedDeploy(reason);
   });
-})();0:{"P":null,"b":"static-export","p":"","c":["","admin","telemetry"],"i":false,"f":[[["",{"children":["(protected)",{"children":["admin",{"children":["telemetry",{"children":["__PAGE__",{}]}]}]}]},"$undefined","$undefined",true],["",["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/2a245e559996cf00.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]],["$","html",null,{"lang":"nl","suppressHydrationWarning":true,"children":[["$","head",null,{"children":[["$","link",null,{"rel":"apple-touch-icon","href":"/icon-192x192.png"}],["$","script",null,{"dangerouslySetInnerHTML":{"__html":"$2"}}],"$L3"]}],"$L4"]}]]}],{"children":["(protected)","$L5",{"children":["admin","$L6",{"children":["telemetry","$L7",{"children":["__PAGE__","$L8",{},null,false]},null,false]},null,false]},null,false]},null,false],"$L9",false]],"m":"$undefined","G":["$a",[]],"s":false,"S":true}
-c:I[69835,["5319","static/chunks/5319-36a1ade57528f891.js","3562","static/chunks/3562-66ceb62a6d3b7ea2.js","8111","static/chunks/8111-1e2737016e34a12d.js","7619","static/chunks/7619-6f6bd9f13bf342c5.js","9617","static/chunks/9617-27c79d820d229c0d.js","7177","static/chunks/app/layout-6635f50f2111eb34.js"],"default"]
-d:I[55038,["5319","static/chunks/5319-36a1ade57528f891.js","3562","static/chunks/3562-66ceb62a6d3b7ea2.js","8111","static/chunks/8111-1e2737016e34a12d.js","7619","static/chunks/7619-6f6bd9f13bf342c5.js","9617","static/chunks/9617-27c79d820d229c0d.js","7177","static/chunks/app/layout-6635f50f2111eb34.js"],"default"]
-e:I[9766,[],""]
-f:I[98924,[],""]
-10:I[33293,["2619","static/chunks/2619-04bc32f026a0d946.js","8111","static/chunks/8111-1e2737016e34a12d.js","4345","static/chunks/app/not-found-ae3401f9fb2fc98c.js"],"default"]
-11:I[11803,["5319","static/chunks/5319-36a1ade57528f891.js","3562","static/chunks/3562-66ceb62a6d3b7ea2.js","8111","static/chunks/8111-1e2737016e34a12d.js","7619","static/chunks/7619-6f6bd9f13bf342c5.js","9617","static/chunks/9617-27c79d820d229c0d.js","7177","static/chunks/app/layout-6635f50f2111eb34.js"],"default"]
-12:I[17989,[],"ClientSegmentRoot"]
-13:I[3964,["5319","static/chunks/5319-36a1ade57528f891.js","2619","static/chunks/2619-04bc32f026a0d946.js","3562","static/chunks/3562-66ceb62a6d3b7ea2.js","5571","static/chunks/5571-3bdf4edc9781850d.js","8111","static/chunks/8111-1e2737016e34a12d.js","7619","static/chunks/7619-6f6bd9f13bf342c5.js","1731","static/chunks/1731-9ef8303ba448ad06.js","9617","static/chunks/9617-27c79d820d229c0d.js","9283","static/chunks/9283-2616c595e4a6374d.js","8149","static/chunks/8149-09c9df091815a2e0.js","5770","static/chunks/5770-e04110e44b211342.js","4163","static/chunks/app/(protected)/layout-050ce689edb46d00.js"],"default"]
-15:I[81959,[],"ClientPageRoot"]
-16:I[43593,["8111","static/chunks/8111-1e2737016e34a12d.js","6692","static/chunks/app/(protected)/admin/telemetry/page-6bf521b6f93e00d3.js"],"default"]
-19:I[24431,[],"OutletBoundary"]
-1b:I[15278,[],"AsyncMetadataOutlet"]
-1d:I[24431,[],"ViewportBoundary"]
-1f:I[24431,[],"MetadataBoundary"]
+})();0:{"P":null,"b":"static-export","p":"","c":["","admin","telemetry"],"i":false,"f":[[["",{"children":["(protected)",{"children":["admin",{"children":["telemetry",{"children":["__PAGE__",{}]}]}]}]},"$undefined","$undefined",true],["",["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/e3df6f43a33c2c65.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]],["$","html",null,{"lang":"nl","suppressHydrationWarning":true,"children":[["$","head",null,{"children":[["$","link",null,{"rel":"apple-touch-icon","href":"/icon-192x192.png"}],["$","script",null,{"dangerouslySetInnerHTML":{"__html":"$2"}}],"$L3"]}],"$L4"]}]]}],{"children":["(protected)","$L5",{"children":["admin","$L6",{"children":["telemetry","$L7",{"children":["__PAGE__","$L8",{},null,false]},null,false]},null,false]},null,false]},null,false],"$L9",false]],"m":"$undefined","G":["$a",[]],"s":false,"S":true}
+c:I[89399,["2157","static/chunks/2157-480af84db6c41675.js","8374","static/chunks/8374-6108bbfa2217b460.js","7432","static/chunks/7432-a913e3987fca51cd.js","6195","static/chunks/6195-9627d9016ef4a1be.js","389","static/chunks/389-1d7c93d9007ad96d.js","7177","static/chunks/app/layout-3eb2d8459629e8cf.js"],"default"]
+d:I[44202,["2157","static/chunks/2157-480af84db6c41675.js","8374","static/chunks/8374-6108bbfa2217b460.js","7432","static/chunks/7432-a913e3987fca51cd.js","6195","static/chunks/6195-9627d9016ef4a1be.js","389","static/chunks/389-1d7c93d9007ad96d.js","7177","static/chunks/app/layout-3eb2d8459629e8cf.js"],"default"]
+e:I[26291,[],""]
+f:I[46063,[],""]
+10:I[99361,["8618","static/chunks/8618-7c60d096f3705794.js","7432","static/chunks/7432-a913e3987fca51cd.js","4345","static/chunks/app/not-found-55c5bc91ee0722eb.js"],"default"]
+11:I[62057,["2157","static/chunks/2157-480af84db6c41675.js","8374","static/chunks/8374-6108bbfa2217b460.js","7432","static/chunks/7432-a913e3987fca51cd.js","6195","static/chunks/6195-9627d9016ef4a1be.js","389","static/chunks/389-1d7c93d9007ad96d.js","7177","static/chunks/app/layout-3eb2d8459629e8cf.js"],"default"]
+12:I[65098,[],"ClientSegmentRoot"]
+13:I[70404,["2157","static/chunks/2157-480af84db6c41675.js","8618","static/chunks/8618-7c60d096f3705794.js","8374","static/chunks/8374-6108bbfa2217b460.js","7775","static/chunks/7775-f0a7cf27596f1568.js","7432","static/chunks/7432-a913e3987fca51cd.js","6195","static/chunks/6195-9627d9016ef4a1be.js","5527","static/chunks/5527-cb8cbaeac55b3dcb.js","389","static/chunks/389-1d7c93d9007ad96d.js","3184","static/chunks/3184-54c893b80eb1bd76.js","2465","static/chunks/2465-a97b7c0edb24151f.js","6613","static/chunks/6613-ba81729929cebcce.js","4163","static/chunks/app/(protected)/layout-bbcd4543f3f4f2bc.js"],"default"]
+15:I[41918,[],"ClientPageRoot"]
+16:I[4258,["7432","static/chunks/7432-a913e3987fca51cd.js","6692","static/chunks/app/(protected)/admin/telemetry/page-6e1b749125fdd8d9.js"],"default"]
+19:I[78490,[],"OutletBoundary"]
+1b:I[90127,[],"AsyncMetadataOutlet"]
+1d:I[78490,[],"ViewportBoundary"]
+1f:I[78490,[],"MetadataBoundary"]
 20:"$Sreact.suspense"
 b:T619,
     (function () {

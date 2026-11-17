@@ -3,7 +3,7 @@
 import React, { Suspense, useState, useEffect, useLayoutEffect, useRef } from "react";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
 import { cancelFinnV2Proposal, cancelFinnV2Run, confirmAndExecuteFinnV2Proposal, getAssistantPreferences, getFinnV2Conversations, getFinnV2ConversationDetail, updateAssistantPreferences, assistantChatStream, abortAssistantChatStream, fetchFinnV2Proposal, fetchFinnV2Run, fetchFinnManualTradePlans, waitForFinnV2TerminalSse } from "@/lib/api/ai";
-import { Send, Shield, Loader2, X, Bot, ListChecks, CheckCircle2, Plus, Search, SlidersHorizontal, History, Maximize2, Minimize2, Square } from "lucide-react";
+import { Send, Shield, Loader2, X, Bot, ListChecks, CheckCircle2, Plus, Search, SlidersHorizontal, History, Maximize2, Minimize2, Square, Copy, Check } from "lucide-react";
 import { useAsset } from "@/app/providers/AssetProvider";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { invalidateWatchlist, useWatchlist } from "@/hooks/useWatchlist";
@@ -186,6 +186,9 @@ function buildAssistantUiText(at) {
     paperMode: at("uiText.paperMode"),
     conceptMode: at("uiText.conceptMode"),
     retry: at("uiText.retry"),
+    copyMessage: at("uiText.copyMessage"),
+    messageCopied: at("uiText.messageCopied"),
+    copyMessageFailed: at("uiText.copyMessageFailed"),
     inputPlaceholder: at("uiText.inputPlaceholder"),
     composerAsset: at("uiText.composerAsset"),
     composerIndicator: at("uiText.composerIndicator"),
@@ -466,6 +469,8 @@ function AIAssistantContent({
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState([]);
+  const [copiedMessageIndex, setCopiedMessageIndex] = useState(null);
+  const copyFeedbackTimerRef = useRef(null);
   const messagesRef = useRef(messages);
   const [preferences, setPreferences] = useState({});
   const [activeState, setActiveState] = useState(null);
@@ -512,7 +517,18 @@ function AIAssistantContent({
   const [feedDraftEdit, setFeedDraftEdit] = useState(null);
   const [consumedFeedNonce, setConsumedFeedNonce] = useState(null);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
+  useEffect(() => () => clearTimeout(copyFeedbackTimerRef.current), []);
   const at = createAssistantTranslator(t);
+  const handleCopyUserMessage = async (messageText, index) => {
+    try {
+      await navigator.clipboard.writeText(messageText);
+      clearTimeout(copyFeedbackTimerRef.current);
+      setCopiedMessageIndex(index);
+      copyFeedbackTimerRef.current = setTimeout(() => setCopiedMessageIndex(null), 2000);
+    } catch {
+      showSnackbar(uiText.copyMessageFailed, "error");
+    }
+  };
   const isFeedHandoff = Boolean(
     commandRequest?.mode === "chat" && commandRequest?.context?.feed_item_id,
   );
@@ -2853,6 +2869,20 @@ function AIAssistantContent({
                       : <React.Fragment key={index}>{part.text}</React.Fragment>)
                     : m.text}
                 </p>
+                {m.role === "user" && (
+                  <div className="mt-2 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => handleCopyUserMessage(m.text, i)}
+                      aria-label={copiedMessageIndex === i ? uiText.messageCopied : uiText.copyMessage}
+                      title={copiedMessageIndex === i ? uiText.messageCopied : uiText.copyMessage}
+                      className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-white/85 hover:bg-white/15 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                    >
+                      {copiedMessageIndex === i ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+                      {copiedMessageIndex === i ? uiText.messageCopied : uiText.copyMessage}
+                    </button>
+                  </div>
+                )}
                 {m.role === "assistant" && m.isComplete !== false && Array.isArray(m.reviewLinks) && m.reviewLinks.length > 0 && (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {m.reviewLinks.filter((link) => Number.isSafeInteger(link?.review_id) && link.review_id > 0).slice(0, 5).map((link) => (
