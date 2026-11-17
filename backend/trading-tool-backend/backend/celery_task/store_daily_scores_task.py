@@ -325,6 +325,7 @@ def reconcile_coach_feed_score(user_id: int, symbol: str, market_id: int | None 
             generate_coach_feed_copy.delay(user_id, item_id)
     except Exception:
         logger.warning("FINN feed reconciliation failed for %s", symbol, exc_info=True)
+        raise
 
 
 @shared_task(name="backend.celery_task.store_daily_scores_task.generate_coach_feed_copy")

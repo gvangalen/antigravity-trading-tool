@@ -60,8 +60,11 @@ def test_missing_indicator_bot_review_is_owner_and_pair_scoped(monkeypatch):
 
     class Session:
         async def execute(self, query, params):
-            if "FROM bot_configs" in str(query):
+            statement = str(query)
+            if "FROM bot_configs b" in statement:
                 assert params == {"user_id": 7, "symbol": "BTC", "market_id": 123}
+                assert "JOIN strategies s ON s.id=b.strategy_id AND s.user_id=b.user_id" in statement
+                assert "s.setup_id IS NOT NULL" in statement
                 return Rows([{"id": 9, "name": "BTC Paper", "setup_id": 42, "is_live": False},
                              {"id": 10, "name": "BTC Live", "setup_id": 42, "is_live": True}])
             return Rows([])
