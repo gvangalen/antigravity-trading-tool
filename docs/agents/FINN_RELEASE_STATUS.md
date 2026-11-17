@@ -37,8 +37,8 @@ Er zijn geen berichten, fixtureacties of trades uitgevoerd.
 
 ## FINN Smart DCA op benchmarkscore (17 november 2026)
 
-Phase: `BUILD_REPAIR_CANDIDATE_CI`. [PR #1164](https://github.com/gvangalen/antigravity-trading-tool/pull/1164)
-is gemerged als `3be93ca80660e1a5e5507e4c5600c7efd0508d06`.
+Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA_RETEST`. [PR #1164](https://github.com/gvangalen/antigravity-trading-tool/pull/1164)
+is gemerged als `3be93ca80660e1a5e5507e4c5600c7efd0508d06` en
 voegt een wekelijkse Smart DCA toe zonder vaste koopdag: bij een volledige
 benchmarkscore hoogstens één Paper-aankoop per periode, met afzonderlijke
 bedragsschalen voor lage, middelste en hoge scores. Een setup en gekoppelde
@@ -118,8 +118,16 @@ was rood op één tijdzonegevoelige Paper-bottest: de bot gebruikt de huidige
 Amsterdamse datum, maar de test verwachtte `date.today()` op de UTC-runner.
 De test vergelijkt nu met de Amsterdamse dag en vangt een dagwisseling
 tijdens de test op. De gerichte test en de volledige hertest zijn groen:
-**5.038 geslaagd, 7 bestaande skips**. Nieuwe CI, deployment en
-onafhankelijke live hertest volgen.
+**5.038 geslaagd, 7 bestaande skips**. De reparatie staat in
+[PR #1168](https://github.com/gvangalen/antigravity-trading-tool/pull/1168),
+gemerged als `2df691a098c20bbc487a96184464a04565b9372b`. De definitieve
+PR-CI had vijf groene jobs. [Main-CI 44200245680](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44200245680)
+en [Auto Deploy 44201004104](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44201004104)
+zijn geslaagd. GitHub main, backend-health (HTTP 200) en frontend-buildinfo
+(HTTP 200) meldden alle drie reparatie-SHA
+`2df691a098c20bbc487a96184464a04565b9372b`. Deze statuswijziging
+creëert zelf een nieuwe main-SHA; de laatste main-CI, Auto Deploy en publieke
+identiteit worden opnieuw gecontroleerd vóór de onafhankelijke QA-hertest.
 
 ## FINN-chat: eigen berichten kopiëren (17 november 2026)
 
