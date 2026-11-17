@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0 Paper-flow: FOMO-coach en geannuleerde feedkaart (17 november 2026)
 
-Phase: `LOCAL_VALIDATED_RELEASE_CANDIDATE` op branch
+Phase: `PRODUCT_DEPLOYED_FINAL_STATUS_PENDING_QA` op branch
 `codex/finn-paper-coach-context-feed-fix-20261117`. Onafhankelijke QA gaf
 **NOT_ACCEPTED** op definitieve publieke SHA
 `54ad3309546c1a19cf561e4908bb50c092be79c0`. De ingelogde browserreis
@@ -47,6 +47,17 @@ en `7852c5cbe1686c01a2bd52456c1bec4b81161ce2fc9ef0cc465a07f9ae221e14`).
 Onafhankelijke gerichte code-QA en Security vonden na reparatie geen concrete
 resterende fout. Authentieke browser- en Paper-acceptatie van deze nieuwe
 publieke SHA blijft QA-eigendom en is nog niet uitgevoerd.
+
+[PR #1140](https://github.com/gvangalen/antigravity-trading-tool/pull/1140)
+slaagde op alle vijf PR-CI-jobs en is gemerged als
+`bbdec7ea58184d8bb550e1f5b4da2e55ef66205b`. Main CI `43996446616`
+slaagde op alle vijf jobs en Auto Deploy `43997092159` slaagde op die SHA.
+GitHub main, publieke backend-health en frontend-build-info identificeerden
+alle drie exact die commit; beide endpoints gaven HTTP 200. Deze
+statusaanvulling creëert een latere documentatierevisie. De bestaande
+QA-agent krijgt pas de definitieve publieke SHA nadat ook diens main-CI,
+Auto Deploy en publieke SHA-pariteit zijn bevestigd. Onafhankelijke ingelogde
+QA voor deze kandidaat is nog niet afgerond.
 
 ## FINN 3.0 Paper-flow vervolg: accountread, dossier en annulering (17 november 2026)
 
