@@ -4,6 +4,51 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: exacte scorelezing en meetbare Paper-feedproef (17 november 2026)
+
+Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA`. De vorige onafhankelijke
+live proef op `ddf5e945256600fb0af1311a22b30da20f5d64f6` was
+`NOT_ACCEPTED`: FINN gaf voor BTC/EUR geen geverifieerde deelscores, terwijl
+Analyse Markt **50**, Macro **20**, Technisch **35** en benchmark **35/100**
+toonde. De twee ingelogde antwoorden waren wel verschillend, noemden per plan
+een veilige controle en wijzigden niets. De beschermde Paper-feedproef
+[44131635842](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44131635842)
+bereikte de verbeterkaart niet binnen 45 seconden. De eerdere runner gaf
+geen bewijs over taakontvangst of voltooiing; een queueachterstand is daarom
+geen vastgestelde oorzaak. De QA-fixture bleef geïsoleerd; QA rapporteerde
+één Paper-uitvoeringspoging en nul Live-aanroepen.
+
+De productreparatie in [PR #1156](https://github.com/gvangalen/antigravity-trading-tool/pull/1156)
+is gemerged als `3d6a55d5af331c89c0b327ac98cb8a5b323624d6`. De speciale
+alleen-lezen twee-planroute vraagt nu voor **elk** expliciet plan zowel de
+marktmeting als `read_asset_scores` op. Daardoor kan het antwoord de exacte
+BTC/EUR-Score 2.0-read gebruiken en de AAPL-deelscores afzonderlijk tonen;
+een BTC/USDT-score wordt niet als BTC/EUR gebruikt. De regressietest controleert
+de daadwerkelijke read-scope in beide vragen. De QA-only meetwijziging in
+[PR #1157](https://github.com/gvangalen/antigravity-trading-tool/pull/1157)
+is gemerged als `6ad48c54b383661ddd88291d06016007d2d0c921`. De volgende
+beschermde proef rapporteert alleen allowlisted taakstatus, kaartgevonden en
+timeout. `pending_unconfirmed` bewijst geen workerontvangst of backlog.
+
+Lokale Build-validatie: volledige backend **5.016 passed, 7 skipped**;
+FastAPI/Celery-actiematrix **17/17** en adaptertests **26/26**, zonder
+brokerorders, productieverbindingen of Live-aanroepen (artifact SHA-256
+`c472ca509491f3691de107af498b10d9bec9aa1dbf53a7e74a8e97d6125d3c31`).
+De echte providerontwikkelset slaagde **20/20** (SHA-256
+`65a53f19f667ad5ea456ce3f430f243cb9cd5e781b2ded52c367f6ae3f1cdb2c`);
+de echte providerregressie **109/109** (SHA-256
+`1599fa25271ce6316686829e5fe59726f3a92945d0c05960e6b1655a9d4dda4e`),
+beide zonder provider-, schema-, parse-, timeout- of validatiefouten. Beide
+PR's hadden vijf groene CI-jobs. [Main-CI 44136761684](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44136761684)
+en [Auto Deploy 44137813288](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44137813288)
+zijn geslaagd. GitHub main, publieke backend-health (HTTP 200) en
+frontend-build-info (HTTP 200) meldden exact product-SHA
+`3d6a55d5af331c89c0b327ac98cb8a5b323624d6`. Dit document creëert
+zelf nog een nieuwe main-SHA; Build verifieert ook daarvan de laatste
+main-CI, Auto Deploy en de publieke backend/frontend-identiteit voordat QA
+de ingelogde twee-planvraag en de Paper-only feedproef op exact die SHA
+hertest.
+
 ## FINN 3.0: exacte paarscores en vervolgadvies na onafhankelijke QA (17 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA`. Onafhankelijke QA
