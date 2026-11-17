@@ -172,3 +172,71 @@ def test_coach_probe_sanitizes_pool_disposal_failure(monkeypatch):
         "result": "FAIL", "reason": "coach_feed_runtime_failed",
     }
     assert "private" not in str(result)
+
+
+def test_coach_probe_task_status_is_allowlisted():
+    assert probe._safe_task_status(SimpleNamespace(state="PENDING")) == "pending_unconfirmed"
+    assert probe._safe_task_status(SimpleNamespace(state="SUCCESS")) == "success"
+    assert probe._safe_task_status(SimpleNamespace(state="private worker error")) == "unknown"
+
+    class FailingTask:
+        @property
+        def state(self):
+            raise RuntimeError("private worker error")
+
+    assert probe._safe_task_status(FailingTask()) == "unknown"
+
+
+def test_coach_probe_records_missing_card_timeout_without_task_details(monkeypatch):
+    async def missing(*args, **kwargs):
+        raise RuntimeError("coach_feed_improvement_card_missing")
+
+    monkeypatch.setattr(probe, "_feed", missing)
+    diagnostic = {"dispatch": "enqueued", "task_status": "unknown",
+                  "card_found": False, "timed_out": False}
+    with pytest.raises(RuntimeError, match="coach_feed_improvement_card_missing"):
+        asyncio.run(probe._await_feed(123, "improvement_suggestion", subject="asset",
+                                      timeout_seconds=0, task=SimpleNamespace(state="PENDING"),
+                                      diagnostic=diagnostic))
+    assert diagnostic == {"dispatch": "enqueued", "task_status": "pending_unconfirmed",
+                          "card_found": False, "timed_out": True}
+
+
+def test_coach_probe_records_card_and_completed_task(monkeypatch):
+    async def found(*args, **kwargs):
+        return {"evidence": {"suggestion_kind": "weights"}}
+
+    monkeypatch.setattr(probe, "_feed", found)
+    diagnostic = {"dispatch": "enqueued", "task_status": "unknown",
+                  "card_found": False, "timed_out": False}
+    card = asyncio.run(probe._await_feed(123, "improvement_suggestion", subject="asset",
+                                         task=SimpleNamespace(state="SUCCESS"), diagnostic=diagnostic))
+    assert card["evidence"]["suggestion_kind"] == "weights"
+    assert diagnostic == {"dispatch": "enqueued", "task_status": "success",
+                          "card_found": True, "timed_out": False}
+
+
+def test_coach_probe_includes_only_allowlisted_improvement_diagnostic(monkeypatch):
+    monkeypatch.setattr(probe, "_require_run", lambda namespace: 123)
+
+    def score_case(namespace, bound, *, trace, run_async):
+        trace["stage"] = "improvement_wait"
+        trace["improvement_diagnostic"] = {
+            "dispatch": "enqueued", "task_status": "failure",
+            "card_found": False, "timed_out": True,
+            "private_error": "private worker error",
+        }
+        raise RuntimeError("coach_feed_improvement_card_missing")
+
+    monkeypatch.setattr(probe, "_score_case", score_case)
+    monkeypatch.setattr(probe, "_risk_case", lambda namespace, bound, *, trace, run_async: {})
+    result = probe.run("qa-44006750736-1-12345678-abcdef12")
+    assert result["score_and_plan"] == {
+        "result": "FAIL", "reason": "coach_feed_improvement_card_missing",
+        "failure_stage": "improvement_wait", "fixture_state": "not_created",
+        "improvement_diagnostic": {
+            "dispatch": "enqueued", "task_status": "failure",
+            "card_found": False, "timed_out": True,
+        },
+    }
+    assert "private worker error" not in str(result)

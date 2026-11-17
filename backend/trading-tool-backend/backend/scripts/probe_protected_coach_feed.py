@@ -27,6 +27,18 @@ SAFE_FAILURES = frozenset({
     "coach_feed_quarantine_failed", "coach_feed_runtime_failed",
 })
 SOURCE_LIMITATIONS = frozenset({"coach_feed_source_unavailable", "coach_feed_source_not_moving"})
+TASK_STATES = {
+    "PENDING": "pending_unconfirmed", "RECEIVED": "received",
+    "STARTED": "started", "SUCCESS": "success", "FAILURE": "failure",
+    "RETRY": "retry", "REVOKED": "revoked",
+}
+
+
+def _safe_task_status(task) -> str:
+    try:
+        return TASK_STATES.get(task.state, "unknown")
+    except Exception:
+        return "unknown"
 
 
 def _require_run(namespace: str) -> int:
@@ -82,16 +94,27 @@ async def _feed(user_id: int, expected: str, *, subject: str | None = None) -> d
 
 
 async def _await_feed(user_id: int, expected: str, *, subject: str | None = None,
-                      timeout_seconds: float = 45) -> dict:
+                      timeout_seconds: float = 45, task=None,
+                      diagnostic: dict | None = None) -> dict:
     deadline = time.monotonic() + timeout_seconds
     while True:
+        if diagnostic is not None:
+            diagnostic["task_status"] = _safe_task_status(task)
         try:
-            return await _feed(user_id, expected, subject=subject)
+            card = await _feed(user_id, expected, subject=subject)
+            if diagnostic is not None:
+                diagnostic["card_found"] = True
+                diagnostic["task_status"] = _safe_task_status(task)
+            return card
         except RuntimeError as error:
+            timed_out = time.monotonic() >= deadline
+            if diagnostic is not None:
+                diagnostic["timed_out"] = timed_out
+                diagnostic["task_status"] = _safe_task_status(task)
             if str(error) != {
                 "improvement_suggestion": "coach_feed_improvement_card_missing",
                 "position_risk": "coach_feed_risk_card_missing",
-            }.get(expected) or time.monotonic() >= deadline:
+            }.get(expected) or timed_out:
                 raise
             await asyncio.sleep(2)
 
@@ -164,9 +187,13 @@ async def _observe_score_feed(user_id: int, *, threshold: float, trace: dict) ->
         connection.close()
     from backend.celery_task.store_daily_scores_task import reconcile_coach_feed_score
     trace["stage"] = "improvement_dispatch"
-    reconcile_coach_feed_score.delay(user_id, "ETH")
+    task = reconcile_coach_feed_score.delay(user_id, "ETH")
+    diagnostic = {"dispatch": "enqueued", "task_status": "unknown",
+                  "card_found": False, "timed_out": False}
+    trace["improvement_diagnostic"] = diagnostic
     trace["stage"] = "improvement_wait"
-    improvement = await _await_feed(user_id, "improvement_suggestion", subject="asset")
+    improvement = await _await_feed(user_id, "improvement_suggestion", subject="asset",
+                                   task=task, diagnostic=diagnostic)
     if improvement["evidence"].get("suggestion_kind") != "weights":
         raise RuntimeError("coach_feed_improvement_card_missing")
     trace["stage"] = "improvement_discuss"
@@ -401,6 +428,15 @@ def run(namespace: str) -> dict:
                                      else "coach_feed_runtime_failed",
                                      "failure_stage": trace["stage"],
                                      "fixture_state": trace["fixture_state"]}
+                if name == "score_and_plan" and "improvement_diagnostic" in trace:
+                    diagnostic = trace["improvement_diagnostic"]
+                    status = diagnostic.get("task_status")
+                    results[name]["improvement_diagnostic"] = {
+                        "dispatch": "enqueued" if diagnostic.get("dispatch") == "enqueued" else "unknown",
+                        "task_status": status if status in TASK_STATES.values() else "unknown",
+                        "card_found": diagnostic.get("card_found") is True,
+                        "timed_out": diagnostic.get("timed_out") is True,
+                    }
                 if name == "paper_risk":
                     results["paper_execution_attempts"] = int(trace["paper_execution_attempted"])
         from backend.infrastructure.database import engine
