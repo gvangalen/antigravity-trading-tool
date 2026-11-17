@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0 Paper-flow: brongebonden FOMO-antwoord verifiëren (17 november 2026)
 
-Phase: `PRODUCT_DEPLOYED_FINAL_STATUS_PENDING_QA` op productbranch
+Phase: `ACCEPTED_PAPER_ONLY` op productbranch
 `codex/finn-coach-verifier-fix-20261117`. [PR #1142](https://github.com/gvangalen/antigravity-trading-tool/pull/1142)
 slaagde op alle vijf PR-CI-jobs en is gemerged als
 `15b2dc5b3b6f84ee4cbf94c953e26a4a883c77ca`. Onafhankelijke QA gaf
@@ -55,11 +55,38 @@ Main CI `44003908637` slaagde op alle vijf jobs en Auto Deploy
 `44004641916` slaagde. GitHub main, publieke backend-health en
 frontend-build-info identificeerden op dat moment exact de productcommit;
 beide publieke endpoints gaven HTTP 200. Deze statusaanvulling creëert een
-latere documentatie-SHA. De bestaande QA-agent krijgt pas die definitieve
-publieke SHA nadat diens main-CI, Auto Deploy en SHA-pariteit zijn bevestigd.
+latere documentatie-SHA. De bestaande QA-agent kreeg die definitieve publieke
+SHA na succesvolle main-CI, Auto Deploy en SHA-pariteit.
 De vorige Paper-proef bewijst de uitvoering van de vorige SHA; zij is geen
-acceptatie van deze reparatie. Onafhankelijke ingelogde browser- en
-Paper-acceptatie voor deze kandidaat staat nog open.
+acceptatie van deze reparatie. De definitieve kandidaat
+`c6d54760b97db54f64b751cecfb6858b18a276f6` slaagde daarna op alle
+vijf main-CI-jobs (`44005777874`) en Auto Deploy (`44006464089`). GitHub
+main, productiecheckout, releasemarker, publieke backend en frontend
+matchten die SHA; beide publieke endpoints gaven HTTP 200.
+
+De bestaande onafhankelijke QA-agent gaf **ACCEPTED** op exact die SHA voor
+de afgesproken FINN 3.0 Paper-only browser- en workflowmatrix. De eerste
+AAPL-FOMO-vraag las direct de opgeslagen trade-opzet (61–75), Markt 80,
+Macro 20, ontbrekende Technische score, 0 AAPL, €405,48 Paper-kas en de
+afzonderlijke €400 botlimiet; hij behandelde de oude koers niet als actuele
+uitvoeringskoers en maakte geen koopvoorstel. De vervolgbeurten bleven bij
+de trade-opzet zonder DCA-verwarring. De geannuleerde feedkaarten bleven
+gesloten na refresh, account- en Reflectie-lezingen scheidden USD- en
+EUR-doelen, de natuurlijke Trade-knop blokkeerde op een niet actuele koers,
+en de pair-validatie wees `BTC//USDT` af zonder `BTC/EUR` en `BTC/USDT` te
+vermengen. QA noteerde als kleine kwaliteitsnuance dat het derde coachantwoord
+het eerste grotendeels herhaalde.
+
+De beschermde [Paper-only workflow 44006750736](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44006750736)
+slaagde met twee virtuele executions, één exitbeslissing, owner-scoped review,
+polling/SSE-pariteit, nul dubbele verkopen en nul Live-calls. Het gesaniteerde
+artifact heeft SHA-256
+`2de3b26db4970045faa74939f09c511c0477560e4703c2ad58562f05be969ba7`.
+Dit verdict geldt voor deze Paper- en coachmatrix, niet voor de volledige
+37/48-contractmatrix; numerieke ledger- en FX-details blijven in het
+beschermde QA-artifact gesaniteerd. Deze verdict-update wijzigt alleen dit
+document en creëert na merge een nieuwe documentatie-SHA; de QA-acceptatie
+hoort bij de hierboven genoemde productidentiteit.
 
 ## FINN 3.0 Paper-flow: FOMO-coach en geannuleerde feedkaart (17 november 2026)
 
