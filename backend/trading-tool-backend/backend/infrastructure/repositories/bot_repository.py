@@ -84,7 +84,7 @@ class BotRepository:
               st.id AS setup_id, st.name AS setup_name, st.symbol AS setup_symbol,
               COALESCE(s.timeframe, s.data->>'timeframe', st.timeframe) AS timeframe,
               st.timeframe AS setup_timeframe,
-              st.dca_frequency, st.dca_day, st.dca_month_day
+              st.dca_frequency, st.dca_trigger_mode, st.dca_day, st.dca_month_day
             FROM bot_configs b
             LEFT JOIN strategies s ON s.id = b.strategy_id AND s.user_id = b.user_id
             LEFT JOIN setups st    ON st.id = s.setup_id AND st.user_id = b.user_id
@@ -112,7 +112,7 @@ class BotRepository:
               st.id AS setup_id, st.name AS setup_name, st.symbol AS setup_symbol,
               COALESCE(s.timeframe, s.data->>'timeframe', st.timeframe) AS timeframe,
               st.timeframe AS setup_timeframe,
-              st.dca_frequency, st.dca_day, st.dca_month_day
+              st.dca_frequency, st.dca_trigger_mode, st.dca_day, st.dca_month_day
             FROM bot_configs b
             LEFT JOIN strategies s ON s.id = b.strategy_id AND s.user_id = b.user_id
             LEFT JOIN setups st    ON st.id = s.setup_id AND st.user_id = b.user_id

@@ -744,6 +744,63 @@ def test_smart_dca_collects_full_ladder_from_first_turn_without_model_band_input
     }
 
 
+def test_inverse_smart_dca_proposes_score_trigger_without_a_weekday():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message=(
+            "Maak een nieuw Smart DCA-plan voor BTC/USDT met naam Smart DCA BTC Test, "
+            "timeframe 1D, wekelijks en basisbedrag €200. Geen vaste dag: koop zodra "
+            "de volledige benchmarkscore beschikbaar is. Ik wil meer kopen bij zware "
+            "druk en minder kopen bij een sterke markt. Toon eerst je voorstel."
+        ),
+        explicit_asset="BTC", conversation_context={}, supplied_inputs={},
+        model_tool_inputs=True,
+    )
+    assert state.missing_required_inputs == []
+    assert state.collected_inputs["dca_frequency"] == "weekly"
+    assert state.collected_inputs["dca_trigger_mode"] == "benchmark"
+    assert "dca_day" not in state.collected_inputs
+    assert state.collected_inputs["base_amount"] == 200
+    assert [state.collected_inputs[key] for key in (
+        "low_threshold", "high_threshold", "low_score_percent",
+        "mid_score_percent", "high_score_percent",
+    )] == [26, 76, 150, 100, 50]
+
+
+def test_guided_smart_dca_replaces_weekday_question_with_benchmark_trigger():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    service = FinnV2OperationStateService()
+    pending = service.resolve(
+        contract=contract, message="Maak een Smart DCA voor BTC/USDT, 1D, wekelijks met basisbedrag €200",
+        explicit_asset="BTC", conversation_context={},
+        supplied_inputs={"name": "Smart DCA BTC Test"},
+        model_tool_inputs=True,
+    )
+    triggered = service.resolve(
+        contract=contract, message="maakt me niet uit licht aan de benchmarkt score",
+        explicit_asset=None,
+        conversation_context={"active_guided_operation": pending.dict()},
+        supplied_inputs={}, model_tool_inputs=True,
+    )
+    assert triggered.collected_inputs["dca_trigger_mode"] == "benchmark"
+    assert "dca_day" not in triggered.collected_inputs
+    assert triggered.next_missing_input != "dca_day"
+    ladder = service.resolve(
+        contract=contract,
+        message="Meer kopen als de markt zwaar onder druk is en bij een sterke markt steeds minder.",
+        explicit_asset=None,
+        conversation_context={"active_guided_operation": triggered.dict()},
+        supplied_inputs={}, model_tool_inputs=True,
+    )
+    assert ladder.missing_required_inputs == []
+    assert ladder.collected_inputs["dca_amount_mode"] == "score_bands"
+    assert [ladder.collected_inputs[key] for key in (
+        "low_threshold", "high_threshold", "low_score_percent",
+        "mid_score_percent", "high_score_percent",
+    )] == [26, 76, 150, 100, 50]
+
+
 def test_smart_dca_guided_reply_fills_all_three_percentages_without_smart_keyword():
     contract = FinnV2OperationRegistry().require_supported("create_setup")
     service = FinnV2OperationStateService()

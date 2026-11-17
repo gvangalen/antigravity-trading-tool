@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN-chat: subtiele kopieeractie voor beide kanten (17 november 2026)
 
-Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA`. [PR #1165](https://github.com/gvangalen/antigravity-trading-tool/pull/1165)
+Phase: `INDEPENDENT_QA_ACCEPTED`. [PR #1165](https://github.com/gvangalen/antigravity-trading-tool/pull/1165)
 is gemerged als `717787579bfb20a1eea5e24d35c966ecb347df0e`. De bestaande knop staat nu als klein
 icoon onder de eigen berichtballon; een FINN-antwoord krijgt hetzelfde icoon
 links onder de inhoud. Beide knoppen kopiëren de oorspronkelijke berichttekst,
@@ -29,10 +29,58 @@ De eerdere onafhankelijke kopieerknopcontrole op
 `4a7d498ce34c5e89ee52ccd8c01ee115843434f1` was **PASS** voor de
 oorspronkelijke tekst en bediening op 390 px en via Enter; regeleinden konden
 zonder bestaand meerregelig bericht niet live worden afgetekend.
+De bestaande QA-agent heeft de uiteindelijke live SHA
+`8880422374e2641b458272f6f022278fb8714e12` daarna **PASS** gegeven:
+beide kopieerknoppen leverden de originele tekst, een langer FINN-antwoord
+behield zes regeleinden en Markdown, en de knoppen werkten op 390 px met Enter.
+Er zijn geen berichten, fixtureacties of trades uitgevoerd.
+
+## FINN Smart DCA op benchmarkscore (17 november 2026)
+
+Phase: `BUILD_CANDIDATE_CI`. [PR #1164](https://github.com/gvangalen/antigravity-trading-tool/pull/1164)
+voegt een wekelijkse Smart DCA toe zonder vaste koopdag: bij een volledige
+benchmarkscore hoogstens één Paper-aankoop per periode, met afzonderlijke
+bedragsschalen voor lage, middelste en hoge scores. Een setup en gekoppelde
+strategie worden pas na expliciete bevestiging samen opgeslagen; een voorstel
+activeert geen bot. De scorebanden, drempels, bron en ritme worden op de
+voorstelkaart en in de opgeslagen planweergave getoond.
+
+De meerstapsfout uit de echte Responses-route is lokaal gereproduceerd: na
+“geen vaste koopdag” verloor FINN bij de scorebanden het open BTC/USDT-concept.
+De vervolgdetectie en de controle op reeds vastgelegde Smart DCA-regels zijn
+hersteld. Een nieuwe lokale worker/provider-proef hield BTC/USDT, 1D, wekelijks
+en €200 vast en leverde na de scorebandenzin een bevestigbaar voorstel op.
+De synthetische lokale eigenaar kon de kaart met de server-token bevestigen en
+de setup met strategie eenmaal opslaan; een andere eigenaar kreeg geen toegang.
+
+De gescheiden Security-review vond dat openstaande Paper-orders de week nog
+niet reserveerden. De beoordeling houdt nu rekening met een open kooporder en
+de handmatige én automatische uitvoering controleren opnieuw onder de botlock.
+Uitvoering van een besluit uit een vorige week of maand is geblokkeerd. Een
+lokale PostgreSQL-proef bevestigde dat een open kooporder de periode vasthoudt,
+annulering die vrijgeeft en een uitvoering die weer sluit. De gescheiden
+Architecture-review leidde tot expliciete Amsterdamse datumgrenzen en een
+verplichte koopdag bij terugkeer naar kalender-DCA. Beide reviews vonden na
+de reparatie geen bevestigde blokkade meer; een gelijktijdige Paper-proef blijft
+onderdeel van onafhankelijke QA.
+
+Gerichte regressies: **70/70**; de twee bestaande Paper-ketenproeven met
+bijgewerkte SQL-stubs zijn daarna **40/40**. De real-provider selector development was
+**20/20** en regression **109/109**, met nul provider-, schema- of timeoutfouten.
+De definitieve lokale worker-actiematrix was **17/17** via echte Responses,
+FastAPI en Celery, met adaptertests **27/27** en artifact SHA-256
+`dd87a47c432d5e7b6f688c45afe3d8cbb49ba6042aa6e9ec13105191762a6bae`.
+De volledige backend-suite is na de bijgewerkte SQL-teststubs afgerond:
+**5.035 geslaagd, 7 bestaande skips**. De frontend-build na rebase op de
+nieuwste `main`, typecheck en `lint:i18n` zijn geslaagd; `test:i18n` **43/43**,
+`test:commands` **85/85**, `test:proposals` **9/9** en `test:setups` **20/20**.
+De kandidaat blijft een draft totdat zijn CI groen
+is en de voorafgaande FINN-chatrelease is afgerond. Live SHA en onafhankelijke
+QA volgen pas na deployment.
 
 ## FINN-chat: eigen berichten kopiëren (17 november 2026)
 
-Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA`. [PR #1162](https://github.com/gvangalen/antigravity-trading-tool/pull/1162)
+Phase: `INDEPENDENT_QA_ACCEPTED`. [PR #1162](https://github.com/gvangalen/antigravity-trading-tool/pull/1162)
 is gemerged als `0dcd8a96d5f38c0a2c15204a889c9d385e50371d`. Onder elk eigen
 chatbericht staat nu een zichtbare kopieerknop. De knop schrijft de volledige
 oorspronkelijke tekst naar het klembord en bevestigt kort de actie; bij een
@@ -49,6 +97,9 @@ zijn geslaagd. GitHub main, backend-health (HTTP 200) en frontend-buildinfo
 `0dcd8a96d5f38c0a2c15204a889c9d385e50371d`. Deze statuswijziging
 creëert zelf nog een nieuwe main-SHA; de laatste main-CI, Auto Deploy en
 publieke identiteit worden daarop opnieuw gecontroleerd vóór de QA-handoff.
+De bestaande QA-agent heeft de uiteindelijke live SHA
+`4a7d498ce34c5e89ee52ccd8c01ee115843434f1` vervolgens onafhankelijk
+beoordeeld met verdict **PASS** voor de kopieerknop.
 De eerdere onafhankelijke beschermde FINN 3.0-hertest op
 `d35bd3c888c364ff9edf681da291c2e9d40c2b47` gaf **PASS** in
 [QA-run 44153564120](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44153564120),

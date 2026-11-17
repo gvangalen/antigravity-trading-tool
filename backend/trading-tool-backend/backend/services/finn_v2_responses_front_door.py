@@ -1427,9 +1427,22 @@ class FinnResponsesFrontDoor:
                         known_setup_type="dca",
                     )
                     return bool(set(explicit) & {
-                        "dca_frequency", "dca_day", "dca_month_day", "dca_amount_mode",
+                        "dca_frequency", "dca_trigger_mode", "dca_day", "dca_month_day", "dca_amount_mode",
                         "base_amount",
                     })
+                # Score-band choices can answer several future DCA slots at
+                # once. Keep them attached to the open owner-bound draft even
+                # when the current question asks for the first threshold.
+                if not separate_action:
+                    explicit = states.explicit_inputs(
+                        contract=contract, message=message, explicit_asset=None,
+                        known_setup_type="dca",
+                    )
+                    if set(explicit) & {
+                        "low_threshold", "high_threshold", "low_score_percent",
+                        "mid_score_percent", "high_score_percent",
+                    }:
+                        return True
             return False
         # Even a short answer can contain a separate action after a sentence
         # boundary. Do not consume that new request as only a slot value.
@@ -1466,7 +1479,7 @@ class FinnResponsesFrontDoor:
             known_setup_type=(
                 "dca" if contract.operation_id == "create_setup"
                 and requested_slot in {
-                    "dca_frequency", "dca_day", "dca_month_day", "dca_amount_mode",
+                    "dca_frequency", "dca_trigger_mode", "dca_day", "dca_month_day", "dca_amount_mode",
                     "base_amount", "low_score_percent", "mid_score_percent", "high_score_percent",
                 } else None
             ),

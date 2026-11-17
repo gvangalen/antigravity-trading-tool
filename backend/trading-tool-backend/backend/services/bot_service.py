@@ -7,6 +7,7 @@ import os
 import uuid
 from decimal import Decimal, InvalidOperation
 from datetime import date, timedelta, datetime, timezone
+from zoneinfo import ZoneInfo
 from typing import List, Dict, Any, Optional
 from fastapi import HTTPException
 from sqlalchemy import text
@@ -119,6 +120,17 @@ def _dca_schedule_status(setup: Optional[dict], report_date: date, strategy_row:
         "decision_curve": curve, "dca_amount_semantics": semantics,
     }):
         return None
+    if setup.get("dca_trigger_mode") == "benchmark":
+        if mode != "custom":
+            return None
+        return {
+            "as_of_date": report_date.isoformat(),
+            "trigger_mode": "benchmark",
+            "frequency": setup.get("dca_frequency"),
+            "due_today": None,
+            "next_due_date": None,
+            "condition": "complete_benchmark_required",
+        }
     next_due = next(
         (report_date + timedelta(days=offset) for offset in range(62)
          if dca_due_on_date(setup, report_date + timedelta(days=offset))),
@@ -524,6 +536,7 @@ class BotService:
                     "symbol": bot.get("setup_symbol") or bot.get("symbol"),
                     "timeframe": bot.get("setup_timeframe"),
                     "dca_frequency": bot.get("dca_frequency"),
+                    "dca_trigger_mode": bot.get("dca_trigger_mode"),
                     "dca_day": bot.get("dca_day"),
                     "dca_month_day": bot.get("dca_month_day"),
                 },
@@ -589,6 +602,7 @@ class BotService:
                         "symbol": r["symbol"],
                         "timeframe": r.get("setup_timeframe"),
                         "dca_frequency": r.get("dca_frequency"),
+                        "dca_trigger_mode": r.get("dca_trigger_mode"),
                         "dca_day": r.get("dca_day"),
                         "dca_month_day": r.get("dca_month_day"),
                     },
@@ -2627,7 +2641,7 @@ class BotService:
             payload.idempotency_key = key
 
     async def skip_bot_today(self, bot_id: int, report_date_str: Optional[str], user_id: int) -> dict:
-        report_date = date.fromisoformat(report_date_str) if report_date_str else date.today()
+        report_date = date.fromisoformat(report_date_str) if report_date_str else datetime.now(ZoneInfo("Europe/Amsterdam")).date()
         decision_id = await self.repository.mark_decision_skipped(user_id, bot_id, report_date)
         if not decision_id:
             raise HTTPException(409, "Decision is al afgehandeld")
@@ -2654,8 +2668,8 @@ class BotService:
         trace_id: Optional[str] = None,
         paper_only: bool = False,
     ) -> dict:
-        report_date = date.today() if paper_only else (
-            date.fromisoformat(report_date_str) if report_date_str else date.today()
+        report_date = datetime.now(ZoneInfo("Europe/Amsterdam")).date() if paper_only else (
+            date.fromisoformat(report_date_str) if report_date_str else datetime.now(ZoneInfo("Europe/Amsterdam")).date()
         )
         if paper_only:
             bot = await self.repository.get_bot_config(user_id, bot_id)

@@ -105,7 +105,8 @@ def test_model_capabilities_match_confirmed_dca_amount_contract():
     facts = dca_automation_capabilities()
     assert facts["supported_amount_modes"] == ("fixed", "score_bands")
     assert facts["minimum_score_band_percent"] > 0
-    assert facts["score_band_percent_order"] == "nondecreasing_as_benchmark_score_rises"
+    assert facts["score_band_percent_orders"] == ("nondecreasing", "nonincreasing")
+    assert "benchmark" in facts["supported_trigger_modes"]
     assert facts["score_band_amount_count"] == 3
     _, strategy = split_confirmed_dca_plan({
         "setup_type": "dca", "name": "BTC test", "dca_amount_mode": "score_bands",

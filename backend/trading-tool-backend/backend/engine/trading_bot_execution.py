@@ -2,7 +2,8 @@
 import logging
 import json
 import math
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional
 
 from backend.utils.db import get_db_connection
@@ -981,6 +982,7 @@ def _get_active_bots(conn, user_id: int) -> List[Dict[str, Any]]:
               st.symbol,
               st.timeframe,
               st.dca_frequency,
+              st.dca_trigger_mode,
               st.dca_day,
               st.dca_month_day,
               st.last_validated
@@ -1017,6 +1019,7 @@ def _get_active_bots(conn, user_id: int) -> List[Dict[str, Any]]:
             symbol,
             timeframe,
             dca_frequency,
+            dca_trigger_mode,
             dca_day,
             dca_month_day,
             setup_last_validated,
@@ -1040,6 +1043,7 @@ def _get_active_bots(conn, user_id: int) -> List[Dict[str, Any]]:
                 "symbol": (symbol or DEFAULT_SYMBOL).upper(),
                 "timeframe": timeframe,
                 "dca_frequency": dca_frequency,
+                "dca_trigger_mode": dca_trigger_mode or "calendar",
                 "dca_day": dca_day,
                 "dca_month_day": dca_month_day,
                 "setup_revision": setup_last_validated.isoformat() if setup_last_validated else None,
@@ -1578,6 +1582,68 @@ def _claim_bot_decision_for_execution(
         if not claimed:
             increment_execution_safety_counter("replay_block_hits")
         return claimed
+
+
+def _require_smart_dca_period_available(
+    conn, *, user_id: int, bot_id: int, decision_id: int,
+    as_of: date | None = None,
+) -> None:
+    """Recheck the period while holding bot_configs FOR UPDATE before a buy."""
+    from backend.domain.finn_dca_plan_contract import dca_execution_period
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT d.decision_date, st.setup_type, st.dca_trigger_mode,
+                      st.dca_frequency
+               FROM bot_decisions d
+               JOIN setups st ON st.id=d.setup_id AND st.user_id=d.user_id
+               WHERE d.id=%s AND d.user_id=%s AND d.bot_id=%s""",
+            (decision_id, user_id, bot_id),
+        )
+        row = cur.fetchone()
+    if not row or row[1] != "dca" or row[2] != "benchmark":
+        return
+    period_start, period_end = dca_execution_period(
+        {"dca_frequency": row[3]}, row[0],
+    )
+    local_today = as_of or datetime.now(ZoneInfo("Europe/Amsterdam")).date()
+    if not period_start <= local_today < period_end:
+        raise BotSafetyBlock("Deze Smart DCA-beslissing hoort bij een verstreken periode. Maak een nieuwe beslissing.")
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT 1 FROM bot_decisions
+               WHERE user_id=%s AND bot_id=%s AND id<>%s
+                 AND decision_date >= %s AND decision_date < %s
+                 AND decision_kind='assessment'
+                 AND status IN ('executing', 'executed', 'unknown_exchange_state')
+               LIMIT 1""",
+            (user_id, bot_id, decision_id, period_start, period_end),
+        )
+        if cur.fetchone():
+            raise BotSafetyBlock("Voor deze periode is al een Smart DCA-aankoop uitgevoerd.")
+
+
+def _score_trigger_period_has_pending_or_executed_buy(
+    conn, *, user_id: int, bot_id: int, period_start: date, period_end: date,
+) -> bool:
+    """Called under the bot row lock so an open Paper order holds the period."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT 1 FROM bot_decisions d
+               WHERE d.user_id=%s AND d.bot_id=%s
+                 AND d.decision_date >= %s AND d.decision_date < %s
+                 AND d.decision_kind='assessment'
+                 AND (d.status IN ('executing', 'executed', 'unknown_exchange_state')
+                      OR (d.status='planned' AND EXISTS (
+                          SELECT 1 FROM bot_orders o
+                          WHERE o.user_id=d.user_id AND o.bot_id=d.bot_id
+                            AND o.decision_id=d.id AND o.side='buy'
+                            AND o.status IN ('ready', 'pending')
+                      )))
+               LIMIT 1""",
+            (user_id, bot_id, period_start, period_end),
+        )
+        return cur.fetchone() is not None
 
 
 def _mark_bot_decision_execution_failed(
@@ -2168,7 +2234,7 @@ def _maybe_execute_paper_position_exit(
     strategy and position stay locked through the Paper ledger write. It never
     creates a Live order or treats a stored level as an exchange stop order.
     """
-    if (report_date != date.today() or bot.get("is_live") or
+    if (report_date != datetime.now(ZoneInfo("Europe/Amsterdam")).date() or bot.get("is_live") or
             bot.get("mode") != "auto" or
             str(bot.get("setup_type") or "").lower() != "trade"):
         return None
@@ -2365,7 +2431,7 @@ def run_trading_bot_execution(
     paper_only: bool = False,
 ) -> Dict[str, Any]:
 
-    report_date = report_date or date.today()
+    report_date = report_date or datetime.now(ZoneInfo("Europe/Amsterdam")).date()
 
     conn = get_db_connection()
     if not conn:
@@ -2554,30 +2620,46 @@ def run_trading_bot_execution(
             scores["setup"] = current_match["score"]
             scores["_source_available"]["setup_score"] = current_match["score"] is not None
 
+            if bot.get("dca_trigger_mode") == "benchmark" and not (
+                setup_payload.get("setup_type") == "dca"
+                and setup_payload.get("execution_mode") == "custom"
+                and setup_payload.get("dca_amount_semantics") == "planned_exact"
+                and is_confirmed_dca_amount_rule(setup_payload)
+            ):
+                skip_reasons[bot["bot_id"]] = "invalid_score_trigger"
+                continue
+
             if setup_payload.get("dca_amount_semantics") == "planned_exact":
-                from backend.domain.finn_dca_plan_contract import dca_due_on_date
+                from backend.domain.finn_dca_plan_contract import dca_due_on_date, dca_execution_period
 
                 if not dca_due_on_date(bot, report_date):
                     skip_reasons[bot["bot_id"]] = "not_due"
                     continue
+                period_start, period_end = (
+                    dca_execution_period(bot, report_date)
+                    if bot.get("dca_trigger_mode") == "benchmark"
+                    else (report_date, report_date + timedelta(days=1))
+                )
                 with conn.cursor() as cur:
                     # Serialize runs for this owner and bot until the paper
                     # decision and order commit. A second worker must observe
-                    # the first execution before considering another buy.
+                    # the first pending order or execution before another buy.
                     cur.execute(
                         "SELECT pg_advisory_xact_lock(%s, %s)",
                         (user_id, bot["bot_id"]),
                     )
+                    # Manual confirmation holds this same row lock. It cannot
+                    # commit a fill between the period check and new proposal.
                     cur.execute(
-                        """SELECT 1 FROM bot_decisions
-                           WHERE user_id=%s AND bot_id=%s AND decision_date=%s
-                             AND decision_kind='assessment'
-                             AND status='executed' LIMIT 1""",
-                        (user_id, bot["bot_id"], report_date),
+                        "SELECT id FROM bot_configs WHERE id=%s AND user_id=%s FOR UPDATE",
+                        (bot["bot_id"], user_id),
                     )
-                    if cur.fetchone():
-                        skip_reasons[bot["bot_id"]] = "already_executed"
-                        continue
+                if _score_trigger_period_has_pending_or_executed_buy(
+                    conn, user_id=user_id, bot_id=bot["bot_id"],
+                    period_start=period_start, period_end=period_end,
+                ):
+                    skip_reasons[bot["bot_id"]] = "already_pending_or_executed"
+                    continue
 
             if setup_payload.get("symbol"):
                 symbol = setup_payload.get("symbol").upper()
@@ -3039,7 +3121,7 @@ def _recheck_auto_buy_limits(
         raise BotSafetyBlock("De actuele botbudgetten zijn ongeldig. De order is geblokkeerd.") from None
 
     portfolio = get_bot_portfolio_state(conn, user_id, bot_id, symbol)
-    today = get_today_spent_eur(conn, user_id, bot_id, date.today())
+    today = get_today_spent_eur(conn, user_id, bot_id, datetime.now(ZoneInfo("Europe/Amsterdam")).date())
     asset_value = float(portfolio["qty"]) * price
     result = apply_guardrails(
         proposed_amount_eur=notional,
@@ -3371,6 +3453,10 @@ def _auto_execute_decision(
 
     submission_started = False
     try:
+        if side == "buy":
+            _require_smart_dca_period_available(
+                conn, user_id=user_id, bot_id=bot_id, decision_id=decision_id,
+            )
         if not is_live and side == "buy":
             with conn.cursor() as cur:
                 cur.execute(
@@ -3662,6 +3748,11 @@ def execute_manual_decision(
         side = (side or "buy").lower().strip()
         qty = float(qty or 0.0)
         price = float(price or 0.0)
+
+        if side == "buy":
+            _require_smart_dca_period_available(
+                conn, user_id=user_id, bot_id=bot_id, decision_id=decision_id,
+            )
 
         if qty <= 0 or price <= 0:
             raise RuntimeError("Invalid order execution values")

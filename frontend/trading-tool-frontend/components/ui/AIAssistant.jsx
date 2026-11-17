@@ -2051,7 +2051,7 @@ function AIAssistantContent({
       : supplied.symbol;
     const contextLine = [selectedMarket, supplied.timeframe, humanValue(supplied.setup_type)].filter(Boolean).join(" · ");
     const frequency = setupDraftFrequencyLabel(supplied, humanValue);
-    const labels = { name: "naam", setup_type: "type", symbol: "asset", quote_currency: "koersvaluta", timeframe: "timeframe", dca_frequency: "frequentie", dca_day: "weekdag", dca_month_day: "dag van de maand", min_investment: "minimuminvestering", min_benchmark_score: "ondergrens totale benchmark", max_benchmark_score: "bovengrens totale benchmark", dca_amount_mode: "bedragregel", base_amount: "basisbedrag", score_source: "totale benchmark (markt + macro + technisch)", low_threshold: "grens lage/middenscore", high_threshold: "grens midden/hoge score", low_score_percent: "percentage lage score", mid_score_percent: "percentage middenscore", high_score_percent: "percentage hoge score" };
+    const labels = { name: "naam", setup_type: "type", symbol: "asset", quote_currency: "koersvaluta", timeframe: "timeframe", dca_frequency: "frequentie", dca_trigger_mode: "koopmoment", dca_day: "weekdag", dca_month_day: "dag van de maand", min_investment: "minimuminvestering", min_benchmark_score: "ondergrens totale benchmark", max_benchmark_score: "bovengrens totale benchmark", dca_amount_mode: "bedragregel", base_amount: "basisbedrag", score_source: "totale benchmark (markt + macro + technisch)", low_threshold: "grens lage/middenscore", high_threshold: "grens midden/hoge score", low_score_percent: "percentage lage score", mid_score_percent: "percentage middenscore", high_score_percent: "percentage hoge score" };
     const missing = (draft.missing_inputs || []).map((field) => at(`draftCards.inputs.${field}`, labels[field] || field));
     const euro = (value) => new Intl.NumberFormat(locale || "nl-NL", { style: "currency", currency: "EUR" }).format(Number(value));
     const priceCurrency = String(supplied.price_currency || supplied.quote_currency || "EUR").toUpperCase();
@@ -2070,6 +2070,7 @@ function AIAssistantContent({
           {contextLine && <p className="mt-1 break-words text-xs text-slate-500 dark:text-slate-400">{contextLine}</p>}
         </div>
         {frequency && <p className="mt-3 text-sm text-slate-700 dark:text-slate-200">{at("draftCards.frequency", "Frequentie")}: <span className="font-semibold">{frequency}</span></p>}
+        {isSmartDca && supplied.dca_trigger_mode === "benchmark" && <p className="mt-1 text-sm font-semibold text-blue-700 dark:text-blue-300">{at("dcaDraft.benchmarkTrigger", "Koopmoment: zodra de volledige benchmarkscore beschikbaar is, maximaal één aankoop per gekozen periode; geen vaste koopdag.")}</p>}
         <p className="mt-2 text-sm text-slate-700 dark:text-slate-200">
           {at("draftCards.benchmarkCondition", "Voorwaarde totale benchmark")}: <span className="font-semibold">{
             supplied.min_benchmark_score != null || supplied.max_benchmark_score != null

@@ -26,7 +26,7 @@ from backend.schemas.finn_v2_domain_validation_schema import EvidenceValidationR
 
 
 _PUBLIC_PROPOSAL_FIELDS = frozenset({
-    "name", "symbol", "timeframe", "setup_type", "dca_frequency", "dca_day",
+    "name", "symbol", "timeframe", "setup_type", "dca_frequency", "dca_trigger_mode", "dca_day",
     "dca_month_day", "min_investment", "benchmark_score_min", "benchmark_score_max",
     "macro_score_min", "macro_score_max", "technical_score_min", "technical_score_max",
     "execution_mode", "base_amount", "entry", "stop_loss", "targets", "price_currency",
@@ -723,7 +723,7 @@ class FinnV2ReasoningContextService:
                 key: payload.get(key)
                 for key in [
                     "setup_id", "name", "symbol", "timeframe", "setup_type", "description",
-                    "dca_frequency", "dca_day_name", "dca_month_day", "min_investment",
+                    "dca_frequency", "dca_trigger_mode", "dca_day_name", "dca_month_day", "min_investment",
                     "min_benchmark_score", "max_benchmark_score",
                     "saved_market_condition", "score",
                 ]

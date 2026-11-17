@@ -24,6 +24,27 @@ def test_same_asset_restatement_binds_to_open_dca_draft():
     )
 
 
+def test_score_band_followup_stays_with_open_smart_dca_draft():
+    registry = FinnV2OperationRegistry()
+    contract = registry.require_supported("create_setup")
+    collected = {
+        "symbol": "BTC", "quote_currency": "USDT", "setup_type": "dca",
+        "dca_trigger_mode": "benchmark", "dca_frequency": "weekly",
+    }
+    assert FinnResponsesFrontDoor.binds_guided_slot(
+        message=("Gebruik benchmarkscorebanden: meer kopen als de markt zwaar "
+                 "onder druk is en bij een sterke markt steeds minder. "
+                 "Maak het concrete voorstel."),
+        contract=contract, registry=registry, requested_slot="low_threshold",
+        collected_inputs=collected,
+    )
+    assert not FinnResponsesFrontDoor.binds_guided_slot(
+        message="Maak een nieuwe aparte setup voor ETH/USDT met scorebanden.",
+        contract=contract, registry=registry, requested_slot="low_threshold",
+        collected_inputs=collected,
+    )
+
+
 def test_conversational_request_with_asset_starts_new_setup_draft():
     assert _explicit_create_operation_request(
         "kan je voor eth ook een setup maken?"
@@ -48,7 +69,7 @@ def test_known_asset_replacement_preserves_dca_fields_but_not_old_asset():
     )
     assert carried == {
         "name": "ETH concept", "setup_type": "dca", "timeframe": "1D",
-        "dca_frequency": "weekly", "dca_day": "monday",
+            "dca_frequency": "weekly", "dca_day": "monday",
         "dca_amount_mode": "fixed", "base_amount": 100,
         "min_benchmark_score": None,
     }
@@ -337,7 +358,7 @@ def test_open_setup_asset_switch_retains_explicit_scope_schedule_and_score_bound
     assert state["collected_inputs"] == {
         "name": "QA AAPL Voorwaarde 2510", "symbol": "AAPL",
         "setup_type": "dca", "timeframe": "1D", "plan_scope": "setup_only",
-        "dca_frequency": "weekly", "dca_day": "monday",
+        "dca_frequency": "weekly", "dca_trigger_mode": "calendar", "dca_day": "monday",
         "min_benchmark_score": 26, "max_benchmark_score": 45,
     }
 

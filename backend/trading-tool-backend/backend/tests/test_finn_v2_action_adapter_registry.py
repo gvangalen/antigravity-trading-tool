@@ -183,6 +183,38 @@ def test_confirmed_dca_creates_setup_and_strategy_in_one_transaction(monkeypatch
     session.commit.assert_awaited_once()
 
 
+def test_confirmed_inverse_smart_dca_saves_score_trigger_without_weekday(monkeypatch):
+    monkeypatch.setattr("backend.infrastructure.repositories.onboarding_repository.OnboardingRepository.mark_step_completed", AsyncMock())
+
+    @asynccontextmanager
+    async def savepoint():
+        yield
+
+    session = SimpleNamespace(commit=AsyncMock(), begin_nested=savepoint)
+    registry = FinnV2ActionAdapterRegistry(session)
+    registry.flags.execute_setup_changes_enabled = lambda: True
+    registry.setups.save_setup = AsyncMock(return_value={"setup_id": 91, "name": "BTC inverse"})
+    registry.setups._mark_setup_step_completed_best_effort = AsyncMock()
+    registry.strategies.save_strategy = AsyncMock(return_value={"strategy_id": 92})
+
+    result = asyncio.run(registry._create_setup(390, {"change": {"setup_fields": {
+        "name": "BTC inverse", "symbol": "BTC", "quote_currency": "USDT", "timeframe": "1D",
+        "setup_type": "dca", "dca_frequency": "weekly", "dca_trigger_mode": "benchmark",
+        "dca_amount_mode": "score_bands", "base_amount": 200,
+        "score_source": "benchmark_score", "low_threshold": 26, "high_threshold": 76,
+        "low_score_percent": 150, "mid_score_percent": 100, "high_score_percent": 50,
+    }}}))
+
+    assert result["setup_id"] == 91 and result["strategy_id"] == 92
+    setup_fields = registry.setups.save_setup.await_args.args[1]
+    strategy_fields = registry.strategies.save_strategy.await_args.args[1]
+    assert setup_fields["dca_trigger_mode"] == "benchmark"
+    assert setup_fields.get("dca_day") is None
+    assert strategy_fields["decision_curve"]["points"][0]["y"] == 1.5
+    assert strategy_fields["decision_curve"]["points"][-1]["y"] == 0.5
+    session.commit.assert_awaited_once()
+
+
 def test_confirmed_sma_trade_plan_saves_exact_pair_and_rule_atomically(monkeypatch):
     monkeypatch.setattr("backend.infrastructure.repositories.onboarding_repository.OnboardingRepository.mark_step_completed", AsyncMock())
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 
@@ -14,6 +14,7 @@ _AMOUNT_FIELDS = frozenset({
 _SCORE_SOURCES = frozenset({"benchmark_score"})
 _SCORE_BAND_PERCENT_RANGE = (5, 300)
 _SCORE_BAND_INTERPOLATION = "step"
+_TRIGGER_MODES = frozenset({"calendar", "benchmark"})
 BENCHMARK_COMPONENTS = ("market_score", "macro_score", "technical_score")
 EQUAL_BENCHMARK_WEIGHTS = {component: 1 / 3 for component in BENCHMARK_COMPONENTS}
 
@@ -27,7 +28,10 @@ def dca_automation_capabilities() -> dict[str, Any]:
         "score_band_percent_range": _SCORE_BAND_PERCENT_RANGE,
         "score_band_threshold_count": 2,
         "score_band_amount_count": 3,
-        "score_band_percent_order": "nondecreasing_as_benchmark_score_rises",
+        "score_band_percent_order": "monotonic_in_either_direction",
+        "score_band_percent_orders": ("nondecreasing", "nonincreasing"),
+        "supported_trigger_modes": tuple(sorted(_TRIGGER_MODES)),
+        "benchmark_trigger_cadence": "at_most_once_per_period_when_complete_score_is_available",
         "minimum_score_band_percent": _SCORE_BAND_PERCENT_RANGE[0],
         "automatic_sell_rule_in_dca_plan": False,
         "separate_setup_creation": True,
@@ -42,9 +46,14 @@ def validate_dca_setup_only(fields: dict[str, Any]) -> None:
         raise ValueError("dca_setup_only_cannot_have_strategy_amounts")
     if fields.get("dca_frequency") not in {"daily", "weekly", "monthly"}:
         raise ValueError("dca_frequency_required")
-    if fields["dca_frequency"] == "weekly" and not fields.get("dca_day"):
+    trigger_mode = fields.get("dca_trigger_mode") or "calendar"
+    if trigger_mode not in _TRIGGER_MODES:
+        raise ValueError("dca_trigger_mode_invalid")
+    if trigger_mode == "benchmark" and (fields.get("dca_day") or fields.get("dca_month_day")):
+        raise ValueError("benchmark_trigger_cannot_have_calendar_day")
+    if trigger_mode == "calendar" and fields["dca_frequency"] == "weekly" and not fields.get("dca_day"):
         raise ValueError("dca_day_required")
-    if fields["dca_frequency"] == "monthly" and not fields.get("dca_month_day"):
+    if trigger_mode == "calendar" and fields["dca_frequency"] == "monthly" and not fields.get("dca_month_day"):
         raise ValueError("dca_month_day_required")
 
 
@@ -99,6 +108,17 @@ def split_confirmed_dca_plan(fields: dict[str, Any]) -> tuple[dict[str, Any], di
     """
     if str(fields.get("setup_type") or "").lower() != "dca":
         raise ValueError("dca_setup_required")
+    trigger_mode = fields.get("dca_trigger_mode") or "calendar"
+    if trigger_mode not in _TRIGGER_MODES:
+        raise ValueError("dca_trigger_mode_invalid")
+    if trigger_mode == "benchmark" and (fields.get("dca_day") or fields.get("dca_month_day")):
+        raise ValueError("benchmark_trigger_cannot_have_calendar_day")
+    if trigger_mode == "calendar" and fields.get("dca_frequency") == "weekly" and not fields.get("dca_day"):
+        raise ValueError("dca_day_required")
+    if trigger_mode == "calendar" and fields.get("dca_frequency") == "monthly" and not fields.get("dca_month_day"):
+        raise ValueError("dca_month_day_required")
+    if fields.get("dca_frequency") is not None and fields.get("dca_frequency") not in {"daily", "weekly", "monthly"}:
+        raise ValueError("dca_frequency_required")
     setup_fields = {key: value for key, value in fields.items() if key not in _AMOUNT_FIELDS}
     mode = fields.get("dca_amount_mode")
     strategy_fields: dict[str, Any] = {
@@ -109,6 +129,8 @@ def split_confirmed_dca_plan(fields: dict[str, Any]) -> tuple[dict[str, Any], di
     }
 
     if mode == "fixed":
+        if trigger_mode == "benchmark":
+            raise ValueError("benchmark_trigger_requires_score_bands")
         if any(fields.get(key) is not None for key in _AMOUNT_FIELDS - {"dca_amount_mode", "base_amount"}):
             raise ValueError("fixed_dca_cannot_have_score_bands")
     elif mode == "score_bands":
@@ -127,7 +149,10 @@ def split_confirmed_dca_plan(fields: dict[str, Any]) -> tuple[dict[str, Any], di
             _positive_amount(fields.get(key), key)
             for key in ("low_score_percent", "mid_score_percent", "high_score_percent")
         )
-        if not _SCORE_BAND_PERCENT_RANGE[0] <= percents[0] <= percents[1] <= percents[2] <= _SCORE_BAND_PERCENT_RANGE[1]:
+        if not all(_SCORE_BAND_PERCENT_RANGE[0] <= percent <= _SCORE_BAND_PERCENT_RANGE[1] for percent in percents) or not (
+            percents[0] <= percents[1] <= percents[2]
+            or percents[0] >= percents[1] >= percents[2]
+        ):
             raise ValueError("score_band_percentages_invalid")
         multipliers = tuple(percent / 100 for percent in percents)
         strategy_fields["decision_curve"] = {
@@ -151,7 +176,7 @@ def split_confirmed_dca_plan(fields: dict[str, Any]) -> tuple[dict[str, Any], di
         if type(minimum) not in {int, float} or not math.isfinite(minimum) or minimum < 0:
             raise ValueError("min_investment_must_be_nonnegative_finite")
         lowest = (strategy_fields["base_amount"] if mode == "fixed" else
-                  strategy_fields["base_amount"] * multipliers[0])
+                  strategy_fields["base_amount"] * min(multipliers))
         if minimum > lowest:
             raise ValueError("minimum_investment_exceeds_planned_amount")
     return setup_fields, strategy_fields
@@ -203,6 +228,8 @@ def is_confirmed_dca_amount_rule(strategy: dict[str, Any]) -> bool:
 def dca_due_on_date(setup: dict[str, Any], report_date: date) -> bool:
     """Evaluate the saved setup cadence for a nominal local report date."""
     frequency = str(setup.get("dca_frequency") or "").lower()
+    if setup.get("dca_trigger_mode") == "benchmark":
+        return frequency in {"daily", "weekly", "monthly"}
     if frequency == "daily":
         return True
     if frequency == "weekly":
@@ -220,3 +247,16 @@ def dca_due_on_date(setup: dict[str, Any], report_date: date) -> bool:
         except (TypeError, ValueError):
             return False
     return False
+
+
+def dca_execution_period(setup: dict[str, Any], report_date: date) -> tuple[date, date]:
+    """Return the half-open local period used to enforce a saved DCA cadence."""
+    frequency = str(setup.get("dca_frequency") or "").lower()
+    if frequency == "weekly":
+        start = report_date - timedelta(days=report_date.weekday())
+        return start, start + timedelta(days=7)
+    if frequency == "monthly":
+        start = report_date.replace(day=1)
+        end = start.replace(year=start.year + 1, month=1) if start.month == 12 else start.replace(month=start.month + 1)
+        return start, end
+    return report_date, report_date + timedelta(days=1)

@@ -34,7 +34,7 @@ class SetupRepository:
             INSERT INTO setups (
                 name, symbol, market_id, timeframe,
                 setup_type,
-                dca_frequency, dca_day, dca_month_day,
+                dca_frequency, dca_trigger_mode, dca_day, dca_month_day,
                 account_type, min_investment, tags, trend, score_logic,
                 favorite, explanation, description, action, category,
                 min_macro_score, max_macro_score,
@@ -46,7 +46,7 @@ class SetupRepository:
             VALUES (
                 :name, :symbol, :market_id, :timeframe,
                 :setup_type,
-                :dca_frequency, :dca_day, :dca_month_day,
+                :dca_frequency, :dca_trigger_mode, :dca_day, :dca_month_day,
                 :account_type, :min_investment, CAST(:tags AS text[]), :trend, :score_logic,
                 :favorite, :explanation, :description, :action, :category,
                 :min_macro_score, :max_macro_score,
@@ -66,6 +66,7 @@ class SetupRepository:
             "setup_type": payload.get("setup_type"),
             
             "dca_frequency": payload.get("dca_frequency"),
+            "dca_trigger_mode": payload.get("dca_trigger_mode") or "calendar",
             "dca_day": self._as_optional_text(payload.get("dca_day")),
             # Production stores the monthly day as INTEGER. asyncpg does not
             # coerce the string form accepted by the API to that column type.
