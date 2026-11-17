@@ -37,7 +37,7 @@ Er zijn geen berichten, fixtureacties of trades uitgevoerd.
 
 ## FINN Smart DCA op benchmarkscore (17 november 2026)
 
-Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA`. [PR #1164](https://github.com/gvangalen/antigravity-trading-tool/pull/1164)
+Phase: `BUILD_REPAIR_CANDIDATE_CI`. [PR #1164](https://github.com/gvangalen/antigravity-trading-tool/pull/1164)
 is gemerged als `3be93ca80660e1a5e5507e4c5600c7efd0508d06`.
 voegt een wekelijkse Smart DCA toe zonder vaste koopdag: bij een volledige
 benchmarkscore hoogstens één Paper-aankoop per periode, met afzonderlijke
@@ -83,7 +83,43 @@ frontend-buildinfo (HTTP 200) meldden alle drie product-SHA
 `3be93ca80660e1a5e5507e4c5600c7efd0508d06`. Deze statuswijziging
 creëert zelf nog een nieuwe main-SHA; de laatste main-CI, Auto Deploy en
 publieke identiteit worden daarop opnieuw gecontroleerd vóór de QA-handoff.
-De onafhankelijke ingelogde Smart DCA-proef is nog niet uitgevoerd.
+De bestaande QA-agent heeft de definitieve live SHA
+`db1dc5c7e61b9cc42d89d6c3b8d5e1123d8c33d0` onafhankelijk
+**NOT_ACCEPTED** gegeven na een ingelogde browserproef. Publieke versie,
+productiecheckout en beschermde authenticatie kwamen overeen; de beschermde
+[preflight 44193293540](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44193293540)
+was geen volledige fixturematrix. In het gesprek werd “zonder vaste koopdag”
+toch als kalender-DCA behandeld. Na naam en tijdframe vroeg FINN alsnog om
+een weekdag; de correctie “geen vaste weekdag” eindigde in
+`guided_proposal_tool_call_required` en een generieke fout. Later vroeg FINN
+opnieuw naar EUR/USDT ondanks het genoemde BTC/USDT. Er kwam geen
+bevestigbare voorstelkaart en er werd niets opgeslagen of uitgevoerd.
+
+De oorzaak is lokaal in de operatie-state gereproduceerd: “vaste koopdag”
+werd als vast bedrag gelezen, waardoor de benchmarktrigger en scorestaffels
+verdwenen. De parser onderscheidt die woorden nu, herkent “koop meer bij lage
+scores en minder bij hoge scores” als voorstelbare inverse staffel, en bindt
+een expliciete dagloze correctie aan het bestaande DCA-concept. De exacte
+drie gebruikerszinnen van de QA-casus leverden lokaal via FastAPI, Celery en
+echte Responses een voorstelrij voor BTC/USDT, 1D, wekelijks, €200, zonder
+`dca_day`, met benchmarktrigger en 150% / 100% / 50% als nog te bevestigen
+bedragsschalen. Drie gerichte regressies bewaken deze route en herstel van
+een oudere kalender-DCA-state. De volledige backend-suite is
+**5.038 geslaagd, 7 bestaande skips**; frontend-build, typecheck, `lint:i18n`,
+`test:i18n` **43/43**, `test:commands` **85/85**, `test:proposals` **9/9** en
+`test:setups` **20/20** zijn groen. De providerontwikkelset is **20/20** met
+nul provider- of schemafouten. De lokale FastAPI/Celery/Responses-actiematrix
+is **17/17** met adaptertests **27/27** en artifact SHA-256
+`d972c37e0c87871b9b716297c78b73992860fb45cb28587f74a5e7798d78013c`.
+De echte providerregressie is **109/109** met alle gemeten accuracies 1,0 en
+nul provider- of schemafouten. De eerste reparatie-PR-CI
+[44196946173](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44196946173)
+was rood op één tijdzonegevoelige Paper-bottest: de bot gebruikt de huidige
+Amsterdamse datum, maar de test verwachtte `date.today()` op de UTC-runner.
+De test vergelijkt nu met de Amsterdamse dag en vangt een dagwisseling
+tijdens de test op. De gerichte test en de volledige hertest zijn groen:
+**5.038 geslaagd, 7 bestaande skips**. Nieuwe CI, deployment en
+onafhankelijke live hertest volgen.
 
 ## FINN-chat: eigen berichten kopiëren (17 november 2026)
 

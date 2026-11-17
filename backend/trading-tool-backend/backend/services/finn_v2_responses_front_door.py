@@ -1439,6 +1439,7 @@ class FinnResponsesFrontDoor:
                         known_setup_type="dca",
                     )
                     if set(explicit) & {
+                        "dca_trigger_mode",
                         "low_threshold", "high_threshold", "low_score_percent",
                         "mid_score_percent", "high_score_percent",
                     }:

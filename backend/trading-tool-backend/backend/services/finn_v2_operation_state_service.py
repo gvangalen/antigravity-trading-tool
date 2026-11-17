@@ -267,6 +267,16 @@ class FinnV2OperationStateService:
             for key, value in labelled.items():
                 if key in accepted_inputs and (key not in collected or (
                     key == "name" and self._name_input_from_text(message) is not None
+                ) or (
+                    contract.operation_id == "create_setup"
+                    and key in {"dca_amount_mode", "dca_trigger_mode"}
+                    and (
+                        self._is_explicit_correction(message)
+                        or re.search(
+                            r"\b(?:geen|zonder)\s+vaste\s+(?:week|koop)?dag\b",
+                            message, re.I,
+                        )
+                    )
                 )) and not self._is_missing(value):
                     explicit.setdefault(key, value)
             for key, value in score_percentages.items():
@@ -1419,7 +1429,7 @@ class FinnV2OperationStateService:
                     amount_text = amount_text.replace(explicit_name.casefold(), " ")
                 smart_amount = bool(re.search(r"\b(?:smart(?:\s*dca)?|score(?:s|gestuurd|afhankelijk)?|staffel|score\s*bands?|variab\w*)\b", amount_text))
                 fixed_amount = bool(re.search(
-                    r"\b(?:vast(?:e)?|fixed|exact|fest(?:er|es|em|en)?)\b(?!\s+(?:week)?(?:dag|day)\b)",
+                    r"\b(?:vast(?:e)?|fixed|exact|fest(?:er|es|em|en)?)\b(?!\s+(?:(?:week|koop)?dag|(?:buying|purchase)\s+day)\b)",
                     amount_text,
                 ))
                 if smart_amount and not fixed_amount:
@@ -1429,7 +1439,7 @@ class FinnV2OperationStateService:
                 if "dca_trigger_mode" in accepted_inputs:
                     trigger = None
                     if requested_slot == "dca_trigger_mode" or re.search(
-                        r"\b(?:geen|zonder)\s+vaste\s+(?:week)?dag\b"
+                        r"\b(?:geen|zonder)\s+vaste\s+(?:week|koop)?dag\b"
                         r"|\b(?:maakt\s+(?:me\s+)?niet\s+uit|licht|ligt)\b.{0,50}\b(?:benchmark(?:t)?score|benchmark(?:t)?|score)\b"
                         r"|\b(?:wanneer|zodra|als|ligt\s+aan)\b.{0,90}"
                         r"\b(?:benchmark(?:t)?score|benchmark(?:t)?|score)\b.{0,90}\b(?:kopen|koop|buy)\b"
@@ -1445,9 +1455,9 @@ class FinnV2OperationStateService:
                     if trigger:
                         values["dca_trigger_mode"] = trigger
                 inverse_ladder = bool(
-                    re.search(r"\b(?:meer|more|mehr)\s+(?:kopen|koop|buy|investeren|invest)\b", amount_text)
+                    re.search(r"\b(?:(?:meer|more|mehr)\s+(?:kopen|koop|buy|investeren|invest)|(?:koop|buy|invest)\s+(?:meer|more|mehr))\b", amount_text)
                     and re.search(r"\b(?:minder|less|weniger)(?:\s+(?:kopen|koop|buy|investeren|invest))?\b", amount_text)
-                    and re.search(r"\b(?:oversold|overbought|druk|zwak|sterk|score|benchmark)\b", amount_text)
+                    and re.search(r"\b(?:oversold|overbought|druk|zwak|sterk|scores?|benchmark|lage|hoge)\b", amount_text)
                 )
                 if inverse_ladder and not self._dca_score_percentages(message):
                     # Product suggestion only: the visible proposal still
@@ -1851,7 +1861,7 @@ class FinnV2OperationStateService:
             return self._canonical_dca_frequency(value)
         if field == "dca_trigger_mode":
             lowered = value.casefold()
-            if re.search(r"\b(?:geen|zonder)\s+vaste\s+(?:week)?dag\b", lowered) or re.search(
+            if re.search(r"\b(?:geen|zonder)\s+vaste\s+(?:week|koop)?dag\b", lowered) or re.search(
                 r"\b(?:maakt\s+(?:me\s+)?niet\s+uit|licht|ligt)\b.{0,50}"
                 r"\b(?:benchmark(?:t)?score|benchmark(?:t)?|score)\b", lowered,
             ):

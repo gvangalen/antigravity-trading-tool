@@ -801,6 +801,64 @@ def test_guided_smart_dca_replaces_weekday_question_with_benchmark_trigger():
     )] == [26, 76, 150, 100, 50]
 
 
+def test_live_smart_dca_wording_keeps_pair_and_skips_weekday_question():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    service = FinnV2OperationStateService()
+    turns = (
+        "Maak voor BTC/USDT een wekelijkse Smart DCA van €200 zonder vaste koopdag. "
+        "Gebruik de volledige benchmarkscore: koop meer bij lage scores en minder "
+        "bij hoge scores. Toon eerst het voorstel; sla nog niets op en activeer geen bot.",
+        "1D als analysetijdsframe. De DCA blijft wekelijks, zonder vaste koopdag.",
+        "Noem hem BTC USDT Smart DCA QA 1117.",
+    )
+    context = {}
+    for index, message in enumerate(turns):
+        state = service.resolve(
+            contract=contract, message=message,
+            explicit_asset="BTC" if index == 0 else None,
+            conversation_context=context, supplied_inputs={}, model_tool_inputs=True,
+        )
+        context = {"active_guided_operation": state.dict()}
+    assert state.missing_required_inputs == []
+    assert state.collected_inputs["symbol"] == "BTC"
+    assert state.collected_inputs["quote_currency"] == "USDT"
+    assert state.collected_inputs["dca_frequency"] == "weekly"
+    assert state.collected_inputs["dca_trigger_mode"] == "benchmark"
+    assert state.collected_inputs["dca_amount_mode"] == "score_bands"
+    assert state.collected_inputs["score_source"] == "benchmark_score"
+    assert state.collected_inputs["base_amount"] == 200
+    assert [state.collected_inputs[key] for key in (
+        "low_threshold", "high_threshold", "low_score_percent",
+        "mid_score_percent", "high_score_percent",
+    )] == [26, 76, 150, 100, 50]
+    assert "dca_day" not in state.collected_inputs
+
+
+def test_no_fixed_weekday_recovers_a_pending_calendar_dca_draft():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    service = FinnV2OperationStateService()
+    pending = service.resolve(
+        contract=contract,
+        message="Maak een wekelijkse BTC/USDT DCA van €200 op 1D.",
+        explicit_asset="BTC", conversation_context={},
+        supplied_inputs={"name": "BTC Smart DCA"}, model_tool_inputs=True,
+    )
+    assert pending.next_missing_input == "dca_day"
+    corrected = service.resolve(
+        contract=contract,
+        message=("Geen vaste weekdag. Juist scoregestuurd: hoogstens één aankoop "
+                 "per week wanneer de volledige benchmark geldig is."),
+        explicit_asset=None,
+        conversation_context={"active_guided_operation": pending.dict()},
+        supplied_inputs={}, model_tool_inputs=True,
+    )
+    assert corrected.collected_inputs["symbol"] == "BTC"
+    assert corrected.collected_inputs["quote_currency"] == "USDT"
+    assert corrected.collected_inputs["dca_trigger_mode"] == "benchmark"
+    assert corrected.collected_inputs["dca_amount_mode"] == "score_bands"
+    assert corrected.next_missing_input != "dca_day"
+
+
 def test_smart_dca_guided_reply_fills_all_three_percentages_without_smart_keyword():
     contract = FinnV2OperationRegistry().require_supported("create_setup")
     service = FinnV2OperationStateService()
