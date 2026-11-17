@@ -1,5 +1,8 @@
 """Safety and contract checks for the bounded coach-feed production probe."""
 
+import asyncio
+from types import SimpleNamespace
+
 import pytest
 
 from backend.scripts import probe_protected_coach_feed as probe
@@ -39,10 +42,10 @@ def test_coach_probe_is_allowlisted_and_sanitizes_errors():
 
 def test_coach_probe_runs_both_cases_without_leaking_exception(monkeypatch):
     monkeypatch.setattr(probe, "_require_run", lambda namespace: 123)
-    monkeypatch.setattr(probe, "_score_case", lambda namespace, bound, *, trace: (_ for _ in ()).throw(
+    monkeypatch.setattr(probe, "_score_case", lambda namespace, bound, *, trace, run_async: (_ for _ in ()).throw(
         RuntimeError("private database value")
     ))
-    monkeypatch.setattr(probe, "_risk_case", lambda namespace, bound, *, trace: {
+    monkeypatch.setattr(probe, "_risk_case", lambda namespace, bound, *, trace, run_async: {
         "position_risk": "passed", "paper_only": True,
     })
     result = probe.run("qa-44006750736-1-12345678-abcdef12")
@@ -59,10 +62,10 @@ def test_coach_probe_runs_both_cases_without_leaking_exception(monkeypatch):
 
 def test_coach_probe_reports_missing_quote_as_inconclusive(monkeypatch):
     monkeypatch.setattr(probe, "_require_run", lambda namespace: 123)
-    monkeypatch.setattr(probe, "_score_case", lambda namespace, bound, *, trace: (_ for _ in ()).throw(
+    monkeypatch.setattr(probe, "_score_case", lambda namespace, bound, *, trace, run_async: (_ for _ in ()).throw(
         RuntimeError("coach_feed_source_unavailable")
     ))
-    monkeypatch.setattr(probe, "_risk_case", lambda namespace, bound, *, trace: {
+    monkeypatch.setattr(probe, "_risk_case", lambda namespace, bound, *, trace, run_async: {
         "position_risk": "passed", "paper_only": True,
     })
     result = probe.run("qa-44006750736-1-12345678-abcdef12")
@@ -84,7 +87,7 @@ def test_score_probe_reports_stage_and_quarantine_without_private_error(monkeypa
     monkeypatch.setattr(probe, "_align_child_market_reading", lambda *args, **kwargs: (
         _ for _ in ()).throw(RuntimeError("private database value")))
     monkeypatch.setattr(probe.score, "_quarantine", lambda *args: quarantined.append(True))
-    monkeypatch.setattr(probe, "_risk_case", lambda namespace, bound, *, trace: {})
+    monkeypatch.setattr(probe, "_risk_case", lambda namespace, bound, *, trace, run_async: {})
 
     result = probe.run("qa-44006750736-1-12345678-abcdef12")
     assert quarantined == [True]
@@ -98,7 +101,7 @@ def test_score_probe_reports_stage_and_quarantine_without_private_error(monkeypa
 def test_risk_probe_counts_execution_attempt_and_quarantine(monkeypatch):
     finished = []
     monkeypatch.setattr(probe, "_require_run", lambda namespace: 123)
-    monkeypatch.setattr(probe, "_score_case", lambda namespace, bound, *, trace: {})
+    monkeypatch.setattr(probe, "_score_case", lambda namespace, bound, *, trace, run_async: {})
     monkeypatch.setattr(probe.paper, "_verified_source_price_eur", lambda: {"eur_price": 10})
     monkeypatch.setattr(probe.paper, "_seed", lambda *args: (456, 789, 101))
     monkeypatch.setattr(probe.paper, "_execute_and_replay", lambda *args: (
@@ -122,3 +125,49 @@ def test_plan_review_requires_a_verified_benchmark_not_only_a_moving_quote():
     assert probe._verified_plan_evidence(valid)
     assert not probe._verified_plan_evidence({**valid, "source_status": "invalid_weights"})
     assert not probe._verified_plan_evidence({**valid, "plan_status": "insufficient_data"})
+
+
+def test_coach_probe_reuses_one_loop_and_disposes_pool_before_closing(monkeypatch):
+    from backend.infrastructure import database
+
+    loops = []
+
+    async def observe_loop():
+        loops.append(asyncio.get_running_loop())
+
+    async def dispose():
+        loops.append(asyncio.get_running_loop())
+
+    def case(namespace, bound, *, trace, run_async):
+        run_async(observe_loop())
+        return {"result": "PASS"}
+
+    monkeypatch.setattr(probe, "_require_run", lambda namespace: 123)
+    monkeypatch.setattr(probe, "_score_case", case)
+    monkeypatch.setattr(probe, "_risk_case", case)
+    monkeypatch.setattr(database, "engine", SimpleNamespace(dispose=dispose))
+
+    result = probe.run("qa-44006750736-1-12345678-abcdef12")
+    assert result["result"] == "PASS"
+    assert len(loops) == 3
+    assert loops[0] is loops[1] is loops[2]
+    assert loops[0].is_closed()
+
+
+def test_coach_probe_sanitizes_pool_disposal_failure(monkeypatch):
+    from backend.infrastructure import database
+
+    async def dispose():
+        raise RuntimeError("private database value")
+
+    monkeypatch.setattr(probe, "_require_run", lambda namespace: 123)
+    monkeypatch.setattr(probe, "_score_case", lambda namespace, bound, *, trace, run_async: {})
+    monkeypatch.setattr(probe, "_risk_case", lambda namespace, bound, *, trace, run_async: {})
+    monkeypatch.setattr(database, "engine", SimpleNamespace(dispose=dispose))
+
+    result = probe.run("qa-44006750736-1-12345678-abcdef12")
+    assert result["result"] == "FAIL"
+    assert result["resource_cleanup"] == {
+        "result": "FAIL", "reason": "coach_feed_runtime_failed",
+    }
+    assert "private" not in str(result)

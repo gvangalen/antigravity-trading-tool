@@ -282,12 +282,12 @@ def _align_child_market_reading(user_id: int, *, change: float, observed: dateti
         connection.close()
 
 
-def _score_case(namespace: str, bound: int, *, trace: dict) -> dict:
+def _score_case(namespace: str, bound: int, *, trace: dict, run_async) -> dict:
     user_id = bot_id = None
     passed = False
     try:
         trace["stage"] = "source"
-        movement, change, observed = asyncio.run(_fresh_eth_move())
+        movement, change, observed = run_async(_fresh_eth_move())
         trace["stage"] = "seed"
         user_id, bot_id, _ = score._seed(namespace, bound, bot_active=False)
         trace["fixture_state"] = "created"
@@ -297,8 +297,8 @@ def _score_case(namespace: str, bound: int, *, trace: dict) -> dict:
         trace["stage"] = "score_build"
         build_daily_scores_for_user(user_id, ["ETH"], publish_feed=False)
         trace["stage"] = "feed_observation"
-        result = asyncio.run(_observe_score_feed(user_id, threshold=min(movement / 2, 9.0),
-                                                 trace=trace))
+        result = run_async(_observe_score_feed(user_id, threshold=min(movement / 2, 9.0),
+                                               trace=trace))
         trace["stage"] = "safety_check"
         if _counts(user_id) != (0, 0, 0, 0):
             raise RuntimeError("coach_feed_unexpected_order")
@@ -319,7 +319,7 @@ def _score_case(namespace: str, bound: int, *, trace: dict) -> dict:
                                    "coach_feed_quarantine_failed") from None
 
 
-def _risk_case(namespace: str, bound: int, *, trace: dict) -> dict:
+def _risk_case(namespace: str, bound: int, *, trace: dict, run_async) -> dict:
     user_id = bot_id = None
     passed = False
     try:
@@ -349,11 +349,11 @@ def _risk_case(namespace: str, bound: int, *, trace: dict) -> dict:
         trace["stage"] = "worker_dispatch"
         reconcile_paper_position_risk.delay(user_id)
         trace["stage"] = "feed_observation"
-        card = asyncio.run(_await_feed(user_id, "position_risk", subject="bot"))
+        card = run_async(_await_feed(user_id, "position_risk", subject="bot"))
         if card["evidence"].get("status") != "above_saved_limit":
             raise RuntimeError("coach_feed_risk_card_missing")
         trace["stage"] = "discuss"
-        discussed = asyncio.run(_discuss(
+        discussed = run_async(_discuss(
             user_id, card["id"], symbol="BTC",
             question="Bespreek dit positierisico voor mijn BTC Paper-bot. "
                      "Welke opgeslagen limiet is overschreden en wat controleer ik? "
@@ -384,21 +384,29 @@ def run(namespace: str) -> dict:
     from backend.scripts.probe_protected_paper_exit_reconciliation import _guard_live_exchange
 
     results = {}
-    with _guard_live_exchange() as live_attempts:
-        for name, procedure in (("score_and_plan", _score_case), ("paper_risk", _risk_case)):
-            trace = {"stage": "preflight", "fixture_state": "not_created",
-                     "paper_execution_attempted": False}
-            try:
-                results[name] = procedure(namespace, bound, trace=trace)
-                results[name]["fixture_state"] = trace["fixture_state"]
-            except Exception as error:
-                code = str(error)
-                results[name] = {"result": "FAIL", "reason": code if code in SAFE_FAILURES
-                                 else "coach_feed_runtime_failed",
-                                 "failure_stage": trace["stage"],
-                                 "fixture_state": trace["fixture_state"]}
-            if name == "paper_risk":
-                results["paper_execution_attempts"] = int(trace["paper_execution_attempted"])
+    with asyncio.Runner() as async_runner:
+        with _guard_live_exchange() as live_attempts:
+            for name, procedure in (("score_and_plan", _score_case), ("paper_risk", _risk_case)):
+                trace = {"stage": "preflight", "fixture_state": "not_created",
+                         "paper_execution_attempted": False}
+                try:
+                    results[name] = procedure(namespace, bound, trace=trace,
+                                              run_async=async_runner.run)
+                    results[name]["fixture_state"] = trace["fixture_state"]
+                except Exception as error:
+                    code = str(error)
+                    results[name] = {"result": "FAIL", "reason": code if code in SAFE_FAILURES
+                                     else "coach_feed_runtime_failed",
+                                     "failure_stage": trace["stage"],
+                                     "fixture_state": trace["fixture_state"]}
+                if name == "paper_risk":
+                    results["paper_execution_attempts"] = int(trace["paper_execution_attempted"])
+        from backend.infrastructure.database import engine
+
+        try:
+            async_runner.run(engine.dispose())
+        except Exception:
+            results["resource_cleanup"] = {"result": "FAIL", "reason": "coach_feed_runtime_failed"}
     results["live_calls"] = len(live_attempts)
     if live_attempts:
         results["safety"] = {"result": "FAIL", "reason": "coach_feed_unexpected_order"}
