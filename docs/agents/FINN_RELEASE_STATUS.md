@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: vervolgvraag en feedharnas na live afwijzing (17 november 2026)
 
-Phase: `LOCAL_REPAIR_VALIDATION`. Onafhankelijke QA wees live SHA
+Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA`. Onafhankelijke QA wees live SHA
 `8774a26f045af3f722c2e2dccd1e12874b3329b6` af. De eerste ingelogde
 AAPL/BTC-EUR-vraag las de afzonderlijke 4H-plannen en benoemde AAPL's
 ontbrekende technische score en BTC/EUR-benchmark 31,7 buiten de opgeslagen
@@ -24,11 +24,15 @@ voor vandaag of voor de volgende scoreverversing. Een lokale tweebeurtige
 FastAPI/Celery-proef op synthetische plannen leverde voor beide vragen vier
 read-calls, `factual_source` en `verifier_status=passed`; de antwoorden waren
 verschillend en maakten geen voorstel of order. De lokale fixture bewijst
-geen actuele productiebronwaarde. De oorzaak van de feedproeffouten wordt
-apart onderzocht: een lokale synthetische verbeterkaart verscheen correct,
-terwijl opeenvolgende `asyncio.run`-loops op één globale asyncpg-pool een
-`Event loop is closed`-fout veroorzaakten. QA controleert of zijn beschermde
-probe dit patroon bevat; dit is nog geen bewezen productoorzaak. Brede Build-
+geen actuele productiebronwaarde. De feedproef gebruikte meerdere losse
+`asyncio.run`-loops op één globale asyncpg-pool. Een lokale synthetische
+verbeterkaart verscheen correct, maar een volgende loop gaf
+`Event loop is closed`. QA heeft de beschermde probe op één loop gezet en de
+pool vóór het sluiten opgeruimd. Die QA-only reparatie is met 61 gerichte
+tests en vijf groene PR-checks gemerged via
+[PR #1151](https://github.com/gvangalen/antigravity-trading-tool/pull/1151)
+als `d3fefb5cf21a174be768ceecaa4079e64cdfda79`. De beschermde hertest
+moet nog bepalen of daarnaast een productfout bestaat. Brede Build-
 validatie leverde **992 passed** voor de gerichte FINN-router/contexttests en
 **5.013 passed, 7 skipped** voor de volledige backendrun. De lokale
 FastAPI/Celery-actiematrix leverde **17/17** contracten en **26/26**
@@ -41,11 +45,16 @@ parse- of validatiefouten (artifact SHA-256
 De volledige echte providerregressie leverde **109/109** met eveneens nul
 provider-, schema-, timeout-, parse- of validatiefouten (artifact SHA-256
 `6e1ed40cc7eb91b5a2658b1b5b5c987d061e1150f8368a88cd062d22e7f5c9d7`).
-Definitieve CI, deployment en nieuwe onafhankelijke live QA volgen nog.
+De productreparatie is met vijf groene PR-checks gemerged via
 [PR #1150](https://github.com/gvangalen/antigravity-trading-tool/pull/1150)
-is de huidige productkandidaat; de QA-only probe-reparatie loopt apart.
-Die probe-reparatie staat in [PR #1151](https://github.com/gvangalen/antigravity-trading-tool/pull/1151)
-en moet eveneens CI doorlopen vóór de beschermde hertest.
+als `806043c68b120804ab445d2bdee544616cb193ae`. Alle vijf jobs van
+[main-CI 44116249382](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44116249382)
+en de laatste [Auto Deploy 44117368301](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44117368301)
+zijn geslaagd. GitHub main, publieke backend-health (HTTP 200) en
+frontend-build-info (HTTP 200) meldden exact `806043c68b120804ab445d2bdee544616cb193ae`.
+Deze statusaanvulling maakt zelf een nieuwe documentatie-SHA. Onafhankelijke
+QA start pas nadat ook de laatste main-CI, Auto Deploy en publieke SHA-pariteit
+voor die nieuwe SHA zijn geverifieerd. De kandidaat is nog niet live geaccepteerd.
 
 ## FINN 3.0: exacte twee-plan vervolgvragen na live afwijzing (17 november 2026)
 
