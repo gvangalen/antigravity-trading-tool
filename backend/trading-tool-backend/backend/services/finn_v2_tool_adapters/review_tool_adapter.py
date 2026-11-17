@@ -84,7 +84,7 @@ class ReviewToolAdapter:
                       include_weekly_reflection: bool = False, **_kwargs):
         self.sources.get("review_history").validate_request(user_id=user_id)
         selected_feed_decision = None
-        if type(selected_feed_decision_id) is int and selected_feed_decision_id > 0:
+        if review_id is None and type(selected_feed_decision_id) is int and selected_feed_decision_id > 0:
             selected_result = await self.session.execute(text("""
                 SELECT d.id, d.bot_id, d.action, d.status, d.decision_ts,
                        d.amount_eur, b.name AS bot_name,
@@ -158,10 +158,12 @@ class ReviewToolAdapter:
                 }
         # A selected feed card asks about that event. A newer per-bot summary
         # would compete with it and can wrongly replace its historical time.
-        latest_rows = ([] if review_id is not None or selected_feed_decision else
+        latest_rows = ([] if (review_id is not None and not (selector or {}).get("_include_latest_bot_decisions"))
+                       or selected_feed_decision else
                        await self.repository.get_latest_bot_decisions_for_owner(user_id))
-        if asset:
-            requested = asset.upper()
+        decision_asset = str((selector or {}).get("_latest_bot_decisions_asset") or asset or "").upper()
+        if decision_asset:
+            requested = decision_asset
             latest_rows = [row for row in latest_rows if (
                 str(row.get("symbol") or "").upper() == requested
                 or ("/" not in requested and str(row.get("symbol") or "").upper().split("/", 1)[0] == requested)

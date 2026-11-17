@@ -11,7 +11,9 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.repositories.finn_v2_confirmation_repository import FinnV2ConfirmationRepository
+from backend.infrastructure.repositories.finn_v2_conversation_repository import FinnV2ConversationRepository
 from backend.infrastructure.repositories.finn_v2_proposal_repository import FinnV2ProposalRepository
+from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2RunRepository
 from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
 from backend.schemas.finn_v2_confirmation_schema import FinnV2ConfirmationRequest, FinnV2ConfirmationResult
 from backend.services.finn_v2_flag_service import FinnV2FlagService
@@ -82,6 +84,15 @@ class FinnV2ConfirmationService:
         if proposal.status not in {"draft", "pending_confirmation"}:
             raise ValueError("proposal_cannot_be_cancelled")
         await self.proposals.update_status(proposal, status="cancelled")
+        if callable(getattr(self.session, "execute", None)):
+            run = await FinnV2RunRepository(self.session).get_by_id_for_user(
+                run_id=proposal.run_id, user_id=user_id,
+            )
+            if run is not None and run.conversation_id:
+                await FinnV2ConversationRepository(self.session).clear_cancelled_proposal_continuation(
+                    conversation_id=run.conversation_id, user_id=user_id,
+                    run_id=run.id, proposal_id=proposal.id,
+                )
         await self._record_workflow_event(proposal, event="cancelled")
         await self._resolve_feed_proposal(proposal, user_id=user_id)
         await self._commit_before_success_response()

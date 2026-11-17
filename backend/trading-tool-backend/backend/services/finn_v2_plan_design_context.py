@@ -146,6 +146,14 @@ def remember_unsaved_design(context: dict[str, Any]) -> bool:
 def requests_execution_capability_question(message: str, context: dict[str, Any] | None = None) -> bool:
     """Route explicit feasibility questions through the executable contracts."""
     text = str(message or "")
+    if (re.search(r"\b(?:hoeveel|wat is|betekent)\b", text, re.I)
+            and re.search(r"\bbotbudget\b", text, re.I)
+            and re.search(r"\b(?:positie|posities|position|positions)\b", text, re.I)
+            and re.search(r"\b(?:kas|kassaldo|cash|saldo)\b", text, re.I)):
+        # "Can I buy more?" with position, cash and budget asks about
+        # account capacity. It needs an owner-scoped portfolio read, not the
+        # plan-rule capability explainer that runs before the Responses door.
+        return False
     if is_report_technical_comparison_request(text):
         # "Wat kan Analyse lezen?" asks for owner-scoped measurements, not
         # whether a plan rule is executable. Let the factual read run first.
