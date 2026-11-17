@@ -4,6 +4,50 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: exacte paarscores en vervolgadvies na onafhankelijke QA (17 november 2026)
+
+Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA`. Onafhankelijke QA
+wees live SHA `c82374f04d57f98b48dc8c95084592f75a83bb76` af: FINN gaf in
+twee afzonderlijke antwoorden aan dat BTC/EUR geen Markt-score had, terwijl
+Analyse voor dat paar Markt **50**, Macro **20**, Technisch **35** en benchmark
+**35/100** liet zien. De vervolgvraag was wel verschillend en read-only. De
+beschermde Paper-feedproef [44120866816](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44120866816)
+bevestigde SHA en QA-authenticatie, maar eindigde met `runner_internal` voor de
+eerste testcase (`attempted_count: 0`). Dat is geen feed-productverdict.
+
+De productreparatie in [PR #1154](https://github.com/gvangalen/antigravity-trading-tool/pull/1154)
+is gemerged als `91ce0758470740d8149f0bcf5bb7a174530f41c3`. De
+twee-planroute haalt de geverifieerde Markt-, Macro- en Technisch-scores nu
+van het expliciet gevraagde handelspaar uit dezelfde Score 2.0-read als
+Analyse, met het oudste indicatorbronmoment per groep. Een nog onbevestigde
+setup-planmatch wordt apart benoemd en maakt een aanwezige Analyse-score
+niet onzichtbaar. AAPL/USD gebruikt de aandeelread zonder de uitsluitend voor
+crypto bedoelde EUR/USDT-selector. De gerichte regressie verwerpt een
+BTC/USDT-score voor een BTC/EUR-vraag. QA repareerde de beschermde
+loopcompatibiliteit zelfstandig in [PR #1153](https://github.com/gvangalen/antigravity-trading-tool/pull/1153),
+gemerged als `2bbf3c793f764c7c3e253b6c66d2c152f4728800`; ook die
+runnerwijziging moet nog op live worden bewezen.
+
+Lokale Build-validatie: **5.015 passed, 7 skipped** voor de volledige
+backend-suite vóór de laatste kleine aanduiding en extra veiligheidsregressie;
+de gerichte eindtests voor de twee-planroute en beschermde probe slaagden
+**13/13**. De volledige FastAPI/Celery-actiematrix slaagde **17/17** en
+adaptertests **26/26** zonder brokerorders of Live-aanroepen (artifact SHA-256
+`7b525e4b763a577a308a4586b0ea8e967af62ed3734401d1b258a9be5ec9fa79`).
+De echte providerontwikkelset slaagde **20/20** met nul providerfouten
+(artifact SHA-256 `dcc2581c64155ecb857a73446d855ccd1d44e9390ae0141ea1ba5cd531236a03`);
+de echte providerregressie slaagde **109/109** met nul providerfouten
+(artifact SHA-256 `e1fbabbb0ec1223837c63fafd4a747736ddbaf02e32395c4ded76d311de671fc`).
+De laatste product-PR-CI [44125916023](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44125916023)
+en [main-CI 44127058374](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44127058374)
+zijn groen in alle vijf jobs. [Auto Deploy 44128133535](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44128133535)
+is geslaagd. GitHub main, publieke backend-health (HTTP 200) en
+frontend-build-info (HTTP 200) meldden exact product-SHA
+`91ce0758470740d8149f0bcf5bb7a174530f41c3`. Deze statuswijziging
+maakt zelf een nieuwe documentatie-SHA. De onafhankelijke ingelogde chat- en
+Paper-feedhertest start pas nadat ook die definitieve SHA volledig gedeployed
+en geverifieerd is.
+
 ## FINN 3.0: vervolgvraag en feedharnas na live afwijzing (17 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA`. Onafhankelijke QA wees live SHA
