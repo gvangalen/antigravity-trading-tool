@@ -2282,6 +2282,80 @@ def test_plan_score_comparison_keeps_aapl_and_btc_eur_separate_from_btc_usdt(que
     assert {row["setup_id"]: row["benchmark_score"] for row in scores} == {1: 57.3, 2: 40}
 
 
+def test_each_plan_followup_reopens_both_verified_4h_trade_setups():
+    message = (
+        "Dus moet ik alleen wachten, of kan ik mijn voorbereiding vandaag zinvol verbeteren? "
+        "Geef voor AAPL en BTC/EUR elk één concrete controle die past bij mijn opgeslagen "
+        "trade-opzet. Ik wil geen wijziging of order."
+    )
+    fake = FakeResponses(
+        response("inventory", calls=[tool_call("plans", "get_saved_setup_inventory", {})]),
+        response("answer", text=(
+            "AAPL: controleer op 4H een verse koers en de ontbrekende technische score. "
+            "BTC/EUR: toets de benchmark opnieuw aan de opgeslagen zone 61–75."
+        )),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="each-plan-followup", model_led_coach=True,
+    )
+    calls = []
+
+    async def read(call):
+        calls.append(call)
+        if call.name == "get_saved_setup_inventory":
+            return {"status": "completed", "results": [{
+                "scope": "read_saved_setup_inventory", "status": "completed",
+                "data": {"complete": True, "setups": [
+                    {"setup_id": 1, "name": "AAPL 4H trade", "symbol": "AAPL",
+                     "timeframe": "4H", "setup_type": "trade", "pair": "AAPL/USD"},
+                    {"setup_id": 2, "name": "BTC EUR 4H trade", "symbol": "BTC",
+                     "timeframe": "4H", "setup_type": "trade", "pair": "BTC/EUR"},
+                    {"setup_id": 3, "name": "BTC USDT DCA", "symbol": "BTC",
+                     "timeframe": "1D", "setup_type": "dca", "pair": "BTC/USDT"},
+                ]},
+            }]}
+        if call.name == "get_setup_market_matches":
+            return {"status": "completed", "results": [{
+                "scope": "read_setup_market_matches", "status": "completed",
+                "data": {"matches": [
+                    {"setup_id": 1, "symbol": "AAPL", "benchmark_score": None,
+                     "source_status": "missing_scores"},
+                    {"setup_id": 2, "symbol": "BTC", "trading_pair": "BTC/EUR",
+                     "benchmark_score": 35, "source_status": "available"},
+                ]},
+            }]}
+        if call.name == "get_market_snapshot":
+            return {"status": "completed", "results": [{
+                "scope": "read_market_snapshot", "status": "completed",
+                "data": {"asset": call.inputs["asset"],
+                         "quote_currency": call.inputs.get("quote_currency"),
+                         "source_status": "unavailable"},
+            }]}
+        if call.name == "get_active_plan_and_strategy":
+            return {"status": "completed", "results": []}
+        raise AssertionError(call.name)
+
+    front.reads = read
+    previous = {"turn_contract": {"answer_type": "compare", "targets": [
+        {"setup_id": 1, "name": "AAPL 4H trade", "evidence": {"symbol": "AAPL"}},
+        {"setup_id": 2, "name": "BTC EUR 4H trade", "evidence": {"symbol": "BTC"}},
+    ]}}
+    result = asyncio.run(front.run(
+        message=message, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="BTC", previous_response=previous,
+        workspace_hints={"page": "/asset", "symbol": "BTC", "quote_currency": "USDT"},
+    ))
+    assert calls[0].name == "get_saved_setup_inventory"
+    assert any(call.name == "get_setup_market_matches" for call in calls)
+    assert {(call.inputs["asset"], call.inputs.get("quote_currency"))
+            for call in calls if call.name == "get_market_snapshot"} == {
+                ("AAPL", "USD"), ("BTC", "EUR"),
+            }
+    assert {target["setup_id"] for target in result.response.turn_contract["targets"]} == {1, 2}
+    assert "BTC/USDT" not in result.response.text
+
+
 def test_named_plan_comparison_also_reads_account_wide_paper_cash_when_asked():
     fake = FakeResponses(
         response("inventory", calls=[tool_call("plans", "get_saved_setup_inventory", {})]),

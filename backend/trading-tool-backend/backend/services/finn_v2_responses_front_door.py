@@ -743,6 +743,12 @@ class FinnResponsesFrontDoor:
             "When asked for a field per saved setup, cover each setup in the returned "
             "owner-scoped collection before summarizing totals. Use typed score-condition "
             "groups for exact counts; if asked how many, state each count explicitly. "
+            "When the trader asks what to check next for two named saved plans, read both "
+            "plans again and give one concrete check per plan from its current evidence. "
+            "Keep the exact saved trading-pair notation (for example BTC/EUR). "
+            "Preserve each saved setup type and chart timeframe: a 4H trade is not a "
+            "daily-candle rule or a DCA plan. If a score or quote is missing, identify "
+            "that exact missing source instead of offering an unrelated trading pattern. "
             "A missing bound is distinct from a bound of zero. "
             "For a saved setup, saved_market_condition is derived from its persisted score "
             "bounds. A named preset is a setup eligibility filter, while description is "
@@ -2653,6 +2659,15 @@ class FinnResponsesFrontDoor:
             value.upper() for value in re.findall(r"\b(?:15m|30m|1h|4h|1d|1w)\b", message, re.I)
         }
         multiple_targets = len(mentioned_assets) > 1 or len(mentioned_timeframes) > 1
+        # "Voor AAPL en BTC/EUR elk één controle" is a request about two
+        # saved plans even without the verb "vergelijk". Keep the pair on
+        # the owner-scoped inventory path rather than falling back to one
+        # active workspace setup on a follow-up turn.
+        per_asset_plan_advice = bool(
+            len(mentioned_assets) > 1
+            and re.search(r"\b(?:elk|ieder|per|each|every|jeweils)\b", message, re.I)
+            and re.search(r"\b(?:plan\w*|setup\w*|concept\w*|opzet\w*|controle\w*|stap\w*)\b", message, re.I)
+        )
         account_bundle_followup = self._follows_account_state_bundle(message, previous_response)
         account_state_bundle = self._asks_about_account_state_bundle(message) or account_bundle_followup
         previous_turn_contract = (previous_response or {}).get("turn_contract") or {}
@@ -2699,7 +2714,7 @@ class FinnResponsesFrontDoor:
             and (
                 re.search(
                     r"\b(?:vergelijk\w*|vergelijking|verschil\w*|beide|allebei|"
-                    r"twee|compare\w*|comparison|both)\b", message, re.I,
+                    r"twee|elk|ieder|per|each|every|jeweils|compare\w*|comparison|both)\b", message, re.I,
                 )
                 or all(str(row.get("name") or "").casefold() in message.casefold()
                        for row in prior_pair)
@@ -2811,7 +2826,7 @@ class FinnResponsesFrontDoor:
         # including setups without any linked strategy or bot. This is a
         # data read only; the model still composes the coaching answer.
         collection_answer_requested = bool(
-            requests_comparison(message)
+            requests_comparison(message) or per_asset_plan_advice
             or re.search(r"\b(?:per\s+setup|"
                       r"voor\s+elke\s+setup|welke\s+van|which\s+of|hoeveel\s+setups?)\b",
                       message, re.I)
@@ -2862,9 +2877,9 @@ class FinnResponsesFrontDoor:
             )
         )
         named_plan_comparison = bool(
-            is_read_only_turn and requests_comparison(message)
+            is_read_only_turn and (requests_comparison(message) or per_asset_plan_advice)
             and len(mentioned_assets) >= 2
-            and re.search(r"\b(?:plan\w*|setup\w*|concept\w*)\b", message, re.I)
+            and re.search(r"\b(?:plan\w*|setup\w*|concept\w*|opzet\w*)\b", message, re.I)
         )
         normalized_inventory_read = (
             complete_collection_read or setup_relationship_read or named_plan_comparison
@@ -4552,7 +4567,8 @@ class FinnResponsesFrontDoor:
                         else:
                             projected_results.append(item)
                     read_result = {**read_result, "results": projected_results}
-                    if re.search(r"\b(?:score\w*|benchmark\w*|match\w*|ochtendstand)\b", message, re.I):
+                    if (per_asset_plan_advice or re.search(
+                            r"\b(?:score\w*|benchmark\w*|match\w*|ochtendstand)\b", message, re.I)):
                         # A collection of plans needs a collection of exact
                         # market assessments. One asset-only score read could
                         # silently use the currently open BTC/USDT workspace
@@ -4584,7 +4600,8 @@ class FinnResponsesFrontDoor:
                         read_result["results"] = [*read_result["results"], *market_evidence]
                         if market_read.get("status") != "completed":
                             read_result["status"] = "partial"
-                    if re.search(r"\b(?:koers\w*|prijs\w*|price\w*|quote\w*)\b", message, re.I):
+                    if (per_asset_plan_advice or re.search(
+                            r"\b(?:koers\w*|prijs\w*|price\w*|quote\w*)\b", message, re.I)):
                         # The inventory and score match do not contain a
                         # dated current quote. Read each selected saved
                         # asset/pair independently, without using page state.

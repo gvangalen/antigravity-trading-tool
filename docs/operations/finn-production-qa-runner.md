@@ -59,6 +59,32 @@ The historical report and bot decision are controlled fixture evidence, so
 this profile verifies FINN's handling of their age and safety reason, not the
 original user's private report or a live Paper executor decision.
 
+`coach_feed_triggers` is a separately authorized, one-shot protected FINN 3.0
+feed profile. It requires `manifest_id=none`, `allow_fixture_actions=true`, and
+`allow_safe_fixture_execution=true`. It creates two inactive, uncredentialed
+children under the bound QA owner. One child uses the current ETH source and
+an isolated, process-local movement threshold to exercise plan review, then
+sets only its own weights to an invalid configuration to exercise an
+improvement suggestion. The other makes one virtual BTC Paper buy and lowers
+only its own saved exposure limit to exercise position risk. Improvement and
+position risk are enqueued on their canonical Celery tasks, then the probe
+waits for their owner-scoped cards. Plan review uses the isolated threshold
+inside the observer process. Each scenario
+checks a new owner-scoped card, a fresh detail read and a read-only FINN
+discussion. Successful children are removed; failed children are disabled
+and retained for protected diagnosis. Shared market data and Live orders are
+never written. The process-local Live-call guard covers the Paper fill path;
+the queued observer tasks are read/feed-only and are not instrumented by that
+guard. Because the movement threshold is lowered only inside this
+QA process, this profile proves the live plan-review path, not that a real
+production 10% movement has occurred. A PASS proves Celery worker delivery
+for improvement and position risk, but not their periodic beat schedule nor
+the plan-review score-job dispatch. QA must evaluate those automatic triggers
+separately.
+An absent or unmoving current ETH quote makes the score/plan scenario
+`INCONCLUSIVE` when the Paper risk scenario is otherwise green; it is not
+reported as a product failure.
+
 `trader_pair_fixture_audit` is a read-only follow-up for one failed or
 incomplete `trader_pair_score_continuity` run. It requires `manifest_id=none`,
 both fixture flags `false`, and `run_label=audit-<workflow-id>-<attempt>-<sha8>`.
