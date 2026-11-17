@@ -52,6 +52,7 @@ from backend.services.finn_manual_trade_suggestion_service import ManualTradeSet
 from backend.services.watchlist_conversation_service import ambiguous_asset_change_scope, asks_for_watchlist_inventory, replacement_mentions
 from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
 from backend.services.finn_v2_account_bundle_answer import render_account_bundle_answer
+from backend.services.finn_v2_fomo_plan_answer import render_fomo_plan_answer
 from backend.services.finn_v2_paper_position_answer import (
     PAPER_POSITION_CASH_UNAVAILABLE, render_paper_position_cash_answer,
 )
@@ -65,6 +66,24 @@ from backend.services.finn_v2_factual_source_answer import (
 logger = logging.getLogger(__name__)
 
 _QUOTE_QUESTION = re.compile(r"\b(?:koers|koersen|prijs|prijzen|quote|price|prices|kurs|kurse)\b", re.IGNORECASE)
+
+
+def _read_only_impulse_plan_asset(message: str) -> str | None:
+    """The narrow coach read is for single-market stocks or ETFs only."""
+    assets = mentioned_catalog_symbols(message)
+    if len(assets) != 1 or requested_catalog_trading_pair(message):
+        return None
+    asset = next(iter(assets))
+    if re.search(rf"\b{re.escape(asset)}/[A-Z0-9]+\b", message, re.I):
+        return None
+    if (DEFAULT_ASSET_CATALOG.get(asset) or {}).get("asset_class") not in {"stock", "etf"}:
+        return None
+    if not (re.search(r"\b(?:FOMO|impulsief)\b", message, re.I)
+            and re.search(r"\b(?:plan|setup)\b", message, re.I)
+            and re.search(r"\b(?:bijkopen|kopen|aankoop|instapsignaal)\b", message, re.I)
+            and re.search(r"\b(?:alleen coachen|niets voorstellen|niets.{0,20}uitvoeren|zonder koopvoorstel|zonder uitvoering|leg uit zonder)\b", message, re.I)):
+        return None
+    return asset
 
 
 def _named_asset_quote_question(message: str) -> bool:
@@ -1525,6 +1544,35 @@ class FinnResponsesFrontDoor:
             and os.getenv("FINN_PER_OPERATION_TOOLS_EXPERIMENT") == "1"
         )
         catalog = FinnResponsesToolCatalog(individual_proposals=individual_proposals)
+        # An explicit, read-only impulse-buy question asks for the owner's
+        # saved plan and current evidence. Do not let a model answer from chat
+        # text alone or reinterpret a saved trade setup as a DCA proposal.
+        impulse_asset = _read_only_impulse_plan_asset(message)
+        if (getattr(self, "model_led_coach", False)
+                and locale.lower().startswith("nl")
+                and impulse_asset):
+            asset = impulse_asset
+            call = replace(
+                catalog.validate("get_active_plan_and_strategy", {"asset": asset}),
+                read_tools=("read_active_setup", "read_linked_strategy",
+                            "read_asset_scores", "read_market_snapshot", "read_portfolio"),
+                inputs={"asset": asset, "environment": "paper"},
+            )
+            try:
+                coach_read = await self.reads(call)
+            except Exception:
+                logger.exception("FINN impulse-buy plan read failed")
+                coach_read = {"status": "unavailable", "results": []}
+            trace = ({"name": call.name, "status": coach_read.get("status", "unavailable"),
+                      "arguments": call.inputs, "result": coach_read},)
+            return FinnResponsesFrontDoorResult(
+                FinnResponsesResult(
+                    text=render_fomo_plan_answer(coach_read, asset=asset),
+                    response_id=f"impulse-plan-{self.run_id}", tool_trace=trace,
+                    answer_kind="factual_source", model_led_coach=True,
+                    response_id_reusable=False,
+                ), None, previous_response, locale=locale,
+            )
         # Resolve an explicit, read-only Paper account question before guided
         # drafts or workspace shortcuts can intercept the request.
         named_paper_assets = mentioned_catalog_symbols(message)
