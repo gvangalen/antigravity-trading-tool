@@ -4,6 +4,60 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: proactieve feed en concreet advies per opgeslagen plan (17 november 2026)
+
+Phase: `LOCAL_VALIDATED_PENDING_CI` op branch
+`codex/finn-proactive-feed-acceptance`. Deze kandidaat verandert nog geen
+productieaccount en heeft nog geen onafhankelijke live-QA-acceptatie.
+
+De eerdere ingelogde QA-diagnose vond een concreet P1-vervolggesprek: FINN
+las eerst de afzonderlijke AAPL- en BTC/EUR-tradeplannen, maar gaf op de
+vervolgvraag naar één controle per plan een dagkaarsadvies voor een opgeslagen
+4H-trade en verloor de verwijzing naar beide plannen. De lokale reparatie
+bindt die vervolgvraag aan beide eigenaargebonden setups en leest per plan
+opnieuw de exacte benchmarkbeoordeling en de bijbehorende koersbron. Het
+model krijgt de opdracht om per opgeslagen tradeplan één controle uit dat
+bewijs te geven en geen DCA-regel of ander timeframe te verzinnen.
+
+Een echte lokale Responses-beurt op de definitieve code met twee synthetische 4H-tradeplannen las
+de setupinventaris, scorebeoordelingen, AAPL/USD-koersbron en BTC/EUR-koersbron.
+Het antwoord noemde de ontbrekende AAPL-technische score en de BTC/EUR-score
+35 tegenover de opgeslagen zone 61–75, zonder DCA- of orderadvies. Het
+gebruikte de naam “BTC EUR 4H trade” in plaats van de pairnotatie BTC/EUR;
+de onafhankelijke browser-QA moet de leesbaarheid en juistheid op het echte
+account nog beoordelen. De synthetische brondata bewijzen geen actuele
+productiekoersen.
+
+Er is tevens een afgeschermd, apart te autoriseren `coach_feed_triggers`
+QA-profiel toegevoegd. Het maakt twee inactieve kinderen onder de gebonden
+QA-eigenaar: één test met een actuele ETH-bron de planherbeoordeling en een
+configuratieverbetering, het andere test met één virtuele BTC-Paper-aankoop
+een positierisicokaart. Het profiel controleert eigenaarsscheiding,
+feed-detaillering, FINN’s alleen-lezen Bespreek-route, nul Live-aanroepen en
+opruimen of quarantaine. Het verlaagt de bewegingsgrens uitsluitend binnen
+de geïsoleerde QA-proef en bewijst dus geen natuurlijke beweging boven de
+productiedrempel. Een ontbrekende of stilstaande ETH-bron wordt als
+`INCONCLUSIVE` gerapporteerd. Build heeft dit beschermde productieprofiel
+niet uitgevoerd; dat is exclusief aan QA.
+
+De gerichte regressies voor de exacte vervolgvraag en de profielguards
+slagen. De definitieve volledige backendrun leverde **5.008 passed,
+7 skipped**. De frontend build, typecheck, i18n-lint en tests, command- en
+voorsteltests en `audit:high` zijn groen; er is geen frontendcode gewijzigd.
+Na een herstart op de definitieve code slaagde de lokale worker-actiematrix
+**17/17** en de adapters **26/26**, zonder brokerorders, Live-aanroepen of
+productieverbindingen (artifact SHA-256
+`0b1835ca304a2b3555b963b56cc8be0c8dc06d41b21870c8d276030de267ac15`).
+De echte-provider ontwikkelset slaagde **20/20**
+(artifact SHA-256 `41c2f12f008cf1c46d2e2054ab98db2d0a41336c173b18ccfc2088d732811fa9`)
+en de regressieset **109/109** zonder provider-, schema-, parse- of
+validatiefouten (artifact SHA-256
+`b3f0f7c6f958ded340b7328bddec8dc2c7e0160771d2cf7d52165137c7d4519a`).
+Onafhankelijke lokale QA- en Security-codecontroles vonden geen concrete
+blokkade. De afgeschermde probe roept de feed-observers wel rechtstreeks aan:
+een PASS bewijst **niet** de automatische Celery/beat-dispatch. QA moet die
+afzonderlijk live toetsen of expliciet als nog onbewezen rapporteren.
+
 ## FINN 3.0 Paper-flow: brongebonden FOMO-antwoord verifiëren (17 november 2026)
 
 Phase: `ACCEPTED_PAPER_ONLY` op productbranch

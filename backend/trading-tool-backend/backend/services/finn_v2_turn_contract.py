@@ -41,7 +41,7 @@ def referenced_setup_rows(
         if isinstance(target, dict) and isinstance(target.get("setup_id"), int)
     }
     pair_reference = bool(re.search(
-        r"\b(?:beide|allebei|twee|genoemde|vorige|die|deze|both|those|same)\b", message, re.I,
+        r"\b(?:beide|allebei|twee|elk|ieder|per|genoemde|vorige|die|deze|both|those|same|each|every)\b", message, re.I,
     ))
     if len(prior_ids) == 2 and pair_reference and (
         not positive or positive[0].get("setup_id") in prior_ids

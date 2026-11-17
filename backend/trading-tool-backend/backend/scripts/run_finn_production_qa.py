@@ -70,6 +70,7 @@ ALLOWED_PROFILES = {
     "portfolio_paper_fx",
     "portfolio_paper_fx_schema",
     "typed_entry_paper",
+    "coach_feed_triggers",
 }
 SAFE_PORTFOLIO_PAPER_FX_SCHEMA_ERRORS = frozenset({
     "portfolio_paper_fx_schema_database_unavailable",
@@ -303,6 +304,10 @@ def profile_error_category(profile: str, error: Exception) -> str:
         code = str(error)
         return (code if code in SAFE_PORTFOLIO_PAPER_FX_ERRORS
                 else "portfolio_paper_fx_runtime_error")
+    if profile == "coach_feed_triggers":
+        from backend.scripts.probe_protected_coach_feed import SAFE_FAILURES
+        code = str(error)
+        return code if code in SAFE_FAILURES else "coach_feed_runtime_failed"
     if profile == "portfolio_paper_fx_schema":
         code = str(error)
         return (code if code in SAFE_PORTFOLIO_PAPER_FX_SCHEMA_ERRORS
@@ -3937,6 +3942,25 @@ def main() -> int:
                 from backend.scripts.probe_protected_portfolio_paper_fx import run as run_portfolio_probe
 
                 run_protected_portfolio_probe(report, run_portfolio_probe, fixture_namespace or "")
+            elif args.profile == "coach_feed_triggers":
+                if args.manifest_id != "none" or args.manifest_bundle_path:
+                    raise ValueError("coach_feed_manifest_forbidden")
+                if (os.getenv("FINN_QA_ALLOW_COACH_FEED_FIXTURE") != "1"
+                        or os.getenv("FINN_QA_ALLOW_FIXTURE_ACTIONS") != "1"
+                        or os.getenv("FINN_QA_ALLOW_FIXTURE_EXECUTION") != "1"):
+                    raise ValueError("coach_feed_fixture_not_authorized")
+                from backend.scripts.probe_protected_coach_feed import run as run_coach_feed_probe
+
+                report[args.profile] = run_coach_feed_probe(fixture_namespace or "")
+                report["protected_profile_attempted"] = True
+                report["safety"]["read_only_profile"] = False
+                report["safety"]["execution_calls"] = 1
+                report["safety"]["live_trading_calls"] = report[args.profile]["live_calls"]
+                report["outcome"] = (
+                    "passed" if report[args.profile]["result"] == "PASS" else
+                    "incomplete" if report[args.profile]["result"] == "INCONCLUSIVE" else "failed"
+                )
+                report["qa_status"] = "INCOMPLETE" if report["outcome"] == "incomplete" else "COMPLETED"
             elif args.profile == "portfolio_paper_fx_schema":
                 if args.manifest_id != "none" or args.manifest_bundle_path:
                     raise ValueError("portfolio_paper_fx_schema_manifest_forbidden")
