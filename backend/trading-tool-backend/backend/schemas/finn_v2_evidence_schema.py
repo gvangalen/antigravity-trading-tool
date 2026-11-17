@@ -175,6 +175,7 @@ class ActiveSetupData(BaseModel):
     description: Optional[str] = None
     saved_market_condition: Dict[str, Any] = Field(default_factory=dict)
     dca_frequency: Optional[str] = None
+    dca_trigger_mode: Optional[str] = None
     dca_day: Optional[str] = None
     dca_day_name: Optional[str] = None
     dca_month_day: Optional[int] = None

@@ -1427,7 +1427,7 @@ class FinnResponsesFrontDoor:
                         known_setup_type="dca",
                     )
                     return bool(set(explicit) & {
-                        "dca_frequency", "dca_day", "dca_month_day", "dca_amount_mode",
+                        "dca_frequency", "dca_trigger_mode", "dca_day", "dca_month_day", "dca_amount_mode",
                         "base_amount",
                     })
             return False
@@ -1466,7 +1466,7 @@ class FinnResponsesFrontDoor:
             known_setup_type=(
                 "dca" if contract.operation_id == "create_setup"
                 and requested_slot in {
-                    "dca_frequency", "dca_day", "dca_month_day", "dca_amount_mode",
+                    "dca_frequency", "dca_trigger_mode", "dca_day", "dca_month_day", "dca_amount_mode",
                     "base_amount", "low_score_percent", "mid_score_percent", "high_score_percent",
                 } else None
             ),

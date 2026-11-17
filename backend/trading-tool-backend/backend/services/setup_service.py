@@ -45,7 +45,7 @@ class SetupService:
     # The domain service, not FINN, owns which persisted setup fields can be
     # changed. V2 adapters pass a typed proposal through this same boundary.
     UPDATE_ALLOWED_FIELDS = frozenset({
-        "name", "symbol", "timeframe", "setup_type", "dca_frequency",
+        "name", "symbol", "timeframe", "setup_type", "dca_frequency", "dca_trigger_mode",
         "dca_day", "dca_month_day", "account_type", "min_investment",
         "trend", "score_logic", "favorite", "description", "action",
         "category", "min_macro_score", "max_macro_score",
@@ -85,12 +85,20 @@ class SetupService:
 
         if setup_type != "dca":
             raw_payload["dca_frequency"] = None
+            raw_payload["dca_trigger_mode"] = "calendar"
             raw_payload["dca_day"] = None
             raw_payload["dca_month_day"] = None
             return
 
         if "dca_frequency" in raw_payload and raw_payload.get("dca_frequency") is not None:
             raw_payload["dca_frequency"] = dca_freq
+
+        trigger_mode = str(raw_payload.get("dca_trigger_mode") or "calendar").lower()
+        raw_payload["dca_trigger_mode"] = trigger_mode
+        if trigger_mode == "benchmark":
+            raw_payload["dca_day"] = None
+            raw_payload["dca_month_day"] = None
+            return
 
         if dca_freq == "weekly":
             dca_day = raw_payload.get("dca_day")
@@ -138,6 +146,7 @@ class SetupService:
             "setup_type": item.get("setup_type"),
             
             "dca_frequency": item.get("dca_frequency"),
+            "dca_trigger_mode": item.get("dca_trigger_mode") or "calendar",
             "dca_day": item.get("dca_day"),
             "dca_month_day": item.get("dca_month_day"),
             
@@ -233,6 +242,8 @@ class SetupService:
             dca_freq = raw_payload.get("dca_frequency")
             if not dca_freq or not isinstance(dca_freq, str) or dca_freq.lower() not in ["daily", "weekly", "monthly"]:
                 raise HTTPException(400, "dca_frequency is verplicht voor DCA setup en moet 'daily', 'weekly' of 'monthly' zijn.")
+            if raw_payload.get("dca_trigger_mode", "calendar") not in {"calendar", "benchmark"}:
+                raise HTTPException(400, "Ongeldige DCA-trigger.")
             
             # Check weekly day
             if dca_freq.lower() == "weekly":
@@ -404,9 +415,14 @@ class SetupService:
         self.validate_setup_payload(merged_payload, is_update=True)
         if "description" in raw_payload:
             raw_payload["description"] = merged_payload["description"]
-        for field in ("setup_type", "dca_frequency", "dca_day", "dca_month_day"):
+        for field in ("setup_type", "dca_frequency", "dca_trigger_mode", "dca_day", "dca_month_day"):
             if field in raw_payload and field in merged_payload:
                 raw_payload[field] = merged_payload[field]
+        if raw_payload.get("dca_trigger_mode") == "benchmark":
+            # The trigger replaces the calendar schedule; persist the cleared
+            # fields even when only the trigger was sent in this update.
+            raw_payload["dca_day"] = None
+            raw_payload["dca_month_day"] = None
 
         # Normalize uppercase symbol if being updated
         if "symbol" in raw_payload:
@@ -428,6 +444,7 @@ class SetupService:
         # Cleanup DCA fields if setup type is changed to Trade
         if updates.get("setup_type") in {"trade", "position"}:
             updates["dca_frequency"] = None
+            updates["dca_trigger_mode"] = "calendar"
             updates["dca_day"] = None
             updates["dca_month_day"] = None
 

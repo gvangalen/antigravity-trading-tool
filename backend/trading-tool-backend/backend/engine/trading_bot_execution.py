@@ -2,7 +2,7 @@
 import logging
 import json
 import math
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from backend.utils.db import get_db_connection
@@ -981,6 +981,7 @@ def _get_active_bots(conn, user_id: int) -> List[Dict[str, Any]]:
               st.symbol,
               st.timeframe,
               st.dca_frequency,
+              st.dca_trigger_mode,
               st.dca_day,
               st.dca_month_day,
               st.last_validated
@@ -1017,6 +1018,7 @@ def _get_active_bots(conn, user_id: int) -> List[Dict[str, Any]]:
             symbol,
             timeframe,
             dca_frequency,
+            dca_trigger_mode,
             dca_day,
             dca_month_day,
             setup_last_validated,
@@ -1040,6 +1042,7 @@ def _get_active_bots(conn, user_id: int) -> List[Dict[str, Any]]:
                 "symbol": (symbol or DEFAULT_SYMBOL).upper(),
                 "timeframe": timeframe,
                 "dca_frequency": dca_frequency,
+                "dca_trigger_mode": dca_trigger_mode or "calendar",
                 "dca_day": dca_day,
                 "dca_month_day": dca_month_day,
                 "setup_revision": setup_last_validated.isoformat() if setup_last_validated else None,
@@ -2554,12 +2557,26 @@ def run_trading_bot_execution(
             scores["setup"] = current_match["score"]
             scores["_source_available"]["setup_score"] = current_match["score"] is not None
 
+            if bot.get("dca_trigger_mode") == "benchmark" and not (
+                setup_payload.get("setup_type") == "dca"
+                and setup_payload.get("execution_mode") == "custom"
+                and setup_payload.get("dca_amount_semantics") == "planned_exact"
+                and is_confirmed_dca_amount_rule(setup_payload)
+            ):
+                skip_reasons[bot["bot_id"]] = "invalid_score_trigger"
+                continue
+
             if setup_payload.get("dca_amount_semantics") == "planned_exact":
-                from backend.domain.finn_dca_plan_contract import dca_due_on_date
+                from backend.domain.finn_dca_plan_contract import dca_due_on_date, dca_execution_period
 
                 if not dca_due_on_date(bot, report_date):
                     skip_reasons[bot["bot_id"]] = "not_due"
                     continue
+                period_start, period_end = (
+                    dca_execution_period(bot, report_date)
+                    if bot.get("dca_trigger_mode") == "benchmark"
+                    else (report_date, report_date + timedelta(days=1))
+                )
                 with conn.cursor() as cur:
                     # Serialize runs for this owner and bot until the paper
                     # decision and order commit. A second worker must observe
@@ -2570,10 +2587,12 @@ def run_trading_bot_execution(
                     )
                     cur.execute(
                         """SELECT 1 FROM bot_decisions
-                           WHERE user_id=%s AND bot_id=%s AND decision_date=%s
+                           WHERE user_id=%s AND bot_id=%s
+                             AND decision_date >= %s AND decision_date < %s
                              AND decision_kind='assessment'
-                             AND status='executed' LIMIT 1""",
-                        (user_id, bot["bot_id"], report_date),
+                             AND status IN ('executing', 'executed', 'unknown_exchange_state')
+                           LIMIT 1""",
+                        (user_id, bot["bot_id"], period_start, period_end),
                     )
                     if cur.fetchone():
                         skip_reasons[bot["bot_id"]] = "already_executed"

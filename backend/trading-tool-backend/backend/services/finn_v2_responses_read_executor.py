@@ -38,7 +38,7 @@ class FinnResponsesReadExecutor:
         saved = data.get("data") if isinstance(data.get("data"), dict) else data
         fields = (
             "name", "symbol", "timeframe", "setup_type", "description",
-            "dca_frequency", "dca_day_name", "dca_month_day", "min_investment",
+            "dca_frequency", "dca_trigger_mode", "dca_day_name", "dca_month_day", "min_investment",
             "min_benchmark_score", "max_benchmark_score", "saved_market_condition",
         )
         return {

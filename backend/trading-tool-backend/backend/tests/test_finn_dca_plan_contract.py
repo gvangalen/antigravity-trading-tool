@@ -2,10 +2,10 @@ import pytest
 from datetime import date
 
 from backend.domain.finn_dca_plan_contract import (
-    split_confirmed_dca_plan, dca_due_on_date, benchmark_score, normalize_benchmark_weights,
+    split_confirmed_dca_plan, dca_due_on_date, dca_execution_period, benchmark_score, normalize_benchmark_weights,
     is_confirmed_dca_amount_rule, validate_dca_setup_only,
 )
-from backend.engine.decision_engine import decide_amount
+from backend.engine.decision_engine import DecisionEngineError, decide_amount
 from backend.engine.trading_bot_execution import _get_current_benchmark_weights
 from backend.services.finn_v2_tool_adapters.strategy_tool_adapter import StrategyToolAdapter
 import asyncio
@@ -132,6 +132,46 @@ def test_dca_cadence_is_evaluated_from_the_saved_setup_date():
     assert not dca_due_on_date({"dca_frequency": "monthly", "dca_month_day": "15"}, monday)
     assert dca_due_on_date({"dca_frequency": "daily"}, monday)
     assert not dca_due_on_date({}, monday)
+
+
+def test_inverse_smart_dca_uses_flexible_weekly_score_trigger_and_exact_amounts():
+    setup, strategy = split_confirmed_dca_plan({
+        "name": "BTC score DCA", "symbol": "BTC", "setup_type": "dca",
+        "timeframe": "1D", "dca_frequency": "weekly", "dca_trigger_mode": "benchmark",
+        "dca_amount_mode": "score_bands", "base_amount": 200,
+        "score_source": "benchmark_score", "low_threshold": 26, "high_threshold": 76,
+        "low_score_percent": 150, "mid_score_percent": 100,
+        "high_score_percent": 50,
+    })
+    assert setup["dca_trigger_mode"] == "benchmark"
+    assert setup.get("dca_day") is None
+    assert is_confirmed_dca_amount_rule({**strategy, "setup_type": "dca"})
+    assert dca_due_on_date(setup, date(2026, 11, 17))
+    assert dca_execution_period(setup, date(2026, 11, 17)) == (
+        date(2026, 11, 16), date(2026, 11, 23),
+    )
+    weights = normalize_benchmark_weights({})
+    for score, amount in ((20, 300), (50, 200), (80, 100)):
+        scores = {"market_score": score, "macro_score": score,
+                  "technical_score": score, "setup_score": score,
+                  "_benchmark_weights": weights,
+                  "_source_available": {key: True for key in weights}}
+        assert decide_amount({**strategy, "setup_type": "dca"}, scores)["final_amount"] == amount
+    with pytest.raises(DecisionEngineError, match="ontbreekt"):
+        decide_amount({**strategy, "setup_type": "dca"}, {
+            "market_score": 20, "macro_score": 20, "technical_score": None,
+            "_benchmark_weights": weights,
+            "_source_available": {key: True for key in weights},
+        })
+
+
+def test_score_trigger_rejects_fixed_amount_and_calendar_day():
+    base = {"setup_type": "dca", "dca_frequency": "weekly",
+            "dca_trigger_mode": "benchmark", "base_amount": 200}
+    with pytest.raises(ValueError, match="benchmark_trigger_requires_score_bands"):
+        split_confirmed_dca_plan({**base, "dca_amount_mode": "fixed"})
+    with pytest.raises(ValueError, match="benchmark_trigger_cannot_have_calendar_day"):
+        split_confirmed_dca_plan({**base, "dca_amount_mode": "fixed", "dca_day": "monday"})
 
 
 def test_benchmark_requires_all_three_scores_and_uses_current_normalized_weights():

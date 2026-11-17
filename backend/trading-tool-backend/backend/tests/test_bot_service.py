@@ -2238,6 +2238,15 @@ def test_dca_schedule_status_uses_saved_weekday_without_creating_a_decision():
         "high_score_percent": 150,
     })
     assert _dca_schedule_status(setup, date(2026, 10, 20), smart)["next_due_date"] == "2026-10-23"
+    score_trigger = _dca_schedule_status({
+        "setup_type": "dca", "dca_frequency": "weekly", "dca_trigger_mode": "benchmark",
+        "dca_day": None,
+    }, date(2026, 10, 20), smart)
+    assert score_trigger == {
+        "as_of_date": "2026-10-20", "trigger_mode": "benchmark",
+        "frequency": "weekly", "due_today": None, "next_due_date": None,
+        "condition": "complete_benchmark_required",
+    }
     assert _dca_schedule_status({"setup_type": "trade"}, date(2026, 10, 20), confirmed_fixed) is None
 
 

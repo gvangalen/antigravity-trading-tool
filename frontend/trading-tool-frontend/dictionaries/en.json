@@ -4116,6 +4116,7 @@
     "dcaDraft": {
       "baseAmount": "Base amount (100%): {amount}",
       "smartTitle": "Smart DCA · score based amounts",
+      "benchmarkTrigger": "Buying time: when the complete benchmark score is available, at most one purchase per selected period; no fixed buying day.",
       "scoreSource": "Score source: {source}",
       "benchmarkSource": "your benchmark (market + macro + technical)",
       "benchmarkWeights": "Weights follow your current Analysis settings (each ⅓ by default). Changes affect future amounts. All three scores are required on the decision date.",

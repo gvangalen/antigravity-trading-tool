@@ -4217,6 +4217,7 @@
     "dcaDraft": {
       "baseAmount": "Basisbedrag (100%): {amount}",
       "smartTitle": "Smart DCA · scoregestuurde bedragen",
+      "benchmarkTrigger": "Koopmoment: zodra de volledige benchmarkscore beschikbaar is, maximaal één aankoop per gekozen periode; geen vaste koopdag.",
       "scoreSource": "Scorebron: {source}",
       "benchmarkSource": "eigen benchmark (markt + macro + technisch)",
       "benchmarkWeights": "De weging volgt je actuele instellingen in Analyse (standaard ieder ⅓). Wijzigingen beïnvloeden toekomstige bedragen. Alle drie scores zijn nodig op de beslisdatum.",

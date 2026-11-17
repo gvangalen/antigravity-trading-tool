@@ -4259,6 +4259,7 @@
     "dcaDraft": {
       "baseAmount": "Basisbetrag (100%): {amount}",
       "smartTitle": "Smart DCA · scoreabhängige Beträge",
+      "benchmarkTrigger": "Kaufzeitpunkt: sobald der vollständige Benchmark-Score verfügbar ist, höchstens ein Kauf pro gewähltem Zeitraum; kein fester Kauftag.",
       "scoreSource": "Scorequelle: {source}",
       "benchmarkSource": "eigene Benchmark (Markt + Makro + Technik)",
       "benchmarkWeights": "Die Gewichtung folgt den aktuellen Analyse-Einstellungen (standardmäßig je ⅓). Änderungen beeinflussen künftige Beträge. Alle drei Scores werden am Entscheidungstag benötigt.",

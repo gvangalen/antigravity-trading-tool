@@ -55,6 +55,7 @@ class SetupInventoryToolAdapter:
                 "description": row.get("description"),
                 "saved_market_condition": saved_setup_market_condition(row),
                 "dca_frequency": row.get("dca_frequency"),
+                "dca_trigger_mode": row.get("dca_trigger_mode") or "calendar",
                 "dca_day": row.get("dca_day"),
                 "dca_day_name": _dca_day_name(row.get("dca_day")),
                 "dca_month_day": row.get("dca_month_day"),

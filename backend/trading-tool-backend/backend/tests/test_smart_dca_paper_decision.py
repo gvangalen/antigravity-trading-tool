@@ -147,6 +147,30 @@ def test_smart_dca_missing_score_cannot_turn_placeholder_into_a_buy(paper_engine
     assert result["amount_eur"] == 0
 
 
+@pytest.mark.parametrize("score,expected", [(20, 300), (50, 200), (80, 100)])
+def test_inverse_smart_dca_paper_amounts_decrease_as_benchmark_rises(paper_engines, score, expected):
+    _, strategy = split_confirmed_dca_plan({
+        "setup_type": "dca", "name": "BTC inverse", "dca_frequency": "weekly",
+        "dca_trigger_mode": "benchmark", "base_amount": 200,
+        "dca_amount_mode": "score_bands", "score_source": "benchmark_score",
+        "low_threshold": 26, "high_threshold": 76,
+        "low_score_percent": 150, "mid_score_percent": 100,
+        "high_score_percent": 50,
+    })
+    result = bot_brain.run_bot_brain(
+        user_id=1,
+        setup={**strategy, "setup_type": "dca", "symbol": "BTC"},
+        scores={
+            "market_score": score, "macro_score": score, "technical_score": score,
+            "_benchmark_weights": {key: 1/3 for key in ("market_score", "macro_score", "technical_score")},
+            "_source_available": {key: True for key in ("market_score", "macro_score", "technical_score")},
+        },
+        backtest_mode=True,
+    )
+    assert result["action"] == "buy"
+    assert result["amount_eur"] == expected
+
+
 def test_previous_market_only_smart_dca_plan_holds_even_with_a_valid_market_score(paper_engines):
     result = bot_brain.run_bot_brain(
         user_id=1,

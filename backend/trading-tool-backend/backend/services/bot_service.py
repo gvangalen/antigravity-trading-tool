@@ -119,6 +119,17 @@ def _dca_schedule_status(setup: Optional[dict], report_date: date, strategy_row:
         "decision_curve": curve, "dca_amount_semantics": semantics,
     }):
         return None
+    if setup.get("dca_trigger_mode") == "benchmark":
+        if mode != "custom":
+            return None
+        return {
+            "as_of_date": report_date.isoformat(),
+            "trigger_mode": "benchmark",
+            "frequency": setup.get("dca_frequency"),
+            "due_today": None,
+            "next_due_date": None,
+            "condition": "complete_benchmark_required",
+        }
     next_due = next(
         (report_date + timedelta(days=offset) for offset in range(62)
          if dca_due_on_date(setup, report_date + timedelta(days=offset))),
@@ -524,6 +535,7 @@ class BotService:
                     "symbol": bot.get("setup_symbol") or bot.get("symbol"),
                     "timeframe": bot.get("setup_timeframe"),
                     "dca_frequency": bot.get("dca_frequency"),
+                    "dca_trigger_mode": bot.get("dca_trigger_mode"),
                     "dca_day": bot.get("dca_day"),
                     "dca_month_day": bot.get("dca_month_day"),
                 },
@@ -589,6 +601,7 @@ class BotService:
                         "symbol": r["symbol"],
                         "timeframe": r.get("setup_timeframe"),
                         "dca_frequency": r.get("dca_frequency"),
+                        "dca_trigger_mode": r.get("dca_trigger_mode"),
                         "dca_day": r.get("dca_day"),
                         "dca_month_day": r.get("dca_month_day"),
                     },

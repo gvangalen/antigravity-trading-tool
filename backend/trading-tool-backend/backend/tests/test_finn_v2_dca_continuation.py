@@ -48,7 +48,7 @@ def test_known_asset_replacement_preserves_dca_fields_but_not_old_asset():
     )
     assert carried == {
         "name": "ETH concept", "setup_type": "dca", "timeframe": "1D",
-        "dca_frequency": "weekly", "dca_day": "monday",
+            "dca_frequency": "weekly", "dca_day": "monday",
         "dca_amount_mode": "fixed", "base_amount": 100,
         "min_benchmark_score": None,
     }
@@ -337,7 +337,7 @@ def test_open_setup_asset_switch_retains_explicit_scope_schedule_and_score_bound
     assert state["collected_inputs"] == {
         "name": "QA AAPL Voorwaarde 2510", "symbol": "AAPL",
         "setup_type": "dca", "timeframe": "1D", "plan_scope": "setup_only",
-        "dca_frequency": "weekly", "dca_day": "monday",
+        "dca_frequency": "weekly", "dca_trigger_mode": "calendar", "dca_day": "monday",
         "min_benchmark_score": 26, "max_benchmark_score": 45,
     }
 

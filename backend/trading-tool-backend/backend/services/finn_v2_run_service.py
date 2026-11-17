@@ -1120,6 +1120,8 @@ def _blocked_setup_replay_message(inputs: dict[str, object]) -> str:
         parts.append(f"timeframe {inputs['timeframe']}.")
     if str(inputs.get("setup_type") or "").casefold() == "dca":
         frequency = str(inputs.get("dca_frequency") or "").casefold()
+        if inputs.get("dca_trigger_mode") == "benchmark":
+            parts.append("Koopmoment op basis van volledige benchmarkscore, maximaal één aankoop per periode zonder vaste koopdag.")
         if frequency == "weekly":
             weekdays = {
                 "monday": "maandag", "tuesday": "dinsdag", "wednesday": "woensdag",
@@ -3202,7 +3204,9 @@ class FinnV2RunService:
                 + ". The platform closed-candle trade entry contract is: "
                 + json.dumps(entry_signal_capabilities(), ensure_ascii=False)
                 + ". A fixed amount and stepwise bands of the total benchmark score can be saved; "
-                "the three band percentages must not decrease as benchmark score rises. "
+                "the three band percentages may rise or fall monotonically as benchmark score rises. "
+                "A score-triggered weekly Smart DCA checks each day with a complete benchmark, "
+                "buys at most once per week, and needs no fixed weekday. "
                 "A proposed automatic rule is executable only if its inputs, mapping and "
                 "action exist in the typed plan and operation contracts. Do not equate a "
                 "similar benchmark score band with a different indicator formula. You may "

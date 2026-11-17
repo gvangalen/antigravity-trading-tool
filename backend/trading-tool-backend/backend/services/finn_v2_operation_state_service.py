@@ -643,7 +643,7 @@ class FinnV2OperationStateService:
                 "name", "entry_signal", "execution_mode", "base_amount",
                 "entry", "stop_loss", "targets", "risk_profile",
                 "price_currency", "min_benchmark_score", "max_benchmark_score",
-                "dca_amount_mode", "dca_frequency", "dca_day", "dca_month_day",
+                "dca_amount_mode", "dca_frequency", "dca_trigger_mode", "dca_day", "dca_month_day",
                 "score_source", "low_threshold", "high_threshold",
                 "low_score_percent", "mid_score_percent", "high_score_percent",
             }
@@ -655,7 +655,7 @@ class FinnV2OperationStateService:
                 # signal rules belong to the old instrument and cannot move.
                 invalidated.difference_update({
                     "execution_mode", "base_amount", "dca_amount_mode",
-                    "dca_frequency", "dca_day", "dca_month_day",
+                    "dca_frequency", "dca_trigger_mode", "dca_day", "dca_month_day",
                     "score_source", "low_threshold", "high_threshold",
                     "low_score_percent", "mid_score_percent", "high_score_percent",
                 })
@@ -740,10 +740,15 @@ class FinnV2OperationStateService:
             sources["plan_scope"] = "entry_signal_contract"
             provenance["plan_scope"] = {"source": "entry_signal_contract", "state_revision": next_revision}
             for key in (
-                "dca_frequency", "dca_day", "dca_month_day", "dca_amount_mode",
+                "dca_frequency", "dca_trigger_mode", "dca_day", "dca_month_day", "dca_amount_mode",
                 "score_source", "low_threshold", "high_threshold",
                 "low_score_percent", "mid_score_percent", "high_score_percent",
             ):
+                collected.pop(key, None)
+                sources.pop(key, None)
+                provenance.pop(key, None)
+        if contract.operation_id == "create_setup" and collected.get("dca_trigger_mode") == "benchmark":
+            for key in ("dca_day", "dca_month_day"):
                 collected.pop(key, None)
                 sources.pop(key, None)
                 provenance.pop(key, None)
@@ -757,6 +762,9 @@ class FinnV2OperationStateService:
                 provenance.pop(key, None)
         if (contract.operation_id == "create_setup" and collected.get("setup_type") == "dca"
               and collected.get("dca_amount_mode") == "fixed"):
+            collected.pop("dca_trigger_mode", None)
+            sources.pop("dca_trigger_mode", None)
+            provenance.pop("dca_trigger_mode", None)
             for key in ("score_source", "low_threshold", "high_threshold",
                         "low_score_percent", "mid_score_percent", "high_score_percent"):
                 collected.pop(key, None)
@@ -949,6 +957,7 @@ class FinnV2OperationStateService:
                     "timeframe": "Which analysis timeframe should this setup use, for example 1D (daily chart) or 4H (four-hour chart)? This does not set how often DCA buys occur; I will ask that separately.",
                     "dca_frequency": "How often would you like to buy: daily, weekly or monthly?",
                     "dca_day": "On which weekday would you like to buy?",
+                    "dca_trigger_mode": "Use a fixed buying day, or buy at most once per period when your complete benchmark score is available?",
                     "dca_month_day": "On which day of the month would you like to buy?",
                     "dca_amount_mode": "Should each scheduled purchase use the same amount, or should Smart DCA adjust it using your total benchmark score?",
                     "min_investment": "What minimum amount would you like to set for this setup?",
@@ -984,6 +993,7 @@ class FinnV2OperationStateService:
                     "timeframe": "Welches Analyse-Zeitfenster soll dieses Setup verwenden, zum Beispiel 1D (Tageschart) oder 4H (Vier-Stunden-Chart)? Das legt nicht fest, wie oft DCA kauft; danach frage ich getrennt.",
                     "dca_frequency": "Wie oft möchtest du kaufen: täglich, wöchentlich oder monatlich?",
                     "dca_day": "An welchem Wochentag möchtest du kaufen?",
+                    "dca_trigger_mode": "Möchtest du einen festen Kauftag oder höchstens einen Kauf pro Zeitraum bei verfügbarem vollständigem Benchmark-Score?",
                     "dca_month_day": "An welchem Tag im Monat möchtest du kaufen?",
                     "dca_amount_mode": "Soll jeder geplante Kauf denselben Betrag verwenden oder soll Smart DCA ihn anhand deines gesamten Benchmark-Scores anpassen?",
                     "min_investment": "Welchen Mindestbetrag möchtest du für dieses Setup festlegen?",
@@ -1039,6 +1049,7 @@ class FinnV2OperationStateService:
             "timeframe": "Welk analysetijdsframe wil je voor deze setup gebruiken, bijvoorbeeld 1D (daggrafiek) of 4H (vieruursgrafiek)? Dit bepaalt niet hoe vaak je DCA koopt; dat vraag ik apart.",
             "dca_frequency": "Hoe vaak wil je volgens deze DCA-setup aankopen: dagelijks, wekelijks of maandelijks?",
             "dca_day": "Op welke weekdag wil je volgens deze DCA-setup aankopen?",
+            "dca_trigger_mode": "Wil je een vaste koopdag, of maximaal één aankoop per periode zodra je volledige benchmarkscore beschikbaar is?",
             "dca_month_day": "Op welke dag van de maand wil je volgens deze DCA-setup aankopen?",
             "dca_amount_mode": "Wil je bij elke geplande aankoop hetzelfde bedrag, of Smart DCA waarbij je totale benchmarkscore het bedrag aanpast?",
             "min_investment": "Welk minimumbedrag wil je voor deze setup vastleggen?",
@@ -1407,11 +1418,46 @@ class FinnV2OperationStateService:
                 if explicit_name:
                     amount_text = amount_text.replace(explicit_name.casefold(), " ")
                 smart_amount = bool(re.search(r"\b(?:smart(?:\s*dca)?|score(?:s|gestuurd|afhankelijk)?|staffel|score\s*bands?|variab\w*)\b", amount_text))
-                fixed_amount = bool(re.search(r"\b(?:vast(?:e)?|fixed|exact|fest(?:er|es|em|en)?)\b", amount_text))
+                fixed_amount = bool(re.search(
+                    r"\b(?:vast(?:e)?|fixed|exact|fest(?:er|es|em|en)?)\b(?!\s+(?:week)?(?:dag|day)\b)",
+                    amount_text,
+                ))
                 if smart_amount and not fixed_amount:
                     values["dca_amount_mode"] = "score_bands"
                 elif fixed_amount and not smart_amount:
                     values["dca_amount_mode"] = "fixed"
+                if "dca_trigger_mode" in accepted_inputs:
+                    trigger = None
+                    if requested_slot == "dca_trigger_mode" or re.search(
+                        r"\b(?:geen|zonder)\s+vaste\s+(?:week)?dag\b"
+                        r"|\b(?:maakt\s+(?:me\s+)?niet\s+uit|licht|ligt)\b.{0,50}\b(?:benchmark(?:t)?score|benchmark(?:t)?|score)\b"
+                        r"|\b(?:wanneer|zodra|als|ligt\s+aan)\b.{0,90}"
+                        r"\b(?:benchmark(?:t)?score|benchmark(?:t)?|score)\b.{0,90}\b(?:kopen|koop|buy)\b"
+                        r"|\b(?:ligt\s+aan|afhankelijk\s+van)\b.{0,60}\b(?:benchmark(?:t)?score|benchmark(?:t)?|score)\b"
+                        r"|\bkoopmoment\b.{0,60}\b(?:benchmark(?:t)?score|benchmark(?:t)?|score)\b",
+                        amount_text,
+                    ):
+                        trigger = self._requested_slot_value(
+                            field="dca_trigger_mode", text=amount_text, contract=contract,
+                        )
+                    elif values.get("dca_day") or values.get("dca_month_day"):
+                        trigger = "calendar"
+                    if trigger:
+                        values["dca_trigger_mode"] = trigger
+                inverse_ladder = bool(
+                    re.search(r"\b(?:meer|more|mehr)\s+(?:kopen|koop|buy|investeren|invest)\b", amount_text)
+                    and re.search(r"\b(?:minder|less|weniger)(?:\s+(?:kopen|koop|buy|investeren|invest))?\b", amount_text)
+                    and re.search(r"\b(?:oversold|overbought|druk|zwak|sterk|score|benchmark)\b", amount_text)
+                )
+                if inverse_ladder and not self._dca_score_percentages(message):
+                    # Product suggestion only: the visible proposal still
+                    # needs explicit user confirmation before any save.
+                    values.update({
+                        "dca_amount_mode": "score_bands", "score_source": "benchmark_score",
+                        "low_threshold": 26, "high_threshold": 76,
+                        "low_score_percent": 150, "mid_score_percent": 100,
+                        "high_score_percent": 50,
+                    })
                 if smart_amount:
                     market_only = re.search(
                         r"\b(?:alleen|uitsluitend|only)\s+(?:de\s+)?(?:markt\s*score|marktscore|market\s*score)\b",
@@ -1803,6 +1849,18 @@ class FinnV2OperationStateService:
             return next(iter(quotes)) if len(quotes) == 1 else None
         if field == "dca_frequency":
             return self._canonical_dca_frequency(value)
+        if field == "dca_trigger_mode":
+            lowered = value.casefold()
+            if re.search(r"\b(?:geen|zonder)\s+vaste\s+(?:week)?dag\b", lowered) or re.search(
+                r"\b(?:maakt\s+(?:me\s+)?niet\s+uit|licht|ligt)\b.{0,50}"
+                r"\b(?:benchmark(?:t)?score|benchmark(?:t)?|score)\b", lowered,
+            ):
+                return "benchmark"
+            if re.search(r"\b(?:vaste\s+(?:dag|weekdag)|fixed\s+day|kalender|calendar)\b", lowered):
+                return "calendar"
+            if re.search(r"\b(?:benchmark(?:t)?score|benchmark(?:t)?|score|flexibel)\b", lowered):
+                return "benchmark"
+            return None
         if field == "dca_day":
             return self._canonical_dca_day(value)
         if field == "dca_month_day":
@@ -2846,6 +2904,9 @@ class FinnV2OperationStateService:
             return FinnV2OperationStateService._canonical_category(str(value))
         if field == "dca_frequency":
             return FinnV2OperationStateService._canonical_dca_frequency(str(value))
+        if field == "dca_trigger_mode":
+            normalized = str(value or "").strip().casefold()
+            return normalized if normalized in {"calendar", "benchmark"} else None
         if field == "dca_day":
             return FinnV2OperationStateService._canonical_dca_day(str(value))
         return FinnV2SetupInputCatalog.canonical_input(field, value)
