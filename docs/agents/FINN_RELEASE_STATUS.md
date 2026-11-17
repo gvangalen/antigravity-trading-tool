@@ -4,6 +4,25 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN-chat: subtiele kopieeractie voor beide kanten (17 november 2026)
+
+Phase: `BUILD_VALIDATED_PENDING_CI`. Branch
+`codex/finn-copy-subtle-both-20261117`. De bestaande knop staat nu als klein
+icoon onder de eigen berichtballon; een FINN-antwoord krijgt hetzelfde icoon
+links onder de inhoud. Beide knoppen kopiëren de oorspronkelijke berichttekst,
+tonen kort een vinkje en houden de bestaande toegankelijke labels en
+klembordfoutmelding. Lopende FINN-antwoorden krijgen pas een knop zodra het
+antwoord compleet is.
+
+Lokale Build-controle: frontend-build, typecheck en `lint:i18n` geslaagd;
+`test:i18n` **43/43** en `test:commands` **85/85**. Alleen de FINN-chatweergave en
+bijbehorende statische frontend-export zijn gewijzigd. Geen action contract,
+backend, provider, bot of handelspad is geraakt. CI, Auto Deploy en publieke
+SHA-controle volgen nog. De eerdere onafhankelijke kopieerknopcontrole op
+`4a7d498ce34c5e89ee52ccd8c01ee115843434f1` was **PASS** voor de
+oorspronkelijke tekst en bediening op 390 px en via Enter; regeleinden konden
+zonder bestaand meerregelig bericht niet live worden afgetekend.
+
 ## FINN-chat: eigen berichten kopiëren (17 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA`. [PR #1162](https://github.com/gvangalen/antigravity-trading-tool/pull/1162)
