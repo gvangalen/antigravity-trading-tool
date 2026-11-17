@@ -45,6 +45,20 @@ def test_score_band_followup_stays_with_open_smart_dca_draft():
     )
 
 
+def test_no_fixed_weekday_corrects_open_dca_draft_instead_of_abandoning_it():
+    registry = FinnV2OperationRegistry()
+    assert FinnResponsesFrontDoor.binds_guided_slot(
+        message=("Geen vaste weekdag. Juist scoregestuurd: hoogstens één "
+                 "aankoop per week wanneer de volledige benchmark geldig is."),
+        contract=registry.require_supported("create_setup"), registry=registry,
+        requested_slot="dca_day",
+        collected_inputs={
+            "symbol": "BTC", "quote_currency": "USDT", "setup_type": "dca",
+            "dca_frequency": "weekly", "dca_amount_mode": "fixed",
+        },
+    )
+
+
 def test_conversational_request_with_asset_starts_new_setup_draft():
     assert _explicit_create_operation_request(
         "kan je voor eth ook een setup maken?"
