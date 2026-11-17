@@ -53,6 +53,7 @@ from backend.services.watchlist_conversation_service import ambiguous_asset_chan
 from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
 from backend.services.finn_v2_account_bundle_answer import render_account_bundle_answer
 from backend.services.finn_v2_fomo_plan_answer import render_fomo_plan_answer
+from backend.services.finn_v2_plan_design_context import asks_read_only_impulse_plan_coaching
 from backend.services.finn_v2_paper_position_answer import (
     PAPER_POSITION_CASH_UNAVAILABLE, render_paper_position_cash_answer,
 )
@@ -78,10 +79,7 @@ def _read_only_impulse_plan_asset(message: str) -> str | None:
         return None
     if (DEFAULT_ASSET_CATALOG.get(asset) or {}).get("asset_class") not in {"stock", "etf"}:
         return None
-    if not (re.search(r"\b(?:FOMO|impulsief)\b", message, re.I)
-            and re.search(r"\b(?:plan|setup)\b", message, re.I)
-            and re.search(r"\b(?:bijkopen|kopen|aankoop|instapsignaal)\b", message, re.I)
-            and re.search(r"\b(?:alleen coachen|niets voorstellen|niets.{0,20}uitvoeren|zonder koopvoorstel|zonder uitvoering|leg uit zonder)\b", message, re.I)):
+    if not asks_read_only_impulse_plan_coaching(message):
         return None
     return asset
 

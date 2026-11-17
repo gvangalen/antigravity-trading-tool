@@ -58,6 +58,23 @@ def test_plan_design_focus_does_not_bind_an_ordinary_saved_plan_read():
     assert not is_explicit_saved_plan_read("Het oude plan is alleen achtergrond voor een nieuw plan")
 
 
+def test_read_only_fomo_plan_questions_bypass_capability_explainer():
+    first = ("Ik wil vandaag uit FOMO extra AAPL bijkopen. Wat zegt mijn opgeslagen "
+             "plan samen met de huidige Markt-, Macro- en Technisch-bewijzen, mijn "
+             "Paper-positie en botlimiet? Mag ik dit als instapsignaal zien? "
+             "Alleen coachen, niets voorstellen of uitvoeren.")
+    followup = ("Met deze bevestigde feiten: als ik nu uit FOMO €400 AAPL wil "
+                "bijkopen, welke stap past bij mijn plan? Leg uit zonder "
+                "koopvoorstel of uitvoering.")
+    assert not requests_execution_capability_question(first, {})
+    assert not requests_execution_capability_question(
+        followup, {"plan_design_focus": {"kind": "unsaved_capability_design"}},
+    )
+    assert requests_execution_capability_question(
+        "Kan mijn plan een automatische FOMO-bijkoop uitvoeren?", {},
+    )
+
+
 def test_unsaved_design_remains_separate_from_saved_plan_until_scope_is_chosen():
     context = {}
     assert remember_unsaved_design(context)

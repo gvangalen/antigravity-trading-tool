@@ -4,6 +4,54 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 Paper-flow: brongebonden FOMO-antwoord verifiëren (17 november 2026)
+
+Phase: `BUILD_VALIDATED_PENDING_RELEASE` op branch
+`codex/finn-coach-verifier-fix-20261117`. Onafhankelijke QA gaf
+**NOT_ACCEPTED** op de vorige definitieve publieke SHA
+`78a57b1a519ac83cdfdcb8444743a49b33b307ca`: de beschermde
+Paper-only proef met twee virtuele executions, één exit, owner-scope,
+polling/SSE en nul Live-aanroepen was groen. De ingelogde browser las
+account, botbesluit en Reflectie correct en de gesloten feedkaarten kregen
+de juiste status. De eerste AAPL-FOMO-vraag viel echter terug op een
+ongefundeerde ontbrekende-gegevensmelding; een vervolg duidde de opgeslagen
+trade-opzet ten onrechte als mogelijke DCA. Er kwam geen voorstel of order.
+
+Een echte lokale FastAPI/Celery-beurt reproduceerde de fout: de vroege
+plan-uitvoerbaarheidsrouter onderschepte de expliciete alleen-lezen FOMO-vraag
+en beëindigde de run met `plan_execution_capability`, zonder bronlezing of
+antwoordverifier. De reparatie laat deze vragen door naar de eigenaargebonden
+plan-, score- en Paper-lezing. Daarnaast ontbrak de nieuwe `factual_source`
+antwoordsoort in de laatste verifier. Die verifier reconstrueert het antwoord
+nu uit dezelfde toolresultaten en wijst gewijzigde setupsoort of tekst af.
+De gerichte regressies voor de twee exacte browserprompts en een vervalst
+DCA-antwoord slagen. Een nieuwe echte lokale FastAPI/Celery-beurt op de
+gerepareerde code eindigt in `factual_source_verified`; de synthetische
+gebruiker zonder opgeslagen AAPL-plan krijgt een specifieke ontbrekende-
+bronnenmelding in plaats van een algemeen capability-antwoord.
+Ook de echte lokale `/api/assistant/chat/stream`-ingang met pending-run
+polling eindigt voor diezelfde vraag in `factual_source_verified` met
+`verifier_status=passed`. Deze lokale fixture bevat geen echte AAPL-setup;
+de ingelogde productieaccount met opgeslagen setup blijft een onafhankelijke
+QA-acceptatievoorwaarde.
+
+Op de definitieve code slaagde de volledige backend-suite **5.002 passed,
+7 skipped** (log SHA-256
+`c96dfd409d8454099aedcc85eb951111475cb7c2a77b2d38648cf24d9ec3d0f8`).
+Frontend build, typecheck, i18n-, command- en voorsteltests en `audit:high`
+slaagden (nul hoge kwetsbaarheden); er is geen frontendcode gewijzigd.
+De lokale FastAPI/Celery/PostgreSQL/Redis/Responses-actiematrix slaagde
+**17/17** en de adapters **26/26** (artifact SHA-256
+`4fb70147fda760a5e6cabe7a22d77fd3739937594d279d33d33db59469db27f8`),
+met nul brokerorders, Live-aanroepen en productieverbindingen.
+De echte-providerontwikkeling slaagde **20/20** zonder casefouten (artifact
+SHA-256 `55009b35df376cfd56126eaa0ca721c8a6b726ca92fadc513ef0ed3d087adb5a`).
+
+De volledige providerregressie, CI, Auto Deploy, publieke SHA-pariteit en
+onafhankelijke ingelogde browserhertest staan voor
+deze kandidaat nog open. De vorige Paper-proef bewijst de uitvoering van die
+vorige SHA; zij is geen acceptatie van deze reparatie.
+
 ## FINN 3.0 Paper-flow: FOMO-coach en geannuleerde feedkaart (17 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_FINAL_STATUS_PENDING_QA` op branch

@@ -43,6 +43,7 @@ from backend.services.finn_v2_bot_subject_claims import focused_bot_id, bot_subj
 from backend.services.finn_v2_paper_position_answer import (
     PAPER_POSITION_CASH_UNAVAILABLE, render_paper_position_cash_answer,
 )
+from backend.services.finn_v2_fomo_plan_answer import render_fomo_plan_answer
 from backend.services.finn_v2_factual_source_answer import (
     render_bot_decision, render_closed_paper_exit_facts, render_selected_paper_feed_decision, render_latest_quote, render_portfolio_read_time,
     render_report_and_quote_times, render_report_and_technical_read,
@@ -3082,7 +3083,13 @@ class FinnResponsesAnswerVerifier:
             symbol = str(args.get("asset") or "").upper()
             exit_facts = render_closed_paper_exit_facts(message, result.tool_trace)
             named_paper_assets = mentioned_catalog_symbols(message)
-            if (call.get("name") == "get_portfolio_and_exposure"
+            if (call.get("name") == "get_active_plan_and_strategy"
+                    and args.get("environment") == "paper"
+                    and symbol in named_paper_assets
+                    and re.search(r"\b(?:FOMO|impulsief)\b", message, re.I)
+                    and str(locale or "nl").lower().startswith("nl")):
+                expected = render_fomo_plan_answer(read, asset=symbol)
+            elif (call.get("name") == "get_portfolio_and_exposure"
                     and args.get("environment") == "paper"
                     and len(named_paper_assets) == 1
                     and re.search(r"\bbotbudget\b", message, re.I)
