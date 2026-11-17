@@ -2327,16 +2327,39 @@ def test_each_plan_followup_reopens_both_verified_4h_trade_setups(message, has_p
                     {"setup_id": 1, "symbol": "AAPL", "benchmark_score": None,
                      "source_status": "missing_scores"},
                     {"setup_id": 2, "symbol": "BTC", "trading_pair": "BTC/EUR",
-                     "benchmark_score": 35, "source_status": "available"},
+                     "benchmark_score": None, "source_status": "unverified_scores",
+                     "component_source_status": {"market_score": "missing_score"}},
                 ]},
             }]}
         if call.name == "get_market_snapshot":
-            return {"status": "completed", "results": [{
-                "scope": "read_market_snapshot", "status": "completed",
-                "data": {"asset": call.inputs["asset"],
-                         "quote_currency": call.inputs.get("quote_currency"),
-                         "source_status": "unavailable"},
-            }]}
+            asset = call.inputs["asset"]
+            score = ({"symbol": "BTC", "pair": "BTC/EUR", "market_id": 42,
+                      "source_status": "available", "benchmark_score": 35,
+                      "reported_scores": {"market_score": 50, "macro_score": 20,
+                                          "technical_score": 35},
+                      "component_source_status": {"market_score": "fresh",
+                                                  "macro_score": "fresh",
+                                                  "technical_score": "fresh"},
+                      "component_source_observed_at": {
+                          "market": {"price": "2026-11-17T13:05:00+00:00"},
+                          "macro": {"dxy": "2026-11-16T23:00:00+00:00"},
+                          "technical": {"rsi": "2026-11-17T12:00:00+00:00"},
+                      }} if asset == "BTC" else {
+                          "symbol": "AAPL", "source_status": "missing_scores",
+                          "benchmark_score": None,
+                          "reported_scores": {"market_score": 80, "macro_score": 20,
+                                              "technical_score": None},
+                          "component_source_status": {"market_score": "fresh",
+                                                      "macro_score": "fresh",
+                                                      "technical_score": "missing_score"},
+                      })
+            return {"status": "completed", "results": [
+                {"scope": "read_market_snapshot", "status": "completed",
+                 "data": {"asset": asset,
+                          "quote_currency": call.inputs.get("quote_currency"),
+                          "source_status": "unavailable"}},
+                {"scope": "read_asset_scores", "status": "completed", "data": score},
+            ]}
         if call.name == "get_active_plan_and_strategy":
             return {"status": "completed", "results": []}
         raise AssertionError(call.name)
@@ -2356,7 +2379,7 @@ def test_each_plan_followup_reopens_both_verified_4h_trade_setups(message, has_p
     assert any(call.name == "get_setup_market_matches" for call in calls)
     assert {(call.inputs["asset"], call.inputs.get("quote_currency"))
             for call in calls if call.name == "get_market_snapshot"} == {
-                ("AAPL", "USD"), ("BTC", "EUR"),
+                ("AAPL", None), ("BTC", "EUR"),
             }
     assert {target["setup_id"] for target in result.response.turn_contract["targets"]} == {1, 2}
     assert result.response.answer_kind == "factual_source"
@@ -2365,6 +2388,11 @@ def test_each_plan_followup_reopens_both_verified_4h_trade_setups(message, has_p
     assert "4H trade-opzet" in result.response.text
     assert "ontbrekende" in result.response.text
     assert "35/100" in result.response.text and "61–75" in result.response.text
+    assert "Markt 50/100" in result.response.text
+    assert "Macro 20/100" in result.response.text
+    assert "Technisch 35/100" in result.response.text
+    assert "oudste indicatorbron: 2026-11-17 14:05:00 CET" in result.response.text
+    assert "afzonderlijke planmatch is nog niet bevestigd" in result.response.text
     assert "dagkaars" not in result.response.text.lower()
     assert "SMA" not in result.response.text
     assert "DCA" not in result.response.text
@@ -2397,6 +2425,27 @@ def test_each_plan_followup_reopens_both_verified_4h_trade_setups(message, has_p
     ))
     assert wrong_pair.status == "unavailable"
     assert wrong_pair.reason == "factual_source_mismatch"
+
+
+def test_two_plan_coach_does_not_borrow_other_quote_score():
+    from backend.services.finn_v2_two_plan_checks_answer import render_two_plan_checks
+
+    plans = [{"setup_id": 2, "name": "BTC EUR 4H trade", "symbol": "BTC",
+              "pair": "BTC/EUR", "timeframe": "4H", "setup_type": "trade",
+              "min_benchmark_score": 61, "max_benchmark_score": 75}]
+    matches = {"results": [{"scope": "read_setup_market_matches", "status": "completed",
+                            "data": {"matches": [{"setup_id": 2,
+                                                  "source_status": "unverified_scores",
+                                                  "benchmark_score": None}]}}]}
+    wrong_pair = {"results": [{"scope": "read_asset_scores", "status": "completed",
+                               "data": {"symbol": "BTC", "pair": "BTC/USDT",
+                                        "source_status": "available", "benchmark_score": 95,
+                                        "reported_scores": {"market_score": 95},
+                                        "component_source_status": {"market_score": "fresh"}}}]}
+    answer = render_two_plan_checks(plans, matches, {2: wrong_pair})
+    assert "BTC/EUR" in answer
+    assert "95" not in answer
+    assert "planmatch is nog niet bevestigd" in answer
 
 
 def test_named_plan_comparison_also_reads_account_wide_paper_cash_when_asked():
