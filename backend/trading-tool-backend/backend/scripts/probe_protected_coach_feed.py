@@ -142,12 +142,13 @@ async def _discuss(user_id: int, item_id: str, *, symbol: str, question: str) ->
             "read_only": True, "answer_length": len(response.content)}
 
 
-async def _observe_score_feed(user_id: int, *, threshold: float) -> dict:
+async def _observe_score_feed(user_id: int, *, threshold: float, trace: dict) -> dict:
     from backend.infrastructure.database import async_session_factory
     from backend.services.finn_coach_feed_service import FinnCoachFeedService
 
     # Only this isolated child's category weights become invalid. This proves
     # that a real configuration gap yields an advice card, not an automatic edit.
+    trace["stage"] = "weights_invalid"
     connection = score._connection()
     try:
         with connection.cursor() as cursor:
@@ -162,10 +163,13 @@ async def _observe_score_feed(user_id: int, *, threshold: float) -> dict:
     finally:
         connection.close()
     from backend.celery_task.store_daily_scores_task import reconcile_coach_feed_score
+    trace["stage"] = "improvement_dispatch"
     reconcile_coach_feed_score.delay(user_id, "ETH")
+    trace["stage"] = "improvement_wait"
     improvement = await _await_feed(user_id, "improvement_suggestion", subject="asset")
     if improvement["evidence"].get("suggestion_kind") != "weights":
         raise RuntimeError("coach_feed_improvement_card_missing")
+    trace["stage"] = "improvement_discuss"
     improvement_discuss = await _discuss(
         user_id, improvement["id"], symbol="ETH",
         question="Bespreek dit verbeteringsvoorstel voor ETH. Welke opgeslagen "
@@ -174,6 +178,7 @@ async def _observe_score_feed(user_id: int, *, threshold: float) -> dict:
 
     # Restore this child's original valid weights before evaluating its plan.
     # The improvement card remains a dated record of the preceding gap.
+    trace["stage"] = "weights_restore"
     connection = score._connection()
     try:
         with connection.cursor() as cursor:
@@ -187,6 +192,7 @@ async def _observe_score_feed(user_id: int, *, threshold: float) -> dict:
     finally:
         connection.close()
 
+    trace["stage"] = "improvement_resolution"
     async with async_session_factory() as session:
         reopened = await FinnCoachFeedService(session).reconcile_improvement_suggestions(
             user_id=user_id, symbol="ETH")
@@ -204,6 +210,7 @@ async def _observe_score_feed(user_id: int, *, threshold: float) -> dict:
     # Observe the move last: the normal-threshold worker above would resolve
     # a synthetic below-threshold plan card. The earlier improvement card is
     # now resolved because the test-only invalid weights were restored.
+    trace["stage"] = "plan_observation"
     previous = os.environ.get("FINN_COACH_MOVE_THRESHOLD_PCT")
     os.environ["FINN_COACH_MOVE_THRESHOLD_PCT"] = str(threshold)
     try:
@@ -218,10 +225,12 @@ async def _observe_score_feed(user_id: int, *, threshold: float) -> dict:
             os.environ["FINN_COACH_MOVE_THRESHOLD_PCT"] = previous
     if len(plan) != 1:
         raise RuntimeError("coach_feed_plan_card_missing")
+    trace["stage"] = "plan_readback"
     card = await _feed(user_id, "plan_review", subject="setup")
     evidence = card["evidence"]
     if not _verified_plan_evidence(evidence):
         raise RuntimeError("coach_feed_plan_card_missing")
+    trace["stage"] = "plan_discuss"
     plan_discuss = await _discuss(
         user_id, card["id"], symbol="ETH",
         question="Bespreek deze planherbeoordeling. Welke gemeten beweging en "
@@ -273,16 +282,24 @@ def _align_child_market_reading(user_id: int, *, change: float, observed: dateti
         connection.close()
 
 
-def _score_case(namespace: str, bound: int) -> dict:
+def _score_case(namespace: str, bound: int, *, trace: dict) -> dict:
     user_id = bot_id = None
     passed = False
     try:
+        trace["stage"] = "source"
         movement, change, observed = asyncio.run(_fresh_eth_move())
+        trace["stage"] = "seed"
         user_id, bot_id, _ = score._seed(namespace, bound, bot_active=False)
+        trace["fixture_state"] = "created"
+        trace["stage"] = "source_alignment"
         _align_child_market_reading(user_id, change=change, observed=observed)
         from backend.celery_task.store_daily_scores_task import build_daily_scores_for_user
+        trace["stage"] = "score_build"
         build_daily_scores_for_user(user_id, ["ETH"], publish_feed=False)
-        result = asyncio.run(_observe_score_feed(user_id, threshold=min(movement / 2, 9.0)))
+        trace["stage"] = "feed_observation"
+        result = asyncio.run(_observe_score_feed(user_id, threshold=min(movement / 2, 9.0),
+                                                 trace=trace))
+        trace["stage"] = "safety_check"
         if _counts(user_id) != (0, 0, 0, 0):
             raise RuntimeError("coach_feed_unexpected_order")
         passed = True
@@ -292,22 +309,31 @@ def _score_case(namespace: str, bound: int) -> dict:
             try:
                 if passed:
                     score._cleanup(namespace, user_id, bot_id, require_safe_pair_cleanup=True)
+                    trace["fixture_state"] = "cleaned"
                 else:
                     score._quarantine(namespace, user_id, bot_id)
+                    trace["fixture_state"] = "quarantined"
             except Exception:
+                trace["fixture_state"] = "cleanup_failed"
                 raise RuntimeError("coach_feed_cleanup_failed" if passed else
                                    "coach_feed_quarantine_failed") from None
 
 
-def _risk_case(namespace: str, bound: int) -> dict:
+def _risk_case(namespace: str, bound: int, *, trace: dict) -> dict:
     user_id = bot_id = None
     passed = False
     try:
+        trace["stage"] = "source"
         source = paper._verified_source_price_eur()
+        trace["stage"] = "seed"
         user_id, bot_id, decision_id = paper._seed(namespace, bound)
+        trace["fixture_state"] = "created"
+        trace["stage"] = "paper_execution"
+        trace["paper_execution_attempted"] = True
         paper._execute_and_replay(user_id, bot_id, decision_id, source["eur_price"])
         # The actual virtual Paper fill provides valuation and cash evidence.
         # Lower only the synthetic bot's saved exposure threshold afterwards.
+        trace["stage"] = "risk_limit"
         connection = paper._connection()
         try:
             with connection.cursor() as cursor:
@@ -320,16 +346,20 @@ def _risk_case(namespace: str, bound: int) -> dict:
         finally:
             connection.close()
         from backend.celery_task.portfolio_snapshot_task import reconcile_paper_position_risk
+        trace["stage"] = "worker_dispatch"
         reconcile_paper_position_risk.delay(user_id)
+        trace["stage"] = "feed_observation"
         card = asyncio.run(_await_feed(user_id, "position_risk", subject="bot"))
         if card["evidence"].get("status") != "above_saved_limit":
             raise RuntimeError("coach_feed_risk_card_missing")
+        trace["stage"] = "discuss"
         discussed = asyncio.run(_discuss(
             user_id, card["id"], symbol="BTC",
             question="Bespreek dit positierisico voor mijn BTC Paper-bot. "
                      "Welke opgeslagen limiet is overschreden en wat controleer ik? "
                      "Wijzig niets en plaats geen order.",
         ))
+        trace["stage"] = "safety_check"
         if _counts(user_id) != (1, 1, 0, 0):
             raise RuntimeError("coach_feed_unexpected_order")
         passed = True
@@ -341,7 +371,9 @@ def _risk_case(namespace: str, bound: int) -> dict:
         if user_id is not None and bot_id is not None:
             try:
                 paper._finish(namespace, user_id, bot_id, passed=passed)
+                trace["fixture_state"] = "cleaned" if passed else "quarantined"
             except Exception:
+                trace["fixture_state"] = "cleanup_failed"
                 raise RuntimeError("coach_feed_cleanup_failed") from None
 
 
@@ -354,12 +386,19 @@ def run(namespace: str) -> dict:
     results = {}
     with _guard_live_exchange() as live_attempts:
         for name, procedure in (("score_and_plan", _score_case), ("paper_risk", _risk_case)):
+            trace = {"stage": "preflight", "fixture_state": "not_created",
+                     "paper_execution_attempted": False}
             try:
-                results[name] = procedure(namespace, bound)
+                results[name] = procedure(namespace, bound, trace=trace)
+                results[name]["fixture_state"] = trace["fixture_state"]
             except Exception as error:
                 code = str(error)
                 results[name] = {"result": "FAIL", "reason": code if code in SAFE_FAILURES
-                                 else "coach_feed_runtime_failed"}
+                                 else "coach_feed_runtime_failed",
+                                 "failure_stage": trace["stage"],
+                                 "fixture_state": trace["fixture_state"]}
+            if name == "paper_risk":
+                results["paper_execution_attempts"] = int(trace["paper_execution_attempted"])
     results["live_calls"] = len(live_attempts)
     if live_attempts:
         results["safety"] = {"result": "FAIL", "reason": "coach_feed_unexpected_order"}
