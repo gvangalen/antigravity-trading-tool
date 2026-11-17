@@ -2332,6 +2332,7 @@ def test_each_plan_followup_reopens_both_verified_4h_trade_setups(message, has_p
                 ]},
             }]}
         if call.name == "get_market_snapshot":
+            assert call.read_tools == ("read_market_snapshot", "read_asset_scores")
             asset = call.inputs["asset"]
             score = ({"symbol": "BTC", "pair": "BTC/EUR", "market_id": 42,
                       "source_status": "available", "benchmark_score": 35,
