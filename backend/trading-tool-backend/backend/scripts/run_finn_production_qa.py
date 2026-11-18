@@ -228,8 +228,47 @@ def profile_error_category(profile: str, error: Exception) -> str:
     """The published QA error category must not contain private fixture text."""
     if profile == "score2_finn_weekly_smart_dca_chain":
         code = str(error)
-        return (code if re.fullmatch(r"(?:finn_weekly_chain|weekly_smart_dca|temporary_qa|fixture)_[a-z_]+", code)
-                else "finn_weekly_chain_runner_error")
+        allowed = {
+            "finn_weekly_chain_fixture_manifest_forbidden",
+            "finn_weekly_chain_fixture_not_authorized",
+            "finn_weekly_chain_capability_binding_failed",
+            "finn_weekly_chain_emergency_revoke_binding_wrong",
+            "finn_weekly_chain_emergency_revoke_failed",
+            "finn_weekly_chain_emergency_live_bot_present",
+            "finn_weekly_chain_revocation_fallback_used",
+            "finn_weekly_chain_cleanup_failed",
+            "finn_weekly_chain_guided_state_wrong",
+            "finn_weekly_chain_guided_inputs_wrong",
+            "finn_weekly_chain_first_turn_transport_failed",
+            "finn_weekly_chain_second_turn_transport_failed",
+            "finn_weekly_chain_proposal_missing",
+            "finn_weekly_chain_proposal_fields_wrong",
+            "finn_weekly_chain_proposal_lifecycle_failed",
+            "finn_weekly_chain_confirmation_or_replay_failed",
+            "finn_weekly_chain_saved_plan_cardinality_wrong",
+            "finn_weekly_chain_saved_plan_wrong",
+            "finn_weekly_chain_owner_not_deactivated",
+            "finn_weekly_chain_strategy_link_missing",
+            "finn_weekly_chain_bot_strategy_link_wrong",
+            "finn_weekly_chain_scores_incomplete",
+            "finn_weekly_chain_first_assessment_failed",
+            "finn_weekly_chain_same_day_not_blocked",
+            "finn_weekly_chain_same_week_not_blocked",
+            "finn_weekly_chain_date_boundary_unavailable",
+            "finn_weekly_chain_cleanup_binding_wrong",
+            "finn_weekly_chain_cleanup_bot_unsafe",
+            "finn_weekly_chain_cleanup_exchange_key_present",
+            "finn_weekly_chain_cleanup_live_order_present",
+            "finn_weekly_chain_cleanup_rows_remain",
+            "finn_weekly_chain_parent_state_changed",
+        }
+        if code in allowed:
+            return code
+        if code.startswith("weekly_smart_dca_"):
+            weekly_code = profile_error_category("score2_weekly_smart_dca_paper", error)
+            if weekly_code != "weekly_smart_dca_probe_runtime_error":
+                return weekly_code
+        return "finn_weekly_chain_runner_error"
     if profile == "score2_weekly_smart_dca_paper":
         code = str(error)
         allowed = {

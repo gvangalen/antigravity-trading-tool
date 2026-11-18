@@ -864,6 +864,10 @@ def test_finn_weekly_chain_profile_is_protected_and_does_not_seed_plan(monkeypat
     assert module.profile_error_category(
         "score2_finn_weekly_smart_dca_chain", RuntimeError("private user data"),
     ) == "finn_weekly_chain_runner_error"
+    assert module.profile_error_category(
+        "score2_finn_weekly_smart_dca_chain",
+        RuntimeError("finn_weekly_chain_private_user_data"),
+    ) == "finn_weekly_chain_runner_error"
 
 
 def test_finn_weekly_chain_child_token_binding_is_restored(monkeypatch):
@@ -913,6 +917,7 @@ def test_finn_weekly_chain_uses_saved_strategy_and_cleans_child(monkeypatch):
     monkeypatch.setattr(probe.temporary, "_db", lambda value: value)
     monkeypatch.setattr(probe.temporary, "_create_child", lambda *_args: (11, "parent-hash"))
     monkeypatch.setattr(probe.temporary, "_extend_lease", lambda *_args: None)
+    monkeypatch.setattr(probe, "_grant_weekly_dca_capability", lambda *_args: calls.append("grant"))
     monkeypatch.setattr(probe.temporary, "_revoke_child", lambda *_args: calls.append("revoke"))
     monkeypatch.setattr(probe, "_issue_child_token", lambda *_args: "in-memory-token")
     monkeypatch.setattr(probe, "_chat_create_plan", lambda *_args: (13, 17, {"proposal_confirmed": True}))
@@ -930,7 +935,7 @@ def test_finn_weekly_chain_uses_saved_strategy_and_cleans_child(monkeypatch):
     result = probe.run("qa-123456-1-abcd1234-5678abcd", base_url="https://example.test",
                        parent_token="in-memory-parent-token", issuer=Path("issuer"))
     assert result["cleanup_verified"] is True
-    assert calls == ["revoke", ("bot", 11, 17), ("link", 11, 19, 13, 17),
+    assert calls == ["grant", "revoke", ("bot", 11, 17), ("link", 11, 19, 13, 17),
                      ("paper", 11, 19), ("link", 11, 19, 13, 17), "cleanup"]
 
     calls.clear()
@@ -940,7 +945,58 @@ def test_finn_weekly_chain_uses_saved_strategy_and_cleans_child(monkeypatch):
     with pytest.raises(RuntimeError, match="finn_weekly_chain_proposal_missing"):
         probe.run("qa-123456-1-abcd1234-5678abcd", base_url="https://example.test",
                   parent_token="in-memory-parent-token", issuer=Path("issuer"))
-    assert calls == ["revoke", "cleanup"]
+    assert calls == ["grant", "revoke", "cleanup"]
+
+    calls.clear()
+    monkeypatch.setattr(probe, "_chat_create_plan", lambda *_args: (
+        13, 17, {"proposal_confirmed": True}))
+    def fail_revoke(*_args):
+        raise RuntimeError("temporary_qa_revoke_cas_failed")
+    monkeypatch.setattr(probe.temporary, "_revoke_child", fail_revoke)
+    monkeypatch.setattr(probe, "_emergency_revoke_child", lambda *_args: calls.append("emergency"))
+    with pytest.raises(RuntimeError, match="finn_weekly_chain_revocation_fallback_used"):
+        probe.run("qa-123456-1-abcd1234-5678abcd", base_url="https://example.test",
+                  parent_token="in-memory-parent-token", issuer=Path("issuer"))
+    assert calls == ["grant", "emergency", "cleanup"]
+
+
+def test_finn_weekly_emergency_revokes_child_before_reporting_live_bot(monkeypatch):
+    from backend.scripts import probe_protected_finn_weekly_smart_dca_chain as probe
+
+    namespace = "qa-123456-1-abcd1234-5678abcd"
+    operations = []
+    preferences = {"qa_fixture": probe.temporary.FINN_TEMP_QA_KIND,
+                   "finn_temp_qa": {"namespace": namespace, "lease": "secret",
+                                    "status": "active"}}
+
+    class Cursor:
+        rowcount = 1
+        def __enter__(self):
+            return self
+        def __exit__(self, *_args):
+            return None
+        def execute(self, query, _params):
+            operations.append(str(query))
+        def fetchone(self):
+            return (preferences,) if len(operations) == 1 else (1,)
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+        def commit(self):
+            operations.append("commit")
+        def rollback(self):
+            operations.append("rollback")
+        def close(self):
+            operations.append("close")
+
+    monkeypatch.setattr(probe.fixture, "_connection", lambda: Connection())
+    with pytest.raises(RuntimeError, match="finn_weekly_chain_emergency_live_bot_present"):
+        probe._emergency_revoke_child(11, namespace, "secret")
+    assert any("UPDATE users SET is_active=FALSE" in item for item in operations)
+    assert any("is_live=FALSE" in item for item in operations)
+    assert not any("UPDATE bot_configs" in item and "is_live=TRUE" in item for item in operations)
+    assert operations[-2:] == ["commit", "close"]
 
 
 def test_score2_match_paper_result_checks_match_before_execution():

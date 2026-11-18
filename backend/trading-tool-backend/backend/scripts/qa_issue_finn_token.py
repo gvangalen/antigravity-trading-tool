@@ -29,6 +29,7 @@ from sqlalchemy import select
 from backend.infrastructure.database import async_session_factory
 from backend.infrastructure.models import User
 from backend.utils.auth_utils import (ACCESS_TOKEN_EXPIRE_MINUTES, FINN_TEMP_QA_KIND,
+                                      FINN_TEMP_QA_WEEKLY_DCA_CAPABILITY,
                                       create_token)
 
 
@@ -103,9 +104,14 @@ async def _run() -> int:
         if not isinstance(lease.get("namespace"), str) or not isinstance(lease.get("lease"), str):
             print(json.dumps({"ok": False, "error": "temporary_lease_invalid"}))
             return 1
+        capability = lease.get("capability")
+        if capability not in (None, FINN_TEMP_QA_WEEKLY_DCA_CAPABILITY):
+            print(json.dumps({"ok": False, "error": "temporary_lease_invalid"}))
+            return 1
         claim = {"finn_temp_qa": {"kind": FINN_TEMP_QA_KIND,
                                   "namespace": lease["namespace"],
-                                  "lease": lease["lease"]}}
+                                  "lease": lease["lease"],
+                                  **({"capability": capability} if capability else {})}}
 
     token = create_token({"sub": str(user.id), "role": user.role, **claim},
                          timedelta(minutes=args.minutes), "access")

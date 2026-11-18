@@ -8,6 +8,10 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import text
+
+from backend.utils.auth_utils import FINN_TEMP_QA_WEEKLY_DCA_CAPABILITY
+
 from backend.scripts import probe_protected_manual_trade_temporary_matrix as temporary
 from backend.scripts import probe_protected_weekly_smart_dca_paper as weekly
 from backend.scripts import probe_protected_score2_stale_paper as fixture
@@ -37,6 +41,63 @@ def _issue_child_token(child: int, issuer: Path) -> str:
                 os.environ.pop(key, None)
             else:
                 os.environ[key] = value
+
+
+async def _grant_weekly_dca_capability(child: int, namespace: str, lease_secret: str) -> None:
+    from backend.infrastructure.database import async_session_factory
+
+    async with async_session_factory() as session:
+        updated = await session.execute(text("""
+            UPDATE users SET ai_preferences=jsonb_set(
+                ai_preferences, '{finn_temp_qa,capability}', to_jsonb(CAST(:capability AS text)))
+            WHERE id=:child AND is_active=TRUE
+              AND ai_preferences->>'qa_fixture'=:kind
+              AND ai_preferences->'finn_temp_qa'->>'namespace'=:namespace
+              AND ai_preferences->'finn_temp_qa'->>'lease'=:lease
+              AND ai_preferences->'finn_temp_qa'->>'status'='active'
+              AND ai_preferences->'finn_temp_qa'->>'capability' IS NULL
+        """), {
+            "child": child, "kind": temporary.FINN_TEMP_QA_KIND,
+            "namespace": namespace, "lease": lease_secret,
+            "capability": FINN_TEMP_QA_WEEKLY_DCA_CAPABILITY,
+        })
+        if updated.rowcount != 1:
+            raise RuntimeError("finn_weekly_chain_capability_binding_failed")
+        await session.commit()
+
+
+def _emergency_revoke_child(child: int, namespace: str, lease_secret: str) -> None:
+    """Disable only the exact marked child if normal lease revocation fails."""
+    conn = fixture._connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT ai_preferences FROM users WHERE id=%s FOR UPDATE", (child,))
+            row = cur.fetchone()
+            preferences = row[0] if row and isinstance(row[0], dict) else {}
+            lease = preferences.get("finn_temp_qa")
+            if (preferences.get("qa_fixture") != temporary.FINN_TEMP_QA_KIND
+                    or not isinstance(lease, dict)
+                    or lease.get("namespace") != namespace
+                    or lease.get("lease") != lease_secret
+                    or lease.get("status") not in {"preparing", "active", "revoked"}):
+                raise RuntimeError("finn_weekly_chain_emergency_revoke_binding_wrong")
+            cur.execute("""UPDATE users SET is_active=FALSE,
+                           ai_preferences=jsonb_set(ai_preferences,
+                               '{finn_temp_qa,status}',to_jsonb('revoked'::text))
+                           WHERE id=%s""", (child,))
+            if cur.rowcount != 1:
+                raise RuntimeError("finn_weekly_chain_emergency_revoke_failed")
+            cur.execute("UPDATE bot_configs SET is_active=FALSE WHERE user_id=%s AND is_live=FALSE", (child,))
+            cur.execute("SELECT COUNT(*) FROM bot_configs WHERE user_id=%s AND is_live=TRUE", (child,))
+            live_bot_present = bool(cur.fetchone()[0])
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+    if live_bot_present:
+        raise RuntimeError("finn_weekly_chain_emergency_live_bot_present")
 
 
 def _chat_create_plan(base_url: str, child_token: str, parent_token: str,
@@ -69,10 +130,10 @@ def _chat_create_plan(base_url: str, child_token: str, parent_token: str,
         second = run_gate(
             base_url=base_url, bearer_token=child_token, timeout_seconds=100,
             conversation_id=first["conversation_id"],
-            message=("Mijn scoregrenzen zijn: onder 26 zwak (€300), 26 tot en met 75 midden "
-                     "(€200), vanaf 76 sterk (€100). Dat is 150/100/50 procent van €200. "
-                     "Maak de bevestigbare BTC/USDT-setup en gekoppelde strategie voor dit "
-                     "wekelijkse plan zonder vaste dag. Maak nog geen bot en koop niets."),
+            message=("Gebruik onder 26 voor laag: 150% van €200. Van 26 tot onder 76 is midden: "
+                     "100%. Vanaf 76 is hoog: 50%. BTC/USDT, wekelijks zonder vaste dag, "
+                     "volledige benchmark. Maak de bevestigbare setupkaart en gekoppelde strategie; "
+                     "geen bot of order."),
         )
     except (AssertionError, TimeoutError) as error:
         raise RuntimeError("finn_weekly_chain_second_turn_transport_failed") from error
@@ -92,7 +153,8 @@ def _chat_create_plan(base_url: str, child_token: str, parent_token: str,
     finally:
         conn.close()
     expected = {
-        "symbol": "BTC", "quote_currency": "USDT", "dca_frequency": "weekly",
+        "symbol": "BTC", "quote_currency": "USDT", "timeframe": "1D",
+        "score_source": "benchmark_score", "dca_frequency": "weekly",
         "dca_trigger_mode": "benchmark", "dca_amount_mode": "score_bands",
         "dca_day": None, "base_amount": 200, "low_threshold": 26,
         "high_threshold": 76, "low_score_percent": 150,
@@ -119,7 +181,8 @@ def _chat_create_plan(base_url: str, child_token: str, parent_token: str,
                 """SELECT s.id,s.symbol,s.market_id,s.timeframe,s.setup_type,
                           s.dca_frequency,s.dca_trigger_mode,s.dca_day,s.dca_month_day,
                           st.id,st.setup_id,st.symbol,st.market_id,st.execution_mode,
-                          st.base_amount,st.decision_curve,st.data
+                          st.base_amount,st.decision_curve,st.data,
+                          s.min_benchmark_score,s.max_benchmark_score
                    FROM setups s JOIN strategies st ON st.setup_id=s.id AND st.user_id=s.user_id
                    WHERE s.user_id=%s AND s.name=%s ORDER BY st.id""",
                 (child, name),
@@ -134,10 +197,10 @@ def _chat_create_plan(base_url: str, child_token: str, parent_token: str,
         if (row[1:9] != ("BTC", market_id, "1D", "dca", "weekly", "benchmark", None, None)
                 or row[10] != row[0] or row[11:14] != ("BTC", market_id, "custom")
                 or float(row[14]) != 200.0 or row[15] != expected_strategy["decision_curve"]
-                or (row[16] or {}).get("dca_amount_semantics") != "planned_exact"):
+                or (row[16] or {}).get("dca_amount_semantics") != "planned_exact"
+                or row[17:19] != (0, 100)):
             raise RuntimeError("finn_weekly_chain_saved_plan_wrong")
         return int(row[0]), int(row[9]), {
-            "first_run_id": first["run_id"], "proposal_run_id": second["run_id"],
             "proposal_confirmed": True, "replay": "already_executed",
             "owner_isolation": True,
         }
@@ -336,10 +399,12 @@ def run(namespace: str, *, base_url: str, parent_token: str, issuer: Path) -> di
         conn.close()
     child = None
     revoked = False
+    lease_secret = None
     try:
         lease_secret = secrets.token_urlsafe(32)
         child, parent_hash = temporary._db(temporary._create_child(parent, namespace, lease_secret))
         temporary._db(temporary._extend_lease(child, namespace, lease_secret))
+        temporary._db(_grant_weekly_dca_capability(child, namespace, lease_secret))
         child_token = _issue_child_token(child, issuer)
         setup_id, strategy_id, chat = _chat_create_plan(
             base_url, child_token, parent_token, child, namespace, market_id,
@@ -353,9 +418,26 @@ def run(namespace: str, *, base_url: str, parent_token: str, issuer: Path) -> di
         _assert_bot_link(child, bot_id, setup_id, strategy_id)
     finally:
         if child is not None:
+            normal_revoke_failed = False
             if not revoked:
-                temporary._db(temporary._revoke_child(child, namespace))
-            _cleanup(child, namespace)
+                try:
+                    temporary._db(temporary._revoke_child(child, namespace))
+                except Exception:
+                    normal_revoke_failed = True
+                    try:
+                        _emergency_revoke_child(child, namespace, lease_secret)
+                    except Exception:
+                        pass
+            try:
+                _cleanup(child, namespace)
+            except Exception:
+                try:
+                    _emergency_revoke_child(child, namespace, lease_secret)
+                except Exception:
+                    pass
+                raise RuntimeError("finn_weekly_chain_cleanup_failed") from None
+            if normal_revoke_failed:
+                raise RuntimeError("finn_weekly_chain_revocation_fallback_used") from None
     if temporary._db(_parent_hash(parent)) != parent_hash:
         raise RuntimeError("finn_weekly_chain_parent_state_changed")
     return {**result, **chat, "saved_setup_strategy_link": True,

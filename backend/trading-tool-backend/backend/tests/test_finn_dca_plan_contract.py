@@ -145,6 +145,7 @@ def test_inverse_smart_dca_uses_flexible_weekly_score_trigger_and_exact_amounts(
     })
     assert setup["dca_trigger_mode"] == "benchmark"
     assert setup.get("dca_day") is None
+    assert (setup["min_benchmark_score"], setup["max_benchmark_score"]) == (0, 100)
     assert is_confirmed_dca_amount_rule({**strategy, "setup_type": "dca"})
     assert dca_due_on_date(setup, date(2026, 11, 17))
     assert dca_execution_period(setup, date(2026, 11, 17)) == (
