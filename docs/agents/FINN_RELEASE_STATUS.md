@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Smart DCA vrijdag- en vaste-DCA-vervolgreparatie (18 november 2026)
 
-Phase: `BUILD_LOCAL_VALIDATION`. Onafhankelijke browser-QA accepteerde de
+Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA_RETEST`. Onafhankelijke browser-QA accepteerde de
 begeleide flow op live SHA `ad2384eecaa94a91de723fc1d2d7cd8fe1338548`
 niet: een volledig ingevulde Smart DCA met vrijdag, wekelijkse limiet en
 scorestaffels werd twee keer als niet-afdwingbare voorwaarde geweigerd, ook
@@ -31,8 +31,18 @@ vond geen resterende blokkade na het uitsluiten van extra verzamelde
 financiële velden van de begrensde controle. De echte
 provider-developmentselectie slaagde 20/20 en de regressionselectie
 109/109, beide zonder provider-, schema-, timeout-, parse- of validatiefout.
-CI en live QA volgen nog op deze nieuwe kandidaat; er is nog geen nieuw live
-verdict.
+De vijf PR-CI-jobs voor
+[PR #1187](https://github.com/gvangalen/antigravity-trading-tool/pull/1187)
+slaagden in [run 44400101682](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44400101682).
+De vijf main-CI-jobs slaagden in
+[run 44401280726](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44401280726)
+en [Auto Deploy 44402156428](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44402156428)
+slaagde. GitHub main, publieke backend-health (HTTP 200) en
+frontend-buildinfo (HTTP 200) meldden alle drie SHA
+`600782369de9e2303d885fa4304a03f3d21f0f76`. Dit is deploymentbewijs,
+geen ingelogde acceptatie. Deze statuswijziging creëert zelf een latere
+main-SHA; de laatste CI, Auto Deploy en publieke identiteit worden opnieuw
+gecontroleerd vóór de QA-handoff. Er is nog geen nieuw live verdict.
 
 ## Smart DCA begeleide chatreparatie (18 november 2026)
 
