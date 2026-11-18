@@ -164,6 +164,24 @@ def main() -> None:
     named_fields = dict(dict(named_payload.get("change") or {}).get("setup_fields") or {})
     assert named_fields["name"] == "BTC Smart DCA Default Local"
     assert named_fields["timeframe"] == "1D"
+    fixed = run_gate(
+        base_url=base_url, bearer_token=token, timeout_seconds=100,
+        message=("Maak een gewone vaste DCA-setup voor BTC/USDT met naam "
+                 "BTC Vaste DCA Local. Grafiek 1D, iedere vrijdag €200, "
+                 "maximaal één aankoop per week. Het bedrag blijft altijd €200, "
+                 "ongeacht de Markt-, Macro- of Technisch-score. Toon eerst de conceptkaart."),
+    )
+    fixed_record = _runtime_record(fixed["run_id"])
+    assert fixed["status"] == "completed" and fixed["final_operation_id"] == "create_setup"
+    assert fixed_record["proposal"]
+    with sync_engine.connect() as connection:
+        fixed_payload = connection.execute(text(
+            "SELECT payload_json FROM finn_v2_proposals WHERE id = :id"
+        ), {"id": fixed_record["proposal"]["id"]}).scalar_one()
+    fixed_fields = dict(dict(fixed_payload.get("change") or {}).get("setup_fields") or {})
+    assert fixed_fields["dca_amount_mode"] == "fixed"
+    assert fixed_fields["base_amount"] == 200
+    assert fixed_fields["dca_frequency"] == "weekly" and fixed_fields["dca_day"] == "friday"
     print("smart_dca_confirmed_runtime: proposal, confirmation, save and replay passed")
 
 

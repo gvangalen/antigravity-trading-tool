@@ -112,7 +112,8 @@ class FinnResponsesToolRelevanceGuard:
         fields = {
             key: value for key, value in collected_inputs.items()
             if key in {
-                "setup_type", "symbol", "quote_currency", "timeframe", "dca_frequency", "dca_day",
+                "setup_type", "symbol", "quote_currency", "timeframe", "dca_frequency",
+                "dca_trigger_mode", "dca_day",
                 "dca_month_day", "dca_amount_mode", "base_amount", "score_source",
                 "low_threshold", "high_threshold", "low_score_percent",
                 "mid_score_percent", "high_score_percent", "min_benchmark_score",
@@ -132,9 +133,13 @@ class FinnResponsesToolRelevanceGuard:
                         "trend or 4H confirmation. A validated typed entry_signal in a "
                         "combined setup-and-strategy plan does enforce the represented "
                         "closed-candle crossing after confirmation. A description is only a note and is not "
-                        "enforced. For DCA, a fixed amount, scheduled cadence and weekday "
-                        "are already represented by the amount mode, amount and schedule "
-                        "fields; they are not additional market-entry conditions. "
+                        "enforced. For DCA, a fixed amount, scheduled cadence, weekday and "
+                        "at-most-one purchase per frequency period are represented by the "
+                        "amount mode, amount and schedule fields; they are not additional "
+                        "market-entry conditions. A calendar-triggered Smart DCA may SCALE "
+                        "its amount using the complete benchmark score on the chosen day. "
+                        "That combination is represented by dca_trigger_mode=calendar, "
+                        "dca_day, score_source, the thresholds and all score-percent fields. "
                         "For score-triggered Smart DCA, dca_trigger_mode=benchmark "
                         "means there is no fixed buying day: at most one purchase per "
                         "dca_frequency period is eligible when a complete benchmark "
@@ -148,8 +153,9 @@ class FinnResponsesToolRelevanceGuard:
                         "Replacing an unfinished setup's asset (for example 'make a new "
                         "setup for Apple instead of ETH') is also a target correction, not "
                         "a trading rule. Asking FINN to suggest a name is not a rule. "
-                        "A request to show a proposal without confirming it defines the "
-                        "consent boundary, not an execution rule. "
+                        "A request to show a proposal without confirming it, including "
+                        "'koop niets' for now, defines the consent boundary, not a "
+                        "persistent execution rule. "
                         "Do not invent a score threshold from phrases like 'market "
                         "not under pressure'. Treat 'only buy if', 'do not enter unless', "
                         "'enter once', and equivalent phrasing in any language as a required "

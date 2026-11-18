@@ -4,6 +4,36 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Smart DCA vrijdag- en vaste-DCA-vervolgreparatie (18 november 2026)
+
+Phase: `BUILD_LOCAL_VALIDATION`. Onafhankelijke browser-QA accepteerde de
+begeleide flow op live SHA `ad2384eecaa94a91de723fc1d2d7cd8fe1338548`
+niet: een volledig ingevulde Smart DCA met vrijdag, wekelijkse limiet en
+scorestaffels werd twee keer als niet-afdwingbare voorwaarde geweigerd, ook
+zonder "koop niets". Een gewone vaste DCA met tweemaal hetzelfde genoemde
+bedrag vroeg onnodig opnieuw naar bedrag en modus. De beschermde
+[Paper-proef 44394110672](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44394110672)
+slaagde wel: één aankoop van €200, weekblokkade, replay en cleanup. Die
+proef gebruikte expliciet geen koopdag en bewijst de vrijdagvariant niet.
+
+De nieuwe reparatie herkent alleen een volledig begrensde, veld-voor-veld
+gecontroleerde vrijdagse Smart DCA als afgedekte regel; aanvullende tekst en
+extra verzamelde financiële velden blijven in de fail-closed semantische
+controle. De controle krijgt nu ook de
+opgeslagen kalendertrigger en toelichting op scorestaffels op een vaste dag.
+Identieke herhaalde eurobedragen en "ongeacht de score" worden bij vaste DCA
+als één vast bedrag gelezen. De gerichte tests slaagden 11/11 en de volledige
+backend-suite 5067/5067 (7 overgeslagen). De definitieve lokale
+FINN-actiematrix slaagde 17/17 en adapters 27/27; de Smart DCA- en
+kalender-DCA-opslagproeven slaagden. Frontend-typecheck, i18n-, command-,
+proposal- en setup-tests, productiebuild en `audit:high` slaagden. Security
+vond geen resterende blokkade na het uitsluiten van extra verzamelde
+financiële velden van de begrensde controle. De echte
+provider-developmentselectie slaagde 20/20 en de regressionselectie
+109/109, beide zonder provider-, schema-, timeout-, parse- of validatiefout.
+CI en live QA volgen nog op deze nieuwe kandidaat; er is nog geen nieuw live
+verdict.
+
 ## Smart DCA begeleide chatreparatie (18 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA_RETEST`. Onafhankelijke browser-QA op live SHA

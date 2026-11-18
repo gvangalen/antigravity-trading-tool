@@ -32,6 +32,38 @@ def test_guided_dca_reply_keeps_cadence_and_weekday_from_one_sentence():
     assert continued.next_missing_input == "dca_amount_mode"
 
 
+def test_fixed_dca_does_not_ask_again_for_repeated_same_amount_or_score_mode():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message=(
+            "Maak een gewone vaste DCA-setup voor BTC/USDT met naam BTC Vaste DCA QA 1811K. "
+            "Grafiek 1D, iedere vrijdag €200, maximaal één aankoop per week. "
+            "Het bedrag blijft altijd €200, ongeacht de Markt-, Macro- of Technisch-score. "
+            "Toon eerst de conceptkaart."
+        ),
+        explicit_asset="BTC", conversation_context={},
+        supplied_inputs={"symbol": "BTC", "setup_type": "dca"}, model_tool_inputs=True,
+    )
+    assert state.status == "complete"
+    assert state.collected_inputs["dca_amount_mode"] == "fixed"
+    assert state.collected_inputs["base_amount"] == 200
+    assert state.collected_inputs["dca_frequency"] == "weekly"
+    assert state.collected_inputs["dca_day"] == "friday"
+
+
+def test_fixed_dca_does_not_guess_between_different_euro_amounts():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message=("Maak een vaste BTC/USDT DCA-setup met naam BTC DCA. "
+                 "Koop iedere vrijdag €200 of €300, ongeacht de score."),
+        explicit_asset="BTC", conversation_context={},
+        supplied_inputs={"symbol": "BTC", "setup_type": "dca"}, model_tool_inputs=True,
+    )
+    assert state.collected_inputs.get("base_amount") is None
+
+
 def test_explicit_setup_only_dca_keeps_eligibility_and_needs_no_strategy_amount():
     contract = FinnV2OperationRegistry().require_supported("create_setup")
     state = FinnV2OperationStateService().resolve(
