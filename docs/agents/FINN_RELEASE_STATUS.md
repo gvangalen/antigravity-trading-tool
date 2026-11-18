@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Smart DCA naam- en grafiekperiode-extractie (18 november 2026)
 
-Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA_RETEST`. Onafhankelijke browser-QA
+Phase: `QA_ACCEPTED_TARGETED_SMART_DCA_SCOPE`. Onafhankelijke browser-QA
 wees live SHA `838b94823dfb5b910be2409d221bbbe50b24190a` af: een code
 `1811M` aan het einde van de setupnaam werd ten onrechte als grafiekperiode
 gebruikt, en bij een tweede vraag werd `en grafiek 1D` aan de naam toegevoegd
@@ -33,9 +33,23 @@ De vijf main-CI-jobs slaagden in
 en [Auto Deploy 44411344568](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44411344568)
 slaagde. GitHub main, publieke backend-health (HTTP 200) en frontend-buildinfo
 (HTTP 200) meldden alle drie SHA `c57136a1caca6354f3b6a71c06a2403697f35a23`.
-Dit is deploymentbewijs, geen ingelogde acceptatie. Deze statuswijziging
-creëert zelf een latere main-SHA; de laatste CI, Auto Deploy en publieke
-identiteit worden opnieuw gecontroleerd vóór de QA-handoff.
+De vijf CI-jobs op de daaropvolgende statuscommit slaagden in
+[run 44412756949](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44412756949)
+en [Auto Deploy 44413681523](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44413681523)
+slaagde. GitHub main, backend-health en frontend-buildinfo (beide HTTP 200)
+meldden daarna alle drie SHA `7e3052419844b3ca23fe517876d8e5d47ac1ed59`;
+er stond geen nieuwere deploy klaar. Onafhankelijke ingelogde browser-QA
+accepteerde de afgesproken hertests op exact die SHA: beide oorspronkelijke
+naam/grafiekperiode-fouten zijn weg, de vrijdag- en vaste-DCA-kaarten zijn
+correct, een niet-controleerbare trendvoorwaarde en directe koopopdracht
+leverden geen bevestigbare kaart of order op. De browserconcepten bleven
+onbevestigd. De beschermde
+[Paper-run 44414751845](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44414751845)
+bevestigde eigenaar-gebonden opslag, `already_executed`-replay, één Paper-aankoop
+van €200 bij benchmarkscore 40, een tweede aankoop in dezelfde week geblokkeerd
+en cleanup, zonder Live-calls of Live-botactivaties. SHA-256 van het gesaniteerde
+QA-artifact: `bf39f16dbd0afca963bb66328410d43e16b11593a34d923a29e3d8c2898896c8`.
+Dit is acceptatie van deze gerichte scope, geen volledige FINN-matrix.
 
 ## Smart DCA vrijdag- en vaste-DCA-vervolgreparatie (18 november 2026)
 
