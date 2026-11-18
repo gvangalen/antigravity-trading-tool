@@ -137,7 +137,9 @@ def _configure(user_id: int, bot_id: int, market_id: int) -> None:
 
 
 def _next_same_week(today: date) -> date:
-    return today + timedelta(days=1 if today.weekday() < 6 else -1)
+    if today.weekday() == 6:
+        raise RuntimeError("weekly_smart_dca_date_boundary_unavailable")
+    return today + timedelta(days=1)
 
 
 def _copy_score_for_second_day(user_id: int, market_id: int, first: date, second: date) -> None:
@@ -280,6 +282,7 @@ def run(namespace: str) -> dict:
         local_today = datetime.now(ZoneInfo("Europe/Amsterdam")).date()
         if first != local_today:
             raise RuntimeError("weekly_smart_dca_date_boundary_unavailable")
+        second = _next_same_week(first)
         result = build_daily_scores_for_market(user_id, market_id)
         if any(score is None for score in result["scores"].values()):
             raise RuntimeError("weekly_smart_dca_scores_incomplete")
@@ -294,7 +297,6 @@ def run(namespace: str) -> dict:
         if (not replay.get("ok") or replay.get("decisions")
                 or (replay.get("skip_reasons") or {}).get(bot_id) != "already_pending_or_executed"):
             raise RuntimeError("weekly_smart_dca_replay_not_blocked")
-        second = _next_same_week(first)
         _copy_score_for_second_day(user_id, market_id, first, second)
         second_result = run_trading_bot_execution(
             user_id, report_date=second, bot_id=bot_id, paper_only=True,

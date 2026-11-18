@@ -751,9 +751,11 @@ def test_weekly_smart_dca_profile_is_protected_and_uses_same_week(monkeypatch):
     assert probe._require_protected_run(namespace) == 42
     with pytest.raises(RuntimeError, match="stale_fixture_namespace_invalid"):
         probe._require_protected_run("../unsafe")
-    for day in (date(2026, 11, 16), date(2026, 11, 18), date(2026, 11, 22)):
+    for day in (date(2026, 11, 16), date(2026, 11, 18)):
         second = probe._next_same_week(day)
-        assert second != day and second.isocalendar()[:2] == day.isocalendar()[:2]
+        assert second > day and second.isocalendar()[:2] == day.isocalendar()[:2]
+    with pytest.raises(RuntimeError, match="weekly_smart_dca_date_boundary_unavailable"):
+        probe._next_same_week(date(2026, 11, 22))
 
 
 def test_weekly_smart_dca_verifier_checks_fill_ledger_cash_and_no_second_order(monkeypatch):
