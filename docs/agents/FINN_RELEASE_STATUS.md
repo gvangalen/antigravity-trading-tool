@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Smart DCA begeleide chatreparatie (18 november 2026)
 
-Phase: `BUILD_LOCAL_VALIDATION`. Onafhankelijke browser-QA op live SHA
+Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA_RETEST`. Onafhankelijke browser-QA op live SHA
 `a3696321468e916a97a03fba285beb094a386235` vond de scoregestuurde
 conceptkaart zonder koopdag en de expliciete vrijdagkaart correct, maar
 accepteerde de begeleide chatflow niet. De reeks met "maximaal één aankoop per
@@ -25,9 +25,19 @@ de kalender-DCA-proef. Frontend-typecheck, i18n-controle en -tests,
 command-, proposal- en setup-tests en productiebuild slaagden; `audit:high`
 vond nul kwetsbaarheden. De echte provider-developmentselectie slaagde
 20/20 en de regressionselectie 109/109, beide zonder provider-, schema-,
-timeout-, parse- of validatiefout. CI, deployment en onafhankelijke live QA
-volgen. Een voorstel blijft onbevestigd
-totdat de gebruiker het goedkeurt.
+timeout-, parse- of validatiefout. De vijf PR-CI-jobs voor
+[PR #1185](https://github.com/gvangalen/antigravity-trading-tool/pull/1185)
+slaagden in [run 44388438193](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44388438193).
+De vijf main-CI-jobs slaagden in
+[run 44389696497](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44389696497)
+en [Auto Deploy 44390615732](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44390615732)
+slaagde. GitHub main, publieke backend-health (HTTP 200) en
+frontend-buildinfo (HTTP 200) meldden alle drie SHA
+`ab1c7a00bd41e42c8f54f20f1ea8fa7f7477dfc8`. Dit is deploymentbewijs,
+geen ingelogde acceptatie. Deze statuswijziging creëert zelf een latere
+main-SHA; de laatste CI, Auto Deploy en publieke identiteit worden opnieuw
+gecontroleerd vóór de QA-handoff. Een voorstel blijft onbevestigd totdat de
+gebruiker het goedkeurt.
 
 ## Smart DCA zonder vaste koopdag (18 november 2026)
 
