@@ -93,6 +93,7 @@ CAPACITY_FIXTURE_ROUTES = frozenset({
 
 
 FINN_TEMP_QA_KIND = "manual_trade_temporary_v1"
+FINN_TEMP_QA_WEEKLY_DCA_CAPABILITY = "weekly_smart_dca_create_setup_v1"
 FINN_TEMP_QA_ROUTE_RULES = (
     ("GET", re.compile(r"/api/auth/me")),
     ("POST", re.compile(r"/api/assistant/v2/runs")),
@@ -104,6 +105,30 @@ FINN_TEMP_QA_ROUTE_RULES = (
 )
 FINN_TEMP_QA_PROPOSAL_WRITE = re.compile(
     r"/api/assistant/v2/proposals/([A-Za-z0-9_-]+)/(?:publish|confirm|execute)")
+
+
+def _temporary_weekly_dca_proposal_allowed(proposal: Any, namespace: str) -> bool:
+    """Limit the extra QA write capability to the exact synthetic Paper plan."""
+    if proposal is None or proposal.operation_type != "create_setup":
+        return False
+    payload = proposal.payload_json
+    change = payload.get("change") if isinstance(payload, dict) else None
+    fields = change.get("setup_fields") if isinstance(change, dict) else None
+    if not isinstance(fields, dict):
+        return False
+    expected = {
+        "name": f"Smart DCA {namespace}", "symbol": "BTC", "quote_currency": "USDT",
+        "timeframe": "1D", "setup_type": "dca", "dca_frequency": "weekly",
+        "dca_trigger_mode": "benchmark", "dca_amount_mode": "score_bands",
+        "score_source": "benchmark_score", "base_amount": 200,
+        "low_threshold": 26, "high_threshold": 76,
+        "low_score_percent": 150, "mid_score_percent": 100,
+        "high_score_percent": 50,
+    }
+    if set(fields) - (set(expected) | {"dca_day", "dca_month_day"}):
+        return False
+    return (all(fields.get(key) == value for key, value in expected.items())
+            and fields.get("dca_day") is None and fields.get("dca_month_day") is None)
 
 
 async def _validate_finn_temp_qa_token(payload: Dict[str, Any], request: Request,
@@ -139,6 +164,7 @@ async def _validate_finn_temp_qa_token(payload: Dict[str, Any], request: Request
                 FinnV2Proposal.user_id == subject))).scalar_one_or_none()
     preferences = user.ai_preferences if user is not None else None
     lease = preferences.get("finn_temp_qa") if isinstance(preferences, dict) else None
+    capability = fixture.get("capability")
     if (user is None or user.is_active is not True or user.role != "user"
             or not isinstance(preferences, dict)
             or preferences.get("qa_fixture") != FINN_TEMP_QA_KIND
@@ -146,6 +172,8 @@ async def _validate_finn_temp_qa_token(payload: Dict[str, Any], request: Request
             or lease.get("namespace") != fixture["namespace"]
             or lease.get("lease") != fixture["lease"]
             or lease.get("status") != "active"
+            or capability not in (None, FINN_TEMP_QA_WEEKLY_DCA_CAPABILITY)
+            or capability != lease.get("capability")
             or not isinstance(lease.get("expires_at"), str)):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Temporary QA lease inactive")
@@ -156,10 +184,16 @@ async def _validate_finn_temp_qa_token(payload: Dict[str, Any], request: Request
     except ValueError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Temporary QA lease expired")
-    if proposal_match is not None and (
-            proposal is None or proposal.operation_type != "create_manual_trade_plan"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                            detail="Temporary QA token permits only manual trade plans")
+    if proposal_match is not None:
+        permitted = (
+            (capability is None and proposal is not None
+             and proposal.operation_type == "create_manual_trade_plan")
+            or (capability == FINN_TEMP_QA_WEEKLY_DCA_CAPABILITY
+                and _temporary_weekly_dca_proposal_allowed(proposal, fixture["namespace"]))
+        )
+        if not permitted:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail="Temporary QA proposal is outside its scoped capability")
 
 
 def decode_token(token: str, *, verify_exp: bool = True,

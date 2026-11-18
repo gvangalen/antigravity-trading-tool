@@ -120,6 +120,12 @@ def split_confirmed_dca_plan(fields: dict[str, Any]) -> tuple[dict[str, Any], di
     if fields.get("dca_frequency") is not None and fields.get("dca_frequency") not in {"daily", "weekly", "monthly"}:
         raise ValueError("dca_frequency_required")
     setup_fields = {key: value for key, value in fields.items() if key not in _AMOUNT_FIELDS}
+    if trigger_mode == "benchmark" and setup_fields.get("min_benchmark_score") is None and setup_fields.get("max_benchmark_score") is None:
+        # A score-banded amount rule needs an assessable setup for every
+        # complete benchmark score. The curve determines the amount; these
+        # bounds let the Paper evaluator reach that curve.
+        setup_fields["min_benchmark_score"] = 0
+        setup_fields["max_benchmark_score"] = 100
     mode = fields.get("dca_amount_mode")
     strategy_fields: dict[str, Any] = {
         "name": f"{str(fields.get('name') or '').strip()} Strategy",

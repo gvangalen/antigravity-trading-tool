@@ -180,8 +180,11 @@ class FinnResponsesToolRelevanceGuard:
                 ), timeout=timeout,
             )
             verdict = json.loads(str(getattr(response, "output_text", "") or "")).get("verdict")
+            if verdict == "unclear":
+                logger.info("FINN setup-rule coverage returned unclear")
             return verdict if verdict in {"none", "unsupported_required_rule", "unclear"} else "unclear"
-        except Exception:
+        except Exception as error:
+            logger.warning("FINN setup-rule coverage unavailable: %s", type(error).__name__)
             return "unclear"
 
     async def immediate_bot_target(self, *, message: str) -> str:

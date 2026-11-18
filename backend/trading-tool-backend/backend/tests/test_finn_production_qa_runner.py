@@ -840,6 +840,165 @@ def test_weekly_smart_dca_verifier_checks_fill_ledger_cash_and_no_second_order(m
         probe._verify(11, 12, 7, first, second)
 
 
+def test_finn_weekly_chain_profile_is_protected_and_does_not_seed_plan(monkeypatch):
+    from backend.scripts import probe_protected_finn_weekly_smart_dca_chain as probe
+
+    module = _module()
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    dispatch = DISPATCH_SCRIPT_PATH.read_text(encoding="utf-8")
+    source = Path(probe.__file__).read_text(encoding="utf-8")
+    assert "score2_finn_weekly_smart_dca_chain" in module.ALLOWED_PROFILES
+    assert "score2_finn_weekly_smart_dca_chain" in workflow
+    assert "score2_finn_weekly_smart_dca_chain" in dispatch
+    assert "FINN_QA_ALLOW_FINN_WEEKLY_CHAIN_FIXTURE=0" in workflow
+    assert "FINN_QA_ALLOW_FINN_WEEKLY_CHAIN_FIXTURE=1" in workflow
+    assert "INSERT INTO setups" not in source and "INSERT INTO strategies" not in source
+    assert "paper_only=True" in source and "_delete_child" in source
+    assert "finn_v2_conversations" in source and "finn_v2_proposals" in source
+    monkeypatch.delenv("FINN_QA_ALLOW_FINN_WEEKLY_CHAIN_FIXTURE", raising=False)
+    with pytest.raises(RuntimeError, match="finn_weekly_chain_fixture_not_authorized"):
+        probe._require_protected_run("qa-123456-1-abcd1234-5678abcd")
+    assert module.profile_error_category(
+        "score2_finn_weekly_smart_dca_chain", RuntimeError("finn_weekly_chain_bot_strategy_link_wrong"),
+    ) == "finn_weekly_chain_bot_strategy_link_wrong"
+    assert module.profile_error_category(
+        "score2_finn_weekly_smart_dca_chain", RuntimeError("private user data"),
+    ) == "finn_weekly_chain_runner_error"
+    assert module.profile_error_category(
+        "score2_finn_weekly_smart_dca_chain",
+        RuntimeError("finn_weekly_chain_private_user_data"),
+    ) == "finn_weekly_chain_runner_error"
+
+
+def test_finn_weekly_chain_child_token_binding_is_restored(monkeypatch):
+    from backend.scripts import probe_protected_finn_weekly_smart_dca_chain as probe
+    from backend.scripts import run_finn_production_qa as runner
+
+    monkeypatch.setenv("FINN_QA_USER_ID", "7")
+    monkeypatch.delenv("FINN_QA_TEMP_CHILD_RUN", raising=False)
+    def issue(*, issuer):
+        assert issuer == Path("issuer")
+        assert os.environ["FINN_QA_USER_ID"] == "11"
+        assert os.environ["FINN_QA_TEMP_CHILD_RUN"] == "1"
+        return "in-memory-only"
+    monkeypatch.setattr(runner, "issue_fixture_token", issue)
+    assert probe._issue_child_token(11, Path("issuer")) == "in-memory-only"
+    assert os.environ["FINN_QA_USER_ID"] == "7"
+    assert "FINN_QA_TEMP_CHILD_RUN" not in os.environ
+
+
+def test_finn_weekly_chain_uses_saved_strategy_and_cleans_child(monkeypatch):
+    from backend.scripts import probe_protected_finn_weekly_smart_dca_chain as probe
+
+    calls = []
+    today = datetime.now(probe.ZoneInfo("Europe/Amsterdam")).date()
+    if today.weekday() == 6:
+        pytest.skip("Sunday is an intentional pre-fixture boundary")
+
+    class Cursor:
+        def __enter__(self):
+            return self
+        def __exit__(self, *_args):
+            return None
+        def execute(self, *_args):
+            pass
+        def fetchone(self):
+            return (today,)
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+        def close(self):
+            pass
+
+    monkeypatch.setattr(probe, "_require_protected_run", lambda _namespace: 7)
+    monkeypatch.setattr(probe.weekly, "_source", lambda: 9)
+    monkeypatch.setattr(probe.fixture, "_connection", lambda: Connection())
+    monkeypatch.setattr(probe.temporary, "_db", lambda value: value)
+    monkeypatch.setattr(probe.temporary, "_create_child", lambda *_args: (11, "parent-hash"))
+    monkeypatch.setattr(probe.temporary, "_extend_lease", lambda *_args: None)
+    monkeypatch.setattr(probe, "_grant_weekly_dca_capability", lambda *_args: calls.append("grant"))
+    monkeypatch.setattr(probe.temporary, "_revoke_child", lambda *_args: calls.append("revoke"))
+    monkeypatch.setattr(probe, "_issue_child_token", lambda *_args: "in-memory-token")
+    monkeypatch.setattr(probe, "_chat_create_plan", lambda *_args: (13, 17, {"proposal_confirmed": True}))
+    monkeypatch.setattr(probe, "_seed_paper_bot", lambda child, strategy, *_args: (
+        calls.append(("bot", child, strategy)) or 19
+    ))
+    monkeypatch.setattr(probe, "_assert_bot_link", lambda child, bot, setup, strategy: (
+        calls.append(("link", child, bot, setup, strategy))
+    ))
+    monkeypatch.setattr(probe, "_run_paper", lambda child, bot, *_args: (
+        calls.append(("paper", child, bot)) or {"result": "PASS"}
+    ))
+    monkeypatch.setattr(probe, "_cleanup", lambda *_args: calls.append("cleanup"))
+    monkeypatch.setattr(probe, "_parent_hash", lambda *_args: "parent-hash")
+    result = probe.run("qa-123456-1-abcd1234-5678abcd", base_url="https://example.test",
+                       parent_token="in-memory-parent-token", issuer=Path("issuer"))
+    assert result["cleanup_verified"] is True
+    assert calls == ["grant", "revoke", ("bot", 11, 17), ("link", 11, 19, 13, 17),
+                     ("paper", 11, 19), ("link", 11, 19, 13, 17), "cleanup"]
+
+    calls.clear()
+    def fail_chat(*_args):
+        raise RuntimeError("finn_weekly_chain_proposal_missing")
+    monkeypatch.setattr(probe, "_chat_create_plan", fail_chat)
+    with pytest.raises(RuntimeError, match="finn_weekly_chain_proposal_missing"):
+        probe.run("qa-123456-1-abcd1234-5678abcd", base_url="https://example.test",
+                  parent_token="in-memory-parent-token", issuer=Path("issuer"))
+    assert calls == ["grant", "revoke", "cleanup"]
+
+    calls.clear()
+    monkeypatch.setattr(probe, "_chat_create_plan", lambda *_args: (
+        13, 17, {"proposal_confirmed": True}))
+    def fail_revoke(*_args):
+        raise RuntimeError("temporary_qa_revoke_cas_failed")
+    monkeypatch.setattr(probe.temporary, "_revoke_child", fail_revoke)
+    monkeypatch.setattr(probe, "_emergency_revoke_child", lambda *_args: calls.append("emergency"))
+    with pytest.raises(RuntimeError, match="finn_weekly_chain_revocation_fallback_used"):
+        probe.run("qa-123456-1-abcd1234-5678abcd", base_url="https://example.test",
+                  parent_token="in-memory-parent-token", issuer=Path("issuer"))
+    assert calls == ["grant", "emergency", "cleanup"]
+
+
+def test_finn_weekly_emergency_revokes_child_before_reporting_live_bot(monkeypatch):
+    from backend.scripts import probe_protected_finn_weekly_smart_dca_chain as probe
+
+    namespace = "qa-123456-1-abcd1234-5678abcd"
+    operations = []
+    preferences = {"qa_fixture": probe.temporary.FINN_TEMP_QA_KIND,
+                   "finn_temp_qa": {"namespace": namespace, "lease": "secret",
+                                    "status": "active"}}
+
+    class Cursor:
+        rowcount = 1
+        def __enter__(self):
+            return self
+        def __exit__(self, *_args):
+            return None
+        def execute(self, query, _params):
+            operations.append(str(query))
+        def fetchone(self):
+            return (preferences,) if len(operations) == 1 else (1,)
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+        def commit(self):
+            operations.append("commit")
+        def rollback(self):
+            operations.append("rollback")
+        def close(self):
+            operations.append("close")
+
+    monkeypatch.setattr(probe.fixture, "_connection", lambda: Connection())
+    with pytest.raises(RuntimeError, match="finn_weekly_chain_emergency_live_bot_present"):
+        probe._emergency_revoke_child(11, namespace, "secret")
+    assert any("UPDATE users SET is_active=FALSE" in item for item in operations)
+    assert any("is_live=FALSE" in item for item in operations)
+    assert not any("UPDATE bot_configs" in item and "is_live=TRUE" in item for item in operations)
+    assert operations[-2:] == ["commit", "close"]
+
+
 def test_score2_match_paper_result_checks_match_before_execution():
     from backend.scripts import probe_protected_score2_match_paper as probe
 

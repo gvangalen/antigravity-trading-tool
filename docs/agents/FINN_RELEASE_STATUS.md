@@ -4,6 +4,41 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN-chat naar wekelijkse Smart DCA Paper-aankoop (18 november 2026)
+
+Phase: `LOCAL_VALIDATED_PENDING_PR_CI`. De onafhankelijke wekelijkse Paper-proef
+voor de los ingezaaide setup werd geaccepteerd op live SHA
+`d8cdacc9908669d7106ce83ba93f968113fcb8e4` in
+[QA-run 44313615914](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44313615914).
+Die proef koppelde nog niet de door FINN via chat bevestigde en opgeslagen
+strategie aan de Paper-bot. Het nieuwe beschermde QA-profiel toetst juist die
+ononderbroken keten met een tijdelijke eigenaar en verplichte opruiming.
+
+De lokale proef op de nieuwe kandidaat reproduceerde een echte productfout:
+de door FINN opgeslagen benchmarkgestuurde setup had geen scorebereik en de
+Paper-bot gaf daarom `hold` zonder order, ondanks een complete score en een
+correcte score-afhankelijke strategie. Het opslagcontract geeft zo'n setup nu
+standaard een beoordeelbaar bereik van 0–100 wanneer de gebruiker geen extra
+scorefilter heeft gekozen. De geïsoleerde lokale FastAPI/Responses/Celery-
+proef met een synthetische eigenaar slaagde daarna: voorstel bevestigd,
+één opgeslagen setup en gekoppelde strategie, één Paper-aankoop van €200,
+één gevulde order, één kasboeking, een geblokkeerde herhaling op dezelfde dag
+en op de volgende dag in dezelfde week, eigenaarafbakening en gecontroleerde
+cleanup. Geen live bot of geldorder is gebruikt. De ingelogde productieproef
+op de uiteindelijke deploy-SHA is nog niet uitgevoerd.
+De gerichte contract-, adapter-, QA-runner- en authsuite had **181 geslaagde
+tests**; de volledige backend-suite **5048 geslaagd, 7 overgeslagen**. De
+volledige lokale FINN-actiematrix slaagde **17/17**, de adapters **27/27**,
+en de Smart- en kalender-DCA-opslagproeven slaagden. De afzonderlijke
+Security-hercontrole vond geen concrete blokkade.
+De echte provider-developmentselector slaagde opnieuw **20/20**; de
+regressionselector slaagde **109/109** op dezelfde onveranderde selectorcode
+vóór de laatste opslagcontract- en QA-verifierwijziging. Beide hadden nul
+provider-, schema-, parse-, validatie- of timeoutfouten. De frontend-build,
+typecheck, i18n-controle en tests, commands, proposals, setups en `audit:high`
+slaagden vóór deze backend-only reparatie. De lokale volledige keten werd na
+de laatste QA-verifierwijziging nogmaals met succes uitgevoerd.
+
 ## FINN wekelijkse Smart DCA Paper-aankoopproef (18 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA_RETEST`. De eerdere ingelogde QA accepteerde
