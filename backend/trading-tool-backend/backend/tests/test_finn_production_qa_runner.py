@@ -799,7 +799,7 @@ def test_weekly_smart_dca_verifier_checks_fill_ledger_cash_and_no_second_order(m
         def close(self):
             pass
 
-    def rows(*, extra_order=False, cash=800):
+    def rows(*, extra_order=False, cash=800, score_components=None):
         order = ("filled", "paper", "buy", 7, 200, "filled", 0.003)
         return [
             [(first, "buy", 200, "executed", {"dca_policy": policy})],
@@ -807,13 +807,22 @@ def test_weekly_smart_dca_verifier_checks_fill_ledger_cash_and_no_second_order(m
             [("execute", -200, 0.003)],
             (cash, 0.003, False, True, "auto", "weekly", "benchmark", None,
              200, {"points": []}),
-            (0,), (False,), (50, 50, 50),
+            (0,), (False,), score_components or (Decimal("50"), Decimal("50"), Decimal("50")),
         ]
 
     monkeypatch.setattr(probe.fixture, "_connection", lambda: Connection(rows()))
     result = probe._verify(11, 12, 7, first, second)
     assert result["result"] == "PASS" and result["paper_order_count"] == 1
     assert result["source_score"] == 50 and result["planned_amount_eur"] == 200
+    monkeypatch.setattr(probe.fixture, "_connection", lambda: Connection(rows(
+        score_components=(Decimal("40"), Decimal("50"), Decimal("60")),
+    )))
+    assert probe._verify(11, 12, 7, first, second)["source_score"] == 50
+    monkeypatch.setattr(probe.fixture, "_connection", lambda: Connection(rows(
+        score_components=(Decimal("60"), Decimal("60"), Decimal("60")),
+    )))
+    with pytest.raises(RuntimeError, match="weekly_smart_dca_benchmark_mismatch"):
+        probe._verify(11, 12, 7, first, second)
     monkeypatch.setattr(probe.fixture, "_connection", lambda: Connection(rows(extra_order=True)))
     with pytest.raises(RuntimeError, match="weekly_smart_dca_order_not_paper_filled"):
         probe._verify(11, 12, 7, first, second)

@@ -6,6 +6,7 @@ import json
 import math
 import os
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from backend.scripts import probe_protected_score2_stale_paper as fixture
@@ -228,7 +229,10 @@ def _verify(user_id: int, bot_id: int, market_id: int, first: date, second: date
             raise RuntimeError("weekly_smart_dca_benchmark_unverified")
         weights = policy.get("weights") or {}
         score = benchmark_score(
-            dict(zip(("market_score", "macro_score", "technical_score"), components)),
+            dict(zip(
+                ("market_score", "macro_score", "technical_score"),
+                (float(value) if isinstance(value, Decimal) else value for value in components),
+            )),
             weights, {key: True for key in ("market_score", "macro_score", "technical_score")},
         )
         if score is None or not math.isclose(float(policy.get("source_score") or -1), score, abs_tol=0.05):
