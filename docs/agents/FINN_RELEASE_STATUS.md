@@ -23,15 +23,18 @@ de volgende dag gaf nul extra beslissingen; één order en uitvoering bleven
 staan en de virtuele kas bleef €50. De oude positieve lokale fixture is
 bijgewerkt voor de actuele quotevelden en een recente USDT-bron. De volledige
 backend-suite had **5040 geslaagd, 7 overgeslagen** vóór toevoeging van het
-beschermde QA-profiel; daarna slaagden **161 gerichte tests**. Frontend-build,
+beschermde QA-profiel; op de definitieve code slaagden **5043 backendtests**
+met **7 overgeslagen** en **161 gerichte tests**. Frontend-build,
 typecheck, i18n-controle en tests, commands, proposals, setups en `audit:high`
 slaagden. De volledige lokale FINN-actiematrix slaagde **17/17**, de adapters
 **27/27**, en Smart- en kalender-DCA-opslagproeven slaagden. Security vond en
 liet een foutlekrisico in het QA-rapport herstellen: onbekende fouten krijgen
 nu een vaste foutcode. Er is volgens de hercontrole geen resterende concrete
-beveiligingsblokkade. De echte provider-developmentselector slaagde **20/20**;
-provider-regressie, CI, deploymentidentiteit en onafhankelijke live QA zijn
-nog in behandeling.
+beveiligingsblokkade. De echte provider-developmentselector slaagde **20/20**
+en de regressionselector **109/109**, beide met nul provider-, schema-, parse-,
+validatie- of timeoutfouten. [PR #1176](https://github.com/gvangalen/antigravity-trading-tool/pull/1176)
+had op de kandidaat vóór deze statusaanvulling vijf groene CI-jobs. De laatste
+PR-CI, deploymentidentiteit en onafhankelijke live QA zijn nog in behandeling.
 
 ## FINN kalender-DCA na Smart DCA QA (18 november 2026)
 
