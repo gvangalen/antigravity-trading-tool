@@ -49,8 +49,9 @@ class FinnV2SetupInputCatalog:
         return cls.setup_type_from_text(str(value or ""))
 
     @classmethod
-    def timeframe_from_text(cls, text: str) -> Optional[str]:
-        match = cls._CODE_TIMEFRAME.search(str(text or ""))
+    def timeframe_from_text(cls, text: str, *, ignored_names: Sequence[str] = ()) -> Optional[str]:
+        text = cls._without_named_titles(str(text or ""), ignored_names)
+        match = cls._CODE_TIMEFRAME.search(text)
         if match:
             return match.group(1).upper()
         lowered = cls._comparison_text(text)
@@ -69,22 +70,27 @@ class FinnV2SetupInputCatalog:
         return next(iter(matches)) if len(matches) == 1 else None
 
     @classmethod
-    def explicit_chart_timeframe_from_text(
-        cls, text: str, *, ignored_names: Sequence[str] = (),
-    ) -> Optional[str]:
-        """A concrete chart duration cannot be confused with a DCA cadence."""
-        text = str(text or "")
+    def _without_named_titles(cls, text: str, ignored_names: Sequence[str]) -> str:
         for name in ignored_names:
             if name:
                 # Mask only the name attached to a naming cue. The same token
                 # may appear again as a genuine chart correction, e.g. a
                 # setup named "4H" and "wijzig timeframe naar 4H".
                 text = re.sub(
-                    r"(\b(?:naam|name|bezeichnung)\b\s*(?:(?:is|:|=)\s*)?[\"'“‘]?)"
+                    r"(\b(?:(?:met\s+(?:de\s+)?)?(?:naam|name|bezeichnung)|"
+                    r"noem\s+(?:hem|haar|het))\b\s*(?:(?:is|:|=)\s*)?[\"'“‘]?)"
                     + re.escape(str(name)) + r"\b",
                     lambda match: match.group(1) + " ", text,
                     count=1, flags=re.IGNORECASE,
                 )
+        return text
+
+    @classmethod
+    def explicit_chart_timeframe_from_text(
+        cls, text: str, *, ignored_names: Sequence[str] = (),
+    ) -> Optional[str]:
+        """A concrete chart duration cannot be confused with a DCA cadence."""
+        text = cls._without_named_titles(str(text or ""), ignored_names)
         match = cls._CODE_TIMEFRAME.search(text)
         if match:
             return match.group(1).upper()

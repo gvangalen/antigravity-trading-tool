@@ -2096,6 +2096,52 @@ def test_shared_name_parser_stops_before_asset_and_timeframe_context():
     ) == "FINN DCA Flow 1759B"
 
 
+@pytest.mark.parametrize(
+    ("message", "expected_name"),
+    [
+        (
+            "Maak een nieuwe BTC/USDT Smart DCA. Noem hem BTC Smart DCA Vrijdag QA 1811M. "
+            "De grafiek is 1D. Koop wekelijks op vrijdag maximaal één keer voor €200 basisbedrag. "
+            "Gebruik Markt, Macro en Technisch samen: onder score 26 150%, 26 tot 76 100%, "
+            "vanaf 76 50%. Toon eerst het voorstel; koop niets.",
+            "BTC Smart DCA Vrijdag QA 1811M",
+        ),
+        (
+            "Maak een nieuwe BTC/USDT Smart DCA-setup met naam BTC Smart DCA QA Amber en "
+            "grafiek 1D. €200 basisbedrag, maximaal één aankoop per week. Gebruik de volledige "
+            "gewogen benchmark van Markt, Macro en Technisch. Onder score 26 150%, van 26 tot "
+            "onder 76 100%, vanaf 76 50%. Laat eerst de conceptkaart zien; start geen bot en "
+            "plaats geen order.",
+            "BTC Smart DCA QA Amber",
+        ),
+    ],
+)
+def test_smart_dca_name_and_chart_timeframe_remain_separate(message, expected_name):
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    assert service._name_input_from_text(message) == expected_name
+    for model_inputs in ({}, {"name": expected_name, "timeframe": "1811M"}):
+        state = service.resolve(
+            contract=contract, message=message, explicit_asset="BTC",
+            conversation_context={}, supplied_inputs=model_inputs,
+            model_tool_inputs=bool(model_inputs),
+        )
+        assert state.collected_inputs["name"] == expected_name
+        assert state.collected_inputs["timeframe"] == "1D"
+
+
+def test_timeframe_like_setup_name_does_not_supply_a_missing_chart_timeframe():
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    message = "Maak een BTC/USDT Smart DCA. Noem hem BTC QA 1811M. Koop maximaal één keer per week."
+    state = service.resolve(
+        contract=contract, message=message, explicit_asset="BTC",
+        conversation_context={}, model_tool_inputs=False,
+    )
+    assert state.collected_inputs["name"] == "BTC QA 1811M"
+    assert "timeframe" not in state.collected_inputs
+
+
 def test_bot_name_stops_before_budget_clause():
     assert FinnV2OperationStateService._name_input_from_text(
         "Maak voor de strategie van het net opgeslagen DCA-plan een Paper-bot "

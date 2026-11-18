@@ -1356,7 +1356,8 @@ class FinnV2OperationStateService:
             recurring_schedule = re.search(
                 r"\b(?:daily|dagelijks|iedere dag|elke dag|every day|jeden tag|taeglich|täglich|"
                 r"weekly|wekelijks|iedere week|elke week|every week|jede woche|wöchentlich|woechentlich|"
-                r"monthly|maandelijks|iedere maand|elke maand|every month|jeden monat|monatlich)\b",
+                r"monthly|maandelijks|iedere maand|elke maand|every month|jeden monat|monatlich|"
+                r"per\s+(?:dag|week|maand|day|month))\b",
                 lowered,
             )
             recurring_investment = bool(recurring_schedule) and bool(re.search(
@@ -1376,13 +1377,14 @@ class FinnV2OperationStateService:
                 values["name"] = FinnV2SetupInputCatalog.display_name(
                     self._trim_setup_name_clause(str(values["name"]))
                 )
-            timeframe = FinnV2SetupInputCatalog.timeframe_from_text(text)
-            explicit_chart_timeframe = bool(
-                re.search(
-                    r"\b(?:\d+\s*(?:m|min|h|d|w|mo)|timeframe|chart|grafiek|zeiteinheit)\b",
-                    lowered,
-                )
+            ignored_names = (str(values.get("name") or ""),)
+            named_timeframe = FinnV2SetupInputCatalog.explicit_chart_timeframe_from_text(
+                text, ignored_names=ignored_names,
             )
+            timeframe = named_timeframe or FinnV2SetupInputCatalog.timeframe_from_text(
+                text, ignored_names=ignored_names,
+            )
+            explicit_chart_timeframe = bool(named_timeframe)
             if (
                 (values.get("setup_type") == "dca" or dca_context)
                 and recurring_schedule
@@ -2534,6 +2536,7 @@ class FinnV2OperationStateService:
             r"(?:conceptnaam|naam|name|titel|title))\b"
             r"\s*(?:exact\s+)?(?:is|:|=)?\s*(?:(?:alleen|only|slechts|just)\s+)?[\"'“‘]?([\w .-]{2,80}?)"
             r"(?=\s+(?:voor|for|für)\s+[\w-]+\b|\s+(?:op|on|auf)\s+(?:timeframe\s+)?\d|"
+            r"\s+(?:en|and|und)\s+(?:de\s+|het\s+|the\s+)?(?:grafiek|chart|timeframe)\b|"
             r"\s+en\s+(?:een\s+)?(?:€\s*\d+(?:[,.]\d+)?\s*)?budget\b|"
             r"\s+(?:en|and|und)\s+(?:zet|set|gebruik|use|verwende|nutze|stel|setze)\b|"
             r"\s+(?:en|and|und)\s+(?:risico|risk|risiko)\b|"
