@@ -4,6 +4,39 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Smart DCA naam- en grafiekperiode-extractie (18 november 2026)
+
+Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA_RETEST`. Onafhankelijke browser-QA
+wees live SHA `838b94823dfb5b910be2409d221bbbe50b24190a` af: een code
+`1811M` aan het einde van de setupnaam werd ten onrechte als grafiekperiode
+gebruikt, en bij een tweede vraag werd `en grafiek 1D` aan de naam toegevoegd
+waarna FINN opnieuw naar de periode vroeg. De beschermde Paper-proef
+[44405735046](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44405735046)
+slaagde; de fout zat in bevestigbare voorstelvelden, niet in een uitgevoerde order.
+
+De reparatie scheidt namen van expliciete grafiekperioden bij zowel `Noem hem`
+als `met naam`, stopt de naam vóór een grafiekclausule en laat `per week`
+alleen de DCA-frequentie invullen. De exacte twee mislukte QA-zinnen zijn als
+regressietests toegevoegd. De gerichte suite slaagde 198/198 en de volledige
+backend-suite 5070/5070 (7 overgeslagen). De lokale worker-gedreven
+FINN-actiematrix slaagde 17/17, adapters 27/27, en bevestigde Smart-DCA- en
+kalender-DCA-opslagproeven slaagden. De twee exacte QA-zinnen leverden lokaal
+via HTTP, worker en voorstel elk de juiste naam en `1D` op; er is daarbij geen
+voorstel bevestigd. Frontend-typecheck, i18n-, command-, proposal- en
+setup-tests, productiebuild en `audit:high` slaagden. De echte
+provider-developmentset slaagde 20/20 en de regressionselectie 109/109,
+zonder provider-, schema-, timeout-, parse- of validatiefout. De vijf PR-CI-jobs
+voor [PR #1189](https://github.com/gvangalen/antigravity-trading-tool/pull/1189)
+slaagden in [run 44409428764](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44409428764).
+De vijf main-CI-jobs slaagden in
+[run 44410474383](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44410474383)
+en [Auto Deploy 44411344568](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44411344568)
+slaagde. GitHub main, publieke backend-health (HTTP 200) en frontend-buildinfo
+(HTTP 200) meldden alle drie SHA `c57136a1caca6354f3b6a71c06a2403697f35a23`.
+Dit is deploymentbewijs, geen ingelogde acceptatie. Deze statuswijziging
+creëert zelf een latere main-SHA; de laatste CI, Auto Deploy en publieke
+identiteit worden opnieuw gecontroleerd vóór de QA-handoff.
+
 ## Smart DCA vrijdag- en vaste-DCA-vervolgreparatie (18 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA_RETEST`. Onafhankelijke browser-QA accepteerde de
