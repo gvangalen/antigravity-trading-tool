@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Mapping, Optional
+from typing import Dict, List, Mapping, Optional
 
 from backend.domain.finn_v2_operation_registry import OperationContract
 from backend.domain.finn_v2_setup_input_catalog import FinnV2SetupInputCatalog
@@ -930,6 +930,32 @@ class FinnV2OperationStateService:
         except (TypeError, ValueError):
             return None
         return state.operation_id if state.missing_required_inputs else None
+
+    @staticmethod
+    def clarification_choice_options(
+        field: Optional[str], *, operation_id: Optional[str], locale: Optional[str] = None,
+    ) -> List[Dict[str, str]]:
+        """Return bounded, server-approved replies for the question being asked.
+
+        The visible response and its options share the same requested slot.
+        Free text remains available; these are suggestions, not inputs or
+        authorization to save a proposal.
+        """
+        if operation_id not in {"create_setup", "create_manual_trade_plan"}:
+            return []
+        language = str(locale or "nl").split("-")[0].lower()
+        if field == "timeframe" and operation_id == "create_setup":
+            return [{"label": value, "reply": value} for value in ("1D", "4H")]
+        if field == "quote_currency":
+            return [{"label": value, "reply": value} for value in ("EUR", "USDT")]
+        if field == "dca_frequency" and operation_id == "create_setup":
+            labels = {
+                "nl": ("Dagelijks", "Wekelijks", "Maandelijks"),
+                "en": ("Daily", "Weekly", "Monthly"),
+                "de": ("Täglich", "Wöchentlich", "Monatlich"),
+            }.get(language, ("Dagelijks", "Wekelijks", "Maandelijks"))
+            return [{"label": value, "reply": value} for value in labels]
+        return []
 
     @staticmethod
     def clarification_question(

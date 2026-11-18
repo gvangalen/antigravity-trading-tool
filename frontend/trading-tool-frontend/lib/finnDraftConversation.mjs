@@ -20,6 +20,15 @@ export function draftMissingField(message) {
 export function draftQuestionChoices(message, locale = 'nl') {
   const field = draftMissingField(message);
   const copy = draftConversationCopy(locale);
+  const serverChoices = message?.choiceOptions;
+  if (Array.isArray(serverChoices) && serverChoices.length > 0 && serverChoices.length <= 3) {
+    const valid = serverChoices.every((choice) =>
+      typeof choice?.label === 'string' && choice.label.trim().length > 0 && choice.label.length <= 80 &&
+      typeof choice?.reply === 'string' && choice.reply.trim().length > 0 && choice.reply.length <= 80);
+    if (valid && new Set(serverChoices.map((choice) => choice.reply.toLocaleLowerCase())).size === serverChoices.length) {
+      return serverChoices.map(({ label, reply }) => ({ label, reply }));
+    }
+  }
   const optionField = { setup_id: 'setup_options', strategy_id: 'strategy_options', indicator: 'indicator_options' }[field];
   const options = optionField ? message?.state?.[optionField] : null;
   if (Array.isArray(options) && options.length > 0) {
@@ -28,17 +37,6 @@ export function draftQuestionChoices(message, locale = 'nl') {
       label: option.name || option.display_name || String(option.id || ''),
       reply: kind && option.id ? `${kind} ${option.id}` : String(option.name || ''),
     })).filter((option) => option.label && option.reply);
-  }
-  if (field === 'timeframe') {
-    const mentioned = [...String(message?.text || '').toUpperCase().matchAll(/\b(?:\d{1,2}[MHDW])\b/g)]
-      .map(([value]) => value);
-    const timeframes = [...new Set(mentioned)].slice(0, 3);
-    return timeframes.map((value) => ({ label: value, reply: value }));
-  }
-  if (field === 'quote_currency') {
-    const mentioned = [...String(message?.text || '').toUpperCase().matchAll(/\b(?:USDT|USD|EUR)\b/g)]
-      .map(([value]) => value);
-    return [...new Set(mentioned)].slice(0, 3).map((value) => ({ label: value, reply: value }));
   }
   const choices = {
     dca_frequency: ['daily', 'weekly', 'monthly'],
@@ -73,6 +71,9 @@ export function conversationQuestionChoices(message, locale = 'nl') {
   const field = draftMissingField(message);
   const optionField = { setup_id: 'setup_options', strategy_id: 'strategy_options', indicator: 'indicator_options' }[field];
   if (isCollectingDraft(message) && Array.isArray(message?.state?.[optionField]) && message.state[optionField].length) {
+    return draftQuestionChoices(message, locale);
+  }
+  if (isCollectingDraft(message) && Array.isArray(message?.choiceOptions) && message.choiceOptions.length) {
     return draftQuestionChoices(message, locale);
   }
   const clarificationChoices = clarificationQuestionChoices(message);

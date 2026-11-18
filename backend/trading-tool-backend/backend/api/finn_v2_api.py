@@ -130,6 +130,13 @@ async def get_finn_v2_conversation(
         content = response.get("content") if isinstance(response, dict) else None
         if isinstance(content, str) and content.strip():
             message = {"role": "assistant", "content": content}
+            if getattr(run, "status", None) == "clarification_required" and isinstance(response, dict):
+                projection = dict(response.get("_runtime_contract_projection") or {})
+                guided_draft = dict(projection.get("setup_draft") or projection.get("action_draft") or {})
+                choices = list(response.get("choice_options") or [])
+                if guided_draft.get("requested_slot") and guided_draft.get("missing_inputs") and choices:
+                    message["guided_draft"] = guided_draft
+                    message["choice_options"] = choices
             pending = pending_by_run.get(getattr(run, "id", None))
             if pending is not None:
                 message["pending_proposal"] = pending

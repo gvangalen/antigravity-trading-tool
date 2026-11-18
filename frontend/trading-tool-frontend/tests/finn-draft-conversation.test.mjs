@@ -60,7 +60,8 @@ test('guided setup timeframe and trading pair questions offer their stated choic
   const timeframe = { actionDraft: {
     requested_slot: 'timeframe', missing_inputs: ['name', 'timeframe'], draft_status: 'collecting',
   }, state: { run_status: 'clarification_required' }, text:
-    'Welk analysetijdsframe wil je voor deze setup gebruiken, bijvoorbeeld 1D (daggrafiek) of 4H (vieruursgrafiek)?' };
+    'Welk analysetijdsframe wil je voor deze setup gebruiken, bijvoorbeeld 1D (daggrafiek) of 4H (vieruursgrafiek)?',
+  choiceOptions: [{ label: '1D', reply: '1D' }, { label: '4H', reply: '4H' }] };
   assert.equal(isCollectingDraft(timeframe), true);
   assert.deepEqual(conversationQuestionChoices(timeframe), [
     { label: '1D', reply: '1D' }, { label: '4H', reply: '4H' },
@@ -69,11 +70,13 @@ test('guided setup timeframe and trading pair questions offer their stated choic
   const pair = { actionDraft: {
     requested_slot: 'quote_currency', missing_inputs: ['quote_currency'], draft_status: 'collecting',
   }, state: { run_status: 'clarification_required' }, text:
-    'Welk handelspaar wil je voor dit cryptoplan gebruiken: EUR of USDT?' };
+    'Welk handelspaar wil je voor dit cryptoplan gebruiken: EUR of USDT?',
+  choiceOptions: [{ label: 'EUR', reply: 'EUR' }, { label: 'USDT', reply: 'USDT' }] };
   assert.deepEqual(conversationQuestionChoices(pair), [
     { label: 'EUR', reply: 'EUR' }, { label: 'USDT', reply: 'USDT' },
   ]);
-  assert.deepEqual(conversationQuestionChoices({ ...pair, text: 'Welke valuta wil je gebruiken?' }), []);
+  assert.deepEqual(conversationQuestionChoices({ ...pair, text: 'Welke valuta wil je gebruiken?' }), pair.choiceOptions);
+  assert.deepEqual(conversationQuestionChoices({ ...pair, choiceOptions: [] }), []);
 });
 
 test('general clarification offers only verified choices and preserves free text when none exist', () => {

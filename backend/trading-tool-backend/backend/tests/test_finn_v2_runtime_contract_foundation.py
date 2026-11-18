@@ -30,6 +30,8 @@ from backend.infrastructure.repositories.finn_v2_runtime_contract_repository imp
 from backend.services.finn_v2_run_service import FinnV2RunService, _verified_closed_review_evidence
 from backend.services.finn_v2_responses_answer_verifier import FinnResponsesVerifiedAnswer
 from backend.services.finn_v2_flag_service import FinnV2FlagService
+from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
+from backend.schemas.finn_v2_schema import VerifiedResponse
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -1617,10 +1619,48 @@ def test_guided_question_overrides_mismatched_model_copy_for_the_actual_slot():
     )
     assert response["proposal_id"] is None
     assert response["confirmation_required"] is False
+    assert response["choice_options"] == [
+        {"label": "1D", "reply": "1D"}, {"label": "4H", "reply": "4H"},
+    ]
+    assert [choice.reply for choice in VerifiedResponse(**response).choice_options] == ["1D", "4H"]
     coach = {"mode": "COACH", "content": "Je plan vraagt om geduld."}
     assert run_service._align_guided_clarification(
         coach, terminal_status="completed", guided_draft={}, locale="nl",
     ) is coach
+
+
+def test_guided_pair_choices_match_the_requested_slot_not_prior_question():
+    response = FinnV2RunService._align_guided_clarification(
+        {"mode": "CLARIFICATION", "content": "Choose a timeframe", "choice_options": [
+            {"label": "1D", "reply": "1D"}]},
+        terminal_status="clarification_required",
+        guided_draft={
+            "operation_id": "create_setup", "draft_status": "collecting",
+            "requested_slot": "quote_currency", "supplied_inputs": {"symbol": "BTC"},
+        },
+        locale="nl",
+    )
+    assert response["choice_options"] == [
+        {"label": "EUR", "reply": "EUR"}, {"label": "USDT", "reply": "USDT"},
+    ]
+    assert response["proposal_id"] is None
+    assert response["confirmation_required"] is False
+
+
+def test_guided_choice_options_are_limited_to_supported_questions():
+    assert FinnV2OperationStateService.clarification_choice_options(
+        "dca_frequency", operation_id="create_setup", locale="en",
+    ) == [
+        {"label": "Daily", "reply": "Daily"},
+        {"label": "Weekly", "reply": "Weekly"},
+        {"label": "Monthly", "reply": "Monthly"},
+    ]
+    assert FinnV2OperationStateService.clarification_choice_options(
+        "timeframe", operation_id="delete_setup", locale="nl",
+    ) == []
+    assert FinnV2OperationStateService.clarification_choice_options(
+        "name", operation_id="create_setup", locale="nl",
+    ) == []
 
 
 def test_asset_correction_is_visible_in_guided_clarification():

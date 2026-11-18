@@ -116,6 +116,21 @@ export function mapBackendSessionMessages(messages = []) {
         text: message.content,
         isComplete: true,
       };
+      const guided = message.role === "assistant" ? message.guided_draft : null;
+      if (guided?.requested_slot && Array.isArray(guided.missing_inputs)
+          && guided.missing_inputs.length && Array.isArray(message.choice_options)
+          && message.choice_options.length) {
+        const isSetup = guided.operation_id === "create_setup";
+        return {
+          ...base,
+          setupDraft: isSetup ? guided : null,
+          actionDraft: isSetup ? null : guided,
+          choiceOptions: message.choice_options,
+          state: { run_status: "clarification_required",
+            setup_draft: isSetup ? guided : null,
+            action_draft: isSetup ? null : guided },
+        };
+      }
       const pending = message.role === "assistant" ? message.pending_proposal : null;
       const operationId = String(pending?.operation_id || "");
       const draft = pending?.operation_id === "create_setup"
