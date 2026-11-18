@@ -64,6 +64,7 @@ ALLOWED_PROFILES = {
     "trader_pair_fixture_cleanup",
     "trader_strategy_schema_audit",
     "score2_exact_usdt_paper",
+    "score2_weekly_smart_dca_paper",
     "closed_paper_trade_review",
     "closed_paper_trade_review_chat",
     "auto_paper_trade_history",
@@ -224,6 +225,50 @@ def safe_manual_trade_failure_diagnostic(profile: str, error: Exception) -> Dict
 
 def profile_error_category(profile: str, error: Exception) -> str:
     """The published QA error category must not contain private fixture text."""
+    if profile == "score2_weekly_smart_dca_paper":
+        code = str(error)
+        allowed = {
+            "weekly_smart_dca_fixture_manifest_forbidden",
+            "weekly_smart_dca_fixture_not_authorized",
+            "weekly_smart_dca_fixture_owner_or_bot_unsafe",
+            "weekly_smart_dca_market_unavailable",
+            "weekly_smart_dca_paper_quote_unavailable",
+            "weekly_smart_dca_setup_missing",
+            "weekly_smart_dca_strategy_missing",
+            "weekly_smart_dca_bot_missing",
+            "weekly_smart_dca_portfolio_missing",
+            "weekly_smart_dca_date_boundary_unavailable",
+            "weekly_smart_dca_scores_incomplete",
+            "weekly_smart_dca_first_assessment_failed",
+            "weekly_smart_dca_replay_not_blocked",
+            "weekly_smart_dca_second_score_copy_failed",
+            "weekly_smart_dca_second_assessment_not_blocked",
+            "weekly_smart_dca_period_probe_invalid",
+            "weekly_smart_dca_first_decision_not_executed",
+            "weekly_smart_dca_benchmark_unverified",
+            "weekly_smart_dca_benchmark_mismatch",
+            "weekly_smart_dca_amount_mismatch",
+            "weekly_smart_dca_order_not_paper_filled",
+            "weekly_smart_dca_ledger_mismatch",
+            "weekly_smart_dca_state_or_owner_mismatch",
+            "stale_fixture_namespace_invalid",
+            "stale_fixture_not_authorized",
+            "fixture_binding_invalid",
+            "fixture_has_exchange_keys",
+            "fixture_quarantine_bot_mismatch",
+            "fixture_quarantine_failed",
+            "fixture_quarantine_owner_mismatch",
+            "fixture_cleanup_bot_mismatch",
+            "fixture_cleanup_bot_unsafe",
+            "fixture_cleanup_failed",
+            "fixture_cleanup_keys_present",
+            "fixture_cleanup_live_order_present",
+            "fixture_cleanup_owner_active",
+            "fixture_cleanup_owner_mismatch",
+            "fixture_cleanup_trade_present",
+            "fixture_cleanup_user_missing",
+        }
+        return code if code in allowed else "weekly_smart_dca_probe_runtime_error"
     if profile in {"manual_trade_temporary_matrix", "manual_trade_temporary_diagnose",
                    "manual_trade_temporary_cleanup"}:
         code = str(error)
@@ -3755,6 +3800,16 @@ def main() -> int:
                     fixture_namespace or "",
                     quote="EUR" if args.profile == "score2_exact_eur_paper" else "USDT",
                 )
+                report["outcome"] = "passed"
+                report["qa_status"] = "COMPLETED"
+            elif args.profile == "score2_weekly_smart_dca_paper":
+                if args.manifest_id != "none" or args.manifest_bundle_path:
+                    raise ValueError("weekly_smart_dca_fixture_manifest_forbidden")
+                from backend.scripts.probe_protected_weekly_smart_dca_paper import run as run_weekly_probe
+
+                report["safety"]["read_only_profile"] = False
+                report["safety"]["execution_calls"] = 3
+                report[args.profile] = run_weekly_probe(fixture_namespace or "")
                 report["outcome"] = "passed"
                 report["qa_status"] = "COMPLETED"
             elif args.profile == "trader_pair_score_continuity":

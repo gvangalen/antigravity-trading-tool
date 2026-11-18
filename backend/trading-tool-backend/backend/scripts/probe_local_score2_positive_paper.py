@@ -32,7 +32,7 @@ def _assert_local_only() -> None:
         raise RuntimeError("local_only_environment_required:isolated_endpoints")
 
 
-def _seed_fixture() -> tuple[int, int, str]:
+def _seed_fixture(*, frequency: str = "daily", trigger_mode: str = "calendar") -> tuple[int, int, str]:
     _assert_local_only()
     from backend.domain.finn_dca_plan_contract import split_confirmed_dca_plan
     from backend.utils.db import get_db_connection
@@ -45,7 +45,7 @@ def _seed_fixture() -> tuple[int, int, str]:
         raise RuntimeError("local_database_unavailable")
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT CURRENT_DATE")
+            cur.execute("SELECT (NOW() AT TIME ZONE 'Europe/Amsterdam')::date")
             report_date = cur.fetchone()[0]
             # ETH is USDT-quoted in the catalog. The isolated worker needs a
             # dated conversion to create a verified EUR Paper valuation.
@@ -66,12 +66,12 @@ def _seed_fixture() -> tuple[int, int, str]:
             user_id = int(cur.fetchone()[0])
             cur.execute(
                 """INSERT INTO setups (
-                    user_id,name,symbol,timeframe,setup_type,dca_frequency,
+                    user_id,name,symbol,timeframe,setup_type,dca_frequency,dca_trigger_mode,
                     min_benchmark_score,max_benchmark_score,
                     created_at,last_validated)
-                   VALUES (%s,'Local positive Smart DCA','ETH','1D','dca','daily',
+                   VALUES (%s,'Local positive Smart DCA','ETH','1D','dca',%s,%s,
                            0,100,%s,%s) RETURNING id""",
-                (user_id, now, now),
+                (user_id, frequency, trigger_mode, now, now),
             )
             setup_id = int(cur.fetchone()[0])
             _, strategy = split_confirmed_dca_plan({
@@ -99,10 +99,10 @@ def _seed_fixture() -> tuple[int, int, str]:
                     budget_min_order_eur,budget_max_order_eur,
                     max_asset_exposure_pct,base_currency,paper_initial_cash_eur,
                     created_at,updated_at)
-                   VALUES (%s,%s,'daily','ETH','Local positive Smart Paper',
+                   VALUES (%s,%s,%s,'ETH','Local positive Smart Paper',
                            'auto',FALSE,TRUE,'balanced',100,50,1,50,100,
                            'EUR',100,%s,%s) RETURNING id""",
-                (user_id, strategy_id, now, now),
+                (user_id, strategy_id, frequency, now, now),
             )
             bot_id = int(cur.fetchone()[0])
             cur.execute(
@@ -150,11 +150,12 @@ def _seed_fixture() -> tuple[int, int, str]:
                            VALUES (%s,'ETH','dxy',%s,%s,%s)""",
                         (user_id, dxy, observed, observed),
                     )
+                quote_observed = now - timedelta(minutes=5) if days_ago == 0 else observed
                 cur.execute(
                     """INSERT INTO market_data
-                       (symbol,price,timestamp,source_observed_at)
-                       VALUES ('ETH',%s,%s,%s)""",
-                    (price, observed, observed),
+                       (symbol,price,timestamp,source_observed_at,is_final_candle,quote_currency)
+                       VALUES ('ETH',%s,%s,%s,FALSE,'USDT')""",
+                    (price, quote_observed, quote_observed),
                 )
         conn.commit()
         return user_id, bot_id, report_date.isoformat()

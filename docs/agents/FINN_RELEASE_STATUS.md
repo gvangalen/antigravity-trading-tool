@@ -4,6 +4,38 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN wekelijkse Smart DCA Paper-aankoopproef (18 november 2026)
+
+Phase: `LOCAL_VALIDATION_IN_PROGRESS`. De eerdere ingelogde QA accepteerde
+voor de wekelijkse scoregestuurde Smart DCA het FINN-voorstel, de bevestiging,
+de opslag van één setup plus strategie en idempotente herhaling. De bestaande
+productieproeven testten alleen dagelijkse Paper-aankopen en bewezen daardoor
+de weekblokkade niet. Dit werk voegt een afzonderlijk beschermd QA-profiel toe
+voor één BTC/USDT-Paper-aankoop met volledige benchmark, plus een tweede
+beoordeling op een andere datum binnen dezelfde week. De proef controleert
+besluit, order, uitvoering, ledger, virtuele kas, scorebron, replay,
+eigenaarafbakening en verplichte cleanup. Er is nog **geen live aankoop** met
+dit profiel uitgevoerd.
+
+Een geïsoleerde lokale FastAPI/Celery/Paper-proef met synthetische eigenaar
+kocht één keer €50 via een wekelijkse benchmarktrigger. Een tweede beoordeling
+de volgende dag gaf nul extra beslissingen; één order en uitvoering bleven
+staan en de virtuele kas bleef €50. De oude positieve lokale fixture is
+bijgewerkt voor de actuele quotevelden en een recente USDT-bron. De volledige
+backend-suite had **5040 geslaagd, 7 overgeslagen** vóór toevoeging van het
+beschermde QA-profiel; op de definitieve code slaagden **5043 backendtests**
+met **7 overgeslagen** en **161 gerichte tests**. Frontend-build,
+typecheck, i18n-controle en tests, commands, proposals, setups en `audit:high`
+slaagden. De volledige lokale FINN-actiematrix slaagde **17/17**, de adapters
+**27/27**, en Smart- en kalender-DCA-opslagproeven slaagden. Security vond en
+liet een foutlekrisico in het QA-rapport herstellen: onbekende fouten krijgen
+nu een vaste foutcode. Er is volgens de hercontrole geen resterende concrete
+beveiligingsblokkade. De echte provider-developmentselector slaagde **20/20**
+en de regressionselector **109/109**, beide met nul provider-, schema-, parse-,
+validatie- of timeoutfouten. [PR #1176](https://github.com/gvangalen/antigravity-trading-tool/pull/1176)
+had op de kandidaat vóór deze statusaanvulling vijf groene CI-jobs. De laatste
+PR-CI, deploymentidentiteit en onafhankelijke live QA zijn nog in behandeling.
+
 ## FINN kalender-DCA na Smart DCA QA (18 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA_RETEST`. [PR #1174](https://github.com/gvangalen/antigravity-trading-tool/pull/1174)

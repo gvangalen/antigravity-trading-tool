@@ -35,6 +35,11 @@ trap cleanup EXIT INT TERM
 
 (
   cd "$BACKEND"
+  probe_script="${FINN_LOCAL_SCORE2_PROBE:-probe_local_score2_positive_paper.py}"
+  case "$probe_script" in
+    probe_local_score2_positive_paper.py|probe_local_smart_dca_weekly_paper.py) ;;
+    *) exit 2 ;;
+  esac
   TRADAMIND_CELERY_PROFILE=api PYTHONPATH=. \
-    python3 backend/scripts/probe_local_score2_positive_paper.py
+    python3 "backend/scripts/$probe_script"
 )

@@ -9,7 +9,7 @@ import socket
 import ssl
 import sys
 import types
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -726,6 +726,100 @@ def test_score2_match_paper_profiles_are_separately_gated(monkeypatch):
     monkeypatch.delenv("FINN_QA_ALLOW_SCORE2_MATCH_FIXTURE", raising=False)
     with pytest.raises(RuntimeError, match="score2_match_fixture_not_authorized"):
         probe.run("qa-123456-1-abcd1234-5678abcd", outside=False)
+
+
+def test_weekly_smart_dca_profile_error_category_never_leaks_private_text():
+    module = _module()
+    profile = "score2_weekly_smart_dca_paper"
+    assert module.profile_error_category(
+        profile, RuntimeError("weekly_smart_dca_ledger_mismatch"),
+    ) == "weekly_smart_dca_ledger_mismatch"
+    assert module.profile_error_category(
+        profile, ValueError("private owner 123 and quote 456"),
+    ) == "weekly_smart_dca_probe_runtime_error"
+
+
+def test_weekly_smart_dca_profile_is_protected_and_uses_same_week(monkeypatch):
+    from backend.scripts import probe_protected_weekly_smart_dca_paper as probe
+
+    module = _module()
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    dispatch = DISPATCH_SCRIPT_PATH.read_text(encoding="utf-8")
+    assert "score2_weekly_smart_dca_paper" in module.ALLOWED_PROFILES
+    assert "score2_weekly_smart_dca_paper" in workflow and "score2_weekly_smart_dca_paper" in dispatch
+    assert "FINN_QA_ALLOW_WEEKLY_SMART_DCA_FIXTURE=0" in workflow
+    assert "FINN_QA_ALLOW_WEEKLY_SMART_DCA_FIXTURE=1" in workflow
+    assert "paper_only=True" in Path(probe.__file__).read_text(encoding="utf-8")
+    namespace = "qa-123456-1-abcd1234-5678abcd"
+    monkeypatch.setenv("FINN_QA_USER_ID", "42")
+    monkeypatch.delenv("FINN_QA_ALLOW_WEEKLY_SMART_DCA_FIXTURE", raising=False)
+    with pytest.raises(RuntimeError, match="weekly_smart_dca_fixture_not_authorized"):
+        probe._require_protected_run(namespace)
+    for key in ("FINN_QA_ALLOW_WEEKLY_SMART_DCA_FIXTURE",
+                "FINN_QA_ALLOW_FIXTURE_ACTIONS", "FINN_QA_ALLOW_FIXTURE_EXECUTION",
+                "FINN_QA_ALLOW_STALE_SCORE_FIXTURE"):
+        monkeypatch.setenv(key, "1")
+    assert probe._require_protected_run(namespace) == 42
+    with pytest.raises(RuntimeError, match="stale_fixture_namespace_invalid"):
+        probe._require_protected_run("../unsafe")
+    for day in (date(2026, 11, 16), date(2026, 11, 18)):
+        second = probe._next_same_week(day)
+        assert second > day and second.isocalendar()[:2] == day.isocalendar()[:2]
+    with pytest.raises(RuntimeError, match="weekly_smart_dca_date_boundary_unavailable"):
+        probe._next_same_week(date(2026, 11, 22))
+
+
+def test_weekly_smart_dca_verifier_checks_fill_ledger_cash_and_no_second_order(monkeypatch):
+    from backend.scripts import probe_protected_weekly_smart_dca_paper as probe
+
+    first, second = date(2026, 11, 18), date(2026, 11, 19)
+    policy = {"score_source": "benchmark_score", "source_available": True,
+              "source_score": 50, "weights": {key: 1 / 3 for key in
+              ("market_score", "macro_score", "technical_score")}}
+
+    class Cursor:
+        def __init__(self, rows):
+            self.rows = iter(rows)
+        def __enter__(self):
+            return self
+        def __exit__(self, *_args):
+            return None
+        def execute(self, _query, _params):
+            self.current = next(self.rows)
+        def fetchone(self):
+            return self.current
+        def fetchall(self):
+            return self.current
+
+    class Connection:
+        def __init__(self, rows):
+            self.cursor_instance = Cursor(rows)
+        def cursor(self):
+            return self.cursor_instance
+        def close(self):
+            pass
+
+    def rows(*, extra_order=False, cash=800):
+        order = ("filled", "paper", "buy", 7, 200, "filled", 0.003)
+        return [
+            [(first, "buy", 200, "executed", {"dca_policy": policy})],
+            [order, order] if extra_order else [order],
+            [("execute", -200, 0.003)],
+            (cash, 0.003, False, True, "auto", "weekly", "benchmark", None,
+             200, {"points": []}),
+            (0,), (False,), (50, 50, 50),
+        ]
+
+    monkeypatch.setattr(probe.fixture, "_connection", lambda: Connection(rows()))
+    result = probe._verify(11, 12, 7, first, second)
+    assert result["result"] == "PASS" and result["paper_order_count"] == 1
+    assert result["source_score"] == 50 and result["planned_amount_eur"] == 200
+    monkeypatch.setattr(probe.fixture, "_connection", lambda: Connection(rows(extra_order=True)))
+    with pytest.raises(RuntimeError, match="weekly_smart_dca_order_not_paper_filled"):
+        probe._verify(11, 12, 7, first, second)
+    monkeypatch.setattr(probe.fixture, "_connection", lambda: Connection(rows(cash=900)))
+    with pytest.raises(RuntimeError, match="weekly_smart_dca_state_or_owner_mismatch"):
+        probe._verify(11, 12, 7, first, second)
 
 
 def test_score2_match_paper_result_checks_match_before_execution():
