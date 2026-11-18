@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN kalender-DCA na Smart DCA QA (18 november 2026)
 
-Phase: `BUILD_VALIDATED_PENDING_RELEASE`. De bestaande QA-agent accepteerde
+Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA_RETEST`. [PR #1174](https://github.com/gvangalen/antigravity-trading-tool/pull/1174)
+is gemerged als `9528522d0e64fddbcb89276f6c2fdf108aeee8e9`. De bestaande QA-agent accepteerde
 de Smart-DCA-opslag op de live SHA
 `d990496341fc46308ade9ca1ab5d1ce79bf90399` technisch: de ingelogde kaart
 was correct en [beschermde run 44219970585](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44219970585)
@@ -31,9 +32,16 @@ backend-suite **5040 geslaagd, 7 bestaande skips**; worker-actiematrix
 **17/17**, adapters **27/27**, Smart- en kalenderopslagproeven groen. Echte
 provider development **20/20** en regression **109/109**, beide zonder
 provider-, schema-, parse-, validatie- of timeoutfouten. Frontend-build,
-typecheck, i18n lint/tests, commands, proposals en setups geslaagd. PR-CI,
-main-CI, Auto Deploy en onafhankelijke live QA volgen; lokale resultaten zijn
-geen live acceptatie.
+typecheck, i18n lint/tests, commands, proposals en setups geslaagd.
+[PR-CI 44247501385](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44247501385)
+en [main-CI 44248283858](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44248283858)
+hadden vijf groene jobs; [Auto Deploy 44249010595](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44249010595)
+is geslaagd. GitHub main, publieke backend-health (HTTP 200) en
+frontend-buildinfo (HTTP 200) meldden alle drie SHA
+`9528522d0e64fddbcb89276f6c2fdf108aeee8e9`. Dit is deploymentbewijs,
+geen ingelogde acceptatie. Deze statuswijziging maakt zelf een latere
+main-SHA; de laatste CI, Auto Deploy en publieke identiteit worden opnieuw
+gecontroleerd vóór de QA-handoff.
 
 ## FINN Smart DCA: legacy opslagconstraint (18 november 2026)
 
