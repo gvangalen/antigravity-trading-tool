@@ -417,7 +417,13 @@ class FinnV2OperationStateService:
                 explicit.pop(field, None)
             lowered = message.casefold()
             smart = bool(re.search(r"\b(?:smart\s*dca|score(?:s|gestuurd|afhankelijk)?|staffel|variab\w*)\b", lowered))
-            fixed = bool(re.search(r"\b(?:vast(?:e)?|fixed|exact)\b", lowered))
+            # A fixed buying day is independent of the amount ladder. In
+            # particular, "zonder vaste dag" must not turn a Smart DCA
+            # follow-up into a fixed-amount calendar DCA.
+            fixed = bool(re.search(
+                r"\b(?:vast(?:e)?|fixed|exact)\b(?!\s+(?:(?:week|koop)?dag|(?:buying|purchase)\s+day)\b)",
+                lowered,
+            ))
             if smart and not fixed:
                 explicit["dca_amount_mode"] = "score_bands"
                 explicit["score_source"] = "benchmark_score"
@@ -1428,6 +1434,10 @@ class FinnV2OperationStateService:
                 if explicit_name:
                     amount_text = amount_text.replace(explicit_name.casefold(), " ")
                 smart_amount = bool(re.search(r"\b(?:smart(?:\s*dca)?|score(?:s|gestuurd|afhankelijk)?|staffel|score\s*bands?|variab\w*)\b", amount_text))
+                if self._dca_score_percentages(text) and re.search(r"\bbenchmark(?:t)?\b", amount_text):
+                    # A follow-up can state the complete three-band ladder
+                    # without repeating the word Smart or score.
+                    smart_amount = True
                 fixed_amount = bool(re.search(
                     r"\b(?:vast(?:e)?|fixed|exact|fest(?:er|es|em|en)?)\b(?!\s+(?:(?:week|koop)?dag|(?:buying|purchase)\s+day)\b)",
                     amount_text,
@@ -1494,6 +1504,12 @@ class FinnV2OperationStateService:
                     values["dca_amount_mode"] = "fixed"
                 if smart_amount:
                     values.update(self._dca_score_percentages(text))
+                    low_boundary = re.search(r"(?<!tot )\b(?:onder|below|unter)\s+(?:score\s+)?(\d{1,3})\b", amount_text)
+                    high_boundary = re.search(r"\b(?:vanaf|from|ab)\s+(\d{1,3})\b", amount_text)
+                    if low_boundary:
+                        values["low_threshold"] = int(low_boundary.group(1))
+                    if high_boundary:
+                        values["high_threshold"] = int(high_boundary.group(1))
             if "min_investment" in accepted_inputs:
                 investment = re.search(
                     r"\bminim(?:um|ale)\s*(?:investering|inleg|bedrag)?\s*(?:van|is|:|=)?\s*"
