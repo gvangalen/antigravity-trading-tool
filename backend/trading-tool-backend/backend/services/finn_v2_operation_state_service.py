@@ -765,6 +765,20 @@ class FinnV2OperationStateService:
                 collected.pop(key, None)
                 sources.pop(key, None)
                 provenance.pop(key, None)
+        if (contract.operation_id == "create_setup"
+                and collected.get("setup_type") == "dca"
+                and collected.get("dca_amount_mode") == "score_bands"
+                and not collected.get("dca_trigger_mode")
+                and not collected.get("dca_day")
+                and not collected.get("dca_month_day")):
+            # With no requested calendar day, Smart DCA follows the score.
+            # Its frequency caps purchases per period; it does not select a
+            # weekday. An explicit calendar choice remains authoritative.
+            collected["dca_trigger_mode"] = "benchmark"
+            sources["dca_trigger_mode"] = "default"
+            provenance["dca_trigger_mode"] = {
+                "source": "default", "state_revision": next_revision,
+            }
         if contract.operation_id == "create_setup" and collected.get("dca_trigger_mode") == "benchmark":
             for key in ("dca_day", "dca_month_day"):
                 collected.pop(key, None)
