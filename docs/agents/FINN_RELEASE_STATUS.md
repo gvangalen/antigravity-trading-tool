@@ -6,7 +6,9 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN Smart DCA: legacy opslagconstraint (18 november 2026)
 
-Phase: `BUILD_VALIDATED_PENDING_RELEASE`. Onafhankelijke QA wees de vorige
+Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA_RETEST`. [PR #1172](https://github.com/gvangalen/antigravity-trading-tool/pull/1172)
+is gemerged als `240de3ad51c71f6fe5a675e7adc54e01f301311f`.
+Onafhankelijke QA wees de vorige
 live kandidaat `e78b3665acd075ff1c8c13f1a0ea8c22cc40f91e` af: de juiste
 BTC/USDT-voorstelkaart kon na bevestiging niet worden opgeslagen door de
 bestaande PostgreSQL-check `dca_logic_check`, die bij elke wekelijkse DCA een
@@ -28,8 +30,17 @@ Smart DCA-proeven geslaagd; echte provider development **20/20** en regression
 timeoutfouten. Root-backendtests **5039 geslaagd, 7 bestaande skips**.
 Frontend-build, typecheck, i18n lint/tests, commands, proposals en setups
 geslaagd. De gescheiden Security- en Architecture-review vonden na de
-constraint- en deployreparatie geen blocker. PR-CI, main-CI, Auto Deploy en
-onafhankelijke live QA volgen; deze lokale resultaten zijn geen live acceptatie.
+constraint- en deployreparatie geen blocker. [PR-CI 44215830230](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44215830230)
+en [main-CI 44216636604](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44216636604)
+hadden vijf groene jobs; [Auto Deploy 44217300683](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44217300683)
+is geslaagd. Op 18 november 2026 toonden GitHub main, publieke backend-health
+(HTTP 200) en frontend-buildinfo (HTTP 200) alle drie SHA `240de3ad51c71f6fe5a675e7adc54e01f301311f`.
+Een read-only query op de productieconstraint bevestigde dat `dca_logic_check`
+de benchmarkuitzondering bevat en de aparte
+`setups_smart_dca_schedule_valid` aanwezig is. Dit is deploymentbewijs,
+geen ingelogde opslagacceptatie. Deze statuswijziging maakt zelf een latere
+main-SHA; de laatste CI, Auto Deploy en publieke identiteit worden opnieuw
+gecontroleerd vóór de QA-handoff.
 
 ## FINN-chat: subtiele kopieeractie voor beide kanten (17 november 2026)
 
