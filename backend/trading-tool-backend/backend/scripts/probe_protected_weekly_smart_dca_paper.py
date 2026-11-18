@@ -235,7 +235,8 @@ def _verify(user_id: int, bot_id: int, market_id: int, first: date, second: date
             )),
             weights, {key: True for key in ("market_score", "macro_score", "technical_score")},
         )
-        if score is None or not math.isclose(float(policy.get("source_score") or -1), score, abs_tol=0.05):
+        source_score = policy.get("source_score")
+        if score is None or source_score is None or not math.isclose(float(source_score), score, abs_tol=0.05):
             raise RuntimeError("weekly_smart_dca_benchmark_mismatch")
         expected = BASE_AMOUNT_EUR * (1.5 if score < 26 else 1 if score < 76 else 0.5)
         if not math.isclose(float(decisions[0][2]), expected, abs_tol=0.01):
