@@ -65,7 +65,9 @@ case "${1:-}" in
     (cd "$BACKEND" && PYTHONPATH=. python3 backend/scripts/run_finn_v2_full_action_matrix.py \
       --base-url http://127.0.0.1:18000 \
       --output "$ROOT/.local-finn-parity-artifacts/full-action-matrix.json" "$@")
-    (cd "$BACKEND" && PYTHONPATH=. pytest -q backend/tests/test_finn_v2_action_adapter_registry.py) ;;
+    (cd "$BACKEND" && PYTHONPATH=. pytest -q backend/tests/test_finn_v2_action_adapter_registry.py)
+    (cd "$BACKEND" && PYTHONPATH=. python3 backend/scripts/verify_smart_dca_schedule_migration.py)
+    (cd "$BACKEND" && PYTHONPATH=. python3 backend/scripts/verify_smart_dca_confirmed_runtime.py) ;;
   selector-eval)
     require_env; load_env
     shift

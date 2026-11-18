@@ -4,6 +4,33 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN Smart DCA: legacy opslagconstraint (18 november 2026)
+
+Phase: `BUILD_VALIDATED_PENDING_RELEASE`. Onafhankelijke QA wees de vorige
+live kandidaat `e78b3665acd075ff1c8c13f1a0ea8c22cc40f91e` af: de juiste
+BTC/USDT-voorstelkaart kon na bevestiging niet worden opgeslagen door de
+bestaande PostgreSQL-check `dca_logic_check`, die bij elke wekelijkse DCA een
+vaste weekdag eiste. Er is toen geen setup, strategie, bot of order aangemaakt.
+
+De nieuwe migratie bewaart de volledige bestaande check en voegt uitsluitend
+voor een benchmarkgestuurde DCA zonder kalenderdag een uitzondering toe. Een
+extra constraint bewaakt dat een benchmarksetup geen kalenderdag draagt. De
+productiedeployment voert deze migratie vóór de schema- en processtart uit.
+Een lokale rollback-proef reproduceert de oude afwijzing en bewijst opslag,
+kalenderbehoud en idempotente migratie. Een geïsoleerde publieke FastAPI/Celery-
+proef met synthetische eigenaren bevestigt de exacte tweebeurtige Smart DCA,
+opslag van precies één setup en strategie, afwijzing van een andere eigenaar,
+idempotente herhaling en geen bot.
+
+Lokale gates: worker-actiematrix **17/17**, adapters **27/27**, beide nieuwe
+Smart DCA-proeven geslaagd; echte provider development **20/20** en regression
+**109/109**, beide zonder provider-, schema-, parse-, validatie- of
+timeoutfouten. Root-backendtests **5039 geslaagd, 7 bestaande skips**.
+Frontend-build, typecheck, i18n lint/tests, commands, proposals en setups
+geslaagd. De gescheiden Security- en Architecture-review vonden na de
+constraint- en deployreparatie geen blocker. PR-CI, main-CI, Auto Deploy en
+onafhankelijke live QA volgen; deze lokale resultaten zijn geen live acceptatie.
+
 ## FINN-chat: subtiele kopieeractie voor beide kanten (17 november 2026)
 
 Phase: `INDEPENDENT_QA_ACCEPTED`. [PR #1165](https://github.com/gvangalen/antigravity-trading-tool/pull/1165)
