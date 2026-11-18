@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN wekelijkse Smart DCA Paper-aankoopproef (18 november 2026)
 
-Phase: `QA_VERIFIER_REPAIR_PENDING_DEPLOYMENT`. De eerdere ingelogde QA accepteerde
+Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA_RETEST`. De eerdere ingelogde QA accepteerde
 voor de wekelijkse scoregestuurde Smart DCA het FINN-voorstel, de bevestiging,
 de opslag van één setup plus strategie en idempotente herhaling. De bestaande
 productieproeven testten alleen dagelijkse Paper-aankopen en bewezen daardoor
@@ -56,6 +56,18 @@ artifact geen expliciete cleanup-postcondition achter; de `finally`-cleanup
 gaf geen foutcode. De runner meldt toekomstige profielfouten als onvolledig
 bewijs in plaats van `NOT_STARTED` en claimt drie evaluaties pas na een
 geslaagde probe. Er is nog geen tweede live aankoopproef gedaan.
+
+De lokale wekelijkse Celery/Paper-proef is na de verifiercorrectie opnieuw
+geslaagd; de gerichte runner-suite had **129 geslaagd** en de volledige
+backend-suite **5043 geslaagd, 7 overgeslagen**. [PR #1178](https://github.com/gvangalen/antigravity-trading-tool/pull/1178)
+had vijf groene CI-jobs in [run 44308912488](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44308912488).
+[Main-CI 44309874488](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44309874488)
+had vijf groene jobs; [Auto Deploy 44310827446](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44310827446)
+slaagde. GitHub main, publieke backend-health (HTTP 200) en frontend-buildinfo
+(HTTP 200) meldden alle drie SHA `d33ba6314e1a7041376763e3778ab550f7eccd6f`.
+Dit is deploymentbewijs, geen ingelogde acceptatie. Deze statuswijziging maakt
+zelf een latere main-SHA; de laatste CI, Auto Deploy en publieke identiteit
+worden opnieuw gecontroleerd vóór de QA-handoff.
 
 ## FINN kalender-DCA na Smart DCA QA (18 november 2026)
 
