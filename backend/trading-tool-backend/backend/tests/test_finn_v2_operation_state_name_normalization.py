@@ -768,6 +768,25 @@ def test_inverse_smart_dca_proposes_score_trigger_without_a_weekday():
     )] == [26, 76, 150, 100, 50]
 
 
+def test_inverse_smart_dca_without_calendar_day_uses_benchmark_cadence():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message=("Maak een Smart DCA voor BTC/USDT met naam BTC Score DCA, timeframe 1D, "
+                 "wekelijks en basisbedrag €200. Ik wil meer kopen als de markt oversold is "
+                 "en minder kopen als de markt overbought is."),
+        explicit_asset="BTC", conversation_context={}, supplied_inputs={},
+        model_tool_inputs=True,
+    )
+    assert state.collected_inputs["dca_trigger_mode"] == "benchmark"
+    assert "dca_day" not in state.collected_inputs
+    assert state.next_missing_input not in {"dca_trigger_mode", "dca_day"}
+    assert [state.collected_inputs[key] for key in (
+        "low_threshold", "high_threshold", "low_score_percent",
+        "mid_score_percent", "high_score_percent",
+    )] == [26, 76, 150, 100, 50]
+
+
 def test_guided_smart_dca_replaces_weekday_question_with_benchmark_trigger():
     contract = FinnV2OperationRegistry().require_supported("create_setup")
     service = FinnV2OperationStateService()
@@ -777,6 +796,9 @@ def test_guided_smart_dca_replaces_weekday_question_with_benchmark_trigger():
         supplied_inputs={"name": "Smart DCA BTC Test"},
         model_tool_inputs=True,
     )
+    assert pending.collected_inputs["dca_trigger_mode"] == "benchmark"
+    assert "dca_day" not in pending.collected_inputs
+    assert pending.next_missing_input not in {"dca_trigger_mode", "dca_day"}
     triggered = service.resolve(
         contract=contract, message="maakt me niet uit licht aan de benchmarkt score",
         explicit_asset=None,
@@ -870,6 +892,8 @@ def test_smart_dca_guided_reply_fills_all_three_percentages_without_smart_keywor
         supplied_inputs={"name": "BTC Smart DCA", "low_threshold": 40, "high_threshold": 70},
         model_tool_inputs=True,
     )
+    assert existing.collected_inputs["dca_trigger_mode"] == "calendar"
+    assert existing.collected_inputs["dca_day"] == "monday"
     assert existing.next_missing_input == "low_score_percent"
     continued = service.resolve(
         contract=contract,

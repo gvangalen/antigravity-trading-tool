@@ -41,6 +41,26 @@ Frontend-build, typecheck, i18n-lint en tests, commands, proposals, setups en
 [run 44375020095](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44375020095)
 vóór deze status-only toevoeging; CI wordt op de definitieve kandidaat herhaald.
 
+## Smart DCA zonder vaste koopdag (18 november 2026)
+
+Phase: `BUILD_LOCAL_VALIDATION`. De gebruiker kiest zelf hoe de aankoopgrootte
+verandert bij lage en hoge benchmarkscore. Een Smart DCA zonder expliciet
+gekozen koopdag gebruikt daarom standaard de volledige benchmarkscore als
+trigger, met de frequentie als maximum van één aankoop per periode. Een
+expliciet gekozen kalenderdag blijft mogelijk. De optionele scorezone bepaalt
+of de aankoop überhaupt mag plaatsvinden; zonder extra filter geldt 0–100.
+De opslag blijft onderworpen aan de bevestigingsstap en de bestaande
+Paper/Live-veiligheidsgrenzen. De gerichte regressietests en de volledige
+backend-suite zijn lokaal groen (5049 geslaagd, 7 overgeslagen). De volledige
+lokale FINN-actiematrix slaagde 17/17, de adapters 27/27; de scoregestuurde
+en kalendergestuurde Smart-DCA-opslagproeven slaagden. De echte
+provider-developmentselectie slaagde 20/20 en de echte regressionselectie
+109/109, beide zonder provider-, schema-, parse-, validatie- of timeoutfout.
+CI, deployment en onafhankelijke live QA volgen. De vorige FINN-naar-Paper-keten werd door
+onafhankelijke QA geaccepteerd op SHA `c3e60c19083278621932d1877568be3abfdb9bdb`
+in [run 44364003106](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44364003106);
+die acceptatie bewijst deze nieuwe standaardkeuze nog niet.
+
 ## FINN-chat naar wekelijkse Smart DCA Paper-aankoop (18 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA_RETEST`. De onafhankelijke wekelijkse Paper-proef
