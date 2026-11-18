@@ -64,6 +64,7 @@ ALLOWED_PROFILES = {
     "trader_pair_fixture_cleanup",
     "trader_strategy_schema_audit",
     "score2_exact_usdt_paper",
+    "score2_weekly_smart_dca_paper",
     "closed_paper_trade_review",
     "closed_paper_trade_review_chat",
     "auto_paper_trade_history",
@@ -3755,6 +3756,16 @@ def main() -> int:
                     fixture_namespace or "",
                     quote="EUR" if args.profile == "score2_exact_eur_paper" else "USDT",
                 )
+                report["outcome"] = "passed"
+                report["qa_status"] = "COMPLETED"
+            elif args.profile == "score2_weekly_smart_dca_paper":
+                if args.manifest_id != "none" or args.manifest_bundle_path:
+                    raise ValueError("weekly_smart_dca_fixture_manifest_forbidden")
+                from backend.scripts.probe_protected_weekly_smart_dca_paper import run as run_weekly_probe
+
+                report["safety"]["read_only_profile"] = False
+                report["safety"]["execution_calls"] = 3
+                report[args.profile] = run_weekly_probe(fixture_namespace or "")
                 report["outcome"] = "passed"
                 report["qa_status"] = "COMPLETED"
             elif args.profile == "trader_pair_score_continuity":
