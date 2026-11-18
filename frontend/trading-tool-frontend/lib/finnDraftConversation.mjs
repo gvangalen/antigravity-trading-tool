@@ -1,7 +1,7 @@
 const COPY = Object.freeze({
-  nl: { hint: 'Kies een antwoord of typ je eigen antwoord in de chat.', freeTextHint: 'Typ je antwoord in de chat.', weekly: 'Wekelijks', monthly: 'Maandelijks', fixed: 'Vast bedrag', smart: 'Variabel bedrag op basis van de benchmark', custom: 'Variabel bedrag volgens een curve', dca: 'DCA', trade: 'Trade', cautious: 'Voorzichtig', balanced: 'Gebalanceerd', aggressive: 'Offensief', market: 'Markt', macro: 'Macro', technical: 'Technisch', other: 'Anders · typ in de chat' },
-  en: { hint: 'Choose an answer or type your own reply in the chat.', freeTextHint: 'Type your answer in the chat.', weekly: 'Weekly', monthly: 'Monthly', fixed: 'Fixed amount', smart: 'Variable amount based on the benchmark', custom: 'Variable amount using a curve', dca: 'DCA', trade: 'Trade', cautious: 'Cautious', balanced: 'Balanced', aggressive: 'Aggressive', market: 'Market', macro: 'Macro', technical: 'Technical', other: 'Other · type in chat' },
-  de: { hint: 'Wähle eine Antwort oder schreibe deine eigene Antwort im Chat.', freeTextHint: 'Schreibe deine Antwort im Chat.', weekly: 'Wöchentlich', monthly: 'Monatlich', fixed: 'Fester Betrag', smart: 'Variabler Betrag nach Benchmark', custom: 'Variabler Betrag nach Kurve', dca: 'DCA', trade: 'Trade', cautious: 'Vorsichtig', balanced: 'Ausgewogen', aggressive: 'Offensiv', market: 'Markt', macro: 'Makro', technical: 'Technisch', other: 'Anders · im Chat schreiben' },
+  nl: { hint: 'Kies een antwoord of typ je eigen antwoord in de chat.', freeTextHint: 'Typ je antwoord in de chat.', daily: 'Dagelijks', weekly: 'Wekelijks', monthly: 'Maandelijks', fixed: 'Vast bedrag', smart: 'Variabel bedrag op basis van de benchmark', custom: 'Variabel bedrag volgens een curve', dca: 'DCA', trade: 'Trade', cautious: 'Voorzichtig', balanced: 'Gebalanceerd', aggressive: 'Offensief', market: 'Markt', macro: 'Macro', technical: 'Technisch', other: 'Eigen antwoord' },
+  en: { hint: 'Choose an answer or type your own reply in the chat.', freeTextHint: 'Type your answer in the chat.', daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', fixed: 'Fixed amount', smart: 'Variable amount based on the benchmark', custom: 'Variable amount using a curve', dca: 'DCA', trade: 'Trade', cautious: 'Cautious', balanced: 'Balanced', aggressive: 'Aggressive', market: 'Market', macro: 'Macro', technical: 'Technical', other: 'Your own answer' },
+  de: { hint: 'Wähle eine Antwort oder schreibe deine eigene Antwort im Chat.', freeTextHint: 'Schreibe deine Antwort im Chat.', daily: 'Täglich', weekly: 'Wöchentlich', monthly: 'Monatlich', fixed: 'Fester Betrag', smart: 'Variabler Betrag nach Benchmark', custom: 'Variabler Betrag nach Kurve', dca: 'DCA', trade: 'Trade', cautious: 'Vorsichtig', balanced: 'Ausgewogen', aggressive: 'Offensiv', market: 'Markt', macro: 'Makro', technical: 'Technisch', other: 'Eigene Antwort' },
 });
 
 export function draftConversationCopy(locale = 'nl') {
@@ -11,7 +11,7 @@ export function draftConversationCopy(locale = 'nl') {
 export function draftMissingField(message) {
   const draft = message?.setupDraft || message?.actionDraft || message?.state?.setup_draft || message?.state?.action_draft;
   const missing = draft?.missing_inputs || message?.state?.missing_required_inputs || message?.state?.missing_slots || message?.missingFields || [];
-  const next = draft?.next_missing_input || message?.state?.next_missing_input || message?.nextQuestion;
+  const next = draft?.requested_slot || draft?.next_missing_input || message?.state?.next_missing_input || message?.nextQuestion;
   const field = (typeof next === 'string' && /^[a-z][\w.]*$/i.test(next) ? next : null)
     || missing.find((value) => value !== 'plan_deviation_ack');
   return typeof field === 'string' ? field.split('.').at(-1) : null;
@@ -29,17 +29,28 @@ export function draftQuestionChoices(message, locale = 'nl') {
       reply: kind && option.id ? `${kind} ${option.id}` : String(option.name || ''),
     })).filter((option) => option.label && option.reply);
   }
+  if (field === 'timeframe') {
+    const mentioned = [...String(message?.text || '').toUpperCase().matchAll(/\b(?:\d{1,2}[MHDW])\b/g)]
+      .map(([value]) => value);
+    const timeframes = [...new Set(mentioned)].slice(0, 3);
+    return timeframes.map((value) => ({ label: value, reply: value }));
+  }
+  if (field === 'quote_currency') {
+    const mentioned = [...String(message?.text || '').toUpperCase().matchAll(/\b(?:USDT|USD|EUR)\b/g)]
+      .map(([value]) => value);
+    return [...new Set(mentioned)].slice(0, 3).map((value) => ({ label: value, reply: value }));
+  }
   const choices = {
-    dca_frequency: ['weekly', 'monthly'],
-    frequency: ['weekly', 'monthly'],
+    dca_frequency: ['daily', 'weekly', 'monthly'],
+    frequency: ['daily', 'weekly', 'monthly'],
     dca_amount_mode: ['fixed', 'smart'],
     execution_mode: ['fixed', 'custom'],
     setup_type: ['dca', 'trade'],
     risk_profile: ['cautious', 'balanced', 'aggressive'],
     category: ['market', 'macro', 'technical'],
   }[field] || [];
-  const reply = { weekly: copy.weekly, monthly: copy.monthly, fixed: copy.fixed, smart: 'Smart DCA', custom: copy.custom, dca: copy.dca, trade: copy.trade, cautious: copy.cautious, balanced: copy.balanced, aggressive: copy.aggressive, market: copy.market, macro: copy.macro, technical: copy.technical };
-  return choices.map((choice) => ({ label: copy[choice], reply: reply[choice] }));
+  const reply = { daily: copy.daily, weekly: copy.weekly, monthly: copy.monthly, fixed: copy.fixed, smart: 'Smart DCA', custom: copy.custom, dca: copy.dca, trade: copy.trade, cautious: copy.cautious, balanced: copy.balanced, aggressive: copy.aggressive, market: copy.market, macro: copy.macro, technical: copy.technical };
+  return choices.map((choice) => ({ label: copy[choice] || choice, reply: reply[choice] || choice }));
 }
 
 export function isOpenClarification(message) {
