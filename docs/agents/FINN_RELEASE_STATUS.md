@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN wekelijkse Smart DCA Paper-aankoopproef (18 november 2026)
 
-Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA`. De eerdere ingelogde QA accepteerde
+Phase: `QA_VERIFIER_REPAIR_PENDING_DEPLOYMENT`. De eerdere ingelogde QA accepteerde
 voor de wekelijkse scoregestuurde Smart DCA het FINN-voorstel, de bevestiging,
 de opslag van één setup plus strategie en idempotente herhaling. De bestaande
 productieproeven testten alleen dagelijkse Paper-aankopen en bewezen daardoor
@@ -43,6 +43,19 @@ slaagde. GitHub main, publieke backend-health (HTTP 200) en frontend-buildinfo
 geen ingelogde acceptatie. Deze statuswijziging maakt zelf een latere
 main-SHA; de laatste CI, Auto Deploy en publieke identiteit worden opnieuw
 gecontroleerd vóór de QA-handoff.
+
+De onafhankelijke [eerste wekelijkse Paper-run 44307884757](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44307884757)
+op finale live SHA `72735af08196486c474d2d6f6af20908cde0508c` was **niet groen**:
+de afgeschermde verifier meldde alleen `weekly_smart_dca_benchmark_mismatch`.
+De productcode rekent met `float`, maar de nieuwe QA-verifier gaf PostgreSQL
+`NUMERIC`-componenten als `Decimal` door aan een functie die alleen `int` en
+`float` accepteert. De verifier converteert deze componenten nu expliciet en
+behoudt een geldige score van nul. Een regressie met `Decimal`-rijen en een
+echte mismatch slaagt. Een vroegtijdige verifierfout liet in het eerste
+artifact geen expliciete cleanup-postcondition achter; de `finally`-cleanup
+gaf geen foutcode. De runner meldt toekomstige profielfouten als onvolledig
+bewijs in plaats van `NOT_STARTED` en claimt drie evaluaties pas na een
+geslaagde probe. Er is nog geen tweede live aankoopproef gedaan.
 
 ## FINN kalender-DCA na Smart DCA QA (18 november 2026)
 

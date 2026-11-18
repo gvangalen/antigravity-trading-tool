@@ -3808,8 +3808,8 @@ def main() -> int:
                 from backend.scripts.probe_protected_weekly_smart_dca_paper import run as run_weekly_probe
 
                 report["safety"]["read_only_profile"] = False
-                report["safety"]["execution_calls"] = 3
                 report[args.profile] = run_weekly_probe(fixture_namespace or "")
+                report["safety"]["execution_calls"] = 3
                 report["outcome"] = "passed"
                 report["qa_status"] = "COMPLETED"
             elif args.profile == "trader_pair_score_continuity":
@@ -4187,6 +4187,11 @@ def main() -> int:
         if report["error_category"] in {"fixture_namespace_required", "fixture_namespace_invalid"}:
             report["outcome"] = "blocked"
             report["qa_status"] = "QA BLOCKED / NOT STARTED"
+        elif args.profile == "score2_weekly_smart_dca_paper":
+            # The fixture can already have assessed and filled a Paper order.
+            # A verifier failure is incomplete evidence, never NOT_STARTED.
+            report["incomplete"] = True
+            report["qa_status"] = "INCOMPLETE"
         elif report["error_category"] == "exact_pair_probe_price_window_unstable":
             # The Paper fill already happened. A volatile source window makes
             # this fixture inconclusive, not unstarted or a product failure.
