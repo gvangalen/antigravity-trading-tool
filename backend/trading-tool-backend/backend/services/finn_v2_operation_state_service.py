@@ -424,6 +424,8 @@ class FinnV2OperationStateService:
                 r"\b(?:vast(?:e)?|fixed|exact)\b(?!\s+(?:(?:week|koop)?dag|(?:buying|purchase)\s+day)\b)",
                 lowered,
             ))
+            if fixed and self._negates_score_based_amount(lowered):
+                smart = False
             if smart and not fixed:
                 explicit["dca_amount_mode"] = "score_bands"
                 explicit["score_source"] = "benchmark_score"
@@ -1442,6 +1444,8 @@ class FinnV2OperationStateService:
                     r"\b(?:vast(?:e)?|fixed|exact|fest(?:er|es|em|en)?)\b(?!\s+(?:(?:week|koop)?dag|(?:buying|purchase)\s+day)\b)",
                     amount_text,
                 ))
+                if fixed_amount and self._negates_score_based_amount(amount_text):
+                    smart_amount = False
                 if smart_amount and not fixed_amount:
                     values["dca_amount_mode"] = "score_bands"
                 elif fixed_amount and not smart_amount:
@@ -1642,6 +1646,15 @@ class FinnV2OperationStateService:
             if changes:
                 values["changed_fields"] = changes
         return values
+
+    @staticmethod
+    def _negates_score_based_amount(text: str) -> bool:
+        """Keep an explicitly fixed amount when score adjustment is rejected."""
+        return bool(re.search(
+            r"\b(?:niet|geen|zonder)\s+(?:(?:op\s+basis\s+van|met)\s+)?"
+            r"(?:een\s+)?(?:score\w*|benchmarkscore\w*|smart\s*dca|variab\w*)\b",
+            text.casefold(),
+        ))
 
     @classmethod
     def _dca_score_percentages(cls, text: str) -> dict[str, object]:
@@ -1906,6 +1919,10 @@ class FinnV2OperationStateService:
             return FinnV2SetupInputCatalog.setup_type_from_text(value)
         if field == "dca_amount_mode":
             lowered = value.casefold()
+            if self._negates_score_based_amount(lowered) and re.search(
+                r"\b(?:fixed|vast|vaste|exact|fest(?:e|er|es)?)\b", lowered,
+            ):
+                return "fixed"
             if re.search(r"\b(?:smart|score|staffel|variab|custom)\w*\b", lowered):
                 return "score_bands"
             if re.search(r"\b(?:fixed|vast|vaste|exact|fest(?:e|er|es)?)\b", lowered):
