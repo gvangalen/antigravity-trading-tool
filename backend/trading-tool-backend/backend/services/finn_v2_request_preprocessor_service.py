@@ -372,6 +372,50 @@ class FinnV2RequestPreprocessorService:
             direct_market_order = False
             financial_execution_intent = False
             action = "create"
+        dca_draft_request = action == "create" and bool(re.search(r"\b(?:smart\s*dca|dca)\b", normalized))
+        positive_order_match = re.search(
+            r"\b(?:koop|buy|kaufe)\s+(?:nu|now|sofort)\b|"
+            r"\b(?:plaats|place|submit)\s+(?:nu\s+|now\s+)?"
+            r"(?:een\s+|an?\s+)?(?:koop)?order\b",
+            normalized,
+        )
+        positive_immediate_order = bool(
+            positive_order_match and not re.match(
+                r"\s+(?:niets|niks|geen|niet|nothing|no|not|nichts|kein\w*)\b",
+                normalized[positive_order_match.end():],
+            )
+        )
+        dca_schedule_request = bool(
+            dca_draft_request
+            and not positive_immediate_order
+            and (
+                re.search(
+                    r"\b(?:koop|buy|kaufe)\s+(?:(?:dagelijks|wekelijks|maandelijks|"
+                    r"daily|weekly|monthly)\b|"
+                    r"(?:iedere|elke|every|jede[nr]?)\s+"
+                    r"(?:(?:eerste|first|1e)\s+)?"
+                    r"(?:dag|week|maand|day|month|maandag|dinsdag|woensdag|"
+                    r"donderdag|vrijdag|zaterdag|zondag|monday|tuesday|wednesday|"
+                    r"thursday|friday|saturday|sunday)\b)|"
+                    r"\b(?:koop|buy|kaufe)\s+op\s+(?:maandag|dinsdag|woensdag|"
+                    r"donderdag|vrijdag|zaterdag|zondag)\b|"
+                    r"\b(?:aankoop|koop|purchase|buy)\b[^.!?;]{0,45}"
+                    r"\bper\s+(?:dag|week|maand|day|month)\b",
+                    normalized,
+                )
+                or re.search(
+                    r"\b(?:koop|buy|kaufe)\s+(?:niets|niks|geen|niet|"
+                    r"nothing|no|not|nichts|kein\w*)\b|"
+                    r"\b(?:plaats|place|submit)\s+geen\s+order\b",
+                    normalized,
+                )
+            )
+        )
+        if dca_schedule_request:
+            # Buying cadence is a proposed plan rule. It cannot authorize an
+            # immediate market order, including when the user adds "koop niets".
+            direct_market_order = False
+            financial_execution_intent = False
         # A first question about a plan remains a question when a later
         # clause mentions buying or automation. A market verb is not itself
         # an instruction to FINN. Still retain a direct order anywhere in
@@ -880,10 +924,18 @@ class FinnV2RequestPreprocessorService:
             r"\b(?:koop|verkoop|buy|sell)[-\s]?orders?\b",
             text,
         )
+        imperative = re.search(rf"(?:^|[,;.!?]\s*)(?:please\s+|bitte\s+)?{imperative_verb}\b", text)
+        directed_imperative = bool(
+            imperative and not re.match(
+                r"\s+(?:(?:nu|now|sofort)\s+)?"
+                r"(?:niets|niks|geen|niet|nothing|no|not|nichts|kein\w*)\b",
+                text[imperative.end():],
+            )
+        )
         return bool(
             (execute_order and not re.search(r"\b(?:geen|niet|no)\b", execute_order.group()))
             or
-            re.search(rf"(?:^|[,;.!?]\s*)(?:please\s+|bitte\s+)?{imperative_verb}\b", text)
+            directed_imperative
             or re.search(
                 rf"\b(?:kun|kan|kunt|could|can|wil|would|laat|let)\s+"
                 rf"(?:je|jij|you|du|finn|de assistent|the assistant)\b"

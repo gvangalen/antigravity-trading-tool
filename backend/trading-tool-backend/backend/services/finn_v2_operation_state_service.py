@@ -28,6 +28,17 @@ class FinnV2OperationStateService:
     })
 
     @staticmethod
+    def requests_smart_dca_ladder_suggestion(message: str) -> bool:
+        text = str(message or "").casefold()
+        return bool(
+            re.search(r"\b(?:staffels?|scorebanden|scoregrenzen)\b", text)
+            and re.search(
+                r"\b(?:stel\s+(?:je\s+)?voor|voorstellen|suggest|propose|"
+                r"kies\s+zelf|bedenk|raad\s+(?:je\s+)?aan)\b", text,
+            )
+        )
+
+    @staticmethod
     def setup_only_intent(message: str) -> bool:
         """A user may save the setup now and choose its strategy in a later step."""
         text = str(message or "").casefold()
@@ -705,6 +716,23 @@ class FinnV2OperationStateService:
             key: {"source": "explicit", "state_revision": next_revision}
             for key in explicit
         })
+        if (contract.operation_id == "create_setup"
+                and collected.get("setup_type") == "dca"
+                and collected.get("dca_amount_mode") == "score_bands"
+                and self.requests_smart_dca_ladder_suggestion(message)):
+            suggested_ladder = {
+                "low_threshold": 26, "high_threshold": 76,
+                "low_score_percent": 150, "mid_score_percent": 100,
+                "high_score_percent": 50,
+            }
+            if not any(field in collected for field in suggested_ladder):
+                # Editable suggestion only; confirmation is still required.
+                collected.update(suggested_ladder)
+                for field in suggested_ladder:
+                    sources[field] = "requested_suggestion"
+                    provenance[field] = {
+                        "source": "requested_suggestion", "state_revision": next_revision,
+                    }
         if "category" in accepted_inputs and collected.get("indicator"):
             definition = self._indicator_input_from_text(str(collected["indicator"]))
             if definition is not None:
@@ -1416,6 +1444,17 @@ class FinnV2OperationStateService:
                 )
                 if frequency:
                     values["dca_frequency"] = frequency
+                if not frequency:
+                    period = re.search(
+                        r"\b(?:aanko\w*|koop\w*|buy\w*|purchase\w*|keer|times?|mal)\b"
+                        r"[^.!?;]{0,45}\bper\s+(dag|week|maand|day|month)\b",
+                        lowered,
+                    )
+                    if period:
+                        values["dca_frequency"] = {
+                            "dag": "daily", "day": "daily", "week": "weekly",
+                            "maand": "monthly", "month": "monthly",
+                        }[period.group(1)]
                 weekday_match = re.search(
                     r"\b(monday|maandag|montag|tuesday|dinsdag|dienstag|wednesday|woensdag|mittwoch|"
                     r"thursday|donderdag|donnerstag|friday|vrijdag|freitag|saturday|zaterdag|samstag|"
@@ -2492,7 +2531,7 @@ class FinnV2OperationStateService:
             r"hij\s+heet|het\s+heet|naam\s+van\s+(?:alleen\s+)?(?:dit|deze)\s+concept|"
             r"(?:conceptnaam|naam|name|titel|title))\b"
             r"\s*(?:exact\s+)?(?:is|:|=)?\s*(?:(?:alleen|only|slechts|just)\s+)?[\"'“‘]?([\w .-]{2,80}?)"
-            r"(?=\s+(?:voor|for|für)\s+[\w-]+\b|\s+(?:op|on|auf)\s+\d|"
+            r"(?=\s+(?:voor|for|für)\s+[\w-]+\b|\s+(?:op|on|auf)\s+(?:timeframe\s+)?\d|"
             r"\s+en\s+(?:een\s+)?(?:€\s*\d+(?:[,.]\d+)?\s*)?budget\b|"
             r"\s+(?:en|and|und)\s+(?:zet|set|gebruik|use|verwende|nutze|stel|setze)\b|"
             r"\s+(?:en|and|und)\s+(?:risico|risk|risiko)\b|"
