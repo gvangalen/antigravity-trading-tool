@@ -65,6 +65,7 @@ ALLOWED_PROFILES = {
     "trader_strategy_schema_audit",
     "score2_exact_usdt_paper",
     "score2_weekly_smart_dca_paper",
+    "score2_finn_weekly_smart_dca_chain",
     "closed_paper_trade_review",
     "closed_paper_trade_review_chat",
     "auto_paper_trade_history",
@@ -225,6 +226,10 @@ def safe_manual_trade_failure_diagnostic(profile: str, error: Exception) -> Dict
 
 def profile_error_category(profile: str, error: Exception) -> str:
     """The published QA error category must not contain private fixture text."""
+    if profile == "score2_finn_weekly_smart_dca_chain":
+        code = str(error)
+        return (code if re.fullmatch(r"(?:finn_weekly_chain|weekly_smart_dca|temporary_qa|fixture)_[a-z_]+", code)
+                else "finn_weekly_chain_runner_error")
     if profile == "score2_weekly_smart_dca_paper":
         code = str(error)
         allowed = {
@@ -3812,6 +3817,24 @@ def main() -> int:
                 report["safety"]["execution_calls"] = 3
                 report["outcome"] = "passed"
                 report["qa_status"] = "COMPLETED"
+            elif args.profile == "score2_finn_weekly_smart_dca_chain":
+                if args.manifest_id != "none" or args.manifest_bundle_path:
+                    raise ValueError("finn_weekly_chain_fixture_manifest_forbidden")
+                from backend.scripts.probe_protected_finn_weekly_smart_dca_chain import run as run_chain
+
+                report["protected_profile_attempted"] = True
+                report["safety"]["read_only_profile"] = False
+                report["qa_status"] = "INCOMPLETE"
+                report[args.profile] = run_chain(
+                    fixture_namespace or "", base_url=args.base_url.rstrip("/"),
+                    parent_token=token,
+                    issuer=checkout / "backend" / "trading-tool-backend" / "backend"
+                    / "scripts" / "qa_issue_finn_token.py",
+                )
+                report["safety"]["confirmation_calls"] = 1
+                report["safety"]["execution_calls"] = 4
+                report["outcome"] = "passed"
+                report["qa_status"] = "COMPLETED"
             elif args.profile == "trader_pair_score_continuity":
                 if args.manifest_id != "none" or args.manifest_bundle_path:
                     raise ValueError("trader_pair_fixture_manifest_forbidden")
@@ -4187,7 +4210,7 @@ def main() -> int:
         if report["error_category"] in {"fixture_namespace_required", "fixture_namespace_invalid"}:
             report["outcome"] = "blocked"
             report["qa_status"] = "QA BLOCKED / NOT STARTED"
-        elif args.profile == "score2_weekly_smart_dca_paper":
+        elif args.profile in {"score2_weekly_smart_dca_paper", "score2_finn_weekly_smart_dca_chain"}:
             # The fixture can already have assessed and filled a Paper order.
             # A verifier failure is incomplete evidence, never NOT_STARTED.
             report["incomplete"] = True
