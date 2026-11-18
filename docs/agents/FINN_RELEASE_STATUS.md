@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Smart DCA zonder vaste koopdag (18 november 2026)
 
-Phase: `BUILD_LOCAL_VALIDATION`. De gebruiker kiest zelf hoe de aankoopgrootte
+Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA`. De gebruiker kiest zelf hoe de aankoopgrootte
 verandert bij lage en hoge benchmarkscore. Een Smart DCA zonder expliciet
 gekozen koopdag gebruikt daarom standaard de volledige benchmarkscore als
 trigger, met de frequentie als maximum van één aankoop per periode. Een
@@ -19,7 +19,18 @@ lokale FINN-actiematrix slaagde 17/17, de adapters 27/27; de scoregestuurde
 en kalendergestuurde Smart-DCA-opslagproeven slaagden. De echte
 provider-developmentselectie slaagde 20/20 en de echte regressionselectie
 109/109, beide zonder provider-, schema-, parse-, validatie- of timeoutfout.
-CI, deployment en onafhankelijke live QA volgen. De vorige FINN-naar-Paper-keten werd door
+De vijf PR-CI-jobs voor
+[PR #1183](https://github.com/gvangalen/antigravity-trading-tool/pull/1183)
+slaagden in [run 44375818384](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44375818384).
+De vijf main-CI-jobs slaagden in
+[run 44377001490](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44377001490),
+en [Auto Deploy 44378125653](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44378125653)
+slaagde. GitHub main, publieke backend-health (HTTP 200) en
+frontend-buildinfo (HTTP 200) meldden op 18 november alle drie SHA
+`319346391465ad3cf4254282683fe17bdf4dbac2`. Dit is deploymentbewijs,
+geen ingelogde acceptatie. Deze statuswijziging creëert zelf een nieuwere
+main-SHA; de laatste CI, Auto Deploy en publieke identiteit worden opnieuw
+gecontroleerd vóór de QA-handoff. De vorige FINN-naar-Paper-keten werd door
 onafhankelijke QA geaccepteerd op SHA `c3e60c19083278621932d1877568be3abfdb9bdb`
 in [run 44364003106](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44364003106);
 die acceptatie bewijst deze nieuwe standaardkeuze nog niet.
