@@ -129,6 +129,48 @@ zijn geslaagd. GitHub main, backend-health (HTTP 200) en frontend-buildinfo
 creëert zelf een nieuwe main-SHA; de laatste main-CI, Auto Deploy en publieke
 identiteit worden opnieuw gecontroleerd vóór de onafhankelijke QA-hertest.
 
+## FINN Smart DCA: scorebanden in begeleide vervolgvraag (18 november 2026)
+
+Phase: `PRODUCT_DEPLOYED_PENDING_FINAL_STATUS_AND_INDEPENDENT_QA`.
+De bestaande onafhankelijke QA-agent beoordeelde de vorige publieke SHA
+`2dc835de0c6734eafe3db3bff20c9d060dbad5be` als **NOT_ACCEPTED**.
+De oorspronkelijke browservraag maakte wel een bevestigbare BTC/USDT-kaart,
+maar het antwoord ontkende die kaart. De beschermde tweebeurtentest in
+[QA-run 44204622990](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44204622990)
+vroeg na de expliciete drempels toch naar een vaste koopdag. Er werd niets
+bevestigd of uitgevoerd; de Paper-reservering en uitvoering konden daardoor
+niet worden afgetekend.
+
+De reparatie in [PR #1170](https://github.com/gvangalen/antigravity-trading-tool/pull/1170)
+houdt de benchmarktrigger en scorebanden vast bij de vervolgvraag, leest
+de afzonderlijke drempels 26 en 76, en corrigeert een antwoord dat een
+daadwerkelijk opgeslagen bevestigbare kaart tegenspreekt. De gecorrigeerde
+respons wordt als `repaired` vastgelegd. Een exacte tweebeurtige lokale
+FastAPI/Celery/Responses-proef op een synthetische eigenaar eindigde in een
+bevestigbaar BTC/USDT-voorstel: 1D, wekelijks maximaal één keer, €200 basis,
+volledige benchmark, scorebanden 150/100/50%, drempels 26/76 en geen koopdag.
+Er is daarbij geen bot of order geactiveerd.
+
+Definitieve lokale Build-validatie: backend **5.039 geslaagd, 7 bestaande
+skips**; worker-actiematrix **17/17** en adapters **27/27** (artifact SHA-256
+`4fc07869a7ea4b6e3105f5c11ff5e8dc29a5c6c4341bd6d0c93158c6c1a3fcf4`).
+De echte providerontwikkelset was **20/20** (artifact SHA-256
+`c211b3fb6d04196fd822570ba05a08d5734395ba634d5d88ff485253ac530711`),
+de providerregressie **109/109** (artifact SHA-256
+`738f5f2ed9b2b1fbdc7ec7dda25630857ecf3fa54fccbf25825c99d323e0f2e7`),
+met nul provider-, schema-, timeout-, parse- en validatiefouten. Frontend-build,
+typecheck en `lint:i18n` slaagden; `test:i18n` **43/43**, `test:commands`
+**85/85**, `test:proposals` **9/9** en `test:setups` **20/20**. De
+afzonderlijke read-only Security-review vond geen concrete blokkade.
+
+PR-CI en [main-CI 44208706430](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44208706430)
+hadden elk vijf groene jobs. [Auto Deploy 44209554113](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44209554113)
+slaagde. GitHub main, backend-health (HTTP 200) en frontend-buildinfo (HTTP
+200) meldden alle drie product-SHA
+`ba494e685967d6d78a6afbe2b6e509ca5a8a1288`. Deze statuswijziging
+maakt zelf een nieuwe main-SHA; de laatste CI, Auto Deploy en publieke
+identiteit worden opnieuw gecontroleerd vóór de QA-handoff.
+
 ## FINN-chat: eigen berichten kopiëren (17 november 2026)
 
 Phase: `INDEPENDENT_QA_ACCEPTED`. [PR #1162](https://github.com/gvangalen/antigravity-trading-tool/pull/1162)
