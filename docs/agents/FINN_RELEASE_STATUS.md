@@ -4,9 +4,34 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Smart DCA begeleide chatreparatie (18 november 2026)
+
+Phase: `BUILD_LOCAL_VALIDATION`. Onafhankelijke browser-QA op live SHA
+`a3696321468e916a97a03fba285beb094a386235` vond de scoregestuurde
+conceptkaart zonder koopdag en de expliciete vrijdagkaart correct, maar
+accepteerde de begeleide chatflow niet. De reeks met "maximaal één aankoop per
+week" verloor de frequentie, een vraag om een scorebandvoorstel raakte de
+lopende nieuwe setup kwijt, een naam nam "op timeframe 1D" mee, en "koop
+niets" werd als koopintentie gelezen. Er werd niets bevestigd of gekocht.
+
+De reparatie bewaart de frequentie, houdt een gevraagde bewerkbare
+scorebandstandaard binnen de nieuwe setup, snijdt de timeframe-clausule van
+de naam af en behandelt een DCA-koopschema plus "koop niets" als
+voorstelverzoek. De lokale gerichte suite slaagde 479/479 en de volledige
+backend-suite 5062/5062 (7 overgeslagen). De lokale FINN-actiematrix slaagde
+17/17 en de adapters 27/27. De lokale Responses/voorstel/bevestiging/
+opslagproef inclusief de nieuwe begeleide en negatiegevallen slaagde, evenals
+de kalender-DCA-proef. Frontend-typecheck, i18n-controle en -tests,
+command-, proposal- en setup-tests en productiebuild slaagden; `audit:high`
+vond nul kwetsbaarheden. De echte provider-developmentselectie slaagde
+20/20 en de regressionselectie 109/109, beide zonder provider-, schema-,
+timeout-, parse- of validatiefout. CI, deployment en onafhankelijke live QA
+volgen. Een voorstel blijft onbevestigd
+totdat de gebruiker het goedkeurt.
+
 ## Smart DCA zonder vaste koopdag (18 november 2026)
 
-Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA`. De gebruiker kiest zelf hoe de aankoopgrootte
+Phase: `QA_NOT_ACCEPTED_GUIDED_FLOW`. De gebruiker kiest zelf hoe de aankoopgrootte
 verandert bij lage en hoge benchmarkscore. Een Smart DCA zonder expliciet
 gekozen koopdag gebruikt daarom standaard de volledige benchmarkscore als
 trigger, met de frequentie als maximum van één aankoop per periode. Een

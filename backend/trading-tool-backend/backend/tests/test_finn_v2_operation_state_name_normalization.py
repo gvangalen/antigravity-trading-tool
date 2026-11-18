@@ -787,6 +787,56 @@ def test_inverse_smart_dca_without_calendar_day_uses_benchmark_cadence():
     )] == [26, 76, 150, 100, 50]
 
 
+def test_guided_smart_dca_remembers_weekly_limit_and_requested_ladder_proposal():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    service = FinnV2OperationStateService()
+    first = service.resolve(
+        contract=contract,
+        message=("Ik wil voor BTC/USDT een Smart DCA maken: maximaal één aankoop per week, "
+                 "€200 als basisbedrag. Laat het bedrag meebewegen met de gezamenlijke "
+                 "Markt-, Macro- en Technisch-score. Welke drie staffels stel je voor? "
+                 "Toon eerst een bewerkbaar concept; start geen bot en plaats geen order."),
+        explicit_asset="BTC", conversation_context={}, supplied_inputs={}, model_tool_inputs=True,
+    )
+    assert first.collected_inputs["dca_frequency"] == "weekly"
+    assert first.collected_inputs["dca_trigger_mode"] == "benchmark"
+    assert first.input_sources["low_threshold"] == "requested_suggestion"
+    assert first.next_missing_input == "timeframe"
+    second = service.resolve(
+        contract=contract,
+        message="1D. De aankoopfrequentie had ik al genoemd: maximaal één keer per week.",
+        explicit_asset=None, conversation_context={"active_guided_operation": first.dict()},
+        supplied_inputs={}, model_tool_inputs=True,
+    )
+    assert second.collected_inputs["dca_frequency"] == "weekly"
+    assert second.next_missing_input == "name"
+    ready = service.resolve(
+        contract=contract, message="BTC Smart DCA Browser QA 1811C",
+        explicit_asset=None, conversation_context={"active_guided_operation": second.dict()},
+        supplied_inputs={}, model_tool_inputs=True,
+    )
+    assert ready.missing_required_inputs == []
+    assert [ready.collected_inputs[key] for key in (
+        "low_threshold", "high_threshold", "low_score_percent",
+        "mid_score_percent", "high_score_percent",
+    )] == [26, 76, 150, 100, 50]
+
+
+def test_smart_dca_name_excludes_explicit_timeframe_clause():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message=("Maak een nieuwe BTC/USDT Smart DCA-setup met de naam "
+                 "BTC Smart DCA Default QA 1811D op timeframe 1D. "
+                 "Basisbedrag €200, maximaal één aankoop per week. "
+                 "Score onder 26: 150%; van 26 tot onder 76: 100%; vanaf 76: 50%."),
+        explicit_asset="BTC", conversation_context={}, supplied_inputs={}, model_tool_inputs=True,
+    )
+    assert state.collected_inputs["name"] == "BTC Smart DCA Default QA 1811D"
+    assert state.collected_inputs["timeframe"] == "1D"
+    assert state.collected_inputs["dca_frequency"] == "weekly"
+
+
 def test_guided_smart_dca_replaces_weekday_question_with_benchmark_trigger():
     contract = FinnV2OperationRegistry().require_supported("create_setup")
     service = FinnV2OperationStateService()

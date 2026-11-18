@@ -3,6 +3,61 @@ import pytest
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
 
 
+def test_smart_dca_schedule_with_koop_niets_remains_proposal_request():
+    message = (
+        "Maak een nieuwe BTC/USDT Smart DCA. Noem hem BTC Smart DCA Vrijdag QA. "
+        "De grafiek is 1D. Koop wekelijks op vrijdag maximaal één keer voor "
+        "€200 basisbedrag. Gebruik Markt, Macro en Technisch samen: onder score "
+        "26 150%, 26 tot 76 100%, vanaf 76 50%. Toon eerst het voorstel; koop niets."
+    )
+    service = FinnV2RequestPreprocessorService()
+    facts = service.preprocess(message=message)
+    assert facts.action_polarity == "create"
+    assert not service._is_direct_market_order_request("koop niets")
+    assert service._is_direct_market_order_request("koop nu €100 BTC")
+
+
+def test_recurring_dca_instruction_and_explicit_no_buy_do_not_authorize_order():
+    service = FinnV2RequestPreprocessorService()
+    request = ("Maak een Smart DCA voor BTC. Koop iedere week wanneer de benchmark "
+               "goed is. Koop niets nu; toon eerst een voorstel.")
+    facts = service.preprocess(message=request)
+    assert facts.action_polarity == "create"
+    assert facts.financial_execution_intent is False
+    immediate = service.preprocess(
+        message=("Maak een Smart DCA voor BTC. Koop iedere week wanneer de benchmark "
+                 "goed is. Koop nu €100 BTC."),
+    )
+    assert immediate.action_polarity == "execute"
+    assert immediate.financial_execution_intent is True
+
+
+@pytest.mark.parametrize("cadence", [
+    "Koop elke maandag wanneer de benchmark goed is.",
+    "Koop iedere eerste maandag wanneer de benchmark goed is.",
+    "Koop op maandag wanneer de benchmark goed is.",
+    "Koop elke 1e van de maand wanneer de benchmark goed is.",
+])
+def test_dca_calendar_cadence_with_no_buy_stays_a_draft(cadence):
+    facts = FinnV2RequestPreprocessorService().preprocess(
+        message=f"Maak een Smart DCA voor BTC. {cadence} Koop niets nu; toon eerst een voorstel.",
+    )
+    assert facts.action_polarity == "create"
+    assert facts.financial_execution_intent is False
+
+
+@pytest.mark.parametrize("no_buy", [
+    "Koop niets nu", "Koop nu niets", "Koop nu geen BTC", "Buy nothing now",
+])
+def test_dca_draft_with_negated_immediate_buy_remains_non_executing(no_buy):
+    facts = FinnV2RequestPreprocessorService().preprocess(
+        message=("Maak een Smart DCA voor BTC. Koop elke maandag wanneer de "
+                 f"benchmark goed is. {no_buy}; toon eerst een voorstel."),
+    )
+    assert facts.action_polarity == "create"
+    assert facts.financial_execution_intent is False
+
+
 @pytest.mark.parametrize("message, expected", [
     ("Ik wil hier nu ook een Paper-bot bij, naam Probe Bot, budget €20. Laat het concept zien.", "create"),
     ("En een Paper-bot voor deze strategie? €20 budget; eerst een voorstel.", "create"),
