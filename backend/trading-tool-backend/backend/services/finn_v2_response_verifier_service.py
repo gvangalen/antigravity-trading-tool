@@ -1178,8 +1178,21 @@ class FinnV2ResponseVerifierService:
         )
 
     async def _persist_verified_response(self, *, run, draft: ResponseDraft, verifier: VerifierResult, proposal_id: Optional[str], confirmation_required: bool, lineage_eligible: bool = False) -> VerifiedResponse:
+        corrected_proposal_denial = bool(proposal_id and self._denies_existing_proposal(draft))
+        if corrected_proposal_denial:
+            # The persisted proposal is the authoritative outcome. A model
+            # sentence claiming that no card can be made must never accompany
+            # an actionable confirmation card in the same response.
+            draft = draft.copy(update={
+                "direct_answer": "Ik heb een bevestigbaar concept klaargezet. Controleer de kaart voordat je bevestigt.",
+                "main_observation": "De kaart wacht op jouw bevestiging.",
+                "supporting_points": [],
+                "claims": [],
+            })
         canonical_mode = normalize_interaction_mode(draft.mode)
         verifier_status = "repaired" if verifier.action == "deliver" and verifier.reason_codes else "passed"
+        if corrected_proposal_denial:
+            verifier_status = "repaired"
         if canonical_mode in {"READ", "CAPABILITY", "CLARIFICATION", "UNAVAILABLE"} and verifier.reason_codes:
             verifier_status = "downgraded"
         verifier_row = await self._persist_verifier_result(run=run, draft=draft, verifier=verifier)
@@ -1221,6 +1234,17 @@ class FinnV2ResponseVerifierService:
         increment_execution_safety_counter(f"finn_v2_verifier_results_total:{record.mode}:{verifier.action}")
         increment_execution_safety_counter(f"finn_v2_verified_responses_total:{record.mode}:{record.verifier_status}")
         return record
+
+    @staticmethod
+    def _denies_existing_proposal(draft: ResponseDraft) -> bool:
+        answer = " ".join((draft.direct_answer or "", draft.main_observation or "")).casefold()
+        return bool(re.search(
+            r"\b(?:kan|kunnen)\b.{0,45}\b(?:geen|niet)\b"
+            r".{0,55}\b(?:conceptkaart|voorstel)\b"
+            r"|\bgeen\b.{0,30}\bbevestigbar\w*\b"
+            r".{0,30}\b(?:conceptkaart|voorstel)\b",
+            answer,
+        ))
 
     async def _persist_verifier_result(self, *, run, draft: ResponseDraft, verifier: VerifierResult):
         return await self.verifiers.create(

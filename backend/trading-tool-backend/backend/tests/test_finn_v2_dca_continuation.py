@@ -59,6 +59,44 @@ def test_no_fixed_weekday_corrects_open_dca_draft_instead_of_abandoning_it():
     )
 
 
+def test_smart_dca_threshold_followup_preserves_score_ladder_and_benchmark_trigger():
+    registry = FinnV2OperationRegistry()
+    contract = registry.require_supported("create_setup")
+    service = FinnV2OperationStateService()
+    first = service.resolve(
+        contract=contract,
+        message=("Maak voor BTC/USDT een setup met de naam Smart DCA QA, op 1D. "
+                 "Ik wil wekelijks maximaal een keer €200 basisbedrag inzetten, zonder vaste koopdag. "
+                 "Gebruik de volledige benchmarkscore van Markt, Macro en Technisch: "
+                 "bij lage scores 150%, bij middenscores 100% en bij hoge scores 50%. "
+                 "Toon eerst een voorstel; activeer geen bot en plaats geen order."),
+        explicit_asset="BTC",
+        conversation_context=None,
+    )
+    context = {
+        "conversation_state_version": service.CONTEXT_STATE_VERSION,
+        "active_guided_operation": first.dict(),
+    }
+    second = service.resolve(
+        contract=contract,
+        message=("Gebruik onder 26 voor laag: 150% van €200. Van 26 tot onder 76 is midden: "
+                 "100%. Vanaf 76 is hoog: 50%. BTC/USDT, wekelijks zonder vaste dag, "
+                 "volledige benchmark. Maak de bevestigbare setupkaart en gekoppelde strategie; "
+                 "geen bot of order."),
+        explicit_asset="BTC",
+        conversation_context=context,
+    )
+    inputs = second.collected_inputs
+    assert inputs["symbol"] == "BTC"
+    assert inputs["quote_currency"] == "USDT"
+    assert inputs["dca_trigger_mode"] == "benchmark"
+    assert inputs["dca_amount_mode"] == "score_bands"
+    assert inputs["low_threshold"] == 26
+    assert inputs["high_threshold"] == 76
+    assert "dca_day" not in inputs
+    assert second.missing_required_inputs == []
+
+
 def test_conversational_request_with_asset_starts_new_setup_draft():
     assert _explicit_create_operation_request(
         "kan je voor eth ook een setup maken?"

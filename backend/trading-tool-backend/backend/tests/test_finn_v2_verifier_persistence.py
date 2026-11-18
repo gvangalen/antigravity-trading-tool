@@ -95,6 +95,26 @@ def test_verifier_persistence_serializes_datetime_payloads():
     assert isinstance(response_captured["response_json"]["created_at"], str)
     assert persisted.created_at == response_captured["created_at"]
 
+    conflicting = draft.copy(update={
+        "mode": "CREATE_PROPOSAL",
+        "direct_answer": "Ik kan hier geen bevestigbare conceptkaart aanmaken.",
+        "main_observation": "Wil je alleen een tekstvoorstel?",
+    })
+    repaired = asyncio.run(
+        service._persist_verified_response(
+            run=run,
+            draft=conflicting,
+            verifier=verifier,
+            proposal_id="owner-bound-proposal",
+            confirmation_required=True,
+        )
+    )
+    assert repaired.proposal_id == "owner-bound-proposal"
+    assert repaired.confirmation_required is True
+    assert repaired.verifier_status == "repaired"
+    assert "geen bevestigbare" not in repaired.direct_answer
+    assert "bevestigbaar concept" in repaired.direct_answer
+
 
 def test_verifier_rejects_indicator_configuration_as_a_causal_plan_judgment():
     service = FinnV2ResponseVerifierService(session=object())
