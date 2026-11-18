@@ -33,7 +33,7 @@ def main() -> None:
     first = run_gate(
         base_url=base_url, bearer_token=token, timeout_seconds=100,
         message=(f"Maak voor BTC/USDT een setup met de naam {name}, op 1D. "
-                 "Ik wil wekelijks maximaal een keer €200 basisbedrag inzetten, zonder vaste koopdag. "
+                 "Ik wil wekelijks maximaal een keer €200 basisbedrag inzetten. "
                  "Gebruik de volledige benchmarkscore van Markt, Macro en Technisch: "
                  "bij lage scores 150%, bij middenscores 100% en bij hoge scores 50%. "
                  "Toon eerst een voorstel; activeer geen bot en plaats geen order."),
@@ -43,11 +43,13 @@ def main() -> None:
     assert first_record["runtime_state"]["guided_state"]["missing_required_inputs"] == [
         "low_threshold", "high_threshold",
     ]
+    first_inputs = first_record["runtime_state"]["guided_state"]["collected_inputs"]
+    assert first_inputs["dca_trigger_mode"] == "benchmark" and not first_inputs.get("dca_day")
     second = run_gate(
         base_url=base_url, bearer_token=token, timeout_seconds=100,
         conversation_id=first["conversation_id"],
         message=("Gebruik onder 26 voor laag: 150% van €200. Van 26 tot onder 76 is midden: "
-                 "100%. Vanaf 76 is hoog: 50%. BTC/USDT, wekelijks zonder vaste dag, "
+                 "100%. Vanaf 76 is hoog: 50%. BTC/USDT, wekelijks, "
                  "volledige benchmark. Maak de bevestigbare setupkaart en gekoppelde strategie; "
                  "geen bot of order."),
     )
