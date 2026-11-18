@@ -728,6 +728,17 @@ def test_score2_match_paper_profiles_are_separately_gated(monkeypatch):
         probe.run("qa-123456-1-abcd1234-5678abcd", outside=False)
 
 
+def test_weekly_smart_dca_profile_error_category_never_leaks_private_text():
+    module = _module()
+    profile = "score2_weekly_smart_dca_paper"
+    assert module.profile_error_category(
+        profile, RuntimeError("weekly_smart_dca_ledger_mismatch"),
+    ) == "weekly_smart_dca_ledger_mismatch"
+    assert module.profile_error_category(
+        profile, ValueError("private owner 123 and quote 456"),
+    ) == "weekly_smart_dca_probe_runtime_error"
+
+
 def test_weekly_smart_dca_profile_is_protected_and_uses_same_week(monkeypatch):
     from backend.scripts import probe_protected_weekly_smart_dca_paper as probe
 
