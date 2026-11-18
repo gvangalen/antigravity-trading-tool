@@ -4,6 +4,37 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN kalender-DCA na Smart DCA QA (18 november 2026)
+
+Phase: `BUILD_VALIDATED_PENDING_RELEASE`. De bestaande QA-agent accepteerde
+de Smart-DCA-opslag op de live SHA
+`d990496341fc46308ade9ca1ab5d1ce79bf90399` technisch: de ingelogde kaart
+was correct en [beschermde run 44219970585](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44219970585)
+maakte na bevestiging precies één setup plus strategie, met idempotente replay
+en zonder bot of order. Het eindoordeel voor de complete DCA-flow was toch
+**NOT_ACCEPTED**. Een gewone vrijdag-DCA met “vast bedrag van €50, niet
+scoregestuurd” hield `dca_amount_mode` open; een vervolgzinsnede “zonder
+scoregestuurde aanpassing” verloor het open concept. Zie de onafhankelijke
+[eerste run 44220190373](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44220190373)
+en [vervolgrun 44220392516](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44220392516).
+
+De parser geeft een expliciet vast bedrag voorrang wanneer de gebruiker
+scoregestuurde aanpassing uitdrukkelijk afwijst. Dezelfde regel geldt voor de
+beantwoording van een open `dca_amount_mode`-vraag. Exacte QA-zinnen en de
+vervolgbeurt zijn als regressie toegevoegd. Een geïsoleerde echte
+Responses/FastAPI/Celery-proef bevestigde een kalender-DCA-voorstel, opslag van
+één vrijdagsetup met gekoppelde strategie, eigenaarafbakening, idempotente
+herhaling en nul bots. De eerdere Smart-DCA-proef bleef groen.
+
+Lokale gates: gerichte DCA/naam/proposaltests **221 geslaagd**; volledige
+backend-suite **5040 geslaagd, 7 bestaande skips**; worker-actiematrix
+**17/17**, adapters **27/27**, Smart- en kalenderopslagproeven groen. Echte
+provider development **20/20** en regression **109/109**, beide zonder
+provider-, schema-, parse-, validatie- of timeoutfouten. Frontend-build,
+typecheck, i18n lint/tests, commands, proposals en setups geslaagd. PR-CI,
+main-CI, Auto Deploy en onafhankelijke live QA volgen; lokale resultaten zijn
+geen live acceptatie.
+
 ## FINN Smart DCA: legacy opslagconstraint (18 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA_RETEST`. [PR #1172](https://github.com/gvangalen/antigravity-trading-tool/pull/1172)

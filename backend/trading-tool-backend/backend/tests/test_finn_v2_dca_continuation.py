@@ -97,6 +97,59 @@ def test_smart_dca_threshold_followup_preserves_score_ladder_and_benchmark_trigg
     assert second.missing_required_inputs == []
 
 
+def test_calendar_dca_negated_score_cue_keeps_fixed_amount_and_guided_draft():
+    registry = FinnV2OperationRegistry()
+    contract = registry.require_supported("create_setup")
+    service = FinnV2OperationStateService()
+    first = service.resolve(
+        contract=contract,
+        message=("Maak voor BTC/USDT een setup met de naam Kalender DCA QA, op 1D. "
+                 "Koop elke week op vrijdag een vast bedrag van €50. Dit is gewone "
+                 "kalender-DCA, niet scoregestuurd. Toon een voorstel en activeer geen bot of order."),
+        explicit_asset="BTC", conversation_context=None,
+    )
+    assert first.missing_required_inputs == []
+    assert first.collected_inputs["dca_amount_mode"] == "fixed"
+    assert first.collected_inputs["base_amount"] == 50
+    assert first.collected_inputs["dca_day"] == "friday"
+    assert "score_source" not in first.collected_inputs
+    alternate = service.resolve(
+        contract=contract,
+        message=("Maak voor BTC/USDT een setup met de naam Kalender DCA QA, op 1D. "
+                 "Dit is gewone kalender-DCA: koop elke week op vrijdag een vast "
+                 "bedrag van €50, niet op basis van scores. Toon eerst een voorstel, "
+                 "activeer geen bot en plaats geen order."),
+        explicit_asset="BTC", conversation_context=None,
+    )
+    assert alternate.missing_required_inputs == []
+    assert alternate.collected_inputs["dca_amount_mode"] == "fixed"
+
+    answer = ("Het bedragstype is een vast bedrag: iedere vrijdag €50, zonder "
+              "scoregestuurde aanpassing. Maak nu de bevestigbare setupkaart "
+              "voor BTC/USDT op 1D.")
+    draft = first.dict()
+    draft["collected_inputs"].pop("dca_amount_mode")
+    draft["missing_required_inputs"] = ["dca_amount_mode"]
+    draft["next_missing_input"] = "dca_amount_mode"
+    draft["status"] = "collecting"
+    assert FinnResponsesFrontDoor.binds_guided_slot(
+        message=answer, contract=contract, registry=registry,
+        requested_slot="dca_amount_mode", collected_inputs=draft["collected_inputs"],
+    )
+    second = service.resolve(
+        contract=contract, message=answer, explicit_asset="BTC",
+        conversation_context={
+            "conversation_state_version": service.CONTEXT_STATE_VERSION,
+            "active_guided_operation": draft,
+        },
+    )
+    assert second.missing_required_inputs == []
+    assert second.collected_inputs["name"] == "Kalender DCA QA"
+    assert second.collected_inputs["dca_amount_mode"] == "fixed"
+    assert second.collected_inputs["base_amount"] == 50
+    assert second.collected_inputs["dca_day"] == "friday"
+
+
 def test_conversational_request_with_asset_starts_new_setup_draft():
     assert _explicit_create_operation_request(
         "kan je voor eth ook een setup maken?"
