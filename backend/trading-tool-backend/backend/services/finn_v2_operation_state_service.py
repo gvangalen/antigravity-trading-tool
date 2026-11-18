@@ -1555,9 +1555,10 @@ class FinnV2OperationStateService:
                 )
                 if named_base:
                     values["base_amount"] = self._numeric_value(named_base.group(1))
-                if len(euro_amounts) == 1 and not re.search(r"\bminim(?:um|ale)\b", amount_text):
+                one_amount = bool(euro_amounts) and len(set(euro_amounts)) == 1
+                if one_amount and not re.search(r"\bminim(?:um|ale)\b", amount_text):
                     values.setdefault("base_amount", euro_amounts[0])
-                if not smart_amount and len(euro_amounts) == 1 and not re.search(r"\bminim(?:um|ale)\b", amount_text):
+                if not smart_amount and one_amount and not re.search(r"\bminim(?:um|ale)\b", amount_text):
                     values["dca_amount_mode"] = "fixed"
                 if smart_amount:
                     values.update(self._dca_score_percentages(text))
@@ -1705,7 +1706,8 @@ class FinnV2OperationStateService:
         """Keep an explicitly fixed amount when score adjustment is rejected."""
         return bool(re.search(
             r"\b(?:niet|geen|zonder)\s+(?:(?:op\s+basis\s+van|met)\s+)?"
-            r"(?:een\s+)?(?:score\w*|benchmarkscore\w*|smart\s*dca|variab\w*)\b",
+            r"(?:een\s+)?(?:score\w*|benchmarkscore\w*|smart\s*dca|variab\w*)\b"
+            r"|\bongeacht\b.{0,90}\b(?:score\w*|benchmarkscore\w*)\b",
             text.casefold(),
         ))
 

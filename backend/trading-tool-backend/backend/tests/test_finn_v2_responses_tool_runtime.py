@@ -55,7 +55,7 @@ from backend.services.finn_v2_run_service import (
     _strategy_rule_is_unencoded, _inherits_blocked_strategy_rules,
     _explicitly_separates_new_strategy, _has_independent_strategy_inputs,
     _freeform_strategy_rule_waiver_inputs,
-    _plain_setup_creation_request,
+    _plain_setup_creation_request, _bounded_supported_smart_dca_calendar_request,
     _plain_strategy_execution_mode_reply,
     _plain_strategy_start_request,
     _plain_strategy_guided_mode_transition,
@@ -6643,6 +6643,57 @@ def test_setup_rule_coverage_checks_full_request_against_enforced_fields(verdict
     assert "not an extra trading rule" in fake.requests[0]["instructions"]
     assert fake.requests[0]["store"] is False
     assert fake.requests[0]["tool_choice"] == "none"
+
+
+@pytest.mark.parametrize("ending", ["Toon eerst het voorstel.", "Toon eerst het voorstel; koop niets."])
+def test_complete_smart_dca_friday_draft_has_bounded_rule_coverage(ending):
+    message = (
+        "Maak een nieuwe BTC/USDT Smart DCA. Noem hem BTC Smart DCA Vrijdag QA 1811J. "
+        "De grafiek is 1D. Koop wekelijks op vrijdag maximaal één keer voor €200 basisbedrag. "
+        "Gebruik Markt, Macro en Technisch samen: onder score 26 150%, "
+        "26 tot 76 100%, vanaf 76 50%. " + ending
+    )
+    inputs = {
+        "setup_type": "dca", "symbol": "BTC", "quote_currency": "USDT",
+        "name": "BTC Smart DCA Vrijdag QA 1811J", "timeframe": "1D",
+        "dca_frequency": "weekly", "dca_day": "friday",
+        "dca_trigger_mode": "calendar", "dca_amount_mode": "score_bands",
+        "score_source": "benchmark_score", "base_amount": 200,
+        "low_threshold": 26, "high_threshold": 76,
+        "low_score_percent": 150, "mid_score_percent": 100, "high_score_percent": 50,
+    }
+    assert _bounded_supported_smart_dca_calendar_request(message, inputs)
+    assert not _bounded_supported_smart_dca_calendar_request(
+        message + " Alleen als de 1D-trend stijgt.", inputs,
+    )
+    assert not _bounded_supported_smart_dca_calendar_request(
+        message, {**inputs, "high_score_percent": 100},
+    )
+    conditional_name = message.replace("Vrijdag QA 1811J", "Vrijdag alleen als RSI stijgt")
+    assert not _bounded_supported_smart_dca_calendar_request(
+        conditional_name,
+        {**inputs, "name": "BTC Smart DCA Vrijdag alleen als RSI stijgt"},
+    )
+    for extra_rule in (
+        {"min_benchmark_score": 70}, {"max_benchmark_score": 75},
+        {"min_investment": 250}, {"max_market_score": 20},
+    ):
+        assert not _bounded_supported_smart_dca_calendar_request(
+            message, {**inputs, **extra_rule},
+        )
+
+
+def test_setup_rule_coverage_receives_calendar_trigger_and_score_fields():
+    fake = FakeResponses(response("coverage-calendar", text='{"verdict":"none"}'))
+    guard = FinnResponsesToolRelevanceGuard(SimpleNamespace(responses=fake))
+    inputs = {"setup_type": "dca", "dca_trigger_mode": "calendar", "dca_day": "friday",
+              "dca_amount_mode": "score_bands", "score_source": "benchmark_score"}
+    assert asyncio.run(guard.setup_rule_coverage(
+        message="Maak een vrijdagse Smart DCA met scorestaffels.", collected_inputs=inputs,
+    )) == "none"
+    sent = json.loads(fake.requests[0]["input"])["captured_setup_fields"]
+    assert sent["dca_trigger_mode"] == "calendar"
+    assert "calendar-triggered Smart DCA" in fake.requests[0]["instructions"]
 
 
 def test_setup_rule_coverage_fails_closed_when_provider_cannot_classify():
