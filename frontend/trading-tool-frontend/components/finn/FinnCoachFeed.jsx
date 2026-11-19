@@ -134,7 +134,6 @@ export default function FinnCoachFeed({ onDiscuss }) {
 
   const discuss = (item) => {
     onDiscuss?.(item.id, coachFeedDiscussionQuestion(item, locale), item);
-    if (canUpdateFeedStatus(item)) void setStatus(item.id, "read");
   };
 
   const scopedItems = itemsOwner === user?.id && itemsLocale === locale ? items : [];
@@ -167,14 +166,16 @@ export default function FinnCoachFeed({ onDiscuss }) {
                 {item.symbol ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">{["plan_review", "position_risk", "improvement_suggestion", "analysis_ready", "strategy_next_step", "paper_next_step"].includes(item.event_type) && item.evidence?.trading_pair ? item.evidence.trading_pair : item.symbol}</span> : null}
               </div>
               <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{item.description}</p>
-              <time className="mt-1 block text-xs text-slate-400" dateTime={item.event_type === "bot_decision" && item.source_observed_at ? item.source_observed_at : item.created_at}>
-                {item.event_type === "bot_decision" && item.source_observed_at
-                  ? formatAmsterdamTimestamp(item.source_observed_at, locale)
-                  : new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.created_at))}
+              <time className="mt-1 block text-xs text-slate-400" dateTime={item.created_at}>
+                {formatAmsterdamTimestamp(item.created_at, locale)}
               </time>
-              {["plan_review", "position_risk"].includes(item.event_type) && item.source_observed_at ? (
+              {item.source_observed_at ? (
                 <time className="mt-1 block text-xs text-slate-400" dateTime={item.source_observed_at}>
-                  {item.event_type === "position_risk" ? copy.valuationSource : copy.quoteSource}: {new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(new Date(item.source_observed_at))} UTC
+                  {item.event_type === "position_risk" ? copy.valuationSource : item.event_type === "plan_review" ? copy.quoteSource : item.event_type.endsWith("_report_ready") ? copy.reportReadyAt : item.event_type === "watchlist_added" ? copy.watchlistAddedAt : item.event_type === "strategy_next_step" ? copy.setupSavedAt : item.event_type === "paper_next_step" ? copy.strategySavedAt : copy.sourceMoment}: {formatAmsterdamTimestamp(item.source_observed_at, locale)}
+                </time>
+              ) : item.event_type === "analysis_ready" && /^\d{4}-\d{2}-\d{2}$/.test(String(item.evidence?.score_as_of || "")) ? (
+                <time className="mt-1 block text-xs text-slate-400" dateTime={item.evidence.score_as_of}>
+                  {copy.scoreDate}: {new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(new Date(`${item.evidence.score_as_of}T00:00:00Z`))}
                 </time>
               ) : null}
             </div>
@@ -187,6 +188,13 @@ export default function FinnCoachFeed({ onDiscuss }) {
                 ) : null}
                 {canUpdateFeedStatus(item) && item.event_type !== "proposal_pending" ? (
                   <a href={coachFeedDetailsHref(item)}
+                    onClick={(event) => {
+                      if (!item.event_type.endsWith("_report_ready")) return;
+                      event.preventDefault();
+                      void setStatus(item.id, "read").finally(() => {
+                        window.location.assign(coachFeedDetailsHref(item));
+                      });
+                    }}
                     className="text-sm text-slate-600 hover:underline dark:text-slate-300">{item.event_type === "data_blocked" && item.subject_type === "bot" && item.evidence?.missing_indicators ? copy.reviewManualBuy : item.event_type.endsWith("_report_ready") ? copy.viewReport : copy.details}</a>
                 ) : null}
                 {canUpdateFeedStatus(item) ? (

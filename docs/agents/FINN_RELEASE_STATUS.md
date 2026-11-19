@@ -9,18 +9,22 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 Phase: `LOCAL_BUILD_VALIDATED`. Deze kandidaat staat nog niet live en heeft
 geen onafhankelijk QA-verdict. De feed kiest voortaan op ongelezen status en
 belang: risico en open bevestigingen eerst, daarna een recent rapport en de
-overige vervolgstappen. Een via **Bespreek** geopende kaart verhuist naar de
-geschiedenis; een watchlisttoevoeging die FINN zelf in de chat heeft uitgevoerd
+overige vervolgstappen. **Bespreek** laat de kaart staan totdat FINN een antwoord
+heeft opgeslagen; een afgerond antwoord handelt de kaart af en een gerichte
+verduidelijkingsvraag markeert haar als gelezen. Een mislukte chat laat de kaart
+ongelezen. Een watchlisttoevoeging die FINN zelf in de chat heeft uitgevoerd
 wordt wel vastgelegd maar niet opnieuw als actieve oproep getoond. Web en
 mobiel gebruiken dezelfde selectiegrenzen. De historische feed blijft op
-gebeurtenistijd gesorteerd. Er is geen handelsactie of bevestigingsgrens
-gewijzigd.
+gebeurtenistijd gesorteerd. De feed vermeldt beschikbare bronmomenten in
+Europe/Amsterdam; een score met uitsluitend een kalenderdatum krijgt geen
+verzonnen tijdstip. Er is geen handelsactie of bevestigingsgrens gewijzigd.
 
-Lokale metingen: root pytest **5107 geslaagd, 7 overgeslagen**; gerichte
-feed-, watchlist- en uitvoeringsregressies **85 geslaagd**; webproductiebouw,
-typecheck, i18n-lint, i18n-tests **44 geslaagd**, commandtests **91 geslaagd**,
-mobiele typecheck, lint (0 fouten, 89 waarschuwingen),
-`test:chat` **23 geslaagd** en webbundle-export geslaagd. Een ingelogde
+Lokale metingen na de status- en tijdwijziging: root pytest **5111 geslaagd,
+7 overgeslagen**; de daarna toegevoegde datumregressie is in de gerichte
+feedtest **66/66 geslaagd**. Webproductiebouw, typecheck, i18n-lint,
+i18n-tests **44 geslaagd** en commandtests **91 geslaagd**; mobiele typecheck,
+lint (0 fouten, 89 waarschuwingen), `test:chat` **23 geslaagd** en
+webbundle-export geslaagd. Een ingelogde
 liveproef, CI, Auto Deploy en de officiële onafhankelijke QA-matrix zijn voor
 deze kandidaat nog niet uitgevoerd. De bestaande FINN-actiecontracten en
 Responses-providerselectie zijn niet gewijzigd; een eventuele release volgt

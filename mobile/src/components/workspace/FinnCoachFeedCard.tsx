@@ -54,7 +54,6 @@ export function FinnCoachFeedCard() {
   }, [refresh]);
 
   const handleDiscuss = (item: MobileCoachFeedItem) => {
-    void coachFeedApi.mark(item.id, 'read').then(refresh).catch(() => {});
     openFinn({
       prefill: coachFeedDiscussionPrompt(item, language),
       source: 'coach-feed',
