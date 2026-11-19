@@ -8,6 +8,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 import json
 import logging
+import math
 import os
 import re
 from time import monotonic
@@ -44,6 +45,7 @@ from backend.services.finn_v2_turn_contract import (
     build_turn_contract, can_compose_after_first_read, referenced_setup_rows,
     requests_comparison,
 )
+from backend.services.finn_v2_coach_evidence_plan import coach_evidence_plan
 from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
 from backend.services import finn_v2_entity_resolution_service as entity_resolution_module
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
@@ -2798,6 +2800,9 @@ class FinnResponsesFrontDoor:
             )
         unsupported_pair = unsupported_catalog_pair_mention(message)
         mentioned_assets = mentioned_catalog_symbols(message)
+        coach_plan = coach_evidence_plan(
+            message, named_asset_count=len(mentioned_assets), read_only=is_read_only_turn,
+        )
         mentioned_pairs = {
             (asset.upper(), quote.upper())
             for asset, quote in re.findall(r"\b([A-Z]{2,10})/(EUR|USDT)\b", message, re.I)
@@ -4034,6 +4039,13 @@ class FinnResponsesFrontDoor:
                 call = self._focus_source_reads(
                     call, message=message, read_only=call.operation_id is None and not pending_operation,
                 )
+                if coach_plan and call.operation_id is None and not pending_operation \
+                        and call.name != "evaluate_plan":
+                    # A model-selected narrow read must not drop other source
+                    # domains explicitly requested in the same coach question.
+                    call = replace(call, read_tools=tuple(dict.fromkeys(
+                        (*call.read_tools, *coach_plan.read_tools),
+                    )))
                 # The collection adapter may clear global filters for a
                 # multi-setup comparison, but a later owner-scoped read of
                 # two named rows is a narrower request than the inventory.
@@ -5456,6 +5468,8 @@ class FinnResponsesFrontDoor:
                 and not (collection_cue or requests_comparison(message))
                 and {"plan", "setup", "strategy"}.intersection(request_facts.explicit_entities)
                 and pending_operation is None and not resuming_clarification
+                else "get_active_plan_and_strategy"
+                if coach_plan and pending_operation is None and not resuming_clarification
                 else None
             ),
             rejection_feedback=rejection_feedback,
@@ -5557,12 +5571,34 @@ class FinnResponsesFrontDoor:
                             "name": prior_call.get("name"),
                             "result": {"results": matched},
                         })
-            result = replace(result, turn_contract=build_turn_contract(
+            contract = build_turn_contract(
                 message=message,
                 tool_trace=contract_trace,
                 previous_subject=(previous_response or {}).get("verified_setup_subject"),
                 previous_contract=previous_turn_contract,
-            ), model_owned_repair=result.answer_kind == "free_text")
+            )
+            if coach_plan:
+                source_scores = {
+                    float(item["data"]["benchmark_score"])
+                    for source_call in contract_trace
+                    for item in (source_call.get("result") or {}).get("results") or []
+                    if isinstance(item, dict) and item.get("scope") == "read_asset_scores"
+                    and item.get("status") == "completed"
+                    and isinstance(item.get("data"), dict)
+                    and str(item["data"].get("symbol") or "").upper() in mentioned_assets
+                    and isinstance(item["data"].get("benchmark_score"), (int, float))
+                    and not isinstance(item["data"]["benchmark_score"], bool)
+                    and math.isfinite(item["data"]["benchmark_score"])
+                }
+                contract = {**contract, "coach_evidence_plan": {
+                    "topics": coach_plan.topics,
+                    "decision_required": coach_plan.decision_required,
+                    "next_step_required": coach_plan.next_step_required,
+                    "read_tools": coach_plan.read_tools,
+                    **({"benchmark_score": next(iter(source_scores))} if len(source_scores) == 1 else {}),
+                }}
+            result = replace(result, turn_contract=contract,
+                             model_owned_repair=result.answer_kind == "free_text")
         if (account_state_bundle and is_read_only_turn and result.answer_kind == "free_text"
                 and result.tool_trace):
             canonical_answer = render_account_bundle_answer(result.tool_trace, locale=locale)

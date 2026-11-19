@@ -15437,6 +15437,57 @@ def test_aapl_bot_report_comparison_reads_the_referenced_check_and_report():
     assert checked.text == result.response.text
 
 
+@pytest.mark.parametrize("selected_tool", ["get_active_plan_and_strategy", "get_decision_history"])
+def test_multi_part_coach_question_binds_all_named_asset_sources(selected_tool):
+    question = (
+        "Beoordeel mijn AAPL-plan, benchmark, botbeslissing en laatste koers. "
+        "Waarom wacht de bot en wat doe ik nu? Bespreek alleen."
+    )
+    selected_calls = []
+
+    class FakeRead:
+        async def __call__(self, call):
+            selected_calls.append(call)
+            return {"status": "completed", "results": [
+                {"scope": scope, "status": "completed", "data": {}}
+                for scope in call.read_tools
+            ]}
+
+    fake = FakeResponses(
+        response("coach-read", calls=[tool_call(
+            "call-coach", selected_tool, {"asset": "AAPL"},
+        )]),
+        response("coach-answer", text=(
+            "De AAPL-setupscore en benchmark vragen controle. De botbeslissing en haar reden "
+            "zijn niet ingevuld; de koersbron ontbreekt. Controleer deze bij opening."
+        )),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="multi-part-coach-plan", model_led_coach=True,
+    )
+    front.reads = FakeRead()
+    result = asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="AAPL",
+        workspace_hints={"page": "/asset", "symbol": "AAPL"},
+    ))
+    assert set(selected_calls[0].read_tools) >= {
+        "read_active_setup", "read_linked_strategy", "read_asset_scores",
+        "read_bot_status", "read_review_history", "read_market_snapshot",
+    }
+    assert result.response.turn_contract["coach_evidence_plan"]["topics"] == (
+        "setup", "score", "bot", "quote",
+    )
+    incomplete = replace(result.response, text="De AAPL-score is laag. Wacht rustig af.")
+    checked = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=question, result=incomplete, locale="nl",
+    ))
+    assert checked.status == "unavailable"
+    assert checked.reason == "turn_contract_mismatch"
+    assert checked.rejection_details["gap"] == "coach_topic_missing:setup"
+
+
 def test_bot_report_comparison_does_not_infer_missing_historical_check():
     from backend.services.finn_v2_factual_source_answer import render_report_bot_check_comparison
 
