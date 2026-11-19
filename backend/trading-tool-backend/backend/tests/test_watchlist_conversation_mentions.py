@@ -120,6 +120,10 @@ def test_explicit_watchlist_inventory_reads_owner_entries_without_a_selected_ass
     assert asks_for_watchlist_inventory("Show my watchlist")
     assert not asks_for_watchlist_inventory("Wat vind je van mijn watchlist?")
     assert not asks_for_watchlist_inventory("Voeg ETH toe aan mijn watchlist")
+    assert not asks_for_watchlist_inventory(
+        "Bekijk mijn watchlist-notering MSFT. Controleer de huidige indicatoren en "
+        "benchmark voor deze asset en adviseer welke volgende analysestap logisch is."
+    )
 
     async def exercise():
         front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="inventory-test")

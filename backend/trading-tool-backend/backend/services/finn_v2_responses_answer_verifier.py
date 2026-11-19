@@ -3134,6 +3134,10 @@ class FinnResponsesAnswerVerifier:
                         pair=f"{requested_pair[0]}/{requested_pair[1]}" if requested_pair and requested_pair[0] == symbol else None,
                         bot_id=focused_bot_id(message, previous_response),
                     )
+            elif (scopes == {"read_selected_paper_position_risk"} and symbol
+                  and call.get("name") == "get_selected_paper_position_risk"):
+                from backend.services.finn_v2_factual_source_answer import render_selected_paper_position_risk
+                expected = render_selected_paper_position_risk(read, symbol=symbol)
             elif scopes == {"read_portfolio"} and args.get("environment") == "paper":
                 expected = render_portfolio_read_time(read)
             elif scopes == {"read_market_snapshot"} and symbol:

@@ -63,6 +63,7 @@ from backend.services.finn_v2_paper_position_answer import (
 from backend.services.finn_v2_factual_source_answer import (
     is_report_technical_comparison_request, render_bot_decision, render_closed_paper_exit_facts,
     render_selected_paper_feed_decision, render_latest_quote,
+    render_selected_paper_position_risk,
     render_portfolio_read_time, render_report_and_quote_times,
     render_report_and_technical_read,
 )
@@ -1640,8 +1641,37 @@ class FinnResponsesFrontDoor:
                     model_led_coach=True, response_id_reusable=False,
                 ), None, previous_response, locale=locale,
             )
+        selected_risk_feed = next((item.get("facts") for item in (feed_evidence or [])
+            if isinstance(item, dict) and isinstance(item.get("facts"), dict)
+            and item["facts"].get("event_type") == "position_risk"
+            and item["facts"].get("historical_notification") is True
+            and item["facts"].get("selection_origin") == "current_run"), None)
+        if selected_risk_feed and re.search(
+            r"\b(?:positierisico|position\s+risk|Positionsrisiko|positieconcentratie)\b", message, re.I,
+        ):
+            current_risk_feed = next((item.get("facts") for item in (feed_evidence or [])
+                if isinstance(item, dict) and isinstance(item.get("facts"), dict)
+                and item["facts"].get("feed_item_id") == selected_risk_feed.get("feed_item_id")
+                and isinstance(item["facts"].get("current_position_risk"), dict)), {})
+            symbol = str(selected_risk_feed.get("symbol") or "").upper()
+            read_result = {"status": "completed", "results": [{
+                "scope": "read_selected_paper_position_risk", "status": "completed",
+                "source": "owner_scoped_current_paper_portfolio",
+                "data": {"historical": selected_risk_feed.get("historical_event_facts") or {},
+                         "current": current_risk_feed.get("current_position_risk") or {}},
+            }]}
+            call = {"name": "get_selected_paper_position_risk", "status": "completed",
+                    "arguments": {"asset": symbol}, "result": read_result}
+            return FinnResponsesFrontDoorResult(
+                FinnResponsesResult(
+                    text=render_selected_paper_position_risk(read_result, symbol=symbol),
+                    response_id=f"selected-paper-risk-{self.run_id}", tool_trace=(call,),
+                    answer_kind="factual_source", model_led_coach=True,
+                    response_id_reusable=False,
+                ), None, previous_response, locale=locale,
+            )
         discussing_paper_card = bool(re.search(
-            r"\b(?:dit|deze|this|diese)\b.{0,35}\b(?:Paper[- ]?botbesluit|Paper[- ]?botbeslissing|Paper bot decision|Paper[- ]?Botentscheidung)\b",
+            r"\b(?:dit|deze|this|diese)\b.{0,45}\b(?:Paper[- ]?botbesluit|Paper[- ]?botbeslissing|Paper bot decision|Paper[- ]?Botentscheidung|Paper[- ]?verkoop|Paper[- ]?sale|Paper[- ]?Verkauf)\b",
             message, re.I,
         ))
         selected_paper_feed = next((item.get("facts") for item in (feed_evidence or [])

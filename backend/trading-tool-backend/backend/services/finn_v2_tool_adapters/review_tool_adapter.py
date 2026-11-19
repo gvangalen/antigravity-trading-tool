@@ -134,7 +134,10 @@ class ReviewToolAdapter:
                     snapshot = {"action": action, "at": source_at,
                                 "status": str(facts.get("status") or "").lower(),
                                 "order_status": str(facts.get("order_status") or "").lower(),
-                                "amount_eur": facts.get("amount_eur")}
+                                "amount_eur": facts.get("amount_eur"),
+                                "reasons": [reason[:240] for reason in
+                                            (facts.get("reasons") if isinstance(facts.get("reasons"), list) else [])[:2]
+                                            if isinstance(reason, str) and reason.strip()]}
             if selected and (not asset or selected_base == requested_base) and (
                     selected_feed_snapshot is None or snapshot is not None):
                 # Assessment rows are updated in place within a trading day.
@@ -151,6 +154,7 @@ class ReviewToolAdapter:
                     "decision_at": decision_at.isoformat(),
                     "decision_at_amsterdam": amsterdam_source_moment(decision_at),
                     "paper_order_status": snapshot["order_status"] if snapshot else selected["order_status"],
+                    "reasons": snapshot["reasons"] if snapshot else [],
                     "paper_executed": paper_executed,
                     "filled_amount_eur": (snapshot["amount_eur"] if snapshot and paper_executed
                                           else selected["filled_amount_eur"] if paper_executed else None),

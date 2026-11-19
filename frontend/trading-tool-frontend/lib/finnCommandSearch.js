@@ -37,6 +37,7 @@ export function coachFeedDiscussionQuestion(item, locale = "nl") {
     nl: {
       bot: `Bespreek dit opgeslagen Paper-botbesluit voor ${asset}: ${title}. Controleer de beslissing, opgeslagen regels en eventuele uitvoering in de botgeschiedenis. Leg uit waarom de bot wel of niet handelde en adviseer één concrete vervolgstap. Gebruik geen actuele koers als bewijs voor een historische uitvoering; wijzig niets.`,
       exit: `Controleer deze uitgevoerde Paper-verkoop voor ${asset} in de botgeschiedenis, order en portefeuille. Leg uit of de positie echt is gesloten en bied dan één korte reflectievraag aan. Gebruik geen actuele koers als bewijs voor de uitvoering; wijzig niets.`,
+      risk: `Bespreek deze Paper-positierisicokaart voor ${asset}: ${title}. Vergelijk de huidige, opnieuw gelezen positieconcentratie met de opgeslagen botlimiet en noem het waarderingsmoment. Als de actuele waardering ontbreekt, zeg welke bron ontbreekt. Adviseer één concrete controle; wijzig geen bot of positie.`,
       plan: `Bespreek deze planupdate voor setup ${setup} (${asset}): ${title}. Lees de opgeslagen setup en bijbehorende score.${pair ? " Gebruik dit exacte handelspaar." : " Als bij de setup geen handelspaar is opgeslagen, zeg dat expliciet en kies er niet zelf een."}`,
       data: `Bespreek deze melding over ontbrekend scorebewijs voor ${setupName ? `setup ${setup}` : asset}: ${title}. Controleer de opgeslagen setup, bronstatus en score.${pair ? ` Gebruik ${pair} als exact handelspaar.` : pairUnset ? " Zeg expliciet dat bij deze setup geen handelspaar is opgeslagen." : " Leid geen handelspaar af uit alleen het assetsymbool."}`,
       weekly: `Bespreek mijn opgeslagen weekreflectie${week ? ` van ${week}` : ""}. Lees de afgesloten trades en noem alleen patronen die door de dossiers zijn onderbouwd.`,
@@ -49,6 +50,7 @@ export function coachFeedDiscussionQuestion(item, locale = "nl") {
     en: {
       bot: `Discuss this saved Paper bot decision for ${asset}: ${title}. Check the decision, saved rules and any execution in bot history. Explain why the bot did or did not act and suggest one concrete next step. Do not use a current quote as proof of a historical execution; change nothing.`,
       exit: `Check this executed Paper sale for ${asset} in bot history, order and portfolio. Explain whether the position is actually closed, then offer one short reflection question. Do not use a current quote as execution evidence; change nothing.`,
+      risk: `Discuss this Paper position risk card for ${asset}: ${title}. Compare the current, freshly read position concentration with the saved bot limit and state the valuation time. If the current valuation is unavailable, name the missing source. Suggest one concrete check; change no bot or position.`,
       plan: `Discuss this plan update for setup ${setup} (${asset}): ${title}. Read the saved setup and related score.${pair ? " Use this exact trading pair." : " If no trading pair is saved on the setup, say so explicitly and do not choose one."}`,
       data: `Discuss this missing score evidence for ${setupName ? `setup ${setup}` : asset}: ${title}. Check the saved setup, source status and score.${pair ? ` Use ${pair} as the exact trading pair.` : pairUnset ? " State explicitly that this setup has no saved trading pair." : " Do not infer a trading pair from the asset symbol alone."}`,
       weekly: `Discuss my saved weekly reflection${week ? ` for ${week}` : ""}. Read the closed trades and mention only patterns supported by the records.`,
@@ -61,6 +63,7 @@ export function coachFeedDiscussionQuestion(item, locale = "nl") {
     de: {
       bot: `Besprich diese gespeicherte Paper-Botentscheidung für ${asset}: ${title}. Prüfe Entscheidung, gespeicherte Regeln und Ausführung in der Bot-Historie. Erkläre, warum der Bot handelte oder nicht, und empfehle einen konkreten nächsten Schritt. Verwende keinen aktuellen Kurs als Beleg für eine frühere Ausführung; ändere nichts.`,
       exit: `Prüfe diesen ausgeführten Paper-Verkauf für ${asset} in Bot-Historie, Order und Portfolio. Erkläre, ob die Position wirklich geschlossen ist, und stelle dann eine kurze Reflexionsfrage. Verwende keinen aktuellen Kurs als Ausführungsbeleg; ändere nichts.`,
+      risk: `Besprich diese Paper-Positionsrisikokarte für ${asset}: ${title}. Vergleiche die erneut gelesene aktuelle Positionskonzentration mit dem gespeicherten Bot-Limit und nenne den Bewertungszeitpunkt. Wenn die aktuelle Bewertung fehlt, nenne die fehlende Quelle. Empfiehl eine konkrete Prüfung; ändere weder Bot noch Position.`,
       plan: `Besprich diese Planaktualisierung für Setup ${setup} (${asset}): ${title}. Lies das gespeicherte Setup und den zugehörigen Score.${pair ? " Verwende dieses genaue Handelspaar." : " Wenn kein Handelspaar gespeichert ist, sage dies ausdrücklich und wähle keines selbst."}`,
       data: `Besprich diese Meldung über fehlende Score-Daten für ${setupName ? `Setup ${setup}` : asset}: ${title}. Prüfe das gespeicherte Setup, den Quellenstatus und den Score.${pair ? ` Verwende ${pair} als genaues Handelspaar.` : pairUnset ? " Sage ausdrücklich, dass für dieses Setup kein Handelspaar gespeichert ist." : " Leite aus dem Assetsymbol allein kein Handelspaar ab."}`,
       weekly: `Besprich meine gespeicherte Wochenreflexion${week ? ` vom ${week}` : ""}. Lies die abgeschlossenen Trades und nenne nur belegte Muster.`,
@@ -81,6 +84,7 @@ export function coachFeedDiscussionQuestion(item, locale = "nl") {
       : item?.event_type === "analysis_ready" ? "analysis"
       : item?.event_type === "strategy_next_step" ? "strategy"
       : item?.event_type === "paper_next_step" ? "paper"
+      : item?.event_type === "position_risk" ? "risk"
       : item?.event_type === "weekly_reflection" ? "weekly" : "other";
   return copy[kind];
 }

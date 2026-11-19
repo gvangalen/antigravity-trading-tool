@@ -145,7 +145,7 @@ class FinnV2GatewayService:
             },
             commit=False,
         )
-        if feature_mode == "visible":
+        if feature_mode == "visible_runtime":
             await self.conversations.register_setup_strategy_score_task(
                 conversation_id=conversation.id, user_id=user_id,
                 run_id=run.id, message=request.message,

@@ -4,15 +4,61 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 vervolgflow: reparatie na live QA (19 november 2026)
+
+Phase: `LOCAL_VALIDATED_AWAITING_CI`. De onafhankelijke QA wees de vorige
+publieke SHA `436a29b6e0abbf851916b9cbfc7b39f2bf711fbb` af in
+[QA-run 44533490821](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44533490821)
+(door QA opgegeven artifact SHA-256
+`32729086a3f3eee42eeef8fa07cc0c32789083a10693f0e2a79ffdb721715370`).
+De gecombineerde setup → strategie → score-vraag verloor na de eerste beurt
+zijn opdrachtstatus; een geselecteerde Paper-positierisicokaart kwam als
+`coach_feed_discuss_failed` terug. Een MSFT-watchlistkaart gaf een lijst
+in plaats van indicatoren en benchmark, en Paper-botkaarten misten een
+duidelijke reden of vervolgstap. Een rapportkaart was zichtbaar, maar de
+koppeling aan een opnieuw gegenereerd rapport was nog niet bewezen.
+
+De reparatie bewaart de opdrachtstatus nu in de werkelijk actieve
+`visible_runtime`-modus en houdt de gevraagde drie resultaten vast tijdens
+setupverduidelijking. De exacte gecombineerde vraag doorliep lokaal de
+FastAPI/Celery/PostgreSQL/Redis-chatroute: één bevestigde setup, automatische
+strategieverduidelijking, één bevestigde strategie en een automatisch
+scoreantwoord. Omdat de geïsoleerde proef geen benchmarkscores had, meldde
+FINN het ontbrekende scorebewijs als gedeeltelijk resultaat; de opgeslagen
+setup en strategie bleven behouden. De geselecteerde Paper-risicokaart leest
+opnieuw de eigenaargebonden huidige Paper-waardering; Paper-botantwoorden
+noemen de opgeslagen reden en een controleerbare volgende stap. De
+watchlist-inventarissnelroute onderschept geen indicator- of benchmarkvraag
+meer. Voor een eenvoudige volledig genoemde setup met handelspaar voorkomt
+een begrensde herkenning dat FINN een niet-gevraagde koopvoorwaarde verzint.
+
+Gerichte backendtests voor gateway, taakvoortzetting, feedantwoorden en de
+eenvoudige setupvorm slaagden; de lokale keten bevestigde idempotent hergebruik
+van de setup. De volledige backend-suite slaagde met **5101 tests** en
+**7 bestaande skips**. De definitieve lokale actiematrix slaagde **17/17**,
+de adapters **28/28**; de Smart DCA- en kalender-DCA-opslagproeven slaagden.
+Er waren nul brokerorders, Live-calls, Live-bots of productieverbindingen
+(matrixartifact SHA-256
+`e772da36be71713cbe75f8183a05430690ea9cfe66ee663142cc678343c3e489`).
+Frontend-build, typecheck, i18n-lint en -tests, commands, proposals en
+`audit:high` slaagden. De echte provider-development- en regressieproeven slaagden
+respectievelijk 20/20 (SHA-256
+`d8c0ea3cd13b10668ce03e8b189522c8e46980c6976d077be250a03e3ddb3512`)
+en 109/109 (SHA-256
+`21befb54532a0753b190438838731e62687d227c0014aa13ff74e01e2268e800`),
+zonder fout of mismatch. Er is voor deze reparatie nog geen nieuwe publieke
+SHA of onafhankelijk QA-verdict.
+
 ## FINN 3.0 vervolgacties en rapportmeldingen (19 november 2026)
 
-Phase: `PRODUCT_DEPLOYED_READY_FOR_INDEPENDENT_QA`. [PR #1198](https://github.com/gvangalen/antigravity-trading-tool/pull/1198)
+Phase: `LIVE_QA_NOT_ACCEPTED`. [PR #1198](https://github.com/gvangalen/antigravity-trading-tool/pull/1198)
 bevat de setup → strategie → score-voortzetting, gerichte FINN-feedkaarten voor
 watchlist, analyse, strategie, Paper-botbesluit en geverifieerde Paper-exit,
 plus herstel van meldingen voor dag- en periodieke rapporten. Productcode-SHA
 op de releasebranch is `ebf4d334074b7216f854d4f8960a49529549bbce`.
 De gemergede product-SHA is `f873b81925bc950f13ae1ce3b3dc0dee0e4e979e`.
-Deze kandidaat is live, maar nog niet onafhankelijk door QA geaccepteerd.
+Deze kandidaat is live, maar door onafhankelijke QA afgewezen; zie de
+reparatiesectie hierboven.
 De Responses-ingang en setupkeuze uit PR #1197 zijn in deze SHA geïntegreerd;
 de daarvoor aangekondigde afzonderlijke QA-proef was nog niet uitgevoerd.
 

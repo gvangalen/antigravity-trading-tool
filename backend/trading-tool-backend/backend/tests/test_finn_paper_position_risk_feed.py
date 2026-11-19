@@ -174,6 +174,48 @@ def test_discuss_paper_risk_rereads_current_position_in_same_owner(monkeypatch):
     assert current.facts["current_trade_signal_confirmed"] is False
 
 
+def test_clicked_paper_risk_card_answers_from_current_owner_read_without_model():
+    from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor
+    from backend.services.finn_v2_responses_answer_verifier import FinnResponsesAnswerVerifier
+
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=42,
+                                   run_id="selected-risk-test", model_led_coach=True)
+    evidence = [
+        {"source": "owner_scoped_feed", "facts": {
+            "feed_item_id": "risk-1", "event_type": "position_risk", "symbol": "BTC",
+            "historical_notification": True, "selection_origin": "current_run",
+            "historical_event_facts": {"limit_pct": 50, "exposure_pct": 70}}},
+        {"source": "owner_scoped_current_paper_portfolio", "facts": {
+            "feed_item_id": "risk-1", "current_position_risk": {
+                "symbol": "BTC", "trading_pair": "BTC/USDT", "status": "above_saved_limit",
+                "limit_pct": 50, "exposure_pct": 70,
+                "valuation_as_of": datetime(2026, 11, 19, 11, tzinfo=timezone.utc)}}},
+    ]
+    message = ("Bespreek dit positierisico voor mijn BTC Paper-bot. Welke opgeslagen "
+               "limiet is overschreden en wat controleer ik? Wijzig niets en plaats geen order.")
+    response = asyncio.run(front.run(message=message, instructions="", conversation_context={},
+                                     verified_asset="BTC", locale="nl", feed_evidence=evidence))
+    assert "BTC/USDT" in response.response.text
+    assert "70%" in response.response.text and "50%" in response.response.text
+    assert "koers- en FX-bron" in response.response.text
+    assert "plaats geen order" in response.response.text
+    verified = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=message, result=response.response, locale="nl"))
+    assert verified.status == "completed", (verified.reason, verified.rejection_details)
+
+
+def test_clicked_paper_risk_card_does_not_reuse_historical_exposure_if_current_read_is_unavailable():
+    from backend.services.finn_v2_factual_source_answer import render_selected_paper_position_risk
+
+    result = {"results": [{"scope": "read_selected_paper_position_risk", "status": "completed",
+        "data": {"historical": {"limit_pct": 50, "exposure_pct": 70}, "current": {
+            "symbol": "BTC", "trading_pair": "BTC/USDT", "status": "unavailable",
+            "limit_pct": 50, "exposure_pct": None}}}]}
+    answer = render_selected_paper_position_risk(result, symbol="BTC")
+    assert "geen bruikbare, gedateerde Paper-waardering" in answer
+    assert "70%" not in answer
+
+
 def test_active_risk_card_updates_and_only_worsening_reopens_handled_alert():
     from backend.services.finn_coach_feed_service import FinnCoachFeedService
 

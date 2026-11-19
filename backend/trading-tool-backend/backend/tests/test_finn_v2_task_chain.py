@@ -1,5 +1,6 @@
 from backend.services.finn_v2_task_chain_service import (
     advance_from_action, continuation, continuation_message, requested_task, score_from_trace,
+    wants_task_resume,
 )
 from backend.infrastructure.repositories.finn_v2_conversation_repository import FinnV2ConversationRepository
 from backend.services.finn_v2_task_chain_service import STATE_KEY
@@ -70,6 +71,12 @@ def test_setup_only_finishes_without_strategy_or_score():
     assert requested_task("Make my BTC setup") is not None
 
 
+def test_manual_resume_recognizes_followup_without_creating_another_setup():
+    assert wants_task_resume("Ga verder met de strategie voor de zojuist opgeslagen BTC-setup.")
+    assert wants_task_resume("Probeer opnieuw de score te tonen")
+    assert not wants_task_resume("Wat is mijn BTC-score?")
+
+
 def test_partial_score_and_atomic_setup_strategy_reuse():
     task = requested_task("Maak BTC setup aan, genereer strategie en toon score")
     task = advance_from_action(task, _saved("create_setup", "42", run_id="run-1",
@@ -104,6 +111,12 @@ def test_conversation_records_question_and_reuses_verified_setup_on_retry():
             conversation_id="conv-1", user_id=7, run_id="run-1", question="Welke koopzone?",
         )
         assert row.context_json[STATE_KEY]["pending_question"] == "Welke koopzone?"
+        await repo.register_setup_strategy_score_task(
+            conversation_id="conv-1", user_id=7, run_id="run-clarify",
+            message="Een nieuwe BTC-setup, niet een bestaande setup. Maak die eerst aan.",
+        )
+        assert row.context_json[STATE_KEY]["requested_results"] == ["setup", "strategy", "score"]
+        assert row.context_json[STATE_KEY]["expected_run_id"] == "run-clarify"
         await repo.register_setup_strategy_score_task(
             conversation_id="conv-1", user_id=7, run_id="run-2", message="0 tot 45",
         )

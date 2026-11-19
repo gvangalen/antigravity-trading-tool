@@ -14,6 +14,14 @@ from typing import Any
 STATE_KEY = "setup_strategy_score_task_v1"
 
 
+def wants_task_resume(message: str) -> bool:
+    """Recognize an explicit continuation of the active setup task."""
+    return bool(re.search(
+        r"\b(?:ga\s+verder|verder\s+met|hervat|probeer\s+opnieuw|continue|resume)\b",
+        str(message or ""), re.I,
+    ))
+
+
 def requested_task(message: str) -> dict[str, Any] | None:
     text = str(message or "").strip()
     lower = text.lower()

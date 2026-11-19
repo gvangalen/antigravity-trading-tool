@@ -131,6 +131,35 @@ def test_clicked_paper_card_without_owner_feed_context_fails_closed():
     assert "kaart niet verifiëren" in result.response.text
 
 
+def test_clicked_paper_sale_uses_selected_historical_decision_without_model_clock():
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7,
+                                   run_id="selected-sale-test", model_led_coach=True)
+    calls = []
+
+    async def read(call):
+        calls.append(call)
+        return {"status": "completed", "results": [{"scope": "read_review_history",
+            "status": "completed", "data": {"selected_feed_decision": {
+                "symbol": "AAPL", "action": "sell", "decision_at": "2026-11-10T14:45:00+00:00",
+                "paper_executed": True, "filled_amount_eur": 393.01,
+                "reasons": ["Opgeslagen stop geraakt"]}}}]}
+
+    front.reads = read
+    message = ("Controleer deze uitgevoerde Paper-verkoop voor AAPL in de botgeschiedenis, "
+               "order en portefeuille. Leg uit of de positie echt is gesloten en bied een reflectievraag aan.")
+    result = asyncio.run(front.run(message=message, instructions="", conversation_context={},
+        verified_asset="AAPL", locale="nl", feed_evidence=[{"source": "owner_scoped_feed",
+            "facts": {"event_type": "bot_decision", "historical_notification": True,
+                      "selection_origin": "current_run", "symbol": "AAPL",
+                      "historical_source_observed_at": "2026-11-10T14:45:00+00:00"}}]))
+    assert len(calls) == 1 and calls[0].read_tools == ("read_review_history",)
+    assert "Opgeslagen stop geraakt" in result.response.text
+    assert "Reflectievraag:" in result.response.text
+    checked = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=message, result=result.response, locale="nl"))
+    assert checked.status == "completed", (checked.reason, checked.rejection_details)
+
+
 def test_clicked_paper_card_without_matching_saved_decision_never_uses_latest():
     front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7,
                                    run_id="unmatched-feed-test", model_led_coach=True)
@@ -180,9 +209,25 @@ def test_legacy_houd_vast_action_is_a_selected_wait_card():
     text = render_selected_paper_feed_decision({"results": [{"scope": "read_review_history",
         "status": "completed", "data": {"selected_feed_decision": {
             "symbol": "AAPL", "action": "houd_vast",
-            "decision_at": "2026-11-16T06:00:18+00:00", "paper_executed": False}}}]}, symbol="AAPL")
+            "decision_at": "2026-11-16T06:00:18+00:00", "paper_executed": False,
+            "reasons": ["Score buiten de opgeslagen koopzone"]}}}]}, symbol="AAPL")
     assert "wachten (hold)" in text
     assert "2026-11-16 07:00:18 CET" in text
+    assert "Score buiten de opgeslagen koopzone" in text
+    assert "Controleer vóór een volgende beoordeling" in text
+
+
+def test_clicked_filled_paper_exit_offers_reflection_without_claiming_flat_position():
+    from backend.services.finn_v2_factual_source_answer import render_selected_paper_feed_decision
+    text = render_selected_paper_feed_decision({"results": [{"scope": "read_review_history",
+        "status": "completed", "data": {"selected_feed_decision": {
+            "symbol": "AAPL", "action": "sell", "decision_at": "2026-11-10T14:45:00+00:00",
+            "paper_executed": True, "filled_amount_eur": 393.01,
+            "reasons": ["Opgeslagen stop geraakt"]}}}]}, symbol="AAPL",
+        expected_source_at="2026-11-10T14:45:00+00:00")
+    assert "Opgeslagen stop geraakt" in text
+    assert "niet dat de hele positie is gesloten" in text
+    assert "Reflectievraag:" in text
 
 
 def test_latest_btc_paper_decision_uses_the_persisted_row():

@@ -1440,9 +1440,9 @@ def _plain_setup_creation_request(message: str) -> bool:
     """Recognize a complete, bare setup request; reject all extra prose."""
     text = " ".join(str(message or "").strip().split())
     text = re.sub(r"\.\s*toon\s+alleen\s+een\s+concept\.?$", "", text, flags=re.I)
-    # Unquoted trailing names cannot be distinguished from an instruction
-    # appended in the same sentence. Only quotes or a following typed field
-    # provide a clear boundary for the short path.
+    # Most unquoted trailing names cannot be distinguished from an appended
+    # instruction. The exact pair/timeframe form below is a bounded exception:
+    # it must end after the name and still passes the rule-word rejection.
     quoted_name = r"[\"“][a-z0-9][a-z0-9 _-]{0,79}[\"”]"
     delimited_name = r"[a-z0-9][a-z0-9_-]{0,79}"
     asset = r"[a-z0-9]{2,10}"
@@ -1450,6 +1450,7 @@ def _plain_setup_creation_request(message: str) -> bool:
     draft = r"\.?"
     patterns = (
         rf"maak\s+een\s+(?:swing|trade|dca)[ -]setup\s+voor\s+{asset}\s+op\s+{interval}\s+met\s+de\s+naam\s+{quoted_name}{draft}",
+        rf"maak\s+een\s+(?:swing|trade|dca)[ -]setup\s+voor\s+{asset}/(?:EUR|USDT)\s+op\s+{interval}\s+met\s+de\s+naam\s+[a-z0-9][a-z0-9 _-]{{1,79}}{draft}",
         rf"maak\s+een\s+{asset}\s+(?:swing|trade|dca)[ -]setup\s+op\s+{interval}\s+met\s+de\s+naam\s+{quoted_name}{draft}",
         rf"maak\s+een\s+(?:swing|trade|dca)?\s*setup\s+met\s+de\s+naam\s+{delimited_name}{draft}",
         rf"maak\s+een\s+(?:swing|trade|dca)\s*setup\s+met\s+de\s+naam\s+{delimited_name},\s*symbool\s+{asset}\s+en\s+timeframe\s+{interval}{draft}",
@@ -1460,7 +1461,8 @@ def _plain_setup_creation_request(message: str) -> bool:
     return not re.search(
         r"\b(?:als|alleen|wanneer|zodra|tenzij|onder|boven|bij|if|only|when|"
         r"unless|below|above|trend|rsi|score|voorwaarde|condition|regel|rule|"
-        r"koop|kopen|aankoop|buy|entry|instap|filter|trigger)\b",
+        r"koop|kopen|aankoop|buy|entry|instap|filter|trigger|activeer|uitbraak|"
+        r"long|short|verkoop|sell|opslaan|sla)\b",
         text, re.I,
     )
 
@@ -4445,10 +4447,13 @@ class FinnV2RunService:
                         context = await service.conversations.get_context(
                             conversation_id=conversation_id, user_id=user_id,
                         )
-                        from backend.services.finn_v2_task_chain_service import STATE_KEY, requested_task, continuation
+                        from backend.services.finn_v2_task_chain_service import (
+                            STATE_KEY, requested_task, continuation, wants_task_resume,
+                        )
 
                         active_task = dict(context.get(STATE_KEY) or {})
-                        if requested_task(run_message) and active_task.get("completed_steps"):
+                        if (requested_task(run_message) or wants_task_resume(run_message)) \
+                                and active_task.get("completed_steps"):
                             next_task = continuation(active_task)
                             if next_task and next_task["step"] == "strategy":
                                 message_override = (

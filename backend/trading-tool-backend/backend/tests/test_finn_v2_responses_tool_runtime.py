@@ -7084,6 +7084,12 @@ def test_plain_action_fields_do_not_need_rule_review():
     assert _plain_setup_creation_request(
         'Maak een swing setup voor SOL op 4 uur met de naam "Matrix Nieuwe Setup".'
     )
+    assert _plain_setup_creation_request(
+        "Maak een swing setup voor SOL/USDT op 4 uur met de naam Matrix Nieuwe Setup."
+    )
+    assert not _plain_setup_creation_request(
+        "Maak een swing setup voor SOL/USDT op 4 uur met de naam Matrix Nieuwe Setup activeer hem na uitbraak."
+    )
     assert not _plain_setup_creation_request(
         "Maak een swing setup voor SOL op 4 uur met de naam Matrix Nieuwe Setup, alleen als RSI stijgt."
     )
