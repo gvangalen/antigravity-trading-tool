@@ -6,12 +6,15 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0 vervolgacties en rapportmeldingen (19 november 2026)
 
-Phase: `BUILD_VALIDATED_PENDING_CI`. [PR #1198](https://github.com/gvangalen/antigravity-trading-tool/pull/1198)
+Phase: `PRODUCT_DEPLOYED_READY_FOR_INDEPENDENT_QA`. [PR #1198](https://github.com/gvangalen/antigravity-trading-tool/pull/1198)
 bevat de setup → strategie → score-voortzetting, gerichte FINN-feedkaarten voor
 watchlist, analyse, strategie, Paper-botbesluit en geverifieerde Paper-exit,
 plus herstel van meldingen voor dag- en periodieke rapporten. Productcode-SHA
 op de releasebranch is `ebf4d334074b7216f854d4f8960a49529549bbce`.
-Deze kandidaat is nog niet live of onafhankelijk door QA geaccepteerd.
+De gemergede product-SHA is `f873b81925bc950f13ae1ce3b3dc0dee0e4e979e`.
+Deze kandidaat is live, maar nog niet onafhankelijk door QA geaccepteerd.
+De Responses-ingang en setupkeuze uit PR #1197 zijn in deze SHA geïntegreerd;
+de daarvoor aangekondigde afzonderlijke QA-proef was nog niet uitgevoerd.
 
 De volledige backend-suite slaagde met 5093 tests en 7 bestaande skips.
 De geïsoleerde FastAPI/Celery/PostgreSQL/Redis-actiematrix slaagde 17/17,
@@ -27,7 +30,25 @@ Frontend-build, typecheck, i18n-lint en -tests, commands, proposals, setups,
 zichtbaarheidstests en `audit:high` slaagden. Mobiele typecheck, lint zonder
 errors en web/iOS/Android-bundlechecks slaagden. De rapport-feedherstelquery
 werkte in een lokale SQL-proef met en zonder optionele weekrapporttabel.
-CI, Auto Deploy, publieke SHA-verificatie en ingelogde QA volgen.
+
+Na integratie met PR #1197 slaagde de volledige backend-suite opnieuw:
+**5094 geslaagd, 7 bestaande skips**. De geïsoleerde actiematrix bleef
+**17/17** groen, adapters **28/28**, met nul brokerorders, Live-calls,
+Live-bots of productieverbindingen (artifact SHA-256
+`e41eba07d7c927690703a684b3a8f82609ae57650f592f4d5850daf10635e038`).
+Echte provider-development slaagde **20/20** (SHA-256
+`d0e7272924375aaed67700528f11e3a880ea80b8c30709bdf05c231647941dc4`)
+en regression **109/109** (SHA-256
+`c46aa512a62332222de60c044b8487c8f928c560b393aab010e04d433e3f83d6`),
+zonder provider-, schema-, parse- of validatiefouten. Alle vijf
+[PR-CI-jobs 44524211473](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44524211473)
+en alle vijf
+[main-CI-jobs 44527241045](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44527241045)
+slaagden. [Auto Deploy 44528156965](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44528156965)
+slaagde. Op 19 november 2026 toonden GitHub main, publieke backend-health en
+frontend-buildinfo alle drie exact product-SHA `f873b81925bc950f13ae1ce3b3dc0dee0e4e979e`;
+beide publieke endpoints gaven HTTP 200. Onafhankelijke ingelogde QA volgt
+op de definitieve SHA nadat deze statusupdate is uitgerold.
 
 ## FINN-keuzeantwoorden: Responses-ingang en eerste setupkeuze (19 november 2026)
 
