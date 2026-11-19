@@ -21,16 +21,27 @@ aparte accounttijdzonevoorkeur. Een score met uitsluitend een kalenderdatum
 krijgt geen verzonnen tijdstip. Er is geen handelsactie of bevestigingsgrens
 gewijzigd.
 
-Lokale metingen na de status- en tijdwijziging: root pytest **5111 geslaagd,
-7 overgeslagen**; de daarna toegevoegde datumregressie is in de gerichte
-feedtest **66/66 geslaagd**. Webproductiebouw, typecheck, i18n-lint,
-i18n-tests **45 geslaagd** en commandtests **91 geslaagd**; mobiele typecheck,
-lint (0 fouten, 89 waarschuwingen), `test:chat` **24 geslaagd** en
-webbundle-export geslaagd. Een ingelogde
-liveproef, CI, Auto Deploy en de officiële onafhankelijke QA-matrix zijn voor
-deze kandidaat nog niet uitgevoerd. De bestaande FINN-actiecontracten en
-Responses-providerselectie zijn niet gewijzigd; een eventuele release volgt
-pas na de toepasselijke releasegates en identiteitscontrole.
+Lokale validatie na rebase op `main` `77ef334a41e0026e93de1cdebe1017182322a26c`:
+root pytest **5120 geslaagd, 7 overgeslagen**. Webproductiebouw, typecheck,
+i18n-lint, i18n-tests **45/45**, commandtests **94/94**, proposaltests
+**10/10** en hoge dependency-audit (0 kwetsbaarheden) slaagden. Mobiele
+typecheck, lint (0 fouten, 89 waarschuwingen), `test:chat` **24/24** en
+webbundle-export slaagden. De geïsoleerde FastAPI/Celery/PostgreSQL/Redis-
+actiematrix slaagde **17/17** na workeropwarming, zonder productieverbinding,
+brokerorder, Live-call of live-bot (artifact SHA-256
+`5337fdaa0596fa88208e9db0105a1a43d041ec251a27360a5bcf2987b71987b3`).
+De eerste poging kreeg een workeropwarm-timeout vóór een casusresultaat;
+de complete hertest is als release-evidentie gebruikt. De echte Responses-
+providerontwikkeling slaagde **20/20** met alle detailmetingen 100% en nul
+provider-, schema-, parse-, validatie- of timeoutfouten (artifact SHA-256
+`2284400565b7314f25cf12027892055a8b0796e8d1c64a86410c4a332bec3553`).
+De echte providerregressie slaagde **109/109**, alle detailmetingen 100% en
+nul provider-, schema-, parse-, validatie- of timeoutfouten (artifact SHA-256
+`1b16c3fde658d90696d8abb83ef4e14f37038e6cb13049eec683808b6e75a8ff`).
+Een ingelogde liveproef, CI,
+Auto Deploy en de officiële onafhankelijke QA-matrix zijn voor deze kandidaat
+nog niet uitgevoerd. De bestaande FINN-actiecontracten en handelsgrenzen zijn
+niet gewijzigd.
 
 ## FINN 3.0 brongebonden AAPL-botcheck en coachvragen (19 november 2026)
 
