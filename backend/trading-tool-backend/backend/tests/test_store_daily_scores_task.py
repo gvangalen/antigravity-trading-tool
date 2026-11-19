@@ -286,6 +286,9 @@ def test_feed_recovery_republishes_recent_saved_report_without_duplicate(monkeyp
         def fetchall(self):
             return [(7, date(2026, 11, 19))] if "FROM daily_reports" in self.sql else []
 
+        def fetchone(self):
+            return (None, None, None)
+
     class Connection:
         def cursor(self):
             return Cursor()
@@ -322,6 +325,9 @@ def test_feed_recovery_republishes_saved_periodic_report(monkeypatch):
 
         def fetchall(self):
             return [(7, 'weekly', date(2026, 11, 19))] if "FROM weekly_reports" in self.sql else []
+
+        def fetchone(self):
+            return ('weekly_reports', None, None)
 
     class Connection:
         def cursor(self):
@@ -360,6 +366,9 @@ def test_feed_recovery_dispatches_new_or_changed_paper_decisions(monkeypatch):
         def fetchall(self):
             return [(7, 91)] if len(statements) == 1 else []
 
+        def fetchone(self):
+            return (None, None, None)
+
     class Connection:
         def cursor(self):
             return Cursor()
@@ -383,8 +392,9 @@ def test_feed_recovery_dispatches_new_or_changed_paper_decisions(monkeypatch):
     assert "'hold'" in statements[0]
     assert "setups" not in statements[0]
     assert "daily_reports" in statements[1]
-    assert "report_snapshots" in statements[1]
+    assert "to_jsonb(r)->'executive_summary' IS NOT NULL" in statements[1]
     assert "f.user_id=r.user_id" in statements[1]
+    assert "to_regclass('weekly_reports')" in statements[2]
     assert task_module._confirmed_component_score({
         "total_score": 10, "scores": {"unused": {"weight": 0}},
     }) is None

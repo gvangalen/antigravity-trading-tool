@@ -508,27 +508,34 @@ def recover_coach_feed_events():
             cur.execute("""
                 SELECT r.user_id, r.report_date
                 FROM daily_reports r
-                WHERE r.generated_at >= NOW() - INTERVAL '48 hours'
-                  AND EXISTS (
-                    SELECT 1 FROM report_snapshots s
-                    WHERE s.user_id=r.user_id AND s.report_type='daily'
-                      AND s.report_id=0
-                  )
+                WHERE r.report_date >= CURRENT_DATE - 2
+                  AND to_jsonb(r)->'executive_summary' IS NOT NULL
                   AND NOT EXISTS (
                     SELECT 1 FROM finn_coach_feed_items f
                     WHERE f.user_id=r.user_id
                       AND f.event_key='daily-report:' || r.report_date::TEXT
                   )
-                ORDER BY r.generated_at DESC LIMIT 12
+                ORDER BY r.report_date DESC LIMIT 12
             """)
             reports = cur.fetchall()
             cur.execute("""
+                SELECT to_regclass('weekly_reports'), to_regclass('monthly_reports'),
+                       to_regclass('quarterly_reports')
+            """)
+            existing = cur.fetchone() or (None, None, None)
+            sources = [
+                f"SELECT user_id, '{kind}' AS report_type, report_date FROM {table}"
+                for kind, table, present in zip(
+                    ('weekly', 'monthly', 'quarterly'),
+                    ('weekly_reports', 'monthly_reports', 'quarterly_reports'),
+                    existing,
+                ) if present is not None
+            ]
+            periodic_reports = []
+            if sources:
+                cur.execute("""
                 SELECT p.user_id, p.report_type, p.report_date FROM (
-                    SELECT user_id, 'weekly' AS report_type, report_date FROM weekly_reports
-                    UNION ALL
-                    SELECT user_id, 'monthly' AS report_type, report_date FROM monthly_reports
-                    UNION ALL
-                    SELECT user_id, 'quarterly' AS report_type, report_date FROM quarterly_reports
+                    """ + " UNION ALL ".join(sources) + """
                 ) p
                 WHERE p.report_date >= CURRENT_DATE - 2
                   AND NOT EXISTS (
@@ -537,8 +544,8 @@ def recover_coach_feed_events():
                       AND f.event_key=p.report_type || '-report:' || p.report_date::TEXT
                   )
                 ORDER BY p.report_date DESC LIMIT 12
-            """)
-            periodic_reports = cur.fetchall()
+                """)
+                periodic_reports = cur.fetchall()
         conn.commit()
     finally:
         conn.close()
@@ -549,15 +556,16 @@ def recover_coach_feed_events():
             dispatched += 1
         except Exception:
             logger.warning("FINN feed Paper recovery dispatch failed", exc_info=True)
-    from backend.celery_task.daily_report_task import _publish_daily_report_ready_feed
-    from backend.celery_task.report_feed import publish_periodic_report_ready
-
+    if reports:
+        from backend.celery_task.daily_report_task import _publish_daily_report_ready_feed
     for user_id, report_date in reports:
         try:
             _publish_daily_report_ready_feed(user_id, report_date)
             dispatched += 1
         except Exception:
             logger.warning("FINN feed daily report recovery failed", exc_info=True)
+    if periodic_reports:
+        from backend.celery_task.report_feed import publish_periodic_report_ready
     for user_id, report_type, report_date in periodic_reports:
         try:
             publish_periodic_report_ready(user_id, report_type, report_date)
