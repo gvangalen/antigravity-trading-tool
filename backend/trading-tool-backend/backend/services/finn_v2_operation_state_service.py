@@ -986,6 +986,8 @@ class FinnV2OperationStateService:
         if operation_id not in {"create_setup", "create_manual_trade_plan"}:
             return []
         language = str(locale or "nl").split("-")[0].lower()
+        if field == "setup_type" and operation_id == "create_setup":
+            return [{"label": value, "reply": value} for value in ("Trade", "DCA")]
         if field == "timeframe" and operation_id == "create_setup":
             return [{"label": value, "reply": value} for value in ("1D", "4H")]
         if field == "quote_currency":
