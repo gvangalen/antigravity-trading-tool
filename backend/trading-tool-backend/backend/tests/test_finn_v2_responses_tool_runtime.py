@@ -4037,6 +4037,69 @@ def test_current_asset_score_read_uses_only_source_verified_score_tool():
     assert "get_saved_asset_scores" not in {item["name"] for item in catalog.definitions()}
 
 
+def test_smart_dca_guidance_tool_reads_exact_pair_and_owner_evidence():
+    catalog = FinnResponsesToolCatalog()
+    call = catalog.validate("get_smart_dca_guidance", {
+        "asset": "BTC", "quote_currency": "USDT",
+    })
+    assert call.read_tools == (
+        "read_active_asset", "read_indicator_configuration",
+        "read_asset_scores", "read_user_preferences",
+    )
+    assert call.inputs["quote_currency"] == "USDT"
+    definition = next(item for item in catalog.definitions() if item["name"] == "get_smart_dca_guidance")
+    assert "not proof of RSI oversold" in definition["description"]
+    with pytest.raises(FinnResponsesToolError, match="read_arguments_invalid"):
+        catalog.validate("get_smart_dca_guidance", {"user_id": 44})
+
+
+def test_smart_dca_creation_with_question_about_editable_bands_remains_creation():
+    message = (
+        "Ik wil voor BTC/USDT een Smart DCA maken: maximaal één aankoop per week, "
+        "€200 als basisbedrag. Welke drie staffels stel je voor? "
+        "Toon eerst een bewerkbaar concept; start geen bot en plaats geen order."
+    )
+    assert _explicit_create_operation_request(message) == "create_setup"
+    assert _explicit_create_operation_request(
+        "Maak een BTC/USDT Smart DCA. Welke staffels raad je aan? "
+        "Toon eerst een bewerkbaar concept; plaats geen order."
+    ) == "create_setup"
+    assert _explicit_create_operation_request(
+        "Welke Smart DCA-scorebanden raad je aan voor BTC/USDT? Wijzig niets."
+    ) is None
+
+
+@pytest.mark.parametrize("score,expected_band", [
+    (25.9, "low"), (26, "middle"), (75.9, "middle"), (76, "high"), (None, None),
+])
+def test_smart_dca_guidance_illustrates_band_only_with_verified_benchmark(score, expected_band):
+    class Reads:
+        async def execute_tool(self, *, tool_name, **_kwargs):
+            data = ({"symbol": "BTC", "pair": "BTC/USDT", "benchmark_score": score,
+                     "reported_scores": {"market_score": 40, "macro_score": None,
+                                         "technical_score": 30}}
+                    if tool_name == "read_asset_scores" else {"symbol": "BTC"})
+            return SimpleNamespace(
+                success=True, availability="available", freshness_status="fresh",
+                source="owner_scoped", asset="BTC", result=data, error_codes=[], as_of=None,
+            )
+
+    executor = object.__new__(FinnResponsesReadExecutor)
+    executor.user_id = 44
+    executor.run_id = "run-guidance"
+    executor.reads = Reads()
+    result = asyncio.run(executor(FinnResponsesToolCatalog().validate(
+        "get_smart_dca_guidance", {"asset": "BTC", "quote_currency": "USDT"},
+    )))
+    guidance = result["smart_dca_guidance"]
+    assert guidance["pair"] == "BTC/USDT"
+    assert guidance["current_band"] == expected_band
+    assert guidance["current_band_available"] is (expected_band is not None)
+    assert guidance["example_amounts_eur"] == {"low": 150, "middle": 100, "high": 50}
+    assert guidance["incomplete_benchmark_action"] == "hold_without_purchase"
+    assert guidance["example_only"] is True
+
+
 def test_saved_setup_bounds_question_uses_setup_read_without_strategy_disambiguation():
     fake = FakeResponses(
         response("bounds-read", calls=[tool_call(

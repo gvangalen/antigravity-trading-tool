@@ -195,6 +195,30 @@ class FinnResponsesReadExecutor:
             "tool": call.name,
             "results": results,
         }
+        if call.name == "get_smart_dca_guidance":
+            score_row = next((item for item in results if item["scope"] == "read_asset_scores"), None)
+            score_data = score_row.get("data") if score_row and score_row["status"] == "completed" else None
+            score = score_data.get("benchmark_score") if isinstance(score_data, dict) else None
+            current_band = None
+            if isinstance(score, (int, float)) and 0 <= score <= 100:
+                current_band = "low" if score < 26 else "middle" if score < 76 else "high"
+            output["smart_dca_guidance"] = {
+                "example_only": True,
+                "score_basis": "weighted_total_benchmark_not_an_oversold_indicator",
+                "pair": score_data.get("pair") if isinstance(score_data, dict) else None,
+                "current_band": current_band,
+                "current_band_available": current_band is not None,
+                "illustrative_bands": [
+                    {"score_from_inclusive": 0, "score_to_exclusive": 26, "percent_of_base": 150},
+                    {"score_from_inclusive": 26, "score_to_exclusive": 76, "percent_of_base": 100},
+                    {"score_from_inclusive": 76, "score_to_inclusive": 100, "percent_of_base": 50},
+                ],
+                "example_base_eur": 100,
+                "example_amounts_eur": {"low": 150, "middle": 100, "high": 50},
+                "threshold_basis": "illustrative_score_zones_not_backtested_or_optimized",
+                "requires_user_choice": ["base_amount", "maximum_per_period", "risk_tolerance"],
+                "incomplete_benchmark_action": "hold_without_purchase",
+            }
         if missing_linked_bot and any(item["status"] == "unavailable" for item in results):
             output["linked_bot_status"] = "no_bot_linked_to_selected_strategy"
         comparisons = self._current_plan_price_comparisons(self._plan_price_sources)
