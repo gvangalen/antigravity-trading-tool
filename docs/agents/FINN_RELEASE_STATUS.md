@@ -10,9 +10,9 @@ Phase: `BUILD_GATES_PASSED_PENDING_DEPLOY`. Product branch
 `codex/finn-setup-choice-buttons-20261118`, productcode-SHA `409202cca` en
 [PR #1182](https://github.com/gvangalen/antigravity-trading-tool/pull/1182).
 De onafhankelijke QA voor de vorige wekelijkse Smart DCA-keten accepteerde
-live SHA `c3e60c19083278621932d1877568be3abfdb9bdb`. De parallelle
-Smart DCA-triggerrelease is via PR #1183 en #1184 in deze branch geïntegreerd;
-deze keuzeantwoordkandidaat is nog niet live getest.
+live SHA `c3e60c19083278621932d1877568be3abfdb9bdb`. De daaropvolgende Smart DCA-reparaties en hun gerichte, geaccepteerde
+live QA zijn via de huidige main-SHA `a8831b433` in deze branch geïntegreerd.
+Deze keuzeantwoordkandidaat is zelf nog niet live getest.
 
 Bij een begeleide FINN-vraag levert de backend nu begrensde, gestructureerde
 antwoordopties op basis van het daadwerkelijk gevraagde invoerveld. Voor een
@@ -27,20 +27,21 @@ verzonnen opties.
 De geïsoleerde lokale FastAPI/Celery/PostgreSQL/Redis/Responses-actiematrix
 slaagde **17/17**, met nul brokerorders, Live-calls, Live-bots of
 productieverbindingen (artifact SHA-256
-`2841bfb91c7c3a8ad3053704da9743f40b8eda16f6430e6873976423b36f0c97`).
+`23c8dd96e3e17f4d57e4016ad209b34f77c5335e6569bc028a15c2b81c75d9fd`).
 De adaptertests slaagden **27/27**. Een echte setupconversatie toonde bij
 `timeframe` exact `1D` en `4H`, bij de tussenliggende naamvraag geen
 keuzeknoppen en bij `quote_currency` exact `EUR` en `USDT` in de opgeslagen
 runtime-respons. Real-provider selector development slaagde **20/20**
-(SHA-256 `7568613f3e4afff59add1d51c61fa11f79524811d1d91a5d7552d57033afeac4`)
+(SHA-256 `4776873d71c081fc6ec30e7378276406d84a022f71a24f40eb5fd044c1974746`)
 en regression **109/109**
-(SHA-256 `882f5c725d08169d0425e7a351676a0dd3789153ddc52949ae87cb04085da19e`),
+(SHA-256 `c48a5c0da7ad8b4d1610c24a8abed732ccfc32cca2c0d0558e2d6aa06a6e6c9c`),
 beide met nul provider-, schema-, parse-, validatie- of timeoutfouten.
-De volledige backend-suite had **5051 geslaagde tests, 7 bestaande skips**.
+De volledige backend-suite had **5072 geslaagde tests, 7 bestaande skips**.
 Frontend-build, typecheck, i18n-lint en tests, commands, proposals, setups en
 `audit:high` slaagden (nul kwetsbaarheden). Alle vijf PR-CI-jobs slaagden in
 [run 44375020095](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44375020095)
-vóór de integratie met PR #1183; CI wordt op de definitieve kandidaat herhaald.
+vóór de integratie met de geaccepteerde Smart DCA-reparaties; CI wordt op
+de definitieve kandidaat herhaald.
 
 ## Smart DCA naam- en grafiekperiode-extractie (18 november 2026)
 
