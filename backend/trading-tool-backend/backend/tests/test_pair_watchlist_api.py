@@ -1,12 +1,19 @@
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, call
 
 import pytest
 from fastapi import HTTPException
 
 from backend.api import watchlist_api
 from backend.services.workspace_data_service import WorkspaceDataService, _keep_watchlist_row
+
+
+@pytest.fixture(autouse=True)
+def stub_watchlist_feed(monkeypatch):
+    observer = AsyncMock()
+    monkeypatch.setattr(watchlist_api, "record_watchlist_feed_change", observer)
+    return observer
 
 
 class _Scalars:
@@ -53,7 +60,7 @@ class _Session:
         self.commits += 1
 
 
-def test_two_pairs_can_be_added_and_one_removed_independently(monkeypatch):
+def test_two_pairs_can_be_added_and_one_removed_independently(monkeypatch, stub_watchlist_feed):
     eur = SimpleNamespace(id=11, quote_currency="EUR")
     usdt = SimpleNamespace(id=12, quote_currency="USDT")
     session = _Session([
@@ -77,6 +84,11 @@ def test_two_pairs_can_be_added_and_one_removed_independently(monkeypatch):
     asyncio.run(watchlist_api.remove_from_watchlist("BTC", 11, user, session))
     assert "watchlists.market_id = :market_id_1" in session.statements[-1]
     assert session.commits == 3
+    assert stub_watchlist_feed.await_args_list == [
+        call(session, user_id=9, symbol="BTC", market_id=11, added=True),
+        call(session, user_id=9, symbol="BTC", market_id=12, added=True),
+        call(session, user_id=9, symbol="BTC", market_id=11, added=False),
+    ]
 
 
 def test_symbol_only_delete_requires_pair_choice_when_ambiguous():

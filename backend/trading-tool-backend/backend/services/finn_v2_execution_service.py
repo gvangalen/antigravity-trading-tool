@@ -39,6 +39,9 @@ class FinnV2ExecutionService:
     async def execute(self, *, proposal_id: str, user_id: int, idempotency_key: str, expected_payload_hash: str, expected_review_target_name: str | None = None, step_up_proof: StepUpProof | None = None) -> ExecutionResult:
         existing = await self.repo.get_by_idempotency_key_for_user(idempotency_key=idempotency_key, user_id=user_id)
         if existing is not None:
+            conversation_id = await self._conversation_id_for_run(getattr(existing, "run_id", None))
+            next_step = (await self._task_continuation(conversation_id, user_id, execution_id=existing.id)
+                         if existing.status == "succeeded" else None)
             return ExecutionResult(
                 execution_id=existing.id,
                 proposal_id=existing.proposal_id,
@@ -51,10 +54,18 @@ class FinnV2ExecutionService:
                 error_codes=existing.error_codes_json,
                 started_at=existing.started_at,
                 completed_at=existing.completed_at,
-                conversation_id=await self._conversation_id_for_run(getattr(existing, "run_id", None)),
+                conversation_id=conversation_id,
+                task_continuation=next_step,
+                continuation_run_id=await self._dispatch_task_continuation(
+                    conversation_id, user_id, existing.id, next_step,
+                ),
             )
         existing_for_proposal = await self.repo.get_for_proposal(proposal_id=proposal_id, user_id=user_id)
         if existing_for_proposal is not None:
+            conversation_id = await self._conversation_id_for_run(getattr(existing_for_proposal, "run_id", None))
+            next_step = (await self._task_continuation(
+                conversation_id, user_id, execution_id=existing_for_proposal.id,
+            ) if existing_for_proposal.status == "succeeded" else None)
             return ExecutionResult(
                 execution_id=existing_for_proposal.id,
                 proposal_id=existing_for_proposal.proposal_id,
@@ -67,7 +78,11 @@ class FinnV2ExecutionService:
                 error_codes=existing_for_proposal.error_codes_json,
                 started_at=existing_for_proposal.started_at,
                 completed_at=existing_for_proposal.completed_at,
-                conversation_id=await self._conversation_id_for_run(getattr(existing_for_proposal, "run_id", None)),
+                conversation_id=conversation_id,
+                task_continuation=next_step,
+                continuation_run_id=await self._dispatch_task_continuation(
+                    conversation_id, user_id, existing_for_proposal.id, next_step,
+                ),
             )
         proposal = await self.proposals.get_by_id_for_user(proposal_id=proposal_id, user_id=user_id)
         if proposal is None:
@@ -118,6 +133,12 @@ class FinnV2ExecutionService:
                 error_codes=execution.error_codes_json,
                 started_at=execution.started_at,
                 completed_at=execution.completed_at,
+                conversation_id=(await self._conversation_id_for_run(proposal.run_id)
+                                 if hasattr(self.session, "execute") else None),
+                task_continuation=await self._task_continuation(
+                    (await self._conversation_id_for_run(proposal.run_id)
+                     if hasattr(self.session, "execute") else None), user_id,
+                ),
             )
         adapter = self.adapters.get(proposal.operation_type)
         if adapter is None:
@@ -193,6 +214,15 @@ class FinnV2ExecutionService:
             # terminal lifecycle together here so an immediate replay observes
             # ``already_executed`` rather than a transient ``started`` row.
             await self._commit_terminal_execution()
+            if proposal.operation_type in {"watchlist_add", "watchlist_remove"}:
+                if proposal.operation_type == "watchlist_remove" or safe_result_payload.get("created"):
+                    from backend.services.finn_coach_feed_service import record_watchlist_feed_change
+                    await record_watchlist_feed_change(
+                        self.session, user_id=user_id,
+                        symbol=str(safe_result_payload.get("asset") or "").upper(),
+                        market_id=safe_result_payload.get("market_id"),
+                        added=proposal.operation_type == "watchlist_add",
+                    )
             if proposal.operation_type in {"create_setup", "update_setup", "delete_setup"}:
                 change = (proposal.payload_json or {}).get("change") or {}
                 fields = change.get("setup_fields") or change.get("changed_fields") or {}
@@ -219,6 +249,12 @@ class FinnV2ExecutionService:
                     conversation_id = await self._conversation_id_for_run(proposal.run_id)
                 except Exception:
                     conversation_id = None
+            next_step = await self._task_continuation(
+                conversation_id, user_id, execution_id=execution.id,
+            )
+            continuation_run_id = await self._dispatch_task_continuation(
+                conversation_id, user_id, execution.id, next_step,
+            )
             return ExecutionResult(
                 execution_id=execution.id,
                 proposal_id=proposal_id,
@@ -232,6 +268,8 @@ class FinnV2ExecutionService:
                 started_at=started_at,
                 completed_at=execution.completed_at,
                 conversation_id=conversation_id,
+                task_continuation=next_step,
+                continuation_run_id=continuation_run_id,
             )
         except Exception as exc:
             execution.status = "failed"
@@ -258,7 +296,86 @@ class FinnV2ExecutionService:
                 error_codes=[str(exc)],
                 started_at=started_at,
                 completed_at=execution.completed_at,
+                conversation_id=(await self._conversation_id_for_run(proposal.run_id)
+                                 if hasattr(self.session, "execute") else None),
+                task_continuation=await self._task_continuation(
+                    (await self._conversation_id_for_run(proposal.run_id)
+                     if hasattr(self.session, "execute") else None), user_id,
+                ),
             )
+
+    async def _task_continuation(
+        self, conversation_id: Optional[str], user_id: int,
+        *, execution_id: Optional[str] = None,
+    ) -> Optional[dict]:
+        if not conversation_id or not hasattr(self.session, "execute"):
+            return None
+        from backend.services.finn_v2_task_chain_service import STATE_KEY, continuation
+
+        try:
+            context = await self.conversations.get_context(
+                conversation_id=conversation_id, user_id=user_id,
+            )
+        except Exception:
+            # An optional continuation read happens after the write commit.
+            # Its failure must never recast that verified write as failed.
+            logger.warning("FINN task continuation lookup failed", exc_info=True)
+            return None
+        task = dict(context.get(STATE_KEY) or {})
+        if execution_id and not any(
+            dict(step or {}).get("execution_id") == execution_id
+            for step in dict(task.get("completed_steps") or {}).values()
+        ):
+            return None
+        return continuation(task)
+
+    async def _dispatch_task_continuation(
+        self, conversation_id: Optional[str], user_id: int,
+        execution_id: str, next_step: Optional[dict],
+    ) -> Optional[str]:
+        if not conversation_id or not next_step or not hasattr(self.session, "execute"):
+            return None
+        from backend.services.finn_v2_task_chain_service import continuation_message
+
+        message = continuation_message(next_step)
+        if not message:
+            return None
+        key = f"finn-v2-task-chain-{execution_id}"
+        try:
+            from backend.services.finn_v2_gateway_service import FinnV2GatewayService
+
+            # The execution has already committed. A deterministic idempotency
+            # key makes a replay return the same continuation run, while the
+            # gateway's outbox recovers a broker handoff after a short outage.
+            return await FinnV2GatewayService(self.session, flag_service=self.flags).run_foundation_now(
+                user_id=user_id,
+                request_payload={
+                    "message": message,
+                    "conversation_id": conversation_id,
+                    "idempotency_key": key,
+                    "client_context": {"surface": "finn_task_chain_v1"},
+                    "transport": "chat",
+                },
+                request_path="/assistant/v2/task-chain",
+                request_id=f"finn-v2-task-chain-{execution_id}",
+                trace_id=f"finn-v2-chain-trace-{uuid.uuid4().hex}",
+            )
+        except Exception:
+            # Delivery failure cannot change the committed write. The client
+            # should poll an already-created run if the handoff failed after
+            # its commit, rather than creating a second continuation.
+            logger.warning("FINN task continuation dispatch failed", exc_info=True)
+            try:
+                from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2RunRepository
+
+                existing = await FinnV2RunRepository(self.session).get_by_idempotency_key_for_user(
+                    idempotency_key=key, user_id=user_id,
+                )
+                if existing is not None:
+                    return existing.id
+            except Exception:
+                logger.warning("FINN task continuation recovery lookup failed", exc_info=True)
+            return None
 
     async def _conversation_id_for_run(self, run_id: Optional[str]) -> Optional[str]:
         """Return the verified conversation binding for a replayed execution."""

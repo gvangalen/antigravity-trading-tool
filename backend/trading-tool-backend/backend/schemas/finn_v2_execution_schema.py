@@ -56,7 +56,10 @@ class ExecutionResult(BaseModel):
     error_codes: List[str] = Field(default_factory=list)
     started_at: datetime
     completed_at: Optional[datetime] = None
-    # Confirmation runs outside the chat stream. Return only the owning
-    # conversation identity so the client can bind its next natural-language
-    # turn to the verified execution boundary.
+    # Confirmation runs outside the chat stream. Return the owner-bound
+    # conversation and, for the narrow task chain, its dispatched next run.
     conversation_id: Optional[str] = None
+    # A verified next step for the same owner-scoped multi-step request.
+    # This is a chat continuation hint, never permission to execute a write.
+    task_continuation: Optional[Dict[str, Any]] = None
+    continuation_run_id: Optional[str] = None

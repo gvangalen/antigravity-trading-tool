@@ -531,6 +531,36 @@ def test_deferred_live_creation_persists_paused_and_notifies_finn(monkeypatch):
     assert session.commits == 1
 
 
+def test_linked_bot_creation_rechecks_paper_followup_after_commit(monkeypatch):
+    session = _FakeSession()
+    service = BotService(session)
+    dispatched = []
+
+    async def validate(payload, _user_id, **_kwargs):
+        payload["symbol"] = "BTC"
+
+    class Repo:
+        async def create_bot_config(self, payload):
+            return 77
+
+        async def get_bot_config(self, _user_id, bot_id):
+            return {"id": bot_id, "name": "BTC Paper", "strategy_id": 5,
+                    "setup_id": 42, "setup_symbol": "BTC", "market_id": 34,
+                    "symbol": "BTC", "is_live": False, "mode": "manual"}
+
+    def notify(user_id, symbol, market_id):
+        assert session.commits == 1
+        dispatched.append((user_id, symbol, market_id))
+
+    monkeypatch.setattr(service, "validate_bot_payload", validate)
+    monkeypatch.setattr("backend.services.setup_service.SetupService._notify_coach_feed", notify)
+    service.repository = Repo()
+    asyncio.run(service.create_bot_config(BotConfigCreateSchema(
+        name="BTC Paper", strategy_id=5, budget_total_eur=100,
+    ), user_id=7))
+    assert dispatched == [(7, "BTC", 34)]
+
+
 def test_existing_unused_paper_bot_can_receive_one_explicit_initial_credit(monkeypatch):
     session = _FakeSession()
     service = BotService(session)

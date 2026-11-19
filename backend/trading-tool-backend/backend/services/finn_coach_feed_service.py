@@ -71,9 +71,9 @@ def _bot_fallback(subject: str, evidence: dict) -> dict:
             "de": (f"Dein {label}-Bot hat gekauft · Paper", "Der virtuelle Kauf wurde ausgeführt und in deinem Paper-Portfolio erfasst."),
         },
         "sell_executed": {
-            "nl": (f"Je {label}-bot heeft verkocht · Paper", "De virtuele verkoop is uitgevoerd en verwerkt in je Paper-portfolio."),
-            "en": (f"Your {label} bot sold · Paper", "The virtual sale was executed and recorded in your Paper portfolio."),
-            "de": (f"Dein {label}-Bot hat verkauft · Paper", "Der virtuelle Verkauf wurde ausgeführt und in deinem Paper-Portfolio erfasst."),
+            "nl": (f"Je {label}-bot heeft verkocht · Paper", "De virtuele verkoop is uitgevoerd en verwerkt in je Paper-portfolio. Bespreek de beslissing en leg een korte reflectie vast als de positie is gesloten."),
+            "en": (f"Your {label} bot sold · Paper", "The virtual sale was executed and recorded in your Paper portfolio. Discuss the decision and record a short reflection if the position is closed."),
+            "de": (f"Dein {label}-Bot hat verkauft · Paper", "Der virtuelle Verkauf wurde ausgeführt und im Paper-Portfolio erfasst. Besprich die Entscheidung und halte eine kurze Reflexion fest, falls die Position geschlossen ist."),
         },
         "buy_planned": {
             "nl": (f"Je {label}-bot wil kopen · Paper", "De koopbeslissing is vastgelegd; een uitgevoerde aankoop is nog niet bevestigd."),
@@ -287,6 +287,35 @@ def _plan_score_phrase(evidence: dict, locale: str) -> str:
 
 def _fallback(kind: str, subject: str, evidence: dict, *, focus: str = "brief") -> dict:
     name = str(subject or "").strip()[:120]
+    if kind == "watchlist_added":
+        return {
+            "nl": {"title": f"{name} staat op je watchlist",
+                   "body": "Bekijk welke indicatoren en benchmark voor deze notering zijn ingesteld. FINN kan een volgende analysestap voorstellen; er is niets aan je analyse gewijzigd."},
+            "en": {"title": f"{name} is on your watchlist",
+                   "body": "Review the indicators and benchmark configured for this listing. FINN can suggest a next analysis step; your analysis was not changed."},
+            "de": {"title": f"{name} steht auf deiner Watchlist",
+                   "body": "Prüfe die Indikatoren und den Benchmark dieser Notierung. FINN kann einen nächsten Analyseschritt vorschlagen; an deiner Analyse wurde nichts geändert."},
+        }
+    if kind == "analysis_ready":
+        return {
+            "nl": {"title": f"Analyse voor {name} is bruikbaar", "body": "De opgeslagen benchmark heeft controleerbare scores. Bespreek of een setup bij jouw plan past; er is niets aangemaakt."},
+            "en": {"title": f"Analysis for {name} is ready", "body": "The saved benchmark has verifiable scores. Discuss whether a setup fits your plan; nothing was created."},
+            "de": {"title": f"Analyse für {name} ist bereit", "body": "Der gespeicherte Benchmark hat überprüfbare Scores. Besprich, ob ein Setup zu deinem Plan passt; nichts wurde erstellt."},
+        }
+    if kind == "strategy_next_step":
+        pair = str(evidence.get("trading_pair") or evidence.get("symbol") or "").strip()[:30]
+        return {
+            "nl": {"title": f"Strategie voor {name} ontbreekt", "body": f"Deze opgeslagen setup voor {pair} heeft nog geen gekoppelde strategie. Bespreek de vervolgstap; er is niets aangemaakt of geactiveerd."},
+            "en": {"title": f"Strategy for {name} is missing", "body": f"This saved setup for {pair} has no linked strategy yet. Discuss the next step; nothing was created or activated."},
+            "de": {"title": f"Strategie für {name} fehlt", "body": f"Dieses gespeicherte Setup für {pair} hat noch keine verknüpfte Strategie. Besprich den nächsten Schritt; nichts wurde erstellt oder aktiviert."},
+        }
+    if kind == "paper_next_step":
+        pair = str(evidence.get("trading_pair") or evidence.get("symbol") or "").strip()[:30]
+        return {
+            "nl": {"title": f"Beoordeel een Paper-proef voor {name}", "body": f"Deze strategie voor {pair} heeft nog geen gekoppelde bot. Bespreek eerst de uitvoerbaarheid en risico-instellingen. Er is niets geactiveerd of verhandeld."},
+            "en": {"title": f"Review a Paper trial for {name}", "body": f"This strategy for {pair} has no linked bot yet. Discuss execution readiness and risk settings first. Nothing was activated or traded."},
+            "de": {"title": f"Paper-Test für {name} prüfen", "body": f"Diese Strategie für {pair} hat noch keinen verknüpften Bot. Prüfe zuerst Ausführbarkeit und Risikoeinstellungen. Nichts wurde aktiviert oder gehandelt."},
+        }
     if kind == "bot_decision":
         return _bot_fallback(name, evidence)
     if kind == "position_risk":
@@ -342,10 +371,11 @@ def _fallback(kind: str, subject: str, evidence: dict, *, focus: str = "brief") 
                          + _plan_score_phrase(evidence, locale)}
                 for index, locale in enumerate(LOCALES)}
     if kind == "daily_report_ready":
+        report_date = str(evidence.get("report_date") or "")[:10]
         return {
-            "nl": {"title": "Je dagrapport staat klaar", "body": "Lees wat er is veranderd en wat volgens je plan aandacht vraagt."},
-            "en": {"title": "Your daily report is ready", "body": "See what changed and what needs attention in your plan."},
-            "de": {"title": "Dein Tagesbericht ist bereit", "body": "Lies, was sich geändert hat und was in deinem Plan Aufmerksamkeit braucht."},
+            "nl": {"title": "Je dagrapport staat klaar", "body": f"Dagrapport van {report_date}. Lees wat er is veranderd en wat volgens je plan aandacht vraagt."},
+            "en": {"title": "Your daily report is ready", "body": f"Daily report for {report_date}. See what changed and what needs attention in your plan."},
+            "de": {"title": "Dein Tagesbericht ist bereit", "body": f"Tagesbericht für {report_date}. Lies, was sich geändert hat und was in deinem Plan Aufmerksamkeit braucht."},
         }
     if kind == "weekly_reflection":
         try:
@@ -589,7 +619,7 @@ class FinnCoachFeedService:
                       expires_at: datetime | None = None,
                       revision: str | None = None) -> str | None:
         """One row per owner/event. Unchanged evidence never reopens or regenerates."""
-        if not event_key or event_type not in {"plan_match", "plan_review", "position_risk", "weekly_reflection", "improvement_suggestion", "data_blocked", "proposal_pending", "market_move", "bot_decision", "live_bot_paused", "daily_report_ready", "periodic_report_ready"}:
+        if not event_key or event_type not in {"plan_match", "plan_review", "position_risk", "weekly_reflection", "improvement_suggestion", "data_blocked", "proposal_pending", "market_move", "bot_decision", "live_bot_paused", "daily_report_ready", "periodic_report_ready", "watchlist_added", "analysis_ready", "strategy_next_step", "paper_next_step"}:
             raise ValueError("feed_event_invalid")
         facts = {**evidence, "subject": str(subject or "")[:120]}
         digest = hashlib.sha256(str(revision or _json(facts)).encode()).hexdigest()
@@ -721,12 +751,182 @@ class FinnCoachFeedService:
             "copy_json": _json(_fallback(event_type, subject, facts)),
             "copy_source": ("verified_facts" if event_type in {
                                 "position_risk", "weekly_reflection", "improvement_suggestion",
-                                "bot_decision"} or event_type == "data_blocked" and facts.get("bot_id")
+                                "bot_decision", "watchlist_added", "analysis_ready", "strategy_next_step", "paper_next_step"} or event_type == "data_blocked" and facts.get("bot_id")
                             else "fact_fallback"),
             "expires_at": expires_at,
         })
         row = result.first()
         return str(row[0]) if row else None
+
+    @staticmethod
+    def watchlist_event_key(symbol: str, market_id: int | None) -> str:
+        return f"watchlist-added:{symbol}:{market_id if market_id is not None else 'asset'}"
+
+    async def publish_watchlist_addition(self, *, user_id: int, symbol: str,
+                                         market_id: int | None = None) -> str | None:
+        """Read back the committed owner row before suggesting a next step."""
+        asset = str(symbol or "").strip().upper()
+        if not re.fullmatch(r"[A-Z0-9][A-Z0-9._-]{0,19}", asset):
+            return None
+        row = await self.session.execute(text("""
+            SELECT w.id, w.created_at, m.quote_currency
+            FROM watchlists w LEFT JOIN trading_markets m ON m.id=w.market_id
+            WHERE w.user_id=:user_id AND w.symbol=:symbol
+              AND w.market_id IS NOT DISTINCT FROM :market_id
+            LIMIT 1
+        """), {"user_id": user_id, "symbol": asset, "market_id": market_id})
+        saved = row.mappings().first()
+        if not saved:
+            return None
+        quote = str(saved.get("quote_currency") or "").strip().upper()
+        if quote and not re.fullmatch(r"[A-Z]{2,12}", quote):
+            return None
+        pair = f"{asset}/{quote}" if quote else asset
+        return await self.publish(
+            user_id=user_id, event_key=self.watchlist_event_key(asset, market_id),
+            event_type="watchlist_added", subject_type="asset",
+            subject_id=str(saved["id"]), subject=pair, symbol=asset,
+            evidence={"trading_pair": pair, "market_id": market_id},
+            priority=1, expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+            revision=f"{saved['id']}:{saved['created_at']}",
+        )
+
+    async def reconcile_journey_next_steps(self, *, user_id: int, symbol: str,
+                                           market_id: int | None = None) -> list[str]:
+        """Offer a read-only next step for a verified benchmark or orphan setup."""
+        from backend.infrastructure.repositories.setup_repository import SetupRepository
+        from backend.services.setup_market_match_service import SetupMarketMatchService
+
+        asset = str(symbol or "").strip().upper()
+        if not re.fullmatch(r"[A-Z0-9][A-Z0-9._-]{0,19}", asset):
+            raise ValueError("asset_symbol_invalid")
+        if market_id is not None and (type(market_id) is not int or market_id <= 0):
+            raise ValueError("exact_market_scope_required")
+        scope = {"user_id": user_id, "symbol": asset, "market_id": market_id}
+        listing_result = await self.session.execute(text("""
+            SELECT w.id, m.quote_currency
+            FROM watchlists w LEFT JOIN trading_markets m ON m.id=w.market_id
+            WHERE w.user_id=:user_id AND w.symbol=:symbol
+              AND w.market_id IS NOT DISTINCT FROM :market_id
+            LIMIT 1
+        """), scope)
+        listing = listing_result.mappings().first()
+        quote = str((listing or {}).get("quote_currency") or "").strip().upper()
+        if market_id is not None and not re.fullmatch(r"[A-Z]{2,12}", quote):
+            return []
+        pair = f"{asset}/{quote}" if quote else asset
+        key = f"analysis-ready:{asset}:{market_id if market_id is not None else 'asset'}"
+        setups = [dict(row) for row in await SetupRepository(self.session).get_all_setups(user_id)
+                  if str(row.get("symbol") or "").upper() == asset
+                  and row.get("market_id") == market_id]
+        created: list[str] = []
+        if listing and not setups:
+            assessment = await SetupMarketMatchService(self.session).for_asset(
+                user_id, asset, setups=[], market_id=market_id,
+            )
+            if assessment.get("source_status") == "available" and assessment.get("benchmark_score") is not None:
+                item = await self.publish(
+                    user_id=user_id, event_key=key, event_type="analysis_ready",
+                    subject_type="asset", subject_id=str(listing["id"]),
+                    subject=pair, symbol=asset, priority=2,
+                    evidence={"symbol": asset, "trading_pair": pair, "market_id": market_id,
+                              "source_status": "available", "score_as_of": str(assessment.get("as_of") or "")},
+                    revision="available", expires_at=datetime.now(timezone.utc) + timedelta(days=14),
+                )
+                if item:
+                    created.append(item)
+                await self.resolve(
+                    user_id=user_id,
+                    event_key=self.watchlist_event_key(asset, market_id),
+                )
+            else:
+                await self.resolve(user_id=user_id, event_key=key)
+        else:
+            await self.resolve(user_id=user_id, event_key=key)
+            if setups:
+                await self.resolve(
+                    user_id=user_id,
+                    event_key=self.watchlist_event_key(asset, market_id),
+                )
+
+        strategy_result = await self.session.execute(text("""
+            SELECT id, setup_id, name, created_at FROM strategies
+            WHERE user_id=:user_id AND setup_id = ANY(:setup_ids)
+        """), {"user_id": user_id, "setup_ids": [int(s["id"]) for s in setups]}) if setups else None
+        strategies = [dict(row) for row in strategy_result.mappings().all()] if strategy_result else []
+        linked = {int(row["setup_id"]) for row in strategies}
+        bot_result = await self.session.execute(text("""
+            SELECT DISTINCT s.setup_id FROM bot_configs b
+            JOIN strategies s ON s.id=b.strategy_id AND s.user_id=b.user_id
+            WHERE b.user_id=:user_id AND s.setup_id = ANY(:setup_ids)
+        """), {"user_id": user_id, "setup_ids": [int(s["id"]) for s in setups]}) if strategies else None
+        bot_linked = {int(row[0]) for row in bot_result.all()} if bot_result else set()
+        now = datetime.now(timezone.utc)
+        active_keys: set[str] = set()
+        for setup in setups:
+            setup_id = int(setup["id"])
+            if setup_id in linked:
+                continue
+            strategy_key = f"strategy-next-step:{setup_id}"
+            active_keys.add(strategy_key)
+            item = await self.publish(
+                user_id=user_id, event_key=strategy_key, event_type="strategy_next_step",
+                subject_type="setup", subject_id=str(setup_id),
+                subject=str(setup.get("name") or pair), symbol=asset, priority=2,
+                evidence={"symbol": asset, "trading_pair": pair, "market_id": market_id,
+                          "setup_id": setup_id, "setup_name": str(setup.get("name") or "")[:120]},
+                revision=f"setup:{setup_id}", expires_at=now + timedelta(days=14),
+            )
+            if item:
+                created.append(item)
+        previous = await self.session.execute(text("""
+            SELECT DISTINCT event_key FROM finn_coach_feed_items
+            WHERE user_id=:user_id AND event_type='strategy_next_step' AND symbol=:symbol
+              AND evidence->>'market_id' IS NOT DISTINCT FROM :market_id_text
+              AND status IN ('unread','read')
+        """), {**scope, "market_id_text": str(market_id) if market_id is not None else None})
+        for row in previous.mappings().all():
+            if row["event_key"] not in active_keys:
+                await self.resolve(user_id=user_id, event_key=str(row["event_key"]))
+        paper_keys: set[str] = set()
+        for setup in setups:
+            setup_id = int(setup["id"])
+            if setup_id in bot_linked:
+                continue
+            choices = [row for row in strategies if int(row["setup_id"]) == setup_id]
+            if not choices:
+                continue
+            newest = max(choices, key=lambda row: (
+                (row["created_at"].replace(tzinfo=timezone.utc)
+                 if row["created_at"].tzinfo is None
+                 else row["created_at"].astimezone(timezone.utc)).timestamp()
+                if isinstance(row.get("created_at"), datetime) else float("-inf"),
+                int(row["id"]),
+            ))
+            paper_key = f"paper-next-step:{setup_id}"
+            paper_keys.add(paper_key)
+            item = await self.publish(
+                user_id=user_id, event_key=paper_key, event_type="paper_next_step",
+                subject_type="setup", subject_id=str(setup_id),
+                subject=str(newest.get("name") or pair), symbol=asset, priority=1,
+                evidence={"symbol": asset, "trading_pair": pair, "market_id": market_id,
+                          "setup_id": setup_id, "setup_name": str(setup.get("name") or "")[:120],
+                          "strategy_id": int(newest["id"]),
+                          "strategy_name": str(newest.get("name") or "")[:120]},
+                revision=f"strategy:{newest['id']}", expires_at=now + timedelta(days=14),
+            )
+            if item:
+                created.append(item)
+        prior_paper = await self.session.execute(text("""
+            SELECT DISTINCT event_key FROM finn_coach_feed_items
+            WHERE user_id=:user_id AND event_type='paper_next_step' AND symbol=:symbol
+              AND evidence->>'market_id' IS NOT DISTINCT FROM :market_id_text
+              AND status IN ('unread','read')
+        """), {**scope, "market_id_text": str(market_id) if market_id is not None else None})
+        for row in prior_paper.mappings().all():
+            if row["event_key"] not in paper_keys:
+                await self.resolve(user_id=user_id, event_key=str(row["event_key"]))
+        return created
 
     async def resolve(self, *, user_id: int, event_key: str) -> None:
         await self.session.execute(text("""
@@ -1541,3 +1741,26 @@ class FinnCoachFeedService:
             "fingerprint": item["fingerprint"],
                "copy": _json(copy)})
         return True
+
+
+async def record_watchlist_feed_change(session, *, user_id: int, symbol: str,
+                                       market_id: int | None, added: bool) -> None:
+    """Best-effort feed update after a committed watchlist write."""
+    try:
+        feed = FinnCoachFeedService(session)
+        if added:
+            await feed.publish_watchlist_addition(
+                user_id=user_id, symbol=symbol, market_id=market_id,
+            )
+        else:
+            await feed.resolve(
+                user_id=user_id,
+                event_key=feed.watchlist_event_key(symbol, market_id),
+            )
+        await session.commit()
+    except Exception:
+        logger.warning("FINN watchlist feed update failed", exc_info=True)
+        try:
+            await session.rollback()
+        except Exception:
+            logger.warning("FINN watchlist feed rollback failed", exc_info=True)

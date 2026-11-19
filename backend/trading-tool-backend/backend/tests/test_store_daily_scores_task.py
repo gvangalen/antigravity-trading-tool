@@ -266,6 +266,87 @@ def test_daily_score_storage_keeps_missing_macro_as_null(monkeypatch):
     assert events[-1][1] == (7, "AAPL")
 
 
+def test_feed_recovery_republishes_recent_saved_report_without_duplicate(monkeypatch):
+    from datetime import date
+    import backend.celery_task.store_daily_scores_task as task_module
+    from backend.celery_task import daily_report_task
+
+    published = []
+
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, sql):
+            self.sql = sql
+
+        def fetchall(self):
+            return [(7, date(2026, 11, 19))] if "FROM daily_reports" in self.sql else []
+
+        def fetchone(self):
+            return (None, None, None)
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def commit(self):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(task_module, "get_db_connection", Connection)
+    monkeypatch.setattr(daily_report_task, "_publish_daily_report_ready_feed",
+                        lambda user_id, report_date: published.append((user_id, report_date)))
+    assert task_module.recover_coach_feed_events() == 1
+    assert published == [(7, date(2026, 11, 19))]
+
+
+def test_feed_recovery_republishes_saved_periodic_report(monkeypatch):
+    from datetime import date
+    import backend.celery_task.store_daily_scores_task as task_module
+    from backend.celery_task import report_feed
+
+    published = []
+
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, sql):
+            self.sql = sql
+
+        def fetchall(self):
+            return [(7, 'weekly', date(2026, 11, 19))] if "FROM weekly_reports" in self.sql else []
+
+        def fetchone(self):
+            return ('weekly_reports', None, None)
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def commit(self):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(task_module, "get_db_connection", Connection)
+    monkeypatch.setattr(report_feed, "publish_periodic_report_ready",
+                        lambda user_id, report_type, report_date:
+                        published.append((user_id, report_type, report_date)))
+    assert task_module.recover_coach_feed_events() == 1
+    assert published == [(7, 'weekly', date(2026, 11, 19))]
+
+
 def test_feed_recovery_dispatches_new_or_changed_paper_decisions(monkeypatch):
     import backend.celery_task.store_daily_scores_task as task_module
 
@@ -283,7 +364,10 @@ def test_feed_recovery_dispatches_new_or_changed_paper_decisions(monkeypatch):
             statements.append(sql)
 
         def fetchall(self):
-            return [(7, 91)]
+            return [(7, 91)] if len(statements) == 1 else []
+
+        def fetchone(self):
+            return (None, None, None)
 
     class Connection:
         def cursor(self):
@@ -300,13 +384,17 @@ def test_feed_recovery_dispatches_new_or_changed_paper_decisions(monkeypatch):
                         lambda user_id, decision_id: sent.append((user_id, decision_id)))
     assert task_module.recover_coach_feed_events() == 1
     assert sent == [(7, 91)]
-    assert len(statements) == 1
+    assert len(statements) == 3
     assert "initial_decision_id" in statements[0]
     assert "f.user_id=d.user_id" in statements[0]
     assert "f.evidence->>'status' IS DISTINCT FROM d.status" in statements[0]
     assert "f.evidence->>'order_status' IS DISTINCT FROM o.status" in statements[0]
     assert "'hold'" in statements[0]
     assert "setups" not in statements[0]
+    assert "daily_reports" in statements[1]
+    assert "to_jsonb(r)->'executive_summary' IS NOT NULL" in statements[1]
+    assert "f.user_id=r.user_id" in statements[1]
+    assert "to_regclass('weekly_reports')" in statements[2]
     assert task_module._confirmed_component_score({
         "total_score": 10, "scores": {"unused": {"weight": 0}},
     }) is None

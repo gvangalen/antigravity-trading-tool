@@ -5,8 +5,8 @@ import { View } from 'react-native';
 import { MobileFINNFeed } from '../assistant/MobileFINNFeed';
 import { useFinnOverlay } from '../../contexts/FinnOverlayContext';
 import { useAppPreferences } from '../../preferences/AppPreferencesProvider';
-import { translate } from '../../i18n';
 import { coachFeedApi, type MobileCoachFeedItem } from '../../services/tradamindApi';
+import { coachFeedDiscussionPrompt, coachFeedQuoteCurrency } from '../../services/coachFeedDiscussion';
 import { useAuth } from '../../auth/AuthProvider';
 import type { MainTabParamList } from '../../navigation/MainTabNavigator';
 
@@ -55,9 +55,10 @@ export function FinnCoachFeedCard() {
   const handleDiscuss = (item: MobileCoachFeedItem) => {
     void coachFeedApi.mark(item.id, 'read').then(refresh).catch(() => {});
     openFinn({
-      prefill: `${translate(language, 'finn.feedDiscussQuery')} ${item.evidence?.subject || item.title}`,
+      prefill: coachFeedDiscussionPrompt(item, language),
       source: 'coach-feed',
       symbol: item.symbol || undefined,
+      quoteCurrency: coachFeedQuoteCurrency(item),
       feedItemId: item.id,
     });
   };
@@ -67,10 +68,19 @@ export function FinnCoachFeedCard() {
   };
 
   const scopedItems = itemsOwner === user?.id && itemsLanguage === language ? items : [];
+  const firstItems = scopedItems.slice(0, 3);
+  const recentReport = scopedItems.find((item) => {
+      const age = Date.now() - Date.parse(item.created_at);
+      return (item.event_type.endsWith('_report_ready') || item.event_type === 'weekly_reflection') &&
+        item.status === 'unread' &&
+        Number.isFinite(age) && age >= 0 && age <= 36 * 60 * 60 * 1000;
+    });
+  const visibleItems = recentReport && !firstItems.some((item) => item.id === recentReport.id)
+    ? [...firstItems.slice(0, 2), recentReport] : firstItems;
   return (
     <View>
       <MobileFINNFeed
-        events={history ? scopedItems : scopedItems.slice(0, 3)}
+        events={history ? scopedItems : visibleItems}
         history={history}
         language={language}
         onArchive={handleArchive}

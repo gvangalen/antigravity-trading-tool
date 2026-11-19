@@ -10,6 +10,7 @@ from backend.services.asset_catalog_service import AssetCatalogService
 from backend.utils.auth_utils import get_current_user
 from backend.infrastructure.models import Watchlist, TradingMarket
 from backend.services.indicator_score_refresh_service import queue_exact_market_refresh
+from backend.services.finn_coach_feed_service import record_watchlist_feed_change
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -117,6 +118,8 @@ async def add_to_watchlist(
             legacy.market_id = market.id
             await session.commit()
             queue_exact_market_refresh(int(market.id))
+            await record_watchlist_feed_change(session, user_id=int(user_id),
+                                               symbol=symbol, market_id=int(market.id), added=True)
             return {"message": f"{symbol}/{market.quote_currency} toegevoegd aan watchlist", "symbol": symbol}
 
     new_item = Watchlist(user_id=user_id, symbol=symbol, market_id=payload.market_id)
@@ -124,6 +127,8 @@ async def add_to_watchlist(
     await session.commit()
     if market is not None:
         queue_exact_market_refresh(int(market.id))
+    await record_watchlist_feed_change(session, user_id=int(user_id), symbol=symbol,
+                                       market_id=int(market.id) if market else None, added=True)
     return {"message": f"{symbol} toegevoegd aan watchlist", "symbol": symbol}
 
 @router.delete("/watchlist/{symbol}")
@@ -137,15 +142,17 @@ async def remove_from_watchlist(
     symbol = symbol.upper()
     
     if market_id is None:
-        matching = (await session.execute(select(Watchlist.id).where(
+        matching = (await session.execute(select(Watchlist.id, Watchlist.market_id).where(
             Watchlist.user_id == user_id, Watchlist.symbol == symbol,
-        ))).scalars().all()
+        ))).all()
         if len(matching) > 1:
             raise HTTPException(409, "Kies welk handelspaar je wilt verwijderen")
         if not matching:
             raise HTTPException(404, f"{symbol} niet gevonden in je watchlist")
-        stmt = delete(Watchlist).where(Watchlist.id == matching[0], Watchlist.user_id == user_id)
+        stmt = delete(Watchlist).where(Watchlist.id == matching[0][0], Watchlist.user_id == user_id)
+        removed_market_id = matching[0][1]
     else:
+        removed_market_id = market_id
         stmt = delete(Watchlist).where(
             Watchlist.user_id == user_id,
             Watchlist.symbol == symbol,
@@ -156,5 +163,7 @@ async def remove_from_watchlist(
     
     if result.rowcount == 0:
         raise HTTPException(404, f"{symbol} niet gevonden in je watchlist")
+    await record_watchlist_feed_change(session, user_id=int(user_id), symbol=symbol,
+                                       market_id=removed_market_id, added=False)
         
     return {"message": f"{symbol} verwijderd uit watchlist"}

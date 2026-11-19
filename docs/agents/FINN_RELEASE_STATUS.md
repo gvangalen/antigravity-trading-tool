@@ -4,6 +4,31 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 vervolgacties en rapportmeldingen (19 november 2026)
+
+Phase: `BUILD_VALIDATED_PENDING_CI`. [PR #1198](https://github.com/gvangalen/antigravity-trading-tool/pull/1198)
+bevat de setup → strategie → score-voortzetting, gerichte FINN-feedkaarten voor
+watchlist, analyse, strategie, Paper-botbesluit en geverifieerde Paper-exit,
+plus herstel van meldingen voor dag- en periodieke rapporten. Productcode-SHA
+op de releasebranch is `ebf4d334074b7216f854d4f8960a49529549bbce`.
+Deze kandidaat is nog niet live of onafhankelijk door QA geaccepteerd.
+
+De volledige backend-suite slaagde met 5093 tests en 7 bestaande skips.
+De geïsoleerde FastAPI/Celery/PostgreSQL/Redis-actiematrix slaagde 17/17,
+adapters 28/28, inclusief Smart DCA- en kalender-DCA-opslagproeven; nul
+brokerorders, Live-calls, Live-bots en productieverbindingen (artifact
+SHA-256 `182971eeda30e9bbaf72ca1eed9758cc17c5e97de4722731c6bd96af4841ea73`).
+Echte Responses-provider-development slaagde 20/20 (SHA-256
+`deb5dd333e8cd3e9a92b00c249637bb8b259005a48145255c24dafff43df4a9c`)
+en regression 109/109 (SHA-256
+`5d3f448144ea80d59ba183e9ce22480895c83f43c9b7ea7854ce767d7048872a`),
+zonder provider-, schema-, parse-, validatie- of time-outfouten.
+Frontend-build, typecheck, i18n-lint en -tests, commands, proposals, setups,
+zichtbaarheidstests en `audit:high` slaagden. Mobiele typecheck, lint zonder
+errors en web/iOS/Android-bundlechecks slaagden. De rapport-feedherstelquery
+werkte in een lokale SQL-proef met en zonder optionele weekrapporttabel.
+CI, Auto Deploy, publieke SHA-verificatie en ingelogde QA volgen.
+
 ## FINN-keuzeantwoorden: Responses-ingang en eerste setupkeuze (19 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_READY_FOR_INDEPENDENT_QA`. De onafhankelijke gerichte QA

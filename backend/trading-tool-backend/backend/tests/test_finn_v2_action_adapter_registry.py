@@ -32,7 +32,8 @@ def test_watchlist_add_uses_database_unique_constraint_for_idempotency():
     )
 
     assert result == {
-        "ok": True, "asset": "ETH", "operation": "watchlist_add", "quote_status": "available",
+        "ok": True, "asset": "ETH", "operation": "watchlist_add", "created": False,
+        "quote_status": "available",
     }
     assert len(session.calls) == 1
     sql, params = session.calls[0]
@@ -44,6 +45,23 @@ def test_watchlist_add_uses_database_unique_constraint_for_idempotency():
         "user_id": 390,
         "symbol": "ETH",
     }
+
+
+def test_watchlist_add_marks_only_a_new_row_for_feed_followup():
+    class _InsertedSession(_Session):
+        async def execute(self, statement, params):
+            self.calls.append((str(statement), params))
+            return SimpleNamespace(rowcount=1)
+
+    registry = FinnV2ActionAdapterRegistry(_InsertedSession())
+    registry.flags.execute_watchlist_changes_enabled = lambda: True
+    registry.market_data_ingestion.ingest_latest_snapshots = AsyncMock(
+        return_value={"success_count": 1},
+    )
+    result = asyncio.run(registry._watchlist_add(
+        390, {"change": {"asset": "ETH", "operation": "add"}},
+    ))
+    assert result["created"] is True
 
 
 def test_watchlist_add_binds_verified_exact_market(monkeypatch):
@@ -327,7 +345,8 @@ def test_watchlist_add_keeps_write_when_initial_twelve_data_snapshot_is_pending(
     ))
 
     assert result == {
-        "ok": True, "asset": "AAPL", "operation": "watchlist_add", "quote_status": "pending",
+        "ok": True, "asset": "AAPL", "operation": "watchlist_add", "created": False,
+        "quote_status": "pending",
     }
     assert len(session.calls) == 1
 

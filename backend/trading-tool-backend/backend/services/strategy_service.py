@@ -345,6 +345,8 @@ class StrategyService:
             await self.session.commit()
             from backend.services.onboarding_service import mark_step_completed
             await mark_step_completed(user_id, "strategy", self.session)
+            from backend.services.setup_service import SetupService
+            SetupService._notify_coach_feed(user_id, strategy_symbol, market_id)
         return {
             "id": strategy_id,
             "strategy_id": strategy_id,
@@ -508,10 +510,17 @@ class StrategyService:
                 f"Deze strategie is nog gekoppeld aan paper-bot {names}. Verwijder eerst de gekoppelde paper-bot.",
             )
 
+        existing = await self.repository.get_raw_strategy_with_setup(strategy_id, user_id)
         deleted = await self.repository.delete_strategy(strategy_id, user_id)
         if deleted == 0:
             raise HTTPException(404, "Strategie niet gevonden")
         await self.session.commit()
+        if existing:
+            from backend.services.setup_service import SetupService
+            SetupService._notify_coach_feed(
+                user_id, str(existing.get("setup_symbol") or existing.get("symbol") or ""),
+                existing.get("setup_market_id"),
+            )
         return {"message": "🗑 Verwijderd"}
 
     async def get_strategy_by_setup(self, setup_id: int, user_id: int, format_type: Optional[str] = None) -> Optional[dict]:

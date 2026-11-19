@@ -23,6 +23,7 @@ import { FINN_ASSETS, resolveFeedDraftQuery, selectedFeedItemForSubmission, shou
 import { getActiveSetupId } from "@/lib/setup/activeSetup";
 import { indicatorDisplayName } from "@/lib/indicators/configuredIndicatorRows.mjs";
 import { formatDraftCardValue, formatExecutionMode } from "@/lib/contractValueFormatter.mjs";
+import { buildFinnTaskContinuationPrompt } from "@/lib/ai/finnTaskContinuation.mjs";
 import { clearActiveFinnConversation, readActiveFinnConversation, writeActiveFinnConversation } from "@/lib/finnActiveConversation.mjs";
 import { parseFinnChatText } from "@/lib/finnChatText.mjs";
 import { finnSubmissionLocale } from "@/lib/finnChatLocale.mjs";
@@ -30,7 +31,7 @@ import { inactiveProposalIds, isFinnProposalCorrection, mapBackendSessionMessage
 import { conversationQuestionChoices, draftConversationCopy, hasConfirmableDraft, isCollectingDraft, isOpenClarification } from "@/lib/finnDraftConversation.mjs";
 import { matchAssetsInText, fetchTradingMarkets } from "@/lib/api/assets";
 import { fetchWatchlist } from "@/lib/api/watchlist";
-import { watchlistIntent, watchlistChoices, watchlistScopeChoices, replacementAfterConfirmedAdd } from "@/lib/finnWatchlistConversation.mjs";
+import { watchlistIntent, watchlistChoices, watchlistScopeChoices, replacementAfterConfirmedAdd, watchlistNextStepAfterConfirmedAdd } from "@/lib/finnWatchlistConversation.mjs";
 
 const INDICATOR_MODAL_OPEN_EVENT = "finn-indicator-config:open";
 const INDICATOR_MODAL_COMPLETED_EVENT = "finn-indicator-config:completed";
@@ -42,6 +43,7 @@ function publicFinnExecutionError(value) {
   const reason = String(value || "").replace(/^\d{3}:\s*/, "").trim();
   if (/^Deze setup is nog gekoppeld aan strategie /.test(reason)) return reason;
   if (/^Deze strategie is nog gekoppeld aan paper-bot /.test(reason)) return reason;
+  if (/^Setup \d+ is opgeslagen; de strategie kon nog niet worden opgeslagen\./.test(reason)) return reason;
   return "Dat lukte niet. Ik heb niets gewijzigd.";
 }
 
@@ -1871,6 +1873,9 @@ function AIAssistantContent({
         );
         const execution = result?.execution || {};
         if (!["succeeded", "already_executed"].includes(execution.status)) {
+          if (execution.task_continuation?.step === "strategy" && /^\d+$/.test(String(execution.task_continuation.setup_id || ""))) {
+            throw new Error(`Setup ${execution.task_continuation.setup_id} is opgeslagen; de strategie kon nog niet worden opgeslagen. Vraag FINN om deze stap opnieuw te proberen met dezelfde setup.`);
+          }
           throw new Error(publicFinnExecutionError(execution.error_codes?.[0]));
         }
         const displayContext = action.display_context || {};
@@ -1935,6 +1940,10 @@ function AIAssistantContent({
           asset: suppliedInputs.asset || execution.action_result?.asset,
           quote_currency: suppliedInputs.quote_currency || execution.action_result?.quote_currency,
         });
+        const watchlistNextStep = watchlistNextStepAfterConfirmedAdd(operationId, {
+          asset: suppliedInputs.asset || execution.action_result?.asset,
+          quote_currency: suppliedInputs.quote_currency || execution.action_result?.quote_currency,
+        }, locale);
         if (replacementFollowup) pendingWatchlistReplacementRef.current = null;
         setMessages((prev) => {
           const updated = prev.map((message) => {
@@ -1951,22 +1960,46 @@ function AIAssistantContent({
             state: { ...(message.state || {}), setup_draft: null, action_draft: null },
           };
           });
-          if (!replacementFollowup) return updated;
-          const sourceLabel = replacementFollowup.sourceLabel;
-          return [...updated, {
-            role: "assistant",
-            text: at("watchlistGuidance.removeAfterAdd", "De nieuwe notering staat op je watchlist. Wil je nu {source} verwijderen?", { source: sourceLabel }),
-            watchlistGuidance: { choices: [{
-              label: at("watchlistGuidance.removeSource", "{source} verwijderen", { source: sourceLabel }),
-              action: replacementFollowup.action,
-            }] },
-            isComplete: true,
-          }];
+          const next = [...updated];
+          if (replacementFollowup) {
+            const sourceLabel = replacementFollowup.sourceLabel;
+            next.push({
+              role: "assistant",
+              text: at("watchlistGuidance.removeAfterAdd", "De nieuwe notering staat op je watchlist. Wil je nu {source} verwijderen?", { source: sourceLabel }),
+              watchlistGuidance: { choices: [{
+                label: at("watchlistGuidance.removeSource", "{source} verwijderen", { source: sourceLabel }),
+                action: replacementFollowup.action,
+              }] },
+              isComplete: true,
+            });
+          }
+          if (watchlistNextStep) next.push({
+            role: "assistant", text: watchlistNextStep.question,
+            watchlistGuidance: watchlistNextStep, isComplete: true,
+          });
+          return next;
         });
         if (operationId === "watchlist_add" || operationId === "watchlist_remove") {
           invalidateWatchlist();
         }
         emitFinnRefreshSignals();
+        // This follows a verified write; the next strategy still needs its
+        // own confirmation before it can be persisted.
+        const followup = buildFinnTaskContinuationPrompt(execution.task_continuation);
+        if (followup && typeof execution.continuation_run_id === "string"
+            && execution.continuation_run_id.startsWith("finn-v2-run-")) {
+          const streamId = `stream-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+          activeStreamIdRef.current = streamId;
+          pendingRunRef.current = { streamId, runId: execution.continuation_run_id };
+          setLoading(true);
+          setMessages((prev) => [...prev, {
+            role: "assistant", text: at("draftCards.checking", "Even controleren…"),
+            isComplete: false, streamId,
+          }]);
+          void pollPendingFinnV2Run(execution.continuation_run_id, streamId);
+        } else if (followup) {
+          queueMicrotask(() => { void handleChat(followup, true); });
+        }
         return;
       }
       throw new Error("Dit oudere actievoorstel kan niet meer worden bevestigd. Vraag FINN om een nieuw voorstel.");
