@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN-keuzeantwoorden: Responses-ingang en eerste setupkeuze (19 november 2026)
 
-Phase: `CANDIDATE_VALIDATED_PENDING_DEPLOY`. De onafhankelijke gerichte QA
+Phase: `PRODUCT_DEPLOYED_READY_FOR_INDEPENDENT_QA`. De onafhankelijke gerichte QA
 op live SHA `8648ca7cb99552c36d0951331e1dd7672176e590` wees de
 setupkeuze af. In een nieuw gesprek met het ingelogde Trader-agentaccount
 werd de eerste vraag “Ik wil een nieuwe BTC-setup maken. Help me stap voor
@@ -44,7 +44,13 @@ en regression **109/109** (SHA-256
 `0a3efb131dea885a3a9f8a57add856a7f976c9c2faacc16968fec25b8c02af5b`),
 zonder provider-, schema-, parse-, validatie- of time-outfouten. Alle vijf
 [PR-CI-jobs 44521248295](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44521248295)
-slaagden. Deployment-identiteit en onafhankelijke live hertest volgen.
+slaagden. Alle vijf
+[main-CI-jobs 44523702320](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44523702320)
+en [Auto Deploy 44524673338](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44524673338)
+slaagden voor merge-SHA `293f485afd41ade5181a8216b50dba34d9467a79`.
+GitHub main, publieke backend-health en frontend-buildinfo meldden alle
+drie diezelfde SHA; beide publieke endpoints gaven HTTP 200. Onafhankelijke
+live hertest volgt op de definitieve SHA nadat deze statuscommit is uitgerold.
 
 ## FINN-keuzeantwoorden: herstel na onafhankelijke QA (19 november 2026)
 
