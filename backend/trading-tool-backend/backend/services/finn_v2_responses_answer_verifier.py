@@ -48,6 +48,7 @@ from backend.services.finn_v2_two_plan_checks_answer import verified_two_plan_ch
 from backend.services.finn_v2_factual_source_answer import (
     render_bot_decision, render_closed_paper_exit_facts, render_selected_paper_feed_decision, render_latest_quote, render_portfolio_read_time,
     render_report_and_quote_times, render_report_and_technical_read,
+    render_report_bot_check_comparison,
 )
 
 
@@ -3117,6 +3118,11 @@ class FinnResponsesAnswerVerifier:
                 expected = render_report_and_technical_read(
                     read, symbol=symbol, message=message,
                     pair=f"{symbol}/{quote}" if quote else None,
+                )
+            elif scopes == {"read_review_history", "read_latest_report"} and symbol \
+                    and args.get("_decision_window_start_utc"):
+                expected = render_report_bot_check_comparison(
+                    read, symbol=symbol, message=message,
                 )
             elif scopes in ({"read_review_history"}, {"read_review_history", "read_portfolio"}) \
                     and exit_facts is not None:

@@ -66,7 +66,7 @@ from backend.services.finn_v2_factual_source_answer import (
     render_selected_paper_position_risk,
     render_paper_exit_position_status,
     render_portfolio_read_time, render_report_and_quote_times,
-    render_report_and_technical_read,
+    render_report_and_technical_read, render_report_bot_check_comparison,
 )
 
 logger = logging.getLogger(__name__)
@@ -1044,7 +1044,7 @@ class FinnResponsesFrontDoor:
             re.search(r"\b(?:bot(?:besluit(?:en)?|beslissing(?:en)?|beoordeling(?:en)?|check(?:s)?)?|automatisering|automation)\b", message, re.I)
             and re.search(
                 r"\b(?:botbeslissing(?:en)?|botbesluit(?:en)?|beslissing(?:en)?|besluit(?:en)?|decision(?:s)?|"
-                r"beoordeling(?:en)?|check(?:s)?|entscheidung(?:en)?)\b",
+                r"beoordeling(?:en)?|check(?:s)?|(?:bot)?reden(?:en)?|blokkeer\w*|entscheidung(?:en)?)\b",
                 message, re.I,
             )
         )
@@ -1096,14 +1096,43 @@ class FinnResponsesFrontDoor:
         decision_only = not report_requested and not needs_portfolio and not re.search(
             r"\b(?:trade|transactie)\b", message, re.I,
         )
+        referenced_minute = FinnResponsesFrontDoor._referenced_bot_check_minute(message)
         return replace(call, inputs={**call.inputs, **({"_latest_bot_decisions_only": True}
-                                                    if decision_only and call.name == "get_decision_history" else {})},
+                                                    if decision_only and call.name == "get_decision_history" else {}),
+                                     **({"_decision_window_start_utc": referenced_minute}
+                                        if referenced_minute else {})},
                        read_tools=tuple(dict.fromkeys((
             *base_tools, "read_review_history",
             *(("read_portfolio",) if needs_portfolio or
               (call.name != "get_decision_history" and not report_requested) else ()),
             *(('read_bot_status',) if account_bundle or FinnResponsesFrontDoor._asks_about_account_state_bundle(message) else ()),
         ))))
+
+    @staticmethod
+    def _referenced_bot_check_minute(message: str) -> str | None:
+        """Resolve an explicit local bot-check clock to one owner-read UTC minute."""
+        match = re.search(
+            r"\b(?:bot|botcheck|check|beoordeling)\b[^.!?\n]{0,100}?"
+            r"\b([01]?\d|2[0-3]):([0-5]\d)\s*(CET|CEST)\b",
+            message, re.I,
+        )
+        if not match:
+            return None
+        local_now = datetime.now(ZoneInfo("Europe/Amsterdam"))
+        day = local_now.date()
+        dated = re.search(r"\b(20\d{2})-(\d{2})-(\d{2})\b", message)
+        if dated:
+            try:
+                day = date(int(dated.group(1)), int(dated.group(2)), int(dated.group(3)))
+            except ValueError:
+                return None
+        elif re.search(r"\bgisteren\b", message[:match.start()], re.I):
+            day -= timedelta(days=1)
+        local = datetime(day.year, day.month, day.day, int(match.group(1)),
+                         int(match.group(2)), tzinfo=ZoneInfo("Europe/Amsterdam"))
+        if local.tzname() != match.group(3).upper():
+            return None
+        return local.astimezone(ZoneInfo("UTC")).isoformat()
 
     @staticmethod
     def _bind_explicit_report_evidence(
@@ -1780,6 +1809,12 @@ class FinnResponsesFrontDoor:
                 if symbol:
                     fact_kind = "report_technical_comparison"
             elif len(symbols) == 1 and self._asks_about_bot_decision(message) \
+                    and re.search(r"\b(?:dagrapport|ochtendrapport|rapport)\b", message, re.I) \
+                    and re.search(r"\b(?:waarom|verschil|verschillen|andere|vergelijk)\b", message, re.I) \
+                    and self._referenced_bot_check_minute(message):
+                fact_kind = "report_bot_check_comparison"
+                symbol = next(iter(symbols))
+            elif len(symbols) == 1 and self._asks_about_bot_decision(message) \
                     and re.search(r"\b(?:laatste|nieuwste)\b", message, re.I) \
                     and re.search(r"\bopgeslagen\b", message, re.I) \
                     and not re.search(r"\b(?:dagrapport|rapport|positie|portefeuille|kas|"
@@ -1814,6 +1849,22 @@ class FinnResponsesFrontDoor:
                         call, message=message, read_only=True,
                         previous_response=previous_response, owner_user_id=self.user_id,
                     )
+                elif fact_kind == "report_bot_check_comparison":
+                    call = replace(catalog.validate("get_decision_history", {"asset": symbol}),
+                                   read_tools=("read_review_history", "read_latest_report"),
+                                   inputs={"asset": symbol, "_latest_bot_decisions_only": True})
+                    call = self._bind_bot_decision_evidence(call, message=message, read_only=True)
+                    call = self._bind_explicit_report_evidence(
+                        call, message=message, read_only=True,
+                        previous_response=previous_response, owner_user_id=self.user_id,
+                    )
+                    if not call.inputs.get("report_date") and not call.inputs.get("report_date_unresolved"):
+                        # An undated report clock in this comparison refers to
+                        # the same local day as the explicitly dated bot check.
+                        local_day = datetime.fromisoformat(
+                            call.inputs["_decision_window_start_utc"],
+                        ).astimezone(ZoneInfo("Europe/Amsterdam")).date()
+                        call = replace(call, inputs={**call.inputs, "report_date": local_day.isoformat()})
                 elif fact_kind == "bot_decision":
                     call = replace(catalog.validate("get_decision_history", {"asset": symbol}),
                                    read_tools=("read_review_history",),
@@ -1838,6 +1889,10 @@ class FinnResponsesFrontDoor:
                     fact_text = render_report_and_technical_read(
                         read_result, symbol=symbol, message=message,
                         pair=f"{pair[0]}/{pair[1]}" if pair and pair[0] == symbol else None,
+                    )
+                elif fact_kind == "report_bot_check_comparison":
+                    fact_text = render_report_bot_check_comparison(
+                        read_result, symbol=symbol, message=message,
                     )
                 elif fact_kind == "bot_decision":
                     mode = False if re.search(r"\bPaper\b", message, re.I) else (
@@ -3962,6 +4017,12 @@ class FinnResponsesFrontDoor:
                     call, message=message, read_only=call.operation_id is None and not pending_operation,
                     previous_response=previous_response, owner_user_id=self.user_id,
                 )
+                if (is_read_only_turn and self._asks_about_bot_decision(message)
+                        and "read_review_history" in call.read_tools):
+                    referenced_minute = self._referenced_bot_check_minute(message)
+                    if referenced_minute:
+                        call = replace(call, inputs={**call.inputs,
+                                                     "_decision_window_start_utc": referenced_minute})
                 if (call.name == "get_closed_trade_review"
                         and self._asks_about_bot_decision(message)):
                     # The dossier selector otherwise suppresses the latest
@@ -4373,11 +4434,14 @@ class FinnResponsesFrontDoor:
                         ))
                         extra_results.extend(portfolio_result.get("results") or [])
                     if self._asks_about_bot_decision(message) and "read_review_history" not in completed_scopes:
+                        referenced_minute = self._referenced_bot_check_minute(message)
                         decision_result = await self.reads(replace(
                             call, name="get_decision_history",
                             inputs={
                                 **({"asset": next(iter(mentioned_assets))} if len(mentioned_assets) == 1 else {}),
                                 "_latest_bot_decisions_only": True,
+                                **({"_decision_window_start_utc": referenced_minute}
+                                   if referenced_minute else {}),
                             },
                             read_tools=("read_review_history",), evaluation_operation_id=None,
                         ))

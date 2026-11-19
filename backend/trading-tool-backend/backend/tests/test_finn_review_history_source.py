@@ -55,6 +55,50 @@ def test_owner_saved_week_reflection_is_read_with_review_history():
     assert "raw_instruction" not in str(result["data"])
 
 
+def test_referenced_bot_minute_reads_owner_scoped_historical_reason():
+    from backend.domain.finn_v2_source_registry import FinnV2InformationSourceRegistry
+    from backend.services.bot_service import BotService
+
+    class Repository:
+        async def get_bot_decisions_in_window(self, user_id, start_utc, end_utc):
+            assert user_id == 42
+            assert start_utc.isoformat() == "2026-11-19T09:00:00+00:00"
+            assert end_utc.isoformat() == "2026-11-19T09:01:00+00:00"
+            return [{
+                "decision_id": 101, "bot_id": 130, "bot_name": "AAPL Paper",
+                "symbol": "AAPL", "is_live": False, "action": "hold", "status": "planned",
+                "decision_kind": "evaluation", "decision_ts": datetime(2026, 11, 19, 9, 0, 18),
+                "created_at": datetime(2026, 11, 19, 9, 0, 18),
+                "scores_json": {},
+                "reason_json": ["Beurs is buiten reguliere handelstijden"],
+            }, {
+                "decision_id": 102, "bot_id": 131, "bot_name": "BTC Paper",
+                "symbol": "BTC", "is_live": False, "action": "hold", "status": "planned",
+                "decision_kind": "evaluation", "decision_ts": datetime(2026, 11, 19, 9, 0, 18),
+                "created_at": datetime(2026, 11, 19, 9, 0, 18),
+                "scores_json": {}, "reason_json": ["Score past niet"],
+            }]
+
+        async def get_latest_bot_decisions_for_owner(self, user_id):
+            assert user_id == 42
+            return []
+
+    adapter = object.__new__(ReviewToolAdapter)
+    adapter.repository = Repository()
+    adapter.bot_service = BotService(None)
+    adapter.sources = FinnV2InformationSourceRegistry()
+    result = asyncio.run(adapter.execute(
+        user_id=42, asset="AAPL",
+        selector={"_latest_bot_decisions_only": True,
+                  "_decision_window_start_utc": "2026-11-19T09:00:00+00:00"},
+    ))
+    rows = result["data"].referenced_bot_decisions
+    assert len(rows) == 1
+    assert rows[0]["bot_id"] == 130
+    assert rows[0]["decision_at"] == "2026-11-19T09:00:18+00:00"
+    assert "reguliere handelstijden" in rows[0]["safety_reason"]
+
+
 def test_owner_paper_exit_review_exposes_only_requested_structured_facts():
     exit_evidence = {"trigger": "first_target", "source_price_currency": "USD",
                      "saved_first_target": 357.42, "execution_fx_eur_per_unit": 0.9,

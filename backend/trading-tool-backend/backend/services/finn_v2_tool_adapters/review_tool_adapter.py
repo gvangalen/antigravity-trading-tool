@@ -162,6 +162,48 @@ class ReviewToolAdapter:
                 }
         # A selected feed card asks about that event. A newer per-bot summary
         # would compete with it and can wrongly replace its historical time.
+        referenced_bot_decisions = []
+        requested_minute = (selector or {}).get("_decision_window_start_utc")
+        if isinstance(requested_minute, str) and review_id is None and not selected_feed_decision:
+            try:
+                start_utc = self._utc_instant(requested_minute)
+                if start_utc.second or start_utc.microsecond:
+                    raise ValueError("decision_minute_not_aligned")
+            except (TypeError, ValueError):
+                start_utc = None
+            if start_utc is not None:
+                rows_at_minute = await self.repository.get_bot_decisions_in_window(
+                    user_id, start_utc, start_utc + timedelta(minutes=1),
+                )
+                for row in rows_at_minute:
+                    if (asset and str(row.get("symbol") or "").upper().split("/", 1)[0]
+                            != str(asset).upper().split("/", 1)[0]):
+                        continue
+                    scores = self.bot_service._safe_json(row.get("scores_json"), {})
+                    reasons = self.bot_service._display_reasons(
+                        self.bot_service._safe_json(row.get("reason_json"), []),
+                    )
+                    safety = BotService._safety_contract({
+                        "id": row["decision_id"], "bot_id": row["bot_id"],
+                        "status": row.get("status"),
+                        "created_at": row.get("created_at") or row["decision_ts"],
+                        "guardrails_result": scores.get("guardrails_result"),
+                        "guardrails_checked_at": scores.get("guardrails_checked_at"),
+                        "execution_failure": scores.get("execution_failure"),
+                        "strategy_reason": scores.get("strategy_reason"),
+                    }, bool(row.get("is_live")), historical=True)
+                    reason = safety.get("reason") or next(iter(reasons), None)
+                    referenced_bot_decisions.append({
+                        "bot_id": row["bot_id"], "bot_name": str(row.get("bot_name") or "")[:100],
+                        "symbol": row.get("symbol"), "is_live": bool(row.get("is_live")),
+                        "action": row.get("action"), "decision_kind": row.get("decision_kind"),
+                        "persistence_status": row.get("status"),
+                        "decision_at": self._utc_instant(row["decision_ts"]).isoformat(),
+                        "decision_at_amsterdam": amsterdam_source_moment(row["decision_ts"]),
+                        "safety_state": safety.get("state"),
+                        "safety_reason": re.sub(r"[\x00-\x1f\x7f]+", " ", reason).strip()[:300]
+                        if isinstance(reason, str) and reason.strip() else None,
+                    })
         latest_rows = ([] if (review_id is not None and not (selector or {}).get("_include_latest_bot_decisions"))
                        or selected_feed_decision else
                        await self.repository.get_latest_bot_decisions_for_owner(user_id))
@@ -226,7 +268,8 @@ class ReviewToolAdapter:
             latest_decisions.append(decision)
         if selector and selector.get("_latest_bot_decisions_only") and review_id is None and not selected_feed_decision:
             return {
-                "data": ReviewHistoryData(latest_bot_decisions=latest_decisions),
+                "data": ReviewHistoryData(latest_bot_decisions=latest_decisions,
+                                          referenced_bot_decisions=referenced_bot_decisions),
                 "summary": {"title": "review_history", "kind": "latest_bot_decisions",
                             "asset": asset, "count": len(latest_decisions)},
                 "as_of": max(
@@ -418,6 +461,7 @@ class ReviewToolAdapter:
                 items=[item for item in items if item],
                 weekly_reflection=weekly_reflection,
                 latest_bot_decisions=latest_decisions,
+                referenced_bot_decisions=referenced_bot_decisions,
                 selected_feed_decision=selected_feed_decision,
                 closed_trade_status=closed["status"],
                 closed_trade_coverage=closed["coverage"],

@@ -229,6 +229,32 @@ class BotRepository:
         row = result.fetchone()
         return dict(row._mapping) if row else None
 
+    async def get_bot_decisions_in_window(
+        self, user_id: int, start_utc: datetime, end_utc: datetime,
+    ) -> List[dict]:
+        """Owner-scoped historical checks for one explicitly requested minute."""
+        if not await self.check_table_exists("bot_decisions"):
+            return []
+        result = await self.session.execute(text("""
+            SELECT d.id AS decision_id, d.bot_id, b.name AS bot_name,
+                   b.is_live, COALESCE(d.symbol, s.symbol, s.data->>'symbol', st.symbol) AS symbol,
+                   d.action, d.status, d.decision_ts,
+                   d.decision_kind, d.created_at, d.scores_json, d.reason_json
+            FROM bot_decisions d
+            JOIN bot_configs b ON b.id = d.bot_id AND b.user_id = d.user_id
+            LEFT JOIN strategies s ON s.id = b.strategy_id AND s.user_id = b.user_id
+            LEFT JOIN setups st ON st.id = s.setup_id AND st.user_id = b.user_id
+            WHERE d.user_id = :user_id
+              AND d.decision_ts >= :start_utc AND d.decision_ts < :end_utc
+            ORDER BY d.decision_ts DESC, d.id DESC
+            LIMIT 20
+        """), {
+            "user_id": user_id,
+            "start_utc": start_utc.replace(tzinfo=None),
+            "end_utc": end_utc.replace(tzinfo=None),
+        })
+        return [dict(row._mapping) for row in result.fetchall()]
+
     async def get_latest_bot_decisions_for_owner(self, user_id: int) -> List[dict]:
         """One saved latest decision per owner bot, regardless of decision age."""
         if not await self.check_table_exists("bot_decisions"):

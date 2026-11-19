@@ -402,6 +402,7 @@ class ClosedTradeEvidenceData(BaseModel):
 class ReviewHistoryData(BaseModel):
     items: List[str] = Field(default_factory=list)
     latest_bot_decisions: List[Dict[str, Any]] = Field(default_factory=list)
+    referenced_bot_decisions: List[Dict[str, Any]] = Field(default_factory=list)
     selected_feed_decision: Optional[Dict[str, Any]] = None
     closed_trade_status: str = "no_data"
     closed_trade_coverage: Dict[str, int] = Field(default_factory=dict)
