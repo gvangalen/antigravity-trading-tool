@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { watchlistIntent, watchlistChoices, watchlistScopeChoices, replacementAfterConfirmedAdd } from '../lib/finnWatchlistConversation.mjs';
+import { watchlistIntent, watchlistChoices, watchlistScopeChoices, replacementAfterConfirmedAdd, watchlistNextStepAfterConfirmedAdd } from '../lib/finnWatchlistConversation.mjs';
 
 const btc = { symbol: 'BTC', display_name: 'Bitcoin', asset_class: 'crypto', start: 5, end: 8 };
 const eth = { symbol: 'ETH', display_name: 'Ethereum', asset_class: 'crypto', start: 5, end: 8 };
@@ -9,6 +9,18 @@ const markets = [
   { pair: 'BTC/EUR', quote_currency: 'EUR', status: 'available' },
   { pair: 'BTC/USDT', quote_currency: 'USDT', status: 'available' },
 ];
+
+test('confirmed watchlist addition offers read-only advice for the exact trading pair', () => {
+  const eur = watchlistNextStepAfterConfirmedAdd('watchlist_add', { asset: 'BTC', quote_currency: 'EUR' });
+  const usdt = watchlistNextStepAfterConfirmedAdd('watchlist_add', { asset: 'BTC', quote_currency: 'USDT' });
+  assert.match(eur.question, /BTC\/EUR/);
+  assert.match(usdt.choices[0].reply, /BTC\/USDT/);
+  assert.doesNotMatch(usdt.choices[0].reply, /BTC\/EUR/);
+  assert.match(usdt.choices[0].reply, /wijzig of sla niets op/i);
+  assert.equal(usdt.choices[0].action, undefined);
+  assert.equal(watchlistNextStepAfterConfirmedAdd('watchlist_remove', { asset: 'BTC', quote_currency: 'USDT' }), null);
+  assert.equal(watchlistNextStepAfterConfirmedAdd('watchlist_add', { asset: '' }), null);
+});
 
 function mentionsIn(text) {
   const entries = [

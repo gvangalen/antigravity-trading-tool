@@ -31,7 +31,7 @@ import { inactiveProposalIds, isFinnProposalCorrection, mapBackendSessionMessage
 import { conversationQuestionChoices, draftConversationCopy, hasConfirmableDraft, isCollectingDraft, isOpenClarification } from "@/lib/finnDraftConversation.mjs";
 import { matchAssetsInText, fetchTradingMarkets } from "@/lib/api/assets";
 import { fetchWatchlist } from "@/lib/api/watchlist";
-import { watchlistIntent, watchlistChoices, watchlistScopeChoices, replacementAfterConfirmedAdd } from "@/lib/finnWatchlistConversation.mjs";
+import { watchlistIntent, watchlistChoices, watchlistScopeChoices, replacementAfterConfirmedAdd, watchlistNextStepAfterConfirmedAdd } from "@/lib/finnWatchlistConversation.mjs";
 
 const INDICATOR_MODAL_OPEN_EVENT = "finn-indicator-config:open";
 const INDICATOR_MODAL_COMPLETED_EVENT = "finn-indicator-config:completed";
@@ -1940,6 +1940,10 @@ function AIAssistantContent({
           asset: suppliedInputs.asset || execution.action_result?.asset,
           quote_currency: suppliedInputs.quote_currency || execution.action_result?.quote_currency,
         });
+        const watchlistNextStep = watchlistNextStepAfterConfirmedAdd(operationId, {
+          asset: suppliedInputs.asset || execution.action_result?.asset,
+          quote_currency: suppliedInputs.quote_currency || execution.action_result?.quote_currency,
+        }, locale);
         if (replacementFollowup) pendingWatchlistReplacementRef.current = null;
         setMessages((prev) => {
           const updated = prev.map((message) => {
@@ -1956,17 +1960,24 @@ function AIAssistantContent({
             state: { ...(message.state || {}), setup_draft: null, action_draft: null },
           };
           });
-          if (!replacementFollowup) return updated;
-          const sourceLabel = replacementFollowup.sourceLabel;
-          return [...updated, {
-            role: "assistant",
-            text: at("watchlistGuidance.removeAfterAdd", "De nieuwe notering staat op je watchlist. Wil je nu {source} verwijderen?", { source: sourceLabel }),
-            watchlistGuidance: { choices: [{
-              label: at("watchlistGuidance.removeSource", "{source} verwijderen", { source: sourceLabel }),
-              action: replacementFollowup.action,
-            }] },
-            isComplete: true,
-          }];
+          const next = [...updated];
+          if (replacementFollowup) {
+            const sourceLabel = replacementFollowup.sourceLabel;
+            next.push({
+              role: "assistant",
+              text: at("watchlistGuidance.removeAfterAdd", "De nieuwe notering staat op je watchlist. Wil je nu {source} verwijderen?", { source: sourceLabel }),
+              watchlistGuidance: { choices: [{
+                label: at("watchlistGuidance.removeSource", "{source} verwijderen", { source: sourceLabel }),
+                action: replacementFollowup.action,
+              }] },
+              isComplete: true,
+            });
+          }
+          if (watchlistNextStep) next.push({
+            role: "assistant", text: watchlistNextStep.question,
+            watchlistGuidance: watchlistNextStep, isComplete: true,
+          });
+          return next;
         });
         if (operationId === "watchlist_add" || operationId === "watchlist_remove") {
           invalidateWatchlist();

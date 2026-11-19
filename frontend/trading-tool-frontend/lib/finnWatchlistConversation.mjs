@@ -190,3 +190,32 @@ export function replacementAfterConfirmedAdd(pending, operationId, confirmed) {
     action: { ...pending, kind: 'remove' },
   };
 }
+
+export function watchlistNextStepAfterConfirmedAdd(operationId, confirmed, locale = 'nl') {
+  if (operationId !== 'watchlist_add') return null;
+  const asset = String(confirmed?.asset || '').trim().toUpperCase();
+  const quote = String(confirmed?.quote_currency || '').trim().toUpperCase();
+  if (!/^[A-Z0-9][A-Z0-9._-]{0,19}$/.test(asset) ||
+      (quote && !/^[A-Z0-9][A-Z0-9._-]{0,19}$/.test(quote))) return null;
+  const name = quote ? `${asset}/${quote}` : asset;
+  const language = String(locale || 'nl').split('-')[0];
+  const nextStepCopy = {
+    nl: {
+      question: `${name} staat in je watchlist. Een logische volgende stap is je indicatoren en benchmark voor deze notering bekijken. Wil je dat ik een voorstel doe?`,
+      label: 'Bespreek indicatoren met FINN',
+      reply: `Bekijk de huidige indicatoren en benchmark voor ${name}. Adviseer welke markt-, macro- en technische indicatoren voor deze notering logisch zijn en waarom. Doe alleen een voorstel; wijzig of sla niets op.`,
+    },
+    en: {
+      question: `${name} is on your watchlist. A logical next step is to review its indicators and benchmark. Would you like a suggestion?`,
+      label: 'Discuss indicators with FINN',
+      reply: `Review the current indicators and benchmark for ${name}. Suggest which market, macro, and technical indicators make sense for this listing and why. Only advise; do not change or save anything.`,
+    },
+    de: {
+      question: `${name} steht auf deiner Watchlist. Als Nächstes kannst du die Indikatoren und den Benchmark für diese Notierung prüfen. Möchtest du einen Vorschlag?`,
+      label: 'Indikatoren mit FINN besprechen',
+      reply: `Prüfe die aktuellen Indikatoren und den Benchmark für ${name}. Schlage vor, welche Markt-, Makro- und technischen Indikatoren für diese Notierung sinnvoll sind und warum. Berate nur; ändere oder speichere nichts.`,
+    },
+  };
+  const copy = nextStepCopy[language] || nextStepCopy.nl;
+  return { question: copy.question, choices: [{ label: copy.label, reply: copy.reply }] };
+}
