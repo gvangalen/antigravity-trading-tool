@@ -21,3 +21,11 @@ test('mobile Paper decision asks for historical execution evidence', () => {
   assert.match(prompt, /botgeschiedenis/);
   assert.match(prompt, /geen actuele koers/);
 });
+
+test('mobile Paper follow-up is advisory and exact-pair scoped', () => {
+  const prompt = coachFeedDiscussionPrompt({ event_type: 'paper_next_step', symbol: 'BTC',
+    evidence: { trading_pair: 'BTC/USDT', setup_name: 'BTC plan' },
+    title: 'Paper-proef', description: '' }, 'nl');
+  assert.match(prompt, /BTC\/USDT/);
+  assert.match(prompt, /Activeer of verhandel niets/);
+});

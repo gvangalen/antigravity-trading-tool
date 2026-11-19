@@ -293,7 +293,7 @@ class FinnV2ReasoningContextService:
             historical = {}
             for key in ("status", "match_status", "plan_status", "source_status",
                         "market_id", "trading_pair", "direction", "change_24h", "benchmark_score",
-                        "setup_name", "setup_id", "trading_pair_status",
+                        "setup_name", "setup_id", "strategy_id", "strategy_name", "trading_pair_status",
                         "score_as_of", "conditions", "components",
                         "component_source_status", "source_observed_at",
                         "quote_source_observed_at",
@@ -337,7 +337,8 @@ class FinnV2ReasoningContextService:
             current_source = "owner_scoped_current_score"
             current_as_of = datetime.now(timezone.utc)
             if symbol and event_type in {"plan_match", "plan_review", "data_blocked", "market_move",
-                                         "improvement_suggestion", "analysis_ready", "strategy_next_step"}:
+                                         "improvement_suggestion", "analysis_ready", "strategy_next_step",
+                                         "paper_next_step"}:
                 from backend.services.setup_market_match_service import SetupMarketMatchService
                 matcher = SetupMarketMatchService(self.session)
                 selected_setup_id = (item.get("subject_id") if subject == "setup" else None)
@@ -356,7 +357,8 @@ class FinnV2ReasoningContextService:
                         market_id=owned_setup.get("market_id") if owned_setup else None,
                     )
                 else:
-                    if event_type in {"improvement_suggestion", "analysis_ready", "strategy_next_step"}:
+                    if event_type in {"improvement_suggestion", "analysis_ready", "strategy_next_step",
+                                      "paper_next_step"}:
                         market_id = recorded.get("market_id")
                         if type(market_id) is not int or market_id <= 0:
                             market_id = None
@@ -367,7 +369,7 @@ class FinnV2ReasoningContextService:
                 current_facts = {"feed_item_id": item_id,
                                  "current_source_status": assessment.get("source_status"),
                                  "current_trade_signal_confirmed": False}
-                if event_type in {"analysis_ready", "strategy_next_step"}:
+                if event_type in {"analysis_ready", "strategy_next_step", "paper_next_step"}:
                     current_facts["current_benchmark_score"] = (
                         assessment.get("benchmark_score")
                         if assessment.get("source_status") == "available" else None
@@ -390,23 +392,47 @@ class FinnV2ReasoningContextService:
                                                if (current or owned_setup) else None)
                 if event_type in {"data_blocked", "improvement_suggestion"}:
                     current_facts["current_component_source_status"] = assessment.get("component_source_status")
-                if event_type == "strategy_next_step":
+                if event_type in {"strategy_next_step", "paper_next_step"}:
                     strategy_row = None
                     if owned_setup:
                         strategy_result = await self.session.execute(text("""
-                            SELECT id, name FROM strategies
+                            SELECT id, name, setup_type,
+                                   data->>'execution_ready' AS execution_ready
+                            FROM strategies
                             WHERE user_id=:user_id AND setup_id=:setup_id
                             ORDER BY created_at DESC, id DESC LIMIT 1
                         """), {"user_id": run.user_id, "setup_id": int(owned_setup["id"])})
                         strategy_row = strategy_result.mappings().first()
                     current_facts["current_linked_strategy"] = (
-                        {"id": strategy_row["id"], "name": strategy_row["name"]}
+                        {"id": strategy_row["id"], "name": strategy_row["name"],
+                         "setup_type": strategy_row.get("setup_type"),
+                         "execution_ready_status": (
+                             "draft" if strategy_row.get("execution_ready") == "false"
+                             else "declared_ready" if strategy_row.get("execution_ready") == "true"
+                             else "unverified"
+                         )}
                         if strategy_row else {"status": "missing" if owned_setup else "setup_unavailable"}
                     )
+                    if event_type == "paper_next_step" and owned_setup:
+                        bot_result = await self.session.execute(text("""
+                            SELECT b.id, b.name, b.is_live, b.is_active
+                            FROM bot_configs b
+                            JOIN strategies s ON s.id=b.strategy_id AND s.user_id=b.user_id
+                            WHERE b.user_id=:user_id AND s.setup_id=:setup_id
+                            ORDER BY b.created_at DESC, b.id DESC LIMIT 1
+                        """), {"user_id": run.user_id, "setup_id": int(owned_setup["id"])})
+                        linked_bot = bot_result.mappings().first()
+                        current_facts["current_linked_bot"] = (
+                            {"id": linked_bot["id"], "name": linked_bot["name"],
+                             "is_live": bool(linked_bot["is_live"]),
+                             "is_active": bool(linked_bot["is_active"])}
+                            if linked_bot else {"status": "missing"}
+                        )
                 current_available = assessment.get("source_status") == "available"
-                if event_type == "strategy_next_step":
+                if event_type in {"strategy_next_step", "paper_next_step"}:
                     current_available = bool(owned_setup)
-                if event_type in {"improvement_suggestion", "analysis_ready", "strategy_next_step"}:
+                if event_type in {"improvement_suggestion", "analysis_ready", "strategy_next_step",
+                                  "paper_next_step"}:
                     score_row = getattr(matcher, "last_source_row", None) or {}
                     current_as_of = self._parse_feed_moment(score_row.get("calculated_at"))
             elif event_type == "position_risk" and subject == "bot" and item.get("subject_id"):

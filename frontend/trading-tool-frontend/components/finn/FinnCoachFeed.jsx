@@ -163,7 +163,7 @@ export default function FinnCoachFeed({ onDiscuss }) {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="font-bold text-slate-950 dark:text-slate-50">{item.title}</h3>
-                {item.symbol ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">{["plan_review", "position_risk", "improvement_suggestion"].includes(item.event_type) && item.evidence?.trading_pair ? item.evidence.trading_pair : item.symbol}</span> : null}
+                {item.symbol ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">{["plan_review", "position_risk", "improvement_suggestion", "analysis_ready", "strategy_next_step", "paper_next_step"].includes(item.event_type) && item.evidence?.trading_pair ? item.evidence.trading_pair : item.symbol}</span> : null}
               </div>
               <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{item.description}</p>
               <time className="mt-1 block text-xs text-slate-400" dateTime={item.event_type === "bot_decision" && item.source_observed_at ? item.source_observed_at : item.created_at}>

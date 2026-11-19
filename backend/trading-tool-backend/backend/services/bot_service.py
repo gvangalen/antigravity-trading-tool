@@ -864,6 +864,12 @@ class BotService:
                 raise HTTPException(409, "Paper-startkapitaal is al geboekt.")
         await self.session.commit()
         bot = await self.repository.get_bot_config(user_id, bot_id)
+        if bot and bot.get("setup_id"):
+            from backend.services.setup_service import SetupService
+            SetupService._notify_coach_feed(
+                user_id, str(bot.get("setup_symbol") or bot.get("symbol") or ""),
+                bot.get("market_id"),
+            )
         return {"ok": True, "id": bot_id, **self._bot_contract(bot)}
 
     async def transfer_paper_cash(
@@ -987,7 +993,8 @@ class BotService:
 
     async def delete_bot_config(self, bot_id: int, user_id: int) -> dict:
         await self.repository.lock_bot_config(user_id, bot_id)
-        if not await self.repository.get_bot_config(user_id, bot_id):
+        bot = await self.repository.get_bot_config(user_id, bot_id)
+        if not bot:
             raise HTTPException(404, "Bot niet gevonden")
         if await self.repository.has_execution_history(user_id, bot_id):
             raise HTTPException(409, {
@@ -998,6 +1005,12 @@ class BotService:
         if not deleted:
             raise HTTPException(404, "Bot niet gevonden")
         await self.session.commit()
+        if bot.get("setup_id"):
+            from backend.services.setup_service import SetupService
+            SetupService._notify_coach_feed(
+                user_id, str(bot.get("setup_symbol") or bot.get("symbol") or ""),
+                bot.get("market_id"),
+            )
         return {"ok": True, "bot_id": bot_id, "deleted": True}
 
     def _bot_update_pressure_event(self, existing: Dict[str, Any], merged: Dict[str, Any], updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:

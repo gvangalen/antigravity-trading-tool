@@ -28,6 +28,10 @@ test("journey feed questions reread current scores and strategy state", () => {
     evidence: { trading_pair: "BTC/USDT", setup_name: "BTC plan" } }, "nl");
   assert.match(strategy, /inmiddels een strategie/);
   assert.match(strategy, /BTC plan/);
+  const paper = coachFeedDiscussionQuestion({ event_type: "paper_next_step", symbol: "BTC",
+    evidence: { trading_pair: "BTC/USDT", setup_name: "BTC plan" } }, "nl");
+  assert.match(paper, /Paper-proef/);
+  assert.match(paper, /Activeer of verhandel niets/);
 });
 
 test("historical handled missing-score card remains discussable without reopening its status", () => {

@@ -309,6 +309,13 @@ def _fallback(kind: str, subject: str, evidence: dict, *, focus: str = "brief") 
             "en": {"title": f"Strategy for {name} is missing", "body": f"This saved setup for {pair} has no linked strategy yet. Discuss the next step; nothing was created or activated."},
             "de": {"title": f"Strategie für {name} fehlt", "body": f"Dieses gespeicherte Setup für {pair} hat noch keine verknüpfte Strategie. Besprich den nächsten Schritt; nichts wurde erstellt oder aktiviert."},
         }
+    if kind == "paper_next_step":
+        pair = str(evidence.get("trading_pair") or evidence.get("symbol") or "").strip()[:30]
+        return {
+            "nl": {"title": f"Beoordeel een Paper-proef voor {name}", "body": f"Deze strategie voor {pair} heeft nog geen gekoppelde bot. Bespreek eerst de uitvoerbaarheid en risico-instellingen. Er is niets geactiveerd of verhandeld."},
+            "en": {"title": f"Review a Paper trial for {name}", "body": f"This strategy for {pair} has no linked bot yet. Discuss execution readiness and risk settings first. Nothing was activated or traded."},
+            "de": {"title": f"Paper-Test für {name} prüfen", "body": f"Diese Strategie für {pair} hat noch keinen verknüpften Bot. Prüfe zuerst Ausführbarkeit und Risikoeinstellungen. Nichts wurde aktiviert oder gehandelt."},
+        }
     if kind == "bot_decision":
         return _bot_fallback(name, evidence)
     if kind == "position_risk":
@@ -611,7 +618,7 @@ class FinnCoachFeedService:
                       expires_at: datetime | None = None,
                       revision: str | None = None) -> str | None:
         """One row per owner/event. Unchanged evidence never reopens or regenerates."""
-        if not event_key or event_type not in {"plan_match", "plan_review", "position_risk", "weekly_reflection", "improvement_suggestion", "data_blocked", "proposal_pending", "market_move", "bot_decision", "live_bot_paused", "daily_report_ready", "periodic_report_ready", "watchlist_added", "analysis_ready", "strategy_next_step"}:
+        if not event_key or event_type not in {"plan_match", "plan_review", "position_risk", "weekly_reflection", "improvement_suggestion", "data_blocked", "proposal_pending", "market_move", "bot_decision", "live_bot_paused", "daily_report_ready", "periodic_report_ready", "watchlist_added", "analysis_ready", "strategy_next_step", "paper_next_step"}:
             raise ValueError("feed_event_invalid")
         facts = {**evidence, "subject": str(subject or "")[:120]}
         digest = hashlib.sha256(str(revision or _json(facts)).encode()).hexdigest()
@@ -743,7 +750,7 @@ class FinnCoachFeedService:
             "copy_json": _json(_fallback(event_type, subject, facts)),
             "copy_source": ("verified_facts" if event_type in {
                                 "position_risk", "weekly_reflection", "improvement_suggestion",
-                                "bot_decision", "watchlist_added", "analysis_ready", "strategy_next_step"} or event_type == "data_blocked" and facts.get("bot_id")
+                                "bot_decision", "watchlist_added", "analysis_ready", "strategy_next_step", "paper_next_step"} or event_type == "data_blocked" and facts.get("bot_id")
                             else "fact_fallback"),
             "expires_at": expires_at,
         })
@@ -842,20 +849,23 @@ class FinnCoachFeedService:
                 )
 
         strategy_result = await self.session.execute(text("""
-            SELECT DISTINCT setup_id FROM strategies
+            SELECT id, setup_id, name, created_at FROM strategies
             WHERE user_id=:user_id AND setup_id = ANY(:setup_ids)
         """), {"user_id": user_id, "setup_ids": [int(s["id"]) for s in setups]}) if setups else None
-        linked = {int(row[0]) for row in strategy_result.all()} if strategy_result else set()
+        strategies = [dict(row) for row in strategy_result.mappings().all()] if strategy_result else []
+        linked = {int(row["setup_id"]) for row in strategies}
+        bot_result = await self.session.execute(text("""
+            SELECT DISTINCT s.setup_id FROM bot_configs b
+            JOIN strategies s ON s.id=b.strategy_id AND s.user_id=b.user_id
+            WHERE b.user_id=:user_id AND s.setup_id = ANY(:setup_ids)
+        """), {"user_id": user_id, "setup_ids": [int(s["id"]) for s in setups]}) if strategies else None
+        bot_linked = {int(row[0]) for row in bot_result.all()} if bot_result else set()
         now = datetime.now(timezone.utc)
         active_keys: set[str] = set()
         for setup in setups:
             setup_id = int(setup["id"])
-            created_at = setup.get("created_at")
-            if setup_id in linked or not isinstance(created_at, datetime):
+            if setup_id in linked:
                 continue
-            created_utc = created_at.replace(tzinfo=timezone.utc) if created_at.tzinfo is None else created_at.astimezone(timezone.utc)
-            if now - created_utc < timedelta(minutes=15):
-                continue  # Give a combined setup → strategy chat task time to finish.
             strategy_key = f"strategy-next-step:{setup_id}"
             active_keys.add(strategy_key)
             item = await self.publish(
@@ -876,6 +886,44 @@ class FinnCoachFeedService:
         """), {**scope, "market_id_text": str(market_id) if market_id is not None else None})
         for row in previous.mappings().all():
             if row["event_key"] not in active_keys:
+                await self.resolve(user_id=user_id, event_key=str(row["event_key"]))
+        paper_keys: set[str] = set()
+        for setup in setups:
+            setup_id = int(setup["id"])
+            if setup_id in bot_linked:
+                continue
+            choices = [row for row in strategies if int(row["setup_id"]) == setup_id]
+            if not choices:
+                continue
+            newest = max(choices, key=lambda row: (
+                (row["created_at"].replace(tzinfo=timezone.utc)
+                 if row["created_at"].tzinfo is None
+                 else row["created_at"].astimezone(timezone.utc)).timestamp()
+                if isinstance(row.get("created_at"), datetime) else float("-inf"),
+                int(row["id"]),
+            ))
+            paper_key = f"paper-next-step:{setup_id}"
+            paper_keys.add(paper_key)
+            item = await self.publish(
+                user_id=user_id, event_key=paper_key, event_type="paper_next_step",
+                subject_type="setup", subject_id=str(setup_id),
+                subject=str(newest.get("name") or pair), symbol=asset, priority=1,
+                evidence={"symbol": asset, "trading_pair": pair, "market_id": market_id,
+                          "setup_id": setup_id, "setup_name": str(setup.get("name") or "")[:120],
+                          "strategy_id": int(newest["id"]),
+                          "strategy_name": str(newest.get("name") or "")[:120]},
+                revision=f"strategy:{newest['id']}", expires_at=now + timedelta(days=14),
+            )
+            if item:
+                created.append(item)
+        prior_paper = await self.session.execute(text("""
+            SELECT DISTINCT event_key FROM finn_coach_feed_items
+            WHERE user_id=:user_id AND event_type='paper_next_step' AND symbol=:symbol
+              AND evidence->>'market_id' IS NOT DISTINCT FROM :market_id_text
+              AND status IN ('unread','read')
+        """), {**scope, "market_id_text": str(market_id) if market_id is not None else None})
+        for row in prior_paper.mappings().all():
+            if row["event_key"] not in paper_keys:
                 await self.resolve(user_id=user_id, event_key=str(row["event_key"]))
         return created
 
