@@ -29,3 +29,14 @@ test('mobile Paper follow-up is advisory and exact-pair scoped', () => {
   assert.match(prompt, /BTC\/USDT/);
   assert.match(prompt, /Activeer of verhandel niets/);
 });
+
+test('mobile reflection follows only a filled Paper sale', () => {
+  const filled = coachFeedDiscussionPrompt({ event_type: 'bot_decision', symbol: 'BTC',
+    evidence: { action: 'sell', status: 'executed', order_status: 'filled' },
+    title: 'Verkoop', description: '' }, 'nl');
+  const pending = coachFeedDiscussionPrompt({ event_type: 'bot_decision', symbol: 'BTC',
+    evidence: { action: 'sell', status: 'executed' },
+    title: 'Verkoop', description: '' }, 'nl');
+  assert.match(filled, /reflectievraag/);
+  assert.doesNotMatch(pending, /reflectievraag/);
+});

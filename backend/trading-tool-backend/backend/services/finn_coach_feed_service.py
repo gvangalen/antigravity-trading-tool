@@ -71,9 +71,9 @@ def _bot_fallback(subject: str, evidence: dict) -> dict:
             "de": (f"Dein {label}-Bot hat gekauft · Paper", "Der virtuelle Kauf wurde ausgeführt und in deinem Paper-Portfolio erfasst."),
         },
         "sell_executed": {
-            "nl": (f"Je {label}-bot heeft verkocht · Paper", "De virtuele verkoop is uitgevoerd en verwerkt in je Paper-portfolio."),
-            "en": (f"Your {label} bot sold · Paper", "The virtual sale was executed and recorded in your Paper portfolio."),
-            "de": (f"Dein {label}-Bot hat verkauft · Paper", "Der virtuelle Verkauf wurde ausgeführt und in deinem Paper-Portfolio erfasst."),
+            "nl": (f"Je {label}-bot heeft verkocht · Paper", "De virtuele verkoop is uitgevoerd en verwerkt in je Paper-portfolio. Bespreek de beslissing en leg een korte reflectie vast als de positie is gesloten."),
+            "en": (f"Your {label} bot sold · Paper", "The virtual sale was executed and recorded in your Paper portfolio. Discuss the decision and record a short reflection if the position is closed."),
+            "de": (f"Dein {label}-Bot hat verkauft · Paper", "Der virtuelle Verkauf wurde ausgeführt und im Paper-Portfolio erfasst. Besprich die Entscheidung und halte eine kurze Reflexion fest, falls die Position geschlossen ist."),
         },
         "buy_planned": {
             "nl": (f"Je {label}-bot wil kopen · Paper", "De koopbeslissing is vastgelegd; een uitgevoerde aankoop is nog niet bevestigd."),

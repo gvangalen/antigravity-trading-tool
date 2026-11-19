@@ -335,6 +335,19 @@ def test_daily_report_notification_has_one_factual_translation_per_locale():
     assert "Paper" not in copy["nl"]["body"]
 
 
+def test_verified_paper_sale_offers_reflection_only_after_filled_order():
+    filled = module._fallback("bot_decision", "BTC bot", {
+        "symbol": "BTC", "action": "sell", "status": "executed",
+        "order_status": "filled",
+    })
+    unverified = module._fallback("bot_decision", "BTC bot", {
+        "symbol": "BTC", "action": "sell", "status": "executed",
+        "order_status": None,
+    })
+    assert "reflectie" in filled["nl"]["body"]
+    assert "reflectie" not in unverified["nl"]["body"]
+
+
 @pytest.mark.parametrize("report_type,expected", [
     ("weekly", "weekrapport"),
     ("monthly", "maandrapport"),

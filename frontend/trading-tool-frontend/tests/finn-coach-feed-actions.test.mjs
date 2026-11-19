@@ -46,3 +46,12 @@ test("active cards remain discussable while old reports do not start a chat", ()
   assert.equal(canUpdateFeedStatus({ event_type: "bot_decision", status: "read" }), true);
   assert.equal(canDiscussFeedItem({ event_type: "daily_report_ready", status: "read" }, true), false);
 });
+
+test("only a verified filled Paper sale offers a reflection", () => {
+  const executed = coachFeedDiscussionQuestion({ event_type: "bot_decision", symbol: "BTC",
+    evidence: { action: "sell", status: "executed", order_status: "filled" } }, "nl");
+  const unverified = coachFeedDiscussionQuestion({ event_type: "bot_decision", symbol: "BTC",
+    evidence: { action: "sell", status: "executed" } }, "nl");
+  assert.match(executed, /reflectievraag/);
+  assert.doesNotMatch(unverified, /reflectievraag/);
+});
