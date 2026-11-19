@@ -1,4 +1,4 @@
-const REPORT_TYPES = new Set(["daily_report_ready", "periodic_report_ready"]);
+const REPORT_TYPES = new Set(["daily_report_ready", "periodic_report_ready", "weekly_reflection"]);
 
 export function visibleCoachFeedItems(items, now = Date.now()) {
   const first = items.slice(0, 3);

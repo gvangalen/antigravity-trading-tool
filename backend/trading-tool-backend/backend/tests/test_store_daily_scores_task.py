@@ -303,6 +303,44 @@ def test_feed_recovery_republishes_recent_saved_report_without_duplicate(monkeyp
     assert published == [(7, date(2026, 11, 19))]
 
 
+def test_feed_recovery_republishes_saved_periodic_report(monkeypatch):
+    from datetime import date
+    import backend.celery_task.store_daily_scores_task as task_module
+    from backend.celery_task import report_feed
+
+    published = []
+
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, sql):
+            self.sql = sql
+
+        def fetchall(self):
+            return [(7, 'weekly', date(2026, 11, 19))] if "FROM weekly_reports" in self.sql else []
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def commit(self):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(task_module, "get_db_connection", Connection)
+    monkeypatch.setattr(report_feed, "publish_periodic_report_ready",
+                        lambda user_id, report_type, report_date:
+                        published.append((user_id, report_type, report_date)))
+    assert task_module.recover_coach_feed_events() == 1
+    assert published == [(7, 'weekly', date(2026, 11, 19))]
+
+
 def test_feed_recovery_dispatches_new_or_changed_paper_decisions(monkeypatch):
     import backend.celery_task.store_daily_scores_task as task_module
 
@@ -337,7 +375,7 @@ def test_feed_recovery_dispatches_new_or_changed_paper_decisions(monkeypatch):
                         lambda user_id, decision_id: sent.append((user_id, decision_id)))
     assert task_module.recover_coach_feed_events() == 1
     assert sent == [(7, 91)]
-    assert len(statements) == 2
+    assert len(statements) == 3
     assert "initial_decision_id" in statements[0]
     assert "f.user_id=d.user_id" in statements[0]
     assert "f.evidence->>'status' IS DISTINCT FROM d.status" in statements[0]

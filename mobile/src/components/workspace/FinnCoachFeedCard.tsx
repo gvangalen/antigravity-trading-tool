@@ -71,7 +71,8 @@ export function FinnCoachFeedCard() {
   const firstItems = scopedItems.slice(0, 3);
   const recentReport = scopedItems.find((item) => {
       const age = Date.now() - Date.parse(item.created_at);
-      return item.event_type.endsWith('_report_ready') && item.status === 'unread' &&
+      return (item.event_type.endsWith('_report_ready') || item.event_type === 'weekly_reflection') &&
+        item.status === 'unread' &&
         Number.isFinite(age) && age >= 0 && age <= 36 * 60 * 60 * 1000;
     });
   const visibleItems = recentReport && !firstItems.some((item) => item.id === recentReport.id)

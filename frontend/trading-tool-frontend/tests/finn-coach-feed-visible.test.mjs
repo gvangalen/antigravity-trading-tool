@@ -18,3 +18,8 @@ test("handled and old reports do not displace current updates", () => {
     item("old", "periodic_report_ready", "unread", "2026-11-16T11:00:00Z")];
   assert.deepEqual(visibleCoachFeedItems(rows, now).map((row) => row.id), ["a", "b", "c"]);
 });
+
+test("recent weekly trade reflection stays visible", () => {
+  const rows = [item("a"), item("b"), item("c"), item("reflection", "weekly_reflection")];
+  assert.deepEqual(visibleCoachFeedItems(rows, now).map((row) => row.id), ["a", "b", "reflection"]);
+});

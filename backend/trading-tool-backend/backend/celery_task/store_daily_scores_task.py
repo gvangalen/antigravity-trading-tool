@@ -522,6 +522,23 @@ def recover_coach_feed_events():
                 ORDER BY r.generated_at DESC LIMIT 12
             """)
             reports = cur.fetchall()
+            cur.execute("""
+                SELECT p.user_id, p.report_type, p.report_date FROM (
+                    SELECT user_id, 'weekly' AS report_type, report_date FROM weekly_reports
+                    UNION ALL
+                    SELECT user_id, 'monthly' AS report_type, report_date FROM monthly_reports
+                    UNION ALL
+                    SELECT user_id, 'quarterly' AS report_type, report_date FROM quarterly_reports
+                ) p
+                WHERE p.report_date >= CURRENT_DATE - 2
+                  AND NOT EXISTS (
+                    SELECT 1 FROM finn_coach_feed_items f
+                    WHERE f.user_id=p.user_id
+                      AND f.event_key=p.report_type || '-report:' || p.report_date::TEXT
+                  )
+                ORDER BY p.report_date DESC LIMIT 12
+            """)
+            periodic_reports = cur.fetchall()
         conn.commit()
     finally:
         conn.close()
@@ -533,6 +550,7 @@ def recover_coach_feed_events():
         except Exception:
             logger.warning("FINN feed Paper recovery dispatch failed", exc_info=True)
     from backend.celery_task.daily_report_task import _publish_daily_report_ready_feed
+    from backend.celery_task.report_feed import publish_periodic_report_ready
 
     for user_id, report_date in reports:
         try:
@@ -540,6 +558,12 @@ def recover_coach_feed_events():
             dispatched += 1
         except Exception:
             logger.warning("FINN feed daily report recovery failed", exc_info=True)
+    for user_id, report_type, report_date in periodic_reports:
+        try:
+            publish_periodic_report_ready(user_id, report_type, report_date)
+            dispatched += 1
+        except Exception:
+            logger.warning("FINN feed periodic report recovery failed", exc_info=True)
     return dispatched
 
 
