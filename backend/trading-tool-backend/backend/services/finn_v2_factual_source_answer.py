@@ -145,6 +145,75 @@ def render_bot_decision(
             f"marktbeoordeling. Opslagstatus: {status}.{safety_text}")
 
 
+def render_report_bot_check_comparison(
+    result: dict[str, Any], *, symbol: str, message: str = "",
+) -> str:
+    """Compare one requested historical check with the saved report, by bot ID."""
+    history, history_error = _read(result, "read_review_history")
+    report, report_error = _read(result, "read_latest_report")
+    if history is None or report is None:
+        missing = []
+        if history is None:
+            missing.append(f"de opgeslagen botcheck ({history_error})")
+        if report is None:
+            missing.append(f"het dagrapport ({report_error})")
+        return (f"Ik kan {' en '.join(missing)} voor {symbol} nu niet vergelijken. "
+                "Verander de weging of bot niet om een koop te forceren; controleer de bronnen opnieuw.")
+    requested_report_clock = re.search(
+        r"\b(?:dagrapport|ochtendrapport|rapport)\s+van\s+([01]?\d|2[0-3]):([0-5]\d)\b",
+        message, re.I,
+    )
+    report_generated = report.get("generated_at_amsterdam") or _moment(report.get("generated_at"))
+    if requested_report_clock and (
+        not report_generated or
+        not re.search(rf"\b{int(requested_report_clock.group(1)):02d}:"
+                      rf"{requested_report_clock.group(2)}(?::\d{{2}})?\b", str(report_generated))
+    ):
+        return (f"Het opgeslagen dagrapport voor {symbol} heeft niet het genoemde "
+                f"uitleesmoment {requested_report_clock.group(1)}:{requested_report_clock.group(2)}. "
+                "Ik kan de botredenen daarom niet betrouwbaar vergelijken.")
+    historical = [row for row in history.get("referenced_bot_decisions") or []
+                  if isinstance(row, dict) and str(row.get("symbol") or "").upper().split("/", 1)[0] == symbol]
+    if len(historical) != 1:
+        return (f"Ik kan de bedoelde opgeslagen {symbol}-botcheck niet eenduidig aan één bot koppelen. "
+                "Daarom kan ik de twee botredenen niet betrouwbaar vergelijken. "
+                "Controleer de beslissing in Automatisering; wijzig de weging niet om een koop te forceren.")
+    check = historical[0]
+    snapshot = report.get("score_source_snapshot") or {}
+    report_v2 = snapshot.get("report_v2") if isinstance(snapshot, dict) else None
+    automation = report_v2.get("automation") if isinstance(report_v2, dict) else None
+    bots = automation.get("bots") if isinstance(automation, dict) else None
+    report_bots = [bot for bot in bots or [] if isinstance(bot, dict)
+                   and bot.get("bot_id") == check.get("bot_id")
+                   and str(bot.get("symbol") or "").upper().split("/", 1)[0] == symbol]
+    if len(report_bots) != 1 or not isinstance(report_bots[0].get("latest_decision"), dict):
+        return (f"De check voor {symbol} is gevonden, maar het dagrapport bevat geen eenduidig besluit "
+                "voor dezelfde bot. De verschillende redenen zijn daarom niet verifieerbaar.")
+    report_decision = report_bots[0]["latest_decision"]
+    report_at = report_decision.get("at_amsterdam") or _moment(report_decision.get("at"))
+    check_at = check.get("decision_at_amsterdam") or _moment(check.get("decision_at"))
+    report_reason = str(report_decision.get("reason") or "").strip()
+    check_reason = str(check.get("safety_reason") or "").strip()
+    lines = [f"Ik heb de opgeslagen besluiten van dezelfde {symbol}-bot vergeleken."]
+    lines.append(
+        f"Het dagrapport{f' van {report_generated}' if report_generated else ''} is een momentopname. "
+        f"Het botbesluit daarin is van {report_at or 'een onbekend bronmoment'}: "
+        f"{report_reason or 'geen controleerbare reden opgeslagen'}."
+    )
+    lines.append(
+        f"De afzonderlijke botcheck van {check_at or 'een onbekend bronmoment'} vermeldt "
+        f"{check_reason or 'geen controleerbare reden'}; "
+        f"actie {check.get('action') or 'onbekend'}."
+    )
+    lines.append(
+        "Dit zijn twee beoordelingen op verschillende momenten. De tweede reden vervangt de "
+        "eerste niet achteraf. Verander de weging of bot niet om alsnog een koopmatch te maken. "
+        "Controleer bij de volgende beursopening de verse koers, de score tegenover je opgeslagen "
+        "band en de nieuwe botbeslissing voordat je iets verandert of handelt."
+    )
+    return "\n\n".join(lines)
+
+
 def render_selected_paper_feed_decision(
     result: dict[str, Any], *, symbol: str, expected_source_at: str | None = None,
 ) -> str:

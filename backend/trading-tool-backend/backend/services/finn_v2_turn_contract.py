@@ -10,6 +10,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Mapping
 
 from backend.services.finn_v2_verified_setup_reference import references_selected_setup
+from backend.services.finn_v2_coach_evidence_plan import CoachEvidencePlan, coach_answer_gap
 
 
 def requests_comparison(message: str) -> bool:
@@ -244,6 +245,29 @@ def build_turn_contract(
 
 def turn_contract_gap(contract: Mapping[str, Any], answer: str) -> str | None:
     """Only reject objectively missing selected objects or strategy fields."""
+    coach = contract.get("coach_evidence_plan")
+    if isinstance(coach, dict):
+        required = set(coach.get("read_tools") or ())
+        attempted = set(contract.get("attempted_scopes") or ())
+        if not required <= attempted:
+            return "coach_sources_not_checked"
+        gap = coach_answer_gap(CoachEvidencePlan(
+            topics=tuple(coach.get("topics") or ()),
+            read_tools=tuple(required),
+            decision_required=coach.get("decision_required") is True,
+            next_step_required=coach.get("next_step_required") is True,
+        ), answer)
+        if gap:
+            return gap
+        score = coach.get("benchmark_score")
+        if "score" in (coach.get("topics") or ()) and isinstance(score, (int, float)):
+            expected_score = Decimal(str(score))
+            values = [
+                value for raw in re.findall(r"\b\d[\d.,]*\b", answer)
+                if (value := _display_decimal(raw)) is not None
+            ]
+            if not any(abs(value - expected_score) < Decimal("0.05") for value in values):
+                return "coach_verified_score_missing"
     expected_cash = contract.get("paper_cash_total")
     if isinstance(expected_cash, (int, float)):
         expected = Decimal(str(expected_cash))

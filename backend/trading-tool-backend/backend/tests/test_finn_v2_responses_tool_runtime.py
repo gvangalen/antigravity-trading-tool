@@ -15153,6 +15153,12 @@ def test_bot_decision_question_binds_persisted_history_even_for_portfolio_tool()
     assert bound_exact.read_tools == ("read_review_history",)
     assert bound_exact.inputs["_latest_bot_decisions_only"] is True
     assert "read_latest_report" not in bound_exact.read_tools
+    historical = FinnResponsesFrontDoor._bind_bot_decision_evidence(
+        exact,
+        message="Waarom blokkeerde mijn BTC-bot om 10:00 CET op 2026-11-19?",
+        read_only=True,
+    )
+    assert historical.inputs["_decision_window_start_utc"] == "2026-11-19T09:00:00+00:00"
     report_question = FinnResponsesFrontDoor._bind_bot_decision_evidence(
         exact, message="Vergelijk mijn laatste botbesluit met mijn dagrapport.", read_only=True,
     )
@@ -15374,6 +15380,153 @@ def test_aapl_paper_comparison_reads_dated_report_on_first_turn():
     assert selected_calls[0].name == "get_active_plan_and_strategy"
     assert "read_latest_report" in selected_calls[0].read_tools
     assert selected_calls[0].inputs["report_date"] == "2026-11-09"
+
+
+def test_aapl_bot_report_comparison_reads_the_referenced_check_and_report():
+    question = (
+        "Op 2026-11-19 viel AAPL 52,7 buiten mijn setup 61–75. Mijn AAPL-bot blokkeerde om 10:00 CET "
+        "omdat de beurs dicht is. Moet ik de weging of bot aanpassen om toch te kunnen kopen, "
+        "of wat doe ik bij de beursopening? Waarom toont het rapport van 05:21 een andere botreden?"
+    )
+    selected_calls = []
+
+    class FakeRead:
+        async def __call__(self, call):
+            selected_calls.append(call)
+            return {"status": "completed", "results": [
+                {"scope": "read_review_history", "status": "completed", "data": {
+                    "referenced_bot_decisions": [{
+                        "bot_id": 130, "symbol": "AAPL", "action": "hold",
+                        "decision_at_amsterdam": "19 november 2026 10:00 CET",
+                        "safety_reason": "Trade geblokkeerd: beurs buiten reguliere handelstijden",
+                    }],
+                }},
+                {"scope": "read_latest_report", "status": "completed", "data": {
+                    "generated_at_amsterdam": "19 november 2026 05:21 CET",
+                    "score_source_snapshot": {"report_v2": {"automation": {"bots": [{
+                        "bot_id": 130, "symbol": "AAPL", "latest_decision": {
+                            "at_amsterdam": "19 november 2026 05:15 CET",
+                            "reason": "Geen recente orderkoers buiten reguliere handelstijden",
+                        },
+                    }]}}},
+                }},
+            ]}
+
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7,
+                                   run_id="aapl-report-bot-comparison", model_led_coach=True)
+    front.reads = FakeRead()
+    result = asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="AAPL",
+        workspace_hints={"page": "/asset", "symbol": "AAPL"},
+    ))
+    assert result.response.answer_kind == "factual_source"
+    assert selected_calls[0].read_tools == ("read_review_history", "read_latest_report")
+    assert selected_calls[0].inputs["_decision_window_start_utc"].endswith("09:00:00+00:00")
+    assert selected_calls[0].inputs["report_date"] == "2026-11-19"
+    assert "05:15" in result.response.text
+    assert "10:00" in result.response.text
+    assert "Geen recente orderkoers" in result.response.text
+    assert "Trade geblokkeerd" in result.response.text
+    assert "weging of bot niet" in result.response.text
+    assert "beursopening" in result.response.text
+    checked = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=question, result=result.response, locale="nl",
+    ))
+    assert checked.status == "completed"
+    assert checked.text == result.response.text
+
+
+@pytest.mark.parametrize("selected_tool", ["get_active_plan_and_strategy", "get_decision_history"])
+def test_multi_part_coach_question_binds_all_named_asset_sources(selected_tool):
+    question = (
+        "Beoordeel mijn AAPL-plan, benchmark, botbeslissing en laatste koers. "
+        "Waarom wacht de bot en wat doe ik nu? Bespreek alleen."
+    )
+    selected_calls = []
+
+    class FakeRead:
+        async def __call__(self, call):
+            selected_calls.append(call)
+            return {"status": "completed", "results": [
+                {"scope": scope, "status": "completed", "data": {}}
+                for scope in call.read_tools
+            ]}
+
+    fake = FakeResponses(
+        response("coach-read", calls=[tool_call(
+            "call-coach", selected_tool, {"asset": "AAPL"},
+        )]),
+        response("coach-answer", text=(
+            "De AAPL-setupscore en benchmark vragen controle. De botbeslissing en haar reden "
+            "zijn niet ingevuld; de koersbron ontbreekt. Controleer deze bij opening."
+        )),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="multi-part-coach-plan", model_led_coach=True,
+    )
+    front.reads = FakeRead()
+    result = asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="AAPL",
+        workspace_hints={"page": "/asset", "symbol": "AAPL"},
+    ))
+    assert set(selected_calls[0].read_tools) >= {
+        "read_active_setup", "read_linked_strategy", "read_asset_scores",
+        "read_bot_status", "read_review_history", "read_market_snapshot",
+    }
+    assert result.response.turn_contract["coach_evidence_plan"]["topics"] == (
+        "setup", "score", "bot", "quote",
+    )
+    incomplete = replace(result.response, text="De AAPL-score is laag. Wacht rustig af.")
+    checked = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=question, result=incomplete, locale="nl",
+    ))
+    assert checked.status == "unavailable"
+    assert checked.reason == "turn_contract_mismatch"
+    assert checked.rejection_details["gap"] == "coach_topic_missing:setup"
+
+
+def test_bot_report_comparison_does_not_infer_missing_historical_check():
+    from backend.services.finn_v2_factual_source_answer import render_report_bot_check_comparison
+
+    text = render_report_bot_check_comparison({"results": [
+        {"scope": "read_review_history", "status": "completed", "data": {
+            "referenced_bot_decisions": [],
+            "latest_bot_decisions": [{"bot_id": 130, "symbol": "AAPL",
+                                      "safety_reason": "Nieuwe beslissing"}],
+        }},
+        {"scope": "read_latest_report", "status": "completed", "data": {
+            "score_source_snapshot": {"report_v2": {"automation": {"bots": [{
+                "bot_id": 130, "symbol": "AAPL", "latest_decision": {
+                    "reason": "Oud besluit"},
+            }]}}},
+        }},
+    ]}, symbol="AAPL")
+    assert "niet eenduidig" in text
+    assert "Nieuwe beslissing" not in text
+    assert "Oud besluit" not in text
+
+
+def test_bot_report_comparison_rejects_a_later_report_same_day():
+    from backend.services.finn_v2_factual_source_answer import render_report_bot_check_comparison
+
+    text = render_report_bot_check_comparison({"results": [
+        {"scope": "read_review_history", "status": "completed", "data": {
+            "referenced_bot_decisions": [{"bot_id": 130, "symbol": "AAPL",
+                                          "safety_reason": "Ochtendcheck"}],
+        }},
+        {"scope": "read_latest_report", "status": "completed", "data": {
+            "generated_at_amsterdam": "2026-11-19 20:21:00 CET",
+            "score_source_snapshot": {"report_v2": {"automation": {"bots": [{
+                "bot_id": 130, "symbol": "AAPL", "latest_decision": {
+                    "reason": "Avondrapportreden"},
+            }]}}},
+        }},
+    ]}, symbol="AAPL", message="Waarom heeft het rapport van 05:21 een andere botreden?")
+    assert "niet het genoemde uitleesmoment" in text
+    assert "Avondrapportreden" not in text
 
 
 def test_combined_account_question_requires_owner_reads_on_first_turn(monkeypatch):
