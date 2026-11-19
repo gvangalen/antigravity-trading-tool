@@ -222,6 +222,7 @@ class FinnV2ExecutionService:
                         symbol=str(safe_result_payload.get("asset") or "").upper(),
                         market_id=safe_result_payload.get("market_id"),
                         added=proposal.operation_type == "watchlist_add",
+                        discussed_in_chat=True,
                     )
             if proposal.operation_type in {"create_setup", "update_setup", "delete_setup"}:
                 change = (proposal.payload_json or {}).get("change") or {}

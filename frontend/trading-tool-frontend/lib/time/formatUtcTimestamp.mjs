@@ -25,6 +25,17 @@ export function formatUtcSourceDate(value, locale) {
   }).format(moment);
 }
 
+// The viewer's configured browser time zone is the display zone for personal
+// feed events. Source instants remain UTC in storage.
+export function formatUserTimestamp(value, locale) {
+  const moment = parseUtcMoment(value);
+  if (!moment) return '—';
+  return new Intl.DateTimeFormat(locale || 'en-US', {
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
+  }).format(moment);
+}
+
 // Keep source instants in UTC in storage and convert only at the UI boundary.
 // The explicit market zone makes Analyse agree with Portfolio and FINN on
 // CET/CEST even when the browser runs in a different local time zone.

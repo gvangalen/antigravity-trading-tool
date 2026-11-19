@@ -7,6 +7,7 @@ import { useFinnOverlay } from '../../contexts/FinnOverlayContext';
 import { useAppPreferences } from '../../preferences/AppPreferencesProvider';
 import { coachFeedApi, type MobileCoachFeedItem } from '../../services/tradamindApi';
 import { coachFeedDiscussionPrompt, coachFeedQuoteCurrency } from '../../services/coachFeedDiscussion';
+import { visibleCoachFeedItems } from '../../services/coachFeedVisibility';
 import { useAuth } from '../../auth/AuthProvider';
 import type { MainTabParamList } from '../../navigation/MainTabNavigator';
 
@@ -53,7 +54,6 @@ export function FinnCoachFeedCard() {
   }, [refresh]);
 
   const handleDiscuss = (item: MobileCoachFeedItem) => {
-    void coachFeedApi.mark(item.id, 'read').then(refresh).catch(() => {});
     openFinn({
       prefill: coachFeedDiscussionPrompt(item, language),
       source: 'coach-feed',
@@ -68,15 +68,7 @@ export function FinnCoachFeedCard() {
   };
 
   const scopedItems = itemsOwner === user?.id && itemsLanguage === language ? items : [];
-  const firstItems = scopedItems.slice(0, 3);
-  const recentReport = scopedItems.find((item) => {
-      const age = Date.now() - Date.parse(item.created_at);
-      return (item.event_type.endsWith('_report_ready') || item.event_type === 'weekly_reflection') &&
-        item.status === 'unread' &&
-        Number.isFinite(age) && age >= 0 && age <= 36 * 60 * 60 * 1000;
-    });
-  const visibleItems = recentReport && !firstItems.some((item) => item.id === recentReport.id)
-    ? [...firstItems.slice(0, 2), recentReport] : firstItems;
+  const visibleItems = visibleCoachFeedItems(scopedItems);
   return (
     <View>
       <MobileFINNFeed

@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import {
   formatAmsterdamSourceDate, formatAmsterdamTimestamp,
-  formatUtcSourceDate, formatUtcTimestamp,
+  formatUserTimestamp, formatUtcSourceDate, formatUtcTimestamp,
 } from '../lib/time/formatUtcTimestamp.mjs';
 
 const moduleUrl = new URL('../lib/time/formatUtcTimestamp.mjs', import.meta.url).href;
@@ -54,4 +54,21 @@ test('Analyse and Portfolio show the same Amsterdam source instant across browse
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stdout, formatAmsterdamTimestamp(source, 'en-GB'));
   }
+});
+
+test('FINN feed shows the viewer local date, time and zone for the same UTC instant', () => {
+  const source = '2026-11-19T00:30:00Z';
+  const code = `import { formatUserTimestamp } from ${JSON.stringify(moduleUrl)};
+    process.stdout.write(formatUserTimestamp(${JSON.stringify(source)}, 'en-GB'));`;
+  const render = (zone) => {
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', code], {
+      encoding: 'utf8', env: { ...process.env, TZ: zone },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout;
+  };
+  assert.match(render('Europe/Amsterdam'), /19 Nov 2026, 01:30 CET$/);
+  assert.match(render('America/New_York'), /18 Nov 2026, 19:30 (?:EST|GMT-5)$/);
+  assert.match(render('Asia/Tokyo'), /19 Nov 2026, 09:30 GMT\+9$/);
+  assert.equal(formatUserTimestamp('invalid', 'en-GB'), '—');
 });

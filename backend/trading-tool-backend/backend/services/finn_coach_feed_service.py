@@ -29,6 +29,13 @@ def _same_utc_moment(first: datetime | None, second: datetime | None) -> bool:
     return left == right
 
 
+def _utc_source_moment(value: Any) -> datetime | None:
+    # A calendar-only score date is not an exact source instant.
+    if not isinstance(value, datetime):
+        return None
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+
 def _bot_state(evidence: dict) -> str:
     action = str(evidence.get("action") or "").lower()
     status = str(evidence.get("status") or "").lower()
@@ -787,6 +794,7 @@ class FinnCoachFeedService:
             event_type="watchlist_added", subject_type="asset",
             subject_id=str(saved["id"]), subject=pair, symbol=asset,
             evidence={"trading_pair": pair, "market_id": market_id},
+            source_observed_at=_utc_source_moment(saved.get("created_at")),
             priority=1, expires_at=datetime.now(timezone.utc) + timedelta(days=7),
             revision=f"{saved['id']}:{saved['created_at']}",
         )
@@ -875,6 +883,7 @@ class FinnCoachFeedService:
                 subject=str(setup.get("name") or pair), symbol=asset, priority=2,
                 evidence={"symbol": asset, "trading_pair": pair, "market_id": market_id,
                           "setup_id": setup_id, "setup_name": str(setup.get("name") or "")[:120]},
+                source_observed_at=_utc_source_moment(setup.get("created_at")),
                 revision=f"setup:{setup_id}", expires_at=now + timedelta(days=14),
             )
             if item:
@@ -913,6 +922,7 @@ class FinnCoachFeedService:
                           "setup_id": setup_id, "setup_name": str(setup.get("name") or "")[:120],
                           "strategy_id": int(newest["id"]),
                           "strategy_name": str(newest.get("name") or "")[:120]},
+                source_observed_at=_utc_source_moment(newest.get("created_at")),
                 revision=f"strategy:{newest['id']}", expires_at=now + timedelta(days=14),
             )
             if item:
@@ -1460,7 +1470,17 @@ class FinnCoachFeedService:
                     WHERE p.id=f.subject_id
                       AND p.user_id=:user_id AND p.status IN ('draft','pending_confirmation')
                       AND p.expires_at > NOW()))
-            ORDER BY CASE
+            ORDER BY CASE WHEN :history THEN 0 ELSE
+                CASE
+                  WHEN f.status='unread' AND f.priority >= 4 THEN 30 + f.priority
+                  WHEN f.status='unread'
+                    AND f.event_type IN ('daily_report_ready','periodic_report_ready','weekly_reflection')
+                    AND f.created_at >= NOW() - INTERVAL '36 hours' THEN 25
+                  WHEN f.status='unread' THEN 20 + COALESCE(f.priority, 0)
+                  ELSE COALESCE(f.priority, 0)
+                END
+              END DESC,
+              CASE
                 WHEN f.event_type='bot_decision'
                   THEN COALESCE(f.source_observed_at, f.created_at)
                 ELSE f.created_at
@@ -1563,6 +1583,31 @@ class FinnCoachFeedService:
                   AND p.expires_at > NOW()))
             RETURNING id
         """), {"id": item_id, "user_id": user_id, "status": status})
+        return result.first() is not None
+
+    async def record_discussion_outcome(self, *, user_id: int, item_id: str,
+                                        terminal_status: str) -> bool:
+        """Close a prompt only after FINN persisted a usable reply.
+
+        Pending proposals have a separate confirmation lifecycle. Discussing
+        one never acknowledges or executes that proposal.
+        """
+        target = {"completed": "handled", "clarification_required": "read"}.get(terminal_status)
+        if target is None:
+            return False
+        try:
+            uuid.UUID(item_id)
+        except (ValueError, TypeError):
+            return False
+        result = await self.session.execute(text("""
+            UPDATE finn_coach_feed_items
+            SET status=:status, updated_at=NOW()
+            WHERE id=CAST(:id AS UUID) AND user_id=:user_id
+              AND event_type <> 'proposal_pending'
+              AND status IN ('unread','read')
+              AND (expires_at IS NULL OR expires_at > NOW())
+            RETURNING id
+        """), {"id": item_id, "user_id": user_id, "status": target})
         return result.first() is not None
 
     @staticmethod
@@ -1744,14 +1789,20 @@ class FinnCoachFeedService:
 
 
 async def record_watchlist_feed_change(session, *, user_id: int, symbol: str,
-                                       market_id: int | None, added: bool) -> None:
+                                       market_id: int | None, added: bool,
+                                       discussed_in_chat: bool = False) -> None:
     """Best-effort feed update after a committed watchlist write."""
     try:
         feed = FinnCoachFeedService(session)
         if added:
-            await feed.publish_watchlist_addition(
+            item_id = await feed.publish_watchlist_addition(
                 user_id=user_id, symbol=symbol, market_id=market_id,
             )
+            if discussed_in_chat and item_id:
+                # FINN has already delivered this action in the conversation.
+                # Preserve the event in history without repeating it as a
+                # fresh prompt in the short feed.
+                await feed.set_status(user_id=user_id, item_id=item_id, status="handled")
         else:
             await feed.resolve(
                 user_id=user_id,

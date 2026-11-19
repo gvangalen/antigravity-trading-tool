@@ -5,6 +5,7 @@ import { theme } from '../../constants/theme';
 import { translate } from '../../i18n';
 import type { AppLanguage } from '../../preferences/AppPreferencesProvider';
 import type { MobileCoachFeedItem } from '../../services/tradamindApi';
+import { formatCoachFeedInstant } from '../../services/coachFeedTime';
 import { triggerHaptic } from '../../utils/haptics';
 
 type Props = {
@@ -35,9 +36,11 @@ export function MobileFINNFeed({ events, onArchive, onDiscuss, onViewReport, onT
             {item.symbol ? <Text style={styles.symbol}>{['plan_review', 'position_risk', 'improvement_suggestion', 'analysis_ready', 'strategy_next_step', 'paper_next_step'].includes(item.event_type) && item.evidence?.trading_pair ? item.evidence.trading_pair : item.symbol}</Text> : null}
           </View>
           <Text style={styles.description}>{item.description}</Text>
-          <Text style={styles.time}>{new Date(item.created_at).toLocaleString(language)}</Text>
-          {['plan_review', 'position_risk'].includes(item.event_type) && item.source_observed_at ? (
-            <Text style={styles.time}>{translate(language, item.event_type === 'position_risk' ? 'finn.feedValuationSource' : 'finn.feedQuoteSource')}: {new Date(item.source_observed_at).toLocaleString(language, { timeZone: 'UTC' })} UTC</Text>
+          <Text style={styles.time}>{formatCoachFeedInstant(item.created_at, language)}</Text>
+          {item.source_observed_at ? (
+            <Text style={styles.time}>{translate(language, item.event_type === 'position_risk' ? 'finn.feedValuationSource' : item.event_type === 'plan_review' ? 'finn.feedQuoteSource' : item.event_type.endsWith('_report_ready') ? 'finn.feedReportReadyAt' : item.event_type === 'watchlist_added' ? 'finn.feedWatchlistAddedAt' : item.event_type === 'strategy_next_step' ? 'finn.feedSetupSavedAt' : item.event_type === 'paper_next_step' ? 'finn.feedStrategySavedAt' : 'finn.feedSourceMoment')}: {formatCoachFeedInstant(item.source_observed_at, language)}</Text>
+          ) : item.event_type === 'analysis_ready' && /^\d{4}-\d{2}-\d{2}$/.test(item.evidence?.score_as_of || '') ? (
+            <Text style={styles.time}>{translate(language, 'finn.feedScoreDate')}: {new Date(`${item.evidence?.score_as_of}T00:00:00Z`).toLocaleDateString(language, { timeZone: 'UTC' })}</Text>
           ) : null}
           {item.status === 'unread' || item.status === 'read' ? (
             <View style={styles.actions}>

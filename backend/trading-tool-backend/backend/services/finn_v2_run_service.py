@@ -2228,7 +2228,8 @@ class FinnV2RunService:
         feed_item_id = str((run.client_context_json or {}).get("feed_item_id") or "").strip()
         if feed_item_id and run.conversation_id:
             from backend.services.finn_coach_feed_service import FinnCoachFeedService
-            item = await FinnCoachFeedService(self.session).detail(
+            feed_service = FinnCoachFeedService(self.session)
+            item = await feed_service.detail(
                 user_id=user_id, item_id=feed_item_id,
             )
             if item is not None:
@@ -2237,6 +2238,10 @@ class FinnV2RunService:
                     conversation_id=run.conversation_id, user_id=user_id,
                     run_id=run_id, feed_event=selected["feed_event"],
                 )
+                if item.get("event_type") != "proposal_pending":
+                    await feed_service.record_discussion_outcome(
+                        user_id=user_id, item_id=feed_item_id, terminal_status=status,
+                    )
         if status in {"completed", "clarification_required"} and run.conversation_id:
             await self.conversations.set_responses_cursor(
                 conversation_id=run.conversation_id, user_id=user_id,
@@ -4006,6 +4011,12 @@ class FinnV2RunService:
                 run, status=next_status, response_source="v2_runtime"
             ),
         )
+        feed_item_id = str((run.client_context_json or {}).get("feed_item_id") or "").strip()
+        if feed_item_id and next_status in {"completed", "clarification_required"}:
+            from backend.services.finn_coach_feed_service import FinnCoachFeedService
+            await FinnCoachFeedService(self.session).record_discussion_outcome(
+                user_id=user_id, item_id=feed_item_id, terminal_status=next_status,
+            )
         if responses_response_id and next_status in {"completed", "clarification_required"} and run.conversation_id:
             await self.conversations.set_responses_cursor(
                 conversation_id=run.conversation_id, user_id=user_id,

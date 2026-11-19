@@ -1,7 +1,7 @@
 import asyncio
 import hashlib
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -46,7 +46,75 @@ def test_watchlist_feed_reads_exact_owned_row_before_publishing():
     arguments = feed.publish.await_args.kwargs
     assert arguments["event_key"] == "watchlist-added:BTC:34"
     assert arguments["evidence"] == {"trading_pair": "BTC/USDT", "market_id": 34}
+    assert arguments["source_observed_at"] == datetime(2026, 11, 19, 10, 0, tzinfo=timezone.utc)
     assert arguments["revision"].startswith("71:")
+
+
+def test_chat_watchlist_addition_is_recorded_without_repeating_in_active_feed(monkeypatch):
+    feed = SimpleNamespace(
+        publish_watchlist_addition=AsyncMock(return_value="feed-item"),
+        set_status=AsyncMock(),
+    )
+    monkeypatch.setattr(module, "FinnCoachFeedService", lambda session: feed)
+    session = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
+
+    asyncio.run(module.record_watchlist_feed_change(
+        session, user_id=7, symbol="BTC", market_id=34,
+        added=True, discussed_in_chat=True,
+    ))
+
+    feed.set_status.assert_awaited_once_with(
+        user_id=7, item_id="feed-item", status="handled",
+    )
+    session.commit.assert_awaited_once()
+
+
+def test_web_watchlist_addition_remains_unread_for_feed(monkeypatch):
+    feed = SimpleNamespace(
+        publish_watchlist_addition=AsyncMock(return_value="feed-item"),
+        set_status=AsyncMock(),
+    )
+    monkeypatch.setattr(module, "FinnCoachFeedService", lambda session: feed)
+    session = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
+
+    asyncio.run(module.record_watchlist_feed_change(
+        session, user_id=7, symbol="BTC", market_id=34, added=True,
+    ))
+
+    feed.set_status.assert_not_awaited()
+    session.commit.assert_awaited_once()
+
+
+@pytest.mark.parametrize("terminal_status, expected", [
+    ("completed", "handled"),
+    ("clarification_required", "read"),
+    ("failed", None),
+])
+def test_discussion_status_changes_only_after_usable_owned_reply(terminal_status, expected):
+    class Result:
+        def first(self):
+            return ("feed-id",)
+
+    session = SimpleNamespace(execute=AsyncMock(return_value=Result()))
+    feed = module.FinnCoachFeedService(session)
+    item_id = "00000000-0000-0000-0000-000000000099"
+    changed = asyncio.run(feed.record_discussion_outcome(
+        user_id=7, item_id=item_id, terminal_status=terminal_status,
+    ))
+    assert changed is (expected is not None)
+    if expected is None:
+        session.execute.assert_not_awaited()
+    else:
+        query, params = session.execute.await_args.args
+        assert "event_type <> 'proposal_pending'" in str(query)
+        assert params == {"id": item_id, "user_id": 7, "status": expected}
+
+
+def test_calendar_only_score_date_is_not_presented_as_a_source_instant():
+    assert module._utc_source_moment(date(2026, 11, 19)) is None
+    assert module._utc_source_moment(datetime(2026, 11, 19, 10, 0)) == datetime(
+        2026, 11, 19, 10, 0, tzinfo=timezone.utc,
+    )
 
 
 def test_journey_cards_use_exact_market_and_resolve_when_strategy_exists(monkeypatch):
@@ -878,6 +946,52 @@ def test_direct_responses_read_persists_selected_feed_for_next_turn(monkeypatch)
     assert selected["feed_event"]["item_id"] == item_id
     assert selected["feed_event"]["action_authorized"] is False
     service.conversations.set_responses_cursor.assert_awaited_once()
+
+
+def test_completed_feed_discussion_is_handled_after_saved_chat_reply(monkeypatch):
+    item_id = "00000000-0000-0000-0000-000000000098"
+    run = SimpleNamespace(
+        id="run-c", user_id=7, conversation_id="conversation-c", status="planned",
+        message="Wat betekent deze analyse?", trace_id="trace-c",
+        client_context_json={"feed_item_id": item_id},
+    )
+
+    async def detail(_self, *, user_id, item_id: str):
+        assert user_id == 7
+        return {"id": item_id, "event_type": "analysis_ready",
+                "subject_type": "asset", "subject_id": "71", "symbol": "BTC",
+                "evidence": {"trading_pair": "BTC/USDT", "market_id": 34}}
+
+    recorded = AsyncMock(return_value=True)
+    monkeypatch.setattr(module.FinnCoachFeedService, "detail", detail)
+    monkeypatch.setattr(module.FinnCoachFeedService, "record_discussion_outcome", recorded)
+    service = FinnV2RunService.__new__(FinnV2RunService)
+    service.session = SimpleNamespace()
+    service.runs = SimpleNamespace(
+        get_by_id_for_user=AsyncMock(return_value=run), update_status=AsyncMock(),
+    )
+    service.runtime_contracts = SimpleNamespace(
+        get_for_run=AsyncMock(return_value=SimpleNamespace(state_json={"responses_exchange": {}})),
+        record_verified_setup_subject=AsyncMock(),
+        materialize_terminal=AsyncMock(return_value=SimpleNamespace(terminal_projection_json={})),
+    )
+    service.traces = SimpleNamespace(append_event=AsyncMock())
+    service.conversations = SimpleNamespace(
+        set_selected_feed_event=AsyncMock(), set_responses_cursor=AsyncMock(),
+    )
+    service._trace_payload = lambda *_args, **_kwargs: {}
+    service._commit_session_if_possible = AsyncMock()
+
+    asyncio.run(service.complete_responses_read(
+        run_id="run-c", user_id=7, response_id="response-c",
+        answer=FinnResponsesVerifiedAnswer("completed", "De benchmark is beschikbaar.", None, ()),
+        locale="nl",
+    ))
+
+    recorded.assert_awaited_once_with(
+        user_id=7, item_id=item_id, terminal_status="completed",
+    )
+    service._commit_session_if_possible.assert_awaited_once()
 
 
 def test_discuss_setup_rechecks_current_match_and_marks_old_notification_historical(monkeypatch):

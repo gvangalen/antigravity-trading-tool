@@ -4,6 +4,45 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 actieve feedselectie (19 november 2026)
+
+Phase: `LOCAL_BUILD_VALIDATED`. Deze kandidaat staat nog niet live en heeft
+geen onafhankelijk QA-verdict. De feed kiest voortaan op ongelezen status en
+belang: risico en open bevestigingen eerst, daarna een recent rapport en de
+overige vervolgstappen. **Bespreek** laat de kaart staan totdat FINN een antwoord
+heeft opgeslagen; een afgerond antwoord handelt de kaart af en een gerichte
+verduidelijkingsvraag markeert haar als gelezen. Een mislukte chat laat de kaart
+ongelezen. Een watchlisttoevoeging die FINN zelf in de chat heeft uitgevoerd
+wordt wel vastgelegd maar niet opnieuw als actieve oproep getoond. Web en
+mobiel gebruiken dezelfde selectiegrenzen. De historische feed blijft op
+gebeurtenistijd gesorteerd. De feed vermeldt beschikbare bronmomenten in de
+ingestelde tijdzone van de browser of het mobiele apparaat; er is nog geen
+aparte accounttijdzonevoorkeur. Een score met uitsluitend een kalenderdatum
+krijgt geen verzonnen tijdstip. Er is geen handelsactie of bevestigingsgrens
+gewijzigd.
+
+Lokale validatie na rebase op `main` `77ef334a41e0026e93de1cdebe1017182322a26c`:
+root pytest **5120 geslaagd, 7 overgeslagen**. Webproductiebouw, typecheck,
+i18n-lint, i18n-tests **45/45**, commandtests **94/94**, proposaltests
+**10/10** en hoge dependency-audit (0 kwetsbaarheden) slaagden. Mobiele
+typecheck, lint (0 fouten, 89 waarschuwingen), `test:chat` **24/24** en
+webbundle-export slaagden. De geïsoleerde FastAPI/Celery/PostgreSQL/Redis-
+actiematrix slaagde **17/17** na workeropwarming, zonder productieverbinding,
+brokerorder, Live-call of live-bot (artifact SHA-256
+`5337fdaa0596fa88208e9db0105a1a43d041ec251a27360a5bcf2987b71987b3`).
+De eerste poging kreeg een workeropwarm-timeout vóór een casusresultaat;
+de complete hertest is als release-evidentie gebruikt. De echte Responses-
+providerontwikkeling slaagde **20/20** met alle detailmetingen 100% en nul
+provider-, schema-, parse-, validatie- of timeoutfouten (artifact SHA-256
+`2284400565b7314f25cf12027892055a8b0796e8d1c64a86410c4a332bec3553`).
+De echte providerregressie slaagde **109/109**, alle detailmetingen 100% en
+nul provider-, schema-, parse-, validatie- of timeoutfouten (artifact SHA-256
+`1b16c3fde658d90696d8abb83ef4e14f37038e6cb13049eec683808b6e75a8ff`).
+Een ingelogde liveproef, CI,
+Auto Deploy en de officiële onafhankelijke QA-matrix zijn voor deze kandidaat
+nog niet uitgevoerd. De bestaande FINN-actiecontracten en handelsgrenzen zijn
+niet gewijzigd.
+
 ## FINN 3.0 brongebonden AAPL-botcheck en coachvragen (19 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_READY_FOR_INDEPENDENT_QA`. Op verzoek van de gebruiker gaat deze
