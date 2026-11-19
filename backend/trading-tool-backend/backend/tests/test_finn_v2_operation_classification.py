@@ -1363,6 +1363,19 @@ def test_guided_setup_request_preserves_creation_contract_and_requires_slot_coll
     assert result.clarification_required is True
 
 
+def test_setup_before_create_verb_starts_guided_collection():
+    result = CLASSIFIER.classify(message=(
+        "Ik wil een nieuwe BTC-setup maken. Help me stap voor stap; ik heb het "
+        "analysetijdframe, de handelsvaluta en de naam nog niet gekozen. "
+        "Toon eerst een concept en sla niets op."
+    ))
+
+    assert result.operation_id == "create_setup"
+    assert result.selected_target_asset == "BTC"
+    assert result.selected_missing_inputs == ("setup_type", "timeframe", "name", "quote_currency")
+    assert result.clarification_required is True
+
+
 def test_direct_incomplete_setup_request_does_not_misrepresent_a_guided_exchange():
     result = CLASSIFIER.classify(message="Maak een Solana-setup.")
 

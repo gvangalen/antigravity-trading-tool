@@ -1994,7 +1994,7 @@ function AIAssistantContent({
     const proposal = (message.actions || []).find((action) => action?.type === "v2_proposal");
     if (!proposal) {
       return (
-        <button type="button" onClick={() => commandCenterRef.current?.focus?.()} className={actionButtonStyles({ variant: "primary", className: "justify-center rounded-xl px-4 py-2.5 text-xs" })}>
+        <button type="button" onClick={() => composerInputRef.current?.focus?.()} className={actionButtonStyles({ variant: "primary", className: "justify-center rounded-xl px-4 py-2.5 text-xs" })}>
           {at("draftCards.continue", "Verder invullen")}
         </button>
       );
@@ -2231,7 +2231,7 @@ function AIAssistantContent({
         ))}
         {choices.length > 0 && <button
           type="button"
-          onClick={() => commandCenterRef.current?.focus?.()}
+          onClick={() => composerInputRef.current?.focus?.()}
           className="flex w-full items-center rounded-xl border border-dashed border-slate-300 px-4 py-3 text-left text-sm font-medium text-slate-600 hover:border-blue-400 hover:text-blue-700 dark:border-slate-700 dark:text-slate-300"
         >{copy.other}</button>}
         <p className="text-xs text-slate-500 dark:text-slate-400">{choices.length ? copy.hint : copy.freeTextHint}</p>

@@ -2575,6 +2575,8 @@ class FinnV2OperationStateService:
         if not named:
             return None
         value = named.group(1).strip(" .\"'“”‘’")
+        if re.fullmatch(r"(?:nog\s+)?niet\s+(?:gekozen|bepaald|ingevuld)|not\s+(?:chosen|decided|entered)", value, re.I):
+            return None
         if re.fullmatch(r"(?:gelijk|hetzelfde|ongewijzigd|same|unchanged|unverändert)(?:\s+(?:houden|laten|keep|behouden))?", value, re.I):
             return None
         return value or None
