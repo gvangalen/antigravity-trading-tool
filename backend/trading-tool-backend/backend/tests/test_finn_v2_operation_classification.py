@@ -110,7 +110,7 @@ def test_strategy_amount_accepts_natural_currency_before_the_execution_phrase():
     )
 
     assert state.collected_inputs["base_amount"] == 125.0
-    assert state.missing_required_inputs == ["name", "entry", "stop_loss", "targets", "risk_profile"]
+    assert state.missing_required_inputs == ["name", "entry", "stop_loss", "targets", "risk_profile", "price_currency"]
 
 
 def test_strategy_update_canonicalizes_a_natural_german_execution_mode():
@@ -1038,7 +1038,7 @@ def test_guided_strategy_name_projects_the_persisted_complete_contract_state():
     assert result.operation_id == "create_strategy"
     assert result.selector_source == "guided_state"
     assert result.selected_target_asset is None
-    assert result.selected_missing_inputs == ()
+    assert result.selected_missing_inputs == ("price_currency",)
     assert result.supplied_inputs == {
         **context["active_guided_operation"]["collected_inputs"],
         "name": "BTC Plan q219",
@@ -1194,8 +1194,8 @@ def test_guided_risk_turn_accepts_short_dutch_answer_without_reselection():
     )
 
     assert state.collected_inputs["risk_profile"] == "conservative"
-    assert state.missing_required_inputs == []
-    assert state.status == "complete"
+    assert state.missing_required_inputs == ["price_currency"]
+    assert state.status == "collecting"
 
 
 def test_guided_explicit_correction_changes_only_named_existing_slot():

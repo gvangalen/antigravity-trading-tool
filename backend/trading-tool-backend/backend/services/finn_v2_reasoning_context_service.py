@@ -442,6 +442,14 @@ class FinnV2ReasoningContextService:
                 except (TypeError, ValueError):
                     bot_id = None
                 current = (await PaperPositionRiskService(self.session).evaluate(run.user_id)).get(bot_id)
+                if current:
+                    # Feed facts are also persisted in the Responses tool trace.
+                    # Keep the owner-scoped valuation moments, but make them
+                    # JSON-safe before the runtime contract is written.
+                    current = {
+                        key: value.isoformat() if isinstance(value, datetime) else value
+                        for key, value in current.items()
+                    }
                 current_facts = {
                     "feed_item_id": item_id, "current_trade_signal_confirmed": False,
                     "current_position_risk": current or {"status": "bot_unavailable"},

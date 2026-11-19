@@ -531,6 +531,7 @@ def test_complete_proposal_contracts_remain_deterministic():
                 "stop_loss": 59,
                 "targets": [65, 68],
                 "risk_profile": "defensive",
+                "price_currency": "USDT",
             },
             "strategy",
         ),

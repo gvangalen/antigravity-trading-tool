@@ -399,6 +399,8 @@ class OperationContract:
                 ))
             return tuple(required)
         required = list(self.required_inputs)
+        if self.operation_id == "create_strategy":
+            required.append("price_currency")
         if crypto_pair_required:
             required.append("quote_currency")
         for field, dependency, expected in self.conditional_required_inputs:

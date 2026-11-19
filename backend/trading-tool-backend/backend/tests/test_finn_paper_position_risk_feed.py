@@ -170,6 +170,8 @@ def test_discuss_paper_risk_rereads_current_position_in_same_owner(monkeypatch):
     assert historical.facts["historical_event_facts"]["exposure_pct"] == 70
     assert current.facts["current_position_risk"]["exposure_pct"] == 40
     assert current.facts["current_position_risk"]["status"] == "within_limit"
+    assert current.facts["current_position_risk"]["valuation_as_of"] == "2026-11-15T10:00:00+00:00"
+    json.dumps([historical.facts, current.facts])
     assert current.source == "owner_scoped_current_paper_portfolio"
     assert current.facts["current_trade_signal_confirmed"] is False
 
@@ -189,7 +191,7 @@ def test_clicked_paper_risk_card_answers_from_current_owner_read_without_model()
             "feed_item_id": "risk-1", "current_position_risk": {
                 "symbol": "BTC", "trading_pair": "BTC/USDT", "status": "above_saved_limit",
                 "limit_pct": 50, "exposure_pct": 70,
-                "valuation_as_of": datetime(2026, 11, 19, 11, tzinfo=timezone.utc)}}},
+                "valuation_as_of": "2026-11-19T11:00:00+00:00"}}},
     ]
     message = ("Bespreek dit positierisico voor mijn BTC Paper-bot. Welke opgeslagen "
                "limiet is overschreden en wat controleer ik? Wijzig niets en plaats geen order.")
@@ -199,6 +201,7 @@ def test_clicked_paper_risk_card_answers_from_current_owner_read_without_model()
     assert "70%" in response.response.text and "50%" in response.response.text
     assert "koers- en FX-bron" in response.response.text
     assert "plaats geen order" in response.response.text
+    json.dumps(list(response.response.tool_trace))
     verified = asyncio.run(FinnResponsesAnswerVerifier().verify(
         message=message, result=response.response, locale="nl"))
     assert verified.status == "completed", (verified.reason, verified.rejection_details)
@@ -214,6 +217,56 @@ def test_clicked_paper_risk_card_does_not_reuse_historical_exposure_if_current_r
     answer = render_selected_paper_position_risk(result, symbol="BTC")
     assert "geen bruikbare, gedateerde Paper-waardering" in answer
     assert "70%" not in answer
+
+
+def test_historical_paper_exit_checks_current_owner_portfolio_quantity():
+    from backend.services.finn_v2_factual_source_answer import render_paper_exit_position_status
+
+    def read(quantity):
+        return {"results": [{"scope": "read_portfolio", "status": "completed",
+            "data": {"environment": "paper", "read_at": "2026-11-19T15:00:00+00:00",
+                     "bots": [{"symbol": "AAPL", "is_live": False,
+                               "position_qty": quantity}]}}]}
+
+    closed = render_paper_exit_position_status(read(0), symbol="AAPL")
+    still_open = render_paper_exit_position_status(read(1.5), symbol="AAPL")
+    assert "geen open positie meer" in closed
+    assert "nog 1,5 AAPL open" in still_open
+    assert "Europe/Amsterdam" in closed
+    assert "gevulde verkoop alleen" in closed
+    assert "niet eenduidig" in render_paper_exit_position_status({"results": [{
+        "scope": "read_portfolio", "status": "completed", "data": {
+            "environment": "paper", "read_at": "2026-11-19T15:00:00+00:00",
+            "bots": [{"symbol": "AAPL", "is_live": False, "position_qty": 0},
+                     {"symbol": "AAPL", "is_live": False, "position_qty": 1}],
+        }}]}, symbol="AAPL")
+
+
+def test_paper_exit_followup_reads_current_portfolio_before_claiming_closure():
+    from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor
+
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=42,
+                                   run_id="paper-exit-followup", model_led_coach=True)
+    calls = []
+
+    async def read(call):
+        calls.append(call)
+        return {"status": "completed", "results": [{"scope": "read_portfolio",
+            "status": "completed", "data": {"environment": "paper",
+                "read_at": "2026-11-19T15:00:00+00:00", "bots": [{
+                    "symbol": "AAPL", "is_live": False, "position_qty": 0,
+                }]}}]}
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message="Is de AAPL-positie echt gesloten na die Paper-exit?",
+        instructions="", conversation_context={}, verified_asset="AAPL", locale="nl",
+    ))
+    assert len(calls) == 1
+    assert calls[0].read_tools == ("read_portfolio",)
+    assert calls[0].inputs == {"environment": "paper"}
+    assert "geen open positie meer" in result.response.text
+    assert "Paper-portefeuille" in result.response.text
 
 
 def test_active_risk_card_updates_and_only_worsening_reopens_handled_alert():

@@ -534,6 +534,31 @@ def test_selector_exposes_released_lineage_for_safe_reformulation():
     assert "Released lineage permits reformulation only" in captured["system_role"]
 
 
+def test_reformulation_projects_verified_antecedent_when_provider_omits_reference():
+    selector = FinnV2StructuredOperationSelectorService(
+        provider=lambda **_kwargs: {"parsed": {
+            "operation_id": "reformulate_previous_response", "confidence": 0.9,
+            "entities": {}, "target_asset": None, "conversation_reference": None,
+            "missing_inputs": [], "ambiguity_reason": None,
+        }}
+    )
+    contract = FinnV2OperationRegistry().get("reformulate_previous_response")
+    verified, error = selector.select(
+        message="Herschrijf je voorgaande antwoord als één bondige zin.",
+        candidate_contracts=(contract,), facts={},
+        verified_context={"last_verified_context": {"operation_id": "evaluate_plan"}},
+    )
+    degraded, degraded_error = selector.select(
+        message="Herschrijf je voorgaande antwoord als één bondige zin.",
+        candidate_contracts=(contract,), facts={},
+        verified_context={"last_degraded_context": {"run_id": "run-1"}},
+    )
+    assert error is None and verified is not None
+    assert verified.conversation_reference == "previous_verified_response"
+    assert degraded_error is None and degraded is not None
+    assert degraded.conversation_reference is None
+
+
 def test_selector_manifest_keeps_capability_and_concrete_bot_reads_distinct():
     captured = {}
 

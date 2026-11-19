@@ -1775,6 +1775,7 @@ export default function ReportPage() {
   const [pdfLoading, setPdfLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [generateInfo, setGenerateInfo] = useState('');
+  const [generationNotice, setGenerationNotice] = useState('');
   const [error, setError] = useState('');
 
   const pollTokenRef = useRef(0);
@@ -1954,6 +1955,7 @@ GENERATE
     loadTokenRef.current += 1;
     setGenerating(true);
     setLoading(true);
+    setGenerationNotice('');
     setGenerateInfo(
       fromAuto
         ? `Geen ${fallbackLabel.toLowerCase()} gevonden. We maken nu een nieuwe versie voor je klaar.`
@@ -1977,11 +1979,14 @@ GENERATE
           lastSignatureRef.current = getReportSignature(existing);
           setSelectedDate('latest');
           setReport(existing);
-          showSnackbar(reportT.recentReport || `${fallbackLabel} is recent gemaakt en opnieuw getoond`, 'info');
+          const notice = reportT.recentReport || `${fallbackLabel} is recent gemaakt en opnieuw getoond`;
+          setGenerationNotice(notice);
+          showSnackbar(notice, 'info');
           return;
         }
       }
       await pollUntilNewReport(baselineSignature, generation?.status_token);
+      setGenerationNotice(`${fallbackLabel} staat klaar`);
       showSnackbar(`${fallbackLabel} staat klaar`, 'success');
     } catch (err) {
       console.error(err);
@@ -2088,6 +2093,11 @@ RENDER
                <div className="mt-1 text-xs opacity-80">{reportT.errorHelper}</div>
            </div>
         </div>
+      )}
+      {generationNotice && !generating && (
+        <p role="status" className="mb-6 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200">
+          {generationNotice}
+        </p>
       )}
 
       {/* 📄 REPORT CONTENT */}

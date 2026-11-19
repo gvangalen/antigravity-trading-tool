@@ -505,7 +505,16 @@ class FinnV2StructuredOperationSelectorService:
     ) -> bool:
         """Accept only registry-declared, verifiable lineage references."""
         if contract.requires_verified_context:
-            return bool(raw_reference)
+            # The provider sometimes omits its nullable reference telemetry
+            # while correctly selecting a previous-answer operation. A
+            # verified antecedent is sufficient for these read-only lineage
+            # operations; never infer one from a degraded or released answer.
+            return bool(raw_reference) or (
+                contract.operation_id in {
+                    "explain_previous_evidence", "reformulate_previous_response",
+                }
+                and bool((context or {}).get("last_verified_context"))
+            )
         if not contract.contextual_reference_inputs:
             return False
         verified = dict((context or {}).get("last_verified_context") or {})
