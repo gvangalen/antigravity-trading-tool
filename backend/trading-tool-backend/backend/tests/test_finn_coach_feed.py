@@ -17,6 +17,39 @@ from backend.services.finn_v2_run_service import FinnV2RunService
 from backend.api.ai_assistant_api import _feed_context_boundary
 
 
+def test_watchlist_feed_copy_suggests_analysis_without_claiming_changes():
+    copy = module._fallback("watchlist_added", "BTC/USDT", {"trading_pair": "BTC/USDT"})
+    assert "BTC/USDT" in copy["nl"]["title"]
+    assert "niets aan je analyse gewijzigd" in copy["nl"]["body"]
+
+
+def test_watchlist_feed_reads_exact_owned_row_before_publishing():
+    class _Result:
+        def mappings(self):
+            return self
+
+        def first(self):
+            return {"id": 71, "created_at": datetime(2026, 11, 19, 10, 0),
+                    "quote_currency": "USDT"}
+
+    session = SimpleNamespace(execute=AsyncMock(return_value=_Result()))
+    feed = module.FinnCoachFeedService(session)
+    feed.publish = AsyncMock(return_value="feed-item")
+    result = asyncio.run(feed.publish_watchlist_addition(
+        user_id=7, symbol="btc", market_id=34,
+    ))
+
+    assert result == "feed-item"
+    assert session.execute.await_args.args[1] == {
+        "user_id": 7, "symbol": "BTC", "market_id": 34,
+    }
+    arguments = feed.publish.await_args.kwargs
+    assert arguments["event_key"] == "watchlist-added:BTC:34"
+    assert arguments["evidence"] == {"trading_pair": "BTC/USDT", "market_id": 34}
+    assert arguments["revision"].startswith("71:")
+
+
+
 @pytest.mark.parametrize("locale,closed_title", [
     ("nl", "Voorstel niet meer actief"),
     ("en", "Proposal no longer active"),

@@ -586,7 +586,8 @@ class FinnV2ActionAdapterRegistry:
         parameters = {"user_id": user_id, "symbol": asset}
         if market_id is not None:
             parameters["market_id"] = market_id
-        await self.session.execute(text(statement), parameters)
+        insert_result = await self.session.execute(text(statement), parameters)
+        created = bool((getattr(insert_result, "rowcount", 0) or 0) > 0)
         quote_status = "pending" if market_id is not None else "available"
         try:
             snapshot = await asyncio.wait_for(
@@ -607,6 +608,7 @@ class FinnV2ActionAdapterRegistry:
             "asset": asset,
             **({"market_id": market_id, "quote_currency": quote_currency} if quote_currency else {}),
             "operation": "watchlist_add",
+            "created": created,
             "quote_status": quote_status,
         }
 

@@ -287,6 +287,15 @@ def _plan_score_phrase(evidence: dict, locale: str) -> str:
 
 def _fallback(kind: str, subject: str, evidence: dict, *, focus: str = "brief") -> dict:
     name = str(subject or "").strip()[:120]
+    if kind == "watchlist_added":
+        return {
+            "nl": {"title": f"{name} staat op je watchlist",
+                   "body": "Bekijk welke indicatoren en benchmark voor deze notering zijn ingesteld. FINN kan een volgende analysestap voorstellen; er is niets aan je analyse gewijzigd."},
+            "en": {"title": f"{name} is on your watchlist",
+                   "body": "Review the indicators and benchmark configured for this listing. FINN can suggest a next analysis step; your analysis was not changed."},
+            "de": {"title": f"{name} steht auf deiner Watchlist",
+                   "body": "Prüfe die Indikatoren und den Benchmark dieser Notierung. FINN kann einen nächsten Analyseschritt vorschlagen; an deiner Analyse wurde nichts geändert."},
+        }
     if kind == "bot_decision":
         return _bot_fallback(name, evidence)
     if kind == "position_risk":
@@ -589,7 +598,7 @@ class FinnCoachFeedService:
                       expires_at: datetime | None = None,
                       revision: str | None = None) -> str | None:
         """One row per owner/event. Unchanged evidence never reopens or regenerates."""
-        if not event_key or event_type not in {"plan_match", "plan_review", "position_risk", "weekly_reflection", "improvement_suggestion", "data_blocked", "proposal_pending", "market_move", "bot_decision", "live_bot_paused", "daily_report_ready", "periodic_report_ready"}:
+        if not event_key or event_type not in {"plan_match", "plan_review", "position_risk", "weekly_reflection", "improvement_suggestion", "data_blocked", "proposal_pending", "market_move", "bot_decision", "live_bot_paused", "daily_report_ready", "periodic_report_ready", "watchlist_added"}:
             raise ValueError("feed_event_invalid")
         facts = {**evidence, "subject": str(subject or "")[:120]}
         digest = hashlib.sha256(str(revision or _json(facts)).encode()).hexdigest()
@@ -721,12 +730,45 @@ class FinnCoachFeedService:
             "copy_json": _json(_fallback(event_type, subject, facts)),
             "copy_source": ("verified_facts" if event_type in {
                                 "position_risk", "weekly_reflection", "improvement_suggestion",
-                                "bot_decision"} or event_type == "data_blocked" and facts.get("bot_id")
+                                "bot_decision", "watchlist_added"} or event_type == "data_blocked" and facts.get("bot_id")
                             else "fact_fallback"),
             "expires_at": expires_at,
         })
         row = result.first()
         return str(row[0]) if row else None
+
+    @staticmethod
+    def watchlist_event_key(symbol: str, market_id: int | None) -> str:
+        return f"watchlist-added:{symbol}:{market_id if market_id is not None else 'asset'}"
+
+    async def publish_watchlist_addition(self, *, user_id: int, symbol: str,
+                                         market_id: int | None = None) -> str | None:
+        """Read back the committed owner row before suggesting a next step."""
+        asset = str(symbol or "").strip().upper()
+        if not re.fullmatch(r"[A-Z0-9][A-Z0-9._-]{0,19}", asset):
+            return None
+        row = await self.session.execute(text("""
+            SELECT w.id, w.created_at, m.quote_currency
+            FROM watchlists w LEFT JOIN trading_markets m ON m.id=w.market_id
+            WHERE w.user_id=:user_id AND w.symbol=:symbol
+              AND w.market_id IS NOT DISTINCT FROM :market_id
+            LIMIT 1
+        """), {"user_id": user_id, "symbol": asset, "market_id": market_id})
+        saved = row.mappings().first()
+        if not saved:
+            return None
+        quote = str(saved.get("quote_currency") or "").strip().upper()
+        if quote and not re.fullmatch(r"[A-Z]{2,12}", quote):
+            return None
+        pair = f"{asset}/{quote}" if quote else asset
+        return await self.publish(
+            user_id=user_id, event_key=self.watchlist_event_key(asset, market_id),
+            event_type="watchlist_added", subject_type="asset",
+            subject_id=str(saved["id"]), subject=pair, symbol=asset,
+            evidence={"trading_pair": pair, "market_id": market_id},
+            priority=1, expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+            revision=f"{saved['id']}:{saved['created_at']}",
+        )
 
     async def resolve(self, *, user_id: int, event_key: str) -> None:
         await self.session.execute(text("""
@@ -1541,3 +1583,26 @@ class FinnCoachFeedService:
             "fingerprint": item["fingerprint"],
                "copy": _json(copy)})
         return True
+
+
+async def record_watchlist_feed_change(session, *, user_id: int, symbol: str,
+                                       market_id: int | None, added: bool) -> None:
+    """Best-effort feed update after a committed watchlist write."""
+    try:
+        feed = FinnCoachFeedService(session)
+        if added:
+            await feed.publish_watchlist_addition(
+                user_id=user_id, symbol=symbol, market_id=market_id,
+            )
+        else:
+            await feed.resolve(
+                user_id=user_id,
+                event_key=feed.watchlist_event_key(symbol, market_id),
+            )
+        await session.commit()
+    except Exception:
+        logger.warning("FINN watchlist feed update failed", exc_info=True)
+        try:
+            await session.rollback()
+        except Exception:
+            logger.warning("FINN watchlist feed rollback failed", exc_info=True)

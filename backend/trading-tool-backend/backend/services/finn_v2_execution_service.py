@@ -214,6 +214,15 @@ class FinnV2ExecutionService:
             # terminal lifecycle together here so an immediate replay observes
             # ``already_executed`` rather than a transient ``started`` row.
             await self._commit_terminal_execution()
+            if proposal.operation_type in {"watchlist_add", "watchlist_remove"}:
+                if proposal.operation_type == "watchlist_remove" or safe_result_payload.get("created"):
+                    from backend.services.finn_coach_feed_service import record_watchlist_feed_change
+                    await record_watchlist_feed_change(
+                        self.session, user_id=user_id,
+                        symbol=str(safe_result_payload.get("asset") or "").upper(),
+                        market_id=safe_result_payload.get("market_id"),
+                        added=proposal.operation_type == "watchlist_add",
+                    )
             if proposal.operation_type in {"create_setup", "update_setup", "delete_setup"}:
                 change = (proposal.payload_json or {}).get("change") or {}
                 fields = change.get("setup_fields") or change.get("changed_fields") or {}
