@@ -145,6 +145,11 @@ class FinnV2GatewayService:
             },
             commit=False,
         )
+        if feature_mode == "visible":
+            await self.conversations.register_setup_strategy_score_task(
+                conversation_id=conversation.id, user_id=user_id,
+                run_id=run.id, message=request.message,
+            )
         if hasattr(self.session, "add"):
             dispatch_queue = self._dispatch_queue_for_request(request)
             dispatch = await self.dispatches.create(

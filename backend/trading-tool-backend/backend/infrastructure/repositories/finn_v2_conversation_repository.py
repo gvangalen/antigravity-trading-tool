@@ -71,12 +71,107 @@ class FinnV2ConversationRepository(FinnV2RepositoryTransactionMixin):
         row = await self.get_by_id_for_user(conversation_id, user_id)
         return dict(row.context_json or {}) if row is not None else {}
 
+    async def register_setup_strategy_score_task(
+        self, *, conversation_id: str, user_id: int, run_id: str, message: str,
+    ) -> None:
+        from backend.services.finn_v2_task_chain_service import STATE_KEY, requested_task
+
+        row = await self.get_by_id_for_user(conversation_id, user_id, for_update=True)
+        if row is None:
+            return
+        context = dict(row.context_json or {})
+        current = dict(context.get(STATE_KEY) or {})
+        requested = requested_task(message)
+        if current.get("status") == "in_progress" and str(message or "").strip().lower() in {
+            "stop", "annuleer", "annuleren", "cancel", "stop deze opdracht",
+        }:
+            current.update(status="cancelled", pending_step=None,
+                           pending_question=None, pending_action=None)
+        elif requested and (not current or current.get("status") in {"completed", "cancelled"}
+                            or (requested.get("asset") and current.get("asset")
+                                and requested["asset"] != current["asset"])
+                            or not current.get("completed_steps")):
+            current = requested
+        elif current.get("status") != "in_progress":
+            return
+        current["expected_run_id"] = run_id
+        context[STATE_KEY] = current
+        row.context_json = context
+        row.updated_at = datetime.now(timezone.utc)
+        await self._flush_with_rollback(
+            operation="register_setup_strategy_score_task",
+            entity_type="FinnV2Conversation", run_id=run_id,
+        )
+
+    async def record_setup_strategy_score_open_step(
+        self, *, conversation_id: str, user_id: int, run_id: str,
+        question: str | None = None, proposal_id: str | None = None,
+    ) -> None:
+        from backend.services.finn_v2_task_chain_service import STATE_KEY
+
+        row = await self.get_by_id_for_user(conversation_id, user_id, for_update=True)
+        if row is None:
+            return
+        context = dict(row.context_json or {})
+        task = dict(context.get(STATE_KEY) or {})
+        if task.get("status") != "in_progress" or task.get("expected_run_id") != run_id:
+            return
+        task["pending_question"] = question
+        task["pending_action"] = {"proposal_id": proposal_id} if proposal_id else None
+        context[STATE_KEY] = task
+        row.context_json = context
+        row.updated_at = datetime.now(timezone.utc)
+        await self._flush_with_rollback(
+            operation="record_setup_strategy_score_open_step",
+            entity_type="FinnV2Conversation", run_id=run_id,
+        )
+
+    async def record_setup_strategy_score_read(
+        self, *, conversation_id: str, user_id: int, run_id: str,
+        tool_trace: list[dict[str, Any]],
+    ) -> None:
+        from backend.services.finn_v2_task_chain_service import STATE_KEY, score_from_trace
+
+        row = await self.get_by_id_for_user(conversation_id, user_id, for_update=True)
+        if row is None:
+            return
+        context = dict(row.context_json or {})
+        task = dict(context.get(STATE_KEY) or {})
+        if (task.get("status") != "in_progress" or task.get("pending_step") != "score"
+                or task.get("expected_run_id") != run_id):
+            return
+        score = score_from_trace(task, tool_trace)
+        if score is None:
+            return
+        if score["available"]:
+            completed = dict(task.get("completed_steps") or {})
+            completed["score"] = {**score, "run_id": run_id}
+            task["completed_steps"] = completed
+            task["pending_step"] = None
+            task["status"] = "completed"
+            task.pop("blocked_reason", None)
+        else:
+            task["blocked_reason"] = score["reason"]
+        context[STATE_KEY] = task
+        row.context_json = context
+        row.updated_at = datetime.now(timezone.utc)
+        await self._flush_with_rollback(
+            operation="record_setup_strategy_score_read",
+            entity_type="FinnV2Conversation", run_id=run_id,
+        )
+
     async def update_context(self, *, conversation_id: str, user_id: int, context: Dict[str, Any]) -> None:
         row = await self.get_by_id_for_user(conversation_id, user_id, for_update=True)
         if row is None:
             return
         current = dict(row.context_json or {})
         updated = dict(context)
+        # Worker projections may have started before a confirmation completed.
+        # Never let such a stale snapshot erase verified task progress.
+        from backend.services.finn_v2_task_chain_service import STATE_KEY
+
+        if current.get(STATE_KEY):
+            updated[STATE_KEY] = current[STATE_KEY]
         # A run cancellation is a durable cursor boundary. A caller using a
         # pre-cancel context snapshot must not erase it by replacing JSON.
         if current.get("cancelled_proposal_run_id"):
@@ -201,6 +296,17 @@ class FinnV2ConversationRepository(FinnV2RepositoryTransactionMixin):
         context["verified_action_result"] = result
         context["verified_action_result_revision"] = int(contract_revision)
         context["active_conversation_target"] = target
+        from backend.services.finn_v2_task_chain_service import STATE_KEY, advance_from_action
+
+        task = dict(context.get(STATE_KEY) or {})
+        pending_proposal = dict(task.get("pending_action") or {}).get("proposal_id")
+        matches_open_action = (
+            pending_proposal == result.get("proposal_id") if pending_proposal
+            else task.get("expected_run_id") == result.get("run_id")
+        )
+        if (matches_open_action
+                and result.get("owner_user_id") == user_id):
+            context[STATE_KEY] = advance_from_action(task, result)
         row.context_json = context
         row.updated_at = datetime.now(timezone.utc)
         await self._flush_with_rollback(

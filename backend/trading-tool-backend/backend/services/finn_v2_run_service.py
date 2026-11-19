@@ -2194,6 +2194,19 @@ class FinnV2RunService:
             await self.runtime_contracts.record_final_operation(
                 run_id=run_id, operation_id="read_active_setup", mode="READ", reason=None,
             )
+        task_conversations = getattr(self, "conversations", None)
+        record_open_task = getattr(task_conversations, "record_setup_strategy_score_open_step", None)
+        record_score_task = getattr(task_conversations, "record_setup_strategy_score_read", None)
+        if run.conversation_id and status == "clarification_required" and callable(record_open_task):
+            await record_open_task(
+                conversation_id=run.conversation_id, user_id=user_id, run_id=run_id,
+                question=str((answer.clarification or {}).get("question") or answer.text)[:1000],
+            )
+        elif run.conversation_id and status == "completed" and callable(record_score_task):
+            await record_score_task(
+                conversation_id=run.conversation_id, user_id=user_id, run_id=run_id,
+                tool_trace=list(exchange.get("tool_trace") or []),
+            )
         contract = await self.runtime_contracts.materialize_terminal(
             run_id=run_id, status=status, mode=response_json["mode"],
             response=response_json, error_code=answer.reason,
@@ -3260,7 +3273,16 @@ class FinnV2RunService:
                 "the proposal, but must not replace it or turn the request into a generic question. "
                 "For example, creating a strategy for a named setup is a create_strategy proposal, "
                 "not a request to evaluate the setup or find an existing strategy. "
-                "Choose exactly one proposal operation per user turn. If the user asks for a separate "
+                "Choose exactly one proposal operation per user turn. "
+                "When one request asks to create a setup, create its strategy and show its score, "
+                "start with create_setup. After that write is confirmed, continue with the "
+                "saved setup ID through create_strategy and then read_asset_scores. "
+                "Ask only for missing required inputs; never claim an unconfirmed write succeeded. "
+                "If the setup already exists in a verified action result, reuse its ID and never "
+                "create it again to finish the same request. "
+                "If the user only asked to create a setup, stop after that confirmed write. "
+                "If a later stage lacks a result, report the saved earlier results and the blocker. "
+                "If the user asks for a separate "
                 "new object, do not revise or update an older draft as a second action. "
                 "A handmatig/manual trade plan uses create_manual_trade_plan. It saves only a "
                 "non-executable plan after confirmation; never route it to manual_order, "
@@ -3907,6 +3929,25 @@ class FinnV2RunService:
             guided_draft=guided_draft, locale=responses_locale,
             user_message=str(getattr(current_run, "message", "") or ""),
         )
+        task_conversations = getattr(self, "conversations", None)
+        record_open_task = getattr(task_conversations, "record_setup_strategy_score_open_step", None)
+        record_score_task = getattr(task_conversations, "record_setup_strategy_score_read", None)
+        if ((next_status == "clarification_required" or response_json.get("proposal_id"))
+                and getattr(runtime_contract, "conversation_id", None) and callable(record_open_task)):
+            await record_open_task(
+                conversation_id=runtime_contract.conversation_id,
+                user_id=user_id, run_id=run_id,
+                question=(str(response_json.get("content") or "")[:1000]
+                          if next_status == "clarification_required" else None),
+                proposal_id=response_json.get("proposal_id"),
+            )
+        elif (next_status == "completed" and getattr(runtime_contract, "conversation_id", None)
+              and callable(record_score_task)):
+            await record_score_task(
+                conversation_id=runtime_contract.conversation_id,
+                user_id=user_id, run_id=run_id,
+                tool_trace=list(dict(contract_state.get("responses_exchange") or {}).get("tool_trace") or []),
+            )
         terminal_reason = self._terminal_reason(
             terminal_status=next_status,
             orchestrator=orchestrator,
@@ -4404,6 +4445,27 @@ class FinnV2RunService:
                         context = await service.conversations.get_context(
                             conversation_id=conversation_id, user_id=user_id,
                         )
+                        from backend.services.finn_v2_task_chain_service import STATE_KEY, requested_task, continuation
+
+                        active_task = dict(context.get(STATE_KEY) or {})
+                        if requested_task(run_message) and active_task.get("completed_steps"):
+                            next_task = continuation(active_task)
+                            if next_task and next_task["step"] == "strategy":
+                                message_override = (
+                                    f"Maak de strategie voor de bestaande opgeslagen setup ID {next_task['setup_id']}. "
+                                    "Vraag ontbrekende verplichte keuzes; maak geen nieuwe setup."
+                                )
+                            elif next_task and next_task["step"] == "score":
+                                pair = str(next_task.get("asset") or "")
+                                if next_task.get("quote_currency"):
+                                    pair += f"/{next_task['quote_currency']}"
+                                message_override = (
+                                    f"Lees de actuele benchmarkscore voor {pair} via get_current_asset_scores. "
+                                    f"De opgeslagen setup is ID {next_task['setup_id']} en de strategie "
+                                    f"ID {next_task['strategy_id']}. Toon deze en de beschikbare score samen."
+                                )
+                            if message_override:
+                                run_message = message_override
                         setup_rule_block = dict(context.get("setup_rule_block") or {})
                         strategy_rule_block = dict(context.get("strategy_rule_block") or {})
                         previous_contract = await service.runtime_contracts.get_latest_for_conversation(

@@ -23,6 +23,7 @@ import { FINN_ASSETS, resolveFeedDraftQuery, selectedFeedItemForSubmission, shou
 import { getActiveSetupId } from "@/lib/setup/activeSetup";
 import { indicatorDisplayName } from "@/lib/indicators/configuredIndicatorRows.mjs";
 import { formatDraftCardValue, formatExecutionMode } from "@/lib/contractValueFormatter.mjs";
+import { buildFinnTaskContinuationPrompt } from "@/lib/ai/finnTaskContinuation.mjs";
 import { clearActiveFinnConversation, readActiveFinnConversation, writeActiveFinnConversation } from "@/lib/finnActiveConversation.mjs";
 import { parseFinnChatText } from "@/lib/finnChatText.mjs";
 import { finnSubmissionLocale } from "@/lib/finnChatLocale.mjs";
@@ -42,6 +43,7 @@ function publicFinnExecutionError(value) {
   const reason = String(value || "").replace(/^\d{3}:\s*/, "").trim();
   if (/^Deze setup is nog gekoppeld aan strategie /.test(reason)) return reason;
   if (/^Deze strategie is nog gekoppeld aan paper-bot /.test(reason)) return reason;
+  if (/^Setup \d+ is opgeslagen; de strategie kon nog niet worden opgeslagen\./.test(reason)) return reason;
   return "Dat lukte niet. Ik heb niets gewijzigd.";
 }
 
@@ -1871,6 +1873,9 @@ function AIAssistantContent({
         );
         const execution = result?.execution || {};
         if (!["succeeded", "already_executed"].includes(execution.status)) {
+          if (execution.task_continuation?.step === "strategy" && /^\d+$/.test(String(execution.task_continuation.setup_id || ""))) {
+            throw new Error(`Setup ${execution.task_continuation.setup_id} is opgeslagen; de strategie kon nog niet worden opgeslagen. Vraag FINN om deze stap opnieuw te proberen met dezelfde setup.`);
+          }
           throw new Error(publicFinnExecutionError(execution.error_codes?.[0]));
         }
         const displayContext = action.display_context || {};
@@ -1967,6 +1972,23 @@ function AIAssistantContent({
           invalidateWatchlist();
         }
         emitFinnRefreshSignals();
+        // This follows a verified write; the next strategy still needs its
+        // own confirmation before it can be persisted.
+        const followup = buildFinnTaskContinuationPrompt(execution.task_continuation);
+        if (followup && typeof execution.continuation_run_id === "string"
+            && execution.continuation_run_id.startsWith("finn-v2-run-")) {
+          const streamId = `stream-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+          activeStreamIdRef.current = streamId;
+          pendingRunRef.current = { streamId, runId: execution.continuation_run_id };
+          setLoading(true);
+          setMessages((prev) => [...prev, {
+            role: "assistant", text: at("draftCards.checking", "Even controleren…"),
+            isComplete: false, streamId,
+          }]);
+          void pollPendingFinnV2Run(execution.continuation_run_id, streamId);
+        } else if (followup) {
+          queueMicrotask(() => { void handleChat(followup, true); });
+        }
         return;
       }
       throw new Error("Dit oudere actievoorstel kan niet meer worden bevestigd. Vraag FINN om een nieuw voorstel.");
