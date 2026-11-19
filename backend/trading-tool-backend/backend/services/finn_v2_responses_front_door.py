@@ -288,6 +288,17 @@ def _explicit_create_operation_request(message: str) -> str | None:
                               r"not|no|without|zonder|kein(?:e|en|em|er|es)?)\b", message, re.I)
             and not _proposal_explicitly_excluded(message)):
         return "create_manual_trade_plan" if manual_plan_request else "create_setup"
+    # A trader may name the new object before the create verb. Keep that
+    # unambiguous request on the same guided contract as the typed classifier;
+    # "sla niets op" limits persistence, not proposal creation.
+    if ("?" not in message and not _proposal_explicitly_excluded(message)
+            and re.match(r"^\s*(?:ik\s+wil|i\s+want|ich\s+m[oö]chte)\b", message, re.I)):
+        facts = FinnV2RequestPreprocessorService().preprocess(message=message)
+        operation = FinnV2OperationClassificationService._explicit_guided_create_operation(
+            message=message, facts=facts,
+        )
+        if operation == "create_setup":
+            return operation
     if "?" in message or _proposal_explicitly_excluded(message) or not re.match(
         r"^\s*(?:maak|cre(?:ate|eer)|erstelle|lege\s+an)\b", message, re.I,
     ) or re.match(r"^\s*maak\s+geen\b", message, re.I):
