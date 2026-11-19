@@ -39,7 +39,6 @@ import FinnTradeReviews from '@/components/report/FinnTradeReviews';
 import { ReportSkeleton } from '@/components/dashboard/DashboardSkeleton';
 import DashboardErrorBoundary from '@/components/ui/DashboardErrorBoundary';
 
-import ReportGenerateOverlay from '@/components/ui/ReportGenerateOverlay';
 import { useModal } from '@/components/modal/ModalProvider';
 import { waitUntilVisible } from '@/hooks/useVisibilityPolling';
 import { actionButtonStyles } from '@/components/ui/actionButtonStyles';
@@ -1774,9 +1773,15 @@ export default function ReportPage() {
   const [loading, setLoading] = useState(true);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [generateInfo, setGenerateInfo] = useState('');
   const [generationNotice, setGenerationNotice] = useState('');
+  const [generationNoticeError, setGenerationNoticeError] = useState(false);
   const [error, setError] = useState('');
+
+  const changeReportType = (nextType) => {
+    setGenerationNotice('');
+    setGenerationNoticeError(false);
+    setReportType(nextType);
+  };
 
   const pollTokenRef = useRef(0);
   const loadTokenRef = useRef(0);
@@ -1954,13 +1959,12 @@ GENERATE
     // An earlier history fetch must not overwrite the report generated below.
     loadTokenRef.current += 1;
     setGenerating(true);
-    setLoading(true);
-    setGenerationNotice('');
-    setGenerateInfo(
-      fromAuto
-        ? `Geen ${fallbackLabel.toLowerCase()} gevonden. We maken nu een nieuwe versie voor je klaar.`
-        : `We genereren nu een nieuw ${fallbackLabel.toLowerCase()}.`
-    );
+    setError('');
+    setGenerationNoticeError(false);
+    const progressMessage = fromAuto
+      ? `Geen ${fallbackLabel.toLowerCase()} gevonden. We maken nu een nieuwe versie voor je klaar.`
+      : `We controleren of een nieuw ${fallbackLabel.toLowerCase()} nodig is.`;
+    setGenerationNotice(progressMessage);
 
     try {
       // The selected history date is not the report being generated. Compare
@@ -1984,7 +1988,9 @@ GENERATE
           showSnackbar(notice, 'info');
           return;
         }
+        throw new Error('existing_report_unavailable');
       }
+      setGenerationNotice(`We maken een nieuw ${fallbackLabel.toLowerCase()}. Het huidige rapport blijft zichtbaar tot de nieuwe versie klaar is.`);
       await pollUntilNewReport(baselineSignature, generation?.status_token);
       setGenerationNotice(`${fallbackLabel} staat klaar`);
       showSnackbar(`${fallbackLabel} staat klaar`, 'success');
@@ -2001,12 +2007,14 @@ GENERATE
         de: 'Der Bericht konnte nicht erstellt werden. Bitte versuche es gleich erneut.',
       };
       const language = normalizeLocale(locale);
-      setError(err?.message === 'ai_rate_limited'
+      const message = err?.message === 'ai_rate_limited'
         ? rateLimitMessage[language] || rateLimitMessage.nl
-        : failureMessage[language] || failureMessage.nl);
+        : failureMessage[language] || failureMessage.nl;
+      setGenerationNoticeError(true);
+      setGenerationNotice(message);
+      setError(message);
     } finally {
       setGenerating(false);
-      setLoading(false);
     }
   };
 
@@ -2043,9 +2051,16 @@ GENERATE
 RENDER
 ===================================================== */
 
+  const generationStatus = generationNotice ? (
+    <p role="status" aria-live="polite" className={`mt-3 rounded-xl border px-4 py-3 text-sm ${generationNoticeError
+      ? 'border-red-200 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200'
+      : 'border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200'}`}>
+      {generationNotice}
+    </p>
+  ) : null;
+
   return (
     <div className="page-container bg-white dark:bg-[#020617] transition-colors min-h-screen">
-      {generating && <ReportGenerateOverlay text={generateInfo} />}
 
       {/* 🟢 STANDARD PAGE HEADER */}
       <header className="page-header border-l-4 border-blue-600 pl-8 mb-16">
@@ -2075,11 +2090,14 @@ RENDER
       </DashboardErrorBoundary>
 
       {!loading && !report && !error && (
-        <section className="mb-8 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
-          <ReportTabs selected={reportType} onChange={setReportType} />
-          <button type="button" onClick={() => handleGenerate(false, 'latest')} disabled={generating} className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
-            {reportT.new}
-          </button>
+        <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <ReportTabs selected={reportType} onChange={changeReportType} />
+            <button type="button" onClick={() => handleGenerate(false)} disabled={generating} className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
+              {reportT.new}
+            </button>
+          </div>
+          {generationStatus}
         </section>
       )}
 
@@ -2094,12 +2112,6 @@ RENDER
            </div>
         </div>
       )}
-      {generationNotice && !generating && (
-        <p role="status" className="mb-6 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200">
-          {generationNotice}
-        </p>
-      )}
-
       {/* 📄 REPORT CONTENT */}
       {loading ? (
         <div className="pt-8">
@@ -2129,14 +2141,18 @@ RENDER
 
                 <div className="px-6 py-6 md:px-8">
                   <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                    <ReportTabs selected={reportType} onChange={setReportType} />
+                    <ReportTabs selected={reportType} onChange={changeReportType} />
 
                     <div className="grid w-full min-w-0 grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900 md:flex md:w-auto md:items-center md:gap-2">
                       <div className="col-span-2 flex min-w-0 items-center gap-2 px-3 py-1 md:border-r md:border-slate-100 dark:md:border-slate-800">
                         <Calendar size={13} className="text-slate-400 dark:text-slate-500" />
                         <select
                           value={selectedDate}
-                          onChange={(e) => loadData(e.target.value)}
+                          onChange={(e) => {
+                            setGenerationNotice('');
+                            setGenerationNoticeError(false);
+                            loadData(e.target.value);
+                          }}
                           className="min-w-0 max-w-full flex-1 appearance-none bg-transparent text-[11px] font-bold text-slate-600 focus:outline-none dark:text-slate-400 md:flex-none"
                         >
                           <option value="latest">{reportT.recent}</option>
@@ -2167,6 +2183,7 @@ RENDER
                       </div>
                     </div>
                   </div>
+                  {generationStatus}
 
                   <div className="mt-8">
                     <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
