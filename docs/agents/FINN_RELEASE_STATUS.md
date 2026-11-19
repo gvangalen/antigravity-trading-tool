@@ -4,6 +4,50 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN-keuzeantwoorden: herstel na onafhankelijke QA (19 november 2026)
+
+Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA_RETEST`. Onafhankelijke QA wees live
+SHA `12bafd2a27924298996e74884445a77f9b130b87` voor de volledige
+setupkeuze-scope af. In de ingelogde Codex-browser kreeg “Ik wil een nieuwe
+BTC-setup maken. Help me stap voor stap” een vraag over EUR/USDT zonder
+keuzeknoppen, terwijl “Maak een nieuwe trade setup voor BTC” die wel gaf.
+“Eigen antwoord” liet de toetsenbordfocus op de knop staan. De 4H→USDT- en
+1D→EUR-routes, vrije naamvraag, herstel na heropenen en scheiding tussen
+concept en opgeslagen plan werkten. De browserproef bewees geen
+polling/SSE-pariteit; QA gaf daarom `NOT_ACCEPTED`, zonder geconstateerde
+order of productiestaatwijziging.
+
+De reparatie in [PR #1194](https://github.com/gvangalen/antigravity-trading-tool/pull/1194)
+herkent een expliciete wens om een nieuwe setup te maken ook wanneer de
+setupnaam vóór het werkwoord staat. “Naam nog niet gekozen” wordt als
+ontbrekende invoer behandeld. De knoppen **Eigen antwoord** en **Verder
+invullen** focussen nu het zichtbare chatveld. De exacte afgewezen QA-zin
+is als regressietest toegevoegd. Productcode staat op de gemergede SHA
+`ee11376bdb7d77031beffdb8c509b6e32c48191e`.
+
+De volledige lokale backend-suite had **5073 geslaagde tests** en 7 bestaande
+skips. De geïsoleerde FastAPI/Celery/PostgreSQL/Redis-actiematrix slaagde
+**17/17**, adapters **27/27**, de Smart DCA-migratieproef en bevestigde
+Smart DCA- en kalender-DCA-opslagproeven slaagden. De matrix bevatte nul
+brokerorders, Live-calls, Live-bots of productieverbindingen (artifact
+SHA-256 `f9e4ddfd9cb0d8304e6e0b99afe2ec80641addf495f7b4b8d675380fe467af23`).
+Echte provider-development slaagde **20/20** (SHA-256
+`529242cf25c14eb07d4fe72521e439ff472acb161e9a3ecb78b97f0bc5a3f95b`)
+en regression **109/109** (SHA-256
+`eddee6142b601b635ca0e49a58ac2009606003f9030d12541b13082f2449cada`),
+zonder provider-, schema-, parse-, validatie- of time-outfouten.
+Frontend-build, typecheck, i18n-lint en -tests, commands, proposals, setups
+en `audit:high` slaagden. Alle vijf PR-CI-jobs slaagden in
+[run 44474874738](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44474874738).
+Alle vijf main-CI-jobs slaagden in
+[run 44475630269](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44475630269),
+en [Auto Deploy 44476307114](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44476307114)
+slaagde. GitHub main, publieke backend-health en frontend-buildinfo
+(beide HTTP 200) meldden alle drie product-SHA
+`ee11376bdb7d77031beffdb8c509b6e32c48191e` op 19 november 2026.
+Deze statuswijziging krijgt zelf een latere main-SHA; Build wacht op de
+laatste CI, Auto Deploy en publieke identiteit vóór de QA-handoff.
+
 ## FINN-keuzeantwoorden bij setupvragen (18 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA`. Product branch
