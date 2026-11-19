@@ -1649,6 +1649,12 @@ def test_guided_pair_choices_match_the_requested_slot_not_prior_question():
 
 def test_guided_choice_options_are_limited_to_supported_questions():
     assert FinnV2OperationStateService.clarification_choice_options(
+        "setup_type", operation_id="create_setup", locale="nl",
+    ) == [
+        {"label": "Trade", "reply": "Trade"},
+        {"label": "DCA", "reply": "DCA"},
+    ]
+    assert FinnV2OperationStateService.clarification_choice_options(
         "dca_frequency", operation_id="create_setup", locale="en",
     ) == [
         {"label": "Daily", "reply": "Daily"},

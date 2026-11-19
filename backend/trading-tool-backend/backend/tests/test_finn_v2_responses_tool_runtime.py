@@ -5933,6 +5933,22 @@ def test_new_sma_plan_keeps_rule_and_daily_candle_when_model_omits_inputs():
     }
 
 
+def test_first_turn_setup_request_reaches_responses_guided_contract():
+    message = (
+        "Ik wil een nieuwe BTC-setup maken. Help me stap voor stap; ik heb het "
+        "analysetijdframe, de handelsvaluta en de naam nog niet gekozen. "
+        "Toon eerst een concept en sla niets op."
+    )
+
+    assert _explicit_create_operation_request(message) == "create_setup"
+    assert _explicit_create_operation_request(
+        "Ik wil weten hoe ik een nieuwe BTC-setup kan maken."
+    ) is None
+    assert _explicit_create_operation_request(
+        "Ik wil geen nieuwe BTC-setup maken."
+    ) is None
+
+
 def test_complete_new_sma_plan_is_ready_for_one_confirmation():
     message = (
         "Maak een nieuw BTC/EUR Trade-plan met naam SMA50 Testplan. "
