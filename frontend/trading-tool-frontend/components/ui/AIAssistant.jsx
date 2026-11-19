@@ -1244,6 +1244,8 @@ function AIAssistantContent({
               setupDraft: reviewedSetupDraft,
               proposalRequestedState: immutableProposalState?.requested_state || null,
               actionDraft: visibleActionDraft,
+              choiceOptions: run?.status === "clarification_required" && verified?.mode === "CLARIFICATION"
+                ? (verified?.choice_options || []) : [],
               reasoning: null,
               canConfirm: Boolean(verified?.confirmation_required && verified?.proposal_id
                 && !setupProposalReviewMissing

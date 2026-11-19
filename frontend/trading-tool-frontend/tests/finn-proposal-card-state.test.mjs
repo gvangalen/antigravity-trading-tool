@@ -1,7 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { inactiveProposalIds, isFinnProposalCorrection, mapBackendSessionMessages, retireEarlierFinnProposalCards, retireFinnProposalCards, setupDraftFrequencyLabel, setupDraftFromProposal, tradeSetupReviewComplete, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "../lib/finnProposalCardState.mjs";
-import { hasConfirmableDraft } from "../lib/finnDraftConversation.mjs";
+import { conversationQuestionChoices, hasConfirmableDraft } from "../lib/finnDraftConversation.mjs";
+
+test("a restored guided question keeps its server-approved reply choices", () => {
+  const [message] = mapBackendSessionMessages([{ role: "assistant", content: "Kies 1D of 4H.",
+    guided_draft: { operation_id: "create_setup", requested_slot: "timeframe",
+      missing_inputs: ["timeframe"], draft_status: "collecting" },
+    choice_options: [{ label: "1D", reply: "1D" }, { label: "4H", reply: "4H" }],
+  }]);
+  assert.equal(hasConfirmableDraft(message), false);
+  assert.deepEqual(conversationQuestionChoices(message), [
+    { label: "1D", reply: "1D" }, { label: "4H", reply: "4H" },
+  ]);
+});
 
 test("only an active server proposal restores its confirmable draft card", () => {
   const messages = mapBackendSessionMessages([

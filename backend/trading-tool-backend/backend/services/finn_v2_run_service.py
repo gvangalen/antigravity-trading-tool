@@ -4048,6 +4048,9 @@ class FinnV2RunService:
         aligned["mode"] = "CLARIFICATION"
         aligned["proposal_id"] = None
         aligned["confirmation_required"] = False
+        aligned["choice_options"] = FinnV2OperationStateService.clarification_choice_options(
+            requested_slot, operation_id=operation_id, locale=locale,
+        )
         return aligned
 
     def _terminal_placeholder_response(

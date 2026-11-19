@@ -4,6 +4,45 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN-keuzeantwoorden bij setupvragen (18 november 2026)
+
+Phase: `BUILD_GATES_PASSED_PENDING_DEPLOY`. Product branch
+`codex/finn-setup-choice-buttons-20261118`, productcode-SHA `409202cca` en
+[PR #1182](https://github.com/gvangalen/antigravity-trading-tool/pull/1182).
+De onafhankelijke QA voor de vorige wekelijkse Smart DCA-keten accepteerde
+live SHA `c3e60c19083278621932d1877568be3abfdb9bdb`. De daaropvolgende Smart DCA-reparaties en hun gerichte, geaccepteerde
+live QA zijn via de huidige main-SHA `a8831b433` in deze branch geïntegreerd.
+Deze keuzeantwoordkandidaat is zelf nog niet live getest.
+
+Bij een begeleide FINN-vraag levert de backend nu begrensde, gestructureerde
+antwoordopties op basis van het daadwerkelijk gevraagde invoerveld. Voor een
+setup-tijdsframe zijn dat `1D` en `4H`; voor een koersvaluta `EUR` en `USDT`;
+voor DCA-frequentie dagelijks, wekelijks en maandelijks. De frontend leidt
+de opties niet meer af uit losse woorden in de vraag. De gebruiker kan met
+**Eigen antwoord** altijd zelf typen. De keuzes blijven zichtbaar na het
+heropenen van het gesprek en sturen alleen een antwoord; opslaan en uitvoeren
+behouden hun afzonderlijke bevestiging. Andere open vragen krijgen geen
+verzonnen opties.
+
+De geïsoleerde lokale FastAPI/Celery/PostgreSQL/Redis/Responses-actiematrix
+slaagde **17/17**, met nul brokerorders, Live-calls, Live-bots of
+productieverbindingen (artifact SHA-256
+`23c8dd96e3e17f4d57e4016ad209b34f77c5335e6569bc028a15c2b81c75d9fd`).
+De adaptertests slaagden **27/27**. Een echte setupconversatie toonde bij
+`timeframe` exact `1D` en `4H`, bij de tussenliggende naamvraag geen
+keuzeknoppen en bij `quote_currency` exact `EUR` en `USDT` in de opgeslagen
+runtime-respons. Real-provider selector development slaagde **20/20**
+(SHA-256 `4776873d71c081fc6ec30e7378276406d84a022f71a24f40eb5fd044c1974746`)
+en regression **109/109**
+(SHA-256 `c48a5c0da7ad8b4d1610c24a8abed732ccfc32cca2c0d0558e2d6aa06a6e6c9c`),
+beide met nul provider-, schema-, parse-, validatie- of timeoutfouten.
+De volledige backend-suite had **5072 geslaagde tests, 7 bestaande skips**.
+Frontend-build, typecheck, i18n-lint en tests, commands, proposals, setups en
+`audit:high` slaagden (nul kwetsbaarheden). Alle vijf PR-CI-jobs slaagden in
+[run 44375020095](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44375020095)
+vóór de integratie met de geaccepteerde Smart DCA-reparaties; CI wordt op
+de definitieve kandidaat herhaald.
+
 ## Smart DCA naam- en grafiekperiode-extractie (18 november 2026)
 
 Phase: `QA_ACCEPTED_TARGETED_SMART_DCA_SCOPE`. Onafhankelijke browser-QA

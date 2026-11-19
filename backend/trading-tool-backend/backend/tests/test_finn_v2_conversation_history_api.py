@@ -44,6 +44,14 @@ def test_v2_history_is_owner_scoped_and_restores_only_visible_text(monkeypatch):
         SimpleNamespace(message="Maak een voorstel", response_json={
             "content": "Dit is het voorstel.", "proposal_id": "old-proposal-secret",
         }),
+        SimpleNamespace(message="Maak een BTC-setup", status="clarification_required", response_json={
+            "content": "Kies 1D of 4H.",
+            "choice_options": [{"label": "1D", "reply": "1D"}, {"label": "4H", "reply": "4H"}],
+            "_runtime_contract_projection": {"setup_draft": {
+                "operation_id": "create_setup", "requested_slot": "timeframe",
+                "missing_inputs": ["timeframe"], "draft_status": "collecting",
+            }},
+        }),
     ]
 
     class _Db:
@@ -92,6 +100,11 @@ def test_v2_history_is_owner_scoped_and_restores_only_visible_text(monkeypatch):
         {"role": "assistant", "content": "Je BTC-setup."},
         {"role": "user", "content": "Maak een voorstel"},
         {"role": "assistant", "content": "Dit is het voorstel."},
+        {"role": "user", "content": "Maak een BTC-setup"},
+        {"role": "assistant", "content": "Kies 1D of 4H.",
+         "guided_draft": {"operation_id": "create_setup", "requested_slot": "timeframe",
+                          "missing_inputs": ["timeframe"], "draft_status": "collecting"},
+         "choice_options": [{"label": "1D", "reply": "1D"}, {"label": "4H", "reply": "4H"}]},
     ]
     assert foreign.status_code == 404
 

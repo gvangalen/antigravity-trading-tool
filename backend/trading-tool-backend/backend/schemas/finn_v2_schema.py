@@ -116,6 +116,14 @@ class PolicyDecision(BaseModel):
     execute_allowed: bool = False
 
 
+class ReplyChoice(BaseModel):
+    label: constr(min_length=1, max_length=80)
+    reply: constr(min_length=1, max_length=80)
+
+    class Config:
+        extra = "forbid"
+
+
 class VerifiedResponse(BaseModel):
     mode: InteractionMode = "UNAVAILABLE"
     content: str = ""
@@ -125,6 +133,7 @@ class VerifiedResponse(BaseModel):
     uncertainty: List[str] = Field(default_factory=list)
     proposal_id: Optional[str] = None
     confirmation_required: bool = False
+    choice_options: List[ReplyChoice] = Field(default_factory=list, max_items=3)
     # Shared terminal projection for polling and SSE.
     next_step: Optional[Dict[str, Any]] = None
     reasoning_provenance: Dict[str, Any] = Field(default_factory=dict)
