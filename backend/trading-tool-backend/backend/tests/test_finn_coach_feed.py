@@ -49,6 +49,41 @@ def test_watchlist_feed_reads_exact_owned_row_before_publishing():
     assert arguments["revision"].startswith("71:")
 
 
+def test_chat_watchlist_addition_is_recorded_without_repeating_in_active_feed(monkeypatch):
+    feed = SimpleNamespace(
+        publish_watchlist_addition=AsyncMock(return_value="feed-item"),
+        set_status=AsyncMock(),
+    )
+    monkeypatch.setattr(module, "FinnCoachFeedService", lambda session: feed)
+    session = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
+
+    asyncio.run(module.record_watchlist_feed_change(
+        session, user_id=7, symbol="BTC", market_id=34,
+        added=True, discussed_in_chat=True,
+    ))
+
+    feed.set_status.assert_awaited_once_with(
+        user_id=7, item_id="feed-item", status="handled",
+    )
+    session.commit.assert_awaited_once()
+
+
+def test_web_watchlist_addition_remains_unread_for_feed(monkeypatch):
+    feed = SimpleNamespace(
+        publish_watchlist_addition=AsyncMock(return_value="feed-item"),
+        set_status=AsyncMock(),
+    )
+    monkeypatch.setattr(module, "FinnCoachFeedService", lambda session: feed)
+    session = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
+
+    asyncio.run(module.record_watchlist_feed_change(
+        session, user_id=7, symbol="BTC", market_id=34, added=True,
+    ))
+
+    feed.set_status.assert_not_awaited()
+    session.commit.assert_awaited_once()
+
+
 def test_journey_cards_use_exact_market_and_resolve_when_strategy_exists(monkeypatch):
     class Rows:
         def __init__(self, values):

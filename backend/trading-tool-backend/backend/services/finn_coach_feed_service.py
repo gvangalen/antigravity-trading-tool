@@ -1460,7 +1460,17 @@ class FinnCoachFeedService:
                     WHERE p.id=f.subject_id
                       AND p.user_id=:user_id AND p.status IN ('draft','pending_confirmation')
                       AND p.expires_at > NOW()))
-            ORDER BY CASE
+            ORDER BY CASE WHEN :history THEN 0 ELSE
+                CASE
+                  WHEN f.status='unread' AND f.priority >= 4 THEN 30 + f.priority
+                  WHEN f.status='unread'
+                    AND f.event_type IN ('daily_report_ready','periodic_report_ready','weekly_reflection')
+                    AND f.created_at >= NOW() - INTERVAL '36 hours' THEN 25
+                  WHEN f.status='unread' THEN 20 + COALESCE(f.priority, 0)
+                  ELSE COALESCE(f.priority, 0)
+                END
+              END DESC,
+              CASE
                 WHEN f.event_type='bot_decision'
                   THEN COALESCE(f.source_observed_at, f.created_at)
                 ELSE f.created_at
@@ -1744,14 +1754,20 @@ class FinnCoachFeedService:
 
 
 async def record_watchlist_feed_change(session, *, user_id: int, symbol: str,
-                                       market_id: int | None, added: bool) -> None:
+                                       market_id: int | None, added: bool,
+                                       discussed_in_chat: bool = False) -> None:
     """Best-effort feed update after a committed watchlist write."""
     try:
         feed = FinnCoachFeedService(session)
         if added:
-            await feed.publish_watchlist_addition(
+            item_id = await feed.publish_watchlist_addition(
                 user_id=user_id, symbol=symbol, market_id=market_id,
             )
+            if discussed_in_chat and item_id:
+                # FINN has already delivered this action in the conversation.
+                # Preserve the event in history without repeating it as a
+                # fresh prompt in the short feed.
+                await feed.set_status(user_id=user_id, item_id=item_id, status="handled")
         else:
             await feed.resolve(
                 user_id=user_id,

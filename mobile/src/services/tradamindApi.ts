@@ -131,6 +131,7 @@ export type MobileCoachFeedItem = {
   status: 'unread' | 'read' | 'handled' | 'archived' | 'resolved';
   priority: number;
   created_at: string;
+  activity_at?: string | null;
   source_observed_at?: string | null;
   updated_at: string;
 };

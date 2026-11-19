@@ -4,6 +4,28 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 actieve feedselectie (19 november 2026)
+
+Phase: `LOCAL_BUILD_VALIDATED`. Deze kandidaat staat nog niet live en heeft
+geen onafhankelijk QA-verdict. De feed kiest voortaan op ongelezen status en
+belang: risico en open bevestigingen eerst, daarna een recent rapport en de
+overige vervolgstappen. Een via **Bespreek** geopende kaart verhuist naar de
+geschiedenis; een watchlisttoevoeging die FINN zelf in de chat heeft uitgevoerd
+wordt wel vastgelegd maar niet opnieuw als actieve oproep getoond. Web en
+mobiel gebruiken dezelfde selectiegrenzen. De historische feed blijft op
+gebeurtenistijd gesorteerd. Er is geen handelsactie of bevestigingsgrens
+gewijzigd.
+
+Lokale metingen: root pytest **5107 geslaagd, 7 overgeslagen**; gerichte
+feed-, watchlist- en uitvoeringsregressies **85 geslaagd**; webproductiebouw,
+typecheck, i18n-lint, i18n-tests **44 geslaagd**, commandtests **91 geslaagd**,
+mobiele typecheck, lint (0 fouten, 89 waarschuwingen),
+`test:chat` **23 geslaagd** en webbundle-export geslaagd. Een ingelogde
+liveproef, CI, Auto Deploy en de officiële onafhankelijke QA-matrix zijn voor
+deze kandidaat nog niet uitgevoerd. De bestaande FINN-actiecontracten en
+Responses-providerselectie zijn niet gewijzigd; een eventuele release volgt
+pas na de toepasselijke releasegates en identiteitscontrole.
+
 ## FINN 3.0 brongebonden AAPL-botcheck en coachvragen (19 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_READY_FOR_INDEPENDENT_QA`. Op verzoek van de gebruiker gaat deze
