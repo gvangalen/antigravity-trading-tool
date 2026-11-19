@@ -473,7 +473,7 @@ def retry_coach_feed_copy():
 
 @shared_task(name="backend.celery_task.store_daily_scores_task.recover_coach_feed_events")
 def recover_coach_feed_events():
-    """Recover new persisted Paper events; the score sweep rechecks plans."""
+    """Recover persisted Paper decisions and ready daily reports."""
     conn = get_db_connection()
     if conn is None:
         return 0
@@ -505,6 +505,23 @@ def recover_coach_feed_events():
                 ORDER BY d.id LIMIT 12
             """)
             decisions = cur.fetchall()
+            cur.execute("""
+                SELECT r.user_id, r.report_date
+                FROM daily_reports r
+                WHERE r.generated_at >= NOW() - INTERVAL '48 hours'
+                  AND EXISTS (
+                    SELECT 1 FROM report_snapshots s
+                    WHERE s.user_id=r.user_id AND s.report_type='daily'
+                      AND s.report_id=0
+                  )
+                  AND NOT EXISTS (
+                    SELECT 1 FROM finn_coach_feed_items f
+                    WHERE f.user_id=r.user_id
+                      AND f.event_key='daily-report:' || r.report_date::TEXT
+                  )
+                ORDER BY r.generated_at DESC LIMIT 12
+            """)
+            reports = cur.fetchall()
         conn.commit()
     finally:
         conn.close()
@@ -515,6 +532,14 @@ def recover_coach_feed_events():
             dispatched += 1
         except Exception:
             logger.warning("FINN feed Paper recovery dispatch failed", exc_info=True)
+    from backend.celery_task.daily_report_task import _publish_daily_report_ready_feed
+
+    for user_id, report_date in reports:
+        try:
+            _publish_daily_report_ready_feed(user_id, report_date)
+            dispatched += 1
+        except Exception:
+            logger.warning("FINN feed daily report recovery failed", exc_info=True)
     return dispatched
 
 

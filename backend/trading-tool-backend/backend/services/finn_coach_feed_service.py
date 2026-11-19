@@ -371,10 +371,11 @@ def _fallback(kind: str, subject: str, evidence: dict, *, focus: str = "brief") 
                          + _plan_score_phrase(evidence, locale)}
                 for index, locale in enumerate(LOCALES)}
     if kind == "daily_report_ready":
+        report_date = str(evidence.get("report_date") or "")[:10]
         return {
-            "nl": {"title": "Je dagrapport staat klaar", "body": "Lees wat er is veranderd en wat volgens je plan aandacht vraagt."},
-            "en": {"title": "Your daily report is ready", "body": "See what changed and what needs attention in your plan."},
-            "de": {"title": "Dein Tagesbericht ist bereit", "body": "Lies, was sich geändert hat und was in deinem Plan Aufmerksamkeit braucht."},
+            "nl": {"title": "Je dagrapport staat klaar", "body": f"Dagrapport van {report_date}. Lees wat er is veranderd en wat volgens je plan aandacht vraagt."},
+            "en": {"title": "Your daily report is ready", "body": f"Daily report for {report_date}. See what changed and what needs attention in your plan."},
+            "de": {"title": "Dein Tagesbericht ist bereit", "body": f"Tagesbericht für {report_date}. Lies, was sich geändert hat und was in deinem Plan Aufmerksamkeit braucht."},
         }
     if kind == "weekly_reflection":
         try:

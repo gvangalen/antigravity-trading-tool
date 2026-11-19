@@ -332,6 +332,7 @@ def test_daily_report_notification_has_one_factual_translation_per_locale():
     assert set(copy) == {"nl", "en", "de"}
     assert all(item["body"] for item in copy.values())
     assert "staat klaar" in copy["nl"]["title"]
+    assert "2026-11-04" in copy["nl"]["body"]
     assert "Paper" not in copy["nl"]["body"]
 
 

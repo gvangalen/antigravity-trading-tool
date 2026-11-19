@@ -8,6 +8,7 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 import { fetchAuth } from "@/lib/api/auth";
 import { coachFeedHistoryCursor, readCoachFeedWithRetry } from "@/lib/finnCoachFeedRead.mjs";
 import { coachFeedDetailsHref } from "@/lib/finnCoachFeedLinks.mjs";
+import { visibleCoachFeedItems } from "@/lib/finnCoachFeedVisible.mjs";
 import { canDiscussFeedItem, canUpdateFeedStatus } from "@/lib/finnCoachFeedActions.mjs";
 import { coachFeedDiscussionQuestion } from "@/lib/finnCommandSearch";
 import { formatAmsterdamTimestamp } from "@/lib/time/formatUtcTimestamp.mjs";
@@ -137,7 +138,7 @@ export default function FinnCoachFeed({ onDiscuss }) {
   };
 
   const scopedItems = itemsOwner === user?.id && itemsLocale === locale ? items : [];
-  const visible = error ? [] : history ? scopedItems : scopedItems.slice(0, 3);
+  const visible = error ? [] : history ? scopedItems : visibleCoachFeedItems(scopedItems);
   const initialLoadPending = sessionChecked && Boolean(user?.id) && !error &&
     (itemsOwner !== user.id || itemsLocale !== locale);
   return (
