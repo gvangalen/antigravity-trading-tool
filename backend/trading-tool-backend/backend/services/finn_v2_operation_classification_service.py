@@ -670,6 +670,17 @@ class FinnV2OperationClassificationService:
         )
         if strategy_after_setup or strategy_before_new_setup:
             return "create_setup"
+        # A user can state the object before the create verb: "Ik wil een
+        # nieuwe BTC-setup maken. Help me stap voor stap." That is still a
+        # request to start guided collection, even when no slots are known.
+        if (
+            explicitly_new_setup
+            and re.search(r"^\s*(?:ik\s+wil|i\s+want|ich\s+m[oö]chte)\b", text)
+            and re.search(r"\b(?:maak|maken|make|create|cre[eë]ren|erstellen)\b", text[new_setup.end():])
+            and not re.search(r"\b(?:niet|not|kein(?:e|en|er|es)?)\b", text[:new_setup.end()])
+            and not re.search(r"\b(?:weten|know|wissen)\s+(?:hoe|how|wie)\b", text[:new_setup.start()])
+        ):
+            return "create_setup"
         # The setup can be a named parent rather than the requested object.
         # Allow that parent phrase before an indefinite strategy target,
         # without promoting a bare mention of an existing strategy to CREATE.
