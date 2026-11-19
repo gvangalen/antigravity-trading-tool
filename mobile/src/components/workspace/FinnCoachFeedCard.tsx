@@ -5,8 +5,8 @@ import { View } from 'react-native';
 import { MobileFINNFeed } from '../assistant/MobileFINNFeed';
 import { useFinnOverlay } from '../../contexts/FinnOverlayContext';
 import { useAppPreferences } from '../../preferences/AppPreferencesProvider';
-import { translate } from '../../i18n';
 import { coachFeedApi, type MobileCoachFeedItem } from '../../services/tradamindApi';
+import { coachFeedDiscussionPrompt, coachFeedQuoteCurrency } from '../../services/coachFeedDiscussion';
 import { useAuth } from '../../auth/AuthProvider';
 import type { MainTabParamList } from '../../navigation/MainTabNavigator';
 
@@ -55,9 +55,10 @@ export function FinnCoachFeedCard() {
   const handleDiscuss = (item: MobileCoachFeedItem) => {
     void coachFeedApi.mark(item.id, 'read').then(refresh).catch(() => {});
     openFinn({
-      prefill: `${translate(language, 'finn.feedDiscussQuery')} ${item.evidence?.subject || item.title}`,
+      prefill: coachFeedDiscussionPrompt(item, language),
       source: 'coach-feed',
       symbol: item.symbol || undefined,
+      quoteCurrency: coachFeedQuoteCurrency(item),
       feedItemId: item.id,
     });
   };

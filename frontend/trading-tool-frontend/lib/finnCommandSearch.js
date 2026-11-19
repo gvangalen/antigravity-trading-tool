@@ -40,6 +40,8 @@ export function coachFeedDiscussionQuestion(item, locale = "nl") {
       data: `Bespreek deze melding over ontbrekend scorebewijs voor ${setupName ? `setup ${setup}` : asset}: ${title}. Controleer de opgeslagen setup, bronstatus en score.${pair ? ` Gebruik ${pair} als exact handelspaar.` : pairUnset ? " Zeg expliciet dat bij deze setup geen handelspaar is opgeslagen." : " Leid geen handelspaar af uit alleen het assetsymbool."}`,
       weekly: `Bespreek mijn opgeslagen weekreflectie${week ? ` van ${week}` : ""}. Lees de afgesloten trades en noem alleen patronen die door de dossiers zijn onderbouwd.`,
       watchlist: `Bekijk mijn watchlist-notering ${asset}. Controleer de huidige indicatoren en benchmark ${exactWatchlistPair ? "voor dit exacte handelspaar" : "voor deze asset; leid geen handelspaar af"} en adviseer welke volgende analysestap logisch is. Doe alleen een voorstel; wijzig of sla niets op.`,
+      analysis: `Controleer de actuele benchmark en bronmomenten voor ${asset}. Adviseer of een setup een logische volgende stap is en welke keuze nog van mij nodig is. Maak niets aan.`,
+      strategy: `Controleer of setup ${setup} voor ${asset} nog bestaat en of er inmiddels een strategie aan is gekoppeld. Zo niet, adviseer welke strategie past en welke gegevens je van mij nodig hebt. Maak niets aan.`,
       other: `Bespreek deze melding voor ${asset || "mijn account"}: ${title}. Lees de bijbehorende bron en actuele status opnieuw.`,
     },
     en: {
@@ -48,6 +50,8 @@ export function coachFeedDiscussionQuestion(item, locale = "nl") {
       data: `Discuss this missing score evidence for ${setupName ? `setup ${setup}` : asset}: ${title}. Check the saved setup, source status and score.${pair ? ` Use ${pair} as the exact trading pair.` : pairUnset ? " State explicitly that this setup has no saved trading pair." : " Do not infer a trading pair from the asset symbol alone."}`,
       weekly: `Discuss my saved weekly reflection${week ? ` for ${week}` : ""}. Read the closed trades and mention only patterns supported by the records.`,
       watchlist: `Review my watchlist listing ${asset}. Check the current indicators and benchmark ${exactWatchlistPair ? "for this exact trading pair" : "for this asset; do not infer a trading pair"} and suggest a logical next analysis step. Only advise; do not change or save anything.`,
+      analysis: `Check the current benchmark and source times for ${asset}. Advise whether a setup is a logical next step and what choice you still need from me. Create nothing.`,
+      strategy: `Check whether setup ${setup} for ${asset} still exists and whether a strategy is linked now. If not, advise which strategy fits and what details you need from me. Create nothing.`,
       other: `Discuss this update for ${asset || "my account"}: ${title}. Recheck its source and current status.`,
     },
     de: {
@@ -56,6 +60,8 @@ export function coachFeedDiscussionQuestion(item, locale = "nl") {
       data: `Besprich diese Meldung über fehlende Score-Daten für ${setupName ? `Setup ${setup}` : asset}: ${title}. Prüfe das gespeicherte Setup, den Quellenstatus und den Score.${pair ? ` Verwende ${pair} als genaues Handelspaar.` : pairUnset ? " Sage ausdrücklich, dass für dieses Setup kein Handelspaar gespeichert ist." : " Leite aus dem Assetsymbol allein kein Handelspaar ab."}`,
       weekly: `Besprich meine gespeicherte Wochenreflexion${week ? ` vom ${week}` : ""}. Lies die abgeschlossenen Trades und nenne nur belegte Muster.`,
       watchlist: `Prüfe meine Watchlist-Notierung ${asset}. Prüfe die aktuellen Indikatoren und den Benchmark ${exactWatchlistPair ? "für dieses genaue Handelspaar" : "für diesen Wert; leite kein Handelspaar ab"} und schlage den nächsten sinnvollen Analyseschritt vor. Berate nur; ändere oder speichere nichts.`,
+      analysis: `Prüfe den aktuellen Benchmark und die Quellenzeitpunkte für ${asset}. Empfiehl, ob ein Setup ein sinnvoller nächster Schritt ist und welche Entscheidung du von mir brauchst. Erstelle nichts.`,
+      strategy: `Prüfe, ob Setup ${setup} für ${asset} noch besteht und inzwischen eine Strategie verknüpft ist. Falls nicht, empfehle eine passende Strategie und nenne die benötigten Angaben. Erstelle nichts.`,
       other: `Besprich diese Meldung für ${asset || "mein Konto"}: ${title}. Prüfe Quelle und aktuellen Status erneut.`,
     },
   };
@@ -64,6 +70,8 @@ export function coachFeedDiscussionQuestion(item, locale = "nl") {
     : ["plan_review", "plan_match"].includes(item?.event_type) ? "plan"
       : item?.event_type === "data_blocked" ? "data"
       : item?.event_type === "watchlist_added" ? "watchlist"
+      : item?.event_type === "analysis_ready" ? "analysis"
+      : item?.event_type === "strategy_next_step" ? "strategy"
       : item?.event_type === "weekly_reflection" ? "weekly" : "other";
   return copy[kind];
 }

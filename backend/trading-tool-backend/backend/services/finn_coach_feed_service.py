@@ -296,6 +296,19 @@ def _fallback(kind: str, subject: str, evidence: dict, *, focus: str = "brief") 
             "de": {"title": f"{name} steht auf deiner Watchlist",
                    "body": "Prüfe die Indikatoren und den Benchmark dieser Notierung. FINN kann einen nächsten Analyseschritt vorschlagen; an deiner Analyse wurde nichts geändert."},
         }
+    if kind == "analysis_ready":
+        return {
+            "nl": {"title": f"Analyse voor {name} is bruikbaar", "body": "De opgeslagen benchmark heeft controleerbare scores. Bespreek of een setup bij jouw plan past; er is niets aangemaakt."},
+            "en": {"title": f"Analysis for {name} is ready", "body": "The saved benchmark has verifiable scores. Discuss whether a setup fits your plan; nothing was created."},
+            "de": {"title": f"Analyse für {name} ist bereit", "body": "Der gespeicherte Benchmark hat überprüfbare Scores. Besprich, ob ein Setup zu deinem Plan passt; nichts wurde erstellt."},
+        }
+    if kind == "strategy_next_step":
+        pair = str(evidence.get("trading_pair") or evidence.get("symbol") or "").strip()[:30]
+        return {
+            "nl": {"title": f"Strategie voor {name} ontbreekt", "body": f"Deze opgeslagen setup voor {pair} heeft nog geen gekoppelde strategie. Bespreek de vervolgstap; er is niets aangemaakt of geactiveerd."},
+            "en": {"title": f"Strategy for {name} is missing", "body": f"This saved setup for {pair} has no linked strategy yet. Discuss the next step; nothing was created or activated."},
+            "de": {"title": f"Strategie für {name} fehlt", "body": f"Dieses gespeicherte Setup für {pair} hat noch keine verknüpfte Strategie. Besprich den nächsten Schritt; nichts wurde erstellt oder aktiviert."},
+        }
     if kind == "bot_decision":
         return _bot_fallback(name, evidence)
     if kind == "position_risk":
@@ -598,7 +611,7 @@ class FinnCoachFeedService:
                       expires_at: datetime | None = None,
                       revision: str | None = None) -> str | None:
         """One row per owner/event. Unchanged evidence never reopens or regenerates."""
-        if not event_key or event_type not in {"plan_match", "plan_review", "position_risk", "weekly_reflection", "improvement_suggestion", "data_blocked", "proposal_pending", "market_move", "bot_decision", "live_bot_paused", "daily_report_ready", "periodic_report_ready", "watchlist_added"}:
+        if not event_key or event_type not in {"plan_match", "plan_review", "position_risk", "weekly_reflection", "improvement_suggestion", "data_blocked", "proposal_pending", "market_move", "bot_decision", "live_bot_paused", "daily_report_ready", "periodic_report_ready", "watchlist_added", "analysis_ready", "strategy_next_step"}:
             raise ValueError("feed_event_invalid")
         facts = {**evidence, "subject": str(subject or "")[:120]}
         digest = hashlib.sha256(str(revision or _json(facts)).encode()).hexdigest()
@@ -730,7 +743,7 @@ class FinnCoachFeedService:
             "copy_json": _json(_fallback(event_type, subject, facts)),
             "copy_source": ("verified_facts" if event_type in {
                                 "position_risk", "weekly_reflection", "improvement_suggestion",
-                                "bot_decision", "watchlist_added"} or event_type == "data_blocked" and facts.get("bot_id")
+                                "bot_decision", "watchlist_added", "analysis_ready", "strategy_next_step"} or event_type == "data_blocked" and facts.get("bot_id")
                             else "fact_fallback"),
             "expires_at": expires_at,
         })
@@ -769,6 +782,102 @@ class FinnCoachFeedService:
             priority=1, expires_at=datetime.now(timezone.utc) + timedelta(days=7),
             revision=f"{saved['id']}:{saved['created_at']}",
         )
+
+    async def reconcile_journey_next_steps(self, *, user_id: int, symbol: str,
+                                           market_id: int | None = None) -> list[str]:
+        """Offer a read-only next step for a verified benchmark or orphan setup."""
+        from backend.infrastructure.repositories.setup_repository import SetupRepository
+        from backend.services.setup_market_match_service import SetupMarketMatchService
+
+        asset = str(symbol or "").strip().upper()
+        if not re.fullmatch(r"[A-Z0-9][A-Z0-9._-]{0,19}", asset):
+            raise ValueError("asset_symbol_invalid")
+        if market_id is not None and (type(market_id) is not int or market_id <= 0):
+            raise ValueError("exact_market_scope_required")
+        scope = {"user_id": user_id, "symbol": asset, "market_id": market_id}
+        listing_result = await self.session.execute(text("""
+            SELECT w.id, m.quote_currency
+            FROM watchlists w LEFT JOIN trading_markets m ON m.id=w.market_id
+            WHERE w.user_id=:user_id AND w.symbol=:symbol
+              AND w.market_id IS NOT DISTINCT FROM :market_id
+            LIMIT 1
+        """), scope)
+        listing = listing_result.mappings().first()
+        quote = str((listing or {}).get("quote_currency") or "").strip().upper()
+        if market_id is not None and not re.fullmatch(r"[A-Z]{2,12}", quote):
+            return []
+        pair = f"{asset}/{quote}" if quote else asset
+        key = f"analysis-ready:{asset}:{market_id if market_id is not None else 'asset'}"
+        setups = [dict(row) for row in await SetupRepository(self.session).get_all_setups(user_id)
+                  if str(row.get("symbol") or "").upper() == asset
+                  and row.get("market_id") == market_id]
+        created: list[str] = []
+        if listing and not setups:
+            assessment = await SetupMarketMatchService(self.session).for_asset(
+                user_id, asset, setups=[], market_id=market_id,
+            )
+            if assessment.get("source_status") == "available" and assessment.get("benchmark_score") is not None:
+                item = await self.publish(
+                    user_id=user_id, event_key=key, event_type="analysis_ready",
+                    subject_type="asset", subject_id=str(listing["id"]),
+                    subject=pair, symbol=asset, priority=2,
+                    evidence={"symbol": asset, "trading_pair": pair, "market_id": market_id,
+                              "source_status": "available", "score_as_of": str(assessment.get("as_of") or "")},
+                    revision="available", expires_at=datetime.now(timezone.utc) + timedelta(days=14),
+                )
+                if item:
+                    created.append(item)
+                await self.resolve(
+                    user_id=user_id,
+                    event_key=self.watchlist_event_key(asset, market_id),
+                )
+            else:
+                await self.resolve(user_id=user_id, event_key=key)
+        else:
+            await self.resolve(user_id=user_id, event_key=key)
+            if setups:
+                await self.resolve(
+                    user_id=user_id,
+                    event_key=self.watchlist_event_key(asset, market_id),
+                )
+
+        strategy_result = await self.session.execute(text("""
+            SELECT DISTINCT setup_id FROM strategies
+            WHERE user_id=:user_id AND setup_id = ANY(:setup_ids)
+        """), {"user_id": user_id, "setup_ids": [int(s["id"]) for s in setups]}) if setups else None
+        linked = {int(row[0]) for row in strategy_result.all()} if strategy_result else set()
+        now = datetime.now(timezone.utc)
+        active_keys: set[str] = set()
+        for setup in setups:
+            setup_id = int(setup["id"])
+            created_at = setup.get("created_at")
+            if setup_id in linked or not isinstance(created_at, datetime):
+                continue
+            created_utc = created_at.replace(tzinfo=timezone.utc) if created_at.tzinfo is None else created_at.astimezone(timezone.utc)
+            if now - created_utc < timedelta(minutes=15):
+                continue  # Give a combined setup → strategy chat task time to finish.
+            strategy_key = f"strategy-next-step:{setup_id}"
+            active_keys.add(strategy_key)
+            item = await self.publish(
+                user_id=user_id, event_key=strategy_key, event_type="strategy_next_step",
+                subject_type="setup", subject_id=str(setup_id),
+                subject=str(setup.get("name") or pair), symbol=asset, priority=2,
+                evidence={"symbol": asset, "trading_pair": pair, "market_id": market_id,
+                          "setup_id": setup_id, "setup_name": str(setup.get("name") or "")[:120]},
+                revision=f"setup:{setup_id}", expires_at=now + timedelta(days=14),
+            )
+            if item:
+                created.append(item)
+        previous = await self.session.execute(text("""
+            SELECT DISTINCT event_key FROM finn_coach_feed_items
+            WHERE user_id=:user_id AND event_type='strategy_next_step' AND symbol=:symbol
+              AND evidence->>'market_id' IS NOT DISTINCT FROM :market_id_text
+              AND status IN ('unread','read')
+        """), {**scope, "market_id_text": str(market_id) if market_id is not None else None})
+        for row in previous.mappings().all():
+            if row["event_key"] not in active_keys:
+                await self.resolve(user_id=user_id, event_key=str(row["event_key"]))
+        return created
 
     async def resolve(self, *, user_id: int, event_key: str) -> None:
         await self.session.execute(text("""

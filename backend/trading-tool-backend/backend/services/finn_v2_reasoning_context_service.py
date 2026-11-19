@@ -293,7 +293,7 @@ class FinnV2ReasoningContextService:
             historical = {}
             for key in ("status", "match_status", "plan_status", "source_status",
                         "market_id", "trading_pair", "direction", "change_24h", "benchmark_score",
-                        "setup_name", "trading_pair_status",
+                        "setup_name", "setup_id", "trading_pair_status",
                         "score_as_of", "conditions", "components",
                         "component_source_status", "source_observed_at",
                         "quote_source_observed_at",
@@ -337,7 +337,7 @@ class FinnV2ReasoningContextService:
             current_source = "owner_scoped_current_score"
             current_as_of = datetime.now(timezone.utc)
             if symbol and event_type in {"plan_match", "plan_review", "data_blocked", "market_move",
-                                         "improvement_suggestion"}:
+                                         "improvement_suggestion", "analysis_ready", "strategy_next_step"}:
                 from backend.services.setup_market_match_service import SetupMarketMatchService
                 matcher = SetupMarketMatchService(self.session)
                 selected_setup_id = (item.get("subject_id") if subject == "setup" else None)
@@ -356,7 +356,7 @@ class FinnV2ReasoningContextService:
                         market_id=owned_setup.get("market_id") if owned_setup else None,
                     )
                 else:
-                    if event_type == "improvement_suggestion":
+                    if event_type in {"improvement_suggestion", "analysis_ready", "strategy_next_step"}:
                         market_id = recorded.get("market_id")
                         if type(market_id) is not int or market_id <= 0:
                             market_id = None
@@ -367,6 +367,12 @@ class FinnV2ReasoningContextService:
                 current_facts = {"feed_item_id": item_id,
                                  "current_source_status": assessment.get("source_status"),
                                  "current_trade_signal_confirmed": False}
+                if event_type in {"analysis_ready", "strategy_next_step"}:
+                    current_facts["current_benchmark_score"] = (
+                        assessment.get("benchmark_score")
+                        if assessment.get("source_status") == "available" else None
+                    )
+                    current_facts["current_score_as_of"] = str(assessment.get("as_of") or "")
                 if selected_setup_id:
                     current = next((match for match in assessment.get("matches", [])
                                     if str(match.get("setup_id")) == str(selected_setup_id)), None)
@@ -384,8 +390,23 @@ class FinnV2ReasoningContextService:
                                                if (current or owned_setup) else None)
                 if event_type in {"data_blocked", "improvement_suggestion"}:
                     current_facts["current_component_source_status"] = assessment.get("component_source_status")
+                if event_type == "strategy_next_step":
+                    strategy_row = None
+                    if owned_setup:
+                        strategy_result = await self.session.execute(text("""
+                            SELECT id, name FROM strategies
+                            WHERE user_id=:user_id AND setup_id=:setup_id
+                            ORDER BY created_at DESC, id DESC LIMIT 1
+                        """), {"user_id": run.user_id, "setup_id": int(owned_setup["id"])})
+                        strategy_row = strategy_result.mappings().first()
+                    current_facts["current_linked_strategy"] = (
+                        {"id": strategy_row["id"], "name": strategy_row["name"]}
+                        if strategy_row else {"status": "missing" if owned_setup else "setup_unavailable"}
+                    )
                 current_available = assessment.get("source_status") == "available"
-                if event_type == "improvement_suggestion":
+                if event_type == "strategy_next_step":
+                    current_available = bool(owned_setup)
+                if event_type in {"improvement_suggestion", "analysis_ready", "strategy_next_step"}:
                     score_row = getattr(matcher, "last_source_row", None) or {}
                     current_as_of = self._parse_feed_moment(score_row.get("calculated_at"))
             elif event_type == "position_risk" and subject == "bot" and item.get("subject_id"):

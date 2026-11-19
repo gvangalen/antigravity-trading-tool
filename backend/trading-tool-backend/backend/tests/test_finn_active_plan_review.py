@@ -227,6 +227,10 @@ def test_pair_score_worker_routes_only_the_exact_plan_review(monkeypatch):
             calls.append(("improvement", kwargs))
             return []
 
+        async def reconcile_journey_next_steps(self, **kwargs):
+            calls.append(("journey", kwargs))
+            return []
+
     monkeypatch.setattr("backend.infrastructure.database.async_session_factory", Context)
     monkeypatch.setattr(feed, "FinnCoachFeedService", Coach)
     monkeypatch.setattr("backend.celery_task.finn_v2_task._run_async", lambda coro: asyncio.run(coro))
@@ -236,6 +240,7 @@ def test_pair_score_worker_routes_only_the_exact_plan_review(monkeypatch):
     assert calls == [{"user_id": 42, "symbol": "BTC", "market_id": 11},
                      ("bot-indicator-review", {"user_id": 42, "symbol": "BTC", "market_id": 11}),
                      ("improvement", {"user_id": 42, "symbol": "BTC", "market_id": 11}),
+                         ("journey", {"user_id": 42, "symbol": "BTC", "market_id": 11}),
                      "commit", (42, "item-1")]
 
 

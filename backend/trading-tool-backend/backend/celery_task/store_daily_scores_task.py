@@ -317,6 +317,9 @@ def reconcile_coach_feed_score(user_id: int, symbol: str, market_id: int | None 
             item_ids += await coach.reconcile_improvement_suggestions(
                 user_id=user_id, symbol=symbol, market_id=market_id,
             )
+            item_ids += await coach.reconcile_journey_next_steps(
+                user_id=user_id, symbol=symbol, market_id=market_id,
+            )
             await session.commit()
             return item_ids
 

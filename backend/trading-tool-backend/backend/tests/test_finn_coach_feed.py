@@ -49,6 +49,123 @@ def test_watchlist_feed_reads_exact_owned_row_before_publishing():
     assert arguments["revision"].startswith("71:")
 
 
+def test_journey_cards_use_exact_market_and_resolve_when_strategy_exists(monkeypatch):
+    class Rows:
+        def __init__(self, values):
+            self.values = values
+
+        def mappings(self):
+            return self
+
+        def first(self):
+            return self.values[0] if self.values else None
+
+        def all(self):
+            return self.values
+
+
+    class Session:
+        def __init__(self, linked=False):
+            self.linked = linked
+
+        async def execute(self, query, params):
+            sql = str(query)
+            assert params["user_id"] == 7
+            if "FROM watchlists w" in sql:
+                assert params["market_id"] == 34
+                return Rows([{"id": 71, "quote_currency": "USDT"}])
+            if "FROM strategies" in sql:
+                assert params["setup_ids"] == [42]
+                return Rows([(42,)] if self.linked else [])
+            if "event_type='strategy_next_step'" in sql:
+                return Rows([{"event_key": "strategy-next-step:42"}])
+            raise AssertionError(sql)
+
+    class Setups:
+        def __init__(self, _session):
+            pass
+
+        async def get_all_setups(self, user_id):
+            assert user_id == 7
+            return [{"id": 42, "name": "BTC plan", "symbol": "BTC", "market_id": 34,
+                     "created_at": datetime.now(timezone.utc) - timedelta(hours=1)}]
+
+    monkeypatch.setattr("backend.infrastructure.repositories.setup_repository.SetupRepository", Setups)
+    service = module.FinnCoachFeedService(Session())
+    service.publish = AsyncMock(return_value="card")
+    service.resolve = AsyncMock()
+    assert asyncio.run(service.reconcile_journey_next_steps(
+        user_id=7, symbol="BTC", market_id=34)) == ["card"]
+    assert service.publish.await_args.kwargs["evidence"]["trading_pair"] == "BTC/USDT"
+    assert service.publish.await_args.kwargs["event_type"] == "strategy_next_step"
+
+    linked_service = module.FinnCoachFeedService(Session(linked=True))
+    linked_service.publish = AsyncMock()
+    linked_service.resolve = AsyncMock()
+    assert asyncio.run(linked_service.reconcile_journey_next_steps(
+        user_id=7, symbol="BTC", market_id=34)) == []
+    linked_service.resolve.assert_any_await(user_id=7, event_key="strategy-next-step:42")
+
+
+def test_analysis_ready_requires_verified_score_and_no_setup(monkeypatch):
+    class Rows:
+        def __init__(self, values):
+            self.values = values
+
+        def mappings(self):
+            return self
+
+        def first(self):
+            return self.values[0] if self.values else None
+
+        def all(self):
+            return self.values
+
+
+    class Session:
+        async def execute(self, query, params):
+            sql = str(query)
+            if "FROM watchlists w" in sql:
+                return Rows([{"id": 71, "quote_currency": "USDT"}])
+            if "event_type='strategy_next_step'" in sql:
+                return Rows([])
+            raise AssertionError(sql)
+
+    class Setups:
+        def __init__(self, _session):
+            pass
+
+        async def get_all_setups(self, user_id):
+            return []
+
+    class Match:
+        status = "available"
+
+        def __init__(self, _session):
+            pass
+
+        async def for_asset(self, user_id, symbol, *, setups, market_id):
+            assert (user_id, symbol, setups, market_id) == (7, "BTC", [], 34)
+            return {"source_status": self.status,
+                    "benchmark_score": 52 if self.status == "available" else None,
+                    "as_of": "2026-11-19"}
+
+    monkeypatch.setattr("backend.infrastructure.repositories.setup_repository.SetupRepository", Setups)
+    monkeypatch.setattr("backend.services.setup_market_match_service.SetupMarketMatchService", Match)
+    service = module.FinnCoachFeedService(Session())
+    service.publish = AsyncMock(return_value="card")
+    service.resolve = AsyncMock()
+    assert asyncio.run(service.reconcile_journey_next_steps(
+        user_id=7, symbol="BTC", market_id=34)) == ["card"]
+    assert service.publish.await_args.kwargs["revision"] == "available"
+    Match.status = "stale_sources"
+    service.publish.reset_mock()
+    assert asyncio.run(service.reconcile_journey_next_steps(
+        user_id=7, symbol="BTC", market_id=34)) == []
+    service.publish.assert_not_awaited()
+    service.resolve.assert_any_await(user_id=7, event_key="analysis-ready:BTC:34")
+
+
 
 @pytest.mark.parametrize("locale,closed_title", [
     ("nl", "Voorstel niet meer actief"),
@@ -720,6 +837,55 @@ def test_discuss_setup_rechecks_current_match_and_marks_old_notification_histori
     assert historical.freshness == "historical"
     assert historical.as_of.isoformat() == "2026-10-10T10:00:00+00:00"
     assert current.freshness == "stale"
+
+
+def test_strategy_next_step_discussion_sees_strategy_added_after_card(monkeypatch):
+    item_id = "00000000-0000-0000-0000-000000000032"
+
+    async def detail(_self, *, user_id, item_id: str):
+        assert user_id == 7
+        return {"id": item_id, "event_type": "strategy_next_step", "subject_type": "setup",
+                "subject_id": "11", "symbol": "BTC", "status": "read",
+                "source_observed_at": "2026-11-19T10:00:00Z",
+                "evidence": {"setup_name": "BTC Plan", "market_id": 31,
+                             "trading_pair": "BTC/USDT"}}
+
+    class MatchService:
+        last_source_row = {"calculated_at": datetime(2026, 11, 19, 11, tzinfo=timezone.utc)}
+
+        def __init__(self, _session):
+            pass
+
+        async def for_asset(self, user_id, symbol, *, setups=None, market_id=None):
+            assert (user_id, symbol, market_id) == (7, "BTC", 31)
+            return {"source_status": "available", "benchmark_score": 54,
+                    "as_of": "2026-11-19", "matches": []}
+
+    class Rows:
+        def mappings(self):
+            return self
+
+        def first(self):
+            return {"id": 91, "name": "BTC Strategie"}
+
+    class Session:
+        async def execute(self, query, params):
+            assert "FROM strategies" in str(query)
+            assert params == {"user_id": 7, "setup_id": 11}
+            return Rows()
+
+    monkeypatch.setattr(module.FinnCoachFeedService, "detail", detail)
+    monkeypatch.setattr("backend.services.setup_market_match_service.SetupMarketMatchService", MatchService)
+    monkeypatch.setattr(
+        "backend.infrastructure.repositories.setup_repository.SetupRepository.get_setup_by_id",
+        AsyncMock(return_value={"id": 11, "name": "BTC Plan", "symbol": "BTC",
+                                "market_id": 31, "quote_currency": "USDT"}),
+    )
+    historical, current = asyncio.run(FinnV2ReasoningContextService(Session())._current_feed_evidence(
+        SimpleNamespace(user_id=7, client_context_json={"feed_item_id": item_id})))
+    assert historical.facts["historical_notification"] is True
+    assert current.facts["current_linked_strategy"] == {"id": 91, "name": "BTC Strategie"}
+    assert current.facts["current_benchmark_score"] == 54
 
 
 def test_data_blocked_single_saved_setup_keeps_identity_when_match_unavailable(monkeypatch):

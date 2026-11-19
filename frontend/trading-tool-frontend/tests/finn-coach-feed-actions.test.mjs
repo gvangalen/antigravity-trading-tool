@@ -18,6 +18,18 @@ test("watchlist feed discussion uses the exact pair and remains advisory", () =>
   assert.match(unpaired, /leid geen handelspaar af/i);
 });
 
+test("journey feed questions reread current scores and strategy state", () => {
+  const analysis = coachFeedDiscussionQuestion({ event_type: "analysis_ready", symbol: "BTC",
+    evidence: { trading_pair: "BTC/USDT", market_id: 34 } }, "nl");
+  assert.match(analysis, /actuele benchmark/);
+  assert.match(analysis, /BTC\/USDT/);
+  assert.match(analysis, /Maak niets aan/);
+  const strategy = coachFeedDiscussionQuestion({ event_type: "strategy_next_step", symbol: "BTC",
+    evidence: { trading_pair: "BTC/USDT", setup_name: "BTC plan" } }, "nl");
+  assert.match(strategy, /inmiddels een strategie/);
+  assert.match(strategy, /BTC plan/);
+});
+
 test("historical handled missing-score card remains discussable without reopening its status", () => {
   const card = { event_type: "data_blocked", status: "handled" };
   assert.equal(canDiscussFeedItem(card, true), true);
