@@ -6,13 +6,13 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN-keuzeantwoorden bij setupvragen (18 november 2026)
 
-Phase: `BUILD_GATES_PASSED_PENDING_DEPLOY`. Product branch
+Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA`. Product branch
 `codex/finn-setup-choice-buttons-20261118`, productcode-SHA `409202cca` en
 [PR #1182](https://github.com/gvangalen/antigravity-trading-tool/pull/1182).
 De onafhankelijke QA voor de vorige wekelijkse Smart DCA-keten accepteerde
 live SHA `c3e60c19083278621932d1877568be3abfdb9bdb`. De daaropvolgende Smart DCA-reparaties en hun gerichte, geaccepteerde
 live QA zijn via de huidige main-SHA `a8831b433` in deze branch geïntegreerd.
-Deze keuzeantwoordkandidaat is zelf nog niet live getest.
+Deze keuzeantwoordkandidaat is live beschikbaar maar nog niet onafhankelijk getest.
 
 Bij een begeleide FINN-vraag levert de backend nu begrensde, gestructureerde
 antwoordopties op basis van het daadwerkelijk gevraagde invoerveld. Voor een
@@ -40,8 +40,17 @@ De volledige backend-suite had **5072 geslaagde tests, 7 bestaande skips**.
 Frontend-build, typecheck, i18n-lint en tests, commands, proposals, setups en
 `audit:high` slaagden (nul kwetsbaarheden). Alle vijf PR-CI-jobs slaagden in
 [run 44375020095](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44375020095)
-vóór de integratie met de geaccepteerde Smart DCA-reparaties; CI wordt op
-de definitieve kandidaat herhaald.
+vóór de integratie met de geaccepteerde Smart DCA-reparaties. De vijf
+PR-CI-jobs op de definitieve kandidaat slaagden in
+[run 44466864410](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44466864410).
+De vijf main-CI-jobs slaagden in
+[run 44467544225](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44467544225)
+en [Auto Deploy 44468142691](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44468142691)
+slaagde. GitHub main, publieke backend-health en frontend-buildinfo
+(beide HTTP 200) meldden alle drie exact SHA
+`37db3dc81876651572d92d68658e813959fd5efa` op 19 november 2026.
+Deze statuswijziging maakt zelf een latere SHA; Build wacht op diens laatste
+CI, Auto Deploy en publieke identiteit vóór de onafhankelijke QA-handoff.
 
 ## Smart DCA naam- en grafiekperiode-extractie (18 november 2026)
 
