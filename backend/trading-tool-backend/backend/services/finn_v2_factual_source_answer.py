@@ -240,6 +240,34 @@ def render_selected_paper_position_risk(result: dict[str, Any], *, symbol: str) 
             "Ik wijzig niets en plaats geen order.")
 
 
+def render_paper_exit_position_status(result: dict[str, Any], *, symbol: str) -> str:
+    """Verify whether a historical Paper exit left a current owner-held position."""
+    portfolio, reason = _read(result, "read_portfolio")
+    if portfolio is None or portfolio.get("environment") != "paper":
+        return (f"Ik kan de huidige Paper-positie voor {symbol} niet verifiëren "
+                f"({reason or 'Paper-portefeuille niet beschikbaar'}).")
+    rows = [row for row in portfolio.get("bots") or []
+            if isinstance(row, dict) and row.get("is_live") is False
+            and str(row.get("symbol") or "").upper() == symbol]
+    if len(rows) != 1:
+        return (f"Ik kan de historische Paper-exit voor {symbol} niet eenduidig "
+                "aan één huidige botpositie koppelen.")
+    try:
+        quantity = Decimal(str(rows[0].get("position_qty")))
+    except (InvalidOperation, TypeError, ValueError):
+        quantity = None
+    at = _moment(portfolio.get("read_at"))
+    if quantity is None or not quantity.is_finite() or quantity < 0 or not at:
+        return f"Ik kan de resterende Paper-hoeveelheid voor {symbol} nu niet verifiëren."
+    amount = format(quantity.normalize(), "f").replace(".", ",")
+    state = ("geen open positie meer" if quantity == 0
+             else f"nog {amount} {symbol} open")
+    return (f"Volgens de huidige Paper-portefeuille heeft deze {symbol}-bot {state} "
+            f"op {at} (Europe/Amsterdam). De historische gevulde verkoop alleen "
+            "bewijst geen volledige sluiting; deze uitgelezen hoeveelheid is de huidige stand. "
+            "Ik plaats geen order.")
+
+
 def render_report_and_quote_times(
     result: dict[str, Any], *, symbol: str, quote_currency: str,
 ) -> str:

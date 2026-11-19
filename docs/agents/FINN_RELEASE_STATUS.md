@@ -4,6 +4,48 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 vervolgflow: tweede reparatie na onafhankelijke QA (19 november 2026)
+
+Phase: `LOCAL_REPAIR_VALIDATION`. Onafhankelijke QA wees de vorige live SHA
+`d5c149b23477894c6662a7b246ea8ad342d67da5` af na ingelogde browser- en
+beschermde Paper-proeven. De gecombineerde setup → strategie → score-keten
+werkte en hergebruikte haar objecten, maar de eerste BTC/USDT-strategiekaart
+toonde expliciet opgegeven USDT-niveaus als EUR. De bespreking van een
+geselecteerde Paper-positierisicokaart eindigde met `orchestrator_failed` in
+[QA-run 44548982907](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44548982907);
+QA-artifact SHA-256 `8521ff65fe6a3276b37e06125831734a56ecf7c5861575dd9fb715a65f85cc65`.
+De historische AAPL-Paper-exit werd gevonden, maar een vervolgvraag las de
+actuele resthoeveelheid niet. Bestaande rapportkaarten openden het juiste
+rapport; een nieuwe gereedmelding bleef onbewezen. QA constateerde nul
+Live-calls en nul live-botactivaties. Het verdict is **NOT ACCEPTED**.
+
+De huidige reparatie bewaart de valuta in korte, begeleide prijsslot-
+antwoorden en vereist een koersvaluta voordat een handelsstrategie als
+compleet wordt beschouwd. Een oude kaart zonder valuta toont geen verzonnen
+EUR meer en kan niet bevestigd worden. Paper-risicofeiten worden vóór opslag
+van de FINN-tooluitkomst JSON-veilig gemaakt. Een expliciete vervolgvraag of
+een historische Paper-exit de positie echt sloot, leest de huidige eigenaar-
+gebonden Paper-portefeuille en noemt de gedateerde resthoeveelheid wanneer
+één bot eenduidig is. De rapportpagina laat het hergebruik van een recent
+dagrapport nu zichtbaar staan. Deze wijzigingen zijn nog **niet** gedeployed
+of onafhankelijk hertest.
+
+Lokale Build-evidentie voor deze reparatie: backend `pytest -q` gaf
+**5104 passed, 7 skipped**; de frontend `build`, `typecheck`, `lint:i18n`,
+`test:i18n`, `test:commands`, `test:proposals` en `audit:high` slaagden.
+De geïsoleerde FastAPI/Celery/Postgres/Redis-worker-actiematrix gaf **17/17**,
+de adapterchecks **28/28**, inclusief Smart DCA en kalender-DCA. Daarin
+waren nul brokerorders, nul Live-calls, nul live-botactivaties en nul
+productieverbindingen. De lokale actiematrix heeft SHA-256
+`5e365588b75fe788e26c4f26a6d89d49b1eedc866eb2ae052cb93543561afe80`.
+De echte Responses-provider-developmentset gaf **20/20** en nul provider-,
+schema-, parse-, validatie- en timeoutfouten. Een eerste volledige
+provider-regressierun was **niet groen**: 18 van 109 gevallen kregen een
+`503 server_is_overloaded` van de externe provider, waardoor de gemeten
+operatienauwkeurigheid 91/109 werd. Dit is als fout geteld; er is geen
+drempel of casus verlaagd. Een schone herhaling loopt. CI, Auto Deploy en
+onafhankelijke QA zijn op dit moment nog niet afgerond.
+
 ## FINN 3.0 vervolgflow: reparatie na live QA (19 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_READY_FOR_INDEPENDENT_QA`. De onafhankelijke QA wees de vorige

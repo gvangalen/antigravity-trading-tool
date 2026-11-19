@@ -2023,7 +2023,7 @@ function AIAssistantContent({
     }
   };
 
-  const draftActionButtons = (message, messageIndex, noun) => {
+  const draftActionButtons = (message, messageIndex, noun, suspendConfirm = false) => {
     const proposal = (message.actions || []).find((action) => action?.type === "v2_proposal");
     if (!proposal) {
       return (
@@ -2034,7 +2034,7 @@ function AIAssistantContent({
     }
     return (
       <>
-        <button type="button" onClick={() => void handleExecuteAction(proposal)} disabled={loading || executingAction || message.confirmationSuspended} className={actionButtonStyles({ variant: "primary", className: "min-w-[120px] justify-center rounded-xl px-4 py-2.5 text-xs" })}>
+        <button type="button" onClick={() => void handleExecuteAction(proposal)} disabled={loading || executingAction || message.confirmationSuspended || suspendConfirm} className={actionButtonStyles({ variant: "primary", className: "min-w-[120px] justify-center rounded-xl px-4 py-2.5 text-xs" })}>
           {executingAction ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} {at("draftCards.confirm", "Bevestigen")}
         </button>
         <button type="button" onClick={() => {
@@ -2163,6 +2163,8 @@ function AIAssistantContent({
     const isWatchlist = watchlistOperations.includes(operationId);
     const omittedRules = isStrategy ? waivedDraftRules(messageIndex, "create_strategy") : null;
     const supplied = draft.supplied_inputs || {};
+    const missingPriceCurrency = isStrategy && supplied.setup_type !== "dca"
+      && !["EUR", "USD", "USDT"].includes(supplied.price_currency);
     const context = (message.actions || []).find((action) => action?.type === "v2_proposal")?.display_context || {};
     const linkedName = isStrategy ? supplied.setup_name || context.setup_name || at("draftCards.objectSetup", "Setup") : supplied.strategy_name || context.strategy_name || at("draftCards.objectStrategy", "Strategie");
     const contextLine = isStrategy
@@ -2196,9 +2198,9 @@ function AIAssistantContent({
           [supplied.low_threshold != null && supplied.high_threshold != null ? at("draftCards.fieldScoreBetween", "Score {low} tot onder {high}", { low: supplied.low_threshold, high: supplied.high_threshold }) : at("draftCards.fieldMidScore", "Middenscore"), dcaBand(supplied.mid_score_percent)],
           [supplied.high_threshold != null ? at("draftCards.fieldScoreFrom", "Score vanaf {threshold}", { threshold: supplied.high_threshold }) : at("draftCards.fieldHighScore", "Hoge score"), dcaBand(supplied.high_score_percent)]]
         : [[at("draftCards.fieldExecution", "Uitvoering"), [formatExecutionMode(supplied.execution_mode, locale), supplied.base_amount ? euro(supplied.base_amount) : null].filter(Boolean).join(" · ")],
-          ["Entry", supplied.entry != null ? `${formatValue(supplied.entry)} ${supplied.price_currency || "EUR"}` : null],
-          ["Stop-loss", supplied.stop_loss != null ? `${formatValue(supplied.stop_loss)} ${supplied.price_currency || "EUR"}` : null],
-          ["Targets", supplied.targets?.length ? `${supplied.targets.map(formatValue).join(", ")} ${supplied.price_currency || "EUR"}` : null],
+          ["Entry", supplied.entry != null ? [formatValue(supplied.entry), supplied.price_currency].filter(Boolean).join(" ") : null],
+          ["Stop-loss", supplied.stop_loss != null ? [formatValue(supplied.stop_loss), supplied.price_currency].filter(Boolean).join(" ") : null],
+          ["Targets", supplied.targets?.length ? [supplied.targets.map(formatValue).join(", "), supplied.price_currency].filter(Boolean).join(" ") : null],
           [({ en: "Additional entry condition", de: "Zusätzliche Einstiegsbedingung" }[locale] || "Extra instapvoorwaarde"), signalLabel],
           [({ en: "Trendline anchors", de: "Trendlinien-Anker" }[locale] || "Trendlijnpunten"), signal?.reference?.kind === "trendline" ? signal.reference.anchors?.map((point) => `${point.at} · ${formatValue(point.price)} ${supplied.price_currency || ""}`).join(" → ") : null],
           [at("draftCards.fieldRisk", "Risico"), supplied.risk_profile]]
@@ -2238,8 +2240,8 @@ function AIAssistantContent({
         {isStrategy && omittedRules && <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">{typeof omittedRules === "string" ? at("draftCards.waivedRulesNamed", "Niet opgeslagen: {rules}.", { rules: omittedRules }) : at("draftCards.waivedStrategyRules", "De extra automatische regels uit je eerdere verzoek zijn op jouw keuze weggelaten. Alleen de getoonde strategievelden worden opgeslagen.")}</p>}
         {isStrategy && supplied.setup_type === "dca" && <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{at("draftCards.dcaStrategyOnly", "Bevestigen slaat alleen deze extra strategie op onder de bestaande DCA-setup. Er wordt geen bot gestart en geen aankoop gedaan.")} {at("draftCards.dcaBotModeSeparate", ({ en: "Manual or automatic operation is set on a bot, not on this strategy.", de: "Manueller oder automatischer Betrieb wird am Bot eingestellt, nicht an dieser Strategie." }[locale] || "Handmatige of automatische uitvoering stel je bij een bot in, niet bij deze strategie."))}</p>}
         {isBot && <p className="mt-4 flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300"><Shield size={13} />{at("draftCards.noLiveTrading", "Geen live trading")}</p>}
-        {missing.length > 0 && <p className="mt-4 rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-700 dark:bg-slate-900/70 dark:text-slate-200">{at("draftCards.missingFields", "Nog nodig: {fields}.", { fields: missing.join(", ") })}</p>}
-        <div className="mt-4 flex flex-wrap items-center gap-2">{draftActionButtons(message, messageIndex, isStrategy ? "strategie" : isBot ? "paper-bot" : isIndicator ? "indicator" : "watchlist")}</div>
+        {(missing.length > 0 || missingPriceCurrency) && <p className="mt-4 rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-700 dark:bg-slate-900/70 dark:text-slate-200">{at("draftCards.missingFields", "Nog nodig: {fields}.", { fields: [...missing, ...(missingPriceCurrency ? [at("draftCards.inputs.price_currency", "valuta koersniveaus")] : [])].join(", ") })}</p>}
+        <div className="mt-4 flex flex-wrap items-center gap-2">{draftActionButtons(message, messageIndex, isStrategy ? "strategie" : isBot ? "paper-bot" : isIndicator ? "indicator" : "watchlist", missingPriceCurrency)}</div>
       </div>
     );
   };

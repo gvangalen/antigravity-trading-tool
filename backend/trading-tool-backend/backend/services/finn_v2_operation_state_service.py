@@ -260,6 +260,22 @@ class FinnV2OperationStateService:
                 )
             )
             explicit = {str(requested_slot): slot_value} if slot_value is not None else {}
+            if (contract.operation_id == "create_strategy"
+                    and requested_slot in {"entry", "stop_loss", "targets"}
+                    and slot_value is not None):
+                # A guided numeric reply bypasses explicit_inputs(...,
+                # continuation=True). Preserve the currency attached to the
+                # answered price instead of silently leaving the draft in its
+                # default EUR unit.
+                currency = self._explicit_trade_price_currency(message)
+                if not currency and re.fullmatch(
+                    r"\s*(?:(?:USDT|USD|EUR|[$€])\s*)?\d[\d.,]*\s*"
+                    r"(?:(?:USDT|USD|EUR|[$€]))?\s*[.!]?\s*",
+                    message, re.I,
+                ):
+                    currency = self._currency_token(message)
+                if currency:
+                    explicit["price_currency"] = currency
             # A guided reply can explicitly answer more than the requested
             # slot. Keep the active contract authoritative while retaining
             # both required and optional fields the user actually supplied.

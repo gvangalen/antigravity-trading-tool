@@ -1223,7 +1223,7 @@ def test_declassified_strategy_create_prompt_collects_manual_mode_and_amount():
         "execution_mode": "fixed",
         "base_amount": 100.0,
     }
-    assert resolved.missing_required_inputs == ["name", "entry", "stop_loss", "targets", "risk_profile"]
+    assert resolved.missing_required_inputs == ["name", "entry", "stop_loss", "targets", "risk_profile", "price_currency"]
 
 
 def test_declassified_strategy_and_bot_updates_parse_set_field_op_value_without_ids():
@@ -1319,6 +1319,28 @@ def test_guided_trade_price_answer_keeps_its_currency():
         continuation=True, requested_slot="entry",
     )
     assert collected == {"entry": 84000.0, "price_currency": "USD"}
+
+
+def test_guided_trade_price_turns_keep_usdt_in_confirmable_strategy():
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    service = FinnV2OperationStateService()
+    state = service.resolve(
+        contract=contract, message="Maak de strategie voor mijn BTC/USDT-setup.",
+        explicit_asset="BTC", conversation_context={},
+        supplied_inputs={"setup_id": 42, "name": "BTC strategie", "execution_mode": "fixed",
+                         "base_amount": 10, "risk_profile": "balanced"},
+        model_tool_inputs=True,
+    )
+    for reply in ("85000 USDT.", "82000 USDT.", "90000 USDT."):
+        state = service.resolve(
+            contract=contract, message=reply, explicit_asset=None,
+            conversation_context={"active_guided_operation": state.dict()},
+            supplied_inputs={}, model_tool_inputs=True,
+        )
+    assert state.collected_inputs["entry"] == 85000
+    assert state.collected_inputs["stop_loss"] == 82000
+    assert state.collected_inputs["targets"] == [90000]
+    assert state.collected_inputs["price_currency"] == "USDT"
 
 
 def test_mixed_trade_price_currencies_cannot_complete_a_confirmable_draft():
@@ -1488,7 +1510,7 @@ def test_guided_state_keeps_optional_inputs_declared_by_the_action_contract():
 
     assert state.collected_inputs == {"setup_id": 42, "name": "ETH swing"}
     assert state.missing_required_inputs == [
-        "execution_mode", "base_amount", "entry", "stop_loss", "targets", "risk_profile"
+        "execution_mode", "base_amount", "entry", "stop_loss", "targets", "risk_profile", "price_currency"
     ]
 
 
@@ -1515,7 +1537,7 @@ def test_cross_conversation_action_result_fills_only_contract_declared_parent_sl
         "execution_mode": "fixed",
         "base_amount": 100.0,
     }
-    assert state.missing_required_inputs == ["name", "entry", "stop_loss", "targets", "risk_profile"]
+    assert state.missing_required_inputs == ["name", "entry", "stop_loss", "targets", "risk_profile", "price_currency"]
 
 
 def test_parent_action_result_continues_a_downstream_delete_without_injecting_ids():
@@ -1566,7 +1588,7 @@ def test_create_strategy_extracts_explicit_trade_contract_fields(message):
     assert state.collected_inputs["stop_loss"] == 59800.0
     assert state.collected_inputs["targets"] == [64500.0, 67000.0]
     assert state.collected_inputs["risk_profile"] == "conservative"
-    assert state.missing_required_inputs == []
+    assert state.missing_required_inputs == ["price_currency"]
 
 
 def test_create_strategy_model_placeholders_remain_missing_before_proposal():
@@ -1811,7 +1833,7 @@ def test_explicit_strategy_fields_override_conflicting_model_extraction():
 
     assert state.collected_inputs["risk_profile"] == "balanced"
     assert state.collected_inputs["targets"] == [83000.0, 87000.0]
-    assert not state.missing_required_inputs
+    assert state.missing_required_inputs == ["price_currency"]
 
 
 @pytest.mark.parametrize(
@@ -1877,7 +1899,7 @@ def test_strategy_guided_slot_reply_preserves_prior_contract_inputs():
 
     assert state.collected_inputs["base_amount"] == 100
     assert state.collected_inputs["targets"] == [64500.0, 67000.0]
-    assert state.missing_required_inputs == ["risk_profile"]
+    assert state.missing_required_inputs == ["risk_profile", "price_currency"]
 
 
 def test_compound_german_strategy_does_not_parse_namespaced_name_as_target_or_risk():
@@ -1898,7 +1920,7 @@ def test_compound_german_strategy_does_not_parse_namespaced_name_as_target_or_ri
     assert state.collected_inputs["targets"] == [65.0, 68.0]
     assert state.collected_inputs["risk_profile"] == "conservative"
     assert state.collected_inputs["name"] == "Chain Strategy visiblecore-1789631146"
-    assert state.missing_required_inputs == []
+    assert state.missing_required_inputs == ["price_currency"]
 
 
 def test_update_flow_collects_only_an_explicit_typed_changed_fields_object():
@@ -2066,7 +2088,7 @@ def test_create_strategy_canonicalizes_a_natural_german_base_amount():
 
     assert state.collected_inputs["execution_mode"] == "fixed"
     assert state.collected_inputs["base_amount"] == 100.0
-    assert state.missing_required_inputs == ["name", "entry", "stop_loss", "targets", "risk_profile"]
+    assert state.missing_required_inputs == ["name", "entry", "stop_loss", "targets", "risk_profile", "price_currency"]
 
 
 def test_create_strategy_uses_the_shared_german_name_introducer_without_prefix_truncation():

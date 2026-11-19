@@ -64,6 +64,7 @@ from backend.services.finn_v2_factual_source_answer import (
     is_report_technical_comparison_request, render_bot_decision, render_closed_paper_exit_facts,
     render_selected_paper_feed_decision, render_latest_quote,
     render_selected_paper_position_risk,
+    render_paper_exit_position_status,
     render_portfolio_read_time, render_report_and_quote_times,
     render_report_and_technical_read,
 )
@@ -1579,6 +1580,47 @@ class FinnResponsesFrontDoor:
             and os.getenv("FINN_PER_OPERATION_TOOLS_EXPERIMENT") == "1"
         )
         catalog = FinnResponsesToolCatalog(individual_proposals=individual_proposals)
+        asks_exit_position = bool(re.search(
+            r"\b(?:positie|position)\b[^.!?]{0,80}\b(?:gesloten|closed|verkocht|sold)\b"
+            r"|\b(?:gesloten|closed|verkocht|sold)\b[^.!?]{0,80}\b(?:positie|position)\b",
+            message, re.I,
+        ))
+        prior_paper_answer = str((previous_response or {}).get("answer") or "")
+        exit_assets = mentioned_catalog_symbols(message)
+        selected_historical_decision = any(
+            isinstance(item, dict) and isinstance(item.get("facts"), dict)
+            and item["facts"].get("event_type") == "bot_decision"
+            and item["facts"].get("historical_notification") is True
+            and item["facts"].get("selection_origin") == "current_run"
+            for item in (feed_evidence or [])
+        )
+        if (locale.lower().startswith("nl") and asks_exit_position
+                and not selected_historical_decision
+                and (re.search(r"\bPaper\b", message, re.I)
+                     or re.search(r"\bPaper\b", prior_paper_answer, re.I))
+                and len(exit_assets) <= 1):
+            symbol = next(iter(exit_assets), str(verified_asset or "").upper())
+            if symbol in DEFAULT_ASSET_CATALOG:
+                call = replace(
+                    catalog.validate("get_portfolio_and_exposure", {}),
+                    read_tools=("read_portfolio",), inputs={"environment": "paper"},
+                )
+                try:
+                    portfolio_read = await self.reads(call)
+                except Exception:
+                    logger.exception("FINN Paper exit position read failed")
+                    portfolio_read = {"status": "unavailable", "results": []}
+                trace = ({"name": call.name,
+                          "status": portfolio_read.get("status", "unavailable"),
+                          "arguments": call.inputs, "result": portfolio_read},)
+                return FinnResponsesFrontDoorResult(
+                    FinnResponsesResult(
+                        text=render_paper_exit_position_status(portfolio_read, symbol=symbol),
+                        response_id=f"paper-exit-position-{self.run_id}", tool_trace=trace,
+                        answer_kind="factual_source", model_led_coach=True,
+                        response_id_reusable=False,
+                    ), None, previous_response, locale=locale,
+                )
         # An explicit, read-only impulse-buy question asks for the owner's
         # saved plan and current evidence. Do not let a model answer from chat
         # text alone or reinterpret a saved trade setup as a DCA proposal.
