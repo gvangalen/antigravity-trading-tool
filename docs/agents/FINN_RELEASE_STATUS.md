@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN-keuzeantwoorden: herstel na onafhankelijke QA (19 november 2026)
 
-Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA_RETEST`. Onafhankelijke QA wees live
+Phase: `PRODUCT_DEPLOYED_BROWSER_QA_PASSED_RUNTIME_GATE_NOT_ACCEPTED`. Onafhankelijke QA wees live
 SHA `12bafd2a27924298996e74884445a77f9b130b87` voor de volledige
 setupkeuze-scope af. In de ingelogde Codex-browser kreeg “Ik wil een nieuwe
 BTC-setup maken. Help me stap voor stap” een vraag over EUR/USDT zonder
@@ -45,8 +45,27 @@ en [Auto Deploy 44476307114](https://github.com/gvangalen/antigravity-trading-to
 slaagde. GitHub main, publieke backend-health en frontend-buildinfo
 (beide HTTP 200) meldden alle drie product-SHA
 `ee11376bdb7d77031beffdb8c509b6e32c48191e` op 19 november 2026.
-Deze statuswijziging krijgt zelf een latere main-SHA; Build wacht op de
-laatste CI, Auto Deploy en publieke identiteit vóór de QA-handoff.
+De daaropvolgende statuscommit werd op SHA
+`167846786a935b468ab0b09a83b78ff51f2f2565` uitgerold: alle vijf
+[main-CI-jobs 44477401021](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44477401021)
+en [Auto Deploy 44478084612](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44478084612)
+slaagden. GitHub main, backend-health en frontend-buildinfo (beide HTTP 200)
+toonden exact die SHA zonder nieuwere deploy. Op deze exacte live SHA
+herhaalde onafhankelijke QA de oorspronkelijke foutvraag in de ingelogde
+Codex-browser. Die opende direct de begeleide setupflow met `1D/4H`, daarna
+een vrije naamvraag zonder valse knoppen en vervolgens `EUR/USDT`. **Eigen
+antwoord** focuste bij beide keuzemomenten de zichtbare textarea. Ook de
+eerdere directe aanmaakroute werkte. Beide concepten bleven onbevestigd;
+Mijn Plan behield de drie bestaande plannen en kreeg geen QA-conceptnaam.
+Er waren geen browserconsole-errors of -warnings.
+
+QA gaf de gerichte browserreparatie groen, maar de volledige runtimegate
+`NOT ACCEPTED`: polling/SSE-pariteit voor de nieuwe opties is op deze SHA
+niet onafhankelijk gemeten. De beschermde QA-runner vereist een vooraf
+goedgekeurd manifest en had voor deze run geen passende case. Dit is een
+verificatiegat, geen aangetoonde fout in een order, opslag of transport.
+Deze verdict-update maakt zelf een latere documentatie-SHA; productcode
+blijft die van PR #1194.
 
 ## FINN-keuzeantwoorden bij setupvragen (18 november 2026)
 
