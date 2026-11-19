@@ -55,3 +55,13 @@ test("only a verified filled Paper sale offers a reflection", () => {
   assert.match(executed, /reflectievraag/);
   assert.doesNotMatch(unverified, /reflectievraag/);
 });
+
+test("Paper position risk card opens a bounded current-risk discussion", () => {
+  const question = coachFeedDiscussionQuestion({ event_type: "position_risk", symbol: "BTC",
+    title: "Hoge huidige positieconcentratie · Paper",
+    evidence: { trading_pair: "BTC/USDT" } }, "nl");
+  assert.match(question, /BTC\/USDT/);
+  assert.match(question, /huidige, opnieuw gelezen positieconcentratie/);
+  assert.match(question, /waarderingsmoment/);
+  assert.match(question, /wijzig geen bot of positie/);
+});

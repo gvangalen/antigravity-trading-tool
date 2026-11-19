@@ -619,6 +619,14 @@ class FinnV2OperationClassificationService:
         )
         if not create_verb:
             return None
+        # A complete setup -> strategy -> score request names the strategy as
+        # a later result. The setup is the first object to create, even when
+        # "mijn BTC-setup" lacks the article used by the new_setup heuristic.
+        from backend.services.finn_v2_task_chain_service import requested_task
+        task = requested_task(message)
+        if (task and task.get("requested_results") == ["setup", "strategy", "score"]
+                and not re.search(r"\b(?:bestaande|opgeslagen|existing|saved)\b", text)):
+            return "create_setup"
         if "bot" in facts.explicit_entities and facts.action_polarity == "activate":
             return None
         if re.search(

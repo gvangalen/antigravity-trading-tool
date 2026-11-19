@@ -592,6 +592,15 @@ def test_new_setup_and_existing_setup_have_distinct_create_contracts(message, ex
     assert CLASSIFIER._explicit_guided_create_operation(message=message, facts=facts) == expected
 
 
+def test_combined_setup_strategy_score_request_starts_with_new_setup():
+    from backend.services.finn_v2_responses_front_door import _explicit_create_operation_request
+
+    message = "Maak mijn BTC-setup aan, genereer de strategie en toon de score."
+    facts = CLASSIFIER.preprocessor.preprocess(message=message)
+    assert CLASSIFIER._explicit_guided_create_operation(message=message, facts=facts) == "create_setup"
+    assert _explicit_create_operation_request(message) == "create_setup"
+
+
 def test_long_typed_setup_request_remains_a_create_proposal():
     from backend.services.finn_v2_responses_front_door import _explicit_create_operation_request
 

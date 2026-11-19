@@ -287,6 +287,7 @@ def test_same_day_bot_row_update_preserves_owner_feed_snapshot():
     snapshot = {"event_type": "bot_decision", "subject_id": "130",
         "source_observed_at": "2026-11-16T06:00:18+00:00",
         "evidence": {"decision_id": 813, "action": "hold", "status": "planned",
+                     "reasons": ["Score buiten de opgeslagen koopzone"],
                      "source_observed_at": "2026-11-16 06:00:18+00:00"}}
     result = asyncio.run(adapter.execute(user_id=42, asset="AAPL",
         selector={"_latest_bot_decisions_only": True}, selected_feed_decision_id=813,
@@ -295,6 +296,7 @@ def test_same_day_bot_row_update_preserves_owner_feed_snapshot():
     assert selected["decision_at_amsterdam"] == "2026-11-16 07:00:18 CET"
     assert selected["source_row_changed"] is True
     assert selected["paper_executed"] is False
+    assert selected["reasons"] == ["Score buiten de opgeslagen koopzone"]
     assert result["as_of"] == datetime(2026, 11, 16, 6, 0, 18, tzinfo=timezone.utc)
 
 

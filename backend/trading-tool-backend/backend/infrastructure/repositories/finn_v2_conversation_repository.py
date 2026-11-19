@@ -82,6 +82,18 @@ class FinnV2ConversationRepository(FinnV2RepositoryTransactionMixin):
         context = dict(row.context_json or {})
         current = dict(context.get(STATE_KEY) or {})
         requested = requested_task(message)
+        # A clarification of the first setup step must not narrow an already
+        # requested setup -> strategy -> score task. A new asset, an explicit
+        # setup-only instruction, or a finished task still starts fresh.
+        clarifies_combined_setup = (
+            current.get("status") == "in_progress"
+            and current.get("pending_step") == "setup"
+            and current.get("requested_results") == ["setup", "strategy", "score"]
+            and requested is not None
+            and requested.get("requested_results") == ["setup"]
+            and requested.get("asset") == current.get("asset")
+            and "alleen" not in str(message or "").casefold()
+        )
         if current.get("status") == "in_progress" and str(message or "").strip().lower() in {
             "stop", "annuleer", "annuleren", "cancel", "stop deze opdracht",
         }:
@@ -90,7 +102,7 @@ class FinnV2ConversationRepository(FinnV2RepositoryTransactionMixin):
         elif requested and (not current or current.get("status") in {"completed", "cancelled"}
                             or (requested.get("asset") and current.get("asset")
                                 and requested["asset"] != current["asset"])
-                            or not current.get("completed_steps")):
+                            or (not current.get("completed_steps") and not clarifies_combined_setup)):
             current = requested
         elif current.get("status") != "in_progress":
             return

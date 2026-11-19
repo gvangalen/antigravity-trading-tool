@@ -151,6 +151,10 @@ def asks_for_watchlist_inventory(text: str) -> bool:
         return False
     if re.search(r"\b(?:voeg|toevoegen|add|verwijder|remove|vervang|replace|koop|buy|sell|verkoop)\b", value, re.I):
         return False
+    # A feed discussion can mention the watchlist while asking for analysis.
+    # The inventory shortcut must not swallow its indicator/benchmark read.
+    if re.search(r"\b(?:indicatoren?|benchmark|analyse|analysestap|score|bronmoment(?:en)?)\b", value, re.I):
+        return False
     return bool(
         re.search(r"\b(?:toon|laat\s+(?:me\s+)?zien|geef\s+(?:me\s+)?een\s+overzicht|show|list|zeige|auflisten)\b", value, re.I)
         or re.search(r"\b(?:welke|wat|which|what|welche|was)\b.*\b(?:staan|staat|op|in|are|is|on|stehen|steht|sind)\b", value, re.I)

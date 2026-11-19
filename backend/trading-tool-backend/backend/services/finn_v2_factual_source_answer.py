@@ -180,12 +180,64 @@ def render_selected_paper_feed_decision(
                      + (f" voor €{amount}" if amount else "") + ".")
     else:
         execution = "Bij dit besluit is geen gevulde Paper-order bevestigd."
+    reasons = selected.get("reasons")
+    saved_reasons = [str(reason).strip()[:240] for reason in reasons[:2]
+                     if isinstance(reason, str) and reason.strip()] if isinstance(reasons, list) else []
+    reason_text = (" Opgeslagen beoordelingsreden: " + "; ".join(saved_reasons) + "."
+                   if saved_reasons else " De opgeslagen beslissing bevat geen controleerbare reden.")
+    if action == "sell" and selected.get("paper_executed") is True:
+        next_step = (" De gevulde order alleen bewijst niet dat de hele positie is gesloten; "
+                     "controleer de resterende hoeveelheid in je Paper-portefeuille. "
+                     "Reflectievraag: kwam deze verkoop overeen met je vooraf opgeslagen uitstapregel?")
+    elif action in {"hold", "houd_vast"}:
+        next_step = (" Controleer vóór een volgende beoordeling de actuele score en de "
+                     "opgeslagen botvoorwaarden; dit historische besluit is geen nieuwe handelsinstructie.")
+    else:
+        next_step = " Controleer de huidige Paper-positie en de opgeslagen botvoorwaarden vóór een volgende actie."
     revision_note = (" De huidige botrij is later bijgewerkt; dit antwoord gebruikt de "
                      "opgeslagen momentopname van de aangeklikte kaart."
                      if selected.get("source_row_changed") is True else "")
     return (f"Het geselecteerde historische Paper-botbesluit voor {label} was "
             f"{action_text} op {at} (Europe/Amsterdam). {execution} "
-            f"Een latere botcontrole verandert dit opgeslagen besluit niet.{revision_note}")
+            f"Een latere botcontrole verandert dit opgeslagen besluit niet."
+            f"{reason_text}{next_step}{revision_note}")
+
+
+def render_selected_paper_position_risk(result: dict[str, Any], *, symbol: str) -> str:
+    """Explain one owner-scoped risk card from its historical and current reads."""
+    data, reason = _read(result, "read_selected_paper_position_risk")
+    if data is None:
+        return f"Ik kan het positierisico voor {symbol} nu niet verifiëren ({reason})."
+    historical = data.get("historical") or {}
+    current = data.get("current") or {}
+    if not isinstance(historical, dict) or not isinstance(current, dict):
+        return f"Ik kan het positierisico voor {symbol} nu niet verifiëren."
+    if str(current.get("symbol") or "").upper() != symbol:
+        return f"Ik kan de actuele Paper-positie voor {symbol} niet aan deze kaart koppelen."
+    pair = str(current.get("trading_pair") or symbol).upper()
+    if pair != symbol and not pair.startswith(f"{symbol}/"):
+        return f"Ik kan de actuele Paper-positie voor {symbol} niet aan deze kaart koppelen."
+    limit = _number(current.get("limit_pct"))
+    exposure = _number(current.get("exposure_pct"))
+    at = _moment(current.get("valuation_as_of"))
+    status = current.get("status")
+    if status == "above_saved_limit" and limit is not None and exposure is not None and at:
+        return (f"Voor je {pair} Paper-bot is de huidige positieconcentratie {exposure}% "
+                f"op het waarderingsmoment {at} (Europe/Amsterdam). De opgeslagen limiet "
+                f"is {limit}%; die is overschreden. Controleer de actuele koers- en FX-bron "
+                "en de botlimiet voordat je een beslissing neemt. Ik wijzig niets en plaats geen order.")
+    if status == "within_limit" and limit is not None and exposure is not None and at:
+        return (f"De melding voor {pair} was historisch. Op het huidige waarderingsmoment "
+                f"{at} (Europe/Amsterdam) is de positieconcentratie {exposure}% bij een "
+                f"opgeslagen limiet van {limit}%; die limiet is nu niet overschreden. "
+                "Controleer bij een volgende beoordeling de actuele koers- en FX-bron. "
+                "Ik wijzig niets en plaats geen order.")
+    old_limit = _number(historical.get("limit_pct"))
+    limit_text = f" De kaart noemde destijds een limiet van {old_limit}%." if old_limit else ""
+    return (f"De actuele positieconcentratie voor {pair} kan ik niet verifiëren: "
+            f"er is geen bruikbare, gedateerde Paper-waardering beschikbaar.{limit_text} "
+            "Controleer de koers- en FX-bron en probeer daarna opnieuw. "
+            "Ik wijzig niets en plaats geen order.")
 
 
 def render_report_and_quote_times(

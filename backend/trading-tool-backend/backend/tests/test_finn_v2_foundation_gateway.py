@@ -30,6 +30,13 @@ class _FakeConversationRepo:
         self.rows[conversation_id] = row
         return row
 
+    async def register_setup_strategy_score_task(self, *, conversation_id, user_id, run_id, message):
+        from backend.services.finn_v2_task_chain_service import STATE_KEY, requested_task
+        row = await self.get_by_id_for_user(conversation_id, user_id)
+        task = requested_task(message)
+        if row is not None and task:
+            row.context[STATE_KEY] = task
+
 
 class _FakeRunRepo:
     def __init__(self, _session):
@@ -131,6 +138,29 @@ def test_gateway_serializes_sqlalchemy_objects_in_hints(monkeypatch):
     assert run.workspace_hints_json["market_snapshot"]["symbol"] == "BTC"
     assert run.workspace_hints_json["market_snapshot"]["price"] == 109234.12
     assert run.client_context_json["market_snapshot"]["change_24h"] == 2.3
+
+
+def test_gateway_registers_combined_task_in_real_visible_runtime_mode(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET_KEY", "x" * 32)
+    monkeypatch.setattr(gateway_module, "FinnV2ConversationRepository", _FakeConversationRepo)
+    monkeypatch.setattr(gateway_module, "FinnV2RunRepository", _FakeRunRepo)
+    monkeypatch.setattr(gateway_module, "FinnV2RunService", _FakeRunService)
+    monkeypatch.setattr(gateway_module.run_rate_limiter, "check_rate_limit", lambda *args, **kwargs: None)
+    service = gateway_module.FinnV2GatewayService(session=object())
+    monkeypatch.setattr(service.flags, "resolve_mode", lambda _user_id: "visible_runtime")
+    monkeypatch.setattr(service.flags, "allows_transport", lambda _transport: True)
+    monkeypatch.setattr(service.flags, "max_runs_per_minute", lambda: 20)
+
+    run = asyncio.run(service.create_run(
+        user_id=7,
+        request=AgentRunRequest(message="Maak mijn BTC-setup aan, genereer de strategie en toon de score."),
+        request_path="/api/assistant/v2/runs", request_id="combined-1", trace_id="combined-1",
+    ))
+
+    from backend.services.finn_v2_task_chain_service import STATE_KEY
+    task = service.conversations.rows[run.conversation_id].context[STATE_KEY]
+    assert task["requested_results"] == ["setup", "strategy", "score"]
+    assert task["pending_step"] == "setup"
 
 
 def test_gateway_returns_existing_run_on_same_user_idempotency(monkeypatch):

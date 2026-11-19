@@ -329,6 +329,9 @@ class _FakeConversationRepo:
         self.rows = {}
         self.last_run = None
 
+    async def register_setup_strategy_score_task(self, *, conversation_id, user_id, run_id, message):
+        return None
+
     async def get_by_id_for_user(self, conversation_id, user_id):
         row = self.rows.get(conversation_id)
         if row and row.user_id == user_id:
