@@ -4,6 +4,48 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN-keuzeantwoorden: Responses-ingang en eerste setupkeuze (19 november 2026)
+
+Phase: `CANDIDATE_VALIDATED_PENDING_DEPLOY`. De onafhankelijke gerichte QA
+op live SHA `8648ca7cb99552c36d0951331e1dd7672176e590` wees de
+setupkeuze af. In een nieuw gesprek met het ingelogde Trader-agentaccount
+werd de eerste vraag “Ik wil een nieuwe BTC-setup maken. Help me stap voor
+stap; ik heb het analysetijdframe, de handelsvaluta en de naam nog niet
+gekozen. Toon eerst een concept en sla niets op.” niet als `create_setup`
+geselecteerd. FINN vroeg in losse tekst naar EUR/USDT zonder getypeerde
+setupstap of keuzeknoppen. De beschermde
+[QA-run 44517000778](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44517000778)
+bevestigde `initial_operation_id=null`, `final_operation_id=null`, één
+dispatch en één attempt, en gelijke gesaniteerde polling/SSE-projecties.
+Die projectie bevat geen keuzeopties; zij bewijst geen letterlijke
+knoppariteit. Er was geen opslag of order. Artifact SHA-256:
+`e1db1fbaae9a49ee7115f2733b46d5c93704b1b075a2bccfb6bf39f6b387dd3e`.
+
+De oorzaak is een aparte Responses-ingang die de eerste-persoonszin niet
+aan het bestaande getypeerde `create_setup`-contract bond. De reparatie in
+[PR #1197](https://github.com/gvangalen/antigravity-trading-tool/pull/1197)
+gebruikt de bestaande classifier ook op die ingang. Voor de eerstvolgende
+vraag naar setupsoort geeft de server nu `Trade` en `DCA` als begrensde
+keuzes; een vrij antwoord blijft mogelijk. Een instructie om niets op te
+slaan blijft een onbevestigd concept. De productcode-kandidaat is SHA
+`9bbc31151`.
+
+Op de definitieve lokale code slaagde de backend-suite **5074/5074** met
+7 bestaande skips. De geïsoleerde FastAPI/Celery/PostgreSQL/Redis-
+actiematrix slaagde **17/17**, artifact SHA-256
+`7262c931481d5327ee40b7c94b47a86470237ba6b976c25a859bac346c6fbae5`;
+de adapters **27/27**. De exacte eerste QA-zin doorliep lokaal de echte
+workerroute als `create_setup` en stelde achtereenvolgens vragen met
+`Trade/DCA`, `1D/4H`, vrije naam en `EUR/USDT`. Polling en SSE waren op
+elke beurt gelijk en het testconcept werd niet opgeslagen. Echte provider-
+development slaagde **20/20** (SHA-256
+`e52097eefcbefd13e927dec2c2644a9cb46eca95052c2054736eab3c828c41bc`)
+en regression **109/109** (SHA-256
+`0a3efb131dea885a3a9f8a57add856a7f976c9c2faacc16968fec25b8c02af5b`),
+zonder provider-, schema-, parse-, validatie- of time-outfouten. Alle vijf
+[PR-CI-jobs 44521248295](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44521248295)
+slaagden. Deployment-identiteit en onafhankelijke live hertest volgen.
+
 ## FINN-keuzeantwoorden: herstel na onafhankelijke QA (19 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_BROWSER_QA_PASSED_RUNTIME_GATE_NOT_ACCEPTED`. Onafhankelijke QA wees live
