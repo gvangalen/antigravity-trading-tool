@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0 vervolgflow: reparatie na live QA (19 november 2026)
 
-Phase: `LOCAL_VALIDATED_AWAITING_CI`. De onafhankelijke QA wees de vorige
+Phase: `PRODUCT_DEPLOYED_READY_FOR_INDEPENDENT_QA`. De onafhankelijke QA wees de vorige
 publieke SHA `436a29b6e0abbf851916b9cbfc7b39f2bf711fbb` af in
 [QA-run 44533490821](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44533490821)
 (door QA opgegeven artifact SHA-256
@@ -46,8 +46,17 @@ respectievelijk 20/20 (SHA-256
 `d8c0ea3cd13b10668ce03e8b189522c8e46980c6976d077be250a03e3ddb3512`)
 en 109/109 (SHA-256
 `21befb54532a0753b190438838731e62687d227c0014aa13ff74e01e2268e800`),
-zonder fout of mismatch. Er is voor deze reparatie nog geen nieuwe publieke
-SHA of onafhankelijk QA-verdict.
+zonder fout of mismatch. Alle vijf
+[PR-CI-jobs 44542528322](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44542528322)
+en alle vijf
+[main-CI-jobs 44543698814](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44543698814)
+slaagden. [Auto Deploy 44544899159](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44544899159)
+slaagde voor gemergede product-SHA `3b20428fa667492665d478094dce2f4e284c1a89`.
+GitHub main en beide publieke endpoints meldden op 19 november 2026 exact
+die SHA; backend-health en frontend-buildinfo gaven HTTP 200. De definitieve
+publieke SHA na deze statusupdate moet opnieuw worden geverifieerd voordat
+de bestaande QA-agent de onafhankelijke ingelogde proef uitvoert. Er is nog
+geen QA-verdict voor deze reparatie.
 
 ## FINN 3.0 vervolgacties en rapportmeldingen (19 november 2026)
 
