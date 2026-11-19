@@ -275,6 +275,17 @@ def _explicit_create_operation_request(message: str) -> str | None:
         r"[^.!?\n]{0,90}\b(?:trade(?:voorstel|plan)?|trading[ -]?plan|orderplan)\b",
         message, re.I,
     ))
+    smart_create_with_advice = bool(
+        (re.match(r"^\s*ik\s+wil\b", message, re.I)
+         and re.search(r"\bsmart\s*dca\b[^?]{0,100}\b(?:maken|aanmaken)\b", message, re.I))
+        or re.match(r"^\s*maak\b[^?]{0,120}\bsmart\s*dca\b", message, re.I)
+    )
+    if (smart_create_with_advice
+            and re.search(r"\btoon\b[^.!?]{0,80}\b(?:concept|voorstel)\b", message, re.I)
+            and not _proposal_explicitly_excluded(message)):
+        # An embedded question asking FINN to suggest editable bands does not
+        # turn a direct setup-creation request into a read-only advice turn.
+        return "create_setup"
     conversational_plan_request = bool(re.search(
         r"\b(?:(?:kun|kan)\s+(?:je|jij|u)|(?:could|can)\s+you|kannst\s+du)\b"
         r"[^?]{0,100}\b(?:handmatig(?:e)?\s+tradevoorstel|manual\s+trade\s+proposal|"
@@ -3962,7 +3973,7 @@ class FinnResponsesFrontDoor:
                             "asset": selected_score_setup[1],
                             "setup_id": selected_score_setup[0],
                         })
-                if call.name == "get_current_asset_scores" and mentioned_assets:
+                if call.name in {"get_current_asset_scores", "get_smart_dca_guidance"} and mentioned_assets:
                     # The score tool reads one market. Bind it to the assets
                     # and exact pairs named in this turn instead of letting a
                     # previous page's market hint answer for a different plan.
@@ -5271,6 +5282,11 @@ class FinnResponsesFrontDoor:
             required_read_tool_name=(
                 "get_open_plan_draft"
                 if guided_draft_question
+                else "get_smart_dca_guidance"
+                if is_read_only_turn and pending_operation is None and not explicit_create_request
+                and not resuming_clarification
+                and re.search(r"\bsmart\s*dca\b", message, re.I)
+                and re.search(r"\b(?:advie\w*|aanrad\w*|voorstel\w*|suggest\w*|staffel\w*|scoreband\w*|scoregrens\w*)\b", message, re.I)
                 else "get_closed_trade_review"
                 if (explicit_closed_review_read or contextual_closed_review_read)
                 and pending_operation is None and not resuming_clarification

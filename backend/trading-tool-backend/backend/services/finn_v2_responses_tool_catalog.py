@@ -20,6 +20,7 @@ _READ_SCOPES: dict[str, tuple[str, ...]] = {
     "get_active_plan_and_strategy": ("active_setup", "linked_strategy"),
     "get_market_snapshot": ("market_snapshot", "macro_snapshot"),
     "get_indicator_snapshot": ("indicator_configuration",),
+    "get_smart_dca_guidance": ("active_asset", "indicator_configuration", "scores", "preferences"),
     "get_current_technical_snapshot": ("technical_snapshot",),
     "get_portfolio_and_exposure": ("portfolio",),
     "get_saved_bots": ("portfolio",),
@@ -282,6 +283,20 @@ class FinnResponsesToolCatalog:
                     "If the question compares a recent price quote with a missing Market score, "
                     "read this tool and get_market_snapshot; neither read alone establishes both facts."
                 )
+            if name == "get_smart_dca_guidance":
+                description += (
+                    " Use for personalized Smart DCA score-band advice for the exact requested "
+                    "trading pair, even when no setup has been saved. Read the owner's configured "
+                    "indicators and weights, source-verified current component and total scores, "
+                    "and saved risk preferences. Explain which measurements support the suggestion "
+                    "and which are unavailable. A low weighted benchmark means weak combined "
+                    "Market/Macro/Technical evidence; it is not proof of RSI oversold. "
+                    "The illustrative 26/76 boundaries and 150/100/50 percent amounts are "
+                    "editable examples, not optimized or a buy signal. A complete current score "
+                    "can illustrate one band, but cannot establish optimal thresholds from history. "
+                    "Ask the user to choose their base amount, maximum per period and acceptable "
+                    "extra exposure before proposing a saved plan; never place an order."
+                )
             if name == "get_market_snapshot":
                 description += (
                     " Use this for both current prices and last known provider-dated prices, "
@@ -339,7 +354,7 @@ class FinnResponsesToolCatalog:
                 "asset": {"type": ["string", "null"], "description": "Asset named by the user, if any."},
                 "timeframe": {"type": ["string", "null"], "description": "A real timeframe such as 4H or 1D, never an object name."},
             }
-            if name in {"get_current_asset_scores", "get_setup_market_matches",
+            if name in {"get_current_asset_scores", "get_smart_dca_guidance", "get_setup_market_matches",
                         "get_market_snapshot", "get_saved_setup", "get_active_plan_and_strategy",
                         "get_indicator_snapshot", "get_current_technical_snapshot"}:
                 properties["quote_currency"] = {
@@ -612,7 +627,7 @@ class FinnResponsesToolCatalog:
             return FinnResponsesToolCall(name, None, {}, (), (), ())
         if name in self.read_tools or name in self.evaluation_contracts:
             allowed = {"asset", "timeframe"}
-            if name in {"get_current_asset_scores", "get_setup_market_matches",
+            if name in {"get_current_asset_scores", "get_smart_dca_guidance", "get_setup_market_matches",
                         "get_market_snapshot", "get_saved_setup", "get_active_plan_and_strategy",
                         "get_indicator_snapshot", "get_current_technical_snapshot"}:
                 allowed.add("quote_currency")

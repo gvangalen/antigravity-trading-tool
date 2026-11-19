@@ -673,14 +673,20 @@ class FinnResponsesLoop:
                     "\nExplain only the preceding verified answer and its already verified "
                     "evidence. No new owner-scoped or market facts were fetched this turn."
                 )
+            smart_dca_guidance_read = any(
+                call.get("name") == "get_smart_dca_guidance" for call in trace
+            )
             if any(
                 item.get("scope") == "read_asset_scores"
                 for call in trace
                 for item in (call.get("result") or {}).get("results", [])
             ):
                 turn_instructions += (
-                    "\nFor current score evidence, answer in one brief paragraph without headings "
-                    "or bullet lists. Include only source-verified scores in reported_scores. "
+                    "\nFor current score evidence, "
+                    + ("explain the Smart DCA proposal and its risks clearly. "
+                       if smart_dca_guidance_read else
+                       "answer in one brief paragraph without headings or bullet lists. ")
+                    + "Include only source-verified scores in reported_scores. "
                     "Null components are unknown, not zero. Name the missing or stale sources "
                     "and do not infer a benchmark or trading signal when the benchmark_score is null."
                 )
