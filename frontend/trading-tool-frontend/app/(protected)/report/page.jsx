@@ -80,7 +80,8 @@ CONFIG
 
 const REPORT_TYPE_KEYS = ['daily', 'weekly', 'monthly', 'quarterly'];
 const POLL_INTERVAL_MS = 4000;
-const POLL_MAX_ATTEMPTS = 60;
+const POLL_SLOW_ATTEMPTS = 60;
+const POLL_MAX_ATTEMPTS = 225;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -1946,13 +1947,17 @@ GENERATE
         lastSignatureRef.current = sig;
         setSelectedDate('latest');
         setReport(data);
-        return;
+        return { ready: true };
       }
 
       attempts++;
+      if (attempts === POLL_SLOW_ATTEMPTS) {
+        setGenerationNotice(`Dit ${fallbackLabel.toLowerCase()} duurt langer dan gebruikelijk. FINN werkt op de achtergrond verder; het huidige rapport blijft zichtbaar.`);
+      }
     }
 
-    throw new Error('Polling timeout');
+    if (taskSucceeded) throw new Error('report_not_visible_after_worker_success');
+    return { pending: true };
   };
 
   const handleGenerate = async (fromAuto = false) => {
@@ -1991,7 +1996,11 @@ GENERATE
         throw new Error('existing_report_unavailable');
       }
       setGenerationNotice(`We maken een nieuw ${fallbackLabel.toLowerCase()}. Het huidige rapport blijft zichtbaar tot de nieuwe versie klaar is.`);
-      await pollUntilNewReport(baselineSignature, generation?.status_token);
+      const outcome = await pollUntilNewReport(baselineSignature, generation?.status_token);
+      if (outcome?.pending) {
+        setGenerationNotice(`Dit ${fallbackLabel.toLowerCase()} wordt nog op de achtergrond gemaakt. Het huidige rapport blijft zichtbaar; open deze pagina later opnieuw voor de nieuwe versie.`);
+        return;
+      }
       setGenerationNotice(`${fallbackLabel} staat klaar`);
       showSnackbar(`${fallbackLabel} staat klaar`, 'success');
     } catch (err) {
