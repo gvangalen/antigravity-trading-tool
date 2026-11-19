@@ -4,9 +4,36 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 rapportknopfeedback: reparatie na onafhankelijke QA (19 november 2026)
+
+Phase: `LOCAL_REPAIR_VALIDATION`. De onafhankelijke QA heeft de vorige
+definitieve live SHA `3eb0ae1e8fe0ebe43b6f725cf635252b53c99b05`
+**NOT ACCEPTED** beoordeeld. De eerste BTC/USDT-strategiekaart behield nu
+USDT, de gecombineerde keten maakte één setup en één strategie, de beschermde
+Paper-risicoproef slaagde zonder Live-calls en de AAPL-exit las de actuele
+restpositie. Watchlist-, bot- en reflectievragen bleven read-only. Bij
+**Rapport → Nieuw** op een bestaand dagrapport bleef echter hetzelfde rapport
+staan zonder waarneembare voortgang of blijvende melding. Het gesaniteerde
+QA-artifact had SHA-256
+`3b09746fb322adb633dbedab372aa0f42206dcec50828ecebb0021e6cbb71f16`.
+De geobserveerde bronrespons van de rapportknop is niet vastgelegd; hergebruik
+en een mislukte of nog lopende generatie mogen daarom niet worden verward.
+
+De huidige lokale reparatie houdt het bestaande rapport tijdens een klik
+zichtbaar en toont direct bij **Nieuw** een blijvende, voor alle uitkomsten
+zichtbare status: aanvraag loopt, recent rapport hergebruikt, nieuw rapport
+gereed of fout. Bij wissel van rapporttype of historische datum verdwijnt een
+oude status. `npm run typecheck`, `npm run build`, `npm run lint:i18n`,
+`npm run test:i18n` (43), `npm run test:commands` (91),
+`npm run test:proposals` (10), `npm run audit:high` (0 hoge bevindingen) en
+`git diff --check` zijn lokaal geslaagd. De ongewijzigde backend- en
+providerpaden behouden de validatie van de vorige kandidaat; CI toetst de
+nieuwe kandidaat opnieuw. Er is nog geen nieuwe deployment of onafhankelijke
+hertest.
+
 ## FINN 3.0 vervolgflow: tweede reparatie na onafhankelijke QA (19 november 2026)
 
-Phase: `PRODUCT_DEPLOYED_READY_FOR_INDEPENDENT_QA`. Onafhankelijke QA wees de vorige live SHA
+Phase: `LIVE_QA_NOT_ACCEPTED`. Onafhankelijke QA wees de vorige live SHA
 `d5c149b23477894c6662a7b246ea8ad342d67da5` af na ingelogde browser- en
 beschermde Paper-proeven. De gecombineerde setup → strategie → score-keten
 werkte en hergebruikte haar objecten, maar de eerste BTC/USDT-strategiekaart
