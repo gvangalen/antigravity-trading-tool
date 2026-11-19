@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0 vervolgflow: tweede reparatie na onafhankelijke QA (19 november 2026)
 
-Phase: `LOCAL_VALIDATED_PR_CI_PENDING`. Onafhankelijke QA wees de vorige live SHA
+Phase: `PRODUCT_DEPLOYED_READY_FOR_INDEPENDENT_QA`. Onafhankelijke QA wees de vorige live SHA
 `d5c149b23477894c6662a7b246ea8ad342d67da5` af na ingelogde browser- en
 beschermde Paper-proeven. De gecombineerde setup → strategie → score-keten
 werkte en hergebruikte haar objecten, maar de eerste BTC/USDT-strategiekaart
@@ -27,8 +27,8 @@ van de FINN-tooluitkomst JSON-veilig gemaakt. Een expliciete vervolgvraag of
 een historische Paper-exit de positie echt sloot, leest de huidige eigenaar-
 gebonden Paper-portefeuille en noemt de gedateerde resthoeveelheid wanneer
 één bot eenduidig is. De rapportpagina laat het hergebruik van een recent
-dagrapport nu zichtbaar staan. Deze wijzigingen zijn nog **niet** gedeployed
-of onafhankelijk hertest.
+dagrapport nu zichtbaar staan. Deze wijzigingen zijn gedeployed, maar nog
+**niet onafhankelijk ingelogd hertest**.
 
 Lokale Build-evidentie voor deze reparatie: backend `pytest -q` gaf
 **5105 passed, 7 skipped**; de frontend `build`, `typecheck`, `lint:i18n`,
@@ -52,8 +52,19 @@ zijn gerepareerd en streng hertest. Alle vijf CI-jobs voor de eerste
 [concept-PR #1203](https://github.com/gvangalen/antigravity-trading-tool/pull/1203)
 commit `854140e38aa9c3f24095768ca7ba023597ed9d28` slaagden in
 [CI-run 44563657643](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44563657643).
-CI voor de definitieve commit, Auto Deploy en onafhankelijke QA zijn op dit
-moment nog niet afgerond.
+Alle vijf jobs voor de definitieve PR-commit
+`2edb84db3b33c1e28999b02a77cd00e9fb66f40c` slaagden in
+[PR-CI 44570770761](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44570770761).
+Alle vijf jobs van [main-CI 44572003927](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44572003927)
+slaagden op gemergede product-SHA
+`c56c22f5046fb62bdc5ab425779ad39297557d78`.
+[Auto Deploy 44573250963](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44573250963)
+slaagde op dezelfde SHA. GitHub `main`, publieke backend-health en
+frontend-build-info meldden op 19 november 2026 alle drie exact die SHA;
+beide publieke endpoints gaven HTTP 200. Deze statusupdate zelf maakt een
+nieuwe Git-SHA: vóór de QA-handoff moeten de laatste main-CI, Auto Deploy en
+beide publieke endpoints opnieuw dezelfde definitieve SHA bevestigen.
+Onafhankelijke QA heeft deze reparatie nog niet beoordeeld.
 
 ## FINN 3.0 vervolgflow: reparatie na live QA (19 november 2026)
 
