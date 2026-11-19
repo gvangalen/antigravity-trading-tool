@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0 vervolgflow: tweede reparatie na onafhankelijke QA (19 november 2026)
 
-Phase: `LOCAL_REPAIR_VALIDATION`. Onafhankelijke QA wees de vorige live SHA
+Phase: `LOCAL_VALIDATED_PR_CI_PENDING`. Onafhankelijke QA wees de vorige live SHA
 `d5c149b23477894c6662a7b246ea8ad342d67da5` af na ingelogde browser- en
 beschermde Paper-proeven. De gecombineerde setup → strategie → score-keten
 werkte en hergebruikte haar objecten, maar de eerste BTC/USDT-strategiekaart
@@ -31,20 +31,29 @@ dagrapport nu zichtbaar staan. Deze wijzigingen zijn nog **niet** gedeployed
 of onafhankelijk hertest.
 
 Lokale Build-evidentie voor deze reparatie: backend `pytest -q` gaf
-**5104 passed, 7 skipped**; de frontend `build`, `typecheck`, `lint:i18n`,
+**5105 passed, 7 skipped**; de frontend `build`, `typecheck`, `lint:i18n`,
 `test:i18n`, `test:commands`, `test:proposals` en `audit:high` slaagden.
-De geïsoleerde FastAPI/Celery/Postgres/Redis-worker-actiematrix gaf **17/17**,
+De definitieve geïsoleerde FastAPI/Celery/Postgres/Redis-worker-actiematrix gaf **17/17**,
 de adapterchecks **28/28**, inclusief Smart DCA en kalender-DCA. Daarin
 waren nul brokerorders, nul Live-calls, nul live-botactivaties en nul
 productieverbindingen. De lokale actiematrix heeft SHA-256
-`5e365588b75fe788e26c4f26a6d89d49b1eedc866eb2ae052cb93543561afe80`.
-De echte Responses-provider-developmentset gaf **20/20** en nul provider-,
-schema-, parse-, validatie- en timeoutfouten. Een eerste volledige
+`acd7dd61ba4cc1d9169eb55418df2518aaf6661a4b113f42e85ceb479ada2e6b`.
+De definitieve echte Responses-provider-development- en regressiesets gaven
+**20/20** en **109/109** met alle detailchecks op 100% en nul provider-,
+schema-, parse-, validatie- en timeoutfouten. De artifact-SHA-256's zijn
+`4b0573a7d210fb2341aea01160198f055dc62eb0f26a77ce4c0b09bc20bfade0`
+en `95695fce46d4413540e8cc6275d9dfe87f50a21f3956751c4659eb9023c1f867`.
+Een eerdere volledige
 provider-regressierun was **niet groen**: 18 van 109 gevallen kregen een
 `503 server_is_overloaded` van de externe provider, waardoor de gemeten
 operatienauwkeurigheid 91/109 werd. Dit is als fout geteld; er is geen
-drempel of casus verlaagd. Een schone herhaling loopt. CI, Auto Deploy en
-onafhankelijke QA zijn op dit moment nog niet afgerond.
+drempel of casus verlaagd. De twee resterende detailmismatches na herstel
+zijn gerepareerd en streng hertest. Alle vijf CI-jobs voor de eerste
+[concept-PR #1203](https://github.com/gvangalen/antigravity-trading-tool/pull/1203)
+commit `854140e38aa9c3f24095768ca7ba023597ed9d28` slaagden in
+[CI-run 44563657643](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44563657643).
+CI voor de definitieve commit, Auto Deploy en onafhankelijke QA zijn op dit
+moment nog niet afgerond.
 
 ## FINN 3.0 vervolgflow: reparatie na live QA (19 november 2026)
 
