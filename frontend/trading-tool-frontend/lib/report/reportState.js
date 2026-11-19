@@ -4,8 +4,9 @@ export function getReportSignature(report) {
   if (!report) return '';
   const snapshot = scoreSourceSnapshot(report);
   if (snapshot?.report_v2?.version === 2) {
-    // Period rows are updated in place. Their created_at can stay unchanged.
-    return JSON.stringify(snapshot);
+    // A regenerated report may use the same facts and prose. The persisted
+    // generation moment still changes when the worker saves the new report.
+    return JSON.stringify({ generated_at: report.generated_at || null, snapshot });
   }
   return report.generated_at || report.updated_at || report.created_at || JSON.stringify(report);
 }

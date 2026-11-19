@@ -34,6 +34,18 @@ test('period report identity follows the frozen facts, not the upsert timestamp'
   assert.equal(isGeneratedReportReady(next, getReportSignature(next), getReportSignature(old), true, 'daily'), false);
 });
 
+test('a regenerated daily report with unchanged facts is recognized after worker success', () => {
+  const snapshot = { report_v2: { version: 2, period: 'daily' }, observed_at: '2026-11-19T13:23:00Z' };
+  const old = { report_date: '2026-11-19', created_at: '2026-11-19T13:23:00Z',
+    generated_at: '2026-11-19T13:23:00Z', score_source_snapshot: snapshot };
+  const regenerated = { ...old, generated_at: '2026-11-19T17:30:00Z' };
+  const baseline = getReportSignature(old);
+  const next = getReportSignature(regenerated);
+  assert.notEqual(next, baseline);
+  assert.equal(isGeneratedReportReady(regenerated, next, baseline, false, 'daily'), false);
+  assert.equal(isGeneratedReportReady(regenerated, next, baseline, true, 'daily'), true);
+});
+
 test('PDF labels follow the saved prose language, not the print browser language', () => {
   const report = { score_source_snapshot: JSON.stringify({ content_locale: 'nl' }) };
   assert.equal(reportV2Locale(report, 'en'), 'nl');

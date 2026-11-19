@@ -4,6 +4,30 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 langzame rapportgeneratie: reparatie na live QA (19 november 2026)
+
+Phase: `LOCAL_REPAIR_VALIDATION`. Onafhankelijke QA beoordeelde de vorige
+definitieve live SHA `6015dd3ab83ad45fb4c2aeb255c454e5a05476f7`
+**NOT ACCEPTED**. Na een harde refresh werkte de nieuwe knopfeedback: direct
+status onder **Nieuw**, knop uitgeschakeld tijdens wachten en het bestaande
+dagrapport bleef leesbaar. De aanvankelijk open tab gebruikte nog een oude
+clientbundle. De nieuwe rapportaanvraag eindigde na circa vier minuten met
+`Polling timeout` en een blijvende foutmelding. Later verscheen een nieuw
+rapportmoment (19:21 CET in plaats van 14:23 CET); de browserdiagnostiek kon
+de oorspronkelijke POST-respons of Celery-taakstatus niet meer reconstrueren.
+Daarom is niet bewezen welke van de twee testklikken het rapport opsloeg.
+
+De lokale reparatie laat een nieuwe opslag met dezelfde Report 2.0-snapshot
+als nieuwe versie gelden via `generated_at`. Na vier minuten toont de UI dat
+FINN nog bezig is en blijft zij tot maximaal vijftien minuten controleren.
+Als de taak dan nog niet terminal is, noemt de pagina het rapport nog in
+bewerking en laat zij het bestaande rapport staan; een aantoonbaar geslaagde
+taak zonder zichtbare nieuwe opslag blijft een fout. De gerichte regressietest
+voor dezelfde snapshot met een nieuw opslagmoment (7/7), frontend-typecheck,
+productiebouw, i18n-lint en -tests, command- en proposaltests en de hoge
+dependency-audit zijn lokaal geslaagd. Deployment en onafhankelijke hertest
+van deze tweede reparatie zijn nog niet uitgevoerd.
+
 ## FINN 3.0 rapportknopfeedback: reparatie na onafhankelijke QA (19 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_READY_FOR_INDEPENDENT_QA`. De onafhankelijke QA heeft de vorige
