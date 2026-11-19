@@ -4,6 +4,42 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 brongebonden AAPL-botcheck en coachvragen (19 november 2026)
+
+Phase: `LOCAL_VALIDATED_READY_FOR_PR`. Op verzoek van de gebruiker gaat deze
+kandidaat verder nadat de andere Build-agent klaar is. De vorige
+rapportgeneratie-kandidaat is in de basis op `main` opgenomen; zijn nog niet
+uitgevoerde onafhankelijke hertest geldt niet als acceptatie van deze nieuwe
+kandidaat.
+
+FINN leest bij een vraag over een genoemde historische botcheck de
+eigenaargebonden beslissing op dat tijdstip en het genoemde dagrapport. Hij
+houdt de twee bronmomenten en redenen apart en gebruikt geen later rapport
+als bewijs voor een vroeger rapport. Een meervoudige, alleen-lezen coachvraag
+over één genoemd asset plant de gevraagde setup-, score-, bot-, rapport-,
+koers- en portefeuillesources vooraf. De antwoordcontrole eist dat FINN de
+gelezen onderwerpen, botreden, vervolgstap en een geverifieerde score benoemt
+wanneer de vraag daarom vraagt. Er zijn geen handelsacties aan deze route
+toegevoegd.
+
+Lokale Build-evidentie op de gerebasete productcode: backend `pytest -q` gaf
+**5113 passed, 7 skipped**. De geïsoleerde FastAPI/Celery/PostgreSQL/Redis-
+actiematrix gaf **17/17**, met nul brokerorders, Live-calls, live-bots en
+productieverbindingen (artifact SHA-256
+`1126984d6b78db3cda9a6ecce7c68384db3cdb30e85602a433209e245d2b5206`).
+De echte Responses-providerontwikkeling en -regressie gaven **20/20** en
+**109/109**, alle detailmetingen 100% en nul provider-, schema-, parse-,
+validatie- en timeoutfouten (artifact SHA-256 respectievelijk
+`2c758d7e168f9e9cbac1ae6be765451f1c6bd562e1f76d1d9768a57f2880ca1c`
+en `b2d60fbd09f6816d041e63aa7994d2c9fd572ffbe087fd8da38f62eaf48ce6af`).
+Een synthetisch lokaal vierbeurtig Nederlands coachgesprek via de worker en
+echte provider slaagde (artifact SHA-256
+`2fa9e79209cb165302b7410d05d95f10f711421d3fe99155a64f9a9b2a64783e`).
+De frontend is in deze kandidaat niet gewijzigd; PR-CI controleert de
+toepasselijke frontend-gates. Product-PR, CI, Auto Deploy en publieke SHA-
+controle moeten nog worden uitgevoerd. Onafhankelijke live QA voor deze
+kandidaat moet daarna plaatsvinden.
+
 ## FINN 3.0 langzame rapportgeneratie: reparatie na live QA (19 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_READY_FOR_INDEPENDENT_QA`. Onafhankelijke QA beoordeelde de vorige
