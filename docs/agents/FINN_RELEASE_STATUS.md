@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0 rapportknopfeedback: reparatie na onafhankelijke QA (19 november 2026)
 
-Phase: `LOCAL_REPAIR_VALIDATION`. De onafhankelijke QA heeft de vorige
+Phase: `PRODUCT_DEPLOYED_READY_FOR_INDEPENDENT_QA`. De onafhankelijke QA heeft de vorige
 definitieve live SHA `3eb0ae1e8fe0ebe43b6f725cf635252b53c99b05`
 **NOT ACCEPTED** beoordeeld. De eerste BTC/USDT-strategiekaart behield nu
 USDT, de gecombineerde keten maakte één setup en één strategie, de beschermde
@@ -27,9 +27,15 @@ oude status. `npm run typecheck`, `npm run build`, `npm run lint:i18n`,
 `npm run test:i18n` (43), `npm run test:commands` (91),
 `npm run test:proposals` (10), `npm run audit:high` (0 hoge bevindingen) en
 `git diff --check` zijn lokaal geslaagd. De ongewijzigde backend- en
-providerpaden behouden de validatie van de vorige kandidaat; CI toetst de
-nieuwe kandidaat opnieuw. Er is nog geen nieuwe deployment of onafhankelijke
-hertest.
+providerpaden behouden de validatie van de vorige kandidaat. Product-PR
+[#1205](https://github.com/gvangalen/antigravity-trading-tool/pull/1205)
+is gemerged als `c48c1df774d61b2ba23baf1c90491734c20f5a90`. PR-CI
+`44579739447` en main-CI `44580851540` zijn volledig geslaagd;
+Auto Deploy `44582054234` is geslaagd. Publieke backend-health en frontend
+build-info gaven beide HTTP 200 en dezelfde product-SHA. De status-update
+hieronder veroorzaakt zelf een nieuwe main-SHA; vóór QA moeten de laatste
+main-CI, Auto Deploy en beide publieke SHA's opnieuw gelijk worden bevonden.
+De onafhankelijke hertest is nog niet uitgevoerd.
 
 ## FINN 3.0 vervolgflow: tweede reparatie na onafhankelijke QA (19 november 2026)
 
