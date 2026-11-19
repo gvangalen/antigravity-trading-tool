@@ -11,7 +11,7 @@ import { coachFeedDetailsHref } from "@/lib/finnCoachFeedLinks.mjs";
 import { visibleCoachFeedItems } from "@/lib/finnCoachFeedVisible.mjs";
 import { canDiscussFeedItem, canUpdateFeedStatus } from "@/lib/finnCoachFeedActions.mjs";
 import { coachFeedDiscussionQuestion } from "@/lib/finnCommandSearch";
-import { formatAmsterdamTimestamp } from "@/lib/time/formatUtcTimestamp.mjs";
+import { formatUserTimestamp } from "@/lib/time/formatUtcTimestamp.mjs";
 
 const FEED_PAGE_SIZE = 50;
 
@@ -167,11 +167,11 @@ export default function FinnCoachFeed({ onDiscuss }) {
               </div>
               <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{item.description}</p>
               <time className="mt-1 block text-xs text-slate-400" dateTime={item.created_at}>
-                {formatAmsterdamTimestamp(item.created_at, locale)}
+                {formatUserTimestamp(item.created_at, locale)}
               </time>
               {item.source_observed_at ? (
                 <time className="mt-1 block text-xs text-slate-400" dateTime={item.source_observed_at}>
-                  {item.event_type === "position_risk" ? copy.valuationSource : item.event_type === "plan_review" ? copy.quoteSource : item.event_type.endsWith("_report_ready") ? copy.reportReadyAt : item.event_type === "watchlist_added" ? copy.watchlistAddedAt : item.event_type === "strategy_next_step" ? copy.setupSavedAt : item.event_type === "paper_next_step" ? copy.strategySavedAt : copy.sourceMoment}: {formatAmsterdamTimestamp(item.source_observed_at, locale)}
+                  {item.event_type === "position_risk" ? copy.valuationSource : item.event_type === "plan_review" ? copy.quoteSource : item.event_type.endsWith("_report_ready") ? copy.reportReadyAt : item.event_type === "watchlist_added" ? copy.watchlistAddedAt : item.event_type === "strategy_next_step" ? copy.setupSavedAt : item.event_type === "paper_next_step" ? copy.strategySavedAt : copy.sourceMoment}: {formatUserTimestamp(item.source_observed_at, locale)}
                 </time>
               ) : item.event_type === "analysis_ready" && /^\d{4}-\d{2}-\d{2}$/.test(String(item.evidence?.score_as_of || "")) ? (
                 <time className="mt-1 block text-xs text-slate-400" dateTime={item.evidence.score_as_of}>

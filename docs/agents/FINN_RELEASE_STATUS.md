@@ -15,15 +15,17 @@ verduidelijkingsvraag markeert haar als gelezen. Een mislukte chat laat de kaart
 ongelezen. Een watchlisttoevoeging die FINN zelf in de chat heeft uitgevoerd
 wordt wel vastgelegd maar niet opnieuw als actieve oproep getoond. Web en
 mobiel gebruiken dezelfde selectiegrenzen. De historische feed blijft op
-gebeurtenistijd gesorteerd. De feed vermeldt beschikbare bronmomenten in
-Europe/Amsterdam; een score met uitsluitend een kalenderdatum krijgt geen
-verzonnen tijdstip. Er is geen handelsactie of bevestigingsgrens gewijzigd.
+gebeurtenistijd gesorteerd. De feed vermeldt beschikbare bronmomenten in de
+ingestelde tijdzone van de browser of het mobiele apparaat; er is nog geen
+aparte accounttijdzonevoorkeur. Een score met uitsluitend een kalenderdatum
+krijgt geen verzonnen tijdstip. Er is geen handelsactie of bevestigingsgrens
+gewijzigd.
 
 Lokale metingen na de status- en tijdwijziging: root pytest **5111 geslaagd,
 7 overgeslagen**; de daarna toegevoegde datumregressie is in de gerichte
 feedtest **66/66 geslaagd**. Webproductiebouw, typecheck, i18n-lint,
-i18n-tests **44 geslaagd** en commandtests **91 geslaagd**; mobiele typecheck,
-lint (0 fouten, 89 waarschuwingen), `test:chat` **23 geslaagd** en
+i18n-tests **45 geslaagd** en commandtests **91 geslaagd**; mobiele typecheck,
+lint (0 fouten, 89 waarschuwingen), `test:chat` **24 geslaagd** en
 webbundle-export geslaagd. Een ingelogde
 liveproef, CI, Auto Deploy en de officiële onafhankelijke QA-matrix zijn voor
 deze kandidaat nog niet uitgevoerd. De bestaande FINN-actiecontracten en
