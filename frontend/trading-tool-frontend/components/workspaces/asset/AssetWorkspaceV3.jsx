@@ -48,6 +48,7 @@ import {
   normalizeTradingViewInterval,
 } from "../../../../../shared/tradingViewConfig";
 import { matchesWorkspaceAsset } from "@/lib/workspace/workspaceAssetScope.mjs";
+import { marketDisplayLabel, marketDisplayQuote } from "@/lib/workspace/marketDisplay.mjs";
 import { FINN_INDICATOR_MODAL_COMPLETED_EVENT } from "@/lib/finnCommandSearch";
 import { formatBenchmarkScore, indicatorSourceFreshness, validatedDayEvidence } from "@/lib/workspace/canonicalScorePresentation.mjs";
 import { quotePresentationStatus } from "@/lib/workspace/quotePresentationStatus.mjs";
@@ -1923,6 +1924,7 @@ function AnalysisChartSection({ interval, onIntervalChange, tradingViewSymbol, s
 
 function ActiveAssetCard({
   activeSymbol,
+  activeMarketLabel,
   assetName,
   assetLogoUrl,
   price,
@@ -1983,7 +1985,7 @@ function ActiveAssetCard({
                   referrerPolicy="no-referrer"
                 />
               ) : null}
-              <span>{activeSymbol}</span>
+              <span>{activeMarketLabel || "…"}</span>
               <span className="hidden text-slate-400 sm:inline">{assetName || "Asset"}</span>
             </button>
             <span className="min-w-0 truncate text-[26px] font-black leading-none tracking-tight text-slate-950 sm:text-[29px] lg:text-[31px]">
@@ -2111,8 +2113,7 @@ function AssetList({
                       <span className={`h-2.5 w-2.5 rounded-full ${active ? "bg-blue-600" : "bg-slate-300"}`} />
                     )}
                     <span className="text-[15px] font-black text-slate-950">
-                      {row.assetClass === "crypto" && row.quoteCurrency
-                        ? `${row.symbol}/${row.quoteCurrency}` : row.symbol}
+                      {row.marketLabel || "…"}
                     </span>
                   </div>
                   <div className="mt-0.5 truncate text-[13px] font-medium text-slate-500">
@@ -2130,7 +2131,7 @@ function AssetList({
                 <div className="flex justify-end">
                   <button
                     type="button"
-                    aria-label={`${ui.watchlistRemoveLabel}: ${row.quoteCurrency ? `${row.symbol}/${row.quoteCurrency}` : row.symbol}`}
+                    aria-label={`${ui.watchlistRemoveLabel}: ${row.marketLabel || row.symbol}`}
                     title={ui.watchlistRemoveLabel}
                     onClick={(event) => {
                       event.stopPropagation();
@@ -3027,13 +3028,18 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     ).map(({ saved, workspace: row, previous }) => {
       const symbol = String(saved.symbol || "").toUpperCase();
       const assetClass = String(saved.asset_class || row?.asset_class || previous?.assetClass || "").toLowerCase();
-      const quoteCurrency = String(saved.quote_currency || row?.quote_currency || previous?.quoteCurrency || "").toUpperCase();
+      const tradingviewSymbol = saved.tradingview_symbol || row?.tradingview_symbol || previous?.tradingviewSymbol || null;
+      const quoteCurrency = marketDisplayQuote(symbol, {
+        quoteCurrency: saved.quote_currency || row?.quote_currency,
+        tradingviewSymbol,
+      }) || previous?.quoteCurrency || null;
       const changeValue = row?.change_24h == null ? NaN : Number(row.change_24h);
       return {
         symbol,
+        marketLabel: marketDisplayLabel(symbol, { assetClass, quoteCurrency, tradingviewSymbol }),
         displayName: saved.display_name || row?.display_name || previous?.displayName || ASSET_NAMES[symbol] || symbol,
         logoUrl: resolveAssetLogoUrl(symbol, saved.logo_url || row?.logo_url || previous?.logoUrl || null, assetClass),
-        tradingviewSymbol: saved.tradingview_symbol || row?.tradingview_symbol || previous?.tradingviewSymbol || null,
+        tradingviewSymbol,
         assetClass,
         assetGroup: normalizeAssetGroup(assetClass),
         marketId: saved.market_id ?? null,
@@ -3079,7 +3085,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
 
     openConfirm({
       title: ui.watchlistRemoveTitle,
-      context: ui.watchlistRemoveContext(row.quoteCurrency ? `${row.symbol}/${row.quoteCurrency}` : row.symbol),
+      context: ui.watchlistRemoveContext(row.marketLabel || row.symbol),
       impact: ui.watchlistRemoveImpact,
       safety: ui.watchlistRemoveSafety,
       contextLabel: ui.modalContextLabel,
@@ -3166,6 +3172,11 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     activeWatchlistRow?.assetClass || workspaceAsset?.asset_class || null,
   );
   const activeTradingViewSymbol = workspaceAsset?.tradingview_symbol || null;
+  const activeMarketLabel = workspace?.pair || marketDisplayLabel(activeSymbol, {
+    assetClass: workspaceAsset?.asset_class || activeWatchlistRow?.assetClass,
+    quoteCurrency: activeQuoteCurrency || workspace?.quote_currency,
+    tradingviewSymbol: activeTradingViewSymbol || activeWatchlistRow?.tradingviewSymbol,
+  });
 
   const handleEditIndicator = (category, row) => {
     if (!workspace?.market_id || !row?.name) return;
@@ -3328,6 +3339,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     <section className="space-y-3">
       <ActiveAssetCard
         activeSymbol={activeSymbol}
+        activeMarketLabel={activeMarketLabel}
         assetName={activeAssetName}
         assetLogoUrl={activeAssetLogo}
         price={formatQuotePrice(assetLive?.price, locale, assetLive?.quote_currency)}
