@@ -42,9 +42,131 @@ Frontend-build, typecheck, i18n-lint en tests, commands, proposals, setups en
 [run 44375020095](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44375020095)
 vóór de integratie met PR #1183; CI wordt op de definitieve kandidaat herhaald.
 
+## Smart DCA naam- en grafiekperiode-extractie (18 november 2026)
+
+Phase: `QA_ACCEPTED_TARGETED_SMART_DCA_SCOPE`. Onafhankelijke browser-QA
+wees live SHA `838b94823dfb5b910be2409d221bbbe50b24190a` af: een code
+`1811M` aan het einde van de setupnaam werd ten onrechte als grafiekperiode
+gebruikt, en bij een tweede vraag werd `en grafiek 1D` aan de naam toegevoegd
+waarna FINN opnieuw naar de periode vroeg. De beschermde Paper-proef
+[44405735046](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44405735046)
+slaagde; de fout zat in bevestigbare voorstelvelden, niet in een uitgevoerde order.
+
+De reparatie scheidt namen van expliciete grafiekperioden bij zowel `Noem hem`
+als `met naam`, stopt de naam vóór een grafiekclausule en laat `per week`
+alleen de DCA-frequentie invullen. De exacte twee mislukte QA-zinnen zijn als
+regressietests toegevoegd. De gerichte suite slaagde 198/198 en de volledige
+backend-suite 5070/5070 (7 overgeslagen). De lokale worker-gedreven
+FINN-actiematrix slaagde 17/17, adapters 27/27, en bevestigde Smart-DCA- en
+kalender-DCA-opslagproeven slaagden. De twee exacte QA-zinnen leverden lokaal
+via HTTP, worker en voorstel elk de juiste naam en `1D` op; er is daarbij geen
+voorstel bevestigd. Frontend-typecheck, i18n-, command-, proposal- en
+setup-tests, productiebuild en `audit:high` slaagden. De echte
+provider-developmentset slaagde 20/20 en de regressionselectie 109/109,
+zonder provider-, schema-, timeout-, parse- of validatiefout. De vijf PR-CI-jobs
+voor [PR #1189](https://github.com/gvangalen/antigravity-trading-tool/pull/1189)
+slaagden in [run 44409428764](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44409428764).
+De vijf main-CI-jobs slaagden in
+[run 44410474383](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44410474383)
+en [Auto Deploy 44411344568](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44411344568)
+slaagde. GitHub main, publieke backend-health (HTTP 200) en frontend-buildinfo
+(HTTP 200) meldden alle drie SHA `c57136a1caca6354f3b6a71c06a2403697f35a23`.
+De vijf CI-jobs op de daaropvolgende statuscommit slaagden in
+[run 44412756949](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44412756949)
+en [Auto Deploy 44413681523](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44413681523)
+slaagde. GitHub main, backend-health en frontend-buildinfo (beide HTTP 200)
+meldden daarna alle drie SHA `7e3052419844b3ca23fe517876d8e5d47ac1ed59`;
+er stond geen nieuwere deploy klaar. Onafhankelijke ingelogde browser-QA
+accepteerde de afgesproken hertests op exact die SHA: beide oorspronkelijke
+naam/grafiekperiode-fouten zijn weg, de vrijdag- en vaste-DCA-kaarten zijn
+correct, een niet-controleerbare trendvoorwaarde en directe koopopdracht
+leverden geen bevestigbare kaart of order op. De browserconcepten bleven
+onbevestigd. De beschermde
+[Paper-run 44414751845](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44414751845)
+bevestigde eigenaar-gebonden opslag, `already_executed`-replay, één Paper-aankoop
+van €200 bij benchmarkscore 40, een tweede aankoop in dezelfde week geblokkeerd
+en cleanup, zonder Live-calls of Live-botactivaties. SHA-256 van het gesaniteerde
+QA-artifact: `bf39f16dbd0afca963bb66328410d43e16b11593a34d923a29e3d8c2898896c8`.
+Dit is acceptatie van deze gerichte scope, geen volledige FINN-matrix.
+
+## Smart DCA vrijdag- en vaste-DCA-vervolgreparatie (18 november 2026)
+
+Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA_RETEST`. Onafhankelijke browser-QA accepteerde de
+begeleide flow op live SHA `ad2384eecaa94a91de723fc1d2d7cd8fe1338548`
+niet: een volledig ingevulde Smart DCA met vrijdag, wekelijkse limiet en
+scorestaffels werd twee keer als niet-afdwingbare voorwaarde geweigerd, ook
+zonder "koop niets". Een gewone vaste DCA met tweemaal hetzelfde genoemde
+bedrag vroeg onnodig opnieuw naar bedrag en modus. De beschermde
+[Paper-proef 44394110672](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44394110672)
+slaagde wel: één aankoop van €200, weekblokkade, replay en cleanup. Die
+proef gebruikte expliciet geen koopdag en bewijst de vrijdagvariant niet.
+
+De nieuwe reparatie herkent alleen een volledig begrensde, veld-voor-veld
+gecontroleerde vrijdagse Smart DCA als afgedekte regel; aanvullende tekst en
+extra verzamelde financiële velden blijven in de fail-closed semantische
+controle. De controle krijgt nu ook de
+opgeslagen kalendertrigger en toelichting op scorestaffels op een vaste dag.
+Identieke herhaalde eurobedragen en "ongeacht de score" worden bij vaste DCA
+als één vast bedrag gelezen. De gerichte tests slaagden 11/11 en de volledige
+backend-suite 5067/5067 (7 overgeslagen). De definitieve lokale
+FINN-actiematrix slaagde 17/17 en adapters 27/27; de Smart DCA- en
+kalender-DCA-opslagproeven slaagden. Frontend-typecheck, i18n-, command-,
+proposal- en setup-tests, productiebuild en `audit:high` slaagden. Security
+vond geen resterende blokkade na het uitsluiten van extra verzamelde
+financiële velden van de begrensde controle. De echte
+provider-developmentselectie slaagde 20/20 en de regressionselectie
+109/109, beide zonder provider-, schema-, timeout-, parse- of validatiefout.
+De vijf PR-CI-jobs voor
+[PR #1187](https://github.com/gvangalen/antigravity-trading-tool/pull/1187)
+slaagden in [run 44400101682](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44400101682).
+De vijf main-CI-jobs slaagden in
+[run 44401280726](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44401280726)
+en [Auto Deploy 44402156428](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44402156428)
+slaagde. GitHub main, publieke backend-health (HTTP 200) en
+frontend-buildinfo (HTTP 200) meldden alle drie SHA
+`600782369de9e2303d885fa4304a03f3d21f0f76`. Dit is deploymentbewijs,
+geen ingelogde acceptatie. Deze statuswijziging creëert zelf een latere
+main-SHA; de laatste CI, Auto Deploy en publieke identiteit worden opnieuw
+gecontroleerd vóór de QA-handoff. Er is nog geen nieuw live verdict.
+
+## Smart DCA begeleide chatreparatie (18 november 2026)
+
+Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA_RETEST`. Onafhankelijke browser-QA op live SHA
+`a3696321468e916a97a03fba285beb094a386235` vond de scoregestuurde
+conceptkaart zonder koopdag en de expliciete vrijdagkaart correct, maar
+accepteerde de begeleide chatflow niet. De reeks met "maximaal één aankoop per
+week" verloor de frequentie, een vraag om een scorebandvoorstel raakte de
+lopende nieuwe setup kwijt, een naam nam "op timeframe 1D" mee, en "koop
+niets" werd als koopintentie gelezen. Er werd niets bevestigd of gekocht.
+
+De reparatie bewaart de frequentie, houdt een gevraagde bewerkbare
+scorebandstandaard binnen de nieuwe setup, snijdt de timeframe-clausule van
+de naam af en behandelt een DCA-koopschema plus "koop niets" als
+voorstelverzoek. De lokale gerichte suite slaagde 479/479 en de volledige
+backend-suite 5062/5062 (7 overgeslagen). De lokale FINN-actiematrix slaagde
+17/17 en de adapters 27/27. De lokale Responses/voorstel/bevestiging/
+opslagproef inclusief de nieuwe begeleide en negatiegevallen slaagde, evenals
+de kalender-DCA-proef. Frontend-typecheck, i18n-controle en -tests,
+command-, proposal- en setup-tests en productiebuild slaagden; `audit:high`
+vond nul kwetsbaarheden. De echte provider-developmentselectie slaagde
+20/20 en de regressionselectie 109/109, beide zonder provider-, schema-,
+timeout-, parse- of validatiefout. De vijf PR-CI-jobs voor
+[PR #1185](https://github.com/gvangalen/antigravity-trading-tool/pull/1185)
+slaagden in [run 44388438193](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44388438193).
+De vijf main-CI-jobs slaagden in
+[run 44389696497](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44389696497)
+en [Auto Deploy 44390615732](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44390615732)
+slaagde. GitHub main, publieke backend-health (HTTP 200) en
+frontend-buildinfo (HTTP 200) meldden alle drie SHA
+`ab1c7a00bd41e42c8f54f20f1ea8fa7f7477dfc8`. Dit is deploymentbewijs,
+geen ingelogde acceptatie. Deze statuswijziging creëert zelf een latere
+main-SHA; de laatste CI, Auto Deploy en publieke identiteit worden opnieuw
+gecontroleerd vóór de QA-handoff. Een voorstel blijft onbevestigd totdat de
+gebruiker het goedkeurt.
+
 ## Smart DCA zonder vaste koopdag (18 november 2026)
 
-Phase: `PRODUCT_DEPLOYED_PENDING_INDEPENDENT_QA`. De gebruiker kiest zelf hoe de aankoopgrootte
+Phase: `QA_NOT_ACCEPTED_GUIDED_FLOW`. De gebruiker kiest zelf hoe de aankoopgrootte
 verandert bij lage en hoge benchmarkscore. Een Smart DCA zonder expliciet
 gekozen koopdag gebruikt daarom standaard de volledige benchmarkscore als
 trigger, met de frequentie als maximum van één aankoop per periode. Een

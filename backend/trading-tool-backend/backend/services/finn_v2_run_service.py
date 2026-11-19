@@ -1465,6 +1465,78 @@ def _plain_setup_creation_request(message: str) -> bool:
     )
 
 
+def _bounded_supported_smart_dca_calendar_request(
+    message: str, collected_inputs: dict[str, object],
+) -> bool:
+    """Recognize only a complete, field-matched calendar/score-band draft.
+
+    This narrow path avoids a semantic-guard false positive for a fully typed
+    Smart DCA request. Any extra condition, mismatched value or new wording
+    falls through to the normal fail-closed coverage check.
+    """
+    text = " ".join(str(message or "").strip().split())
+    match = re.fullmatch(
+        r"Maak een nieuwe (?P<symbol>[A-Z]{2,10})/(?P<quote>EUR|USDT) Smart DCA\. "
+        r"Noem hem (?P<name>[\w -]{2,80})\. De grafiek is (?P<timeframe>\d+[HDW])\. "
+        r"Koop wekelijks op (?P<day>maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag) "
+        r"maximaal (?:één|een|1) keer voor €\s*(?P<base>\d+(?:[,.]\d+)?) basisbedrag\. "
+        r"Gebruik Markt, Macro en Technisch samen: onder score (?P<low>\d{1,3}) "
+        r"(?P<low_pct>\d{1,3})%, (?P<mid_low>\d{1,3}) tot (?P<mid_high>\d{1,3}) "
+        r"(?P<mid_pct>\d{1,3})%, vanaf (?P<high>\d{1,3}) (?P<high_pct>\d{1,3})%\. "
+        r"Toon eerst het voorstel(?:; koop niets)?\.?",
+        text, re.IGNORECASE,
+    )
+    if match is None:
+        return False
+    if re.search(
+        r"\b(?:als|alleen|wanneer|zodra|tenzij|onder|boven|bij|if|only|when|"
+        r"unless|trend|rsi|score|voorwaarde|condition|regel|rule|koop|kopen|"
+        r"aankoop|buy|entry|instap|filter|trigger)\b",
+        match.group("name"), re.IGNORECASE,
+    ):
+        return False
+    day = {
+        "maandag": "monday", "dinsdag": "tuesday", "woensdag": "wednesday",
+        "donderdag": "thursday", "vrijdag": "friday", "zaterdag": "saturday",
+        "zondag": "sunday",
+    }[match.group("day").casefold()]
+    expected = {
+        "symbol": match.group("symbol").upper(),
+        "quote_currency": match.group("quote").upper(),
+        "name": match.group("name"),
+        "timeframe": match.group("timeframe").upper(),
+        "setup_type": "dca", "dca_frequency": "weekly", "dca_day": day,
+        "dca_trigger_mode": "calendar", "dca_amount_mode": "score_bands",
+        "score_source": "benchmark_score",
+    }
+    if any(collected_inputs.get(key) != value for key, value in expected.items()):
+        return False
+    numbers = {
+        "base_amount": match.group("base"),
+        "low_threshold": match.group("low"),
+        "high_threshold": match.group("high"),
+        "low_score_percent": match.group("low_pct"),
+        "mid_score_percent": match.group("mid_pct"),
+        "high_score_percent": match.group("high_pct"),
+    }
+    allowed_fields = set(expected) | set(numbers)
+    if any(
+        value is not None for key, value in collected_inputs.items()
+        if key not in allowed_fields
+    ):
+        return False
+    if match.group("mid_low") != match.group("low") or match.group("mid_high") != match.group("high"):
+        return False
+    try:
+        return all(
+            collected_inputs.get(key) is not None
+            and float(collected_inputs[key]) == float(value.replace(",", "."))
+            for key, value in numbers.items()
+        )
+    except (TypeError, ValueError):
+        return False
+
+
 def _scheduled_dca_draft_revision(message: str, origin_inputs: dict[str, object]) -> bool:
     """A bounded schedule and amount can revise one open DCA proposal.
 
@@ -5057,7 +5129,12 @@ class FinnV2RunService:
                                 )
                             coverage = (
                                 "none" if waiver or (
-                                    not active_block and _plain_setup_creation_request(run_message)
+                                    not active_block and (
+                                        _plain_setup_creation_request(run_message)
+                                        or _bounded_supported_smart_dca_calendar_request(
+                                            run_message, setup_inputs,
+                                        )
+                                    )
                                 ) else "unclear" if setup_history_truncated else
                                 await FinnResponsesToolRelevanceGuard(
                                     openai_client.async_client

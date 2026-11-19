@@ -16,6 +16,31 @@ from backend.services.finn_v2_structured_operation_selector_service import FinnV
 CLASSIFIER = FinnV2OperationClassificationService()
 
 
+def test_smart_dca_ladder_suggestion_stays_in_open_create_setup():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    pending = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message=("Maak voor BTC/USDT een Smart DCA met naam BTC Ladder, "
+                 "timeframe 1D, basisbedrag €200 en maximaal één aankoop per week."),
+        explicit_asset="BTC", conversation_context={}, supplied_inputs={}, model_tool_inputs=True,
+    )
+    assert pending.next_missing_input == "low_threshold"
+    message = ("Kies zelf een verstandige standaard voor de drie scorebanden en "
+               "percentages en laat mij die eerst in een bewerkbare conceptkaart beoordelen.")
+    facts = CLASSIFIER.preprocessor.preprocess(message=message)
+    selected = CLASSIFIER._guided_continuation_contract(
+        facts=facts, context={"active_guided_operation": pending.dict()},
+    )
+    assert selected is not None and selected.operation_id == "create_setup"
+    continued = FinnV2OperationStateService().resolve(
+        contract=contract, message=message, explicit_asset=None,
+        conversation_context={"active_guided_operation": pending.dict()},
+        supplied_inputs={}, model_tool_inputs=True,
+    )
+    assert continued.missing_required_inputs == []
+    assert continued.input_sources["low_threshold"] == "requested_suggestion"
+
+
 @pytest.mark.parametrize("message", [
     "Ik ben nieuw hier. Kun je een tradingplan voor mij maken?",
     "Can you make a trading plan for me?",

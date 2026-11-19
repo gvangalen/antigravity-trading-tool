@@ -813,6 +813,19 @@ class FinnV2OperationClassificationService:
         fills_pending_slot = bool(
             set(supplied).intersection(set(active.get("missing_required_inputs") or ()))
         )
+        active_inputs = active.get("collected_inputs") or {}
+        if (contract.operation_id == "create_setup"
+                and isinstance(active_inputs, Mapping)
+                and active_inputs.get("setup_type") == "dca"
+                and active_inputs.get("dca_amount_mode") == "score_bands"
+                and set(active.get("missing_required_inputs") or ()).intersection({
+                    "low_threshold", "high_threshold", "low_score_percent",
+                    "mid_score_percent", "high_score_percent",
+                })
+                and self.operation_state.requests_smart_dca_ladder_suggestion(facts.original_text)):
+            # A request for proposed values answers the open Smart DCA draft;
+            # it does not target one of the user's saved setups.
+            return contract
         # A name or numeric amount can be a complete slot answer without
         # being recognisable as an entity before owner-scoped resolution. Keep
         # it inside the persisted flow rather than reclassifying it as a read

@@ -28,6 +28,17 @@ class FinnV2OperationStateService:
     })
 
     @staticmethod
+    def requests_smart_dca_ladder_suggestion(message: str) -> bool:
+        text = str(message or "").casefold()
+        return bool(
+            re.search(r"\b(?:staffels?|scorebanden|scoregrenzen)\b", text)
+            and re.search(
+                r"\b(?:stel\s+(?:je\s+)?voor|voorstellen|suggest|propose|"
+                r"kies\s+zelf|bedenk|raad\s+(?:je\s+)?aan)\b", text,
+            )
+        )
+
+    @staticmethod
     def setup_only_intent(message: str) -> bool:
         """A user may save the setup now and choose its strategy in a later step."""
         text = str(message or "").casefold()
@@ -705,6 +716,23 @@ class FinnV2OperationStateService:
             key: {"source": "explicit", "state_revision": next_revision}
             for key in explicit
         })
+        if (contract.operation_id == "create_setup"
+                and collected.get("setup_type") == "dca"
+                and collected.get("dca_amount_mode") == "score_bands"
+                and self.requests_smart_dca_ladder_suggestion(message)):
+            suggested_ladder = {
+                "low_threshold": 26, "high_threshold": 76,
+                "low_score_percent": 150, "mid_score_percent": 100,
+                "high_score_percent": 50,
+            }
+            if not any(field in collected for field in suggested_ladder):
+                # Editable suggestion only; confirmation is still required.
+                collected.update(suggested_ladder)
+                for field in suggested_ladder:
+                    sources[field] = "requested_suggestion"
+                    provenance[field] = {
+                        "source": "requested_suggestion", "state_revision": next_revision,
+                    }
         if "category" in accepted_inputs and collected.get("indicator"):
             definition = self._indicator_input_from_text(str(collected["indicator"]))
             if definition is not None:
@@ -1354,7 +1382,8 @@ class FinnV2OperationStateService:
             recurring_schedule = re.search(
                 r"\b(?:daily|dagelijks|iedere dag|elke dag|every day|jeden tag|taeglich|täglich|"
                 r"weekly|wekelijks|iedere week|elke week|every week|jede woche|wöchentlich|woechentlich|"
-                r"monthly|maandelijks|iedere maand|elke maand|every month|jeden monat|monatlich)\b",
+                r"monthly|maandelijks|iedere maand|elke maand|every month|jeden monat|monatlich|"
+                r"per\s+(?:dag|week|maand|day|month))\b",
                 lowered,
             )
             recurring_investment = bool(recurring_schedule) and bool(re.search(
@@ -1374,13 +1403,14 @@ class FinnV2OperationStateService:
                 values["name"] = FinnV2SetupInputCatalog.display_name(
                     self._trim_setup_name_clause(str(values["name"]))
                 )
-            timeframe = FinnV2SetupInputCatalog.timeframe_from_text(text)
-            explicit_chart_timeframe = bool(
-                re.search(
-                    r"\b(?:\d+\s*(?:m|min|h|d|w|mo)|timeframe|chart|grafiek|zeiteinheit)\b",
-                    lowered,
-                )
+            ignored_names = (str(values.get("name") or ""),)
+            named_timeframe = FinnV2SetupInputCatalog.explicit_chart_timeframe_from_text(
+                text, ignored_names=ignored_names,
             )
+            timeframe = named_timeframe or FinnV2SetupInputCatalog.timeframe_from_text(
+                text, ignored_names=ignored_names,
+            )
+            explicit_chart_timeframe = bool(named_timeframe)
             if (
                 (values.get("setup_type") == "dca" or dca_context)
                 and recurring_schedule
@@ -1442,6 +1472,17 @@ class FinnV2OperationStateService:
                 )
                 if frequency:
                     values["dca_frequency"] = frequency
+                if not frequency:
+                    period = re.search(
+                        r"\b(?:aanko\w*|koop\w*|buy\w*|purchase\w*|keer|times?|mal)\b"
+                        r"[^.!?;]{0,45}\bper\s+(dag|week|maand|day|month)\b",
+                        lowered,
+                    )
+                    if period:
+                        values["dca_frequency"] = {
+                            "dag": "daily", "day": "daily", "week": "weekly",
+                            "maand": "monthly", "month": "monthly",
+                        }[period.group(1)]
                 weekday_match = re.search(
                     r"\b(monday|maandag|montag|tuesday|dinsdag|dienstag|wednesday|woensdag|mittwoch|"
                     r"thursday|donderdag|donnerstag|friday|vrijdag|freitag|saturday|zaterdag|samstag|"
@@ -1542,9 +1583,10 @@ class FinnV2OperationStateService:
                 )
                 if named_base:
                     values["base_amount"] = self._numeric_value(named_base.group(1))
-                if len(euro_amounts) == 1 and not re.search(r"\bminim(?:um|ale)\b", amount_text):
+                one_amount = bool(euro_amounts) and len(set(euro_amounts)) == 1
+                if one_amount and not re.search(r"\bminim(?:um|ale)\b", amount_text):
                     values.setdefault("base_amount", euro_amounts[0])
-                if not smart_amount and len(euro_amounts) == 1 and not re.search(r"\bminim(?:um|ale)\b", amount_text):
+                if not smart_amount and one_amount and not re.search(r"\bminim(?:um|ale)\b", amount_text):
                     values["dca_amount_mode"] = "fixed"
                 if smart_amount:
                     values.update(self._dca_score_percentages(text))
@@ -1692,7 +1734,8 @@ class FinnV2OperationStateService:
         """Keep an explicitly fixed amount when score adjustment is rejected."""
         return bool(re.search(
             r"\b(?:niet|geen|zonder)\s+(?:(?:op\s+basis\s+van|met)\s+)?"
-            r"(?:een\s+)?(?:score\w*|benchmarkscore\w*|smart\s*dca|variab\w*)\b",
+            r"(?:een\s+)?(?:score\w*|benchmarkscore\w*|smart\s*dca|variab\w*)\b"
+            r"|\bongeacht\b.{0,90}\b(?:score\w*|benchmarkscore\w*)\b",
             text.casefold(),
         ))
 
@@ -2518,7 +2561,8 @@ class FinnV2OperationStateService:
             r"hij\s+heet|het\s+heet|naam\s+van\s+(?:alleen\s+)?(?:dit|deze)\s+concept|"
             r"(?:conceptnaam|naam|name|titel|title))\b"
             r"\s*(?:exact\s+)?(?:is|:|=)?\s*(?:(?:alleen|only|slechts|just)\s+)?[\"'“‘]?([\w .-]{2,80}?)"
-            r"(?=\s+(?:voor|for|für)\s+[\w-]+\b|\s+(?:op|on|auf)\s+\d|"
+            r"(?=\s+(?:voor|for|für)\s+[\w-]+\b|\s+(?:op|on|auf)\s+(?:timeframe\s+)?\d|"
+            r"\s+(?:en|and|und)\s+(?:de\s+|het\s+|the\s+)?(?:grafiek|chart|timeframe)\b|"
             r"\s+en\s+(?:een\s+)?(?:€\s*\d+(?:[,.]\d+)?\s*)?budget\b|"
             r"\s+(?:en|and|und)\s+(?:zet|set|gebruik|use|verwende|nutze|stel|setze)\b|"
             r"\s+(?:en|and|und)\s+(?:risico|risk|risiko)\b|"
