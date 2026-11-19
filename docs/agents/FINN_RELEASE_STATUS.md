@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0 brongebonden AAPL-botcheck en coachvragen (19 november 2026)
 
-Phase: `LOCAL_VALIDATED_READY_FOR_PR`. Op verzoek van de gebruiker gaat deze
+Phase: `PRODUCT_DEPLOYED_READY_FOR_INDEPENDENT_QA`. Op verzoek van de gebruiker gaat deze
 kandidaat verder nadat de andere Build-agent klaar is. De vorige
 rapportgeneratie-kandidaat is in de basis op `main` opgenomen; zijn nog niet
 uitgevoerde onafhankelijke hertest geldt niet als acceptatie van deze nieuwe
@@ -35,10 +35,21 @@ en `b2d60fbd09f6816d041e63aa7994d2c9fd572ffbe087fd8da38f62eaf48ce6af`).
 Een synthetisch lokaal vierbeurtig Nederlands coachgesprek via de worker en
 echte provider slaagde (artifact SHA-256
 `2fa9e79209cb165302b7410d05d95f10f711421d3fe99155a64f9a9b2a64783e`).
-De frontend is in deze kandidaat niet gewijzigd; PR-CI controleert de
-toepasselijke frontend-gates. Product-PR, CI, Auto Deploy en publieke SHA-
-controle moeten nog worden uitgevoerd. Onafhankelijke live QA voor deze
-kandidaat moet daarna plaatsvinden.
+De frontend is in deze kandidaat niet gewijzigd. De kandidaatbranch
+`codex/finn-bot-report-time-20261119` eindigde op
+`21ba6a39c42e281f32005aa0de4e3988e3380816`. Product-PR
+[#1209](https://github.com/gvangalen/antigravity-trading-tool/pull/1209)
+is als `b0bb04e1d0b0fd55ff0dfd3376de9e7e246672e2` gemerged. Alle vijf
+jobs van [PR-CI 44602946473](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44602946473)
+en [main-CI 44604155834](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44604155834)
+slaagden. [Auto Deploy 44605363722](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44605363722)
+slaagde. GitHub `main`, publieke backend-health en frontend build-info gaven
+op 19 november 2026 allemaal exact de product-SHA
+`b0bb04e1d0b0fd55ff0dfd3376de9e7e246672e2`; beide endpoints gaven HTTP
+200. Deze statusupdate creëert een nieuwe main-SHA. Vóór onafhankelijke QA
+moeten de laatste main-CI en Auto Deploy slagen en beide publieke SHA's met
+die laatste main-SHA overeenkomen. Onafhankelijke live QA is nog niet
+uitgevoerd.
 
 ## FINN 3.0 langzame rapportgeneratie: reparatie na live QA (19 november 2026)
 
