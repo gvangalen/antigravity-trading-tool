@@ -4,6 +4,26 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN-feed: compacte dashboardkaarten (20 november 2026)
+
+Phase: `LOCAL_VALIDATED_AWAITING_CI`. Candidate branch:
+`codex/finn-feed-redesign`. De dashboardfeed toont per melding één blauwe
+hoofdactie, een lokaal tijdstip, een ongelezen puntje en bij Paper-botmeldingen
+de Paper-badge en een korte bekende wachtreden. Het menu bevat `Markeer als
+gelezen` en waar passend `Bespreek met FINN`. Ook gelezen dagrapporten in
+`Alle updates` houden een directe rapportlink. De actieve feed sorteert recente
+meldingen op activiteitstijd met behoud van urgente prioriteit; de geschiedenis
+en bestaande FINN-actiecontracten zijn niet gewijzigd.
+
+De canonieke root-suite gaf **5136 passed, 7 skipped**. De gerichte
+feed-backendtests gaven **66/66**, frontend commandtests **103/103**,
+i18n-tests **45/45** en proposaltests **10/10**. i18n-lint, frontend typecheck
+via de productiebouw, productie-export en `audit:high` slaagden; de audit
+meldde één matige Next.js-kwetsbaarheid. De FINN-workeractie- en
+providercontracten zijn door deze presentatiewijziging niet geraakt.
+CI, deploymentidentiteit en onafhankelijke ingelogde live QA zijn nog niet
+vastgesteld.
+
 ## FINN 3.0 feed: gerichte reparatie na ingelogde QA (20 november 2026)
 
 Phase: `LOCAL_VALIDATED_DEPLOY_PENDING`. De ingelogde browserherkeuring op
