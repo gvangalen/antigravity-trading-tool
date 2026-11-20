@@ -18,7 +18,7 @@ import {
   pendingWorkspaceEvidenceCategories,
 } from "@/lib/workspace/pendingEvidence.mjs";
 import { matchesWorkspaceAsset } from "@/lib/workspace/workspaceAssetScope.mjs";
-import { exactMarketScoreNeedsRefresh } from "@/lib/workspace/pendingExactMarketScore.mjs";
+import { workspaceScoreNeedsRefresh } from "@/lib/workspace/pendingWorkspaceScore.mjs";
 import { mergeQuoteBackfill, symbolsNeedingQuoteBackfill } from "@/lib/workspace/quoteBackfill.mjs";
 
 const WORKSPACE_REQUEST_TIMEOUT_MS = 15000;
@@ -78,8 +78,9 @@ function normalizeQuotePayload(quote) {
   };
 }
 
-function hasFreshWorkspaceCache(key) {
-  return Boolean(getFreshCache(workspaceCache, key, WORKSPACE_CACHE_TTL_MS));
+function hasFreshWorkspaceCache(key, selectedQuote) {
+  const cached = getFreshCache(workspaceCache, key, WORKSPACE_CACHE_TTL_MS);
+  return Boolean(cached && !workspaceScoreNeedsRefresh(cached, selectedQuote));
 }
 
 function buildWorkspaceFallback(symbol, periods, quote, daily) {
@@ -483,7 +484,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols, quoteCu
 
   const refreshWorkspaceIfStale = useCallback(() => {
     const cached = getFreshCache(workspaceCache, workspaceKey, WORKSPACE_CACHE_TTL_MS);
-    if (cached && !isFallbackWorkspace && !exactMarketScoreNeedsRefresh(cached, selectedQuote)) {
+    if (cached && !isFallbackWorkspace && !workspaceScoreNeedsRefresh(cached, selectedQuote)) {
       if (latestWorkspaceRef.current !== cached) {
         setWorkspace(cached);
         setWatchlist(Array.isArray(cached?.watchlist?.rows) ? cached.watchlist.rows : []);
@@ -493,7 +494,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols, quoteCu
       return Promise.resolve(cached);
     }
 
-    const shouldForceNetwork = !cached || isFallbackWorkspace || exactMarketScoreNeedsRefresh(cached, selectedQuote);
+    const shouldForceNetwork = !cached || isFallbackWorkspace || workspaceScoreNeedsRefresh(cached, selectedQuote);
     return reloadWorkspace({ forceNetwork: shouldForceNetwork });
   }, [isFallbackWorkspace, reloadWorkspace, selectedQuote, workspaceKey]);
 
@@ -503,7 +504,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols, quoteCu
 
   useEffect(() => {
     const cached = getFreshCache(workspaceCache, workspaceKey, WORKSPACE_CACHE_TTL_MS);
-    void reloadWorkspace({ forceNetwork: exactMarketScoreNeedsRefresh(cached, selectedQuote) });
+    void reloadWorkspace({ forceNetwork: workspaceScoreNeedsRefresh(cached, selectedQuote) });
   }, [workspaceKey, selectedQuote]);
 
   useEffect(() => {
@@ -574,7 +575,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols, quoteCu
     const refreshIfNeeded = () => {
       const now = Date.now();
       if (now - lastForegroundRefreshAtRef.current < FOREGROUND_REFRESH_COOLDOWN_MS) return;
-      if (hasFreshWorkspaceCache(workspaceKey) && !isFallbackWorkspace) return;
+      if (hasFreshWorkspaceCache(workspaceKey, selectedQuote) && !isFallbackWorkspace) return;
       lastForegroundRefreshAtRef.current = now;
       void refreshWorkspaceIfStale();
     };
@@ -586,13 +587,13 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols, quoteCu
     return () => {
       window.removeEventListener("focus", handleFocus);
     };
-  }, [isFallbackWorkspace, refreshWorkspaceIfStale, workspaceKey]);
+  }, [isFallbackWorkspace, refreshWorkspaceIfStale, selectedQuote, workspaceKey]);
 
   useVisibilityPolling(() => refreshWorkspaceIfStale(), {
     intervalMs: 60_000,
     backgroundIntervalMs: 300_000,
     runImmediately: false,
-    triggerOnVisible: false,
+    triggerOnVisible: true,
     deps: [symbol, selectedQuote, periods.market, periods.macro, periods.technical, watchlistKey],
   });
 

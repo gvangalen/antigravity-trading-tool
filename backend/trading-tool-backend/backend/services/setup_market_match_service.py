@@ -247,9 +247,9 @@ class SetupMarketMatchService:
             for category in ("macro", "technical", "market"):
                 score_key = f"{category}_score"
                 value = stored_scores[score_key]
-                if value is None and not (isinstance(saved_evidence, dict)
-                                          and saved_evidence.get(category)):
-                    continue
+                # A newly copied benchmark can have no score or evidence for
+                # one category yet. Inspect its configured indicators anyway
+                # so the missing list and the indicative score remain useful.
                 fresh = await self._source_is_fresh(
                     user_id, symbol, category, row, component_source_observed_at,
                     score_diagnostics, market_id=market_id,

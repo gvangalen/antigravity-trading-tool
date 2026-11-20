@@ -186,6 +186,10 @@ def test_recent_price_reading_can_need_score_rebuild_without_being_stale():
         }
         session = SimpleNamespace(execute=AsyncMock(side_effect=[
             SimpleNamespace(mappings=lambda: SimpleNamespace(first=lambda: {"ai_preferences": None})),
+            SimpleNamespace(fetchall=lambda: []),
+            SimpleNamespace(fetchall=lambda: []),
+            SimpleNamespace(fetchall=lambda: []),
+            SimpleNamespace(fetchall=lambda: []),
             SimpleNamespace(fetchall=lambda: [("price", now - timedelta(hours=2))]),
             SimpleNamespace(fetchall=lambda: [("price", 101, observed)]),
         ]))
@@ -325,6 +329,35 @@ def test_partial_benchmark_uses_only_verified_indicators_without_enabling_setup_
         assert result["indicative_benchmark_score"] == 45.0
         assert result["missing_indicators"]["macro"] == ["us02y", "us10y"]
         assert result["matches"][0]["status"] == "insufficient_data"
+
+    asyncio.run(run())
+
+
+def test_new_asset_shows_partial_score_when_missing_category_has_no_saved_evidence():
+    async def run():
+        session = SimpleNamespace(execute=AsyncMock(return_value=SimpleNamespace(
+            mappings=lambda: SimpleNamespace(first=lambda: {"ai_preferences": None}),
+        )))
+        service = SetupMarketMatchService(session, daily_rows={
+            "AAPL": {"report_date": date.today(), "macro_score": None,
+                     "market_score": 60, "technical_score": 40,
+                     "calculated_at": datetime.now(timezone.utc),
+                     "indicator_evidence": {}},
+        })
+
+        async def source(_owner, _symbol, category, _row, _moments, diagnostics, **_kwargs):
+            diagnostics[f"{category}_configured_indicators"] = (
+                ["dxy", "sp500"] if category == "macro" else [category])
+            diagnostics[f"{category}_verified_indicators"] = (
+                [] if category == "macro" else [category])
+            return category != "macro"
+
+        service._source_is_fresh = source
+        result = await service.for_asset(7, "AAPL", setups=[])
+        assert result["benchmark_score"] is None
+        assert result["indicative_benchmark_score"] is not None
+        assert result["indicative_component_scores"] == {"market": 60, "technical": 40}
+        assert result["missing_indicators"]["macro"] == ["dxy", "sp500"]
 
     asyncio.run(run())
 
