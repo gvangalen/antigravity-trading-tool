@@ -128,3 +128,45 @@ def test_coach_answer_recovery_preserves_exact_bot_reason_and_bot_cash():
     assert coach_source_coverage_gap(
         asset="AAPL", topics=topics, evidence=evidence, answer=answer,
     ) is None
+
+
+def test_coach_recovery_includes_requested_position_and_rounds_money():
+    evidence = ({"scope": "read_portfolio", "status": "completed", "data": {
+        "global": {"cash_balance": 10005.449999999999},
+        "bots": [{"name": "AAPL Paper", "symbol": "AAPL", "is_live": False,
+                  "paper_cash_eur": 405.48, "position_qty": 0}],
+        "read_at": "2026-11-20T19:00:00+00:00",
+    }},)
+    assert coach_source_coverage_gap(
+        asset="AAPL", topics=("portfolio",), evidence=evidence,
+        question="Wat is mijn Paper-bottegoed en positie?",
+        answer="De AAPL-botkas is €405,48.",
+    ) == "paper_bot_position_missing"
+    assert coach_source_coverage_gap(
+        asset="AAPL", topics=("portfolio",), evidence=evidence,
+        question="Wat is mijn Paper-bottegoed en positie?",
+        answer="De kas is €10005,449999999999 en de positie is 0 AAPL.",
+    ) == "money_precision_invalid"
+    answer = render_coach_source_fallback(
+        asset="AAPL", topics=("portfolio",), evidence=evidence,
+    )
+    assert "€10005,45" in answer
+    assert "0 AAPL open" in answer
+    assert "10005,449999" not in answer
+    assert coach_source_coverage_gap(
+        asset="AAPL", topics=("portfolio",), evidence=evidence,
+        question="Wat is mijn Paper-bottegoed en positie?", answer=answer,
+    ) is None
+
+
+def test_coach_recovery_names_unverified_position_without_paper_cash():
+    evidence = ({"scope": "read_review_history", "status": "completed", "data": {
+        "latest_bot_decisions": [{"symbol": "AAPL", "action": "hold",
+                                  "decision_at": "2026-11-20T19:00:00+00:00"}],
+    }}, {"scope": "read_portfolio", "status": "completed", "data": {
+        "global": {"cash_balance": None}, "bots": [],
+    }})
+    answer = render_coach_source_fallback(
+        asset="AAPL", topics=("bot", "portfolio"), evidence=evidence,
+    )
+    assert "Paper-positie: geen verifieerbare hoeveelheid" in answer

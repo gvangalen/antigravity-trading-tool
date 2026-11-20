@@ -304,6 +304,19 @@ def test_missing_historical_botcheck_names_the_available_report():
     assert call.inputs["report_date"] == "2026-11-19"
     assert "dagrapport van 2026-11-19 05:21:00 CET" in response.text
 
+    later = render_report_bot_check_comparison({"results": [
+        {"scope": "read_review_history", "status": "completed",
+         "data": {"referenced_bot_decisions": []}},
+        {"scope": "read_latest_report", "status": "completed",
+         "data": {"generated_at": "2026-11-19T19:08:00+00:00"}},
+    ]}, symbol="AAPL", message=(
+        "Vergelijk de AAPL-botcheck van 19 november 2026 rond 10:00 CET met "
+        "het AAPL-dagrapport van 19 november 2026 om 05:21 CET."))
+    assert "niet het genoemde uitleesmoment 05:21" in later
+    assert "Het specifiek gevraagde rapport is daarmee niet geverifieerd" in later
+    assert "20:08" not in later
+    assert "botcheck is niet gevonden" in later
+
 
 def test_blocked_bot_decision_reports_safety_outcome_and_reason():
     response, _ = _run(

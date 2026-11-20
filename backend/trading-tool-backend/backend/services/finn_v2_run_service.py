@@ -1667,7 +1667,7 @@ def _minimal_read_answer(
         from backend.services.finn_v2_coach_source_fallback import coach_source_coverage_gap
         if coach_source_coverage_gap(
             asset=next(iter(mentioned_assets)), topics=tuple(coach_plan.get("topics") or ()),
-            evidence=current_evidence, answer=text,
+            evidence=current_evidence, answer=text, question=message,
         ):
             if recovered := source_bound_coach_recovery():
                 return recovered

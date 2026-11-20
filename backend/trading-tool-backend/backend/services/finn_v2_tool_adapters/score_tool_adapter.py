@@ -48,6 +48,25 @@ class ScoreToolAdapter:
         verified = verified_indicator_evidence(
             assessment, getattr(getattr(self.context, "matches", None), "last_source_row", None)
         )
+        scored_source_moments = []
+        for indicators in verified.values():
+            if not isinstance(indicators, dict):
+                continue
+            for values in indicators.values():
+                if not isinstance(values, dict) or values.get("score") is None:
+                    continue
+                moment = values.get("source_observed_at")
+                if not moment:
+                    continue
+                try:
+                    parsed = datetime.fromisoformat(str(moment).replace("Z", "+00:00"))
+                except ValueError:
+                    continue
+                scored_source_moments.append(
+                    parsed.replace(tzinfo=parsed.tzinfo or timezone.utc).astimezone(timezone.utc)
+                )
+        if scored_source_moments:
+            payload["oldest_indicator_source_observed_at"] = min(scored_source_moments).isoformat(timespec="seconds")
         # Pass measurements and scoring facts to Luna, without stored
         # interpretation/action prose from earlier analysis routes.
         factual_fields = ("score", "value", "normalized_value", "source_observed_at",
