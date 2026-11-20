@@ -4,6 +4,50 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 feed: tweede reparatie na browser-QA (20 november 2026)
+
+Phase: `LOCAL_VALIDATED_PR_CI_PENDING`. Candidate branch:
+`codex/finn-feed-live-qa-fix2-20261120`, product-PR
+[#1221](https://github.com/gvangalen/antigravity-trading-tool/pull/1221).
+Onafhankelijke ingelogde browser-QA wees de vorige
+publieke SHA `54986a1006a843dfd6047c209922697ece7c21bb` af. De geselecteerde
+BTC/USDT-Paper-kaart gaf inmiddels de juiste setup en strategie en leende geen
+botbesluit van een andere BTC-setup. Drie fouten bleven over: een door de
+gebruiker herschreven kaartvraag kreeg toch het vaste Paper-antwoord en de
+kaart werd afgehandeld; de zichtbare keuzekop toonde BTC in plaats van
+BTC/USDT; en een verzoek om de enige SPY-watchlistregel te verwijderen bleef
+in het webkeuzemenu steken. De eerdere ETH-ongelezenstatus kon op deze SHA niet
+opnieuw worden vastgesteld.
+
+Deze batch markeert een herschreven feedvraag in de toegestane web- en mobiele
+context. De
+Paper-antwoordshortcut neemt die beurt dan niet over en de kaart wordt na die
+beurt niet automatisch afgehandeld. De zichtbare chatkop neemt het
+geselecteerde handelspaar over op web en mobiel. De webchat slaat de listingkeuze over als er
+precies één eigenaargebonden watchlistregel past; FINN behoudt het bestaande
+bevestigingsvoorstel en de controle vóór verwijdering. Actie- en Live-grenzen
+zijn ongewijzigd.
+
+De definitieve lokale backend-suite gaf **5143 passed, 7 skipped** (log
+SHA-256 `ff217c6ca1ed2854f661029ea6a36448261ae5f963e82e348c74b6bbb657907f`). Web productiebouw, typecheck,
+i18n-lint, i18n-tests **45/45**, commandtests **105/105**, proposaltests
+**10/10** en `audit:high` slaagden; de audit meldt één matige Next.js-
+kwetsbaarheid. Mobiele typecheck, chat-tests **25/25**, lint zonder fouten
+(89 bestaande waarschuwingen) en Expo web-, iOS- en Android-bundels slaagden.
+De echte Responses-providerontwikkeling gaf **20/20** en de regressie
+**109/109**, met alle gemeten nauwkeurigheden 1,0 en nul provider-, schema-,
+parse-, validatie- of timeoutfouten (artifact SHA-256 respectievelijk
+`36c088896f14969b092f0f07ee67ea338aff56040173e39cb055dc15261c8f63`
+en `10f43bb1317d4e7cff1cb1342ad4247ebee2521ed97cd5f65aeffa97a667a0aa`).
+De opnieuw gebouwde geïsoleerde FastAPI/Celery/Postgres/Redis-runtime gaf
+**38/38** matrixgevallen, **16/16** actiecontracten en **9/9** lineagecontroles,
+HTTP 200 voor alle originele aanvragen, terminal-p95 **8062 ms** binnen de
+ongewijzigde grens, nul Live-bots en nul niet-toegestane uitvoeringen
+(artifact SHA-256 `50256647a0604de44807de5c2767a20f48fc01ff7db58d5d077e70cf72af2bc8`).
+De vijf PR-CI-jobs waren groen op de eerste productcommit; de mobiele en
+statusaanvulling wachten nog op hun nieuwe CI. Merge, Auto Deploy, publieke
+SHA-identiteit en onafhankelijke ingelogde live QA zijn nog open.
+
 ## FINN 3.0 feed: geselecteerde Paper-setup en watchlist (20 november 2026)
 
 Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_STATUS_SHA`. Onafhankelijke ingelogde browser-QA

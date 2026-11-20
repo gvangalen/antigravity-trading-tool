@@ -27,6 +27,8 @@ export type AssistantRuntimeContext = {
   page_type?: string;
   symbol?: string;
   quote_currency?: string | null;
+  feed_item_id?: string;
+  feed_draft_edited?: boolean;
   timeframe?: string;
   setup_name?: string;
 };

@@ -44,3 +44,8 @@ export function coachFeedQuoteCurrency(item: MobileCoachFeedItem): string | unde
   const [base, quote, extra] = pair.split('/');
   return base === symbol && !extra && /^[A-Z]{3,5}$/.test(quote || '') ? quote : undefined;
 }
+
+export function coachFeedDraftWasEdited(feedItemId: string | undefined, prefill: string | undefined,
+                                       submitted: string): boolean {
+  return Boolean(feedItemId && prefill && prefill.trim() !== submitted.trim());
+}

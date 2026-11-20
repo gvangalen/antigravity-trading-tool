@@ -2259,13 +2259,14 @@ class FinnV2RunService:
             item = await feed_service.detail(
                 user_id=user_id, item_id=feed_item_id,
             )
-            if item is not None:
+            if item is not None and (run.client_context_json or {}).get("feed_draft_edited") is not True:
                 selected = FinnV2OrchestratorService._selected_feed_context({}, item)
                 await self.conversations.set_selected_feed_event(
                     conversation_id=run.conversation_id, user_id=user_id,
                     run_id=run_id, feed_event=selected["feed_event"],
                 )
-                if item.get("event_type") != "proposal_pending":
+                if (item.get("event_type") != "proposal_pending"
+                        and (run.client_context_json or {}).get("feed_draft_edited") is not True):
                     await feed_service.record_discussion_outcome(
                         user_id=user_id, item_id=feed_item_id, terminal_status=status,
                     )
@@ -4039,7 +4040,8 @@ class FinnV2RunService:
             ),
         )
         feed_item_id = str((run.client_context_json or {}).get("feed_item_id") or "").strip()
-        if feed_item_id and next_status in {"completed", "clarification_required"}:
+        if (feed_item_id and next_status in {"completed", "clarification_required"}
+                and (run.client_context_json or {}).get("feed_draft_edited") is not True):
             from backend.services.finn_coach_feed_service import FinnCoachFeedService
             await FinnCoachFeedService(self.session).record_discussion_outcome(
                 user_id=user_id, item_id=feed_item_id, terminal_status=next_status,
