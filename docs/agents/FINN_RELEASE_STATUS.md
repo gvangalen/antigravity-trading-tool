@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN-feed: compacte dashboardkaarten (20 november 2026)
 
-Phase: `LOCAL_VALIDATED_AWAITING_CI`. Candidate branch:
+Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_STATUS_SHA`. Candidate branch:
 `codex/finn-feed-redesign`. De dashboardfeed toont per melding één blauwe
 hoofdactie, een lokaal tijdstip, een ongelezen puntje en bij Paper-botmeldingen
 de Paper-badge en een korte bekende wachtreden. Het menu bevat `Markeer als
@@ -21,12 +21,16 @@ i18n-tests **45/45** en proposaltests **10/10**. i18n-lint, frontend typecheck
 via de productiebouw, productie-export en `audit:high` slaagden; de audit
 meldde één matige Next.js-kwetsbaarheid. De FINN-workeractie- en
 providercontracten zijn door deze presentatiewijziging niet geraakt.
-CI, deploymentidentiteit en onafhankelijke ingelogde live QA zijn nog niet
-vastgesteld.
+De [main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44799145964)
+en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44800202683)
+zijn geslaagd. GitHub `main`, publieke backend-health en frontend-buildinfo
+gaven beide HTTP 200 en dezelfde product-SHA
+`576ffbc05b5849258c2eaba7d41e4e6b7d9e1251`. Een laatste statusdeploy
+en onafhankelijke ingelogde live QA staan nog open.
 
 ## FINN 3.0 feed: gerichte reparatie na ingelogde QA (20 november 2026)
 
-Phase: `LOCAL_VALIDATED_DEPLOY_PENDING`. De ingelogde browserherkeuring op
+Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_STATUS_SHA`. De ingelogde browserherkeuring op
 publieke SHA `34dc8c57f5494670c0fa98aae80931b747bbd83f` was **NOT ACCEPTED**.
 Twee P2-fouten bleven over: bij **Bespreek** van een BTC/USDT-feedkaart op de
 AAPL-botpagina bleef de FINN-chatkop op AAPL staan, en een expliciet verzoek
@@ -60,8 +64,30 @@ De echte Responses-providerontwikkeling na de laatste tooltekstwijziging gaf
 **20/20**, alle detailmetingen 1,0 en nul provider-, schema-, parse-,
 validatie- of timeoutfouten (artifact SHA-256
 `e7871ca37d376881b16b8d870de9d571f928631c80edc9edc18767585a71d44d`).
-Deploymentidentiteit en onafhankelijke live QA voor deze kandidaat zijn nog
-niet vastgesteld.
+Na rebase op `main` `d4202c067ef07aa3112df0c596fb9289327d86a5` is de
+gecombineerde code opnieuw gevalideerd: root pytest **5136 passed, 7 skipped**
+(log SHA-256 `9128d23785ad0183e4b0437e8b2200480d10f619f9497018ae21aa11f6dac70f`),
+webtypecheck, i18n-controles, command- en proposaltests, productiebouw en
+hoge dependency-audit geslaagd. De worker-matrix gaf opnieuw **38/38**,
+16/16 actiestappen en 9/9 lineagecontroles, zonder Live-bot of
+niet-toegestane uitvoering (artifact SHA-256
+`f5b01c17bfbb4666a15385ba76487deb8a0ed96eb5885fee60b8fdeff5f149c6`).
+De echte providerontwikkeling gaf **20/20** (artifact SHA-256
+`878d53e3a95b189b157c04665e3bf0ba0f73ea9c5f7f86e7aa5f638ec3f4c172`)
+en de regressie **109/109** (artifact SHA-256
+`caf8cbdf7f6893b1f5a4208b7fe794a3f9348bf8a285ba45ea89b2b4993ab9e6`),
+met alle gemeten accuracies 1,0 en nul provider-, schema-, parse-,
+validatie- of timeoutfouten. Product-PR
+[#1216](https://github.com/gvangalen/antigravity-trading-tool/pull/1216)
+is gemerged als `28920174dda5c40e572f027e8c70ce71716efe68` na vijf
+geslaagde [PR-CI-checks](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44796011233).
+De productreparatie is aanwezig op de publiek geverifieerde SHA
+`576ffbc05b5849258c2eaba7d41e4e6b7d9e1251` na geslaagde
+[main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44799145964)
+en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44800202683).
+Backend-health en frontend-buildinfo gaven beide HTTP 200 en exact die SHA.
+Een laatste statusdeploy en onafhankelijke ingelogde QA op de definitieve
+publieke SHA staan nog open.
 
 ## FINN 3.0 AAPL-coach: herhaalbare bronlezing en streamherstel (20 november 2026)
 
