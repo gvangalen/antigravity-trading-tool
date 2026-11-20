@@ -2059,6 +2059,10 @@ class FinnV2OperationStateService:
             return self._numeric_value(number.group(0)) if number else None
         if field == "execution_mode":
             return self._canonical_execution_mode(value)
+        if field == "price_currency" and contract.operation_id == "create_strategy":
+            if re.fullmatch(r"\s*(?:EUR|USD|USDT)\s*[.!]?\s*", value, re.I):
+                return value.strip().rstrip(".!").upper()
+            return self._explicit_trade_price_currency(value)
         if contract.operation_id == "create_manual_trade_plan":
             if field == "risk_budget_quote":
                 clause = self._manual_field_clause(value, r"max(?:imaal|imum)?\s+verlies|risk\s+budget|maximum\s+loss|risicobedrag")
