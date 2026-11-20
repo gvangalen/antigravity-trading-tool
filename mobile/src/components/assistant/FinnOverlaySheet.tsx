@@ -17,6 +17,7 @@ import { translate } from '../../i18n';
 import { useIntelligenceContext } from '../../contexts/ActiveIntelligenceContext';
 import { preferenceColors, useAppPreferences } from '../../preferences/AppPreferencesProvider';
 import { mapAssistantEnvelopeToFeedItems } from '../../services/assistantEnvelopeMapper';
+import { coachFeedDraftWasEdited } from '../../services/coachFeedDiscussion';
 import { assistantApi } from '../../services/tradamindApi';
 import type { FinnManualTradePlanRecord, FinnV2ProposalSummary } from '../../services/tradamindApi';
 import { FinnV2ProposalReviewSheetContent } from '../sheets/SheetContent';
@@ -93,7 +94,8 @@ export function FinnOverlaySheet({ contextMetric, feedItemId, onClose, prefill, 
     Reflection: 'workspace.reflection',
     Settings: 'workspace.settings',
   };
-  const contextLine = `${workspaceLabels[activeWorkspace] ? translate(language, workspaceLabels[activeWorkspace]) : activeWorkspace} · ${activeSymbol}`;
+  const contextInstrument = feedItemId && quoteCurrency ? `${activeSymbol}/${quoteCurrency}` : activeSymbol;
+  const contextLine = `${workspaceLabels[activeWorkspace] ? translate(language, workspaceLabels[activeWorkspace]) : activeWorkspace} · ${contextInstrument}`;
 
   const apiContext = useMemo(
     () => ({
@@ -152,7 +154,12 @@ export function FinnOverlaySheet({ contextMetric, feedItemId, onClose, prefill, 
       const history = (retry ? messages.slice(0, -1) : messages)
         .filter((item): item is Extract<AssistantFeedItem, { type: 'message' }> => item.type === 'message')
         .map((item) => ({ role: item.role, text: item.text }));
-      const envelope = await assistantApi.chat(trimmed, apiContext, history, sessionId, controller.signal);
+      const requestContext = {
+        ...apiContext,
+        ...(coachFeedDraftWasEdited(pendingFeedItemId, prefill, trimmed)
+          ? { feed_draft_edited: true } : {}),
+      };
+      const envelope = await assistantApi.chat(trimmed, requestContext, history, sessionId, controller.signal);
       if (requestId !== requestSequence.current) return;
       const mapped = mapAssistantEnvelopeToFeedItems(envelope).filter((item) => item.type === 'message');
       setMessages((current) => [...current, ...mapped]);

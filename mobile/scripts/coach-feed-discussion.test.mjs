@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { coachFeedDiscussionPrompt, coachFeedQuoteCurrency } from '../src/services/coachFeedDiscussion.ts';
+import { coachFeedDiscussionPrompt, coachFeedQuoteCurrency, coachFeedDraftWasEdited } from '../src/services/coachFeedDiscussion.ts';
+
+test('edited mobile feed question is marked separately from the default prompt', () => {
+  assert.equal(coachFeedDraftWasEdited('feed-1', 'Bespreek BTC/USDT', 'Bespreek BTC/USDT'), false);
+  assert.equal(coachFeedDraftWasEdited('feed-1', 'Bespreek BTC/USDT', 'Hoe laat is het op Mars?'), true);
+  assert.equal(coachFeedDraftWasEdited(undefined, 'Bespreek BTC/USDT', 'Andere vraag'), false);
+});
 
 test('mobile coach prompts reread the exact pair and stay advisory', () => {
   const item = { event_type: 'strategy_next_step', symbol: 'BTC',
