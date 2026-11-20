@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0 AAPL-bronvragen: reparatie na ingelogde QA (20 november 2026)
 
-Phase: `LOCAL_BUILD_VALIDATED`. De ingelogde AAPL-herkeuring op
+Phase: `LIVE_DEPLOYED_QA_PENDING`. De ingelogde AAPL-herkeuring op
 `767f01f1d5bea2de5478c08bf3fd9acc5c8fb180` was **NOT ACCEPTED**:
 FINN liet de concrete reden van een opgeslagen AAPL Paper-`hold` weg en gaf
 op vervolgvragen naar botcheck en dagrapport een generieke bronmomentfout.
@@ -39,7 +39,16 @@ De echte providerregressie gaf **109/109**, alle gemeten accuracies 1,0 en
 nul provider-, schema-, parse-, validatie- of timeoutfouten (artifact SHA-256
 `85b5ad623156bc3d8dedf3633b5340d914dca89051eb57e545e6460e6c439ea6`).
 De productcommit van deze kandidaat is `7c6a9ba64`; de frontend is niet
-gewijzigd. Onafhankelijke live QA voor deze reparatie is nog niet uitgevoerd.
+gewijzigd. Product-PR [#1213](https://github.com/gvangalen/antigravity-trading-tool/pull/1213)
+is gemerged als `a06a82437250d040250ce703615452e4c8e4c5b5`.
+[PR-CI 44753987905](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44753987905),
+[main-CI 44755103740](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44755103740)
+en [Auto Deploy 44756081087](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44756081087)
+zijn geslaagd. Op 20 november gaven GitHub `main`, publieke backend-health
+en frontend-buildinfo dezelfde SHA `a06a82437250d040250ce703615452e4c8e4c5b5`;
+beide publieke endpoints gaven HTTP 200. Dit is de product-SHA vóór deze
+statuswijziging. Onafhankelijke live QA voor deze reparatie is nog niet
+uitgevoerd.
 
 De afzonderlijke feedherkeuring op live SHA `0d60dd2e303621d8f4823cf4e22111a807711832`
 eindigde **NOT ACCEPTED wegens ontbrekende testdekking**: de bestuurbare tab
