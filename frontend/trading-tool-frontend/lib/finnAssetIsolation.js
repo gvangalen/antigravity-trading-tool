@@ -3,6 +3,12 @@ export function normalizeScopedAssetSymbol(value) {
   return /^[A-Z0-9._:-]{1,20}$/.test(normalized) ? normalized : null;
 }
 
+export function feedHeaderInstrument(symbol, quoteCurrency, isFeedHandoff) {
+  const base = normalizeScopedAssetSymbol(symbol) || "BTC";
+  const quote = isFeedHandoff ? String(quoteCurrency || "").trim().toUpperCase() : "";
+  return /^(EUR|USDT)$/.test(quote) ? `${base}/${quote}` : base;
+}
+
 export function resolveScopedAssetStatus({
   isPublicAuthRoute = false,
   sessionChecked = false,

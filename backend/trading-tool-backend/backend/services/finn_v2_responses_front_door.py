@@ -558,6 +558,48 @@ def _feed_evidence_instruction(facts: list[dict[str, Any]] | None) -> str:
     )
 
 
+def _selected_paper_next_step(facts: list[dict[str, Any]] | None, locale: str) -> tuple[str, bool] | None:
+    """Answer the selected setup from its owner-read current state only."""
+    rows = [item.get("facts") for item in (facts or [])
+            if isinstance(item, dict) and isinstance(item.get("facts"), dict)]
+    selected = next((row for row in rows if row.get("event_type") == "paper_next_step"
+                     and row.get("selection_origin") == "current_run"), None)
+    if selected is None:
+        return None
+    current = next((row for row in rows if row.get("feed_item_id") == selected.get("feed_item_id")
+                    and "current_linked_bot" in row), None)
+    language = str(locale or "nl").split("-")[0].lower()
+    if current is None or not isinstance(current.get("current_setup"), dict):
+        return ({
+            "en": "I cannot verify the saved setup and its linked strategy right now. The feed card remains open; please try again later.",
+            "de": "Ich kann das gespeicherte Setup und seine Strategie derzeit nicht prüfen. Die Feed-Karte bleibt offen; bitte versuche es später erneut.",
+        }.get(language, "Ik kan de opgeslagen setup en gekoppelde strategie nu niet controleren. De feedkaart blijft open; probeer het later opnieuw."), False)
+    setup = current["current_setup"]
+    pair = str(setup.get("trading_pair") or selected.get("historical_event_facts", {}).get("trading_pair") or selected.get("symbol") or "").upper()
+    name = str(setup.get("name") or "deze setup")[:100]
+    strategy = current.get("current_linked_strategy") or {}
+    bot = current.get("current_linked_bot") or {}
+    if strategy.get("status") == "missing" or not strategy.get("id"):
+        return ({
+            "en": f"For setup {name} ({pair}), I cannot find a linked strategy. Create or select a strategy before considering a Paper bot. I changed nothing.",
+            "de": f"Für Setup {name} ({pair}) finde ich keine verknüpfte Strategie. Wähle zuerst eine Strategie, bevor du einen Paper-Bot prüfst. Ich habe nichts geändert.",
+        }.get(language, f"Voor setup {name} ({pair}) vind ik geen gekoppelde strategie. Kies eerst een strategie voordat je een Paper-bot overweegt. Ik heb niets gewijzigd."), True)
+    strategy_name = str(strategy.get("name") or "de gekoppelde strategie")[:100]
+    readiness = strategy.get("execution_ready_status")
+    readiness_text = {
+        "declared_ready": {"nl": "De strategie is als uitvoerbaar opgeslagen.", "en": "The strategy is saved as execution ready.", "de": "Die Strategie ist als ausführbar gespeichert."},
+        "draft": {"nl": "De strategie is nog een concept en niet uitvoerbaar.", "en": "The strategy is still a draft and not execution ready.", "de": "Die Strategie ist noch ein Entwurf und nicht ausführbar."},
+    }.get(readiness, {"nl": "Ik kan de uitvoerbaarheid nog niet verifiëren.", "en": "I cannot verify execution readiness yet.", "de": "Ich kann die Ausführbarkeit noch nicht prüfen."})
+    readiness_note = readiness_text.get(language, readiness_text["nl"])
+    if bot.get("status") == "missing":
+        return ({
+            "en": f"Setup {name} ({pair}) has strategy {strategy_name}, but no linked bot. {readiness_note} Check this and choose an amount, risk limit and execution rules before a Paper trial. I have not created or activated a bot or placed an order.",
+            "de": f"Setup {name} ({pair}) hat die Strategie {strategy_name}, aber keinen verknüpften Bot. {readiness_note} Prüfe dies und wähle Betrag, Risikogrenze und Ausführungsregeln vor einem Paper-Test. Ich habe keinen Bot erstellt oder aktiviert und keine Order ausgelöst.",
+        }.get(language, f"Setup {name} ({pair}) heeft strategie {strategy_name}, maar geen gekoppelde bot. {readiness_note} Controleer dit en kies bedrag, risicogrens en uitvoeringsregels vóór een Paper-proef. Ik heb geen bot aangemaakt of geactiveerd en geen order geplaatst."), True)
+    return ({
+        "en": f"Setup {name} ({pair}) has strategy {strategy_name} and a linked bot. {readiness_note} Review the bot's saved risk and execution rules before a Paper trial. I changed nothing and placed no order.",
+        "de": f"Setup {name} ({pair}) hat die Strategie {strategy_name} und einen verknüpften Bot. {readiness_note} Prüfe vor einem Paper-Test die gespeicherten Risiko- und Ausführungsregeln. Ich habe nichts geändert und keine Order ausgelöst.",
+    }.get(language, f"Setup {name} ({pair}) heeft strategie {strategy_name} en een gekoppelde bot. {readiness_note} Controleer de opgeslagen risico- en uitvoeringsregels vóór een Paper-proef. Ik heb niets gewijzigd en geen order geplaatst."), True)
 class FinnResponsesFrontDoor:
     @staticmethod
     def _grouped_comparison_evidence(read_result: dict[str, Any]) -> dict[str, Any]:
@@ -1637,6 +1679,21 @@ class FinnResponsesFrontDoor:
             and os.getenv("FINN_PER_OPERATION_TOOLS_EXPERIMENT") == "1"
         )
         catalog = FinnResponsesToolCatalog(individual_proposals=individual_proposals)
+        selected_paper_step = _selected_paper_next_step(feed_evidence, locale)
+        if selected_paper_step is not None:
+            # A feed item selects one owned setup. A generic BTC bot read may
+            # otherwise borrow a decision from another setup on the same pair.
+            answer_text, verified = selected_paper_step
+            return FinnResponsesFrontDoorResult(
+                FinnResponsesResult(
+                    text=answer_text, response_id=f"selected-paper-step-{self.run_id}",
+                    tool_trace=({"name": "read_selected_paper_next_step",
+                                 "status": "completed" if verified else "unavailable",
+                                 "arguments": {}, "result": {"verified": verified}},),
+                    answer_kind="selected_paper_next_step" if verified else "selected_paper_next_step_unavailable",
+                    model_led_coach=True, response_id_reusable=False,
+                ), None, previous_response, locale=locale,
+            )
         asks_exit_position = bool(re.search(
             r"\b(?:positie|position)\b[^.!?]{0,80}\b(?:gesloten|closed|verkocht|sold)\b"
             r"|\b(?:gesloten|closed|verkocht|sold)\b[^.!?]{0,80}\b(?:positie|position)\b",
@@ -1998,7 +2055,7 @@ class FinnResponsesFrontDoor:
                 ), None, previous_response, locale=locale,
             )
         removal_symbol = _explicit_watchlist_removal_symbol(message)
-        if removal_symbol and not conversation_context.get("active_guided_operation"):
+        if removal_symbol:
             # A single owner-scoped row identifies the requested listing.
             # Keep the confirmation boundary; recheck uniqueness at execution.
             watchlist_call = FinnResponsesToolCall(
@@ -2019,6 +2076,39 @@ class FinnResponsesFrontDoor:
                 for row in (result.get("data") or {}).get("symbols") or []
                 if isinstance(row, dict) and str(row.get("symbol") or "").upper() == removal_symbol
             ]
+            if not matching_rows and getattr(self.reads, "session_factory", None) is not None:
+                # The ordinary read may have timed out while the live chat
+                # tool-call transaction was being persisted. Recheck the
+                # owner's current rows independently before asking for a
+                # listing choice; the action adapter checks again on commit.
+                try:
+                    from backend.services.finn_v2_tool_adapters.watchlist_tool_adapter import WatchlistToolAdapter
+                    async with self.reads.session_factory() as session:
+                        fallback = await WatchlistToolAdapter(session).execute(
+                            user_id=self.user_id)
+                    matching_rows = [row for row in fallback["data"]["symbols"]
+                                     if row.get("symbol") == removal_symbol]
+                    if matching_rows:
+                        watchlist_read = {"status": "completed", "results": [{
+                            "scope": "read_watchlist", "status": "completed",
+                            "data": fallback["data"], "source": "internal",
+                        }]}
+                except Exception:
+                    logger.warning("FINN direct owner watchlist removal read failed", exc_info=True)
+            if not matching_rows and watchlist_read.get("status") != "completed":
+                unavailable = {
+                    "en": "I cannot read your current watchlist right now, so I cannot safely prepare this removal. Please try again.",
+                    "de": "Ich kann deine aktuelle Watchlist derzeit nicht lesen und das Entfernen deshalb nicht sicher vorbereiten. Bitte versuche es erneut.",
+                }.get(str(locale).split("-")[0].lower(),
+                      "Ik kan je huidige watchlist nu niet uitlezen en deze verwijdering daarom niet veilig klaarzetten. Probeer het opnieuw.")
+                return FinnResponsesFrontDoorResult(
+                    FinnResponsesResult(
+                        text=unavailable, response_id=f"watchlist-remove-unavailable-{self.run_id}",
+                        tool_trace=({"name": watchlist_call.name, "status": "unavailable",
+                                     "arguments": {}, "result": watchlist_read},),
+                        answer_kind="watchlist_remove_unavailable", response_id_reusable=False,
+                    ), None, previous_response, locale=locale,
+                )
             if len(matching_rows) == 1:
                 proposal_call = catalog.validate(
                     catalog.proposal_tool_for_operation("watchlist_remove"),

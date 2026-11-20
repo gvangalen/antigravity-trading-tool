@@ -3071,6 +3071,18 @@ class FinnResponsesAnswerVerifier:
             for item in (call.get("result", {}).get("results") or [])
             if isinstance(item, dict)
         )
+        if result.answer_kind in {"selected_paper_next_step", "selected_paper_next_step_unavailable"}:
+            # This text is rendered by the front door from the selected,
+            # owner-reread feed facts, not composed by the model. The marker
+            # cannot turn an unavailable setup into a handled feed card.
+            verified = (len(result.tool_trace) == 1
+                        and result.tool_trace[0].get("name") == "read_selected_paper_next_step"
+                        and (result.tool_trace[0].get("result") or {}).get("verified") is True)
+            if verified and result.answer_kind == "selected_paper_next_step":
+                return FinnResponsesVerifiedAnswer("completed", result.text, None, evidence)
+            return FinnResponsesVerifiedAnswer(
+                "unavailable", result.text, "selected_paper_next_step_unavailable", evidence,
+            )
         if result.answer_kind == "factual_source":
             calls = result.tool_trace
             if result.response_id.startswith("two-plan-checks-"):

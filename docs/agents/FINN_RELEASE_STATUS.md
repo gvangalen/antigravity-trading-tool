@@ -4,6 +4,50 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 feed: geselecteerde Paper-setup en watchlist (20 november 2026)
+
+Phase: `READY_FOR_CANDIDATE_CI`. Onafhankelijke ingelogde browser-QA
+wees de vorige publieke SHA `301e797876cc9da55e519db57612ca4ef59310e4`
+af. Een BTC/USDT-strategiekaart zonder gekoppelde bot kreeg ten onrechte een
+antwoord over een andere BTC-bot en werd daarna afgehandeld. De chatkop noemde
+alleen BTC. Bij de enige SPY-watchlistregel vroeg FINN alsnog om een notering.
+Een niet-besproken ETH-risicokaart verloor volgens QA ook zijn ongelezen
+markering; de oorzaak daarvan is niet vastgesteld.
+
+Deze reparatie rendert de geselecteerde Paper-vervolgstap uitsluitend uit de
+opnieuw gelezen, eigenaargebonden setup, strategie en botkoppeling. Ontbreekt
+die actuele koppeling, dan volgt een expliciete onbeschikbare uitkomst en
+blijft de kaart open. De chatkop toont het exacte handelspaar. Een direct
+verwijderverzoek voor de watchlist heeft voorrang op een oude begeleide flow;
+als de normale owner-read geen rij oplevert, controleert FINN de actuele
+owner-rijen opnieuw. Bij een onbeschikbare bron noemt hij dat in plaats van
+een notering te raden. De uitvoeringsadapter hercontroleert de unieke rij
+voor de bevestigde verwijdering. Geen handels- of Live-grenzen zijn gewijzigd.
+
+De definitieve root-suite gaf **5142 passed, 7 skipped** (log SHA-256
+`ae0798c5988c89810d01f729a7d26e174f9181116a8b75b2f26d15d27ad25928`).
+Web-productiebouw, typecheck, i18n-lint, i18n-tests **45/45**,
+commandtests **103/103**, proposaltests **10/10**, de gerichte
+accountwisseltest **11/11** en `audit:high` slaagden; de audit meldt één
+matige Next.js-kwetsbaarheid. De echte Responses-providerontwikkeling gaf
+**20/20** (artifact SHA-256
+`dd9f5f50362267ec7b2a0b1bcf9a1e5e0944fc9d6f8034fff245824b93ca1544`)
+en de regressie **109/109** (artifact SHA-256
+`6b2c99ff52e2301a51e86dfaba5d86100f8c5d4018e098c924a3d0fef640c118`),
+met alle gemeten nauwkeurigheden 1,0 en nul provider-, schema-, parse-,
+validatie- of timeoutfouten.
+
+Een eerste worker-matrix had **38/38** functionele gevallen,
+**16/16** actiestappen en **9/9** lineagecontroles zonder verboden
+uitvoering, maar faalde op de bestaande p95-latentiegrens tijdens
+parallelle lokale tests. De definitieve, opnieuw gebouwde en geïsoleerde
+runtime slaagde daarna voor de complete matrix: **38/38**, **16/16**
+actiestappen en **9/9** lineagecontroles, HTTP 200 voor alle originele
+aanvragen, terminal-p95 **8461 ms** binnen de ongewijzigde grens, nul
+Live-bots en nul niet-toegestane uitvoeringen (artifact SHA-256
+`c696cf6f45d850ef6b21855bdb9d7c409935a18cb5f704c58158e516adec491e`).
+CI, deploymentidentiteit en onafhankelijke live QA staan nog open.
+
 ## FINN-feed: compacte dashboardkaarten (20 november 2026)
 
 Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_STATUS_SHA`. Candidate branch:
