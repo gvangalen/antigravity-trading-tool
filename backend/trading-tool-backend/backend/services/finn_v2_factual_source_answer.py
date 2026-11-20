@@ -185,8 +185,15 @@ def render_report_bot_check_comparison(
     historical = [row for row in history.get("referenced_bot_decisions") or []
                   if isinstance(row, dict) and str(row.get("symbol") or "").upper().split("/", 1)[0] == symbol]
     if len(historical) != 1:
-        return (f"Ik kan de bedoelde opgeslagen {symbol}-botcheck niet eenduidig aan één bot koppelen of hij ontbreekt. "
-                "Daarom kan ik de twee botredenen niet betrouwbaar vergelijken. "
+        report_status = (f"Ik heb een opgeslagen {symbol}-dagrapport van {report_generated} gelezen. "
+                         if report_generated else
+                         f"Ik heb een opgeslagen {symbol}-dagrapport gelezen, zonder controleerbaar rapportmoment. ")
+        check_status = (f"De genoemde {symbol}-botcheck ontbreekt in de gelezen beslissingen "
+                        "en is daarom niet eenduidig te koppelen. "
+                        if not historical else
+                        f"De genoemde {symbol}-botcheck koppelt aan meerdere beslissingen. ")
+        return (report_status + check_status
+                + "Daarom kan ik de twee botredenen niet betrouwbaar vergelijken. "
                 "Controleer de beslissing in Automatisering; wijzig de weging niet om een koop te forceren.")
     check = historical[0]
     snapshot = report.get("score_source_snapshot") or {}

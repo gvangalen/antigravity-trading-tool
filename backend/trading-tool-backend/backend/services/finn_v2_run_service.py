@@ -1637,14 +1637,14 @@ def _minimal_read_answer(
             if isinstance(item, dict)
         )
     text = prepared.response.text.strip()
+    coach_plan = (getattr(prepared.response, "turn_contract", None) or {}).get("coach_evidence_plan") or {}
     def source_bound_coach_recovery() -> FinnResponsesVerifiedAnswer | None:
         from backend.services.finn_v2_coach_source_fallback import render_coach_source_fallback
         assets = mentioned_catalog_symbols(message)
-        plan = (getattr(prepared.response, "turn_contract", None) or {}).get("coach_evidence_plan") or {}
-        if len(assets) != 1 or not plan:
+        if len(assets) != 1 or not coach_plan:
             return None
         recovered = render_coach_source_fallback(
-            asset=next(iter(assets)), topics=tuple(plan.get("topics") or ()),
+            asset=next(iter(assets)), topics=tuple(coach_plan.get("topics") or ()),
             evidence=current_evidence,
         )
         if recovered:
@@ -1663,6 +1663,14 @@ def _minimal_read_answer(
             "latest_quote_conflicts_with_source", evidence,
             rejection_details={"fact_mismatch": "latest_market_quote"},
         )
+    if coach_plan and len(mentioned_assets) == 1:
+        from backend.services.finn_v2_coach_source_fallback import coach_source_coverage_gap
+        if coach_source_coverage_gap(
+            asset=next(iter(mentioned_assets)), topics=tuple(coach_plan.get("topics") or ()),
+            evidence=current_evidence, answer=text,
+        ):
+            if recovered := source_bound_coach_recovery():
+                return recovered
     from backend.services.finn_v2_source_moment_claims import (
         current_source_moments_supported, source_moment_repair_facts,
     )

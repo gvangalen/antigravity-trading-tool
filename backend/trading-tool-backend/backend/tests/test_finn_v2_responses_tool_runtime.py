@@ -14952,6 +14952,35 @@ def test_paper_cash_and_position_answer_must_include_read_account_balance():
     assert contradicted.rejection_details["gap"] == "paper_cash_total_conflict"
 
 
+def test_broad_coach_answer_recovers_exact_saved_reason_and_paper_bot_cash():
+    question = ("Wat zeggen mijn AAPL-setup, score, botbeslissing en Paper-portefeuille "
+                "samen? Wat is een veilige stap?")
+    prepared = SimpleNamespace(response=SimpleNamespace(
+        text="De AAPL-bot deed geen koopvoorstel; de Paper-kas kon ik niet lezen.",
+        uses_previous_response=False,
+        turn_contract={"coach_evidence_plan": {
+            "topics": ["bot", "portfolio"],
+            "read_tools": ["read_review_history", "read_portfolio"],
+        }},
+        tool_trace=({"result": {"results": [
+            {"scope": "read_review_history", "status": "completed", "data": {
+                "latest_bot_decisions": [{"symbol": "AAPL", "action": "hold",
+                    "decision_at": "2026-11-20T17:45:31+00:00",
+                    "safety_reason": "Opgeslagen setupvoorwaarden passen niet bij de actuele benchmark."}]}},
+            {"scope": "read_portfolio", "status": "completed", "data": {
+                "global": {"cash_balance": 10005.45},
+                "bots": [{"name": "AAPL Paper", "symbol": "AAPL", "is_live": False,
+                          "paper_cash_eur": 405.48}],
+                "read_at": "2026-11-20T17:50:00+00:00"}},
+        ]}},),
+    ))
+    answer = _minimal_read_answer(message=question, prepared=prepared)
+    assert answer.status == "completed"
+    assert "Opgeslagen setupvoorwaarden passen niet" in answer.text
+    assert "€405,48" in answer.text
+    assert "geen koopvoorstel" not in answer.text
+
+
 def test_open_position_question_reads_owner_portfolio_without_bot_page(monkeypatch):
     assert FinnResponsesFrontDoor._asks_about_open_position(
         "Welke open AAPL-positie heb ik naast mijn BTC/EUR-plan?"

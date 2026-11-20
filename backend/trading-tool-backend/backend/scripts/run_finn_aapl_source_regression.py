@@ -93,6 +93,22 @@ def main() -> None:
     conversation_id = None
     turns = []
     for index, question in enumerate(QUESTIONS):
+        if index == 3:
+            # The broad question must read the newest saved decision, even
+            # after the conversation discussed an older historical check.
+            with sync_engine.begin() as connection:
+                connection.execute(text("""
+                    INSERT INTO bot_decisions
+                      (user_id, bot_id, strategy_id, setup_id, symbol, decision_date,
+                       decision_ts, action, status, reason_json, scores_json)
+                    VALUES (:user_id, :bot_id, :strategy_id, :setup_id, 'AAPL',
+                            '2026-11-20', '2026-11-20 17:45:31', 'hold', 'skipped',
+                            CAST(:reasons AS jsonb), '{}'::jsonb)
+                """), {"user_id": user["id"], "bot_id": bot_id,
+                       "strategy_id": strategy_id, "setup_id": setup_id,
+                       "reasons": json.dumps([
+                           "Opgeslagen setupvoorwaarden passen niet bij de actuele benchmark.",
+                       ])})
         observed = run_gate(base_url=args.base_url, bearer_token=token,
                             message=question, conversation_id=conversation_id,
                             timeout_seconds=90,
@@ -113,9 +129,9 @@ def main() -> None:
             checks["not_generic"] = "Ik kan de bronmomenten in dit antwoord niet verifiëren" not in answer
             normalized = answer.casefold()
             checks["bot_reason"] = (
-                "reguliere sessie gesloten" in normalized
-                and ("actuele koers ontbreekt" in normalized or
-                     "actuele koers ontbrak" in normalized)
+                "setupvoorwaarden" in normalized
+                and "passen" in normalized
+                and "actuele benchmark" in normalized
             )
         turns.append({"question": question, "run_id": observed["run_id"],
                       "status": observed["status"], "answer": answer,

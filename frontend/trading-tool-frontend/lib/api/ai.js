@@ -188,13 +188,17 @@ export const assistantChatStream = async (
 
   let attempt = 0;
   let delay = 1000;
+  // A retry must address the same durable FINN run. The backend derives its
+  // idempotency key from this request trace, so a proxy failure cannot turn
+  // one user question into several independent runs.
+  const traceId = `trdm-chat-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
 
   while (attempt <= maxRetries) {
     if (signal.aborted) return;
 
     try {
       const headers = Object.fromEntries(
-        buildAuthHeaders({ 'Content-Type': 'application/json' }, 'POST').entries()
+        buildAuthHeaders({ 'Content-Type': 'application/json', 'X-Trace-Id': traceId }, 'POST').entries()
       );
 
       const response = await fetch(`${API_BASE_URL}/api/assistant/chat/stream`, {
@@ -207,12 +211,13 @@ export const assistantChatStream = async (
       });
 
       if (!response.ok) {
-        throw new Error(`Streaming request failed: ${response.statusText}`);
+        throw new Error(`Streaming request failed: ${response.status} ${response.statusText} (trace ${traceId})`);
       }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder('utf-8');
       let buffer = '';
+      let receivedEnvelope = false;
 
       while (true) {
         if (signal.aborted) {
@@ -230,6 +235,7 @@ export const assistantChatStream = async (
 
         for (const part of parts) {
           if (!part.trim()) continue;
+          if (part.startsWith(':')) continue;
 
           const lines = part.split('\n');
           let event = 'text';
@@ -249,6 +255,7 @@ export const assistantChatStream = async (
             try {
               const parsedEnvelope = JSON.parse(data);
               await onEnvelope(parsedEnvelope);
+              receivedEnvelope = true;
             } catch (err) {
               console.error('Error parsing SSE envelope:', err);
             }
@@ -259,8 +266,16 @@ export const assistantChatStream = async (
             } catch {
               onError(data || 'An error occurred during streaming.');
             }
+            if (activeAbortController?.signal === signal) {
+              activeAbortController = null;
+            }
+            return;
           }
         }
+      }
+
+      if (!receivedEnvelope) {
+        throw new Error(`FINN stream ended without a response (trace ${traceId})`);
       }
 
       // If we finished successfully, clear abort controller reference and break

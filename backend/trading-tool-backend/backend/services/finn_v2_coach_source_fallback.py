@@ -1,8 +1,9 @@
 """Source-bound recovery for a read-only, single-asset coach answer.
 
-This is used only after a model answer fails source-moment verification. It
-reports the current turn's owner-scoped reads separately and never invents a
-trade recommendation or treats a missing read as a current value.
+This is used when a model answer misses a required source fact or fails
+source-moment verification. It reports the current turn's owner-scoped reads
+separately and never invents a trade recommendation or treats a missing read
+as a current value.
 """
 
 from __future__ import annotations
@@ -24,6 +25,12 @@ def _number(value: Any) -> str | None:
 
 
 def _rows(evidence: tuple[dict[str, Any], ...], scope: str, asset: str) -> list[dict[str, Any]]:
+    """Return the last completed read for this scope and asset in the turn.
+
+    The Responses loop may reread the same source several times. Counting
+    those copies as separate bots, reports or portfolios creates false
+    ambiguity and suppresses the source-bound recovery.
+    """
     rows = []
     for item in evidence:
         if item.get("scope") != scope or item.get("status") != "completed":
@@ -35,7 +42,33 @@ def _rows(evidence: tuple[dict[str, Any], ...], scope: str, asset: str) -> list[
         if symbol and symbol.split("/", 1)[0] != asset:
             continue
         rows.append(data)
-    return rows
+    return rows[-1:]
+
+
+def coach_source_coverage_gap(
+    *, asset: str, topics: tuple[str, ...], evidence: tuple[dict[str, Any], ...],
+    answer: str,
+) -> str | None:
+    """Check that a broad answer includes the saved reason and bot cash it read."""
+    if "bot" in topics:
+        decisions = [row for data in _rows(evidence, "read_review_history", asset)
+                     for row in data.get("latest_bot_decisions") or []
+                     if isinstance(row, dict)
+                     and str(row.get("symbol") or "").upper().split("/", 1)[0] == asset]
+        if len(decisions) == 1:
+            reason = str(decisions[0].get("safety_reason") or "").strip()
+            if reason and reason.casefold() not in answer.casefold():
+                return "saved_bot_reason_missing"
+    if "portfolio" in topics:
+        portfolios = _rows(evidence, "read_portfolio", asset)
+        bots = (portfolios[0].get("bots") or []) if len(portfolios) == 1 else []
+        matching = [bot for bot in bots if isinstance(bot, dict) and not bot.get("is_live")
+                    and str(bot.get("symbol") or "").upper().split("/", 1)[0] == asset]
+        if len(matching) == 1:
+            cash = _number(matching[0].get("paper_cash_eur"))
+            if cash is not None and cash not in answer and cash.replace(",", ".") not in answer:
+                return "paper_bot_cash_missing"
+    return None
 
 
 def render_coach_source_fallback(
@@ -88,7 +121,7 @@ def render_coach_source_fallback(
                 lines.append(
                     f"- Botbeslissing: {decision.get('action') or 'actie onbekend'}"
                     + (f" op {at}" if at else " op een onbekend bronmoment")
-                    + (f"; opgeslagen reden: {reason}." if reason else
+                    + (f"; opgeslagen reden: {reason.rstrip('.!?')}." if reason else
                        "; geen concrete reden in de gelezen beslissing.")
                 )
                 verified = True
@@ -121,11 +154,22 @@ def render_coach_source_fallback(
             global_data = portfolio.get("global") or {}
             cash = _number(global_data.get("cash_balance"))
             at = amsterdam_source_moment(portfolio.get("read_at"))
-            if cash:
+            bot_cash = [
+                (str(bot.get("name") or asset), _number(bot.get("paper_cash_eur")))
+                for bot in portfolio.get("bots") or []
+                if isinstance(bot, dict) and not bot.get("is_live")
+                and str(bot.get("symbol") or "").upper().split("/", 1)[0] == asset
+                and _number(bot.get("paper_cash_eur")) is not None
+            ]
+            for name, amount in bot_cash:
+                lines.append(f"- {name} botkas (Paper): €{amount}"
+                             + (f", uitgelezen op {at}." if at else ", uitleesmoment onbekend."))
+                verified = True
+            if cash is not None:
                 lines.append(f"- Paper-portefeuille: kas €{cash}"
                              + (f", uitgelezen op {at}." if at else ", uitleesmoment onbekend."))
                 verified = True
-            else:
+            elif not bot_cash:
                 lines.append("- Paper-portefeuille: geen controleerbare kas uitgelezen.")
     if not verified:
         return None

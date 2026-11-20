@@ -99,6 +99,38 @@ def test_referenced_bot_minute_reads_owner_scoped_historical_reason():
     assert "reguliere handelstijden" in rows[0]["safety_reason"]
 
 
+def test_latest_hold_uses_saved_decision_reason_before_generic_no_proposal_guardrail():
+    from backend.domain.finn_v2_source_registry import FinnV2InformationSourceRegistry
+    from backend.services.bot_service import BotService
+
+    class Repository:
+        async def get_latest_bot_decisions_for_owner(self, user_id):
+            assert user_id == 42
+            return [{
+                "decision_id": 501, "bot_id": 130, "bot_name": "AAPL Paper",
+                "symbol": "AAPL", "is_live": False, "action": "hold", "status": "planned",
+                "decision_kind": "evaluation",
+                "decision_ts": datetime(2026, 11, 20, 17, 45, tzinfo=timezone.utc),
+                "created_at": datetime(2026, 11, 20, 17, 45, tzinfo=timezone.utc),
+                "scores_json": {"guardrails_result": {
+                    "reason": "Er is voor deze beslissing geen koopvoorstel.",
+                    "allowed": False,
+                }},
+                "reason_json": ["Opgeslagen setupvoorwaarden passen niet bij de actuele benchmark."],
+            }]
+
+    adapter = object.__new__(ReviewToolAdapter)
+    adapter.repository = Repository()
+    adapter.bot_service = BotService(None)
+    adapter.sources = FinnV2InformationSourceRegistry()
+    result = asyncio.run(adapter.execute(
+        user_id=42, asset="AAPL", selector={"_latest_bot_decisions_only": True},
+    ))
+    row = result["data"].latest_bot_decisions[0]
+    assert row["safety_reason"] == "Opgeslagen setupvoorwaarden passen niet bij de actuele benchmark."
+    assert "geen koopvoorstel" not in row["safety_reason"]
+
+
 def test_owner_paper_exit_review_exposes_only_requested_structured_facts():
     exit_evidence = {"trigger": "first_target", "source_price_currency": "USD",
                      "saved_first_target": 357.42, "execution_fx_eur_per_unit": 0.9,
