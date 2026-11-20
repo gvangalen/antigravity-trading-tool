@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0 feed: tweede reparatie na browser-QA (20 november 2026)
 
-Phase: `LOCAL_VALIDATED_PR_CI_PENDING`. Candidate branch:
+Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_STATUS_SHA`. Candidate branch:
 `codex/finn-feed-live-qa-fix2-20261120`, product-PR
 [#1221](https://github.com/gvangalen/antigravity-trading-tool/pull/1221).
 Onafhankelijke ingelogde browser-QA wees de vorige
@@ -44,9 +44,15 @@ De opnieuw gebouwde geïsoleerde FastAPI/Celery/Postgres/Redis-runtime gaf
 HTTP 200 voor alle originele aanvragen, terminal-p95 **8062 ms** binnen de
 ongewijzigde grens, nul Live-bots en nul niet-toegestane uitvoeringen
 (artifact SHA-256 `50256647a0604de44807de5c2767a20f48fc01ff7db58d5d077e70cf72af2bc8`).
-De vijf PR-CI-jobs waren groen op de eerste productcommit; de mobiele en
-statusaanvulling wachten nog op hun nieuwe CI. Merge, Auto Deploy, publieke
-SHA-identiteit en onafhankelijke ingelogde live QA zijn nog open.
+De vijf PR-CI-jobs waren groen op de definitieve productcommit. Product-PR
+[#1221](https://github.com/gvangalen/antigravity-trading-tool/pull/1221)
+is gemerged als `7622cceb24bd5e37197618f4e093608317e53ea8`.
+[Main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44819536506)
+en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44820485753)
+zijn geslaagd. GitHub `main`, publieke backend-health en frontend-buildinfo
+gaven exact die SHA; beide publieke endpoints gaven HTTP 200. Deze
+statusaanvulling krijgt na CI en Auto Deploy nog een eigen definitieve SHA.
+Onafhankelijke ingelogde live QA op die laatste publieke SHA staat open.
 
 ## FINN 3.0 feed: geselecteerde Paper-setup en watchlist (20 november 2026)
 
