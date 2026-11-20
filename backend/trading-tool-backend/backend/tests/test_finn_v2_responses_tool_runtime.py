@@ -30,6 +30,7 @@ from backend.services.finn_v2_responses_front_door import (
     _explicit_fresh_create_operation_request, _is_read_only_coach_turn,
     _explicit_discussion_only,
     _read_only_impulse_plan_asset,
+    _explicit_watchlist_removal_symbol,
     _unspecified_setup_overview,
 )
 from backend.services.finn_v2_verified_setup_reference import (
@@ -3920,6 +3921,30 @@ def test_inventory_read_failure_does_not_fall_back_to_active_setup_or_guess_coun
     assert answer.status == "completed"
     assert "niet betrouwbaar uitlezen" in answer.text
     assert "Ik zie één" not in answer.text
+
+
+def test_unique_owner_watchlist_row_prepares_remove_without_listing_question():
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="spy-remove")
+    front.reads = AsyncMock(return_value={"status": "completed", "results": [{
+        "scope": "read_watchlist", "status": "completed",
+        "data": {"symbols": [{"symbol": "SPY", "market_id": 123, "quote_currency": "USD"}]},
+    }]})
+    result = asyncio.run(front.run(
+        message="Verwijder SPY uit mijn watchlist.", instructions="",
+        conversation_context={}, verified_asset="SPY",
+    ))
+    assert result.proposal_analysis.request_plan.operation_id == "watchlist_remove"
+    assert result.proposal_analysis.request_plan.operation_state["collected_inputs"] == {"asset": "SPY"}
+    assert result.proposal_analysis.request_plan.clarification_required is False
+    assert "bevestiging" in result.response.text
+    front.reads.assert_awaited_once()
+
+
+def test_watchlist_remove_shortcut_rejects_negation_and_hypotheticals():
+    assert _explicit_watchlist_removal_symbol("Verwijder SPY uit mijn watchlist.") == "SPY"
+    assert _explicit_watchlist_removal_symbol("Verwijder SPY niet uit mijn watchlist.") is None
+    assert _explicit_watchlist_removal_symbol("Wat als ik SPY uit mijn watchlist verwijder?") is None
+    assert _explicit_watchlist_removal_symbol("Verwijder BTC en SPY uit mijn watchlist.") is None
 
 
 def test_inventory_reference_ids_are_server_only_not_model_arguments():

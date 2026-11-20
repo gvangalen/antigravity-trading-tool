@@ -131,6 +131,21 @@ test("sending from the visible bot ignores a stale chat asset and prior bot flow
   assert.equal(noBot.symbol, "BTC");
 });
 
+test("a selected feed card keeps its own asset on another bot page", () => {
+  const submitted = resolveFinnSubmissionContext({
+    pathname: "/bot",
+    livePageContext: { page: "/bot", bot_id: 130, symbol: "AAPL", setup_id: 4, strategy_id: 5 },
+    commandContext: { feed_item_id: "selected-card", symbol: "BTC", quote_currency: "USDT" },
+    locale: "nl", query: "Bespreek mijn BTC/USDT-setup",
+  });
+  assert.equal(submitted.feed_item_id, "selected-card");
+  assert.equal(submitted.symbol, "BTC");
+  assert.equal(submitted.quote_currency, "USDT");
+  assert.equal(submitted.bot_id, null);
+  assert.equal(submitted.setup_id, null);
+  assert.equal(submitted.strategy_id, null);
+});
+
 test("pair context follows the visible market and clears on asset switch", () => {
   const livePageContext = { page: "/asset", symbol: "BTC", quote_currency: "EUR" };
   const current = resolveFinnSubmissionContext({ pathname: "/asset", livePageContext,

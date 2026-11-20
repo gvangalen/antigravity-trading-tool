@@ -82,6 +82,8 @@ export function resolveFinnSubmissionContext({
     symbol: selectedCommandSymbol || chatAssetOverride || commandContext.symbol || base.symbol,
   };
   if (pathname === "/bot") {
+    const selectedFeedSymbol = commandContext.feed_item_id
+      ? normalizeScopedAssetSymbol(commandContext.symbol) : null;
     const explicitBotId = Number(commandContext.bot_id);
     const explicitBotName = String(commandContext.bot_name || "").trim();
     const explicitBotAction = autoSubmitCommand
@@ -93,10 +95,12 @@ export function resolveFinnSubmissionContext({
     // ordinary chat, the visible URL outranks old flow and asset selection.
     const focused = explicitBotAction ? commandContext : livePageContext;
     request.bot_id = focused.bot_id || null;
-    request.symbol = focused.symbol || null;
-    request.quote_currency = focused.quote_currency || null;
-    request.setup_id = focused.setup_id || null;
-    request.strategy_id = focused.strategy_id || null;
+    request.symbol = selectedFeedSymbol || focused.symbol || null;
+    request.quote_currency = selectedFeedSymbol ? commandContext.quote_currency || null
+      : focused.quote_currency || null;
+    request.setup_id = selectedFeedSymbol ? null : focused.setup_id || null;
+    request.strategy_id = selectedFeedSymbol ? null : focused.strategy_id || null;
+    if (selectedFeedSymbol) request.bot_id = null;
   }
   request.quote_currency = commandContext.quote_currency || (
     String(request.symbol || "").toUpperCase() === String(livePageContext?.symbol || "").toUpperCase()

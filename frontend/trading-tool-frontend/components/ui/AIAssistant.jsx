@@ -2592,7 +2592,8 @@ function AIAssistantContent({
   const workspaceContextLabel = getFinnWorkspaceLabel(pathname, locale) || humanizeFinnContextValue(context.page_type, "Workspace");
   const selectedCommandSymbol = commandRequest?.mode === "chat"
     ? normalizeScopedAssetSymbol(commandRequest?.context?.symbol) : null;
-  const displayedContextSymbol = (pathname === "/bot" && context.bot_id ? context.symbol
+  const displayedContextSymbol = (isFeedHandoff && selectedCommandSymbol
+    ? selectedCommandSymbol : pathname === "/bot" && context.bot_id ? context.symbol
     : chatAssetOverride || selectedCommandSymbol || context.symbol) || globalSymbol || "BTC";
   const finnContextLabel = [workspaceContextLabel, displayedContextSymbol]
     .filter(Boolean)

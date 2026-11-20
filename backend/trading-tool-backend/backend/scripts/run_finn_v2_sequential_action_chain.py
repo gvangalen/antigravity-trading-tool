@@ -237,7 +237,7 @@ def _specifications(names: dict[str, str]) -> tuple[tuple[str, str, str], ...]:
         (
             "strategy_create",
             f"Erstelle dafuer eine fixed Strategie mit einem Grundbetrag von 100 Euro, "
-            f"Einstieg 62, Stop-Loss 59, Zielen 65 und 68, Risikoprofil defensiv "
+            f"Einstieg 62 USDT, Stop-Loss 59 USDT, Zielen 65 und 68 USDT, Risikoprofil defensiv "
             f"und dem Namen {names['strategy']}.",
             "create_strategy",
         ),
