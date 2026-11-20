@@ -220,10 +220,10 @@ export default function FinnCoachFeed({ onDiscuss }) {
                   <button type="button" onClick={() => discuss(item)} className="inline-flex items-center gap-1 whitespace-nowrap text-sm font-semibold text-blue-600 hover:underline">
                     {copy.discuss}<ArrowRight size={16} aria-hidden="true" />
                   </button>
-                ) : canMarkRead && !isProposal ? (
+                ) : (
                   <a href={coachFeedDetailsHref(item)}
                     onClick={(event) => {
-                      if (!isReport) return;
+                      if (!isReport || item.status !== "unread") return;
                       event.preventDefault();
                       void setStatus(item.id, "read").finally(() => {
                         window.location.assign(coachFeedDetailsHref(item));
@@ -234,7 +234,7 @@ export default function FinnCoachFeed({ onDiscuss }) {
                       ? copy.reviewManualBuy : isReport ? copy.viewReport : item.event_type === "bot_decision" ? copy.viewBotDetails : copy.details}
                     <ArrowRight size={16} aria-hidden="true" />
                   </a>
-                ) : null}
+                )}
                 {showMenu ? <FeedActionMenu item={item} copy={copy}
                   showDiscuss={canDiscuss && !isProposal} showMarkRead={showMarkRead}
                   onDiscuss={() => discuss(item)} onMarkRead={() => void setStatus(item.id, "read")} /> : null}
