@@ -45,7 +45,7 @@ niet vastgesteld.
 
 ## FINN 3.0 AAPL-coach: herhaalbare bronlezing en streamherstel (20 november 2026)
 
-Phase: `LOCAL_BUILD_VALIDATED_AWAITING_CI`. Candidate branch:
+Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_STATUS_SHA`. Candidate branch:
 `codex/finn-aapl-live-qa-repair-20261120`, based on
 `34dc8c57f5494670c0fa98aae80931b747bbd83f`. The independent signed-in
 browser retest of the prior release on public SHA
@@ -88,8 +88,17 @@ validation or timeout failures. The full root backend suite passed
 `fb49b7fd2eb9175d7e8c2014d94b50dee340b7066cc6ce2595e6b844658d21dd`).
 The frontend typecheck, command tests
 **97/97**, i18n checks, proposal tests and production build passed; the
-production dependency audit found no high-severity issue. Independent authenticated live QA remains pending
-on the eventual final public SHA.
+production dependency audit found no high-severity issue. Product PR
+[#1215](https://github.com/gvangalen/antigravity-trading-tool/pull/1215)
+passed all five checks in [PR CI 44794501981](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44794501981)
+and was merged as `d4202c067ef07aa3112df0c596fb9289327d86a5`.
+[Main CI 44795500790](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44795500790)
+and [Auto Deploy 44796548364](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44796548364)
+both passed. On 20 November the public backend health and frontend build-info
+returned HTTP 200 and the same product SHA
+`d4202c067ef07aa3112df0c596fb9289327d86a5`. This status-only revision
+will receive its own final SHA after CI and deployment. Independent
+authenticated live QA remains pending on that final public SHA.
 
 ## FINN 3.0 AAPL-bronvragen: reparatie na ingelogde QA (20 november 2026)
 
