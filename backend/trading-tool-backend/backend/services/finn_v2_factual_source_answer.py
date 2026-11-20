@@ -267,8 +267,19 @@ def render_selected_paper_feed_decision(
     else:
         execution = "Bij dit besluit is geen gevulde Paper-order bevestigd."
     reasons = selected.get("reasons")
-    saved_reasons = [str(reason).strip()[:240] for reason in reasons[:2]
-                     if isinstance(reason, str) and reason.strip()] if isinstance(reasons, list) else []
+    saved_reasons = []
+    seen_reasons = set()
+    for reason in reasons if isinstance(reasons, list) else []:
+        if not isinstance(reason, str) or not reason.strip():
+            continue
+        cleaned = reason.strip()[:240].rstrip(".!? ")
+        normalized = cleaned.casefold()
+        if normalized in seen_reasons:
+            continue
+        seen_reasons.add(normalized)
+        saved_reasons.append(cleaned)
+        if len(saved_reasons) == 2:
+            break
     reason_text = (" Opgeslagen beoordelingsreden: " + "; ".join(saved_reasons) + "."
                    if saved_reasons else " De opgeslagen beslissing bevat geen controleerbare reden.")
     if action == "sell" and selected.get("paper_executed") is True:

@@ -1844,6 +1844,7 @@ def test_explicit_strategy_fields_override_conflicting_model_extraction():
         ("stop_loss", "Waar wil je je stop-loss zetten?"),
         ("targets", "Welke koersdoelen wil je gebruiken?"),
         ("risk_profile", "Welke risicostijl wil je gebruiken: voorzichtig, gebalanceerd of offensief?"),
+        ("price_currency", "In welke valuta gelden je instapkoers, stop-loss en koersdoel: EUR, USD of USDT?"),
     ),
 )
 def test_strategy_guided_questions_use_human_slot_copy(slot, question):
@@ -1900,6 +1901,30 @@ def test_strategy_guided_slot_reply_preserves_prior_contract_inputs():
     assert state.collected_inputs["base_amount"] == 100
     assert state.collected_inputs["targets"] == [64500.0, 67000.0]
     assert state.missing_required_inputs == ["risk_profile", "price_currency"]
+
+
+def test_strategy_price_currency_reply_resumes_saved_draft():
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    context = {"operation_state": {
+        "operation_id": "create_strategy", "contract_version": contract.version,
+        "state_revision": 2, "collected_inputs": {
+            "setup_id": 42, "name": "QA MSFT feed", "execution_mode": "fixed",
+            "base_amount": 10, "entry": 491, "stop_loss": 476,
+            "targets": [521], "risk_profile": "balanced",
+        },
+        "input_sources": {}, "resolved_entities": {}, "target_entities": {},
+        "missing_required_inputs": ["price_currency"],
+        "next_missing_input": "price_currency",
+    }}
+    state = service.resolve(
+        contract=contract, message="De koersniveaus zijn in USD.",
+        explicit_asset=None, conversation_context=context,
+    )
+    assert state.collected_inputs["setup_id"] == 42
+    assert state.collected_inputs["entry"] == 491
+    assert state.collected_inputs["price_currency"] == "USD"
+    assert state.missing_required_inputs == []
 
 
 def test_compound_german_strategy_does_not_parse_namespaced_name_as_target_or_risk():

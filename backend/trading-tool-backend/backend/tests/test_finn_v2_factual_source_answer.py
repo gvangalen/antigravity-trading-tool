@@ -217,6 +217,18 @@ def test_legacy_houd_vast_action_is_a_selected_wait_card():
     assert "Controleer vóór een volgende beoordeling" in text
 
 
+def test_selected_paper_card_does_not_repeat_identical_saved_reasons():
+    from backend.services.finn_v2_factual_source_answer import render_selected_paper_feed_decision
+    text = render_selected_paper_feed_decision({"results": [{"scope": "read_review_history",
+        "status": "completed", "data": {"selected_feed_decision": {
+            "symbol": "AAPL", "action": "hold",
+            "decision_at": "2026-11-16T06:00:18+00:00", "paper_executed": False,
+            "reasons": ["Score buiten de koopzone.", "score buiten de koopzone", "Beurs gesloten"],
+        }}}]}, symbol="AAPL")
+    assert text.count("Score buiten de koopzone") == 1
+    assert "Beurs gesloten" in text
+
+
 def test_clicked_filled_paper_exit_offers_reflection_without_claiming_flat_position():
     from backend.services.finn_v2_factual_source_answer import render_selected_paper_feed_decision
     text = render_selected_paper_feed_decision({"results": [{"scope": "read_review_history",
