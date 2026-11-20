@@ -1470,16 +1470,8 @@ class FinnCoachFeedService:
                     WHERE p.id=f.subject_id
                       AND p.user_id=:user_id AND p.status IN ('draft','pending_confirmation')
                       AND p.expires_at > NOW()))
-            ORDER BY CASE WHEN :history THEN 0 ELSE
-                CASE
-                  WHEN f.status='unread' AND f.priority >= 4 THEN 30 + f.priority
-                  WHEN f.status='unread'
-                    AND f.event_type IN ('daily_report_ready','periodic_report_ready','weekly_reflection')
-                    AND f.created_at >= NOW() - INTERVAL '36 hours' THEN 25
-                  WHEN f.status='unread' THEN 20 + COALESCE(f.priority, 0)
-                  ELSE COALESCE(f.priority, 0)
-                END
-              END DESC,
+            ORDER BY CASE WHEN :history THEN 0
+              WHEN f.status='unread' AND f.priority >= 4 THEN 1 ELSE 0 END DESC,
               CASE
                 WHEN f.event_type='bot_decision'
                   THEN COALESCE(f.source_observed_at, f.created_at)

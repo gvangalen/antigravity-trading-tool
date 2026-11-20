@@ -713,6 +713,9 @@ def test_history_cursor_queries_older_owner_items_in_stable_order():
     # date. Pagination must use the displayed decision time, not insertion time.
     assert observed["query"].count("COALESCE(f.source_observed_at, f.created_at)") == 4
     assert "GREATEST(f.created_at" not in observed["query"]
+    assert "ORDER BY CASE" in observed["query"]
+    assert "WHEN f.status='unread' AND f.priority >= 4 THEN 1" in observed["query"]
+    assert "f.event_type IN ('daily_report_ready'" not in observed["query"]
     assert "ELSE f.created_at" in observed["query"]
     assert "END DESC, f.id DESC" in observed["query"]
 

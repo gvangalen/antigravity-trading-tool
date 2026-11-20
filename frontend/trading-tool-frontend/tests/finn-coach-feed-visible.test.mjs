@@ -3,46 +3,44 @@ import assert from "node:assert/strict";
 
 import { visibleCoachFeedItems } from "../lib/finnCoachFeedVisible.mjs";
 
-const now = Date.parse("2026-11-19T12:00:00Z");
-const item = (id, event_type = "bot_decision", status = "unread", created_at = "2026-11-19T11:00:00Z", priority = 1) =>
-  ({ id, event_type, status, created_at, priority });
-
-test("recent unread report remains in three visible updates", () => {
-  const rows = [item("a"), item("b"), item("c"), item("report", "daily_report_ready")];
-  assert.deepEqual(visibleCoachFeedItems(rows, now).map((row) => row.id), ["report", "c", "b"]);
+const item = (id, created_at, extra = {}) => ({
+  id, created_at, status: "unread", event_type: "bot_decision", ...extra,
 });
 
-test("handled and old reports do not displace current updates", () => {
-  const rows = [item("a"), item("b"), item("c"),
-    item("handled", "daily_report_ready", "handled"),
-    item("old", "periodic_report_ready", "unread", "2026-11-16T11:00:00Z")];
-  assert.deepEqual(visibleCoachFeedItems(rows, now).map((row) => row.id), ["c", "b", "a"]);
+test("the dashboard shows the three newest unread notifications", () => {
+  const rows = [
+    item("old-report", "2026-11-19T14:00:00Z", { event_type: "daily_report_ready", priority: 1 }),
+    item("bot", "2026-11-20T00:03:00Z", { activity_at: "2026-11-20T00:03:00Z" }),
+    item("new-report", "2026-11-20T06:20:00Z", { event_type: "daily_report_ready" }),
+    item("older", "2026-11-18T12:00:00Z", { priority: 1 }),
+  ];
+  assert.deepEqual(visibleCoachFeedItems(rows).map((row) => row.id),
+    ["new-report", "bot", "old-report"]);
 });
 
-test("recent weekly trade reflection stays visible", () => {
-  const rows = [item("a"), item("b"), item("c"), item("reflection", "weekly_reflection")];
-  assert.deepEqual(visibleCoachFeedItems(rows, now).map((row) => row.id), ["reflection", "c", "b"]);
+test("a bot's displayed activity time determines its position", () => {
+  const rows = [
+    item("bot", "2026-11-19T08:00:00Z", { activity_at: "2026-11-20T00:03:00Z" }),
+    item("report", "2026-11-19T22:00:00Z", { event_type: "daily_report_ready" }),
+  ];
+  assert.deepEqual(visibleCoachFeedItems(rows).map((row) => row.id), ["bot", "report"]);
 });
 
-test("risk and confirmation outrank a fresh report and routine journey cards", () => {
-  const rows = [item("watchlist", "watchlist_added"), item("report", "daily_report_ready"),
-    item("risk", "position_risk", "unread", "2026-11-19T09:00:00Z", 4),
-    item("proposal", "proposal_pending", "unread", "2026-11-19T08:00:00Z", 5)];
-  assert.deepEqual(visibleCoachFeedItems(rows, now).map((row) => row.id),
-    ["proposal", "risk", "report"]);
+test("urgent risk and confirmation cards remain ahead of routine updates", () => {
+  const rows = [
+    item("report", "2026-11-20T10:00:00Z", { event_type: "daily_report_ready", priority: 1 }),
+    item("risk", "2026-11-20T08:00:00Z", { event_type: "position_risk", priority: 4 }),
+    item("proposal", "2026-11-20T07:00:00Z", { event_type: "proposal_pending", priority: 5 }),
+  ];
+  assert.deepEqual(visibleCoachFeedItems(rows).map((row) => row.id),
+    ["risk", "proposal", "report"]);
 });
 
-test("a new report remains visible behind several urgent cards", () => {
-  const rows = [item("risk-a", "position_risk", "unread", "2026-11-19T10:00:00Z", 4),
-    item("risk-b", "data_blocked", "unread", "2026-11-19T09:00:00Z", 4),
-    item("risk-c", "plan_review", "unread", "2026-11-19T08:00:00Z", 4),
-    item("report", "daily_report_ready")];
-  assert.deepEqual(visibleCoachFeedItems(rows, now).map((row) => row.id),
-    ["risk-a", "risk-b", "report"]);
-});
-
-test("a discussed card moves to history and cannot crowd out another next step", () => {
-  const rows = [item("discussed", "strategy_next_step", "read", "2026-11-19T11:59:00Z", 4),
-    item("next", "analysis_ready", "unread", "2026-11-19T09:00:00Z", 2)];
-  assert.deepEqual(visibleCoachFeedItems(rows, now).map((row) => row.id), ["next"]);
+test("read and handled notifications leave the compact dashboard feed", () => {
+  const rows = [
+    item("read", "2026-11-20T10:00:00Z", { status: "read" }),
+    item("handled", "2026-11-20T09:00:00Z", { status: "handled" }),
+    item("new", "2026-11-20T08:00:00Z"),
+  ];
+  assert.deepEqual(visibleCoachFeedItems(rows).map((row) => row.id), ["new"]);
 });
