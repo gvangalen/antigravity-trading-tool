@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   FINN_ASSETS,
+  feedDraftWasEdited,
   buildExactPairOptions,
   closeFeedDiscussionIfCurrent,
   coachFeedDiscussionQuestion,
@@ -27,6 +28,13 @@ test("feed click stays explicit for the first submission even when command state
   assert.equal(selectedFeedItemForSubmission(selection, null, "Bespreek deze kaart"), "clicked-card");
   assert.equal(selectedFeedItemForSubmission(selection, selection.nonce, "Vervolgvraag"), null);
   assert.equal(selectedFeedItemForSubmission(selection, null, "  "), null);
+});
+
+test("a rewritten feed question is delivered as a question, not as the card's default request", () => {
+  const request = { query: "Bespreek de Paper-stap voor BTC/USDT", context: { feed_item_id: "selected" } };
+  assert.equal(feedDraftWasEdited(request, request.query), false);
+  assert.equal(feedDraftWasEdited(request, "Hoe laat is het op Mars? Voer niets uit."), true);
+  assert.equal(feedDraftWasEdited({ query: request.query }, "Andere vraag"), false);
 });
 
 test("feed discussion names the selected event and exact pair", () => {

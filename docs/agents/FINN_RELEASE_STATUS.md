@@ -4,6 +4,27 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 feed: tweede reparatie na browser-QA (20 november 2026)
+
+Phase: `LOCAL_VALIDATION`. Onafhankelijke ingelogde browser-QA wees de vorige
+publieke SHA `54986a1006a843dfd6047c209922697ece7c21bb` af. De geselecteerde
+BTC/USDT-Paper-kaart gaf inmiddels de juiste setup en strategie en leende geen
+botbesluit van een andere BTC-setup. Drie fouten bleven over: een door de
+gebruiker herschreven kaartvraag kreeg toch het vaste Paper-antwoord en de
+kaart werd afgehandeld; de zichtbare keuzekop toonde BTC in plaats van
+BTC/USDT; en een verzoek om de enige SPY-watchlistregel te verwijderen bleef
+in het webkeuzemenu steken. De eerdere ETH-ongelezenstatus kon op deze SHA niet
+opnieuw worden vastgesteld.
+
+Deze batch markeert een herschreven feedvraag in de toegestane context. De
+Paper-antwoordshortcut neemt die beurt dan niet over en de kaart wordt na die
+beurt niet automatisch afgehandeld. Het zichtbare assetkeuzelabel neemt het
+geselecteerde handelspaar over. De webchat slaat de listingkeuze over als er
+precies één eigenaargebonden watchlistregel past; FINN behoudt het bestaande
+bevestigingsvoorstel en de controle vóór verwijdering. Actie- en Live-grenzen
+zijn ongewijzigd. De lokale validatie en daaropvolgende live QA staan hieronder
+nog open; deze code is op dit moment geen geaccepteerde liveversie.
+
 ## FINN 3.0 feed: geselecteerde Paper-setup en watchlist (20 november 2026)
 
 Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_STATUS_SHA`. Onafhankelijke ingelogde browser-QA

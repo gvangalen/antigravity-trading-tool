@@ -1679,7 +1679,8 @@ class FinnResponsesFrontDoor:
             and os.getenv("FINN_PER_OPERATION_TOOLS_EXPERIMENT") == "1"
         )
         catalog = FinnResponsesToolCatalog(individual_proposals=individual_proposals)
-        selected_paper_step = _selected_paper_next_step(feed_evidence, locale)
+        selected_paper_step = (None if workspace_hints.get("feed_draft_edited") is True
+                               else _selected_paper_next_step(feed_evidence, locale))
         if selected_paper_step is not None:
             # A feed item selects one owned setup. A generic BTC bot read may
             # otherwise borrow a decision from another setup on the same pair.

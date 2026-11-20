@@ -122,6 +122,13 @@ export function watchlistIntent(text, mentions, ownedRows = []) {
   return { kind: hasRemove ? 'remove' : 'add', target: assets[0] };
 }
 
+export function needsWatchlistListingChoice(intent, ownedRows = []) {
+  if (!intent || intent.kind !== 'remove') return Boolean(intent);
+  const matches = ownedRows.filter((row) => row.symbol === intent.target?.symbol &&
+    (!intent.target?.quote_currency || row.quote_currency === intent.target.quote_currency));
+  return matches.length !== 1;
+}
+
 export function watchlistChoices(intent, ownedRows, markets = [], locale = 'nl') {
   if (!intent) return null;
   const copy = COPY[String(locale || 'nl').split('-')[0]] || COPY.nl;

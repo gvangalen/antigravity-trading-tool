@@ -19,7 +19,7 @@ import { feedHeaderInstrument, normalizeScopedAssetSymbol, resolveFinnBotPageCon
 import { normalizeTraderProfilePreferences } from "@/lib/traderProfileOptions";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import FinnCommandCenter from "@/components/finn/FinnCommandCenter";
-import { FINN_ASSETS, resolveFeedDraftQuery, selectedFeedItemForSubmission, shouldAttachFeedContext } from "@/lib/finnCommandSearch";
+import { FINN_ASSETS, feedDraftWasEdited, resolveFeedDraftQuery, selectedFeedItemForSubmission, shouldAttachFeedContext } from "@/lib/finnCommandSearch";
 import { getActiveSetupId } from "@/lib/setup/activeSetup";
 import { indicatorDisplayName } from "@/lib/indicators/configuredIndicatorRows.mjs";
 import { formatDraftCardValue, formatExecutionMode } from "@/lib/contractValueFormatter.mjs";
@@ -31,7 +31,7 @@ import { inactiveProposalIds, isFinnProposalCorrection, mapBackendSessionMessage
 import { conversationQuestionChoices, draftConversationCopy, hasConfirmableDraft, isCollectingDraft, isOpenClarification } from "@/lib/finnDraftConversation.mjs";
 import { matchAssetsInText, fetchTradingMarkets } from "@/lib/api/assets";
 import { fetchWatchlist } from "@/lib/api/watchlist";
-import { watchlistIntent, watchlistChoices, watchlistScopeChoices, replacementAfterConfirmedAdd, watchlistNextStepAfterConfirmedAdd } from "@/lib/finnWatchlistConversation.mjs";
+import { watchlistIntent, watchlistChoices, watchlistScopeChoices, needsWatchlistListingChoice, replacementAfterConfirmedAdd, watchlistNextStepAfterConfirmedAdd } from "@/lib/finnWatchlistConversation.mjs";
 
 const INDICATOR_MODAL_OPEN_EVENT = "finn-indicator-config:open";
 const INDICATOR_MODAL_COMPLETED_EVENT = "finn-indicator-config:completed";
@@ -1485,7 +1485,7 @@ function AIAssistantContent({
         const resolved = await matchAssetsInText(nextQuery);
         const ownedRows = await fetchWatchlist();
         const intent = watchlistIntent(nextQuery, resolved?.mentions || [], ownedRows || []);
-        if (intent) {
+        if (needsWatchlistListingChoice(intent, ownedRows || [])) {
           let markets = [];
           if (["add", "replace"].includes(intent.kind) && intent.target?.asset_class === "crypto") {
             const result = await fetchTradingMarkets(intent.target.symbol);
@@ -1551,6 +1551,9 @@ function AIAssistantContent({
       // selection when sending, since the last chat render may predate it.
       const livePageContext = getContext();
       const commandContext = { ...(commandRequest?.context || {}) };
+      if (isFeedHandoff && feedDraftWasEdited(commandRequest, nextQuery)) {
+        commandContext.feed_draft_edited = true;
+      }
       const selectedFeedItemId = selectedFeedItemForSubmission(
         feedSelection, usedFeedRequestRef.current, nextQuery,
       );
@@ -2751,7 +2754,9 @@ function AIAssistantContent({
                     {!FINN_ASSETS.some((asset) => asset.symbol === displayedContextSymbol) ? (
                       <option value={displayedContextSymbol}>{displayedContextSymbol || "—"}</option>
                     ) : null}
-                    {FINN_ASSETS.map((asset) => <option key={asset.symbol} value={asset.symbol}>{asset.symbol}</option>)}
+                    {FINN_ASSETS.map((asset) => <option key={asset.symbol} value={asset.symbol}>
+                      {asset.symbol === displayedContextSymbol ? displayedContextInstrument : asset.symbol}
+                    </option>)}
                   </select>
                 </div>
               </>

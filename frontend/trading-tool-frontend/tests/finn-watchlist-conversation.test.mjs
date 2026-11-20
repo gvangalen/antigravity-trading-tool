@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { watchlistIntent, watchlistChoices, watchlistScopeChoices, replacementAfterConfirmedAdd, watchlistNextStepAfterConfirmedAdd } from '../lib/finnWatchlistConversation.mjs';
+import { watchlistIntent, watchlistChoices, watchlistScopeChoices, needsWatchlistListingChoice, replacementAfterConfirmedAdd, watchlistNextStepAfterConfirmedAdd } from '../lib/finnWatchlistConversation.mjs';
 
 const btc = { symbol: 'BTC', display_name: 'Bitcoin', asset_class: 'crypto', start: 5, end: 8 };
 const eth = { symbol: 'ETH', display_name: 'Ethereum', asset_class: 'crypto', start: 5, end: 8 };
@@ -20,6 +20,16 @@ test('confirmed watchlist addition offers read-only advice for the exact trading
   assert.equal(usdt.choices[0].action, undefined);
   assert.equal(watchlistNextStepAfterConfirmedAdd('watchlist_remove', { asset: 'BTC', quote_currency: 'USDT' }), null);
   assert.equal(watchlistNextStepAfterConfirmedAdd('watchlist_add', { asset: '' }), null);
+});
+
+test('one owned listing bypasses the frontend removal choice and reaches FINN confirmation', () => {
+  const remove = { kind: 'remove', target: { symbol: 'SPY' } };
+  assert.equal(needsWatchlistListingChoice(remove, [{ symbol: 'SPY', market_id: null }]), false);
+  assert.equal(needsWatchlistListingChoice(remove, [
+    { symbol: 'SPY', market_id: 1, quote_currency: 'USD' },
+    { symbol: 'SPY', market_id: 2, quote_currency: 'EUR' },
+  ]), true);
+  assert.equal(needsWatchlistListingChoice(remove, []), true);
 });
 
 function mentionsIn(text) {

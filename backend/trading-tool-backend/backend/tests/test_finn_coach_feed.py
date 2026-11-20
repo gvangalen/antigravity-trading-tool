@@ -951,12 +951,13 @@ def test_direct_responses_read_persists_selected_feed_for_next_turn(monkeypatch)
     service.conversations.set_responses_cursor.assert_awaited_once()
 
 
-def test_completed_feed_discussion_is_handled_after_saved_chat_reply(monkeypatch):
+@pytest.mark.parametrize("edited", [False, True])
+def test_completed_feed_discussion_is_handled_after_saved_chat_reply(monkeypatch, edited):
     item_id = "00000000-0000-0000-0000-000000000098"
     run = SimpleNamespace(
         id="run-c", user_id=7, conversation_id="conversation-c", status="planned",
         message="Wat betekent deze analyse?", trace_id="trace-c",
-        client_context_json={"feed_item_id": item_id},
+        client_context_json={"feed_item_id": item_id, "feed_draft_edited": edited},
     )
 
     async def detail(_self, *, user_id, item_id: str):
@@ -991,9 +992,13 @@ def test_completed_feed_discussion_is_handled_after_saved_chat_reply(monkeypatch
         locale="nl",
     ))
 
-    recorded.assert_awaited_once_with(
-        user_id=7, item_id=item_id, terminal_status="completed",
-    )
+    if edited:
+        recorded.assert_not_awaited()
+        service.conversations.set_selected_feed_event.assert_not_awaited()
+    else:
+        recorded.assert_awaited_once_with(
+            user_id=7, item_id=item_id, terminal_status="completed",
+        )
     service._commit_session_if_possible.assert_awaited_once()
 
 
@@ -1227,6 +1232,10 @@ def test_feed_boundary_discards_stale_client_plan_and_draft_before_selection():
         "feed_item_id": "feed-b", "locale": "nl", "session_id": "conversation-1",
     }
     assert _feed_context_boundary({"setup_id": 111}) == {"setup_id": 111}
+    assert _feed_context_boundary({"feed_item_id": "feed-b", "feed_draft_edited": True,
+                                   "bot_id": 9}) == {
+        "feed_item_id": "feed-b", "feed_draft_edited": True,
+    }
 
 
 def test_discuss_market_move_can_explain_recorded_change_without_calling_it_current(monkeypatch):

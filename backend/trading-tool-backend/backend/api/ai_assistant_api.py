@@ -388,7 +388,7 @@ def _feed_context_boundary(payload: Optional[dict]) -> dict:
         return context
     return {
         key: context[key]
-        for key in ("feed_item_id", "locale", "session_id")
+        for key in ("feed_item_id", "feed_draft_edited", "locale", "session_id")
         if key in context
     }
 
