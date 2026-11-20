@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0 feed: geselecteerde Paper-setup en watchlist (20 november 2026)
 
-Phase: `READY_FOR_CANDIDATE_CI`. Onafhankelijke ingelogde browser-QA
+Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_STATUS_SHA`. Onafhankelijke ingelogde browser-QA
 wees de vorige publieke SHA `301e797876cc9da55e519db57612ca4ef59310e4`
 af. Een BTC/USDT-strategiekaart zonder gekoppelde bot kreeg ten onrechte een
 antwoord over een andere BTC-bot en werd daarna afgehandeld. De chatkop noemde
@@ -46,7 +46,15 @@ actiestappen en **9/9** lineagecontroles, HTTP 200 voor alle originele
 aanvragen, terminal-p95 **8461 ms** binnen de ongewijzigde grens, nul
 Live-bots en nul niet-toegestane uitvoeringen (artifact SHA-256
 `c696cf6f45d850ef6b21855bdb9d7c409935a18cb5f704c58158e516adec491e`).
-CI, deploymentidentiteit en onafhankelijke live QA staan nog open.
+Product-PR [#1219](https://github.com/gvangalen/antigravity-trading-tool/pull/1219)
+is na vijf groene [PR-CI-jobs](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44808716135)
+gemerged als `97bb915a804a006259520a65355184af0d2feb7d`.
+De [main-CI](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44809819676)
+en [Auto Deploy](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44810854253)
+zijn geslaagd. GitHub main, publieke backend-health en frontend-buildinfo
+gaven exact die SHA; beide publieke endpoints gaven HTTP 200. De laatste
+statusdeploy en onafhankelijke ingelogde QA op diens definitieve publieke
+SHA staan nog open.
 
 ## FINN-feed: compacte dashboardkaarten (20 november 2026)
 
