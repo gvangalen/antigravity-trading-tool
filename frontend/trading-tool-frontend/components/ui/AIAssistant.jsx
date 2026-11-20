@@ -15,7 +15,7 @@ import { useActiveSetup } from "@/app/providers/SetupProvider";
 import { useActiveBot } from "@/app/providers/ActiveBotProvider";
 import { actionButtonStyles } from "@/components/ui/actionButtonStyles";
 import { getAssistantSessionId, trackAssistantEvent } from "@/lib/api/assistantAnalytics";
-import { normalizeScopedAssetSymbol, resolveFinnBotPageContext, resolveFinnContextSymbol, resolveFinnSubmissionContext, shouldBlockFinnSubmission } from "@/lib/finnAssetIsolation";
+import { feedHeaderInstrument, normalizeScopedAssetSymbol, resolveFinnBotPageContext, resolveFinnContextSymbol, resolveFinnSubmissionContext, shouldBlockFinnSubmission } from "@/lib/finnAssetIsolation";
 import { normalizeTraderProfilePreferences } from "@/lib/traderProfileOptions";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import FinnCommandCenter from "@/components/finn/FinnCommandCenter";
@@ -2595,13 +2595,17 @@ function AIAssistantContent({
   const displayedContextSymbol = (isFeedHandoff && selectedCommandSymbol
     ? selectedCommandSymbol : pathname === "/bot" && context.bot_id ? context.symbol
     : chatAssetOverride || selectedCommandSymbol || context.symbol) || globalSymbol || "BTC";
-  const finnContextLabel = [workspaceContextLabel, displayedContextSymbol]
+  const displayedContextInstrument = feedHeaderInstrument(
+    displayedContextSymbol, commandRequest?.context?.quote_currency,
+    isFeedHandoff && Boolean(selectedCommandSymbol),
+  );
+  const finnContextLabel = [workspaceContextLabel, displayedContextInstrument]
     .filter(Boolean)
     .join(" · ");
   const compactFinnHeader = [
     "FINN",
     workspaceContextLabel,
-    String(displayedContextSymbol).toUpperCase(),
+    String(displayedContextInstrument).toUpperCase(),
   ].filter(Boolean);
   const finnModeLabel =
     activeState?.current_flow && activeState.current_flow !== "none"

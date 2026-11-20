@@ -31,6 +31,7 @@ from backend.services.finn_v2_responses_front_door import (
     _explicit_discussion_only,
     _read_only_impulse_plan_asset,
     _explicit_watchlist_removal_symbol,
+    _selected_paper_next_step,
     _unspecified_setup_overview,
 )
 from backend.services.finn_v2_verified_setup_reference import (
@@ -3940,11 +3941,112 @@ def test_unique_owner_watchlist_row_prepares_remove_without_listing_question():
     front.reads.assert_awaited_once()
 
 
+def test_direct_watchlist_removal_overrides_old_guided_operation():
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="spy-guided-remove")
+    front.reads = AsyncMock(return_value={"status": "completed", "results": [{
+        "scope": "read_watchlist", "status": "completed",
+        "data": {"symbols": [{"symbol": "SPY", "market_id": None}]},
+    }]})
+    result = asyncio.run(front.run(
+        message="Verwijder SPY uit mijn watchlist", instructions="",
+        conversation_context={"active_guided_operation": {"operation_id": "watchlist_add"}},
+        verified_asset="SPY",
+    ))
+    assert result.proposal_analysis.request_plan.operation_id == "watchlist_remove"
+    assert result.proposal_analysis.request_plan.clarification_required is False
+
+
+def test_watchlist_removal_rechecks_owner_rows_after_unavailable_tool_read(monkeypatch):
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="spy-fallback-remove")
+    front.reads = AsyncMock(return_value={"status": "unavailable", "results": []})
+
+    @asynccontextmanager
+    async def session_factory():
+        yield object()
+
+    front.reads.session_factory = session_factory
+    direct = AsyncMock(return_value={"data": {"symbols": [{"symbol": "SPY", "market_id": 123}]}})
+    monkeypatch.setattr(
+        "backend.services.finn_v2_tool_adapters.watchlist_tool_adapter.WatchlistToolAdapter.execute",
+        direct,
+    )
+    result = asyncio.run(front.run(
+        message="Verwijder SPY uit mijn watchlist", instructions="",
+        conversation_context={}, verified_asset="SPY",
+    ))
+    assert result.proposal_analysis.request_plan.operation_id == "watchlist_remove"
+    assert result.proposal_analysis.request_plan.clarification_required is False
+    direct.assert_awaited_once_with(user_id=7)
+
+
+def test_watchlist_removal_does_not_invent_listing_choice_when_read_unavailable():
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="spy-unavailable")
+    front.reads = AsyncMock(return_value={"status": "unavailable", "results": []})
+    result = asyncio.run(front.run(
+        message="Verwijder SPY uit mijn watchlist", instructions="",
+        conversation_context={}, verified_asset="SPY",
+    ))
+    assert result.proposal_analysis is None
+    assert result.response.answer_kind == "watchlist_remove_unavailable"
+    assert "niet uitlezen" in result.response.text
+
+
 def test_watchlist_remove_shortcut_rejects_negation_and_hypotheticals():
     assert _explicit_watchlist_removal_symbol("Verwijder SPY uit mijn watchlist.") == "SPY"
     assert _explicit_watchlist_removal_symbol("Verwijder SPY niet uit mijn watchlist.") is None
     assert _explicit_watchlist_removal_symbol("Wat als ik SPY uit mijn watchlist verwijder?") is None
     assert _explicit_watchlist_removal_symbol("Verwijder BTC en SPY uit mijn watchlist.") is None
+
+
+def test_selected_paper_next_step_does_not_borrow_other_btc_bot():
+    feed = [
+        {"facts": {"feed_item_id": "selected", "event_type": "paper_next_step",
+                   "selection_origin": "current_run", "symbol": "BTC"}},
+        {"facts": {"feed_item_id": "selected", "current_setup": {
+            "name": "BTC USDT setup", "trading_pair": "BTC/USDT"},
+            "current_linked_strategy": {"id": 41, "name": "USDT strategy"},
+            "current_linked_bot": {"status": "missing"}}},
+    ]
+    answer, verified = _selected_paper_next_step(feed, "nl")
+    assert verified is True
+    assert "BTC/USDT" in answer and "geen gekoppelde bot" in answer
+    assert "botbesluit" not in answer
+    missing, verified = _selected_paper_next_step(feed[:1], "nl")
+    assert verified is False and "blijft open" in missing
+
+
+def test_selected_paper_next_step_verifier_keeps_unavailable_card_open():
+    for verified, expected_status in ((True, "completed"), (False, "unavailable")):
+        result = FinnResponsesResult(
+            text="De geselecteerde setup is gecontroleerd." if verified else "Setup nu niet beschikbaar.",
+            response_id="selected-paper-step-test",
+            tool_trace=({"name": "read_selected_paper_next_step",
+                         "status": "completed" if verified else "unavailable",
+                         "result": {"verified": verified}},),
+            answer_kind="selected_paper_next_step" if verified else "selected_paper_next_step_unavailable",
+        )
+        answer = asyncio.run(FinnResponsesAnswerVerifier().verify(
+            message="Bespreek deze Paper-kaart", result=result, locale="nl"))
+        assert answer.status == expected_status
+
+
+def test_selected_paper_feed_handoff_uses_owned_setup_not_generic_btc_bot():
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="paper-feed")
+    feed = [
+        {"facts": {"feed_item_id": "selected", "event_type": "paper_next_step",
+                   "selection_origin": "current_run", "symbol": "BTC"}},
+        {"facts": {"feed_item_id": "selected", "current_setup": {
+            "name": "BTC USDT setup", "trading_pair": "BTC/USDT"},
+            "current_linked_strategy": {"id": 41, "name": "USDT strategy"},
+            "current_linked_bot": {"status": "missing"}}},
+    ]
+    result = asyncio.run(front.run(
+        message="Controleer de bot voor deze strategie", instructions="",
+        conversation_context={}, verified_asset="BTC", feed_evidence=feed,
+    ))
+    assert result.response.answer_kind == "selected_paper_next_step"
+    assert "BTC/USDT" in result.response.text
+    assert "geen gekoppelde bot" in result.response.text
 
 
 def test_inventory_reference_ids_are_server_only_not_model_arguments():

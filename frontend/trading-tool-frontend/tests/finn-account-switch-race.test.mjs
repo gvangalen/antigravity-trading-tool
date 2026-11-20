@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  feedHeaderInstrument,
   normalizeScopedAssetSymbol,
   resolveFinnBotPageContext,
   resolveFinnBotContextSymbol,
@@ -10,6 +11,12 @@ import {
   resolveScopedAssetStatus,
   shouldBlockFinnSubmission,
 } from "../lib/finnAssetIsolation.js";
+
+test("a selected BTC/USDT feed card labels the exact pair in FINN's header", () => {
+  assert.equal(feedHeaderInstrument("BTC", "USDT", true), "BTC/USDT");
+  assert.equal(feedHeaderInstrument("BTC", "EUR", true), "BTC/EUR");
+  assert.equal(feedHeaderInstrument("BTC", "USDT", false), "BTC");
+});
 import { matchesWorkspaceAsset } from "../lib/workspace/workspaceAssetScope.mjs";
 
 test("asset switch cannot show an AAPL workspace beneath a BTC heading", () => {
