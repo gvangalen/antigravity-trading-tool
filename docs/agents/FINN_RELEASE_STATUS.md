@@ -4,6 +4,35 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 feed: QA-vervolg en strategieclarificatie (20 november 2026)
+
+Phase: `LOCAL_VALIDATED_PR_PENDING`. Onafhankelijke browser-QA op publieke SHA
+`43991d360b72379f9bfaf5857b5246c1790126c1` bevestigde dat een bewerkte
+Paper-feedvraag de oude kaart niet afhandelt, de normale AAPL-Paper-vraag wel,
+BTC/USDT in de setup-chatkop als exact paar verschijnt en een unieke SPY-ETF
+via een bevestigd voorstel verwijderd wordt. De reeds afgehandelde MSFT- en
+BTC/USDT-Paper-kaarten konden niet opnieuw als ongelezen getest worden;
+polling/SSE en native mobiel bleven onbewezen. QA vond ook een dubbele
+opgeslagen Paper-reden en een nieuwe blokkade: een volledig gespecificeerde
+MSFT-tradestrategie zonder expliciete valuta van koersniveaus kreeg alleen de
+algemene vraag naar een ontbrekend detail, waarna de gebruiker de context
+niet logisch kon aanvullen.
+
+Deze aanvulling vraagt bij `create_strategy` expliciet of instap, stop-loss en
+doelkoersen in EUR, USD of USDT zijn, en hervat daarna dezelfde bewaarde
+strategieaanvraag. Identieke opgeslagen redenen in het antwoord op een
+geselecteerde Paper-kaart verschijnen één keer. Er is geen wijziging aan
+uitvoerings- of Live-botgrenzen. Gerichte tests: **211 passed**; volledige
+backendset: **5146 passed, 7 skipped**. De echte Responses-providerontwikkeling
+gaf **20/20** en de regressie **109/109**, met 1,0 nauwkeurigheid en nul
+provider-, schema-, parse-, validatie- of timeoutfouten. De geïsoleerde
+FastAPI/Celery/Postgres/Redis-matrix gaf **38/38**, **16/16** actiecontracten,
+**9/9** lineagecontroles, alle originele HTTP-antwoorden 200, terminal-p95
+**9637 ms** onder de grens van 10 seconden, nul Live-bots en nul
+niet-toegestane uitvoeringen (artifact SHA-256
+`b18e7a94a35e712e4cfe3ed65371d506ea8760e6629e5a365ee769f31de03e4d`).
+CI, deploy en onafhankelijke live QA voor deze aanvulling staan nog open.
+
 ## FINN 3.0 feed: tweede reparatie na browser-QA (20 november 2026)
 
 Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_STATUS_SHA`. Candidate branch:
