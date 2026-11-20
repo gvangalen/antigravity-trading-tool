@@ -4,6 +4,26 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: directe leescontracten na beschermde QA (21 november 2026)
+
+Phase: `LOCAL_VALIDATION_IN_PROGRESS`. De gerichte ingelogde browserproeven op
+publieke SHA `dbf0041e1e6c7c29d788302916d2f2747b953e47` slaagden voor de
+MSFT- en BTC/USDT-Paper-vervolgkaart, aangepaste-vraagstatus, paarcontext en
+opruimen van tijdelijke strategieën. De beschermde `coach_feed_triggers`-run
+44835088980 slaagde eveneens en ruimde zijn geïsoleerde fixtures op. Een
+afzonderlijk QA-owned manifest voor drie read-only runtimegevallen wees de
+trace op dezelfde SHA af: polling/SSE, dispatch/attempt en HTTP waren gelijk
+en compleet, maar `initial_operation_id` en `final_operation_id` bleven in
+alle drie terminale contracten leeg (workflow 44835804158).
+
+Deze reparatie schrijft alleen een registry-readoperatie in de terminale
+trace als de voltooide owner-read eenduidig uitsluitend `read_watchlist` of
+`read_active_asset` bevat en er geen voorstel-toolcall is. Dit volgt de
+bestaande bewijsgebonden behandeling van `read_active_setup`; antwoorden,
+fixturedata en uitvoeringsgrenzen blijven ongewijzigd. Gerichte regressie:
+**2 passed**. Volledige lokale releasecontroles, CI, deploy en onafhankelijke
+QA op de nieuwe SHA staan nog open.
+
 ## FINN 3.0: begeleide koersvaluta na live QA (20 november 2026)
 
 Phase: `LOCAL_VALIDATION_IN_PROGRESS`. Onafhankelijke live QA op SHA

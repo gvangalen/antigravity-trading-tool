@@ -28,6 +28,27 @@ from backend.domain.finn_v2_runtime_contract import (
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
 from backend.services.finn_v2_run_service import FinnV2RunService, _verified_closed_review_evidence
+
+
+@pytest.mark.parametrize("scope,operation", [
+    ("read_watchlist", "read_watchlist"),
+    ("read_active_asset", "read_active_asset"),
+])
+def test_verified_direct_owner_read_gets_registry_operation(scope, operation):
+    exchange = {"tool_trace": [{"name": "get_active_asset_context", "result": {
+        "results": [{"scope": scope, "status": "completed"}],
+    }}]}
+    assert FinnV2RunService._verified_direct_read_operation(exchange) == operation
+    assert FinnV2RunService._verified_direct_read_operation({"tool_trace": [
+        *exchange["tool_trace"],
+        {"name": "get_other_context", "result": {"results": [
+            {"scope": "read_portfolio", "status": "completed"},
+        ]}},
+    ]}) is None
+    assert FinnV2RunService._verified_direct_read_operation({"tool_trace": [
+        *exchange["tool_trace"], {"name": "remove_watchlist_proposal"},
+    ]}) is None
+
 from backend.services.finn_v2_responses_answer_verifier import FinnResponsesVerifiedAnswer
 from backend.services.finn_v2_flag_service import FinnV2FlagService
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
