@@ -15754,10 +15754,12 @@ def test_bot_decision_front_door_reads_history_before_answer(monkeypatch):
         async def __call__(self, call):
             selected_calls.append(call)
             return {"status": "completed", "results": [
-                {"scope": "read_portfolio", "status": "completed",
-                 "data": {"bots": [{"bot_id": 130, "symbol": "AAPL"}]}},
                 {"scope": "read_review_history", "status": "completed",
-                 "data": {"items": ["Botbeslissing 2026-11-07 19:45 CET: geen order"]}},
+                 "data": {"latest_bot_decisions": [{
+                     "bot_id": 130, "symbol": "AAPL", "is_live": False,
+                     "decision_at": "2026-11-19T20:30:00+00:00", "action": "hold",
+                     "safety_reason": "Reguliere sessie gesloten; actuele koers ontbreekt",
+                 }]}},
             ]}
 
     FakeRead.session_factory = staticmethod(session_factory)
@@ -15783,8 +15785,92 @@ def test_bot_decision_front_door_reads_history_before_answer(monkeypatch):
         workspace_hints={"page": "/asset", "symbol": "AAPL"},
     ))
     assert "read_review_history" in selected_calls[0].read_tools
-    assert "read_portfolio" in selected_calls[0].read_tools
-    assert result.response.tool_trace[0]["result"]["results"][1]["scope"] == "read_review_history"
+    assert "read_portfolio" not in selected_calls[0].read_tools
+    assert "Reguliere sessie gesloten; actuele koers ontbreekt" in result.response.text
+
+
+def test_referenced_aapl_bot_decision_uses_saved_reason_not_later_quote():
+    from backend.services.finn_v2_factual_source_answer import render_bot_decision
+
+    read = {"results": [{"scope": "read_review_history", "status": "completed", "data": {
+        "latest_bot_decisions": [{"symbol": "AAPL", "is_live": False,
+                                  "decision_at": "2026-11-20T09:00:00+00:00", "action": "buy",
+                                  "safety_reason": "Nieuwe beoordeling"}],
+        "referenced_bot_decisions": [{"symbol": "AAPL", "is_live": False,
+                                      "decision_at": "2026-11-19T20:30:00+00:00", "action": "hold",
+                                      "safety_reason": "Reguliere sessie gesloten; actuele koers ontbreekt"}],
+    }}]}
+    answer = render_bot_decision(read, symbol="AAPL", paper=False, referenced_minute=True)
+    assert "Reguliere sessie gesloten; actuele koers ontbreekt" in answer
+    assert "Nieuwe beoordeling" not in answer
+    assert "geen order" in answer
+
+
+def test_dutch_dated_botcheck_resolves_local_cet_minute():
+    minute = FinnResponsesFrontDoor._referenced_bot_check_minute(
+        "Waarom had mijn AAPL-botcheck op 19 november 2026 om 21:30 CET geen order?"
+    )
+    assert minute == "2026-11-19T20:30:00+00:00"
+
+
+def test_short_exact_reason_followup_rechecks_only_the_same_owner_bot(monkeypatch):
+    @asynccontextmanager
+    async def session_factory():
+        yield SimpleNamespace(commit=AsyncMock())
+
+    class FakeRead:
+        async def __call__(self, call):
+            return {"status": "completed", "results": [{
+                "scope": "read_review_history", "status": "completed", "data": {
+                    "latest_bot_decisions": [{
+                        "bot_id": 130, "symbol": "AAPL", "is_live": False,
+                        "decision_at": "2026-11-19T20:30:00+00:00", "action": "hold",
+                        "safety_reason": "Reguliere sessie gesloten; actuele koers ontbreekt",
+                    }],
+                },
+            }]}
+
+    FakeRead.session_factory = staticmethod(session_factory)
+
+    prior = {"owner_user_id": 7, "terminal_status": "completed", "tool_trace": [{
+        "name": "get_decision_history", "result": {"results": [{
+            "scope": "read_review_history", "status": "completed", "data": {
+                "latest_bot_decisions": [{"bot_id": 130, "symbol": "AAPL"}],
+            },
+        }]},
+    }]}
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnV2RuntimeContractRepository.record_responses_progress",
+        AsyncMock(),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=FakeResponses()), session_factory=session_factory,
+        user_id=7, run_id="bot-reason-followup", model_led_coach=True,
+    )
+    front.reads = FakeRead()
+    result = asyncio.run(front.run(
+        message="Wat was de exacte reden?", instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="AAPL", previous_response=prior,
+        workspace_hints={"page": "/asset", "symbol": "AAPL"},
+    ))
+    assert "Reguliere sessie gesloten; actuele koers ontbreekt" in result.response.text
+
+
+def test_aapl_report_comparison_names_missing_report_and_botcheck():
+    from backend.services.finn_v2_factual_source_answer import render_report_bot_check_comparison
+
+    read = {"results": [
+        {"scope": "read_review_history", "status": "completed", "data": {
+            "referenced_bot_decisions": []}},
+        {"scope": "read_latest_report", "status": "completed", "data": {
+            "generated_at_amsterdam": "2026-11-19 20:08:00 CET"}},
+    ]}
+    answer = render_report_bot_check_comparison(
+        read, symbol="AAPL", message="Vergelijk mijn AAPL-botcheck rond 10:00 CET met rapport van 05:21 CET",
+    )
+    assert "05:21" in answer
+    assert "botcheck is niet gevonden" in answer
+    assert "20:08" not in answer
 
 
 @pytest.mark.parametrize("question,selected_tool", [

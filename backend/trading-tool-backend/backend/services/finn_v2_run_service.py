@@ -1611,12 +1611,13 @@ def _minimal_read_answer(
     *, message: str, prepared: FinnResponsesFrontDoorResult,
 ) -> FinnResponsesVerifiedAnswer:
     """Keep the model's wording; check only a concrete saved-object type error."""
-    evidence = tuple(
+    current_evidence = tuple(
         item
         for call in prepared.response.tool_trace
         for item in (call.get("result") or {}).get("results") or []
         if isinstance(item, dict)
     )
+    evidence = current_evidence
     previous = getattr(prepared, "previous_response", None) or {}
     previous_targets = (previous.get("turn_contract") or {}).get("targets") or []
     previous_assets = {
@@ -1636,11 +1637,27 @@ def _minimal_read_answer(
             if isinstance(item, dict)
         )
     text = prepared.response.text.strip()
+    def source_bound_coach_recovery() -> FinnResponsesVerifiedAnswer | None:
+        from backend.services.finn_v2_coach_source_fallback import render_coach_source_fallback
+        assets = mentioned_catalog_symbols(message)
+        plan = (getattr(prepared.response, "turn_contract", None) or {}).get("coach_evidence_plan") or {}
+        if len(assets) != 1 or not plan:
+            return None
+        recovered = render_coach_source_fallback(
+            asset=next(iter(assets)), topics=tuple(plan.get("topics") or ()),
+            evidence=current_evidence,
+        )
+        if recovered:
+            return FinnResponsesVerifiedAnswer("completed", recovered, None, evidence)
+        return None
+
     if not FinnResponsesAnswerVerifier._latest_quote_claim_supported(text, tuple(
         item for call in prepared.response.tool_trace
         for item in (call.get("result") or {}).get("results") or []
         if isinstance(item, dict)
     )):
+        if recovered := source_bound_coach_recovery():
+            return recovered
         return FinnResponsesVerifiedAnswer(
             "unavailable", "Ik kan dit nog niet onderbouwen met betrouwbare koersgegevens.",
             "latest_quote_conflicts_with_source", evidence,
@@ -1651,8 +1668,10 @@ def _minimal_read_answer(
     )
     source_moment_diagnostics: list[str] = []
     if not current_source_moments_supported(
-        text, evidence, question=message, diagnostics=source_moment_diagnostics,
+        text, current_evidence, question=message, diagnostics=source_moment_diagnostics,
     ):
+        if recovered := source_bound_coach_recovery():
+            return recovered
         return FinnResponsesVerifiedAnswer(
             "unavailable", "Ik kan de bronmomenten in dit antwoord niet verifiëren.",
             "source_moment_conflicts_with_source", evidence,

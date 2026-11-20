@@ -4,10 +4,54 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 AAPL-bronvragen: reparatie na ingelogde QA (20 november 2026)
+
+Phase: `LOCAL_BUILD_VALIDATED`. De ingelogde AAPL-herkeuring op
+`767f01f1d5bea2de5478c08bf3fd9acc5c8fb180` was **NOT ACCEPTED**:
+FINN liet de concrete reden van een opgeslagen AAPL Paper-`hold` weg en gaf
+op vervolgvragen naar botcheck en dagrapport een generieke bronmomentfout.
+Dit verdict kwam uit de browser op het Paper Test-account; het was geen
+officiële beschermde QA-run.
+
+Deze reparatie geeft bij een laatste botbesluit ook de opgeslagen reden van
+`hold` terug, koppelt een expliciet genoemd historisch tijdstip aan de juiste
+beslissing en herleest een eenduidige botreden bij een korte vervolgvraag.
+Een rapportvergelijking noemt nu welke genoemde bron ontbreekt en gebruikt
+geen later rapport als vervanging. Als de modeltekst een bronmoment verkeerd
+weergeeft, maakt FINN voor een alleen-lezen vraag over één asset een antwoord
+uit de werkelijk gelezen bronnen van die beurt, met ontbrekende gegevens
+expliciet vermeld. Deze route kan geen voorstel of order aanmaken.
+
+De lokale root-suite gaf **5126 passed, 7 skipped** (log SHA-256
+`3545b7fe12b17a2eb0c42dc9495899ec0074fde920a1167e2fa86e4bff5eb092`).
+De worker-gedreven
+actiecontractmatrix gaf **17/17**, nul brokerorders, Live-calls, live-bots en
+productieverbindingen (artifact SHA-256
+`878e16bcc7260c8b74bc1754612c93a22c383cc5868dba3f807bb459c97e835c`).
+De lokale synthetische vierbeurtige AAPL-proef via FastAPI en Celery gaf
+**4/4**: opgeslagen botreden, korte vervolgzin, ontbrekende historische
+vergelijkingsbronnen en brede coachvraag (artifact SHA-256
+`1ba9b49e68f761657f6d829af50de0bbae4954b40285a71366bbec9f5cd074af`).
+De echte providerontwikkeling gaf **20/20**, alle gemeten accuracies 1,0 en
+nul provider-, schema-, parse-, validatie- of timeoutfouten (artifact SHA-256
+`63cac9fcafbf4ce8965a808c1029b232b2306f401dfcde75c9d714c901a830bd`).
+De echte providerregressie gaf **109/109**, alle gemeten accuracies 1,0 en
+nul provider-, schema-, parse-, validatie- of timeoutfouten (artifact SHA-256
+`85b5ad623156bc3d8dedf3633b5340d914dca89051eb57e545e6460e6c439ea6`).
+De productcommit van deze kandidaat is `7c6a9ba64`; de frontend is niet
+gewijzigd. Onafhankelijke live QA voor deze reparatie is nog niet uitgevoerd.
+
+De afzonderlijke feedherkeuring op live SHA `0d60dd2e303621d8f4823cf4e22111a807711832`
+eindigde **NOT ACCEPTED wegens ontbrekende testdekking**: de bestuurbare tab
+stond op het gewone account en de Paper Test-fixture was niet bereikbaar.
+Er werd daar geen nieuwe productfout bewezen; er zijn geen fixtureacties
+uitgevoerd.
+
 ## FINN 3.0 actieve feedselectie (19 november 2026)
 
-Phase: `PRODUCT_DEPLOYED_READY_FOR_INDEPENDENT_QA`. De productwijziging staat
-live; een onafhankelijk QA-verdict ontbreekt nog. De feed kiest voortaan op ongelezen status en
+Phase: `LIVE_QA_NOT_ACCEPTED_COVERAGE`. De productwijziging staat live;
+de herkeuring op 20 november kon de Paper Test-fixture niet bereiken en
+bewees geen productfout. De feed kiest voortaan op ongelezen status en
 belang: risico en open bevestigingen eerst, daarna een recent rapport en de
 overige vervolgstappen. **Bespreek** laat de kaart staan totdat FINN een antwoord
 heeft opgeslagen; een afgerond antwoord handelt de kaart af en een gerichte
@@ -38,8 +82,8 @@ provider-, schema-, parse-, validatie- of timeoutfouten (artifact SHA-256
 De echte providerregressie slaagde **109/109**, alle detailmetingen 100% en
 nul provider-, schema-, parse-, validatie- of timeoutfouten (artifact SHA-256
 `1b16c3fde658d90696d8abb83ef4e14f37038e6cb13049eec683808b6e75a8ff`).
-Een ingelogde liveproef en de officiële onafhankelijke QA-matrix zijn nog
-niet uitgevoerd. De bestaande FINN-actiecontracten en handelsgrenzen zijn
+Bij deze lokale validatie waren een ingelogde liveproef en de officiële
+onafhankelijke QA-matrix nog niet uitgevoerd. De bestaande FINN-actiecontracten en handelsgrenzen zijn
 niet gewijzigd. Product-PR
 [#1211](https://github.com/gvangalen/antigravity-trading-tool/pull/1211)
 is gemerged als `72c1817db7795e6b6f3c304e88e77e7d7717d584`.

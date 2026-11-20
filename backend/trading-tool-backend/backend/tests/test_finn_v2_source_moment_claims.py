@@ -442,6 +442,36 @@ def test_live_read_answer_rejects_wrong_zone_before_delivery():
     }
 
 
+def test_multi_source_coach_recovers_from_wrong_model_time_with_current_reads():
+    question = "Beoordeel mijn AAPL-setup, score, bot, rapport, koers en Paper-kas. Wijzig niets."
+    evidence = [
+        {"scope": "read_active_setup", "status": "completed", "data": {
+            "symbol": "AAPL", "name": "AAPL setup", "min_benchmark_score": 61, "max_benchmark_score": 75}},
+        {"scope": "read_review_history", "status": "completed", "data": {
+            "latest_bot_decisions": [{"symbol": "AAPL", "action": "hold",
+                                      "decision_at": "2026-11-19T20:30:00+00:00",
+                                      "safety_reason": "Reguliere sessie gesloten"}]}},
+        {"scope": "read_market_snapshot", "status": "completed", "data": {
+            "symbol": "AAPL", "price": 349.34, "quote_currency": "USD",
+            "source_observed_at_utc": "2026-11-19T20:29:00+00:00"}},
+    ]
+    prepared = SimpleNamespace(
+        response=SimpleNamespace(
+            text="De actuele AAPL-koers is $349,34 van 19 november 2026 om 18:00 CET.",
+            tool_trace=({"name": "get_market_snapshot", "result": {"results": evidence}},),
+            uses_previous_response=False,
+            turn_contract={"coach_evidence_plan": {"topics": (
+                "setup", "score", "bot", "report", "quote", "portfolio")}},
+        ), previous_response=None,
+    )
+    recovered = _minimal_read_answer(message=question, prepared=prepared)
+    assert recovered.status == "completed"
+    assert "Reguliere sessie gesloten" in recovered.text
+    assert "21:29:00 CET" in recovered.text
+    assert "18:00 CET" not in recovered.text
+    assert "geen verifieerbare actuele score" in recovered.text
+
+
 def test_live_read_answer_rejects_denial_of_saved_historical_bot_decision():
     evidence = (
         {"scope": "read_latest_report", "status": "completed", "data": {
