@@ -4,6 +4,23 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: begeleide koersvaluta na live QA (20 november 2026)
+
+Phase: `LOCAL_VALIDATION_IN_PROGRESS`. Onafhankelijke live QA op SHA
+`7442de6f0bb5ed040b7518df1d85314c2e9a7e27` bevestigde dat de nieuwe
+valutavraag verschijnt, maar wees de vervolgstap af: het antwoord “De
+koersniveaus zijn in USD” werd niet als antwoord op de openstaande
+`create_strategy`-actie gebonden. De runtime eindigde met
+`guided_proposal_tool_call_required` zonder concept of opslag. De eerdere
+reparatie van dubbele Paper-redenen werd live bevestigd.
+
+De begeleide-slotkoppeling herkent nu een expliciete valuta van tradekoersen
+en een kort antwoord EUR, USD of USDT als antwoord binnen hetzelfde
+strategieconcept. Een los bedrag in EUR geldt daarbij niet als koersvaluta.
+Gerichte regressie: **19 passed**. Volledige backend-, provider- en
+worker-matrix, CI, deploy en onafhankelijke ingelogde hertest staan voor deze
+aanvulling nog open.
+
 ## FINN 3.0 feed: QA-vervolg en strategieclarificatie (20 november 2026)
 
 Phase: `LOCAL_VALIDATED_PR_PENDING`. Onafhankelijke browser-QA op publieke SHA
