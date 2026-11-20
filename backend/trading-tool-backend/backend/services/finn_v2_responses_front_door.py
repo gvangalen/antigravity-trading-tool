@@ -179,6 +179,18 @@ def _proposal_explicitly_excluded(message: str) -> bool:
     ))
 
 
+def _explicit_watchlist_removal_symbol(message: str) -> str | None:
+    """Recognize a direct removal request, never a hypothetical or negation."""
+    match = re.fullmatch(
+        r"\s*(?:(?:verwijder|remove|haal)\s+)([A-Za-z0-9._:-]{1,20})\s+"
+        r"(?:uit|van|from)\s+(?:mijn|de|my|the)\s+"
+        r"(?:watchlist|volglijst)\s*[.!]?\s*",
+        message, re.I,
+    )
+    symbol = str(match.group(1) if match else "").upper()
+    return symbol if symbol in DEFAULT_ASSET_CATALOG else None
+
+
 def _explicit_manual_trade_suggestion_request(message: str) -> bool:
     if _proposal_explicitly_excluded(message):
         return False
@@ -1985,6 +1997,52 @@ class FinnResponsesFrontDoor:
                     response_id_reusable=False,
                 ), None, previous_response, locale=locale,
             )
+        removal_symbol = _explicit_watchlist_removal_symbol(message)
+        if removal_symbol and not conversation_context.get("active_guided_operation"):
+            # A single owner-scoped row identifies the requested listing.
+            # Keep the confirmation boundary; recheck uniqueness at execution.
+            watchlist_call = FinnResponsesToolCall(
+                name="get_active_asset_context", operation_id=None,
+                inputs={}, read_tools=("read_watchlist",),
+                required_inputs=(), missing_inputs=(),
+            )
+            try:
+                watchlist_read = await self.reads(watchlist_call)
+            except Exception:
+                logger.warning("FINN watchlist removal preflight failed", exc_info=True)
+                watchlist_read = {"status": "unavailable", "results": []}
+            matching_rows = [
+                row
+                for result in watchlist_read.get("results") or []
+                if result.get("scope") == "read_watchlist"
+                and result.get("status") == "completed"
+                for row in (result.get("data") or {}).get("symbols") or []
+                if isinstance(row, dict) and str(row.get("symbol") or "").upper() == removal_symbol
+            ]
+            if len(matching_rows) == 1:
+                proposal_call = catalog.validate(
+                    catalog.proposal_tool_for_operation("watchlist_remove"),
+                    {"operation_id": "watchlist_remove", "inputs": {"asset": removal_symbol}},
+                )
+                selected = self.proposals.from_call(
+                    call=proposal_call, message=message,
+                    conversation_context=conversation_context,
+                    verified_asset=removal_symbol, read_context=(watchlist_read,),
+                )
+                prompt = {
+                    "en": f"I can prepare removal of {removal_symbol} from your watchlist for confirmation.",
+                    "de": f"Ich kann das Entfernen von {removal_symbol} aus deiner Watchlist zur Bestätigung vorbereiten.",
+                }.get(str(locale).split("-")[0].lower(),
+                      f"Ik kan het verwijderen van {removal_symbol} uit je watchlist ter bevestiging klaarzetten.")
+                return FinnResponsesFrontDoorResult(
+                    FinnResponsesResult(
+                        text=prompt, response_id=f"watchlist-remove-{self.run_id}",
+                        tool_trace=({"name": watchlist_call.name,
+                                     "status": watchlist_read.get("status", "unavailable"),
+                                     "arguments": {}, "result": watchlist_read},),
+                        response_id_reusable=False,
+                    ), selected, previous_response, locale=locale,
+                )
         replacement = replacement_mentions(message, DEFAULT_ASSET_CATALOG)
         if not replacement and ambiguous_asset_change_scope(message, DEFAULT_ASSET_CATALOG):
             question = {

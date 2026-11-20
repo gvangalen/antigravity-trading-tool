@@ -4,6 +4,45 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 feed: gerichte reparatie na ingelogde QA (20 november 2026)
+
+Phase: `LOCAL_VALIDATED_DEPLOY_PENDING`. De ingelogde browserherkeuring op
+publieke SHA `34dc8c57f5494670c0fa98aae80931b747bbd83f` was **NOT ACCEPTED**.
+Twee P2-fouten bleven over: bij **Bespreek** van een BTC/USDT-feedkaart op de
+AAPL-botpagina bleef de FINN-chatkop op AAPL staan, en een expliciet verzoek
+om de enige SPY-watchlistregel te verwijderen vroeg toch naar de listing.
+
+De reparatie geeft een geselecteerde feedkaart in de chatkop en verzonden
+context voorrang boven de botpagina en neemt de bijbehorende quote mee. Bij
+een expliciet verwijderverzoek leest FINN eerst de eigenaargebonden watchlist.
+Precies één passende rij leidt tot een voorstel met de bestaande bevestiging;
+de uitvoeringsadapter controleert de uniciteit opnieuw. Bij nul of meerdere
+rijen blijft de bestaande verduidelijking gelden. Er zijn geen handelsgrenzen
+gewijzigd. De lokale actiematrixtekst noemt nu expliciet USDT bij de
+SOL/USDT-strategieprijzen, overeenkomstig de bestaande verplichte
+prijsmuntcontrole.
+
+De canonieke root-suite gaf **5129 passed, 7 skipped** (log SHA-256
+`a915236a85375563b795464adbd36d25c46dbedaaa0b510826c78f12bdcdeb9a`). Web typecheck,
+i18n-lint, i18n-tests **45/45**, commandtests, proposaltests **10/10**,
+productiebouw en hoge dependency-audit slaagden; de audit meldde één
+matige Next.js-kwetsbaarheid. De gerichte backend- en webregressies slaagden.
+De geïsoleerde worker-actiematrix gaf **38/38**, inclusief 16/16 sequentiële
+actiecontracten en 9/9 lineagecontroles, nul Live-bots en nul niet-toegestane
+uitvoeringen (artifact SHA-256
+`ee3ca339b38c285b452e454a25788a4badfdd3cff156e7dfcd265e9e8d0aab37`).
+Een eerdere matrixpoging wees één bot-leeskeuze af; de toolbeschrijving is
+verduidelijkt en die casus las in de complete hertest de opgeslagen botregels.
+De echte Responses-providerregressie gaf **109/109**, alle detailmetingen 1,0
+en nul provider-, schema-, parse-, validatie- of timeoutfouten (artifact
+SHA-256 `9878619a1d9a28b1f51f367e92b6f760f06b42f8a2acc130fe33e28f5294c07f`).
+De echte Responses-providerontwikkeling na de laatste tooltekstwijziging gaf
+**20/20**, alle detailmetingen 1,0 en nul provider-, schema-, parse-,
+validatie- of timeoutfouten (artifact SHA-256
+`e7871ca37d376881b16b8d870de9d571f928631c80edc9edc18767585a71d44d`).
+Deploymentidentiteit en onafhankelijke live QA voor deze kandidaat zijn nog
+niet vastgesteld.
+
 ## FINN 3.0 AAPL-coach: herhaalbare bronlezing en streamherstel (20 november 2026)
 
 Phase: `LOCAL_BUILD_VALIDATED_AWAITING_CI`. Candidate branch:
