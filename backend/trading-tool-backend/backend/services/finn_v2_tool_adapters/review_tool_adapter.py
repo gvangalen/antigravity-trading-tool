@@ -192,7 +192,12 @@ class ReviewToolAdapter:
                         "execution_failure": scores.get("execution_failure"),
                         "strategy_reason": scores.get("strategy_reason"),
                     }, bool(row.get("is_live")), historical=True)
-                    reason = safety.get("reason") or next(iter(reasons), None)
+                    # The decision reason shown in Bot History is the saved
+                    # reason_json entry. A no-proposal guardrail may add a
+                    # generic safety sentence; it must not replace the actual
+                    # reason why this bot held.
+                    reason = (safety.get("reason") if safety.get("state") in {"blocked", "error"}
+                              else None) or next(iter(reasons), None) or safety.get("reason")
                     referenced_bot_decisions.append({
                         "bot_id": row["bot_id"], "bot_name": str(row.get("bot_name") or "")[:100],
                         "symbol": row.get("symbol"), "is_live": bool(row.get("is_live")),
@@ -258,7 +263,9 @@ class ReviewToolAdapter:
             if isinstance(guardrails, dict) or scores.get("execution_failure"):
                 decision["safety_state"] = safety["state"]
                 decision["safety_reason_code"] = safety["reason_code"]
-            reason = safety.get("reason") or next(iter(BotService._display_reasons(reasons)), None)
+            saved_reason = next(iter(BotService._display_reasons(reasons)), None)
+            reason = (safety.get("reason") if safety.get("state") in {"blocked", "error"}
+                      else None) or saved_reason or safety.get("reason")
             if isinstance(reason, str) and reason.strip():
                 decision["safety_reason"] = re.sub(r"[\x00-\x1f\x7f]+", " ", reason).strip()[:300]
             if safety.get("checked_at"):

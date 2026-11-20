@@ -4,6 +4,54 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 AAPL-coach: herhaalbare bronlezing en streamherstel (20 november 2026)
+
+Phase: `LOCAL_BUILD_VALIDATED_AWAITING_CI`. Candidate branch:
+`codex/finn-aapl-live-qa-repair-20261120`, based on
+`34dc8c57f5494670c0fa98aae80931b747bbd83f`. The independent signed-in
+browser retest of the prior release on public SHA
+`2b06229cd030e60c2d3af9932a4d7ef4f748d249` returned **NOT ACCEPTED**.
+The latest saved AAPL Paper decision and bot page showed a specific benchmark
+reason and €405.48 bot cash; FINN instead gave a generic no-proposal reason,
+lost the bot-page asset after a failed first turn, omitted report availability
+in a dated comparison, and did not state that bot cash. The first question and
+one retry displayed “Bad Gateway”; the browser had no raw network status or
+run ID, so the underlying gateway cause is unproven.
+
+This local repair gives a saved decision reason precedence over a generic
+no-proposal guardrail, preserves the verified bot-page asset for a short
+follow-up, and states separately whether the named historical bot check and
+report were found. Broad single-asset coach answers must include the concrete
+saved reason and the verified Paper-bot cash when those sources were read.
+Repeated tool reads of one source now count as one latest read; previously they
+made the recovery path falsely ambiguous. The stream sends an early SSE byte
+and periodic keepalives during the durable handoff, while frontend retries
+reuse one trace ID and report that ID on transport failures. This is a
+transport mitigation, not a proven root-cause fix for the observed gateway
+error. No source value is hardcoded and these read-only paths create no trade
+or proposal.
+
+Measured local worker evidence: the 17-action FastAPI/Celery/PostgreSQL/Redis
+matrix passed **17/17**, with zero broker orders, Live calls, live bots and
+production connections (artifact SHA-256
+`eba4c1b1701cb0b7bfa3bb332e35275b65afae18f06ec34ae2eaa4978d86ba98`).
+The synthetic four-turn AAPL conversation passed **4/4** through the same API
+and worker, including a newer saved bot reason after a historical comparison,
+read-only behavior, and polling/SSE parity (artifact SHA-256
+`ba3b2a26906024aab6187543c5e746cf58a9d03e4782151e29c10cb5389b9be7`).
+The real provider selector passed **20/20** development (SHA-256
+`6433caef20901de1adba6cc401b6df3537f6f62ec322c0772936e64b81ce4c9f`)
+and **109/109** regression (SHA-256
+`bbee5e3158230f7115be599651e3cc79e6a8a55c6b1ccb604c534f8fdafc0d24`),
+with all measured accuracy fields 1.0 and no provider, schema, parse,
+validation or timeout failures. The full root backend suite passed
+**5,134 tests, 7 skipped** (log SHA-256
+`fb49b7fd2eb9175d7e8c2014d94b50dee340b7066cc6ce2595e6b844658d21dd`).
+The frontend typecheck, command tests
+**97/97**, i18n checks, proposal tests and production build passed; the
+production dependency audit found no high-severity issue. Independent authenticated live QA remains pending
+on the eventual final public SHA.
+
 ## FINN 3.0 AAPL-bronvragen: reparatie na ingelogde QA (20 november 2026)
 
 Phase: `LIVE_DEPLOYED_QA_PENDING`. De ingelogde AAPL-herkeuring op

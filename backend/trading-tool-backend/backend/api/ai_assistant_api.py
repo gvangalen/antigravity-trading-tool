@@ -642,7 +642,10 @@ async def assistant_chat_stream(
                 prompt_text=request.query,
                 metadata=_trader_profile_event_metadata(context_payload),
             )
-            v2_visible = await _try_v2_visible_delivery(
+            # Send a first byte before the durable run/worker handoff. Keep
+            # the proxy connection active while that handoff completes.
+            yield ": connected\n\n"
+            delivery = asyncio.create_task(_try_v2_visible_delivery(
                 db=db,
                 user_id=user_id,
                 message=request.query,
@@ -652,14 +655,27 @@ async def assistant_chat_stream(
                 request_id=_safe_request_trace_id(raw_request, trace_id),
                 trace_id=trace_id,
                 runtime_selection=runtime_selection,
-            )
+            ))
+            try:
+                while not delivery.done():
+                    done, _ = await asyncio.wait({delivery}, timeout=15)
+                    if not done:
+                        yield ": keepalive\n\n"
+                v2_visible = await delivery
+            finally:
+                if not delivery.done():
+                    delivery.cancel()
+                    await asyncio.gather(delivery, return_exceptions=True)
             yield _sse_event("envelope", v2_visible)
         except Exception as e:
             logger.error(f"❌ Error in SSE assistant stream generator | Trace: {trace_id}: {e}", exc_info=True)
             err_payload = json.dumps({"response": "⚠️ Externe stream fout opgetreden. Klik op retry.", "trace_id": trace_id})
             yield f"event: error\ndata: {err_payload}\n\n"
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_generator(), media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 @router.get("/assistant/preferences", response_model=AssistantPreferences)
 async def get_preferences(

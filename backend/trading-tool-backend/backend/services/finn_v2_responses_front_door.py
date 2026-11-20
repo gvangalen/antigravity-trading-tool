@@ -1831,6 +1831,14 @@ class FinnResponsesFrontDoor:
                         and resolve_catalog_symbol(verified_asset) in prior_symbols):
                     symbols = prior_symbols
                     bot_reason_followup = True
+                elif (workspace_hints.get("page") == "/bot"
+                      and resolve_catalog_symbol(verified_asset)):
+                    # The preceding chat request may have failed before it
+                    # persisted a trace. On a bot page, re-read that page's
+                    # owner-scoped decision instead of asking for the asset
+                    # again or borrowing a reason from an older response.
+                    symbols = {resolve_catalog_symbol(verified_asset)}
+                    bot_reason_followup = True
             report_technical_comparison = is_report_technical_comparison_request(message)
             fact_kind = None
             if pair and re.search(r"\b(?:dagrapport|ochtendrapport)\b", message, re.I) \

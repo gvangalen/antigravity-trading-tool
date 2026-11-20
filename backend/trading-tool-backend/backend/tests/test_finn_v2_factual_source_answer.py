@@ -9,7 +9,7 @@ from backend.services.finn_v2_factual_source_answer import (
 from backend.services.asset_catalog_service import requested_catalog_trading_pair
 
 
-def _run(message, results, *, verified_asset=None):
+def _run(message, results, *, verified_asset=None, workspace_hints=None):
     front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7,
                                    run_id="factual-source-test", model_led_coach=True)
     calls = []
@@ -21,7 +21,7 @@ def _run(message, results, *, verified_asset=None):
     front.reads = read
     prepared = asyncio.run(front.run(
         message=message, instructions="", conversation_context={},
-        verified_asset=verified_asset, locale="nl",
+        verified_asset=verified_asset, locale="nl", workspace_hints=workspace_hints,
     ))
     assert len(calls) == 1
     checked = asyncio.run(FinnResponsesAnswerVerifier().verify(message=message, result=prepared.response, locale="nl"))
@@ -246,6 +246,51 @@ def test_latest_btc_paper_decision_uses_the_persisted_row():
     assert "2026-10-18 09:48:54 CEST" in response.text
     assert "geen order" in response.text and "historische" in response.text
     assert "BTC Live" not in response.text
+
+
+def test_short_bot_reason_rechecks_current_bot_page_after_failed_prior_turn():
+    response, call = _run(
+        "Wat was de exacte reden?",
+        [{"scope": "read_review_history", "status": "completed", "data": {
+            "latest_bot_decisions": [{
+                "symbol": "AAPL", "bot_name": "AAPL Paper", "is_live": False,
+                "action": "hold", "persistence_status": "planned",
+                "decision_at": "2026-11-20T17:45:00+00:00",
+                "safety_reason": "Opgeslagen setupvoorwaarden passen niet bij de actuele benchmark.",
+            }],
+        }}], verified_asset="AAPL", workspace_hints={"page": "/bot"},
+    )
+    assert call.inputs["_latest_bot_decisions_only"] is True
+    assert "Opgeslagen setupvoorwaarden passen niet" in response.text
+    assert "Welke bot" not in response.text
+
+
+def test_missing_historical_botcheck_names_the_available_report():
+    from backend.services.finn_v2_factual_source_answer import render_report_bot_check_comparison
+    answer = render_report_bot_check_comparison({"results": [
+        {"scope": "read_review_history", "status": "completed",
+         "data": {"referenced_bot_decisions": []}},
+        {"scope": "read_latest_report", "status": "completed",
+         "data": {"generated_at": "2026-11-19T04:21:00+00:00"}},
+    ]}, symbol="AAPL", message=(
+        "Vergelijk mijn AAPL-botcheck op 19 november rond 10:00 CET met "
+        "mijn dagrapport van 05:21 CET."))
+    assert "dagrapport van 2026-11-19 05:21:00 CET" in answer
+    assert "botcheck ontbreekt" in answer
+
+    response, call = _run(
+        "Vergelijk de AAPL-botcheck van 19 november 2026 rond 10:00 CET met "
+        "het AAPL-dagrapport van 19 november 2026 om 05:21 CET. Welke bron "
+        "heb je werkelijk? Als een bron ontbreekt, noem precies welke en "
+        "vervang hem niet door een later rapport. Voer niets uit.",
+        [{"scope": "read_review_history", "status": "completed",
+          "data": {"referenced_bot_decisions": []}},
+         {"scope": "read_latest_report", "status": "completed",
+          "data": {"generated_at": "2026-11-19T04:21:00+00:00"}}],
+        verified_asset="AAPL",
+    )
+    assert call.inputs["report_date"] == "2026-11-19"
+    assert "dagrapport van 2026-11-19 05:21:00 CET" in response.text
 
 
 def test_blocked_bot_decision_reports_safety_outcome_and_reason():
