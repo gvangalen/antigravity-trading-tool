@@ -3139,6 +3139,7 @@ class FinnResponsesAnswerVerifier:
                         read, symbol=symbol, paper=mode,
                         pair=f"{requested_pair[0]}/{requested_pair[1]}" if requested_pair and requested_pair[0] == symbol else None,
                         bot_id=focused_bot_id(message, previous_response),
+                        referenced_minute=bool(args.get("_decision_window_start_utc")),
                     )
             elif (scopes == {"read_selected_paper_position_risk"} and symbol
                   and call.get("name") == "get_selected_paper_position_risk"):

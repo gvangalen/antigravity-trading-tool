@@ -98,11 +98,13 @@ def render_closed_paper_exit_facts(message: str, tool_trace: Any) -> str | None:
 def render_bot_decision(
     result: dict[str, Any], *, symbol: str, paper: bool | None,
     pair: str | None = None, bot_id: int | None = None,
+    referenced_minute: bool = False,
 ) -> str:
     data, reason = _read(result, "read_review_history")
     if data is None:
         return f"Ik kan de opgeslagen botbesluiten voor {symbol} nu niet lezen ({reason})."
-    decisions = [row for row in data.get("latest_bot_decisions") or []
+    source = "referenced_bot_decisions" if referenced_minute else "latest_bot_decisions"
+    decisions = [row for row in data.get(source) or []
                  if isinstance(row, dict)
                  and str(row.get("symbol") or "").upper().split("/", 1)[0] == symbol
                  and (bot_id is None or row.get("bot_id") == bot_id)
@@ -123,14 +125,16 @@ def render_bot_decision(
     action_text = {"hold": "geen order (hold)", "buy": "koopbesluit (buy)",
                    "sell": "verkoopbesluit (sell)"}[action]
     safety_state = str(row.get("safety_state") or "").lower()
-    safety_text = ""
+    saved_reason = str(row.get("safety_reason") or "").strip()
+    safety_text = (f" Opgeslagen botreden: {saved_reason}." if saved_reason else
+                   " De opgeslagen beslissing vermeldt geen concrete reden.")
     if safety_state in {"blocked", "error"}:
         action_text = "trade geblokkeerd / geen order"
-        saved_reason = str(row.get("safety_reason") or "").strip()
         safety_text = f" Opgeslagen blokkadereden: {saved_reason}." if saved_reason else (
             " De opgeslagen veiligheidscontrole vermeldt geen controleerbare reden."
         )
     status = {"planned": "besluit opgeslagen", "completed": "besluit afgerond",
+              "skipped": "besluit zonder order afgerond", "executed": "besluit uitgevoerd",
               "failed": "besluit mislukt"}.get(str(row.get("persistence_status") or ""),
                                           "opslagstatus onbekend")
     try:
@@ -140,7 +144,8 @@ def render_bot_decision(
         historical = True
     kind = "historische opgeslagen beoordeling" if historical else "opgeslagen beoordeling"
     label = f"bot {bot_id} ({pair or symbol})" if bot_id is not None else pair or symbol
-    return (f"Het laatst opgeslagen besluit van je {label} {mode}-bot is {action_text}, "
+    prefix = "Het opgeslagen besluit" if referenced_minute else "Het laatst opgeslagen besluit"
+    return (f"{prefix} van je {label} {mode}-bot is {action_text}, "
             f"op {at} (Europe/Amsterdam). Dit is een {kind}, geen actuele "
             f"marktbeoordeling. Opslagstatus: {status}.{safety_text}")
 
@@ -160,7 +165,7 @@ def render_report_bot_check_comparison(
         return (f"Ik kan {' en '.join(missing)} voor {symbol} nu niet vergelijken. "
                 "Verander de weging of bot niet om een koop te forceren; controleer de bronnen opnieuw.")
     requested_report_clock = re.search(
-        r"\b(?:dagrapport|ochtendrapport|rapport)\s+van\s+([01]?\d|2[0-3]):([0-5]\d)\b",
+        r"\b(?:dagrapport|ochtendrapport|rapport)\s+(?:van|om|dat\s+om)\s+([01]?\d|2[0-3]):([0-5]\d)\b",
         message, re.I,
     )
     report_generated = report.get("generated_at_amsterdam") or _moment(report.get("generated_at"))
@@ -169,13 +174,18 @@ def render_report_bot_check_comparison(
         not re.search(rf"\b{int(requested_report_clock.group(1)):02d}:"
                       rf"{requested_report_clock.group(2)}(?::\d{{2}})?\b", str(report_generated))
     ):
+        missing_check = not any(
+            isinstance(row, dict) and str(row.get("symbol") or "").upper().split("/", 1)[0] == symbol
+            for row in history.get("referenced_bot_decisions") or []
+        )
         return (f"Het opgeslagen dagrapport voor {symbol} heeft niet het genoemde "
                 f"uitleesmoment {requested_report_clock.group(1)}:{requested_report_clock.group(2)}. "
-                "Ik kan de botredenen daarom niet betrouwbaar vergelijken.")
+                + (f"Ook de genoemde {symbol}-botcheck is niet gevonden. " if missing_check else "")
+                + "Ik kan de botredenen daarom niet betrouwbaar vergelijken.")
     historical = [row for row in history.get("referenced_bot_decisions") or []
                   if isinstance(row, dict) and str(row.get("symbol") or "").upper().split("/", 1)[0] == symbol]
     if len(historical) != 1:
-        return (f"Ik kan de bedoelde opgeslagen {symbol}-botcheck niet eenduidig aan één bot koppelen. "
+        return (f"Ik kan de bedoelde opgeslagen {symbol}-botcheck niet eenduidig aan één bot koppelen of hij ontbreekt. "
                 "Daarom kan ik de twee botredenen niet betrouwbaar vergelijken. "
                 "Controleer de beslissing in Automatisering; wijzig de weging niet om een koop te forceren.")
     check = historical[0]

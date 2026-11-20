@@ -1046,7 +1046,7 @@ class FinnResponsesFrontDoor:
             re.search(r"\b(?:bot(?:besluit(?:en)?|beslissing(?:en)?|beoordeling(?:en)?|check(?:s)?)?|automatisering|automation)\b", message, re.I)
             and re.search(
                 r"\b(?:botbeslissing(?:en)?|botbesluit(?:en)?|beslissing(?:en)?|besluit(?:en)?|decision(?:s)?|"
-                r"beoordeling(?:en)?|check(?:s)?|(?:bot)?reden(?:en)?|blokkeer\w*|entscheidung(?:en)?)\b",
+                r"beoordeling(?:en)?|(?:bot)?check(?:s)?|(?:bot)?reden(?:en)?|blokkeer\w*|entscheidung(?:en)?)\b",
                 message, re.I,
             )
         )
@@ -1128,8 +1128,22 @@ class FinnResponsesFrontDoor:
                 day = date(int(dated.group(1)), int(dated.group(2)), int(dated.group(3)))
             except ValueError:
                 return None
-        elif re.search(r"\bgisteren\b", message[:match.start()], re.I):
-            day -= timedelta(days=1)
+        else:
+            dutch_date = re.search(
+                r"\b([0-3]?\d)\s+(januari|februari|maart|april|mei|juni|juli|augustus|"
+                r"september|oktober|november|december)\s+(20\d{2})\b", message, re.I,
+            )
+            if dutch_date:
+                months = ("januari", "februari", "maart", "april", "mei", "juni", "juli",
+                          "augustus", "september", "oktober", "november", "december")
+                try:
+                    day = date(int(dutch_date.group(3)),
+                               months.index(dutch_date.group(2).lower()) + 1,
+                               int(dutch_date.group(1)))
+                except ValueError:
+                    return None
+            elif re.search(r"\bgisteren\b", message[:match.start()], re.I):
+                day -= timedelta(days=1)
         local = datetime(day.year, day.month, day.day, int(match.group(1)),
                          int(match.group(2)), tzinfo=ZoneInfo("Europe/Amsterdam"))
         if local.tzname() != match.group(3).upper():
@@ -1794,10 +1808,29 @@ class FinnResponsesFrontDoor:
         # to call a tool or transcribing UTC/CET correctly in a later round.
         if str(locale).lower().startswith("nl") and not resuming_clarification \
                 and not conversation_context.get("active_guided_operation") \
-                and not re.search(r"\b(?:wijzig|verwijder|maak|plaats|koop|verkoop|activeer)\b", message, re.I):
+                and (_explicit_discussion_only(message) or not re.search(
+                    r"\b(?:wijzig|verwijder|maak|plaats|koop|verkoop|activeer)\b", message, re.I)):
             pair = requested_catalog_trading_pair(message)
             pair_mentions = re.findall(r"\b[A-Z][A-Z0-9]*/(?:EUR|USDT)\b", message, re.I)
             symbols = mentioned_catalog_symbols(message)
+            bot_reason_followup = False
+            if not symbols and re.search(r"\b(?:exacte|concrete|precieze)\s+(?:bot)?reden\b", message, re.I):
+                prior = previous_response or {}
+                prior_symbols = {
+                    str(row.get("symbol") or "").upper().split("/", 1)[0]
+                    for prior_call in prior.get("tool_trace") or []
+                    if prior_call.get("name") == "get_decision_history"
+                    for item in (prior_call.get("result") or {}).get("results") or []
+                    if isinstance(item, dict) and item.get("scope") == "read_review_history"
+                    and item.get("status") == "completed" and isinstance(item.get("data"), dict)
+                    for row in (item["data"].get("latest_bot_decisions") or [])
+                    if isinstance(row, dict) and row.get("symbol")
+                }
+                if (prior.get("owner_user_id") == self.user_id
+                        and prior.get("terminal_status") == "completed" and len(prior_symbols) == 1
+                        and resolve_catalog_symbol(verified_asset) in prior_symbols):
+                    symbols = prior_symbols
+                    bot_reason_followup = True
             report_technical_comparison = is_report_technical_comparison_request(message)
             fact_kind = None
             if pair and re.search(r"\b(?:dagrapport|ochtendrapport)\b", message, re.I) \
@@ -1812,13 +1845,12 @@ class FinnResponsesFrontDoor:
                     fact_kind = "report_technical_comparison"
             elif len(symbols) == 1 and self._asks_about_bot_decision(message) \
                     and re.search(r"\b(?:dagrapport|ochtendrapport|rapport)\b", message, re.I) \
-                    and re.search(r"\b(?:waarom|verschil|verschillen|andere|vergelijk)\b", message, re.I) \
                     and self._referenced_bot_check_minute(message):
                 fact_kind = "report_bot_check_comparison"
                 symbol = next(iter(symbols))
-            elif len(symbols) == 1 and self._asks_about_bot_decision(message) \
-                    and re.search(r"\b(?:laatste|nieuwste)\b", message, re.I) \
-                    and re.search(r"\bopgeslagen\b", message, re.I) \
+            elif len(symbols) == 1 and (self._asks_about_bot_decision(message) or bot_reason_followup) \
+                    and (re.search(r"\b(?:laatste|nieuwste)\b", message, re.I)
+                         or self._referenced_bot_check_minute(message) or bot_reason_followup) \
                     and not re.search(r"\b(?:dagrapport|rapport|positie|portefeuille|kas|"
                                       r"score\w*|benchmark\w*|plan|setup|strategie|strategy)\b", message, re.I):
                 fact_kind = "bot_decision"
@@ -1871,6 +1903,7 @@ class FinnResponsesFrontDoor:
                     call = replace(catalog.validate("get_decision_history", {"asset": symbol}),
                                    read_tools=("read_review_history",),
                                    inputs={"asset": symbol, "_latest_bot_decisions_only": True})
+                    call = self._bind_bot_decision_evidence(call, message=message, read_only=True)
                 elif fact_kind == "portfolio_read_time":
                     call = replace(catalog.validate("get_portfolio_and_exposure", {}),
                                    read_tools=("read_portfolio",), inputs={"environment": "paper"})
@@ -1903,6 +1936,7 @@ class FinnResponsesFrontDoor:
                         read_result, symbol=symbol, paper=mode,
                         pair=f"{pair[0]}/{pair[1]}" if pair and pair[0] == symbol else None,
                         bot_id=focused_bot_id(message, previous_response),
+                        referenced_minute=bool(call.inputs.get("_decision_window_start_utc")),
                     )
                 elif fact_kind == "portfolio_read_time":
                     fact_text = render_portfolio_read_time(read_result)
