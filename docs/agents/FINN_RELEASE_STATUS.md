@@ -6,8 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0 actieve feedselectie (19 november 2026)
 
-Phase: `LOCAL_BUILD_VALIDATED`. Deze kandidaat staat nog niet live en heeft
-geen onafhankelijk QA-verdict. De feed kiest voortaan op ongelezen status en
+Phase: `PRODUCT_DEPLOYED_READY_FOR_INDEPENDENT_QA`. De productwijziging staat
+live; een onafhankelijk QA-verdict ontbreekt nog. De feed kiest voortaan op ongelezen status en
 belang: risico en open bevestigingen eerst, daarna een recent rapport en de
 overige vervolgstappen. **Bespreek** laat de kaart staan totdat FINN een antwoord
 heeft opgeslagen; een afgerond antwoord handelt de kaart af en een gerichte
@@ -38,10 +38,20 @@ provider-, schema-, parse-, validatie- of timeoutfouten (artifact SHA-256
 De echte providerregressie slaagde **109/109**, alle detailmetingen 100% en
 nul provider-, schema-, parse-, validatie- of timeoutfouten (artifact SHA-256
 `1b16c3fde658d90696d8abb83ef4e14f37038e6cb13049eec683808b6e75a8ff`).
-Een ingelogde liveproef, CI,
-Auto Deploy en de officiële onafhankelijke QA-matrix zijn voor deze kandidaat
-nog niet uitgevoerd. De bestaande FINN-actiecontracten en handelsgrenzen zijn
-niet gewijzigd.
+Een ingelogde liveproef en de officiële onafhankelijke QA-matrix zijn nog
+niet uitgevoerd. De bestaande FINN-actiecontracten en handelsgrenzen zijn
+niet gewijzigd. Product-PR
+[#1211](https://github.com/gvangalen/antigravity-trading-tool/pull/1211)
+is gemerged als `72c1817db7795e6b6f3c304e88e77e7d7717d584`.
+[PR-CI 44619044961](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44619044961)
+en [main-CI 44619899219](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44619899219)
+slaagden. [Auto Deploy 44620958260](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/44620958260)
+slaagde. GitHub `main`, publieke backend-health (`/api/health`) en frontend
+build-info (`/build-info.json`) gaven op 20 november 2026 exact dezelfde
+product-SHA; beide publieke endpoints gaven HTTP 200. Deze statusupdate
+creëert een nieuwe main-SHA. Vóór onafhankelijke QA moeten de laatste main-CI
+en Auto Deploy slagen en beide publieke SHA's met die laatste main-SHA
+overeenkomen.
 
 ## FINN 3.0 brongebonden AAPL-botcheck en coachvragen (19 november 2026)
 
