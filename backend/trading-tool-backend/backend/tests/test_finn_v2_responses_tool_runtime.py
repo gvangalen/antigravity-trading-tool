@@ -11168,7 +11168,7 @@ def test_model_led_read_question_cannot_start_a_select_asset_proposal():
 
     front.reads = Reads()
     result = asyncio.run(front.run(
-        message="Welke asset is actief?", instructions="unused",
+        message="Welke asset is mijn huidige analyseobject?", instructions="unused",
         conversation_context={}, verified_asset="BTC",
     ))
     assert result.proposal_analysis is None
@@ -11201,7 +11201,7 @@ def test_model_led_completed_read_is_not_reaudited_as_a_missing_action():
 
     front.reads = Reads()
     result = asyncio.run(front.run(
-        message="Welke asset is actief?", instructions="unused",
+        message="Welke asset is mijn huidige analyseobject?", instructions="unused",
         conversation_context={}, verified_asset="BTC",
     ))
     assert result.proposal_analysis is None
@@ -15341,6 +15341,26 @@ def test_bot_decision_question_requires_current_owner_history_before_answer(monk
         instructions="Lees feiten", conversation_context={}, verified_asset="AAPL",
     ))
     assert captured["required_read_tool_name"] == "get_decision_history"
+
+
+def test_bot_risk_evaluation_requires_owner_scoped_evaluator(monkeypatch):
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="bot-risk-required")
+    front.model_led_coach = True
+    captured = {}
+
+    async def capture_loop(_self, **kwargs):
+        captured.update(kwargs)
+        return FinnResponsesResult("Ik beoordeel je botregels.", "answer", ())
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run", capture_loop,
+    )
+    asyncio.run(front.run(
+        message="Wat zijn de risico's van mijn bot?", instructions="Lees feiten",
+        conversation_context={}, verified_asset="BTC",
+    ))
+    assert captured["required_read_tool_name"] == "evaluate_bot"
+    assert captured["read_only_turn"] is True
 
 
 @pytest.mark.parametrize("asset", ["BTC", "ETH"])

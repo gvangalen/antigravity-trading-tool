@@ -49,6 +49,25 @@ def test_verified_direct_owner_read_gets_registry_operation(scope, operation):
         *exchange["tool_trace"], {"name": "remove_watchlist_proposal"},
     ]}) is None
 
+
+def test_released_tool_free_reformulation_gets_its_operation_without_guessing():
+    previous = {
+        "run_id": "prior-run", "terminal_status": "completed",
+        "answer": "Op je watchlist staan BTC/USDT en ETH/EUR.",
+    }
+    assert FinnV2RunService._verified_reformulation_operation(
+        "Leg dat eenvoudiger uit.", previous, {"tool_trace": []},
+    ) == "reformulate_previous_response"
+    assert FinnV2RunService._verified_reformulation_operation(
+        "Wat staat er nu op mijn watchlist?", previous, {"tool_trace": []},
+    ) is None
+    assert FinnV2RunService._verified_reformulation_operation(
+        "Leg dat eenvoudiger uit.", previous, {"tool_trace": [{"name": "get_active_asset_context"}]},
+    ) is None
+    assert FinnV2RunService._verified_reformulation_operation(
+        "Leg dat eenvoudiger uit.", {**previous, "terminal_status": "unavailable"}, {"tool_trace": []},
+    ) is None
+
 from backend.services.finn_v2_responses_answer_verifier import FinnResponsesVerifiedAnswer
 from backend.services.finn_v2_flag_service import FinnV2FlagService
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService

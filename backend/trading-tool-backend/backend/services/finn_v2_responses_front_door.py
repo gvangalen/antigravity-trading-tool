@@ -51,7 +51,7 @@ from backend.services import finn_v2_entity_resolution_service as entity_resolut
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
 from backend.services.finn_v2_operation_classification_service import FinnV2OperationClassificationService
 from backend.services.finn_manual_trade_suggestion_service import ManualTradeSetupChoice
-from backend.services.watchlist_conversation_service import ambiguous_asset_change_scope, asks_for_watchlist_inventory, replacement_mentions
+from backend.services.watchlist_conversation_service import ambiguous_asset_change_scope, asks_for_active_workspace_asset, asks_for_watchlist_inventory, replacement_mentions
 from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
 from backend.services.finn_v2_account_bundle_answer import render_account_bundle_answer
 from backend.services.finn_v2_fomo_plan_answer import render_fomo_plan_answer
@@ -2032,6 +2032,29 @@ class FinnResponsesFrontDoor:
                         response_id_reusable=False,
                     ), None, previous_response, locale=locale,
                 )
+        if asks_for_active_workspace_asset(message):
+            # A selected workspace instrument is an owner-scoped asset read,
+            # even when the question also mentions the watchlist. A model
+            # watchlist choice cannot establish the active selection.
+            call = FinnResponsesToolCall(
+                name="get_active_asset_context", operation_id=None,
+                inputs={}, read_tools=("read_active_asset",),
+                required_inputs=(), missing_inputs=(),
+            )
+            try:
+                read_result = await self.reads(call)
+            except Exception:
+                logger.warning("FINN active workspace asset read failed", exc_info=True)
+                read_result = {"status": "unavailable", "results": []}
+            return FinnResponsesFrontDoorResult(
+                FinnResponsesResult(
+                    text="Verified active workspace asset context.",
+                    response_id=f"active-asset-context-{self.run_id}",
+                    tool_trace=({"name": call.name, "status": read_result.get("status", "unavailable"),
+                                 "arguments": {}, "result": read_result},),
+                    answer_kind="active_asset_context", response_id_reusable=False,
+                ), None, previous_response, locale=locale,
+            )
         if asks_for_watchlist_inventory(message):
             # A list of saved entries belongs to the owner-scoped watchlist
             # read. It must not depend on a selected workspace asset or on
@@ -5653,6 +5676,11 @@ class FinnResponsesFrontDoor:
                     self._asks_about_open_position(message)
                     or self._asks_about_aggregate_portfolio(message)
                 )
+                and pending_operation is None and not resuming_clarification
+                else "evaluate_bot"
+                if is_read_only_turn and request_facts.action_polarity == "evaluate"
+                and request_facts.primary_entity == "bot"
+                and not (collection_cue or requests_comparison(message))
                 and pending_operation is None and not resuming_clarification
                 else "get_active_plan_and_strategy"
                 if is_read_only_turn and request_facts.action_polarity == "evaluate"
