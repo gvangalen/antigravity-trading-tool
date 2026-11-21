@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: protected analysis- and report-feed journey (21 November 2026)
 
-Phase: `LOCAL_VALIDATED_CANDIDATE`. Branch
+Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_IDENTITY`. Branch
 `codex/finn-feed-journey-protected-qa-20261121`, based on final public main
 `b8c276359ddcb3a5823e4191253ce339b998d644`. Independent QA marked the
 previous personalized analysis card `NOT_ACCEPTED` for missing post-deployment
@@ -42,8 +42,14 @@ and regression **109/109** (artifact SHA-256
 both with zero provider, schema, parse, validation, or timeout failures. The
 isolated stack and volume were removed after validation. Read-only Security,
 Architecture, and code-QA reviews found no remaining concrete blocker in this
-scoped profile. No production deployment or official QA run has occurred for
-this batch yet.
+scoped profile. PR [#1240](https://github.com/gvangalen/antigravity-trading-tool/pull/1240)
+merged as `24c9369bea4c9dc81bf59c6ebd84933058ab853a` after candidate CI
+`44901965251` passed all five jobs. Main CI `44902490826` passed all five jobs
+and Auto Deploy `44902996850` succeeded. Public backend health and frontend
+build-info both returned HTTP 200 and that exact merge SHA. This measured
+status update creates a later main SHA; Build must wait for its CI, Auto Deploy,
+and public backend/frontend SHA parity before handing the exact final revision
+to independent QA. The official authenticated QA verdict is still pending.
 
 ## FINN 3.0: persoonlijke eerste analysestap (21 november 2026)
 
