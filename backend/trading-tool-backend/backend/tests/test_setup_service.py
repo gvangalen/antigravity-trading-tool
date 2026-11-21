@@ -71,6 +71,23 @@ def test_calendar_dca_requires_day_after_benchmark_transition(frequency, day_fie
     service.validate_setup_payload(payload, is_update=True)
 
 
+def test_weekly_score_trigger_can_be_changed_to_calendar_day_without_changing_score_bounds():
+    service = SetupService(None)
+    saved = {
+        "name": "Test Smart BTC", "symbol": "BTC", "timeframe": "1D",
+        "setup_type": "dca", "dca_frequency": "weekly",
+        "dca_trigger_mode": "benchmark", "dca_day": None,
+        "min_benchmark_score": 0, "max_benchmark_score": 100,
+    }
+    merged = {**saved, "dca_trigger_mode": "calendar", "dca_day": "maandag"}
+
+    service.validate_setup_payload(merged, is_update=True)
+
+    assert merged["dca_trigger_mode"] == "calendar"
+    assert merged["dca_day"] == "1"
+    assert (merged["min_benchmark_score"], merged["max_benchmark_score"]) == (0, 100)
+
+
 def test_setup_description_is_optional_trimmed_and_bounded():
     service = SetupService(None)
     payload = _weekly_payload("monday") | {"description": "  Wait for a pullback.  "}

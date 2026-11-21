@@ -1,6 +1,8 @@
 import pytest
 
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
+from backend.services.finn_v2_operation_classification_service import FinnV2OperationClassificationService
+from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor
 from backend.domain.saved_setup_market_condition import explicit_benchmark_bounds
@@ -1517,6 +1519,38 @@ def test_natural_update_clauses_use_existing_domain_field_keys(operation_id, mes
     )
 
     assert collected["changed_fields"] == expected
+
+
+@pytest.mark.parametrize(
+    ("message", "day"),
+    (
+        ("Kan je niet maandag nu toevoegen aan onze Test Smart BTC setup?", "monday"),
+        ("Wijzig de Test Smart BTC DCA setup naar donderdag als vaste koopdag.", "thursday"),
+        ("Set Monday as the buying day for my BTC DCA setup.", "monday"),
+    ),
+)
+def test_existing_smart_dca_weekday_update_collects_trigger_and_day(message, day):
+    contract = FinnV2OperationRegistry().require_supported("update_setup")
+    collected = FinnV2OperationStateService().explicit_inputs(
+        contract=contract, message=message, explicit_asset=None,
+    )
+    assert collected["changed_fields"] == {"dca_trigger_mode": "calendar", "dca_day": day}
+
+
+def test_weekday_update_does_not_guess_from_a_discussion_or_multiple_days():
+    service = FinnV2OperationStateService()
+    assert service.explicit_weekly_dca_day_update("Wat betekent maandag voor mijn DCA setup?") == {}
+    assert service.explicit_weekly_dca_day_update("Zet maandag of dinsdag op mijn DCA setup.") == {}
+    assert service.explicit_weekly_dca_day_update("Voeg maandag niet toe aan mijn DCA setup.") == {}
+
+
+def test_add_weekday_to_existing_setup_routes_to_update_contract():
+    message = "Kan je niet maandag nu toevoegen aan onze Test Smart BTC setup?"
+    facts = FinnV2RequestPreprocessorService().preprocess(message=message)
+    assert facts.action_polarity == "add"
+    assert FinnV2OperationClassificationService._explicit_mutation_operation(
+        message=message, facts=facts, workspace_hints=None, client_context=None,
+    ) == "update_setup"
 
 
 def test_numeric_suffix_with_leading_zero_remains_part_of_natural_strategy_name():

@@ -10918,6 +10918,72 @@ def test_existing_btc_setup_keeps_update_proposal_boundary(monkeypatch, matching
     assert result.response.tool_trace[0]["name"] == "verified_update_proposal"
 
 
+def test_named_smart_dca_weekday_request_prepares_existing_setup_update(monkeypatch):
+    class Resolver:
+        def __init__(self, _session):
+            self.setups = SimpleNamespace(get_setup_by_id=self.get_setup_by_id)
+
+        async def resolve_canonical_target(self, **kwargs):
+            assert kwargs["user_id"] == 21
+            assert kwargs["entity_type"] == "setup"
+            assert "Test Smart BTC" in kwargs["message"]
+            return SimpleNamespace(resolution_status="resolved", entity_id=73)
+
+        async def get_setup_by_id(self, setup_id, user_id):
+            assert (setup_id, user_id) == (73, 21)
+            return {"id": 73, "name": "Test Smart BTC", "symbol": "BTC",
+                    "setup_type": "dca", "dca_frequency": "weekly",
+                    "dca_trigger_mode": "benchmark", "dca_day": None}
+
+    @asynccontextmanager
+    async def session_factory():
+        yield SimpleNamespace()
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnV2EntityResolutionService", Resolver,
+    )
+    front = FinnResponsesFrontDoor(
+        client=object(), session_factory=session_factory, user_id=21, run_id="smart-dca-weekday-update",
+    )
+    result = asyncio.run(front.run(
+        message="Kan je niet maandag nu toevoegen aan onze Test Smart BTC setup?",
+        instructions="unused", verified_asset="BTC", conversation_context={},
+    ))
+    assert result.proposal_analysis.request_plan.operation_id == "update_setup"
+    inputs = result.proposal_analysis.request_plan.operation_state["collected_inputs"]
+    assert inputs["setup_id"] == 73
+    assert inputs["changed_fields"] == {
+        "dca_trigger_mode": "calendar", "dca_day": "monday",
+    }
+    assert result.response.tool_trace[0]["name"] == "verified_weekly_dca_update_proposal"
+
+
+def test_smart_dca_weekday_update_does_not_guess_an_ambiguous_setup(monkeypatch):
+    class Resolver:
+        def __init__(self, _session):
+            self.setups = SimpleNamespace(get_setup_by_id=AsyncMock())
+
+        async def resolve_canonical_target(self, **_kwargs):
+            return SimpleNamespace(resolution_status="ambiguous", entity_id=None)
+
+    @asynccontextmanager
+    async def session_factory():
+        yield SimpleNamespace()
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnV2EntityResolutionService", Resolver,
+    )
+    front = FinnResponsesFrontDoor(
+        client=object(), session_factory=session_factory, user_id=21, run_id="smart-dca-ambiguous",
+    )
+    result = asyncio.run(front.run(
+        message="Kan je maandag toevoegen aan onze Test Smart BTC setup?",
+        instructions="unused", verified_asset="BTC", conversation_context={},
+    ))
+    assert result.proposal_analysis is None
+    assert "niet eenduidig" in result.response.text
+
+
 def test_irrelevant_proposal_is_retried_without_creating_draft():
     fake = FakeResponses(
         response("r1", calls=(tool_call("c1", "create_dca_plan_proposal", {

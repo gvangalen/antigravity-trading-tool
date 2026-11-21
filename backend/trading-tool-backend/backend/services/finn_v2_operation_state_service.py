@@ -2681,6 +2681,33 @@ class FinnV2OperationStateService:
         return requested_catalog_trading_pair(target_text)
 
     @classmethod
+    def explicit_weekly_dca_day_update(cls, text: str) -> dict[str, object]:
+        """A named weekday on an existing DCA setup changes its trigger too."""
+        message = str(text or "").casefold()
+        if not re.search(r"\b(?:setup|set-up|dca)\b", message):
+            return {}
+        if not re.search(
+            r"\b(?:voeg|toevoeg\w*|zet|stel|instell\w*|wijzig|verander|pas|"
+            r"add|set|change|update|füge|hinzufüg\w*|setze|ändere)\b", message,
+        ):
+            return {}
+        if re.search(r"\b(?:voeg|zet|stel|wijzig|verander|pas|add|set|change|update)\b"
+                     r"[^.!?\n]{0,35}\bniet\b[^.!?\n]{0,35}\btoe\b", message):
+            return {}
+        weekdays = {
+            cls._canonical_dca_day(match.group(0))
+            for match in re.finditer(
+                r"\b(?:maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag|"
+                r"monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
+                r"montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag)\b",
+                message,
+            )
+        }
+        if len(weekdays) != 1:
+            return {}
+        return {"dca_trigger_mode": "calendar", "dca_day": weekdays.pop()}
+
+    @classmethod
     def _natural_changed_fields(cls, text: str, *, contract: OperationContract) -> dict[str, object]:
         """Capture one explicit natural-language change for a typed update slot.
 
@@ -2693,6 +2720,10 @@ class FinnV2OperationStateService:
         if structured:
             return structured
         changes: dict[str, object] = {}
+        if contract.operation_id == "update_setup":
+            weekday_change = cls.explicit_weekly_dca_day_update(text)
+            if weekday_change:
+                return weekday_change
         if contract.operation_id == "update_indicator_configuration":
             weight = re.search(
                 r"\b(?:weging|gewicht|weight|gewichtung)\b[^.;\n]{0,100}?"
