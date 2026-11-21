@@ -6,8 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: chat- en feedvervolg na setup en strategie (21 november 2026)
 
-Phase: `LOCAL_VALIDATED_RELEASE_CANDIDATE_PENDING_CI`. Branch
-`codex/finn3-journey-followup-20261121`. Na een bevestigde losse setup vraagt
+Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`. Product PR [#1267](https://github.com/gvangalen/antigravity-trading-tool/pull/1267)
+is merged in `9dde70296bff9330ede82eae0781ba47cf00cfe2`. Na een bevestigde losse setup vraagt
 FINN in dezelfde chat of de gebruiker een strategie wil voorbereiden; na een
 bevestigde strategie vraagt hij of een Paper-bot moet worden besproken. Een
 kort "ja" hervat alleen de laatst geverifieerde vervolgvraag. Een samengestelde
@@ -45,8 +45,17 @@ Frontend command-, i18n-, voorstel-, setup- en PDF-tests, typecheck, i18n-lint,
 productiebuild en `audit:high` slaagden. De audit meldde alleen een moderate
 Next.js-advisory. Een eerste nieuwe lokale contractproef ontdekte een
 ongetypeerde lege strategieparameter; na expliciete SQL-cast slaagden de twee
-gerichte contracten en de volledige matrix. Er is voor deze kandidaat nog
-geen CI, deployment of onafhankelijke ingelogde live QA uitgevoerd.
+gerichte contracten en de volledige matrix.
+
+Product-PR-CI **44957700700** en main-CI **44958444917** voltooiden elk alle
+vijf jobs met succes. De laatste Auto Deploy **44959094610** voltooide met
+succes op `9dde70296bff9330ede82eae0781ba47cf00cfe2`. Op 21 november
+2026 gaven publieke backend health (HTTP 200) en frontend build-info beide
+die exacte SHA terug, gelijk aan GitHub `main`. Deze meting geldt voor de
+productcommit; na deze status-only commit moeten de laatste main-CI,
+Auto Deploy en publieke SHA-pariteit opnieuw worden bevestigd. Onafhankelijke
+ingelogde live QA voor de chat- en feedvervolgroute is nog niet uitgevoerd.
+
 ## FINN 3.0: zelfstandig onderwerp wisselen in bestaande chat (21 november 2026)
 
 Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_STATUS_SHA`. Product candidate
