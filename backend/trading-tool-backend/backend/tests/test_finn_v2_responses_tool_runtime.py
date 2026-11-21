@@ -15387,6 +15387,52 @@ def test_bot_decision_question_requires_current_owner_history_before_answer(monk
         assert captured["required_read_tool_name"] == "get_decision_history"
 
 
+def test_chart_opinion_reads_displayed_pair_and_saved_trader_context(monkeypatch):
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="chart-coach")
+    front.model_led_coach = True
+    captured = {}
+
+    class FakeRead:
+        async def __call__(self, call):
+            captured["read_call"] = call
+            return {"status": "completed", "results": []}
+
+    front.reads = FakeRead()
+
+    async def capture_loop(loop, **kwargs):
+        captured.update(kwargs)
+        await loop.executor(FinnResponsesToolCatalog().validate(
+            "get_market_snapshot", {"asset": "BTC", "quote_currency": "EUR"},
+        ))
+        return FinnResponsesResult("BTC/USDT staat onder druk.", "answer", ())
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run", capture_loop,
+    )
+    asyncio.run(front.run(
+        message="wat vind je nu van de btc chart?", instructions="Lees feiten",
+        conversation_context={}, verified_asset="BTC",
+        workspace_hints={"page": "/asset", "symbol": "BTC", "quote_currency": "USDT"},
+    ))
+    assert captured["required_read_tool_name"] == "get_market_snapshot"
+    assert captured["read_call"].inputs == {"asset": "BTC", "quote_currency": "USDT"}
+    assert captured["read_call"].read_tools == (
+        "read_market_snapshot", "read_technical_snapshot", "read_profile",
+        "read_active_setup", "read_linked_strategy",
+    )
+
+
+def test_chart_opinion_pair_prefers_explicit_market_and_rejects_other_workspace_asset():
+    hints = {"page": "/asset", "symbol": "BTC", "quote_currency": "USDT"}
+    resolve = FinnResponsesFrontDoor._chart_coaching_pair
+    assert resolve("wat vind je nu van de BTC/EUR chart?", workspace_hints=hints,
+                   verified_asset="BTC") == ("BTC", "EUR")
+    assert resolve("wat vind je nu van de AAPL chart?", workspace_hints=hints,
+                   verified_asset="BTC") is None
+    assert resolve("wat is de timeframe van de BTC chart?", workspace_hints=hints,
+                   verified_asset="BTC") is None
+
+
 def test_bot_risk_evaluation_requires_owner_scoped_evaluator(monkeypatch):
     front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="bot-risk-required")
     front.model_led_coach = True

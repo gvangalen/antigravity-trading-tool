@@ -797,9 +797,33 @@ class FinnResponsesFrontDoor:
             "making a new freshness claim. Never call a previously verified score stale "
             "merely because its report date is today or because it came from a prior turn. "
             "Do not present historical saved scores as current scores. "
-            "When you describe a score as current or verified, name the oldest "
-            "indicator source moment from that score read. Distinguish it from "
-            "the latest market quote time and the score report date. "
+            "Keep the oldest indicator source moment distinct from the latest "
+            "market quote and the report date in your reasoning. Mention those "
+            "clocks to the trader when asked about provenance or freshness, or "
+            "when a source difference changes the conclusion. "
+            "For a chart opinion, lead with the exact selected pair's trend, "
+            "momentum and meaningful levels. Then explain what that picture "
+            "means for the owner's saved plan and trader profile, using the "
+            "actual saved conditions and amount rule when available. A chart "
+            "timeframe alone is not a trading horizon, amount rule or the "
+            "measurement timeframe of technical indicators. Never label the "
+            "displayed chart from a saved setup's timeframe; only "
+            "name a chart timeframe if the question or chart evidence supplies "
+            "it. If a saved setup has no score condition, missing scores do "
+            "not make that setup's nonexistent score condition unresolved. If a "
+            "relevant idea from an earlier conversation comes up, verify "
+            "whether it is saved before treating it as part of the plan. "
+            "Distinguish the earlier discussion from the saved state in plain "
+            "language. If the trader is seeking coaching and that unresolved "
+            "idea offers a useful next step, end with one natural, specific "
+            "question about continuing it. Do not offer that follow-up when "
+            "the idea is unrelated or the trader only requested facts. Keep "
+            "source times out of the "
+            "answer unless the trader asks or the difference changes the "
+            "judgment. Choose only the few numbers that explain the analysis. "
+            "Avoid generic safety caveats; explain the concrete next "
+            "conditions in the saved plan instead. Never substitute a different "
+            "quote currency for the selected chart market. "
             "A market price snapshot is not a score report. "
             "The asset catalog prices US stocks such as AAPL in USD. AAPL/USD "
             "names that same USD-priced stock, not a separate Binance market; "
@@ -1111,6 +1135,33 @@ class FinnResponsesFrontDoor:
                 message, re.I,
             )
         )
+
+    @staticmethod
+    def _chart_coaching_pair(
+        message: str, *, workspace_hints: Mapping[str, object], verified_asset: str | None,
+    ) -> tuple[str, str] | None:
+        """Resolve a chart-opinion request to its exact displayed market."""
+        if not re.search(r"\b(?:chart|grafiek|koersbeeld|price\s+action)\b", message, re.I):
+            return None
+        if not re.search(
+            r"\b(?:wat\s+(?:vind|denk)\w*|hoe\s+(?:ziet|staat)\w*|"
+            r"analyseer\w*|beoordeel\w*|what\s+do\s+you\s+think|"
+            r"how\s+does|analy[sz]e|was\s+h[aä]ltst)\b", message, re.I,
+        ):
+            return None
+        mentioned = mentioned_catalog_symbols(message)
+        if len(mentioned) > 1:
+            return None
+        explicit = requested_catalog_trading_pair(message)
+        if explicit:
+            return explicit
+        if workspace_hints.get("page") != "/asset":
+            return None
+        symbol = resolve_catalog_symbol(workspace_hints.get("symbol") or verified_asset)
+        quote = str(workspace_hints.get("quote_currency") or "").upper()
+        if symbol and quote in {"EUR", "USDT"} and (not mentioned or symbol in mentioned):
+            return symbol, quote
+        return None
 
     @staticmethod
     def _asks_about_account_state_bundle(message: str) -> bool:
@@ -3064,6 +3115,11 @@ class FinnResponsesFrontDoor:
             )
         unsupported_pair = unsupported_catalog_pair_mention(message)
         mentioned_assets = mentioned_catalog_symbols(message)
+        chart_coaching_pair = (
+            self._chart_coaching_pair(
+                message, workspace_hints=workspace_hints, verified_asset=verified_asset,
+            ) if is_read_only_turn and not pending_operation and not unsupported_pair else None
+        )
         coach_plan = coach_evidence_plan(
             message, named_asset_count=len(mentioned_assets), read_only=is_read_only_turn,
         )
@@ -4303,6 +4359,21 @@ class FinnResponsesFrontDoor:
                 call = self._focus_source_reads(
                     call, message=message, read_only=call.operation_id is None and not pending_operation,
                 )
+                if chart_coaching_pair and call.name == "get_market_snapshot" \
+                        and call.operation_id is None:
+                    # One bounded read gives the model the displayed market,
+                    # current score, saved plan and trader profile together.
+                    # The quoted market is server-bound, never model-selected.
+                    asset, quote = chart_coaching_pair
+                    call = replace(
+                        call,
+                        inputs={"asset": asset, "quote_currency": quote},
+                        read_tools=(
+                            "read_market_snapshot", "read_technical_snapshot",
+                            "read_profile", "read_active_setup",
+                            "read_linked_strategy",
+                        ),
+                    )
                 if coach_plan and call.operation_id is None and not pending_operation \
                         and call.name != "evaluate_plan":
                     # A model-selected narrow read must not drop other source
@@ -5626,6 +5697,19 @@ class FinnResponsesFrontDoor:
                    "Explain the catalog boundary, state that no proposal was made, "
                    "and ask for a supported catalog asset only if the user wants to continue."
                    if unsupported_pair else "")
+                + (
+                    "\nThis is an opinion on the currently displayed chart. Answer the "
+                    "asset question first, then relate it to verified saved plan "
+                    "facts. Do not infer the chart's candle interval from a "
+                    "setup's timeframe or indicator names unless the interval "
+                    "is explicitly verified. For this chart "
+                    "opinion, do not evaluate score gates or mention missing "
+                    "total scores unless the user asks whether entry conditions "
+                    "are met. Do not ask for a "
+                    "timeframe unless it is necessary to answer the question. "
+                    "Omit source timestamps unless they change this conclusion."
+                    if chart_coaching_pair else ""
+                )
                 if getattr(self, "model_led_coach", False) else instructions
             ),
             verified_turn_context=verified_turn,
@@ -5694,6 +5778,8 @@ class FinnResponsesFrontDoor:
             required_read_tool_name=(
                 "get_open_plan_draft"
                 if guided_draft_question
+                else "get_market_snapshot"
+                if chart_coaching_pair and pending_operation is None and not resuming_clarification
                 else "get_closed_trade_review"
                 if (explicit_closed_review_read or contextual_closed_review_read)
                 and pending_operation is None and not resuming_clarification
