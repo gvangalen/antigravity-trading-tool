@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: scoped feed-discussion failure diagnosis (21 November 2026)
 
-Phase: `LOCAL_VALIDATED_CANDIDATE`. Branch
+Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_IDENTITY`. Branch
 `codex/finn-feed-journey-diagnostic-20261121`, based on public main
 `c7b6fe7d3cea130c9ccd20db4ab9e13153d7503d`. Independent QA tested that
 SHA with one official protected `coach_feed_journey` run (workflow
@@ -44,8 +44,14 @@ isolated stack and volume were removed after validation. Frontend, mobile,
 and workflow files are unchanged by this diagnostic delta; their checks passed
 on the preceding deployed main revision and will run again in CI. Read-only
 QA, Security, and Architecture reviews found no concrete blocker in this
-delta. There is no new deployment or independent QA verdict for this repair
-yet.
+delta. PR [#1241](https://github.com/gvangalen/antigravity-trading-tool/pull/1241)
+merged as `dee410b0aa04a224324054742714f1559aafbd4d` after candidate CI
+`44906092800` passed all five jobs. Main CI `44906584006` passed all five
+jobs and Auto Deploy `44907165840` succeeded. Public backend health and
+frontend build-info returned HTTP 200 and that exact merge SHA. This measured
+status update creates a later main SHA; Build must wait for its CI, Auto
+Deploy, and public backend/frontend SHA parity before handing the final
+revision to independent QA. No new authenticated QA verdict exists yet.
 
 ## FINN 3.0: protected analysis- and report-feed journey (21 November 2026)
 
