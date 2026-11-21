@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 
 import {
   feedHeaderInstrument,
+  finnInstrumentOptions,
+  finnPageInstrumentKey,
   normalizeScopedAssetSymbol,
   resolveFinnBotPageContext,
   resolveFinnBotContextSymbol,
@@ -12,10 +14,29 @@ import {
   shouldBlockFinnSubmission,
 } from "../lib/finnAssetIsolation.js";
 
-test("a selected BTC/USDT feed card labels the exact pair in FINN's header", () => {
-  assert.equal(feedHeaderInstrument("BTC", "USDT", true), "BTC/USDT");
-  assert.equal(feedHeaderInstrument("BTC", "EUR", true), "BTC/EUR");
-  assert.equal(feedHeaderInstrument("BTC", "USDT", false), "BTC");
+test("FINN's header labels the selected pair, including outside feed handoffs", () => {
+  assert.equal(feedHeaderInstrument("BTC", "USDT"), "BTC/USDT");
+  assert.equal(feedHeaderInstrument("BTC", "EUR"), "BTC/EUR");
+});
+
+test("FINN offers the watchlist's exact pairs and keeps the displayed route pair available", () => {
+  const options = finnInstrumentOptions([
+    { symbol: "BTC", quote_currency: "USDT" },
+    { symbol: "BTC", quote_currency: "EUR" },
+    { symbol: "ETH", quote_currency: "USDT" },
+  ], { symbol: "BTC", quote_currency: "USDT" });
+  assert.deepEqual(options.map((item) => item.key), ["BTC/USDT", "BTC/EUR", "ETH/USDT"]);
+});
+
+test("a page switch invalidates a prior FINN pair choice, including the same base with another quote", () => {
+  assert.notEqual(
+    finnPageInstrumentKey("/asset", { symbol: "BTC", quote_currency: "USDT" }),
+    finnPageInstrumentKey("/asset", { symbol: "BTC", quote_currency: "EUR" }),
+  );
+  assert.notEqual(
+    finnPageInstrumentKey("/asset", { symbol: "BTC", quote_currency: "USDT" }),
+    finnPageInstrumentKey("/dashboard", { symbol: "BTC", quote_currency: "USDT" }),
+  );
 });
 import { matchesWorkspaceAsset } from "../lib/workspace/workspaceAssetScope.mjs";
 
@@ -162,6 +183,10 @@ test("pair context follows the visible market and clears on asset switch", () =>
     chatAssetOverride: "ETH" });
   assert.equal(switched.symbol, "ETH");
   assert.equal(switched.quote_currency, null);
+  const otherPair = resolveFinnSubmissionContext({ pathname: "/asset", livePageContext,
+    chatAssetOverride: { symbol: "BTC", quote_currency: "USDT" } });
+  assert.equal(otherPair.symbol, "BTC");
+  assert.equal(otherPair.quote_currency, "USDT");
 });
 
 test("automatic plan review uses the clicked plan over an older chat asset", () => {

@@ -99,6 +99,26 @@ def test_saved_smart_dca_readback_uses_engine_at_exact_high_threshold():
     assert actual["final_amount"] == bands[2]["planned_amount"] == 90
 
 
+def test_five_zone_smart_dca_readback_keeps_all_visible_amounts():
+    _, strategy = split_confirmed_dca_plan({
+        **_schedule(), "dca_amount_mode": "score_bands", "base_amount": 100,
+        "score_source": "benchmark_score",
+        "benchmark_zone_percents": [150, 125, 100, 75, 50],
+    })
+    saved = {**strategy, "id": 52, "setup_id": 9, "name": "BTC vijf zones",
+             "data": {"dca_amount_semantics": "planned_exact",
+                      "decision_curve": strategy["decision_curve"]}}
+    readback = asyncio.run(StrategyToolAdapter().execute(
+        strategy=saved, resolution_source="explicit_name",
+    ))["data"]
+    assert readback.benchmark_zone_percents == [150, 125, 100, 75, 50]
+    assert [(row["from_score_inclusive"], row["to_score_exclusive"], row["planned_amount"])
+            for row in readback.dca_score_bands] == [
+                (0, 25.5, 150), (25.5, 45.5, 125), (45.5, 60.5, 100),
+                (60.5, 75.5, 75), (75.5, None, 50),
+            ]
+
+
 @pytest.mark.parametrize("overrides", [
     {"score_source": None},
     {"score_source": "market_score"},

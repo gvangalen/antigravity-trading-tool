@@ -24,7 +24,7 @@ def test_smart_dca_ladder_suggestion_stays_in_open_create_setup():
                  "timeframe 1D, basisbedrag €200 en maximaal één aankoop per week."),
         explicit_asset="BTC", conversation_context={}, supplied_inputs={}, model_tool_inputs=True,
     )
-    assert pending.next_missing_input == "low_threshold"
+    assert pending.next_missing_input == "benchmark_zone_percents"
     message = ("Kies zelf een verstandige standaard voor de drie scorebanden en "
                "percentages en laat mij die eerst in een bewerkbare conceptkaart beoordelen.")
     facts = CLASSIFIER.preprocessor.preprocess(message=message)

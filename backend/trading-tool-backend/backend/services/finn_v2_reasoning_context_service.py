@@ -33,7 +33,7 @@ _PUBLIC_PROPOSAL_FIELDS = frozenset({
     "execution_mode", "base_amount", "entry", "stop_loss", "targets", "price_currency",
     "risk_profile", "budget_total_eur", "paper_initial_cash_eur",
     "score_source", "low_threshold", "high_threshold", "low_score_percent",
-    "mid_score_percent", "high_score_percent",
+    "mid_score_percent", "high_score_percent", "benchmark_zone_percents",
 })
 
 

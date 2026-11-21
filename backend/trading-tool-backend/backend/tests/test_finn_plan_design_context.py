@@ -1,8 +1,12 @@
 import asyncio
+import pytest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from backend.domain.finn_dca_plan_contract import dca_automation_capabilities, split_confirmed_dca_plan
+from backend.domain.finn_dca_plan_contract import (
+    dca_automation_capabilities, is_confirmed_dca_amount_rule, split_confirmed_dca_plan,
+)
+from backend.engine.curve_engine import calculate_position_size
 from backend.services.finn_v2_plan_design_context import (
     advance_plan_design_focus, remember_unsaved_design,
     requests_execution_capability_question, is_new_separate_setup_request,
@@ -107,7 +111,8 @@ def test_model_capabilities_match_confirmed_dca_amount_contract():
     assert facts["minimum_score_band_percent"] > 0
     assert facts["score_band_percent_orders"] == ("nondecreasing", "nonincreasing")
     assert "benchmark" in facts["supported_trigger_modes"]
-    assert facts["score_band_amount_count"] == 3
+    assert facts["score_band_amount_count"] == 5
+    assert facts["legacy_score_band_amount_count"] == 3
     _, strategy = split_confirmed_dca_plan({
         "setup_type": "dca", "name": "BTC test", "dca_amount_mode": "score_bands",
         "base_amount": 100, "score_source": "benchmark_score",
@@ -119,6 +124,31 @@ def test_model_capabilities_match_confirmed_dca_amount_contract():
     assert strategy["decision_curve"]["interpolation"] == facts["score_band_interpolation"]
     assert facts["score_band_input"] == ("benchmark_score",)
     assert facts["score_band_interpolation"] == "step"
+
+
+def test_five_benchmark_zones_size_at_the_same_rounded_boundaries_as_analysis():
+    _, strategy = split_confirmed_dca_plan({
+        "setup_type": "dca", "name": "BTC zones", "dca_amount_mode": "score_bands",
+        "base_amount": 100, "score_source": "benchmark_score",
+        "benchmark_zone_percents": [150, 125, 100, 75, 50],
+    })
+    curve = strategy["decision_curve"]
+    assert [point["x"] for point in curve["points"]] == [0, 25.5, 45.5, 60.5, 75.5]
+    for score, expected in ((25.49, 150), (25.5, 125), (45.49, 125),
+                            (45.5, 100), (60.5, 75), (75.5, 50), (100, 50)):
+        assert calculate_position_size(100, curve, score) == expected
+    assert is_confirmed_dca_amount_rule({"setup_type": "dca", **strategy})
+
+
+@pytest.mark.parametrize("zones", [[150, 125, 100, 75], [150, 125, 100, 75, 4],
+                                    [150, 125, 130, 75, 50], [150, 125, 100, 125, 50]])
+def test_five_zone_contract_rejects_incomplete_unsafe_or_nonmonotonic_amounts(zones):
+    with pytest.raises(ValueError):
+        split_confirmed_dca_plan({
+            "setup_type": "dca", "name": "BTC zones", "dca_amount_mode": "score_bands",
+            "base_amount": 100, "score_source": "benchmark_score",
+            "benchmark_zone_percents": zones,
+        })
 
 
 def test_generic_capability_questions_include_ma_and_trendline_designs():

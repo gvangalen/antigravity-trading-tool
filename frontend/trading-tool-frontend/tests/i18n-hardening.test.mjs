@@ -71,7 +71,7 @@ test("FINN draft actions and pending state have NL, EN and DE copy", () => {
   assert.equal(de.assistant.draftStatus.saved, "✓ Entwurf erfolgreich gespeichert!");
   assert.match(source, /const submissionLocale = finnSubmissionLocale\([\s\S]*?document\.documentElement\.lang/);
   assert.match(source, /const livePageContext = getContext\(\);/);
-  assert.match(source, /const requestContext = resolveFinnSubmissionContext\(\{[\s\S]*?livePageContext[\s\S]*?chatAssetOverride, locale: submissionLocale/);
+  assert.match(source, /const requestContext = resolveFinnSubmissionContext\(\{[\s\S]*?livePageContext[\s\S]*?chatAssetOverride: chatAssetOverride\?\.pageInstrumentKey ===[\s\S]*?finnPageInstrumentKey\(pathname, livePageContext\)[\s\S]*?locale: submissionLocale/);
   assert.match(source, /operationId\.includes\("strategy"\).*linkedName/s);
 });
 

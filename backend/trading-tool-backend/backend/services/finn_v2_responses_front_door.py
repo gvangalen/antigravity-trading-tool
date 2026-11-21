@@ -1162,7 +1162,9 @@ class FinnResponsesFrontDoor:
         if not re.search(
             r"\b(?:wat\s+(?:vind|denk)\w*|hoe\s+(?:ziet|staat)\w*|"
             r"analyseer\w*|beoordeel\w*|what\s+do\s+you\s+think|"
-            r"how\s+does|analy[sz]e|was\s+h[aä]ltst)\b", message, re.I,
+            r"how\s+does|analy[sz]e|was\s+h[aä]ltst|"
+            r"(?:kan|kun)\w*\s+(?:je|jij|u)\b.{0,80}\b(?:zien|uitlezen|bekijken)|"
+            r"(?:can|could)\s+you\b.{0,80}\b(?:see|read|view))\b", message, re.I,
         ):
             return None
         mentioned = mentioned_catalog_symbols(message)
@@ -1627,7 +1629,7 @@ class FinnResponsesFrontDoor:
                     if set(explicit) & {
                         "dca_trigger_mode",
                         "low_threshold", "high_threshold", "low_score_percent",
-                        "mid_score_percent", "high_score_percent",
+                        "mid_score_percent", "high_score_percent", "benchmark_zone_percents",
                     }:
                         return True
             return False
@@ -1668,6 +1670,7 @@ class FinnResponsesFrontDoor:
                 and requested_slot in {
                     "dca_frequency", "dca_trigger_mode", "dca_day", "dca_month_day", "dca_amount_mode",
                     "base_amount", "low_score_percent", "mid_score_percent", "high_score_percent",
+                    "benchmark_zone_percents",
                 } else None
             ),
         )
@@ -5715,11 +5718,13 @@ class FinnResponsesFrontDoor:
                    "and ask for a supported catalog asset only if the user wants to continue."
                    if unsupported_pair else "")
                 + (
-                    "\nThis is an opinion on the currently displayed chart. Answer the "
-                    "asset question first, then relate it to verified saved plan "
-                    "facts. Do not infer the chart's candle interval from a "
+                    "\nThis question concerns the currently displayed chart's exact market. "
+                    "Answer the user's question using the verified market and saved plan "
+                    "facts. If asked about chart access, distinguish the embedded TradingView "
+                    "view from the market data available to FINN. Do not infer the chart's "
+                    "candle interval from a "
                     "setup's timeframe or indicator names unless the interval "
-                    "is explicitly verified. For this chart "
+                    "is explicitly verified. For a chart "
                     "opinion, do not evaluate score gates or mention missing "
                     "total scores unless the user asks whether entry conditions "
                     "are met. Do not ask for a "

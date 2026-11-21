@@ -55,7 +55,9 @@ async def _serialize_watchlist(
         WatchlistItemResponse(
             symbol=str(item.symbol).upper(),
             market_id=item.market_id,
-            quote_currency=market.quote_currency if market else None,
+            quote_currency=(market.quote_currency if market else
+                            asset_map.get(item.symbol, {}).get("quote_currency")
+                            if asset_map.get(item.symbol, {}).get("asset_class") == "crypto" else None),
             display_name=asset_map.get(item.symbol, {}).get("display_name") or item.symbol,
             asset_class=asset_map.get(item.symbol, {}).get("asset_class") or "crypto",
             logo_url=asset_map.get(item.symbol, {}).get("logo_url"),

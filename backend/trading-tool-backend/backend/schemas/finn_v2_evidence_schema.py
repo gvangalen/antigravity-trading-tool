@@ -255,6 +255,7 @@ class LinkedStrategyData(BaseModel):
     low_score_percent: Optional[float] = None
     mid_score_percent: Optional[float] = None
     high_score_percent: Optional[float] = None
+    benchmark_zone_percents: Optional[List[float]] = None
     dca_score_bands: List[Dict[str, Any]] = Field(default_factory=list)
     level_geometry: Optional[Dict[str, Any]] = None
 

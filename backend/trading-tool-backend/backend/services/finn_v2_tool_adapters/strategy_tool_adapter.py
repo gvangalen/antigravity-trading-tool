@@ -103,27 +103,37 @@ class StrategyToolAdapter:
         if not isinstance(curve, dict) or curve.get("interpolation") != "step":
             return {}
         points = curve.get("points")
-        if not isinstance(points, list) or len(points) < 3:
+        if not isinstance(points, list) or len(points) not in {4, 5}:
             return {}
         try:
             ordered = sorted(points, key=lambda point: float(point["x"]))
-            low = float(ordered[1]["x"])
-            high = float(ordered[2]["x"])
-            bands = [
-                (0.0, low, float(ordered[0]["y"])),
-                (low, high, float(ordered[1]["y"])),
-                (high, None, float(ordered[2]["y"])),
-            ]
+            five_zones = len(ordered) == 5
+            if five_zones:
+                bands = [
+                    (float(point["x"]), float(ordered[index + 1]["x"])
+                     if index + 1 < len(ordered) else None, float(point["y"]))
+                    for index, point in enumerate(ordered)
+                ]
+            else:
+                low = float(ordered[1]["x"])
+                high = float(ordered[2]["x"])
+                bands = [
+                    (0.0, low, float(ordered[0]["y"])),
+                    (low, high, float(ordered[1]["y"])),
+                    (high, None, float(ordered[2]["y"])),
+                ]
             return {
                 "dca_amount_mode": "score_bands",
                 "score_source": curve.get("input"),
                 "score_weights": None,
                 "score_weights_policy": curve.get("weights_policy"),
-                "low_threshold": low,
-                "high_threshold": high,
-                "low_score_percent": round(100 * float(ordered[0]["y"]), 2),
-                "mid_score_percent": round(100 * float(ordered[1]["y"]), 2),
-                "high_score_percent": round(100 * float(ordered[2]["y"]), 2),
+                "low_threshold": None if five_zones else low,
+                "high_threshold": None if five_zones else high,
+                "low_score_percent": None if five_zones else round(100 * float(ordered[0]["y"]), 2),
+                "mid_score_percent": None if five_zones else round(100 * float(ordered[1]["y"]), 2),
+                "high_score_percent": None if five_zones else round(100 * float(ordered[2]["y"]), 2),
+                "benchmark_zone_percents": ([round(100 * float(point["y"]), 2) for point in ordered]
+                                            if five_zones else None),
                 "dca_score_bands": [
                     {
                         "from_score_inclusive": start,
