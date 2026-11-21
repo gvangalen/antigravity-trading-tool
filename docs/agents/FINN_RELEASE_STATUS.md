@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: herstel historische forward returns (21 november 2026)
 
-Phase: `LOCAL_REPAIR_VALIDATION`. Independent QA returned `NOT_ACCEPTED` for
+Phase: `CANDIDATE_LOCAL_GREEN_CI_PENDING`. Independent QA returned `NOT_ACCEPTED` for
 the forward-return integration on live SHA
 `3f2040ef05ff8c824664a1f6de0b43a1fd2bf300`. In an authenticated
 BTC/USDT conversation, FINN reported an internal error for stored historical
@@ -20,21 +20,30 @@ read-only public observations, not an independent QA acceptance.
 A focused local regression reproduced an `AttributeError` when a stored
 `start_date` or `end_date` is a `date` rather than a `datetime`. The adapter
 now accepts both types, matching the existing market-data service's date
-handling. The focused forward-return tests pass **3/3**. The full backend suite
-passed **5201**, skipped **7** (log SHA-256
-`37e23ab7d4f05320920b9b4523bb449fb70a993212c4621cfb0658100d6388f2`).
+handling. The focused forward-return tests pass **3/3**. After rebasing on
+main SHA `30bdbdf2bb1e8bfa9420db5bafb3adfa0267122c`, the full backend suite
+passed **5217**, skipped **7** (log SHA-256
+`7437d4741accafd23ed633babebd99370ee4a2b8695c4a85802c5856559715de`).
 The real-provider development selector passed **20/20** with zero provider,
 schema, parse, validation or timeout failures (artifact SHA-256
-`8adc634f882bf6cb9c3c3524fe6bf4fd0c3e3d19a1b5411558d908e78978a24f`).
-The isolated FastAPI/Celery/PostgreSQL/Redis matrix passed **38/38**, including
-**16/16** action contracts and **9/9** lineage checks, with zero Live bots or
-non-allowlisted executions (artifact SHA-256
-`1d4be3c018ebc1ce270bae760cb4d2cd7c549495a4a2b41b89e233a710e45459`).
+`3f879cf0b36a438d6900aa141a7bccf902570b50475c532e6b47fc79d833b1b7`).
 The real-provider regression selector passed **109/109** with zero provider,
 schema, parse, validation or timeout failures (artifact SHA-256
-`f50f7a7cf4f4482fdf2cf29ee3e3ce7f18f72615faa5f2d2df50217ff5b172a7`).
-Release validation remains pending; no production fix or acceptance is claimed
-yet.
+`7876aeb4e12933bd7dc0206b65fe781d1971a848e2e203ef930d809fbb4f78b9`).
+The first rebased isolated FastAPI/Celery/PostgreSQL/Redis matrix completed all
+**38/38** functional cases, **16/16** action contracts and **9/9** lineage checks,
+but failed its fixed terminal-latency gate: p95 **12173.78 ms** against a
+**10000 ms** maximum (artifact SHA-256
+`8f932d4b75a0f0977397cbc0b5c616ee3488696310073ec84b2e5825360dca31`).
+That run overlapped with the real-provider regression. A standalone rerun is
+also complete: **38/38** cases, **16/16** action contracts and **9/9** lineage
+checks passed, with zero Live bots or non-allowlisted executions. Terminal
+p95 was **9477.76 ms**, below the unchanged **10000 ms** limit (artifact
+SHA-256 `19f77b278536bb4782ec6b8e1dd9a431bec14aae82a385510cded8fdd8416fc4`).
+The earlier failed latency measurement remains recorded as a concurrency
+observation. Candidate CI and live deployment remain pending; no production
+fix or acceptance is claimed yet.
+
 ## FINN 3.0: exact watchlist pair and five Smart DCA benchmark zones (21 november 2026)
 
 Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_STATUS_SHA`. Branch `codex/finn-pair-context`,
