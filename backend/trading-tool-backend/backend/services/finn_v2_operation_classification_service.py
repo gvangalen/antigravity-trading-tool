@@ -393,6 +393,16 @@ class FinnV2OperationClassificationService:
         normalized_message = str(message or "").casefold()
         if (
             facts.discourse_act == "operation_request"
+            and polarity in {"add", "update"}
+            and "setup" in entities
+            and not ({"strategy", "bot"} & entities)
+            and FinnV2OperationStateService.explicit_weekly_dca_day_update(message)
+        ):
+            # Adding a buying day to an existing Smart DCA changes its saved
+            # cadence; it is not a new-object add operation.
+            return "update_setup"
+        if (
+            facts.discourse_act == "operation_request"
             and polarity == "update"
             and facts.primary_entity == "indicator_configuration"
             and "indicator_configuration" in facts.explicit_entities

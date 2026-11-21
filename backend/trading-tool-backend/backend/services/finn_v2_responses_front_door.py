@@ -3024,6 +3024,82 @@ class FinnResponsesFrontDoor:
                 ),
                 selected, previous_response, locale=locale,
             )
+        weekday_update = (
+            FinnV2OperationStateService.explicit_weekly_dca_day_update(message)
+            if imperative_operation == "update_setup" else {}
+        )
+        if (
+            weekday_update
+            and request_facts.discourse_act == "operation_request"
+            and not pending_operation
+            and not conversation_context.get("proposal_correction_result")
+        ):
+            session_factory = getattr(self.reads, "session_factory", None)
+            if session_factory is not None:
+                async with session_factory() as session:
+                    resolver = FinnV2EntityResolutionService(session)
+                    target = await resolver.resolve_canonical_target(
+                        user_id=self.user_id, entity_type="setup", message=message,
+                        conversation_context=conversation_context,
+                    )
+                    setup = (
+                        await resolver.setups.get_setup_by_id(target.entity_id, self.user_id)
+                        if target.resolution_status == "resolved" and target.entity_id else None
+                    )
+                if setup and str(setup.get("setup_type") or "").lower() == "dca" and str(
+                    setup.get("dca_frequency") or ""
+                ).lower() == "weekly":
+                    contract = self.proposals.registry.require_supported("update_setup")
+                    selected = self.proposals.from_call(
+                        call=FinnResponsesToolCall(
+                            name=catalog.proposal_tool_for_operation(contract.operation_id),
+                            operation_id=contract.operation_id,
+                            inputs={"changed_fields": weekday_update}, read_tools=(),
+                            required_inputs=contract.required_inputs, missing_inputs=(),
+                            draft_intent="new",
+                        ),
+                        message=message, conversation_context=conversation_context,
+                        verified_asset=verified_asset,
+                        verified_target_inputs={"setup_id": target.entity_id},
+                    )
+                    return FinnResponsesFrontDoorResult(
+                        FinnResponsesResult(
+                            text={
+                                "en": "I am preparing a proposal to change this setup's weekly buying day.",
+                                "de": "Ich bereite einen Vorschlag vor, den wöchentlichen Kauftag dieses Setups zu ändern.",
+                            }.get(locale.split("-")[0].lower(),
+                                  "Ik bereid een voorstel voor om de wekelijkse koopdag van deze setup aan te passen."),
+                            response_id=f"verified-weekly-dca-update-{self.run_id}",
+                            tool_trace=({"name": "verified_weekly_dca_update_proposal",
+                                         "status": "completed",
+                                         "result": {"operation_id": contract.operation_id}},),
+                            response_id_reusable=False,
+                        ),
+                        selected, previous_response, locale=locale,
+                    )
+                language = locale.split("-")[0].lower()
+                reason = (
+                    {
+                        "en": "I cannot identify the saved setup. Please give its exact name.",
+                        "de": "Ich kann das gespeicherte Setup nicht eindeutig finden. Bitte nenne den genauen Namen.",
+                    }.get(language, "Ik kan de genoemde setup niet eenduidig vinden. Noem de exacte opgeslagen naam.")
+                    if setup is None else
+                    {
+                        "en": "This is not a weekly DCA setup. Check its saved frequency first.",
+                        "de": "Dies ist kein wöchentliches DCA-Setup. Prüfe zuerst die gespeicherte Frequenz.",
+                    }.get(language, "Deze setup is geen wekelijkse DCA-setup. Controleer eerst de opgeslagen frequentie.")
+                )
+                return FinnResponsesFrontDoorResult(
+                    FinnResponsesResult(
+                        text=reason,
+                        response_id=f"weekly-dca-update-target-{self.run_id}",
+                        tool_trace=({"name": "verified_weekly_dca_update_target",
+                                     "status": "completed",
+                                     "result": {"resolution_status": target.resolution_status}},),
+                        response_id_reusable=False,
+                    ),
+                    None, previous_response, locale=locale,
+                )
         if (
             imperative_operation == "update_setup"
             and request_facts.discourse_act == "operation_request"

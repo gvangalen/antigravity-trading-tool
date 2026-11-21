@@ -1,6 +1,6 @@
 'use client';
 
-import { buildAuthHeaders, fetchAuth } from '@/lib/api/auth';  // ✅ JUISTE AUTH
+import { apiRefresh, buildAuthHeaders, fetchAuth } from '@/lib/api/auth';
 import { API_BASE_URL } from '@/lib/config';
 
 // ========================================
@@ -188,6 +188,7 @@ export const assistantChatStream = async (
 
   let attempt = 0;
   let delay = 1000;
+  let authRefreshAttempted = false;
   // A retry must address the same durable FINN run. The backend derives its
   // idempotency key from this request trace, so a proxy failure cannot turn
   // one user question into several independent runs.
@@ -210,8 +211,21 @@ export const assistantChatStream = async (
           ...(feedItemId ? { feed_item_id: feedItemId } : {}) }),
       });
 
+      if (response.status === 401) {
+        if (!authRefreshAttempted) {
+          authRefreshAttempted = true;
+          const refresh = await apiRefresh();
+          if (signal.aborted) return;
+          if (refresh.success) continue;
+        }
+        const error = new Error('FINN authentication required');
+        error.status = 401;
+        throw error;
+      }
       if (!response.ok) {
-        throw new Error(`Streaming request failed: ${response.status} ${response.statusText} (trace ${traceId})`);
+        const error = new Error(`Streaming request failed: ${response.status} ${response.statusText} (trace ${traceId})`);
+        error.status = response.status;
+        throw error;
       }
 
       const reader = response.body.getReader();
@@ -290,6 +304,13 @@ export const assistantChatStream = async (
         return;
       }
 
+      if (error.status === 401) {
+        console.warn(`FINN stream authentication failed (trace ${traceId}).`, error);
+        if (activeAbortController?.signal === signal) activeAbortController = null;
+        onError({ code: 'auth_required' });
+        return;
+      }
+
       console.warn(`Stream attempt ${attempt + 1} failed.`, error);
       attempt++;
 
@@ -302,7 +323,7 @@ export const assistantChatStream = async (
         if (activeAbortController?.signal === signal) {
           activeAbortController = null;
         }
-        onError(error.message || 'Connection failed.');
+        onError({ code: 'connection_failed' });
       }
     }
   }
