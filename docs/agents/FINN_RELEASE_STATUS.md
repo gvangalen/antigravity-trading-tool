@@ -4,6 +4,38 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: chartanalyse met opgeslagen tradercontext (21 november 2026)
+
+Phase: `LOCAL_VALIDATED_CANDIDATE`. Branch
+`codex/finn-chart-coach-context`, implementation SHA `59ee3016d`. FINN binds a
+chart-opinion question to the exact displayed crypto pair and reads its market
+and technical measurements, the owner's trader profile, saved setup, and
+linked strategy in one bounded read. The answer guidance leads with asset
+analysis, uses prior discussion only as conversation context, checks whether a
+discussed idea was actually saved, and may ask one relevant coaching follow-up.
+No fixed DCA answer or follow-up sentence is scripted. Source times remain
+available for provenance questions without dominating an ordinary chart answer.
+
+On the implementation before this QA-fixture-only rebase, backend `pytest -q` passed **5193**, skipped **7** (log
+SHA-256 `6d75fcf7d8e51a73ef9edc814d588abde28d2b6e4b6afb16d513478db1c176cb`).
+Frontend typecheck, i18n lint/tests, command/proposal tests, production build,
+and `audit:high` passed (log SHA-256
+`bbf5a313dafb016eefac29f205cbbd19292002efd1e15e262c3d65c8582544cf`);
+one moderate Next.js advisory and no high finding were reported. The isolated
+FastAPI/Celery/PostgreSQL/Redis/Responses action matrix passed **17/17** with
+zero broker orders or Live calls (artifact SHA-256
+`8116f81ace2695e39a765be77dfafb1d431e8a3cbf173784dcba3bc71d894cd6`),
+and adapter tests passed **28/28**. Real-provider selector development passed
+**20/20** (SHA-256 `d96bfe37a6816d82dab83612d5a08720d8cf9d8eda22a50d20d220b14a58a1b8`)
+and regression passed **109/109** (SHA-256
+`3b5da7aafb76b5f5bf834d81fb6dfc86e51bcf4b0a537ecfb66cd26ddd039d35`),
+with zero provider, schema, parse, validation, or timeout failures. A synthetic
+BTC/USDT API/worker conversation completed read-only with polling/SSE parity;
+it distinguished a previously discussed DCA idea from a saved rule (probe
+SHA-256 `615f7e8c433952b3672c29eb7334299a3ddbb698858a7465e13bd7f7a1df4023`).
+The isolated stack was stopped. Candidate CI, Auto Deploy, public identity
+checks, and independent authenticated QA are pending.
+
 ## FINN 3.0: synthetic feed fixture schema alignment (21 November 2026)
 
 Phase: `LOCAL_VALIDATED_CANDIDATE`. Independent QA ran the protected
