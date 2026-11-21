@@ -4,9 +4,39 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: persoonlijke eerste analysestap (21 november 2026)
+
+Phase: `LOCAL_VALIDATED`. Branch
+`codex/finn-personalized-analysis-next-step-20261121`, gebaseerd op publieke
+main `18d79f58f89c26f069f360878f166aa095f3837e`. Een analysekaart na
+een bruikbare eigenaargebonden benchmark noemt nu de gecontroleerde score
+van het exacte asset of handelspaar en de datum van de scoremomentopname.
+Een ontbrekende, ongeldige of niet gedateerde score verschijnt niet als
+scorefeit. De kaart vraagt de gebruiker de passende setup te bespreken en
+maakt zelf niets aan. Een eventuele volgende chat leest de actuele bronnen
+opnieuw. De afgeronde gerichte QA van de vorige release staat hieronder;
+deze nieuwe kaart heeft nog geen ingelogde live acceptatie.
+
+Gemeten op de definitieve code: backend **5183 passed, 7 skipped**
+(`.local-finn-parity-artifacts/finn-personalized-analysis-pytest.log`, SHA-256
+`526da527dc5b2a9c36fbb50ce690dea83203f1d00989f0be4be6535ef219b0e6`).
+Frontend typecheck, i18n-lint en -tests, command- en voorsteltests en
+productiebuild slaagden; `audit:high` gaf geen hoge en één matige Next.js-
+bevinding. De geïsoleerde PostgreSQL/Redis/FastAPI/prefork-Celery-actiematrix
+slaagde **38/38** zonder beschermde QA-fixture
+(`.local-finn-parity-artifacts/finn-personalized-analysis-matrix.json`, SHA-256
+`a89baf6af50a607fa0099e76f7f4e0fa9439ff4bd0e444b7a21b70abc94ac6bb`).
+De echte providerselector slaagde **20/20** development (SHA-256
+`cd3cc2c6882427815e376f135ca7ad0d96891a2aaeec264bd42f2120dff5c6f0`)
+en **109/109** regression (SHA-256
+`846cace4be95cd2136bbababc6231dc116488ceb5a39537403388d3448766a4b`),
+zonder provider-, schema-, parse-, validatie- of timeoutfouten. De lokale
+teststack is na afloop gestopt. PR-CI, main-CI, Auto Deploy, publieke
+SHA-pariteit en onafhankelijke live QA voor deze batch staan nog open.
+
 ## FINN 3.0: multi-asset rapport- en botbronvergelijking (21 november 2026)
 
-Phase: `LIVE_DEPLOYED_QA_PENDING`. Branch
+Phase: `LIVE_QA_ACCEPTED_TARGETED`. Branch
 `codex/finn-qa-source-coaching-20261121`, gebaseerd op main
 `6796b346d1c8fd70341b2ac482dc3589bfa6e424`. Onafhankelijke ingelogde
 QA wees die publieke SHA af voor twee gerichte read-only gevallen: de vraag
@@ -14,7 +44,17 @@ naar AAPL, BTC, het dagrapport en latere Paper-checks viel terug op een
 algemene bronmomentfout; bij AAPL gaf FINN de ruwe opgeslagen botreden van
 de latere check als reden van de eerdere rapportmomentopname. Een nieuwe
 rapportkaart na publicatie is nog niet door QA waargenomen en blijft een
-afzonderlijk dekkingsgat.
+afzonderlijk dekkingsgat. De onafhankelijke ingelogde QA accepteerde de
+gerichte bot-/rapportvergelijking op de uiteindelijke publieke SHA
+`18d79f58f89c26f069f360878f166aa095f3837e`: main, backend en frontend
+kwamen overeen en beide publieke endpoints gaven HTTP 200. De eerder falende
+meervoudige vraag onderscheidde rapport 05:39 CET, rapportbesluiten 05:30 CET
+en latere Paper-checks 11:15 CET. BTC/EUR bleef botloos. De AAPL-vervolgvraag
+noemde de zichtbare rapportreden exact en zette de afwijkende ruwe reden
+apart. QA wijzigde of verhandelde niets. Dit is geen volledige FINN-release-
+acceptatie: er was nog geen na-deploy rapportaandachtkaart, en voor deze
+vragen is geen passend beschermd runner-manifest met polling/SSE- en
+runtimepariteit uitgevoerd.
 
 De reparatie leest de nieuwste Paper-check per genoemd asset en het
 opgeslagen dagrapport eigenaargebonden, koppelt beslissingen via bot-ID en

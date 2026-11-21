@@ -8,7 +8,7 @@ import logging
 import os
 import re
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -19,6 +19,18 @@ from backend.utils.openai_client import StructuredOutputSpec, ask_gpt_structured
 logger = logging.getLogger(__name__)
 VISIBLE = ("unread", "read")
 LOCALES = ("nl", "en", "de")
+
+
+def _verified_benchmark_score(value: Any) -> str | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        score = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+    if not score.is_finite() or not 0 <= score <= 100:
+        return None
+    return format(score.normalize(), "f")
 
 
 def _same_utc_moment(first: datetime | None, second: datetime | None) -> bool:
@@ -324,10 +336,22 @@ def _fallback(kind: str, subject: str, evidence: dict, *, focus: str = "brief") 
                    "body": "Prüfe die Indikatoren und den Benchmark dieser Notierung. FINN kann einen nächsten Analyseschritt vorschlagen; an deiner Analyse wurde nichts geändert."},
         }
     if kind == "analysis_ready":
+        score = _verified_benchmark_score(evidence.get("benchmark_score"))
+        score_date = str(evidence.get("score_as_of") or "")
+        try:
+            if date.fromisoformat(score_date).isoformat() != score_date:
+                score = None
+        except ValueError:
+            score = None
+        score_copy = {
+            "nl": f" Bij de scoremomentopname van {score_date} was de benchmarkscore {score}/100." if score is not None else "",
+            "en": f" In the score snapshot dated {score_date}, the benchmark score was {score}/100." if score is not None else "",
+            "de": f" In der Score-Momentaufnahme vom {score_date} betrug der Benchmark-Score {score}/100." if score is not None else "",
+        }
         return {
-            "nl": {"title": f"Analyse voor {name} is bruikbaar", "body": "De opgeslagen benchmark heeft controleerbare scores. Bespreek of een setup bij jouw plan past; er is niets aangemaakt."},
-            "en": {"title": f"Analysis for {name} is ready", "body": "The saved benchmark has verifiable scores. Discuss whether a setup fits your plan; nothing was created."},
-            "de": {"title": f"Analyse für {name} ist bereit", "body": "Der gespeicherte Benchmark hat überprüfbare Scores. Besprich, ob ein Setup zu deinem Plan passt; nichts wurde erstellt."},
+            "nl": {"title": f"Analyse voor {name} is bruikbaar", "body": "De opgeslagen benchmark heeft controleerbare scores." + score_copy["nl"] + " Bespreek of een setup bij jouw plan past; er is niets aangemaakt."},
+            "en": {"title": f"Analysis for {name} is ready", "body": "The saved benchmark has verifiable scores." + score_copy["en"] + " Discuss whether a setup fits your plan; nothing was created."},
+            "de": {"title": f"Analyse für {name} ist bereit", "body": "Der gespeicherte Benchmark hat überprüfbare Scores." + score_copy["de"] + " Besprich, ob ein Setup zu deinem Plan passt; nichts wurde erstellt."},
         }
     if kind == "strategy_next_step":
         pair = str(evidence.get("trading_pair") or evidence.get("symbol") or "").strip()[:30]
@@ -852,13 +876,15 @@ class FinnCoachFeedService:
             assessment = await SetupMarketMatchService(self.session).for_asset(
                 user_id, asset, setups=[], market_id=market_id,
             )
-            if assessment.get("source_status") == "available" and assessment.get("benchmark_score") is not None:
+            score = _verified_benchmark_score(assessment.get("benchmark_score"))
+            if assessment.get("source_status") == "available" and score is not None:
                 item = await self.publish(
                     user_id=user_id, event_key=key, event_type="analysis_ready",
                     subject_type="asset", subject_id=str(listing["id"]),
                     subject=pair, symbol=asset, priority=2,
                     evidence={"symbol": asset, "trading_pair": pair, "market_id": market_id,
-                              "source_status": "available", "score_as_of": str(assessment.get("as_of") or "")},
+                              "source_status": "available", "score_as_of": str(assessment.get("as_of") or ""),
+                              "benchmark_score": score},
                     revision="available", expires_at=datetime.now(timezone.utc) + timedelta(days=14),
                 )
                 if item:
