@@ -4,6 +4,43 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: Smart DCA-weekdag en chat-sessieherstel (21 november 2026)
+
+Phase: `LOCAL_VALIDATED_CANDIDATE_CI_PENDING`. Branch
+`codex/finn-smart-dca-weekday-update`; product en regressie zijn in concept-PR
+[#1260](https://github.com/gvangalen/antigravity-trading-tool/pull/1260).
+FINN kan een vaste weekdag voorstellen en, na bevestiging, in de bestaande
+wekelijkse Smart DCA-setup wijzigen. Een kort vervolg zoals "maandag" behoudt
+de bedoelde setup. De webchat vernieuwt bij HTTP 401 eenmalig de sessie en
+herhaalt dezelfde vraag met dezelfde trace. Als dat niet lukt, toont hij
+vertaalde herstelinstructies met Opnieuw en Inloggen zonder ruwe HTTP-fout.
+
+De volledige backendtest op de actuele mainbasis met deze wijzigingen slaagde:
+**5232 passed, 7 skipped**. Frontend typecheck, i18n lint en tests,
+commandotests **108/108** (inclusief twee nieuwe 401-regressies), proposal-
+en setup-tests, PDF-tests, productiebuild en `audit:high` slaagden. De audit
+meldde alleen een moderate Next.js-advisory, geen high-severity bevinding.
+De geïsoleerde FastAPI/Celery/PostgreSQL/Redis/Responses-matrix slaagde bij
+volledige herhaling **38/38**, inclusief **16/16** actiecontracten en **9/9**
+herkomstcontroles, met HTTP 200, timing binnen budget, nul Live-bots en nul
+niet-toegestane uitvoeringen (artifact SHA-256
+`95d9c687eb3afab10be5312265942960aeb1de155c24926aae631efb7e4bcd04`).
+De eerste volledige matrix slaagde **37/38**: `setup_graph` gaf het juiste
+opgeslagen plan terug maar miste de vereiste operatie-ID; die rode uitkomst
+is niet als groene gate geteld (artifact SHA-256
+`85e9bcbef1b78b5d156d8950c36767b823f29fd0e731527f5f1a761da2a64fbd`).
+De onafhankelijke volledige herhaling hield dezelfde assertions en slaagde.
+De echte providerselector slaagde development **20/20** (artifact SHA-256
+`7f8f197225c160a0f1f70da35f5d53c962da525025696a4cdfeae6e83c75116d`)
+en regression **109/109** (artifact SHA-256
+`e8672f7323140ab2cd835e868c3773e223791ccbd5dfbf7a70e147a4d62af479`),
+beide zonder provider-, schema-, parse-, validatie- of timeoutfouten.
+
+PR-CI, merge, Auto Deploy en publieke backend/frontend-SHA-controles staan nog
+open. De eerdere productie-QA-workflow `44940411373` voor live SHA
+`65b291d755` eindigde met failure; dat is geen QA-verdict voor deze kandidaat.
+Deze kandidaat is dus nog niet live of onafhankelijk geaccepteerd.
+
 ## FINN 3.0: numerieke rapportsnapshot in coachantwoord (21 november 2026)
 
 Phase: `LIVE_DEPLOYED_QA_RETEST_PENDING`. Independent QA returned
