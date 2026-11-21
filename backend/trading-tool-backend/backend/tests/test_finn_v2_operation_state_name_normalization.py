@@ -776,6 +776,30 @@ def test_smart_dca_collects_full_ladder_from_first_turn_without_model_band_input
     }
 
 
+def test_smart_dca_ignores_model_guessed_five_zones_for_explicit_three_bands():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message=("Maak een nieuwe BTC/USDT Smart DCA. Noem hem BTC Drie Banden. "
+                 "De grafiek is 1D. Koop wekelijks op vrijdag maximaal één keer "
+                 "voor €200 basisbedrag. Gebruik Markt, Macro en Technisch samen: "
+                 "onder score 26 150%, 26 tot 76 100%, vanaf 76 50%. "
+                 "Toon eerst het voorstel; koop niets."),
+        explicit_asset="BTC", conversation_context={},
+        supplied_inputs={"name": "BTC Drie Banden", "symbol": "BTC",
+                         "benchmark_zone_percents": [150, 100, 100, 100, 50],
+                         "low_threshold": 26, "high_threshold": 76,
+                         "low_score_percent": 150, "mid_score_percent": 100,
+                         "high_score_percent": 50},
+        model_tool_inputs=True,
+    )
+    assert state.missing_required_inputs == []
+    assert "benchmark_zone_percents" not in state.collected_inputs
+    assert (state.collected_inputs["low_score_percent"],
+            state.collected_inputs["mid_score_percent"],
+            state.collected_inputs["high_score_percent"]) == (150, 100, 50)
+
+
 def test_inverse_smart_dca_proposes_score_trigger_without_a_weekday():
     contract = FinnV2OperationRegistry().require_supported("create_setup")
     state = FinnV2OperationStateService().resolve(
@@ -857,9 +881,11 @@ def test_guided_smart_dca_remembers_weekly_limit_and_requested_ladder_proposal()
     ready = service.resolve(
         contract=contract, message="BTC Smart DCA Browser QA 1811C",
         explicit_asset=None, conversation_context={"active_guided_operation": second.dict()},
-        supplied_inputs={}, model_tool_inputs=True,
+        supplied_inputs={"benchmark_zone_percents": [150, 125, 100, 75, 50]},
+        model_tool_inputs=True,
     )
     assert ready.missing_required_inputs == []
+    assert "benchmark_zone_percents" not in ready.collected_inputs
     assert [ready.collected_inputs[key] for key in (
         "low_threshold", "high_threshold", "low_score_percent",
         "mid_score_percent", "high_score_percent",

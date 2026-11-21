@@ -628,6 +628,18 @@ class FinnV2OperationStateService:
                     not contract.allowed_values_for(key) or canonical in contract.allowed_values_for(key)
                 ):
                     explicit.setdefault(key, canonical)
+        if contract.operation_id == "create_setup":
+            user_ladder = self._dca_score_percentages(message)
+            legacy_ladder_in_draft = all(collected.get(key) is not None for key in (
+                "low_threshold", "high_threshold", "low_score_percent",
+                "mid_score_percent", "high_score_percent",
+            ))
+            if "benchmark_zone_percents" not in user_ladder and (user_ladder or legacy_ladder_in_draft):
+                # The provider may fill the optional five-zone field by
+                # guessing intermediate amounts from the user's three-band
+                # request, including a later guided turn that only supplies
+                # the plan name. The stated bands take precedence.
+                explicit.pop("benchmark_zone_percents", None)
         if contract.operation_id == "create_bot" and explicit.get("name"):
             explicit["name"] = self._trim_linked_strategy_clause(str(explicit["name"]))
         sources = dict(existing.input_sources) if existing is not None else {}
@@ -691,6 +703,7 @@ class FinnV2OperationStateService:
                 "dca_amount_mode", "dca_frequency", "dca_trigger_mode", "dca_day", "dca_month_day",
                 "score_source", "low_threshold", "high_threshold",
                 "low_score_percent", "mid_score_percent", "high_score_percent",
+                "benchmark_zone_percents",
             }
             if contract.operation_id == "create_manual_trade_plan":
                 invalidated.add("setup_id")
@@ -703,6 +716,7 @@ class FinnV2OperationStateService:
                     "dca_frequency", "dca_trigger_mode", "dca_day", "dca_month_day",
                     "score_source", "low_threshold", "high_threshold",
                     "low_score_percent", "mid_score_percent", "high_score_percent",
+                    "benchmark_zone_percents",
                 })
             if asset_changed or type_changed:
                 invalidated.add("quote_currency")
@@ -718,6 +732,10 @@ class FinnV2OperationStateService:
             collected.pop("quote_currency", None)
             sources.pop("quote_currency", None)
             provenance.pop("quote_currency", None)
+        if contract.operation_id == "create_setup" and user_ladder and "benchmark_zone_percents" not in user_ladder:
+            collected.pop("benchmark_zone_percents", None)
+            sources.pop("benchmark_zone_percents", None)
+            provenance.pop("benchmark_zone_percents", None)
         collected.update(explicit)
         if explicit.get("benchmark_zone_percents") is not None:
             for legacy_field in ("low_threshold", "high_threshold", "low_score_percent",
