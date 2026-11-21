@@ -1386,7 +1386,8 @@ def test_report_feed_instruction_separates_snapshot_from_missing_current_score()
     ])
     assert "historical snapshot" in instruction
     assert "current benchmark score is incomplete or unavailable" in instruction
-    assert "never present the report snapshot score as current" in instruction
+    assert "state that number explicitly as the saved report score" in instruction
+    assert "Never present the report snapshot score as current" in instruction
 
 
 def test_report_feed_does_not_guess_between_duplicate_owner_pairs(monkeypatch):

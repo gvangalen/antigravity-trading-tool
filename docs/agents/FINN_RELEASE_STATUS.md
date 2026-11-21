@@ -4,9 +4,52 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: numerieke rapportsnapshot in coachantwoord (21 november 2026)
+
+Phase: `LOCAL_VALIDATED_QA_RETEST_PENDING`. Independent QA returned
+`NOT_ACCEPTED` for the prior live SHA
+`3231f54b64b47ec452a4ae630760767e3f054b80` because the protected
+`report_discuss` profile failed only `snapshot_score` in workflow
+`44933935456-1`. The saved SOL report card was published and FINN distinguished
+the dated snapshot from the later incomplete current score, but the sanitized
+artifact does not retain the answer text or numeric score. It cannot establish
+whether the number was omitted or the previous QA scorer missed a valid
+wording. Historical BTC returns and the protected three-band Smart DCA flow
+passed; the latter saved and replayed without duplication, then cleaned up.
+No Live order or bot was created.
+
+This repair instructs FINN to state the saved numeric benchmark score for the
+requested asset or pair and the report date when the dated report read contains
+it, or explicitly say that the saved score is absent. The current Analyse
+score must never fill a missing historical value. The web feed's `Bespreek`
+prompt now requests the same distinction in Dutch, English and German.
+Regression checks verify that the report adapter preserves a saved numeric
+score after a later current-score change. QA independently extended its
+protected scorer to recognize equivalent `score 34` wording while still
+rejecting wrong numbers and historical scores stated as current; its targeted
+regressions passed **14/14**. That QA change remains separate from product
+code and no official retest has run on this repair.
+
+The final backend suite passed **5219**, skipped **7** (log SHA-256
+`7cc4882dce2f6f34136ac8d0686cbc6472d85450343b675f70081e3fc09b4616`).
+Frontend typecheck, i18n lint/tests, command/proposal tests, build and
+`audit:high` passed. The real-provider development selector passed **20/20**
+(artifact SHA-256
+`888f976283c855b5503fbda5c94e9349aacc6810e89788b03c6291d9fbeb3e07`)
+and regression passed **109/109** (artifact SHA-256
+`8a374143a6d5584e9351765d9713a790aed0457ec04106c5d7af09b2d08af10a`),
+both with zero provider, schema, timeout, parse or validation failures. The
+isolated local FastAPI/Celery/PostgreSQL/Redis/Responses matrix passed
+**17/17** action contracts, **28/28** adapters and the Smart DCA/calendar DCA
+probes (matrix SHA-256
+`c725c8007a30140ee21d64820cecae5d8d2274f4398432859ba5fc6d3b666067`).
+It recorded zero broker orders, Live bots, Live calls or production connections.
+Candidate CI, Auto Deploy, public SHA parity and independent authenticated
+retest remain pending.
+
 ## FINN 3.0: rapportfeed, rendementen en Smart DCA-vervolg (21 november 2026)
 
-Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_IDENTITY`. Branch
+Phase: `LIVE_DEPLOYED_QA_NOT_ACCEPTED`. Branch
 `codex/finn3-report-recovery-attention-20261121`, rebased on status-only main
 `3c985fba6` with product baseline `9c53648a2c`. Recovery of saved daily,
 weekly, monthly and quarterly reports
@@ -51,10 +94,12 @@ merged as `bdd34e4f006cbe5b13540c74ac8df4c6d033cb21`. Main CI
 `44931035552` passed all five jobs and Auto Deploy `44931600202` succeeded.
 Public backend `/api/health` and frontend `/build-info.json` both returned
 HTTP 200 and the full product merge SHA `bdd34e4f006cbe5b13540c74ac8df4c6d033cb21`.
-This status-only follow-up creates a newer SHA; Build must verify its final
-main CI, Auto Deploy and public SHA parity before QA begins. Independent
-authenticated QA has not yet tested the report-recovery, raw forward-return
-API or guided Smart DCA continuation on this candidate.
+The status-only follow-up merged as
+`3231f54b64b47ec452a4ae630760767e3f054b80`. Its main CI
+`44932432662` passed and Auto Deploy `44933008698` succeeded; both public
+surfaces returned HTTP 200 and that full SHA. Independent authenticated QA
+passed historical returns and guided Smart DCA, but the report discussion
+failed the `snapshot_score` check as recorded in the repair section above.
 
 ## FINN 3.0: herstel historische forward returns (21 november 2026)
 

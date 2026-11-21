@@ -34,6 +34,17 @@ test("journey feed questions reread current scores and strategy state", () => {
   assert.match(paper, /Activeer of verhandel niets/);
 });
 
+test("report discussion asks for the saved numeric score separately from current Analyse", () => {
+  const question = coachFeedDiscussionQuestion({
+    event_type: "daily_report_ready", symbol: "SOL",
+    evidence: { report_type: "daily", report_date: "2026-11-21", attention_pair: "SOL/EUR" },
+  }, "nl");
+  assert.match(question, /opgeslagen numerieke benchmarkscore voor SOL\/EUR/);
+  assert.match(question, /rapportdatum/);
+  assert.match(question, /ontbrekende rapportscore niet af uit de actuele score/);
+  assert.match(question, /Wijzig niets/);
+});
+
 test("historical handled missing-score card remains discussable without reopening its status", () => {
   const card = { event_type: "data_blocked", status: "handled" };
   assert.equal(canDiscussFeedItem(card, true), true);

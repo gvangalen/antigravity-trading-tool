@@ -120,7 +120,7 @@ def test_later_live_score_change_does_not_rewrite_saved_report_snapshot():
         "report_date": date(2026, 10, 12),
         "generated_at": datetime(2026, 10, 12, 8, 16, tzinfo=timezone.utc),
         "score_source_snapshot": {"observed_at": "2026-10-12T08:15:00+00:00", "assets": [
-            {"symbol": "ETH", "reported_scores": {"market_score": 50,
+            {"symbol": "ETH", "benchmark_score": 37, "reported_scores": {"market_score": 50,
              "macro_score": 20, "technical_score": 40}}]},
     }
     live = {"symbol": "ETH", "as_of": "2026-10-12", "source_status": "available",
@@ -146,11 +146,13 @@ def test_later_live_score_change_does_not_rewrite_saved_report_snapshot():
     score_adapter.context = LiveContext()
 
     first = asyncio.run(report_adapter.execute(user_id=7, asset="ETH", selector={}))
+    assert first["data"].score_source_snapshot["assets"][0]["benchmark_score"] == 37
     assert first["data"].score_source_snapshot["assets"][0]["reported_scores"]["market_score"] == 50
     live["reported_scores"] = {**live["reported_scores"], "market_score": 80}
     live["benchmark_score"] = 60
     current = asyncio.run(score_adapter.execute(user_id=7, asset="ETH"))
     second = asyncio.run(report_adapter.execute(user_id=7, asset="ETH", selector={}))
     assert current["data"].reported_scores["market_score"] == 80
+    assert second["data"].score_source_snapshot["assets"][0]["benchmark_score"] == 37
     assert second["data"].score_source_snapshot["assets"][0]["reported_scores"]["market_score"] == 50
     assert second["data"].score_source_snapshot["observed_at"] == "2026-10-12T08:15:00+00:00"

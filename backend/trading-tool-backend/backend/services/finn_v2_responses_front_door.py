@@ -567,7 +567,11 @@ def _feed_evidence_instruction(facts: list[dict[str, Any]] | None) -> str:
            "say that the current score cannot be verified. If the current status "
            "is not available, "
            "explicitly say that the current benchmark score is incomplete or "
-           "unavailable; never present the report snapshot score as current."
+           "unavailable. When the saved report read supplies a numeric benchmark "
+           "score for the selected asset or pair, state that number explicitly "
+           "as the saved report score with its report date. If the saved score "
+           "is absent, say so instead of inferring it from today's Analyse. "
+           "Never present the report snapshot score as current."
            if historical_report else "")
     )
 
@@ -810,6 +814,11 @@ class FinnResponsesFrontDoor:
             "making a new freshness claim. Never call a previously verified score stale "
             "merely because its report date is today or because it came from a prior turn. "
             "Do not present historical saved scores as current scores. "
+            "When comparing a saved report with current Analyse, quote the "
+            "numeric saved report benchmark score for the requested asset or "
+            "pair and the report date if that score is in the report read. If "
+            "it is absent, explicitly say the saved numeric score is unavailable; "
+            "do not fill it from a later current score. "
             "Keep the oldest indicator source moment distinct from the latest "
             "market quote and the report date in your reasoning. Mention those "
             "clocks to the trader when asked about provenance or freshness, or "
