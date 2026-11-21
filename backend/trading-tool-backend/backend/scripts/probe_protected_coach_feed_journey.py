@@ -82,7 +82,8 @@ def _score_in_answer(content: str, score: str) -> bool:
     lower = content.casefold()
     score_matches = re.findall(r"(?<!\d)(\d{1,3}(?:[,.]\d+)?)\s*/\s*100\b", lower)
     score_matches += re.findall(
-        r"\b(?:benchmarkscore|benchmark)\b\s+(?:van|is|bedraagt)\s+\*{0,2}"
+        r"\b(?:benchmarkscore|benchmark|score)\b\s*"
+        r"(?:(?:van|is|bedraagt)\s+|[:=]\s*)?\*{0,2}"
         r"(\d{1,3}(?:[,.]\d+)?)\b", lower,
     )
     return any(Decimal(value.replace(",", ".")) == Decimal(score)

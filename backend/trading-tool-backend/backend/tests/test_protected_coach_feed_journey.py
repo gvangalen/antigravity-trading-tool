@@ -263,3 +263,41 @@ def test_journey_answer_checks_require_dated_score_and_current_report_distinctio
         "SOL: het rapport is beschikbaar, maar de actuele score niet.",
         "40", "2026-11-21",
     )
+
+
+@pytest.mark.parametrize("score_phrase", [
+    "score 34", "score: 34", "benchmarkscore bedraagt 34", "34/100",
+])
+def test_report_snapshot_accepts_equivalent_numeric_score_phrasing(score_phrase):
+    assert probe._report_answer_valid(
+        f"Het dagrapport voor SOL van 21 november 2026 bewaart {score_phrase} "
+        "als momentopname. De huidige marktscore ontbreekt; de actuele "
+        "totaalscore is niet beschikbaar.",
+        "34", "2026-11-21",
+    )
+
+
+def test_report_snapshot_rejects_wrong_score_or_current_score_claim():
+    answer = (
+        "Het dagrapport voor SOL van 21 november 2026 bewaart score 35 "
+        "als momentopname. De huidige marktscore ontbreekt; de actuele "
+        "totaalscore is niet beschikbaar."
+    )
+    assert not probe._report_answer_valid(answer, "34", "2026-11-21")
+    assert probe._report_answer_checks(answer, "34", "2026-11-21")["snapshot_score"] is False
+    assert not probe._report_answer_valid(
+        "Het dagrapport voor SOL van 21 november 2026 bewaart score 34 "
+        "als momentopname. De huidige marktscore ontbreekt, maar de actuele "
+        "benchmarkscore is 34 en verifieerbaar.",
+        "34", "2026-11-21",
+    )
+    assert not probe._report_answer_valid(
+        "Het dagrapport voor SOL bewaart score 34 als momentopname. "
+        "De huidige marktscore ontbreekt; de actuele totaalscore is niet beschikbaar.",
+        "34", "2026-11-21",
+    )
+    assert not probe._report_answer_valid(
+        "Het dagrapport voor SOL van 21 november 2026 noemt score 34. "
+        "De huidige marktscore ontbreekt; de actuele totaalscore is niet beschikbaar.",
+        "34", "2026-11-21",
+    )
