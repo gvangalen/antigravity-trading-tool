@@ -4,6 +4,61 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: reportkaart leest actuele benchmark apart (21 november 2026)
+
+Phase: `LOCAL_VALIDATED_CANDIDATE`. Independent QA tested the previous
+public revision `261a421428f4f82c95c333d30a766c3c5f7a1b8b` with the protected
+`coach_feed_journey` profile (workflow `44916525821`) and returned
+`NOT_ACCEPTED`. The dated analysis card, read-only discussion, removal after an
+invalid score, and dated report-attention card passed. FINN's report discussion
+did not explicitly establish that the current SOL benchmark was incomplete.
+The sanitized artifact SHA-256 was
+`aa4fcba81833b64853773291d12489be853f5462fad7eaeea9d480a5b2521705`.
+The synthetic child was quarantined; QA measured zero confirmations,
+executions, Live activations, and Live calls. This verdict applies only to that
+protected journey, not browser rendering or naturally scheduled reports.
+
+The local repair gives a report discussion both its historical report facts
+and a separately reread, owner-scoped current benchmark. Exact pairs resolve
+through one owner watchlist row and its saved `market_id`; ambiguous pairs do
+not supply a current score. FINN's instruction distinguishes the snapshot from
+current status and explicitly describes an unavailable current score. The
+protected report-answer check accepts equivalent clear Dutch formulations
+while still rejecting an unsupported current numeric score. Focused feed and
+runner tests passed **82/82** (log SHA-256
+`216e0ba935b50d8a9524bb932420e393552c3340591fdbfa072c04cc909c6086`).
+The complete backend suite passed **5198**, skipped **7** (log SHA-256
+`e9b5aa6561480b7a1a07112ed8e08dcc9b450ae4a6ceb7beb65b1257df935597`).
+The isolated local FastAPI/Celery/PostgreSQL/Redis/Responses action matrix
+passed **17/17** (artifact SHA-256
+`743c0ea58916b08a01049eb89461ced33ca9ddc35c3601570dbaf4ea532d7bfa`),
+and the adapter registry passed **28/28**. The Smart DCA schedule, confirmed
+runtime, and calendar DCA replay checks passed. The local matrix reported zero
+broker orders, Live calls, and production connections. Real-provider selector,
+development passed **20/20** with zero provider, schema, parse, validation,
+or timeout failures (artifact SHA-256
+`45f485040158f36dc4681c8823ea0b8f8865851753944090db9fadfcd540a6b4`).
+Frontend typecheck, i18n lint/tests, command tests, production build, and
+`audit:high` passed (log SHA-256
+`71898abeb9709a562e7e4508606bb5cc27455715a9b8561eb5b69da96bdb30cc`).
+The audit reported one moderate Next.js advisory and no high-severity finding.
+Independent read-only code-QA and Security review found no concrete new
+blocker. They checked historical/current separation, owner-scoped score reads,
+exact-pair ambiguity, and lack of a numeric current score when evidence is
+missing; neither review is an authenticated production verdict.
+The real-provider regression selector passed **109/109**, with zero provider,
+schema, parse, validation, or timeout failures (artifact SHA-256
+`c16fe74a00f962ce02fc6a542d432ce272bab8586a67f2f7691a88ba20ce2106`).
+One synthetic local HTTP/worker/Responses discussion of a SOL report card
+completed read-only. FINN described score 40 as a saved report snapshot and
+said the current benchmark could not be fully verified because all three
+components lacked a score; it made no proposal (log SHA-256
+`1d4b7c920cf633a3f7205b37ad8304fc3f37a9d6bfaf5a014`). This synthetic
+card had no separate report row; the answer correctly identified the card as
+its historical source. It is not evidence of naturally scheduled report
+publication or authenticated production behavior. Candidate CI, deployment,
+and independent live QA remain pending.
+
 ## FINN 3.0: chartanalyse met opgeslagen tradercontext (21 november 2026)
 
 Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_STATUS_SHA`. Branch

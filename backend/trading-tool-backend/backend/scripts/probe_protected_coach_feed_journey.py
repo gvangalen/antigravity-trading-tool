@@ -127,6 +127,14 @@ def _report_answer_checks(content: str, score: str, source_date: str) -> dict[st
         or (re.search(r"\b(?:huidig|actueel)\w*\b", lower)
             and re.search(r"\bgeen\s+(?:(?:opgeslagen|complete|volledige)\s+)*"
                           r"(?:markt|benchmark|totaal)score\b", lower))
+        or re.search(r"\b(?:huidige|actuele)\s+"
+                     r"(?:(?:totaal|benchmark|markt)score|score|benchmark)\b"
+                     r"[^.!?\n]{0,90}\b(?:niet (?:te )?verifi\w*|"
+                     r"niet (?:volledig|compleet)|kan\b[^.!?\n]{0,45}\bniet\b"
+                     r"[^.!?\n]{0,30}\bverifi\w*)", lower)
+        or re.search(r"\bgeen\s+(?:volledige|complete|bruikbare)\s+"
+                     r"(?:huidige|actuele)\s+"
+                     r"(?:(?:totaal|benchmark|markt)score|score|benchmark)\b", lower)
     )
     contradictory_current = re.search(
         r"\b(?:huidige|actuele)\s+"

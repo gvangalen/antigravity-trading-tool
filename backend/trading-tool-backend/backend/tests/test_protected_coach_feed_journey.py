@@ -202,6 +202,16 @@ def test_journey_answer_checks_require_dated_score_and_current_report_distinctio
         "niet beschikbaar.", "40", "2026-11-21",
     )
     assert probe._report_answer_valid(
+        "Het dagrapport voor SOL van 21 november 2026 bewaart 40/100 als "
+        "momentopname. De huidige benchmarkscore kan ik door de ontbrekende "
+        "marktmeting niet verifiëren.", "40", "2026-11-21",
+    )
+    assert probe._report_answer_valid(
+        "Het dagrapport voor SOL van 21 november 2026 bewaart 40/100 als "
+        "momentopname. Er is geen volledige huidige benchmarkscore.",
+        "40", "2026-11-21",
+    )
+    assert probe._report_answer_valid(
         "Het dagrapport voor SOL van 21 november 2026 bevat in zijn "
         "rapportsnapshot een benchmarkscore van 40. De huidige marktscore "
         "ontbreekt; de volledige huidige benchmarkscore is niet beschikbaar.",
@@ -228,6 +238,11 @@ def test_journey_answer_checks_require_dated_score_and_current_report_distinctio
     assert not probe._report_answer_valid(
         "Het dagrapport voor SOL van 21 november 2026 bewaart 40/100 in de "
         "snapshot. De actuele benchmark is ook 40/100.", "40", "2026-11-21",
+    )
+    assert not probe._report_answer_valid(
+        "Het dagrapport voor SOL van 21 november 2026 bewaart 40/100 in de "
+        "momentopname. De huidige benchmarkscore is 40/100 en verifieerbaar.",
+        "40", "2026-11-21",
     )
     assert not probe._report_answer_valid(
         "Het dagrapport voor SOL van 21 november 2026 bewaart 40/100 in de "

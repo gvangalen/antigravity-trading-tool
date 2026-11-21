@@ -1297,6 +1297,130 @@ def test_discuss_market_move_can_explain_recorded_change_without_calling_it_curr
     assert current.facts["current_trade_signal_confirmed"] is False
 
 
+def test_report_feed_discussion_reads_current_incomplete_asset_score(monkeypatch):
+    item_id = "00000000-0000-0000-0000-000000000024"
+
+    async def detail(_self, *, user_id, item_id: str):
+        assert user_id == 7
+        return {"id": item_id, "event_type": "daily_report_ready",
+                "subject_type": "report", "subject_id": "2026-11-21",
+                "symbol": None, "status": "read",
+                "source_observed_at": "2026-11-21T10:00:00Z",
+                "evidence": {"report_type": "daily", "report_date": "2026-11-21",
+                             "attention_pair": "SOL", "attention_kind": "benchmark_available"}}
+
+    class MatchService:
+        def __init__(self, _session):
+            self.last_source_row = None
+
+        async def for_asset(self, user_id, symbol, *, market_id=None):
+            assert (user_id, symbol, market_id) == (7, "SOL", None)
+            return {"source_status": "missing_component", "benchmark_score": 40,
+                    "as_of": date(2026, 11, 21),
+                    "component_source_status": {"market_score": "missing_score"}}
+
+    monkeypatch.setattr(module.FinnCoachFeedService, "detail", detail)
+    monkeypatch.setattr("backend.services.setup_market_match_service.SetupMarketMatchService", MatchService)
+    historical, current = asyncio.run(FinnV2ReasoningContextService(SimpleNamespace())._current_feed_evidence(
+        SimpleNamespace(user_id=7, client_context_json={"feed_item_id": item_id})))
+    assert historical.facts["historical_event_facts"]["report_date"] == "2026-11-21"
+    assert historical.facts["historical_event_facts"]["attention_pair"] == "SOL"
+    assert current.facts["current_report_pair"] == "SOL"
+    assert current.facts["current_source_status"] == "missing_component"
+    assert current.facts["current_component_source_status"] == {"market_score": "missing_score"}
+    assert current.facts["current_benchmark_score"] is None
+    assert current.freshness == "stale"
+
+
+def test_report_feed_discussion_keeps_exact_owner_pair(monkeypatch):
+    item_id = "00000000-0000-0000-0000-000000000025"
+
+    async def detail(_self, *, user_id, item_id: str):
+        return {"id": item_id, "event_type": "daily_report_ready",
+                "subject_type": "report", "subject_id": "2026-11-21",
+                "symbol": None, "status": "read",
+                "evidence": {"report_type": "daily", "report_date": "2026-11-21",
+                             "attention_pair": "BTC/USDT", "attention_kind": "benchmark_available"}}
+
+    class Rows:
+        def mappings(self):
+            return self
+
+        def all(self):
+            return [{"market_id": 31}]
+
+    class Session:
+        async def execute(self, query, params):
+            assert params == {"user_id": 7, "symbol": "BTC", "quote": "USDT"}
+            assert "w.user_id=:user_id" in str(query)
+            return Rows()
+
+    class MatchService:
+        def __init__(self, _session):
+            self.last_source_row = None
+
+        async def for_asset(self, user_id, symbol, *, market_id=None):
+            assert (user_id, symbol, market_id) == (7, "BTC", 31)
+            return {"source_status": "available", "benchmark_score": 67,
+                    "as_of": date(2026, 11, 21)}
+
+    monkeypatch.setattr(module.FinnCoachFeedService, "detail", detail)
+    monkeypatch.setattr("backend.services.setup_market_match_service.SetupMarketMatchService", MatchService)
+    historical, current = asyncio.run(FinnV2ReasoningContextService(Session())._current_feed_evidence(
+        SimpleNamespace(user_id=7, client_context_json={"feed_item_id": item_id})))
+    assert historical.asset == "BTC"
+    assert current.asset == "BTC"
+    assert current.facts["current_report_pair"] == "BTC/USDT"
+    assert current.facts["current_benchmark_score"] == 67
+    assert current.freshness == "fresh"
+
+
+def test_report_feed_instruction_separates_snapshot_from_missing_current_score():
+    instruction = _feed_evidence_instruction([
+        {"facts": {"event_type": "daily_report_ready",
+                   "feed_item_id": "saved-card", "historical_notification": True,
+                   "historical_event_facts": {"attention_pair": "SOL"}}},
+        {"facts": {"feed_item_id": "saved-card", "current_report_pair": "SOL",
+                   "current_source_status": "missing_component",
+                   "current_benchmark_score": None}},
+    ])
+    assert "historical snapshot" in instruction
+    assert "current benchmark score is incomplete or unavailable" in instruction
+    assert "never present the report snapshot score as current" in instruction
+
+
+def test_report_feed_does_not_guess_between_duplicate_owner_pairs(monkeypatch):
+    item_id = "00000000-0000-0000-0000-000000000026"
+
+    async def detail(_self, *, user_id, item_id: str):
+        return {"id": item_id, "event_type": "daily_report_ready",
+                "subject_type": "report", "symbol": None, "status": "read",
+                "evidence": {"attention_pair": "BTC/USDT"}}
+
+    class Rows:
+        def mappings(self):
+            return self
+
+        def all(self):
+            return [{"market_id": 31}, {"market_id": 44}]
+
+    class Session:
+        async def execute(self, query, params):
+            return Rows()
+
+    class MatchService:
+        def __init__(self, _session):
+            raise AssertionError("ambiguous pair must not read a score")
+
+    monkeypatch.setattr(module.FinnCoachFeedService, "detail", detail)
+    monkeypatch.setattr("backend.services.setup_market_match_service.SetupMarketMatchService", MatchService)
+    _, current = asyncio.run(FinnV2ReasoningContextService(Session())._current_feed_evidence(
+        SimpleNamespace(user_id=7, client_context_json={"feed_item_id": item_id})))
+    assert current.facts["current_source_status"] == "exact_pair_unavailable"
+    assert current.facts["current_benchmark_score"] is None
+    assert current.freshness == "stale"
+
+
 def test_missing_score_emits_one_owner_asset_blocker_without_false_match(monkeypatch):
     assessment = {
         "source_status": "stale_sources", "component_source_status": {

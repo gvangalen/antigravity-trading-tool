@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import date, datetime, timedelta, timezone
 from hashlib import sha256
 from typing import Any, Dict, Optional
@@ -300,6 +301,7 @@ class FinnV2ReasoningContextService:
                         "setup_ids", "action", "decision_id", "bot_id",
                         "exposure_pct", "limit_pct", "valuation_as_of",
                         "week_start", "week_end", "trades", "plans", "notes",
+                        "report_type", "report_date", "attention_pair", "attention_kind",
                         "analyzed", "pending", "unavailable",
                         "confirmed_repeated_lessons", "suggestion_kind",
                         "affected_categories", "indicator_revision",
@@ -435,6 +437,56 @@ class FinnV2ReasoningContextService:
                                   "paper_next_step"}:
                     score_row = getattr(matcher, "last_source_row", None) or {}
                     current_as_of = self._parse_feed_moment(score_row.get("calculated_at"))
+            elif event_type in {"daily_report_ready", "periodic_report_ready"}:
+                pair = str(recorded.get("attention_pair") or "").strip().upper()
+                if re.fullmatch(r"[A-Z0-9][A-Z0-9._-]{0,19}(?:/[A-Z]{2,12})?", pair):
+                    asset, separator, quote = pair.partition("/")
+                    symbol = asset
+                    market_id = None
+                    pair_resolved = True
+                    if separator:
+                        result = await self.session.execute(text("""
+                            SELECT w.market_id
+                            FROM watchlists w JOIN trading_markets m ON m.id=w.market_id
+                            WHERE w.user_id=:user_id AND w.symbol=:symbol
+                              AND m.quote_currency=:quote
+                            ORDER BY w.id DESC LIMIT 2
+                        """), {"user_id": run.user_id, "symbol": asset, "quote": quote})
+                        owned_pairs = result.mappings().all()
+                        pair_resolved = len(owned_pairs) == 1
+                        if pair_resolved:
+                            market_id = owned_pairs[0]["market_id"]
+                    if pair_resolved:
+                        from backend.services.setup_market_match_service import SetupMarketMatchService
+                        matcher = SetupMarketMatchService(self.session)
+                        assessment = await matcher.for_asset(run.user_id, asset,
+                                                             market_id=market_id)
+                        status = assessment.get("source_status")
+                        current_facts = {
+                            "feed_item_id": item_id,
+                            "current_trade_signal_confirmed": False,
+                            "current_report_pair": pair,
+                            "current_source_status": status,
+                            "current_benchmark_score": (
+                                assessment.get("benchmark_score") if status == "available" else None),
+                            "current_score_as_of": str(assessment.get("as_of") or ""),
+                            "current_component_source_status": assessment.get(
+                                "component_source_status"),
+                        }
+                        current_available = status == "available"
+                        score_row = getattr(matcher, "last_source_row", None) or {}
+                        saved_moment = self._parse_feed_moment(score_row.get("calculated_at"))
+                        if saved_moment is not None:
+                            current_as_of = saved_moment
+                    else:
+                        current_facts = {
+                            "feed_item_id": item_id,
+                            "current_trade_signal_confirmed": False,
+                            "current_report_pair": pair,
+                            "current_source_status": "exact_pair_unavailable",
+                            "current_benchmark_score": None,
+                        }
+                    current_source = "owner_scoped_current_score"
             elif event_type == "position_risk" and subject == "bot" and item.get("subject_id"):
                 from backend.services.paper_position_risk_service import PaperPositionRiskService
                 try:
