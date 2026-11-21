@@ -229,6 +229,20 @@ def safe_manual_trade_failure_diagnostic(profile: str, error: Exception) -> Dict
     return diagnostic or None
 
 
+def safe_journey_runner_diagnostic(stage: str, error: Exception) -> dict[str, str]:
+    allowed_stages = {"probe_start", "probe_result", "safety_projection"}
+    allowed_classes = {
+        "AttributeError", "KeyError", "TypeError", "ImportError", "ModuleNotFoundError",
+        "OSError", "AssertionError", "SQLAlchemyError", "OperationalError",
+        "IntegrityError", "ProgrammingError", "TimeoutError", "Exception",
+    }
+    class_name = type(error).__name__
+    return {
+        "stage": stage if stage in allowed_stages else "unknown",
+        "exception_class": class_name if class_name in allowed_classes else "other",
+    }
+
+
 def profile_error_category(profile: str, error: Exception) -> str:
     """The published QA error category must not contain private fixture text."""
     if profile == "score2_finn_weekly_smart_dca_chain":
@@ -4365,8 +4379,11 @@ def main() -> int:
                 report["outcome"] = "incomplete"
                 report["safety"]["read_only_profile"] = False
                 report["safety"]["live_trading_calls"] = None
+                report["journey_runner_stage"] = "probe_start"
                 report[args.profile] = run_journey(fixture_namespace or "")
+                report["journey_runner_stage"] = "probe_result"
                 report["safety"]["live_trading_calls"] = report[args.profile]["live_calls"]
+                report["journey_runner_stage"] = "safety_projection"
                 report["safety"]["execution_calls"] = report[args.profile]["fixture_executions"]
                 report["safety"]["confirmation_calls"] = report[args.profile]["fixture_confirmations"]
                 report["outcome"] = "passed" if report[args.profile]["result"] == "PASS" else "failed"
@@ -4548,8 +4565,12 @@ def main() -> int:
             # this fixture inconclusive, not unstarted or a product failure.
             report["outcome"] = "incomplete"
             report["qa_status"] = "INCOMPLETE"
-    except Exception:
+    except Exception as error:
         report["error_category"] = "runner_internal"
+        if args.profile == "setup_strategy_journey":
+            report["journey_runner_failure"] = safe_journey_runner_diagnostic(
+                report.get("journey_runner_stage", "unknown"), error,
+            )
     finally:
         token = None
         # A late runner error must retain the most complete checkpoint.  Keep

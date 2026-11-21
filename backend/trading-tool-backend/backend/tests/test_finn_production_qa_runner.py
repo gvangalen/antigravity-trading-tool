@@ -33,6 +33,16 @@ def _module():
     return module
 
 
+def test_journey_runner_diagnostic_exposes_only_allowlisted_labels():
+    module = _module()
+    assert module.safe_journey_runner_diagnostic("probe_start", KeyError("private fixture id")) == {
+        "stage": "probe_start", "exception_class": "KeyError",
+    }
+    assert module.safe_journey_runner_diagnostic("private stage", ValueError("secret")) == {
+        "stage": "unknown", "exception_class": "other",
+    }
+
+
 def test_setup_strategy_journey_dispatch_requires_bound_fixture_flags(tmp_path):
     gh = tmp_path / "gh"
     gh.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$QA_DISPATCH_CAPTURE"\n')
