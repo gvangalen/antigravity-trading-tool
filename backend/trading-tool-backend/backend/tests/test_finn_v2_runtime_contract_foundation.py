@@ -59,6 +59,9 @@ def test_released_tool_free_reformulation_gets_its_operation_without_guessing():
         "Leg dat eenvoudiger uit.", previous, {"tool_trace": []},
     ) == "reformulate_previous_response"
     assert FinnV2RunService._verified_reformulation_operation(
+        "Vat mijn laatste antwoord beknopt samen.", previous, {"tool_trace": []},
+    ) == "reformulate_previous_response"
+    assert FinnV2RunService._verified_reformulation_operation(
         "Wat staat er nu op mijn watchlist?", previous, {"tool_trace": []},
     ) is None
     assert FinnV2RunService._verified_reformulation_operation(

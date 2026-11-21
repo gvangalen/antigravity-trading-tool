@@ -158,6 +158,7 @@ def test_explicit_watchlist_inventory_reads_owner_entries_without_a_selected_ass
 
 def test_active_instrument_reads_selected_asset_even_when_watchlist_is_mentioned():
     assert asks_for_active_workspace_asset("Welk instrument is nu actief?")
+    assert asks_for_active_workspace_asset("Welk handelsinstrument staat geselecteerd in mijn werkruimte?")
     assert asks_for_active_workspace_asset("Welke asset is actief in mijn watchlist?")
     assert not asks_for_watchlist_inventory("Welke asset is actief in mijn watchlist?")
     assert not asks_for_active_workspace_asset("Welke assets staan op mijn watchlist?")
@@ -175,15 +176,18 @@ def test_active_instrument_reads_selected_asset_even_when_watchlist_is_mentioned
             }]}
 
         front.reads = read
-        message = "Welke asset is actief in mijn watchlist?"
-        result = await front.run(
-            message=message, instructions="", conversation_context={}, verified_asset="BTC",
-        )
-        assert result.response.answer_kind == "active_asset_context"
-        verified = await FinnResponsesAnswerVerifier().verify(
-            message=message, result=result.response, locale="nl",
-        )
-        assert verified.status == "completed", verified.reason
-        assert verified.text == "Je huidige geselecteerde instrument is BTC/USDT."
+        for message in (
+            "Welke asset is actief in mijn watchlist?",
+            "Welk handelsinstrument staat geselecteerd in mijn werkruimte?",
+        ):
+            result = await front.run(
+                message=message, instructions="", conversation_context={}, verified_asset="BTC",
+            )
+            assert result.response.answer_kind == "active_asset_context"
+            verified = await FinnResponsesAnswerVerifier().verify(
+                message=message, result=result.response, locale="nl",
+            )
+            assert verified.status == "completed", verified.reason
+            assert verified.text == "Je huidige geselecteerde instrument is BTC/USDT."
 
     asyncio.run(exercise())

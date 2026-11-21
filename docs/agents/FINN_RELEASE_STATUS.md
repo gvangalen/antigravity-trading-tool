@@ -4,9 +4,30 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: samengestelde assetnamen en vorige-antwoord-samenvatting (21 november 2026)
+
+Phase: `LOCAL_VALIDATED_PR_PENDING`. Beschermde QA op live SHA
+`542f40171e984c35315780a44f65520a6b62852d` bleef 1/3 groen (workflow
+44849171757): de watchlistread slaagde, maar een vraag naar het actieve
+handelsinstrument werd niet als actieve-assetread herkend en een verzoek om
+het vorige antwoord kort samen te vatten miste de herformuleringsoperatie.
+De twee oorzaken lagen in de taalherkenning vóór de eigenaargebonden reads:
+`handelsinstrument` werd niet als enkelvoudig instrument herkend en
+`samenvatten` zonder `korter` werd niet als herformulering geclassificeerd.
+
+De parser herkent nu samengestelde handelsinstrumenten en samenvattingen van
+een eerder antwoord in Nederlands, Engels en Duits, met behoud van afzonderlijke
+wijzigingsverzoeken. Gerichte regressie: **201 passed**. Volledige backend-suite:
+**5158 passed, 7 skipped**. Echte Responses-provider: development **20/20**
+en regression **109/109**, zonder provider-, schema- of timeoutfouten. De
+geïsoleerde worker-matrix slaagde met **38/38** cases, **16/16**
+actiecontracten, **9/9** lineage, terminale p95 **7581 ms** en maximum
+**7778 ms**; geen Live-bot of niet-toegestane uitvoering. CI, deployment en
+onafhankelijke QA op een nieuwe SHA staan nog open.
+
 ## FINN 3.0: actieve asset en herformulering na live QA (21 november 2026)
 
-Phase: `LOCAL_VALIDATED_PR_PENDING`. Onafhankelijke beschermde QA op live
+Phase: `LIVE_QA_REJECTED`. Onafhankelijke beschermde QA op live
 SHA `584966ee1b89737b69b65d972119a1f17c38e113` wees twee van drie
 read-only cases af (workflow 44842768470). De watchlisttrace was hersteld,
 maar een vraag naar het actieve instrument las de watchlist en een korte
@@ -26,8 +47,10 @@ backend-suite: **5154 passed, 7 skipped**. Echte Responses-provider:
 development **20/20** en regression **109/109**, zonder provider-, schema- of
 timeoutfouten. De geïsoleerde worker-matrix slaagde met **38/38** cases,
 **16/16** actiecontracten, **9/9** lineage, terminale p95 **7526 ms** en
-maximum **8191 ms**; geen Live-bot of niet-toegestane uitvoering. CI,
-deployment en onafhankelijke QA op de nieuwe SHA staan nog open.
+maximum **8191 ms**; geen Live-bot of niet-toegestane uitvoering. CI en Auto
+Deploy slaagden op SHA `542f40171e984c35315780a44f65520a6b62852d`,
+maar de aanvullende beschermde QA wees de twee bovengenoemde read-only
+gevallen opnieuw af.
 
 ## FINN 3.0: directe leescontracten na beschermde QA (21 november 2026)
 

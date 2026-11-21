@@ -172,6 +172,6 @@ def asks_for_active_workspace_asset(text: str) -> bool:
         return False
     return bool(
         re.search(r"\b(?:actief|actieve|active|geselecteerd|geselecteerde|selected)\b", value, re.I)
-        and re.search(r"\b(?:asset|instrument|symbool|symbol|markt|market|paar|pair)\b", value, re.I)
+        and re.search(r"\b(?:asset|instrument|handelsinstrument|trading\s+instrument|symbool|symbol|markt|market|paar|pair)\b", value, re.I)
         and re.search(r"\b(?:welk(?:e)?|wat|which|what|toon|show|zeige|was|welches?)\b", value, re.I)
     )
