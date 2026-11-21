@@ -24,7 +24,8 @@ SAFE_FAILURES = frozenset({
     "feed_journey_not_authorized", "feed_journey_owner_scope_failed",
     "feed_journey_score_unavailable", "feed_journey_analysis_card_missing",
     "feed_journey_invalid_score_visible", "feed_journey_report_card_missing",
-    "feed_journey_discuss_failed", "feed_journey_unexpected_write",
+    "feed_journey_discuss_failed", "feed_journey_discuss_runtime_failed",
+    "feed_journey_discuss_contract_failed", "feed_journey_unexpected_write",
     "feed_journey_cleanup_failed", "feed_journey_quarantine_failed",
     "feed_journey_runtime_failed",
 })
@@ -32,23 +33,32 @@ _MONTHS_NL = (
     "", "januari", "februari", "maart", "april", "mei", "juni",
     "juli", "augustus", "september", "oktober", "november", "december",
 )
+_ANSWER_CHECKS = frozenset({
+    "subject", "score", "score_date", "setup_step", "verified_current",
+    "no_score_denial", "snapshot_score", "report_date", "report", "snapshot",
+    "current_incomplete", "no_current_score_claim",
+})
 
 
-def _dated_score_in_answer(content: str, score: str, source_date: str) -> bool:
-    observed = date.fromisoformat(source_date)
+def _score_in_answer(content: str, score: str) -> bool:
     lower = content.casefold()
     score_matches = re.findall(r"(?<!\d)(\d{1,3}(?:[,.]\d+)?)\s*/\s*100\b", lower)
     score_matches += re.findall(
         r"\b(?:benchmarkscore|benchmark)\b\s+(?:van|is|bedraagt)\s+\*{0,2}"
         r"(\d{1,3}(?:[,.]\d+)?)\b", lower,
     )
-    return (any(Decimal(value.replace(",", ".")) == Decimal(score)
-                for value in score_matches)
-            and (source_date in lower or
-                 f"{observed.day} {_MONTHS_NL[observed.month]} {observed.year}" in lower))
+    return any(Decimal(value.replace(",", ".")) == Decimal(score)
+               for value in score_matches)
 
 
-def _analysis_answer_valid(content: str, score: str, source_date: str) -> bool:
+def _date_in_answer(content: str, source_date: str) -> bool:
+    observed = date.fromisoformat(source_date)
+    lower = content.casefold()
+    return (source_date in lower or
+            f"{observed.day} {_MONTHS_NL[observed.month]} {observed.year}" in lower)
+
+
+def _analysis_answer_checks(content: str, score: str, source_date: str) -> dict[str, bool]:
     lower = content.casefold()
     denied = re.search(
         r"\b(?:score|benchmark)\b.{0,70}"
@@ -56,14 +66,23 @@ def _analysis_answer_valid(content: str, score: str, source_date: str) -> bool:
         r"niet betrouwbaar|onbetrouwbaar|ontbreekt)\b",
         lower, re.DOTALL,
     )
-    return (_dated_score_in_answer(content, score, source_date)
-            and "sol" in lower and "setup" in lower
-            and re.search(r"\b(?:geverifieerd\w*|beschikbaar|actuel\w*)\b", lower) is not None
-            and denied is None
-            and "geen actuele score" not in lower)
+    return {
+        "subject": "sol" in lower,
+        "score": _score_in_answer(content, score),
+        "score_date": _date_in_answer(content, source_date),
+        "setup_step": "setup" in lower,
+        "verified_current": (re.search(
+            r"\b(?:geverifieerd\w*|beschikbaar|actuel\w*)\b", lower,
+        ) is not None),
+        "no_score_denial": denied is None and "geen actuele score" not in lower,
+    }
 
 
-def _report_answer_valid(content: str, score: str, source_date: str) -> bool:
+def _analysis_answer_valid(content: str, score: str, source_date: str) -> bool:
+    return all(_analysis_answer_checks(content, score, source_date).values())
+
+
+def _report_answer_checks(content: str, score: str, source_date: str) -> dict[str, bool]:
     lower = content.casefold()
     current_missing = (
         re.search(r"\b(?:marktscore|marktcomponent)\s+(?:is\s+)?"
@@ -81,20 +100,58 @@ def _report_answer_valid(content: str, score: str, source_date: str) -> bool:
         r"\d{1,3}(?:[,.]\d+)?(?:\s*/\s*100)?\b",
         lower,
     )
-    return (_dated_score_in_answer(content, score, source_date)
-            and "sol" in lower and "rapport" in lower
-            and ("snapshot" in lower or "momentopname" in lower)
-            and current_missing is not None
-            and contradictory_current is None)
+    return {
+        "subject": "sol" in lower,
+        "snapshot_score": _score_in_answer(content, score),
+        "report_date": _date_in_answer(content, source_date),
+        "report": "rapport" in lower,
+        "snapshot": "snapshot" in lower or "momentopname" in lower,
+        "current_incomplete": current_missing is not None,
+        "no_current_score_claim": contradictory_current is None,
+    }
+
+
+def _report_answer_valid(content: str, score: str, source_date: str) -> bool:
+    return all(_report_answer_checks(content, score, source_date).values())
+
+
+def _safe_discussion(diagnostic: dict) -> dict:
+    status = diagnostic.get("turn_status")
+    return {
+        "turn_status": status if status in coach_probe.TURN_STATUSES else "unknown",
+        "error_code": diagnostic.get("error_code")
+        if diagnostic.get("error_code") in coach_probe.SAFE_TURN_ERROR_CODES | {"none", "other"}
+        else "other" if diagnostic.get("error_code") else "none",
+        "response_present": diagnostic.get("response_present") is True,
+        "content_present": diagnostic.get("content_present") is True,
+        "proposal_present": diagnostic.get("proposal_present") is True,
+        "confirmation_required": diagnostic.get("confirmation_required") is True,
+        "subject_mentioned": diagnostic.get("expected_symbol_mentioned") is True,
+        "failed_checks": sorted(name for name in diagnostic.get("failed_checks", [])
+                                if name in _ANSWER_CHECKS),
+    }
 
 
 async def _discuss_checked(user_id: int, item_id: str, *, question: str,
-                           content_check) -> None:
+                           content_checks, trace: dict) -> None:
+    diagnostic: dict = {}
+
+    def check_answer(content: str) -> bool:
+        checks = content_checks(content)
+        diagnostic["failed_checks"] = [name for name, passed in checks.items()
+                                       if not passed]
+        return all(checks.values())
+
     try:
         await coach_probe._discuss(user_id, item_id, symbol="SOL",
-                                   question=question, content_check=content_check)
+                                   question=question, diagnostic=diagnostic,
+                                   content_check=check_answer)
     except Exception:
-        raise RuntimeError("feed_journey_discuss_failed") from None
+        trace["discussion"] = _safe_discussion(diagnostic)
+        reason = ("feed_journey_discuss_contract_failed"
+                  if diagnostic.get("turn_status") == "completed" else
+                  "feed_journey_discuss_runtime_failed")
+        raise RuntimeError(reason) from None
 
 
 @contextmanager
@@ -295,8 +352,9 @@ def _case(namespace: str, bound: int, *, run_async, trace: dict) -> dict:
             user_id, analysis_id,
             question="Bespreek deze analyse voor SOL. Lees de actuele score en bronnen "
                      "opnieuw en adviseer één volgende setupstap. Maak niets aan.",
-            content_check=lambda content: _analysis_answer_valid(
+            content_checks=lambda content: _analysis_answer_checks(
                 content, saved_score, source_date),
+            trace=trace,
         ))
         trace["stage"] = "score_invalidate"
         run_async(_invalidate_score(user_id))
@@ -321,8 +379,9 @@ def _case(namespace: str, bound: int, *, run_async, trace: dict) -> dict:
             user_id, str(item["id"]),
             question=f"Bespreek het opgeslagen dagrapport van {report['report_date']} voor SOL. "
                      "Maak onderscheid tussen de rapportsnapshot en de huidige score. Wijzig niets.",
-            content_check=lambda content: _report_answer_valid(
+            content_checks=lambda content: _report_answer_checks(
                 content, saved_score, report["report_date"]),
+            trace=trace,
         ))
         trace["stage"] = "safety"
         if coach_probe._counts(user_id) != (0, 0, 0, 0):
@@ -365,6 +424,8 @@ def run(namespace: str) -> dict:
                           else "feed_journey_runtime_failed",
                           "failure_stage": trace["stage"],
                           "fixture_state": trace["fixture_state"]}
+                if trace["stage"] in {"analysis_discuss", "report_discuss"}:
+                    result["discussion"] = trace.get("discussion", _safe_discussion({}))
             if live_attempts:
                 result = {"result": "FAIL", "reason": "feed_journey_unexpected_write",
                           "failure_stage": trace["stage"],
