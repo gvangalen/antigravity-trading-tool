@@ -15361,6 +15361,13 @@ def test_bot_decision_question_requires_current_owner_history_before_answer(monk
     front.model_led_coach = True
     captured = {}
 
+    class FakeRead:
+        async def __call__(self, call):
+            captured.setdefault("owner_reads", []).append(call)
+            return {"status": "unavailable", "results": []}
+
+    front.reads = FakeRead()
+
     async def capture_loop(_self, **kwargs):
         captured.update(kwargs)
         return FinnResponsesResult("Ik lees de botbeslissingen.", "answer", ())
@@ -15372,7 +15379,12 @@ def test_bot_decision_question_requires_current_owner_history_before_answer(monk
         message=message,
         instructions="Lees feiten", conversation_context={}, verified_asset="AAPL",
     ))
-    assert captured["required_read_tool_name"] == "get_decision_history"
+    if "actuele" in message:
+        assert {call.inputs["asset"] for call in captured["owner_reads"]} == {"AAPL", "BTC"}
+        assert all(call.read_tools == ("read_review_history", "read_latest_report")
+                   for call in captured["owner_reads"])
+    else:
+        assert captured["required_read_tool_name"] == "get_decision_history"
 
 
 def test_bot_risk_evaluation_requires_owner_scoped_evaluator(monkeypatch):
@@ -15641,6 +15653,109 @@ def test_aapl_bot_report_comparison_reads_the_referenced_check_and_report():
     assert "Trade geblokkeerd" in result.response.text
     assert "weging of bot niet" in result.response.text
     assert "beursopening" in result.response.text
+    checked = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=question, result=result.response, locale="nl",
+    ))
+    assert checked.status == "completed"
+    assert checked.text == result.response.text
+
+
+def test_multi_asset_report_bot_question_keeps_pair_and_source_moments_separate():
+    question = (
+        "Vergelijk voor AAPL en BTC de botstatus in het dagrapport van 21 november "
+        "met de laatst opgeslagen Paper-botchecks. Houd BTC/EUR zonder gekoppelde "
+        "bot apart van de BTC-bot; verzin geen besluit. Geef per bron datum en tijd. Lees alleen."
+    )
+    calls = []
+    report = {
+        "report_date": "2026-11-21", "generated_at": "2026-11-21T04:39:26+00:00",
+        "score_source_snapshot": {"report_v2": {"automation": {"bots": [
+            {"bot_id": 130, "symbol": "AAPL", "is_live": False, "latest_decision": {
+                "at": "2026-11-21T04:30:32+00:00", "block_code": "market_price_stale",
+                "reason": "De marktprijs is te oud voor een Paper-order.",
+            }},
+            {"bot_id": 81, "symbol": "BTC", "trading_pair": "BTC/USDT", "is_live": False,
+             "latest_decision": {"at": "2026-11-21T04:30:00+00:00", "reason": "Score buiten band."}},
+        ]}}},
+    }
+
+    class FakeRead:
+        async def __call__(self, call):
+            calls.append(call)
+            asset = call.inputs["asset"]
+            decision = {
+                "AAPL": {"bot_id": 130, "symbol": "AAPL", "is_live": False,
+                         "decision_at": "2026-11-21T09:15:17+00:00",
+                         "safety_reason": "De marktprijs is te oud voor een Paper-order."},
+                "BTC": {"bot_id": 81, "symbol": "BTC", "pair": "BTC/USDT", "is_live": False,
+                        "decision_at": "2026-11-21T09:16:00+00:00",
+                        "safety_reason": "Score buiten band."},
+            }[asset]
+            return {"status": "completed", "results": [
+                {"scope": "read_review_history", "status": "completed", "data": {
+                    "latest_bot_decisions": [decision],
+                }},
+                {"scope": "read_latest_report", "status": "completed", "data": report},
+            ]}
+
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7,
+                                   run_id="multi-report-bot", model_led_coach=True)
+    front.reads = FakeRead()
+    result = asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="AAPL",
+        workspace_hints={"page": "/asset", "symbol": "AAPL"},
+    ))
+    assert {call.inputs["asset"] for call in calls} == {"AAPL", "BTC"}
+    assert all(call.inputs["report_date"] == "2026-11-21" for call in calls)
+    assert "05:30" in result.response.text and "10:15" in result.response.text
+    assert "Dagrapport gegenereerd op" in result.response.text
+    assert "BTC/USDT" in result.response.text and "BTC/EUR" in result.response.text
+    assert "Geen recente marktprijs beschikbaar voor deze beoordeling" in result.response.text
+    assert "geen gekoppelde Paper-bot" in result.response.text
+    assert "bronmomenten in dit antwoord niet verifiëren" not in result.response.text
+    assert result.response.answer_kind == "factual_source"
+    checked = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=question, result=result.response, locale="nl",
+    ))
+    assert checked.status == "completed", (checked.reason, checked.rejection_details)
+    assert checked.text == result.response.text
+    altered = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=question,
+        result=replace(result.response, text=result.response.text.replace("BTC/EUR", "BTC/USDT")),
+        locale="nl",
+    ))
+    assert altered.status == "unavailable"
+    assert altered.reason == "factual_source_mismatch"
+
+
+def test_multi_asset_report_bot_question_names_unavailable_report_without_inventing_decisions():
+    question = ("Vergelijk voor AAPL en BTC de laatste Paper-botchecks met het "
+                "dagrapport van 21 november. Lees alleen.")
+    calls = []
+
+    class FakeRead:
+        async def __call__(self, call):
+            calls.append(call)
+            return {"status": "unavailable", "results": [
+                {"scope": "read_review_history", "status": "completed", "data": {
+                    "latest_bot_decisions": [],
+                }},
+                {"scope": "read_latest_report", "status": "unavailable",
+                 "reason": "report_not_found"},
+            ]}
+
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7,
+                                   run_id="multi-report-unavailable", model_led_coach=True)
+    front.reads = FakeRead()
+    result = asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="AAPL",
+        workspace_hints={"page": "/asset", "symbol": "AAPL"},
+    ))
+    assert len(calls) == 2
+    assert "dagrapport niet eenduidig teruglezen" in result.response.text
+    assert "rapportbesluit van" not in result.response.text
     checked = asyncio.run(FinnResponsesAnswerVerifier().verify(
         message=question, result=result.response, locale="nl",
     ))

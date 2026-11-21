@@ -48,7 +48,7 @@ from backend.services.finn_v2_two_plan_checks_answer import verified_two_plan_ch
 from backend.services.finn_v2_factual_source_answer import (
     render_bot_decision, render_closed_paper_exit_facts, render_selected_paper_feed_decision, render_latest_quote, render_portfolio_read_time,
     render_report_and_quote_times, render_report_and_technical_read,
-    render_report_bot_check_comparison,
+    render_report_bot_check_comparison, render_multi_asset_report_bot_comparison,
 )
 
 
@@ -3085,6 +3085,31 @@ class FinnResponsesAnswerVerifier:
             )
         if result.answer_kind == "factual_source":
             calls = result.tool_trace
+            if result.response_id.startswith("multi-report-bot-"):
+                symbols = mentioned_catalog_symbols(message)
+                named_pairs = tuple(sorted(set(re.findall(
+                    r"\b[A-Z][A-Z0-9]*/(?:EUR|USDT)\b", message, re.I,
+                ))))
+                verified_calls = (
+                    2 <= len(symbols) <= 3
+                    and len(calls) == len(symbols)
+                    and {str((call.get("arguments") or {}).get("asset") or "").upper()
+                         for call in calls} == symbols
+                    and all(call.get("name") == "get_decision_history"
+                            and isinstance(call.get("result"), dict)
+                            and (call.get("arguments") or {}).get("_latest_bot_decisions_only") is True
+                            for call in calls)
+                )
+                expected = (render_multi_asset_report_bot_comparison(
+                    [call["result"] for call in calls], symbols=tuple(sorted(symbols)),
+                    named_pairs=tuple(pair.upper() for pair in named_pairs),
+                ) if verified_calls else None)
+                if expected is None or expected != result.text:
+                    return FinnResponsesVerifiedAnswer(
+                        "unavailable", self._fallback_copy("responses_evidence_not_verified", message=message, locale=locale),
+                        "factual_source_mismatch", evidence,
+                    )
+                return FinnResponsesVerifiedAnswer("completed", expected, "factual_source_verified", evidence)
             if result.response_id.startswith("two-plan-checks-"):
                 expected = verified_two_plan_checks(message, calls)
                 if expected is None or expected != result.text:

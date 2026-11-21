@@ -69,6 +69,7 @@ from backend.services.finn_v2_factual_source_answer import (
     render_paper_exit_position_status,
     render_portfolio_read_time, render_report_and_quote_times,
     render_report_and_technical_read, render_report_bot_check_comparison,
+    render_multi_asset_report_bot_comparison,
 )
 
 logger = logging.getLogger(__name__)
@@ -1949,6 +1950,42 @@ class FinnResponsesFrontDoor:
                     and not re.search(r"\b(?:setup|plan|bot|rapport|score|indicator|portefeuille)\b", message, re.I):
                 fact_kind = "latest_quote"
                 symbol = next(iter(symbols))
+            if (not fact_kind and 2 <= len(symbols) <= 3
+                    and self._asks_about_bot_decision(message)
+                    and re.search(r"\b(?:dagrapport|ochtendrapport|rapport)\b", message, re.I)
+                    and re.search(r"\b(?:laatst|laatste|nieuwste|huidige|actuele)\b", message, re.I)):
+                # A combined account question needs each named asset's owner
+                # read. One model answer must not merge report and current bot
+                # reasons across AAPL, BTC, or separate trading pairs.
+                read_results = []
+                trace = []
+                for named_symbol in sorted(symbols):
+                    call = replace(catalog.validate("get_decision_history", {"asset": named_symbol}),
+                                   read_tools=("read_review_history", "read_latest_report"),
+                                   inputs={"asset": named_symbol, "_latest_bot_decisions_only": True})
+                    call = self._bind_explicit_report_evidence(
+                        call, message=message, read_only=True,
+                        previous_response=previous_response, owner_user_id=self.user_id,
+                    )
+                    try:
+                        read_result = await self.reads(call)
+                    except Exception:
+                        logger.exception("FINN multi-asset report/bot read failed")
+                        read_result = {"status": "unavailable", "results": []}
+                    read_results.append(read_result)
+                    trace.append({"name": call.name, "status": read_result.get("status", "unavailable"),
+                                  "arguments": call.inputs, "result": read_result})
+                fact_text = render_multi_asset_report_bot_comparison(
+                    read_results, symbols=tuple(sorted(symbols)),
+                    named_pairs=tuple(sorted({item.upper() for item in pair_mentions})),
+                )
+                return FinnResponsesFrontDoorResult(
+                    FinnResponsesResult(
+                        text=fact_text, response_id=f"multi-report-bot-{self.run_id}",
+                        tool_trace=tuple(trace), answer_kind="factual_source",
+                        model_led_coach=True, response_id_reusable=False,
+                    ), None, previous_response, locale=locale,
+                )
             if fact_kind:
                 if fact_kind == "report_quote_times":
                     call = replace(catalog.validate("get_decision_history", {"asset": symbol}),
