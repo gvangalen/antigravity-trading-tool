@@ -6864,6 +6864,20 @@ def test_setup_rule_coverage_receives_calendar_trigger_and_score_fields():
     assert "calendar-triggered Smart DCA" in fake.requests[0]["instructions"]
 
 
+def test_setup_rule_coverage_receives_five_benchmark_zone_amounts():
+    fake = FakeResponses(response("coverage-five-zones", text='{"verdict":"none"}'))
+    guard = FinnResponsesToolRelevanceGuard(SimpleNamespace(responses=fake))
+    inputs = {"setup_type": "dca", "dca_trigger_mode": "benchmark",
+              "dca_amount_mode": "score_bands", "score_source": "benchmark_score",
+              "benchmark_zone_percents": [150, 125, 100, 75, 50]}
+    assert asyncio.run(guard.setup_rule_coverage(
+        message="Gebruik de vijf benchmarkzones voor Smart DCA.", collected_inputs=inputs,
+    )) == "none"
+    sent = json.loads(fake.requests[0]["input"])["captured_setup_fields"]
+    assert sent["benchmark_zone_percents"] == [150, 125, 100, 75, 50]
+    assert "benchmark_zone_percents" in fake.requests[0]["instructions"]
+
+
 def test_setup_rule_coverage_fails_closed_when_provider_cannot_classify():
     fake = FakeResponses(RuntimeError("provider unavailable"))
     guard = FinnResponsesToolRelevanceGuard(SimpleNamespace(responses=fake))

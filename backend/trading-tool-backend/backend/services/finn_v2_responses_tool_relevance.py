@@ -116,7 +116,8 @@ class FinnResponsesToolRelevanceGuard:
                 "dca_trigger_mode", "dca_day",
                 "dca_month_day", "dca_amount_mode", "base_amount", "score_source",
                 "low_threshold", "high_threshold", "low_score_percent",
-                "mid_score_percent", "high_score_percent", "min_benchmark_score",
+                "mid_score_percent", "high_score_percent", "benchmark_zone_percents",
+                "min_benchmark_score",
                 "max_benchmark_score", "description", "plan_scope", "entry_signal",
                 "execution_mode", "entry", "stop_loss", "targets", "risk_profile", "price_currency",
             }
@@ -139,14 +140,15 @@ class FinnResponsesToolRelevanceGuard:
                         "market-entry conditions. A calendar-triggered Smart DCA may SCALE "
                         "its amount using the complete benchmark score on the chosen day. "
                         "That combination is represented by dca_trigger_mode=calendar, "
-                        "dca_day, score_source, the thresholds and all score-percent fields. "
+                        "dca_day, score_source and either the three-band thresholds and "
+                        "percentages or benchmark_zone_percents for the five benchmark zones. "
                         "For score-triggered Smart DCA, dca_trigger_mode=benchmark "
                         "means there is no fixed buying day: at most one purchase per "
                         "dca_frequency period is eligible when a complete benchmark "
-                        "score exists. score_source=benchmark_score together with "
+                        "score exists. score_source=benchmark_score together with either "
                         "low_threshold, high_threshold and all three score-percent "
-                        "fields represents the requested low/middle/high score bands "
-                        "and buying more at low scores and less at high scores. Do not "
+                        "fields, or benchmark_zone_percents for the five benchmark zones, "
+                        "represents the requested amount scaling across score bands. Do not "
                         "treat those captured score rules as an extra omitted condition. "
                         "An exact trading-pair choice or exclusion (for example BTC/EUR, "
                         "not BTC/USDT) defines the instrument, not an extra trading rule. "
