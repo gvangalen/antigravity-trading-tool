@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: rapportfeed, rendementen en Smart DCA-vervolg (21 november 2026)
 
-Phase: `LOCAL_VALIDATED_CI_GREEN`. Branch
+Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_IDENTITY`. Branch
 `codex/finn3-report-recovery-attention-20261121`, rebased on status-only main
 `3c985fba6` with product baseline `9c53648a2c`. Recovery of saved daily,
 weekly, monthly and quarterly reports
@@ -45,10 +45,16 @@ validation failures (artifact SHA-256
 `891899948e13d2de6fc11c4e5abc080d5cbb2c40a1d66065b3c4c4d365dc43b5`).
 Frontend typecheck, i18n lint/tests, command/proposal tests, build
 and `audit:high` passed on the unchanged web code. All five CI jobs passed on
-the combined product-code SHA `e7af643357` in workflow `44929132780` before
-the status-only rebase. Deploy identity and independent authenticated QA are
-pending. The QA profile has not
-yet tested the report-recovery route on this candidate.
+the exact PR-head SHA `3bcc55738cc53d0c2f0332b732c3663bf19acd9c`
+in workflow `44930403714`. [PR #1252](https://github.com/gvangalen/antigravity-trading-tool/pull/1252)
+merged as `bdd34e4f006cbe5b13540c74ac8df4c6d033cb21`. Main CI
+`44931035552` passed all five jobs and Auto Deploy `44931600202` succeeded.
+Public backend `/api/health` and frontend `/build-info.json` both returned
+HTTP 200 and the full product merge SHA `bdd34e4f006cbe5b13540c74ac8df4c6d033cb21`.
+This status-only follow-up creates a newer SHA; Build must verify its final
+main CI, Auto Deploy and public SHA parity before QA begins. Independent
+authenticated QA has not yet tested the report-recovery, raw forward-return
+API or guided Smart DCA continuation on this candidate.
 
 ## FINN 3.0: herstel historische forward returns (21 november 2026)
 
