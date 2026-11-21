@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import copy
 import hashlib
 import importlib.util
 import json
@@ -18,6 +19,7 @@ import socket
 import ssl
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -41,6 +43,7 @@ ALLOWED_PROFILES = {
     "manual_trade_temporary_cleanup",
     "trade_review_preflight",
     "manifest_key",
+    "manifest_version",
     "targeted_regression",
     "runtime_acceptance",
     "action_contract_acceptance",
@@ -1861,6 +1864,113 @@ def manifest_cases(path: Path) -> list[Dict[str, Any]]:
     return cases
 
 
+FEED_SOURCE_MANIFEST_ID = "qa-feed-runtime-dbf0041-20261121"
+FEED_SOURCE_MANIFEST_SHA256 = "c6411b8fd18eb4f5d243cddc706dd0da4dc3d154690b3a4460873cf7b07bc46f"
+FEED_VERSIONED_MANIFEST_ID = "qa-feed-runtime-v2-20261121"
+
+
+def _write_protected_file_once(path: Path, content: bytes) -> None:
+    if path.exists() or path.is_symlink():
+        if path.is_symlink() or path.read_bytes() != content:
+            raise ValueError("manifest_version_conflict")
+        return
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    path.parent.chmod(0o700)
+    with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as staged:
+        staged.write(content)
+        staged.flush()
+        os.fsync(staged.fileno())
+        staged_path = Path(staged.name)
+    try:
+        os.link(staged_path, path)
+    except FileExistsError:
+        if path.is_symlink() or path.read_bytes() != content:
+            raise ValueError("manifest_version_conflict")
+    finally:
+        staged_path.unlink(missing_ok=True)
+
+
+def version_feed_runtime_manifest(*, manifest_root: Path, source_sha256: str) -> Dict[str, Any]:
+    """Version one sealed QA matrix on the protected host without exporting cases."""
+    source_path = manifest_path(
+        manifest_root=manifest_root, manifest_id=FEED_SOURCE_MANIFEST_ID,
+    )
+    source_bytes = source_path.read_bytes()
+    source_hash = hashlib.sha256(source_bytes).hexdigest()
+    if source_sha256 != FEED_SOURCE_MANIFEST_SHA256 or source_hash != source_sha256:
+        raise ValueError("manifest_source_hash_mismatch")
+    payload = json.loads(source_bytes)
+    cases = payload.get("cases") if isinstance(payload, dict) else None
+    expected_ids = {
+        "feed_runtime_watchlist_read", "feed_runtime_watchlist_reformulate",
+        "feed_runtime_active_asset_read",
+    }
+    if (
+        not isinstance(cases, list) or len(cases) != 3
+        or not all(isinstance(case, dict) for case in cases)
+        or {case.get("case_id") for case in cases} != expected_ids
+        or any(case.get("fixture_action", "read_only") != "read_only" for case in cases)
+        or next(case for case in cases if case.get("case_id") == "feed_runtime_active_asset_read").get("expected_operation_id") != "read_active_asset"
+    ):
+        raise ValueError("manifest_source_shape_mismatch")
+
+    active = next(case for case in cases if case["case_id"] == "feed_runtime_active_asset_read")
+    selected = copy.deepcopy(active)
+    selected["case_id"] = "feed_runtime_active_asset_selected_pair"
+    hints = selected.get("workspace_hints")
+    hints = dict(hints) if isinstance(hints, dict) else {}
+    hints.update({"symbol": "BTC", "asset": "BTC", "quote_currency": "USDT", "page": "asset"})
+    selected["workspace_hints"] = hints
+    selected["expected_operation_id"] = "read_active_asset"
+    selected["expected_answer_terms"] = ["BTC/USDT"]
+
+    no_context = copy.deepcopy(active)
+    no_context["case_id"] = "feed_runtime_active_asset_no_context"
+    for context_key in ("workspace_hints", "client_context"):
+        context = no_context.get(context_key)
+        context = dict(context) if isinstance(context, dict) else {}
+        for field in ACTIVE_ASSET_CONTEXT_FIELDS:
+            context.pop(field, None)
+        no_context[context_key] = context
+    no_context["expected_operation_id"] = None
+    no_context.pop("expected_answer_terms", None)
+    for field in (
+        "expected_canonical_target", "expected_target_source", "expected_target_type",
+        "expected_required_inputs", "expected_supplied_inputs", "expected_missing_inputs",
+    ):
+        no_context.pop(field, None)
+    no_context["expected_active_asset_unavailable"] = True
+
+    versioned = copy.deepcopy(payload)
+    versioned["cases"] = [
+        copy.deepcopy(case) if case["case_id"] != "feed_runtime_active_asset_read" else selected
+        for case in cases
+    ]
+    versioned["cases"].insert(
+        next(index for index, case in enumerate(versioned["cases"])
+             if case["case_id"] == selected["case_id"]) + 1,
+        no_context,
+    )
+    if "manifest_id" in versioned:
+        versioned["manifest_id"] = FEED_VERSIONED_MANIFEST_ID
+    versioned_bytes = (json.dumps(versioned, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+    archive = manifest_root / "archive" / f"{FEED_SOURCE_MANIFEST_ID}.v1.json"
+    target = manifest_root / f"{FEED_VERSIONED_MANIFEST_ID}.json"
+    _write_protected_file_once(archive, source_bytes)
+    _write_protected_file_once(target, versioned_bytes)
+    if archive.read_bytes() != source_bytes or source_path.read_bytes() != source_bytes:
+        raise ValueError("manifest_archive_mismatch")
+    return {
+        "source_manifest_id": FEED_SOURCE_MANIFEST_ID,
+        "source_sha256": source_hash,
+        "archive_sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
+        "versioned_manifest_id": FEED_VERSIONED_MANIFEST_ID,
+        "versioned_sha256": hashlib.sha256(versioned_bytes).hexdigest(),
+        "source_cases": len(cases),
+        "versioned_cases": len(versioned["cases"]),
+    }
+
+
 def load_manifest(
     *, manifest_root: Path, manifest_id: str, fixture_namespace: Optional[str] = None,
 ) -> Iterable[Dict[str, Any]]:
@@ -1902,6 +2012,13 @@ def load_manifest(
             or not all(isinstance(item, str) and 1 <= len(item) <= 100 for item in expected_answer_terms)
         ):
             raise ValueError("manifest_expected_answer_terms_invalid")
+        if case.get("expected_active_asset_unavailable") is not None and (
+            case.get("expected_active_asset_unavailable") is not True
+            or action_mode != "read_only"
+            or case.get("expected_operation_id") is not None
+            or case.get("expected_answer_terms") is not None
+        ):
+            raise ValueError("manifest_active_asset_unavailable_invalid")
         manual_expected = case.get("expected_manual_trade")
         manual_wait = case.get("expected_manual_trade_wait")
         if manual_wait is not None and (
@@ -2267,6 +2384,9 @@ def classify_case_failure(case_result: Dict[str, Any]) -> Optional[str]:
     if terminal.get("status") == "failed":
         return "product"
     if case_result.get("operation_matches") is False:
+        return "product"
+    unavailable_evidence = case_result.get("active_asset_unavailable_evidence")
+    if isinstance(unavailable_evidence, dict) and unavailable_evidence.get("passed") is False:
         return "product"
     evidence = case_result.get("contract_evidence")
     if isinstance(evidence, dict) and not all(evidence.values()):
@@ -3091,6 +3211,30 @@ def run_cases(
                 )
         manual_wait_expected = case.get("expected_manual_trade_wait") is True
         result["operation_matches"] = case.get("expected_operation_id") is None or actual == case["expected_operation_id"]
+        if case.get("expected_active_asset_unavailable") is True:
+            diagnostic = active_asset_case_diagnostic(run_id)
+            tool = diagnostic.get("read_active_asset") or {}
+            context_absent = all(
+                not any((diagnostic.get(field) or {}).values())
+                for field in ("workspace_hints_present", "client_context_present")
+            )
+            result["active_asset_unavailable_evidence"] = {
+                "context_absent": context_absent,
+                "typed_unavailable": tool.get("call_present") is True
+                and tool.get("status") == "failed"
+                and tool.get("error_code") == "asset_not_resolved",
+                "no_proposal": not _proposal_id(terminal),
+                "canonical_target_absent": not projection["runtime_trace"].get("canonical_target"),
+                "completed": terminal.get("status") == "completed",
+                "read_mode": (projection.get("response") or {}).get("mode") == "READ",
+                "passed": context_absent and tool.get("call_present") is True
+                and tool.get("status") == "failed"
+                and tool.get("error_code") == "asset_not_resolved"
+                and not _proposal_id(terminal)
+                and not projection["runtime_trace"].get("canonical_target")
+                and terminal.get("status") == "completed"
+                and (projection.get("response") or {}).get("mode") == "READ",
+            }
         if (
             case.get("case_id") == "feed_runtime_active_asset_read"
             and case.get("expected_operation_id") == "read_active_asset"
@@ -3766,6 +3910,21 @@ def main() -> int:
             report["planned_count"] = len(cases)
             report["outcome"] = "passed"
             report["qa_status"] = "PRECONDITION_PASSED"
+            return 0
+        if args.profile == "manifest_version":
+            if (args.manifest_id != FEED_VERSIONED_MANIFEST_ID or args.manifest_bundle_path
+                    or os.getenv("FINN_QA_ALLOW_FIXTURE_ACTIONS") == "1"
+                    or os.getenv("FINN_QA_ALLOW_FIXTURE_EXECUTION") == "1"):
+                raise ValueError("manifest_version_not_authorized")
+            version = version_feed_runtime_manifest(
+                manifest_root=Path(args.manifest_root),
+                source_sha256=FEED_SOURCE_MANIFEST_SHA256,
+            )
+            report["manifest_version"] = version
+            report["manifest_sha256"] = version["versioned_sha256"]
+            report["base_manifest_hash"] = version["source_sha256"]
+            report["outcome"] = "passed"
+            report["qa_status"] = "MANIFEST_VERSIONED"
             return 0
         report["release_identity"] = release_identity(release_sha=args.release_sha, checkout=checkout, release_marker=Path(args.release_marker), base_url=args.base_url.rstrip("/"))
         if not report["release_identity"]["matches"]:
