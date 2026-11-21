@@ -90,6 +90,36 @@ def test_score_adapter_presents_component_source_times_without_milliseconds():
     assert result["data"].oldest_indicator_source_observed_at == "2026-10-09T22:59:00+00:00"
 
 
+def test_score_adapter_oldest_source_uses_only_scored_indicators(monkeypatch):
+    from backend.services.finn_v2_tool_adapters import score_tool_adapter
+
+    class SharedContext:
+        matches = SimpleNamespace(last_source_row=None)
+
+        async def benchmark_for_asset(self, user_id, asset, *, setups):
+            return {
+                "symbol": asset, "as_of": date.today(), "source_status": "available",
+                "benchmark_score": 40, "benchmark_weights": None,
+                "reported_scores": {"market_score": 40},
+                "component_source_status": {"market_score": "fresh"},
+                "component_source_observed_at": {"market": {
+                    "unscored": "2026-11-19T22:59:59+00:00",
+                    "scored": "2026-11-19T23:59:59+00:00",
+                }},
+            }
+
+    monkeypatch.setattr(score_tool_adapter, "verified_indicator_evidence", lambda *_: {
+        "market": {
+            "unscored": {"score": None, "source_observed_at": "2026-11-19T22:59:59+00:00"},
+            "scored": {"score": 40, "source_observed_at": "2026-11-19T23:59:59+00:00"},
+        },
+    })
+    adapter = object.__new__(ScoreToolAdapter)
+    adapter.context = SharedContext()
+    result = asyncio.run(adapter.execute(user_id=17, asset="AAPL"))
+    assert result["data"].oldest_indicator_source_observed_at == "2026-11-19T23:59:59+00:00"
+
+
 def test_exact_pair_score_adapter_exposes_verified_indicator_scores_only():
     evidence = {
         "market": {"price": {"score": 30, "value": 71854.09,

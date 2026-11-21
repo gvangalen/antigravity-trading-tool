@@ -165,7 +165,7 @@ def render_report_bot_check_comparison(
         return (f"Ik kan {' en '.join(missing)} voor {symbol} nu niet vergelijken. "
                 "Verander de weging of bot niet om een koop te forceren; controleer de bronnen opnieuw.")
     requested_report_clock = re.search(
-        r"\b(?:dagrapport|ochtendrapport|rapport)\s+(?:van|om|dat\s+om)\s+([01]?\d|2[0-3]):([0-5]\d)\b",
+        r"\b(?:dagrapport|ochtendrapport|rapport)\b[^.!?\n]{0,80}?\b([01]?\d|2[0-3]):([0-5]\d)\b",
         message, re.I,
     )
     report_generated = report.get("generated_at_amsterdam") or _moment(report.get("generated_at"))
@@ -178,8 +178,9 @@ def render_report_bot_check_comparison(
             isinstance(row, dict) and str(row.get("symbol") or "").upper().split("/", 1)[0] == symbol
             for row in history.get("referenced_bot_decisions") or []
         )
-        return (f"Het opgeslagen dagrapport voor {symbol} heeft niet het genoemde "
-                f"uitleesmoment {requested_report_clock.group(1)}:{requested_report_clock.group(2)}. "
+        return (f"Het gelezen {symbol}-dagrapport heeft niet het genoemde uitleesmoment "
+                f"{requested_report_clock.group(1)}:{requested_report_clock.group(2)}. "
+                "Het specifiek gevraagde rapport is daarmee niet geverifieerd. "
                 + (f"Ook de genoemde {symbol}-botcheck is niet gevonden. " if missing_check else "")
                 + "Ik kan de botredenen daarom niet betrouwbaar vergelijken.")
     historical = [row for row in history.get("referenced_bot_decisions") or []

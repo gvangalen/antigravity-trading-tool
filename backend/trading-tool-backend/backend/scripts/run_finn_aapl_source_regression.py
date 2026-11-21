@@ -24,8 +24,9 @@ QUESTIONS = (
     "Noem het tijdstip en de concrete reden. Wijzig niets.",
     "Wat was de exacte reden?",
     "Vergelijk mijn AAPL-botcheck rond 10:00 CET op 19 november 2026 met "
-    "het dagrapport van 05:21 CET. Welke botreden is per bron opgeslagen? Wijzig niets.",
-    "Beoordeel mijn AAPL-setup, score, bot, rapport, koers en Paper-kas met hun "
+    "het AAPL-dagrapport van 19 november 2026 om 05:21 CET. Welke bron heb je "
+    "werkelijk? Vervang het rapport niet door een later rapport. Wijzig niets.",
+    "Beoordeel mijn AAPL-setup, score, bot, rapport, koers, Paper-kas en positie met hun "
     "eigen bronmomenten. Wat doe ik bij de volgende beursopening? Wijzig niets.",
 )
 
@@ -123,8 +124,9 @@ def main() -> None:
             checks["saved_reason"] = "Reguliere sessie gesloten" in answer
             checks["missing_quote"] = "actuele koers ontbreekt" in answer
         if index == 2:
-            checks["report_clock"] = "05:21" in answer
+            checks["requested_report_unverified"] = "niet het genoemde uitleesmoment 05:21" in answer
             checks["no_later_report_substitution"] = "20:08" not in answer
+            checks["historical_botcheck_unverified"] = "botcheck is niet gevonden" in answer
         if index == 3:
             checks["not_generic"] = "Ik kan de bronmomenten in dit antwoord niet verifiëren" not in answer
             normalized = answer.casefold()
@@ -133,6 +135,7 @@ def main() -> None:
                 and "passen" in normalized
                 and "actuele benchmark" in normalized
             )
+            checks["position_addressed"] = "positie (Paper)" in answer or "positie" in answer.casefold()
         turns.append({"question": question, "run_id": observed["run_id"],
                       "status": observed["status"], "answer": answer,
                       "checks": checks, "pass": all(checks.values())})
