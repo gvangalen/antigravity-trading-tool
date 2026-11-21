@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: actieve werkruimtelezing na live QA (21 november 2026)
 
-Phase: `LOCAL_VALIDATED_PR_PENDING`. Onafhankelijke QA op live SHA
+Phase: `LIVE_DEPLOYED_QA_PENDING`. Onafhankelijke QA op live SHA
 `2e8021d6e7c8262a6167011de93c1551e3d9c302` testte drie bevroren,
 alleen-lezen gevallen: watchlist en vorige-antwoord-samenvatting slaagden;
 de actieve-instrumentlezing faalde met `active_asset_context_unavailable`.
@@ -34,7 +34,15 @@ De provider-artifacts hebben SHA-256
 `a2423097f800181d4ef0d15234708befb019f0a3557b1ff8762af839428e52ea`
 (development) en
 `36996116f45d9f0dcac704d14113b1905746bb545fe7defadd3c384468debece`
-(regression). CI, deployment en nieuwe onafhankelijke live QA staan nog open.
+(regression). PR [#1228](https://github.com/gvangalen/antigravity-trading-tool/pull/1228)
+en de PR-CI `44856034506` slaagden; de wijziging is gemerged als
+`b235ddef97be470235e20c7a9a24002951c4fd91`. Hoofdbranch-CI
+`44856628452` en Auto Deploy `44857213334` slaagden voor die SHA.
+Publieke `https://tradamind.com/api/health` en
+`https://tradamind.com/build-info.json` gaven beide HTTP 200 en exact die
+SHA. Deze statusupdate maakt zelf een nieuwere hoofdbranch-SHA; Build wacht
+ook de daaropvolgende CI en Auto Deploy af en QA bindt uitsluitend aan de
+laatst publiek geverifieerde SHA. De ingelogde live QA staat nog open.
 
 ## FINN 3.0: samengestelde assetnamen en vorige-antwoord-samenvatting (21 november 2026)
 
