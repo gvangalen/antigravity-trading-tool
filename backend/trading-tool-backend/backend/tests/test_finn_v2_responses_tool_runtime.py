@@ -29,6 +29,7 @@ from backend.services.finn_v2_responses_front_door import (
     _explicit_strategy_proposal_request, _explicit_create_operation_request,
     _explicit_fresh_create_operation_request, _is_read_only_coach_turn,
     _explicit_discussion_only,
+    _standalone_read_subject,
     _read_only_impulse_plan_asset,
     _explicit_watchlist_removal_symbol,
     _selected_paper_next_step,
@@ -10700,6 +10701,67 @@ def test_model_led_read_uses_registry_tool_without_a_second_tool_selector():
     assert fake.requests[0]["tool_choice"] == "auto"
     front.relevance_guard.preferred_read_operation.assert_not_awaited()
     front.relevance_guard.is_relevant.assert_not_awaited()
+
+
+@pytest.mark.parametrize("message, tool_name", [
+    ("Mijn trader profiel die kan je toch gewoon ophalen?", "get_my_profile_and_risk_style"),
+    ("Kan je me wat vertellen over mijn profiel?", "get_my_profile_and_risk_style"),
+    ("Kan je mijn portfolio bekijken?", "get_portfolio_and_exposure"),
+    ("Maar als ik je nu een vraag stel over mijn portfolio kan je die toch ook beantwoorden?",
+     "get_portfolio_and_exposure"),
+    ("Analyseer BTC met historische context.", "get_forward_returns"),
+    ("Ik wil analyse van BTC met historische context, kan je dat doen?", "get_forward_returns"),
+])
+def test_new_read_subject_after_dca_discussion_uses_its_own_tool(message, tool_name):
+    fake = FakeResponses(
+        response("fresh-read", calls=(tool_call("read-call", tool_name, {}),)),
+        response("fresh-answer", text="Ik heb de gevraagde gegevens bekeken."),
+    )
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.client = SimpleNamespace(responses=fake)
+    front.user_id = 21
+    front.run_id = "run-new-subject"
+    front.model_led_coach = True
+    front.proposals = FinnResponsesProposalSelection()
+    front.relevance_guard = SimpleNamespace(
+        previous_answer_suffices=AsyncMock(), is_relevant=AsyncMock(),
+        preferred_read_operation=AsyncMock(),
+    )
+    seen = []
+
+    class Reads:
+        session_factory = None
+
+        async def __call__(self, call):
+            seen.append(call.name)
+            return {"status": "completed", "results": []}
+
+    front.reads = Reads()
+    previous = {
+        "response_id": "prior-dca-response", "answer": "Je Smart DCA-setup is klaar.",
+        "user_message": "Maak mijn Smart DCA-setup af.",
+        "terminal_status": "completed", "tool_trace": [{
+            "name": "create_dca_plan_proposal", "status": "completed", "result": {"results": []},
+        }],
+    }
+    turn = asyncio.run(front.run(
+        message=message, instructions="Gebruik FINN-data",
+        conversation_context={}, verified_asset="BTC",
+        previous_response_id="prior-dca-response", previous_response=previous,
+    ))
+    assert seen == [tool_name]
+    assert turn.response.text == "Ik heb de gevraagde gegevens bekeken."
+    assert fake.requests[0]["tool_choice"] == {"type": "function", "name": tool_name}
+    assert "previous_response_id" not in fake.requests[0]
+    assert fake.requests[0]["input"] == [{"role": "user", "content": message}]
+
+
+def test_profile_question_about_existing_setup_keeps_followup_context():
+    from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
+
+    message = "Wat zegt mijn profiel over deze setup?"
+    facts = FinnV2RequestPreprocessorService().preprocess(message=message)
+    assert _standalone_read_subject(message, facts) is None
 
 
 def test_guided_strategy_slot_binds_without_provider_call():
