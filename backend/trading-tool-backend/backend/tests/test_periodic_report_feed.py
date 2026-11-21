@@ -35,7 +35,7 @@ def test_periodic_feed_publication_has_owner_date_and_stable_key(monkeypatch, re
     assert recorded[1] == "committed"
     assert event["user_id"] == 7
     assert event["event_key"] == f"{report_type}-report:2026-11-04"
-    assert event["revision"] == "2026-11-04"
+    assert event["revision"] == "2026-11-04:benchmark_available:BTC/USDT"
     assert event["evidence"]["report_type"] == report_type
     assert event["evidence"]["report_date"] == "2026-11-04"
     assert event["evidence"]["attention_pair"] == "BTC/USDT"
