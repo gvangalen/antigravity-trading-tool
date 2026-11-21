@@ -4,6 +4,31 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: feed-discussion answer contract follow-up (21 November 2026)
+
+Phase: `LOCAL_VALIDATED_CANDIDATE`. Independent QA ran the official protected
+`coach_feed_journey` profile once on public SHA
+`c18b37b8e9a0186366e9b7ef707e32ef11ac0ade` (workflow `44908092232`)
+and returned `NOT_ACCEPTED`. The dated analysis card was published and FINN
+completed a read-only discussion with the correct SOL asset, benchmark score,
+score date, and setup next step. Only the answer check `verified_current`
+failed because it required one of three literal words. The sanitized artifact
+SHA-256 is `131318e6bf9ef564100f3ef932aad25bcc2bd4c33d44743445bf83b3fec544d0`.
+No product answer defect is proven by that result. The synthetic child was
+quarantined; no confirmations, executions, Live activations, or Live calls
+occurred. The invalid-score and report stages were not reached.
+
+This candidate removes that lexical answer check and instead requires the
+saved score used by the journey to have today's UTC score date before the
+discussion. The answer still must identify the exact asset, score, source
+date, and setup next step, and must not deny the score's availability or
+reliability. The report snapshot/current distinction and all safety checks
+remain. Independent live QA must rerun the same protected profile after
+deployment; this section is not an acceptance verdict. Local targeted
+profile/runner tests passed **162/162**; the full backend suite passed
+**5190**, skipped **7** (log SHA-256
+`ae1703f301616db96e8d0e113b2b6e8dd9b47df2a071399f6a3914b732ed2a53`).
+
 ## FINN 3.0: scoped feed-discussion failure diagnosis (21 November 2026)
 
 Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_IDENTITY`. Branch

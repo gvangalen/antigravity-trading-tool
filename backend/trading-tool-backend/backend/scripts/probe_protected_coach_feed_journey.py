@@ -34,7 +34,7 @@ _MONTHS_NL = (
     "juli", "augustus", "september", "oktober", "november", "december",
 )
 _ANSWER_CHECKS = frozenset({
-    "subject", "score", "score_date", "setup_step", "verified_current",
+    "subject", "score", "score_date", "setup_step",
     "no_score_denial", "snapshot_score", "report_date", "report", "snapshot",
     "current_incomplete", "no_current_score_claim",
 })
@@ -71,9 +71,6 @@ def _analysis_answer_checks(content: str, score: str, source_date: str) -> dict[
         "score": _score_in_answer(content, score),
         "score_date": _date_in_answer(content, source_date),
         "setup_step": "setup" in lower,
-        "verified_current": (re.search(
-            r"\b(?:geverifieerd\w*|beschikbaar|actuel\w*)\b", lower,
-        ) is not None),
         "no_score_denial": denied is None and "geen actuele score" not in lower,
     }
 
@@ -260,7 +257,8 @@ async def _analysis(user_id: int) -> tuple[str, str, str]:
             raise RuntimeError("feed_journey_score_unavailable")
         score = assessment.get("benchmark_score")
         moment = assessment.get("as_of")
-        if score is None or not isinstance(moment, date):
+        if (score is None or not isinstance(moment, date)
+                or moment != datetime.now(timezone.utc).date()):
             raise RuntimeError("feed_journey_score_unavailable")
         created = await FinnCoachFeedService(session).reconcile_journey_next_steps(
             user_id=user_id, symbol="SOL",
