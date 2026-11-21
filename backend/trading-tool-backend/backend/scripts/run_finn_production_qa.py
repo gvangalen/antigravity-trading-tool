@@ -77,6 +77,7 @@ ALLOWED_PROFILES = {
     "typed_entry_paper",
     "coach_feed_triggers",
     "coach_feed_journey",
+    "setup_strategy_journey",
 }
 SAFE_PORTFOLIO_PAPER_FX_SCHEMA_ERRORS = frozenset({
     "portfolio_paper_fx_schema_database_unavailable",
@@ -405,6 +406,10 @@ def profile_error_category(profile: str, error: Exception) -> str:
         from backend.scripts.probe_protected_coach_feed_journey import SAFE_FAILURES
         code = str(error)
         return code if code in SAFE_FAILURES else "feed_journey_runtime_failed"
+    if profile == "setup_strategy_journey":
+        from backend.scripts.probe_protected_setup_strategy_journey import FAILURES
+        code = str(error)
+        return code if code in FAILURES else "journey_runtime_failed"
     if profile == "portfolio_paper_fx_schema":
         code = str(error)
         return (code if code in SAFE_PORTFOLIO_PAPER_FX_SCHEMA_ERRORS
@@ -4345,6 +4350,26 @@ def main() -> int:
                 report["outcome"] = (
                     "passed" if report[args.profile]["result"] == "PASS" else "failed"
                 )
+                report["qa_status"] = "COMPLETED"
+            elif args.profile == "setup_strategy_journey":
+                if args.manifest_id != "none" or args.manifest_bundle_path:
+                    raise ValueError("journey_not_authorized")
+                if (os.getenv("FINN_QA_ALLOW_SETUP_STRATEGY_JOURNEY") != "1"
+                        or os.getenv("FINN_QA_ALLOW_FIXTURE_ACTIONS") != "1"
+                        or os.getenv("FINN_QA_ALLOW_FIXTURE_EXECUTION") != "1"):
+                    raise ValueError("journey_not_authorized")
+                from backend.scripts.probe_protected_setup_strategy_journey import run as run_journey
+
+                report["protected_profile_attempted"] = True
+                report["qa_status"] = "INCOMPLETE"
+                report["outcome"] = "incomplete"
+                report["safety"]["read_only_profile"] = False
+                report["safety"]["live_trading_calls"] = None
+                report[args.profile] = run_journey(fixture_namespace or "")
+                report["safety"]["live_trading_calls"] = report[args.profile]["live_calls"]
+                report["safety"]["execution_calls"] = report[args.profile]["fixture_executions"]
+                report["safety"]["confirmation_calls"] = report[args.profile]["fixture_confirmations"]
+                report["outcome"] = "passed" if report[args.profile]["result"] == "PASS" else "failed"
                 report["qa_status"] = "COMPLETED"
             elif args.profile == "portfolio_paper_fx_schema":
                 if args.manifest_id != "none" or args.manifest_bundle_path:

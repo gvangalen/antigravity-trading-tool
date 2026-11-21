@@ -106,6 +106,23 @@ profile tests the server feed and chat
 journey; browser rendering and a naturally scheduled report remain separate
 QA checks.
 
+`setup_strategy_journey` is a separate protected FINN 3.0 profile with
+`manifest_id=none`, `allow_fixture_actions=true`, and
+`allow_safe_fixture_execution=true`. It uses one inactive, uncredentialed child
+of the bound QA owner and an exact BTC/USDT pair with no BTC watchlist row.
+Through FINN's actual run worker it proposes, confirms, executes, and replays
+only a setup and its linked strategy. A short `ja` must continue each verified
+post-confirmation question; the Paper-bot branch must remain unconfirmed. It
+waits for one owner-scoped strategy card and one Paper card, then discusses each
+through the selected-feed chat context. Before/after checks require exact
+setup-strategy lineage, no write before confirmation, no new bot, no order,
+no exchange key, and no Live bot. A passing child is deleted under the existing
+strict fixture cleanup; a failed child is quarantined inactive. The artifact
+contains only booleans, bounded counts, fixed stages and fixed error codes,
+not user text, IDs or credentials. This server-side profile does not prove
+browser rendering, a natural beat schedule, or independent polling/SSE parity;
+those require separate authenticated browser and transport checks.
+
 `trader_pair_fixture_audit` is a read-only follow-up for one failed or
 incomplete `trader_pair_score_continuity` run. It requires `manifest_id=none`,
 both fixture flags `false`, and `run_label=audit-<workflow-id>-<attempt>-<sha8>`.
