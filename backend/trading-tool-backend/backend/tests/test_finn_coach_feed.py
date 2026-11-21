@@ -23,6 +23,26 @@ def test_watchlist_feed_copy_suggests_analysis_without_claiming_changes():
     assert "niets aan je analyse gewijzigd" in copy["nl"]["body"]
 
 
+def test_analysis_ready_copy_names_only_a_verified_benchmark_score():
+    copy = module._fallback("analysis_ready", "BTC/USDT", {
+        "trading_pair": "BTC/USDT", "benchmark_score": "34.3",
+        "score_as_of": "2026-11-19",
+    })
+    assert "BTC/USDT" in copy["nl"]["title"]
+    assert "34.3/100" in copy["nl"]["body"]
+    assert "2026-11-19" in copy["nl"]["body"]
+    assert "34.3/100" in copy["en"]["body"]
+    assert "niets aangemaakt" in copy["nl"]["body"]
+    for invalid in (None, True, float("nan"), -1, 101, "geen score"):
+        assert "/100" not in module._fallback(
+            "analysis_ready", "BTC/USDT", {"benchmark_score": invalid,
+                                              "score_as_of": "2026-11-19"},
+        )["nl"]["body"]
+    assert "34.3/100" not in module._fallback(
+        "analysis_ready", "BTC/USDT", {"benchmark_score": "34.3"},
+    )["nl"]["body"]
+
+
 def test_manual_plan_review_does_not_refer_to_a_nonexistent_bot():
     copy = module._fallback("plan_review", "ETH-plan", {
         "trading_pair": "ETH/EUR", "direction": "down",
@@ -243,6 +263,7 @@ def test_analysis_ready_requires_verified_score_and_no_setup(monkeypatch):
     assert asyncio.run(service.reconcile_journey_next_steps(
         user_id=7, symbol="BTC", market_id=34)) == ["card"]
     assert service.publish.await_args.kwargs["revision"] == "available"
+    assert service.publish.await_args.kwargs["evidence"]["benchmark_score"] == "52"
     Match.status = "stale_sources"
     service.publish.reset_mock()
     assert asyncio.run(service.reconcile_journey_next_steps(
