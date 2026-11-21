@@ -6,9 +6,10 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: Smart DCA-weekdag en chat-sessieherstel (21 november 2026)
 
-Phase: `LOCAL_VALIDATED_CANDIDATE_CI_PENDING`. Branch
-`codex/finn-smart-dca-weekday-update`; product en regressie zijn in concept-PR
-[#1260](https://github.com/gvangalen/antigravity-trading-tool/pull/1260).
+Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_STATUS_SHA`. Branch
+`codex/finn-smart-dca-weekday-update`; product en regressie zijn via
+[PR #1260](https://github.com/gvangalen/antigravity-trading-tool/pull/1260)
+gemerged als `943903c8ba976b8dec03c602195a1cd515acacab`.
 FINN kan een vaste weekdag voorstellen en, na bevestiging, in de bestaande
 wekelijkse Smart DCA-setup wijzigen. Een kort vervolg zoals "maandag" behoudt
 de bedoelde setup. De webchat vernieuwt bij HTTP 401 eenmalig de sessie en
@@ -36,10 +37,17 @@ en regression **109/109** (artifact SHA-256
 `e8672f7323140ab2cd835e868c3773e223791ccbd5dfbf7a70e147a4d62af479`),
 beide zonder provider-, schema-, parse-, validatie- of timeoutfouten.
 
-PR-CI, merge, Auto Deploy en publieke backend/frontend-SHA-controles staan nog
-open. De eerdere productie-QA-workflow `44940411373` voor live SHA
-`65b291d755` eindigde met failure; dat is geen QA-verdict voor deze kandidaat.
-Deze kandidaat is dus nog niet live of onafhankelijk geaccepteerd.
+De vijf PR-CI-jobs op kandidaat-SHA `e96dc102a417ab75d8b800381aa7190b5ada5505`
+slaagden in workflow `44941512125`. Main-CI `44942115926` slaagde ook met
+vijf jobs en Auto Deploy `44942719041` slaagde voor merge-SHA
+`943903c8ba976b8dec03c602195a1cd515acacab`. De publieke backend
+`https://tradamind.com/api/health` en frontend
+`https://tradamind.com/build-info.json` gaven beide HTTP 200 en rapporteerden
+diezelfde SHA. Deze status-only update maakt een latere main-revisie; Build
+moet nog de laatste main-CI, Auto Deploy en publieke SHA-pariteit controleren.
+De eerdere productie-QA-workflow `44940411373` voor live SHA `65b291d755`
+eindigde met failure; de daaropvolgende workflow `44940567828` eindigde met
+success. Geen van beide is een onafhankelijk QA-verdict voor deze nieuwe SHA.
 
 ## FINN 3.0: numerieke rapportsnapshot in coachantwoord (21 november 2026)
 
