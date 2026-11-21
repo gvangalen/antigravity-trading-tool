@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: exact watchlist pair and five Smart DCA benchmark zones (21 november 2026)
 
-Phase: `CANDIDATE_LOCAL_GREEN_FINAL_CI_PENDING`. Branch `codex/finn-pair-context`,
+Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_STATUS_SHA`. Branch `codex/finn-pair-context`,
 implementation SHA `ab2678fb8`. FINN's asset selector now follows the exact
 watchlist pair, and a chart question uses that same pair after an asset or page
 switch. Smart DCA accepts percentages for the five existing benchmark zones
@@ -38,8 +38,18 @@ the standalone retry and final complete matrix passed.
 
 [PR #1251](https://github.com/gvangalen/antigravity-trading-tool/pull/1251)
 passed all five jobs on implementation SHA `ab2678fb8` in workflow
-`44924305072`. The status commit, final CI, main merge, Auto Deploy, public
-backend/frontend SHA parity and independent authenticated QA are pending.
+`44924305072`; the candidate including release evidence passed all five jobs
+in workflow `44925246357`. The PR merged as
+`30bdbdf2bb1e8bfa9420db5bafb3adfa0267122c`. Main CI `44925833632`
+passed all five jobs and Auto Deploy `44926446854` succeeded for that SHA.
+Public `https://tradamind.com/api/health` and
+`https://tradamind.com/build-info.json` both returned HTTP 200 and reported
+the same SHA. This status-only update creates a later main revision; Build
+must wait for its CI, last Auto Deploy and backend/frontend SHA parity before
+handoff to independent authenticated QA. The pair-context and five-zone
+changes have not yet received independent live QA acceptance. A separate
+earlier QA review found the historical forward-return chat tool NOT_ACCEPTED
+on the previous live revision; this release did not modify that tool.
 
 ## FINN 3.0: historische forward returns in analyse (21 november 2026)
 
