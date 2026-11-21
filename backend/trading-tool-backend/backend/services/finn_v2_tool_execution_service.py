@@ -555,7 +555,16 @@ class FinnV2ToolExecutionService:
         if tool_name == "read_active_asset":
             resolved = await self.resolver.resolve_asset(user_id=user_id, selector=selector, workspace_hints=workspace_hints, client_context=client_context)
             shared_state.update(resolved)
-            scope = await self._resolve_read_market_scope(user_id=user_id, asset=resolved["asset"], selector=selector, run=run, shared_state=shared_state)
+            try:
+                scope = await self._resolve_read_market_scope(user_id=user_id, asset=resolved["asset"], selector=selector, run=run, shared_state=shared_state)
+            except LookupError as exc:
+                if str(exc) not in {
+                    "market_pair_ambiguous", "market_quote_not_supported", "market_pair_not_supported",
+                }:
+                    raise
+                # The base asset is still verified. A pair-specific price or
+                # score read remains unavailable until the owner chooses one.
+                scope = {"market_id": None, "quote_currency": None}
             return await self.asset_adapter.execute(**resolved, **scope)
         if tool_name == "read_indicator_configuration":
             asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)

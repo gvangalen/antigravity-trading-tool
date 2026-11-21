@@ -2036,9 +2036,16 @@ class FinnResponsesFrontDoor:
             # A selected workspace instrument is an owner-scoped asset read,
             # even when the question also mentions the watchlist. A model
             # watchlist choice cannot establish the active selection.
+            workspace_symbol = str(
+                workspace_hints.get("symbol") or workspace_hints.get("workspace_asset") or ""
+            ).strip().upper()
+            workspace_quote = str(workspace_hints.get("quote_currency") or "").strip().upper()
+            selector = {"asset": workspace_symbol} if workspace_symbol else {}
+            if workspace_symbol and workspace_quote:
+                selector["quote_currency"] = workspace_quote
             call = FinnResponsesToolCall(
                 name="get_active_asset_context", operation_id=None,
-                inputs={}, read_tools=("read_active_asset",),
+                inputs=selector, read_tools=("read_active_asset",),
                 required_inputs=(), missing_inputs=(),
             )
             try:
@@ -2051,7 +2058,7 @@ class FinnResponsesFrontDoor:
                     text="Verified active workspace asset context.",
                     response_id=f"active-asset-context-{self.run_id}",
                     tool_trace=({"name": call.name, "status": read_result.get("status", "unavailable"),
-                                 "arguments": {}, "result": read_result},),
+                                 "arguments": call.inputs, "result": read_result},),
                     answer_kind="active_asset_context", response_id_reusable=False,
                 ), None, previous_response, locale=locale,
             )

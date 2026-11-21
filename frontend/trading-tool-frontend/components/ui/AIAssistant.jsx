@@ -755,9 +755,9 @@ function AIAssistantContent({
 
   const getContext = () => {
     const botPage = pathname === "/bot";
-    // Bot selection uses replaceState, so Next's searchParams can lag the
-    // bot that is already open on screen. Read the visible URL at submission.
-    const routeParams = botPage && typeof window !== "undefined"
+    // Asset pair and bot selection can update the visible URL before Next's
+    // searchParams catches up. Read that URL when sending the chat message.
+    const routeParams = (botPage || pathname === "/asset") && typeof window !== "undefined"
       ? new URLSearchParams(window.location.search) : searchParams;
     const routeSymbol = normalizeScopedAssetSymbol(routeParams.get("symbol") || routeParams.get("asset"));
     const botContext = botPage ? resolveFinnBotPageContext({
