@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: reportkaart leest actuele benchmark apart (21 november 2026)
 
-Phase: `LOCAL_VALIDATED_CANDIDATE`. Independent QA tested the previous
+Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_IDENTITY`. Independent QA tested the previous
 public revision `261a421428f4f82c95c333d30a766c3c5f7a1b8b` with the protected
 `coach_feed_journey` profile (workflow `44916525821`) and returned
 `NOT_ACCEPTED`. The dated analysis card, read-only discussion, removal after an
@@ -56,8 +56,15 @@ components lacked a score; it made no proposal (log SHA-256
 `1d4b7c920cf633a3f7205b37ad8304fc3f37a9d6bfaf5a014`). This synthetic
 card had no separate report row; the answer correctly identified the card as
 its historical source. It is not evidence of naturally scheduled report
-publication or authenticated production behavior. Candidate CI, deployment,
-and independent live QA remain pending.
+publication or authenticated production behavior. Implementation commit
+`3e46e081fccdb686a1b23f00580b27af35d01fff` merged through
+[PR #1247](https://github.com/gvangalen/antigravity-trading-tool/pull/1247)
+as `4aae3775a94198fb3b3bf0833240a3ce954f7284`. Candidate CI
+`44919228373` and main CI `44919826961` each passed all five jobs. Auto
+Deploy `44920373578` succeeded. Public backend `/api/health` and frontend
+`/build-info.json` returned HTTP 200 and both reported the exact merge SHA.
+This status update itself will create a later main SHA; Build must wait for its
+CI, last Auto Deploy, and public SHA parity before independent live QA.
 
 ## FINN 3.0: chartanalyse met opgeslagen tradercontext (21 november 2026)
 
