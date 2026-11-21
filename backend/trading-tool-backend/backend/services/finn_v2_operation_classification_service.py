@@ -839,7 +839,7 @@ class FinnV2OperationClassificationService:
                 and active_inputs.get("dca_amount_mode") == "score_bands"
                 and set(active.get("missing_required_inputs") or ()).intersection({
                     "low_threshold", "high_threshold", "low_score_percent",
-                    "mid_score_percent", "high_score_percent",
+                    "mid_score_percent", "high_score_percent", "benchmark_zone_percents",
                 })
                 and self.operation_state.requests_smart_dca_ladder_suggestion(facts.original_text)):
             # A request for proposed values answers the open Smart DCA draft;

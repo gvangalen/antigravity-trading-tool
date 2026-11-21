@@ -6,10 +6,13 @@ import math
 from datetime import date, timedelta
 from typing import Any
 
+from backend.domain.benchmark_score_zones import benchmark_zone_step_boundaries
+
 
 _AMOUNT_FIELDS = frozenset({
     "dca_amount_mode", "base_amount", "score_source", "low_threshold",
     "high_threshold", "low_score_percent", "mid_score_percent", "high_score_percent",
+    "benchmark_zone_percents",
 })
 _SCORE_SOURCES = frozenset({"benchmark_score"})
 _SCORE_BAND_PERCENT_RANGE = (5, 300)
@@ -26,8 +29,10 @@ def dca_automation_capabilities() -> dict[str, Any]:
         "score_band_input": tuple(sorted(_SCORE_SOURCES)),
         "score_band_interpolation": _SCORE_BAND_INTERPOLATION,
         "score_band_percent_range": _SCORE_BAND_PERCENT_RANGE,
-        "score_band_threshold_count": 2,
-        "score_band_amount_count": 3,
+        "score_band_threshold_count": 4,
+        "score_band_amount_count": 5,
+        "score_band_boundaries": benchmark_zone_step_boundaries(),
+        "legacy_score_band_amount_count": 3,
         "score_band_percent_order": "monotonic_in_either_direction",
         "score_band_percent_orders": ("nondecreasing", "nonincreasing"),
         "supported_trigger_modes": tuple(sorted(_TRIGGER_MODES)),
@@ -143,21 +148,43 @@ def split_confirmed_dca_plan(fields: dict[str, Any]) -> tuple[dict[str, Any], di
         source = fields.get("score_source")
         if source not in _SCORE_SOURCES:
             raise ValueError("benchmark_score_required")
-        low = fields.get("low_threshold")
-        high = fields.get("high_threshold")
-        if (
-            type(low) not in {int, float} or type(high) not in {int, float}
-            or not math.isfinite(low) or not math.isfinite(high)
-            or not 0 < low < high < 100
-        ):
-            raise ValueError("score_band_thresholds_invalid")
-        percents = tuple(
-            _positive_amount(fields.get(key), key)
-            for key in ("low_score_percent", "mid_score_percent", "high_score_percent")
-        )
+        zone_percents = fields.get("benchmark_zone_percents")
+        if zone_percents is not None:
+            if any(fields.get(key) is not None for key in (
+                "low_threshold", "high_threshold", "low_score_percent",
+                "mid_score_percent", "high_score_percent",
+            )):
+                raise ValueError("score_band_formats_mixed")
+            if not isinstance(zone_percents, (list, tuple)) or len(zone_percents) != 5:
+                raise ValueError("benchmark_zone_percentages_invalid")
+            percents = tuple(_positive_amount(value, "benchmark_zone_percent") for value in zone_percents)
+            points = [
+                {"x": boundary, "y": percent / 100}
+                for boundary, percent in zip(benchmark_zone_step_boundaries(), percents)
+            ]
+        else:
+            # Already saved three-band plans retain their exact decision curve.
+            low = fields.get("low_threshold")
+            high = fields.get("high_threshold")
+            if (
+                type(low) not in {int, float} or type(high) not in {int, float}
+                or not math.isfinite(low) or not math.isfinite(high)
+                or not 0 < low < high < 100
+            ):
+                raise ValueError("score_band_thresholds_invalid")
+            percents = tuple(
+                _positive_amount(fields.get(key), key)
+                for key in ("low_score_percent", "mid_score_percent", "high_score_percent")
+            )
+            points = [
+                {"x": 0, "y": percents[0] / 100},
+                {"x": float(low), "y": percents[1] / 100},
+                {"x": float(high), "y": percents[2] / 100},
+                {"x": 100, "y": percents[2] / 100},
+            ]
         if not all(_SCORE_BAND_PERCENT_RANGE[0] <= percent <= _SCORE_BAND_PERCENT_RANGE[1] for percent in percents) or not (
-            percents[0] <= percents[1] <= percents[2]
-            or percents[0] >= percents[1] >= percents[2]
+            all(left <= right for left, right in zip(percents, percents[1:]))
+            or all(left >= right for left, right in zip(percents, percents[1:]))
         ):
             raise ValueError("score_band_percentages_invalid")
         multipliers = tuple(percent / 100 for percent in percents)
@@ -167,12 +194,7 @@ def split_confirmed_dca_plan(fields: dict[str, Any]) -> tuple[dict[str, Any], di
             "interpolation": _SCORE_BAND_INTERPOLATION,
             "min_multiplier": _SCORE_BAND_PERCENT_RANGE[0] / 100,
             "max_multiplier": _SCORE_BAND_PERCENT_RANGE[1] / 100,
-            "points": [
-                {"x": 0, "y": multipliers[0]},
-                {"x": float(low), "y": multipliers[1]},
-                {"x": float(high), "y": multipliers[2]},
-                {"x": 100, "y": multipliers[2]},
-            ],
+            "points": points,
         }
     else:
         raise ValueError("dca_amount_mode_required")
@@ -207,17 +229,20 @@ def is_confirmed_dca_amount_rule(strategy: dict[str, Any]) -> bool:
         if not isinstance(curve, dict):
             return False
         points = curve.get("points")
-        if not isinstance(points, list) or len(points) != 4 or any(not isinstance(p, dict) for p in points):
+        if not isinstance(points, list) or len(points) not in {4, 5} or any(not isinstance(p, dict) for p in points):
             return False
         try:
-            fields = {
-                "setup_type": "dca", "dca_amount_mode": "score_bands", "base_amount": base,
-                "score_source": curve.get("input"),
-                "low_threshold": points[1]["x"], "high_threshold": points[2]["x"],
-                "low_score_percent": points[0]["y"] * 100,
-                "mid_score_percent": points[1]["y"] * 100,
-                "high_score_percent": points[2]["y"] * 100,
-            }
+            fields = {"setup_type": "dca", "dca_amount_mode": "score_bands",
+                      "base_amount": base, "score_source": curve.get("input")}
+            if len(points) == 5:
+                fields["benchmark_zone_percents"] = [point["y"] * 100 for point in points]
+            else:
+                fields.update({
+                    "low_threshold": points[1]["x"], "high_threshold": points[2]["x"],
+                    "low_score_percent": points[0]["y"] * 100,
+                    "mid_score_percent": points[1]["y"] * 100,
+                    "high_score_percent": points[2]["y"] * 100,
+                })
         except (KeyError, TypeError):
             return False
     else:

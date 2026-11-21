@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { formatCurrency } from "@/lib/i18n";
+import { MARKET_CONDITIONS } from "@/lib/setup/scoreConditions.mjs";
 
 function formatPairPrice(value, locale, quote) {
   if (!Number.isFinite(Number(value))) return "—";
@@ -82,6 +83,9 @@ export default function ActiveStrategyReportCard({ report }) {
         : frequency === "daily" ? copy.daily : copy.unknownCadence;
     const points = Array.isArray(strategy.decision_curve?.points)
       ? [...strategy.decision_curve.points].sort((a, b) => Number(a.x) - Number(b.x)) : [];
+    const fiveZoneCurve = points.length === MARKET_CONDITIONS.length &&
+      points.every((point, index) => Number(point.x) ===
+        (index === 0 ? 0 : MARKET_CONDITIONS[index - 1].max + 0.5));
     const smart = strategy.execution_mode === "custom";
     return (
       <ReportCard title={copy.cardTitle} icon={<TrendingUp size={16} />}>
@@ -95,8 +99,8 @@ export default function ActiveStrategyReportCard({ report }) {
         {smart && points.length > 0 && <div className="mt-4 border-t border-slate-100 pt-3 text-sm">
           <div className="font-semibold">{copy.scoreBands}</div>
           <ul className="mt-2 space-y-1">
-            {points.map((point) => <li key={point.x} className="flex justify-between gap-3">
-              <span>{copy.fromScore} {point.x}</span><span>{Math.round(Number(point.y) * 100)}%</span>
+            {points.map((point, index) => <li key={point.x} className="flex justify-between gap-3">
+              <span>{fiveZoneCurve ? `${MARKET_CONDITIONS[index].min}–${MARKET_CONDITIONS[index].max}` : `${copy.fromScore} ${point.x}`}</span><span>{Math.round(Number(point.y) * 100)}%</span>
             </li>)}
           </ul>
         </div>}

@@ -1142,6 +1142,10 @@ def _blocked_setup_replay_message(inputs: dict[str, object]) -> str:
             parts.append("vast bedrag.")
         elif mode == "score_bands":
             parts.append("Smart DCA op de totale benchmarkscore.")
+            zones = inputs.get("benchmark_zone_percents")
+            if isinstance(zones, (list, tuple)) and len(zones) == 5:
+                parts.append("Scorezones 0–25, 26–45, 46–60, 61–75 en 76–100: "
+                             + ", ".join(f"{percent}%" for percent in zones) + ".")
             band_fields = (
                 "low_threshold", "high_threshold", "low_score_percent",
                 "mid_score_percent", "high_score_percent",
@@ -3437,7 +3441,8 @@ class FinnV2RunService:
                 + ". The platform closed-candle trade entry contract is: "
                 + json.dumps(entry_signal_capabilities(), ensure_ascii=False)
                 + ". A fixed amount and stepwise bands of the total benchmark score can be saved; "
-                "the three band percentages may rise or fall monotonically as benchmark score rises. "
+                "the five benchmark-zone percentages may rise or fall monotonically as benchmark score rises; "
+                "existing three-band plans remain valid. "
                 "A score-triggered weekly Smart DCA checks each day with a complete benchmark, "
                 "buys at most once per week, and needs no fixed weekday. "
                 "A proposed automatic rule is executable only if its inputs, mapping and "

@@ -21,6 +21,7 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 import FinnCommandCenter from "@/components/finn/FinnCommandCenter";
 import { feedDraftWasEdited, resolveFeedDraftQuery, selectedFeedItemForSubmission, shouldAttachFeedContext } from "@/lib/finnCommandSearch";
 import { getActiveSetupId } from "@/lib/setup/activeSetup";
+import { MARKET_CONDITIONS } from "@/lib/setup/scoreConditions.mjs";
 import { indicatorDisplayName } from "@/lib/indicators/configuredIndicatorRows.mjs";
 import { formatDraftCardValue, formatExecutionMode } from "@/lib/contractValueFormatter.mjs";
 import { buildFinnTaskContinuationPrompt } from "@/lib/ai/finnTaskContinuation.mjs";
@@ -2098,7 +2099,7 @@ function AIAssistantContent({
       : supplied.symbol;
     const contextLine = [selectedMarket, supplied.timeframe, humanValue(supplied.setup_type)].filter(Boolean).join(" · ");
     const frequency = setupDraftFrequencyLabel(supplied, humanValue);
-    const labels = { name: "naam", setup_type: "type", symbol: "asset", quote_currency: "koersvaluta", timeframe: "timeframe", dca_frequency: "frequentie", dca_trigger_mode: "koopmoment", dca_day: "weekdag", dca_month_day: "dag van de maand", min_investment: "minimuminvestering", min_benchmark_score: "ondergrens totale benchmark", max_benchmark_score: "bovengrens totale benchmark", dca_amount_mode: "bedragregel", base_amount: "basisbedrag", score_source: "totale benchmark (markt + macro + technisch)", low_threshold: "grens lage/middenscore", high_threshold: "grens midden/hoge score", low_score_percent: "percentage lage score", mid_score_percent: "percentage middenscore", high_score_percent: "percentage hoge score" };
+    const labels = { name: "naam", setup_type: "type", symbol: "asset", quote_currency: "koersvaluta", timeframe: "timeframe", dca_frequency: "frequentie", dca_trigger_mode: "koopmoment", dca_day: "weekdag", dca_month_day: "dag van de maand", min_investment: "minimuminvestering", min_benchmark_score: "ondergrens totale benchmark", max_benchmark_score: "bovengrens totale benchmark", dca_amount_mode: "bedragregel", base_amount: "basisbedrag", score_source: "totale benchmark (markt + macro + technisch)", benchmark_zone_percents: "percentages voor de vijf benchmarkzones", low_threshold: "grens lage/middenscore", high_threshold: "grens midden/hoge score", low_score_percent: "percentage lage score", mid_score_percent: "percentage middenscore", high_score_percent: "percentage hoge score" };
     const missing = (draft.missing_inputs || []).map((field) => at(`draftCards.inputs.${field}`, labels[field] || field));
     const euro = (value) => new Intl.NumberFormat(locale || "nl-NL", { style: "currency", currency: "EUR" }).format(Number(value));
     const priceCurrency = String(supplied.price_currency || supplied.quote_currency || "EUR").toUpperCase();
@@ -2131,7 +2132,12 @@ function AIAssistantContent({
           <p className="font-semibold">{at("dcaDraft.smartTitle", "Smart DCA · scoregestuurde bedragen")}</p>
           <p className="mt-1">{at("dcaDraft.scoreSource", "Scorebron: {source}", { source: scoreLabels[supplied.score_source] || at("dcaDraft.sourceMissing", "nog te kiezen") })}</p>
           {supplied.score_source === "benchmark_score" && <p className="mt-1 text-xs">{at("dcaDraft.benchmarkWeights", "De weging volgt je actuele instellingen in Analyse (standaard ieder ⅓). Wijzigingen beïnvloeden toekomstige bedragen. Alle drie scores zijn nodig op de beslisdatum.")}</p>}
-          {supplied.base_amount != null && supplied.low_threshold != null && supplied.high_threshold != null && supplied.low_score_percent != null && supplied.mid_score_percent != null && supplied.high_score_percent != null && <ul className="mt-2 space-y-1">
+          {supplied.base_amount != null && Array.isArray(supplied.benchmark_zone_percents) && supplied.benchmark_zone_percents.length === MARKET_CONDITIONS.length && <ul className="mt-2 space-y-1">
+            {MARKET_CONDITIONS.map((zone, index) => <li key={zone.id}>
+              {zone.min}–{zone.max}: {supplied.benchmark_zone_percents[index]}% = {euro(supplied.base_amount * supplied.benchmark_zone_percents[index] / 100)}
+            </li>)}
+          </ul>}
+          {!Array.isArray(supplied.benchmark_zone_percents) && supplied.base_amount != null && supplied.low_threshold != null && supplied.high_threshold != null && supplied.low_score_percent != null && supplied.mid_score_percent != null && supplied.high_score_percent != null && <ul className="mt-2 space-y-1">
             <li>{at("dcaDraft.below", "Score onder {threshold}: {percent}% = {amount}", { threshold: supplied.low_threshold, percent: supplied.low_score_percent, amount: euro(supplied.base_amount * supplied.low_score_percent / 100) })}</li>
             <li>{at("dcaDraft.between", "Score {low} tot onder {high}: {percent}% = {amount}", { low: supplied.low_threshold, high: supplied.high_threshold, percent: supplied.mid_score_percent, amount: euro(supplied.base_amount * supplied.mid_score_percent / 100) })}</li>
             <li>{at("dcaDraft.above", "Score vanaf {threshold}: {percent}% = {amount}", { threshold: supplied.high_threshold, percent: supplied.high_score_percent, amount: euro(supplied.base_amount * supplied.high_score_percent / 100) })}</li>
@@ -2184,7 +2190,7 @@ function AIAssistantContent({
       : isBot
         ? `Paper · ${at("draftCards.linkedToName", "gekoppeld aan {name}", { name: linkedName })}`
         : [isIndicator && supplied.quote_currency ? `${supplied.asset || context.symbol}/${supplied.quote_currency}` : supplied.asset || context.symbol, isIndicator ? ({ technical: at("draftCards.technicalEvidence", "Technisch bewijs"), macro: "Macro", market: at("draftCards.marketIndicators", "Marktindicatoren") }[supplied.category] || supplied.category) : "Watchlist"].filter(Boolean).join(" · ");
-    const labels = { name: "naam", setup_id: "setup", strategy_id: "strategie", symbol: "asset", timeframe: "timeframe", execution_mode: "uitvoering", base_amount: "bedrag", entry: "entry", stop_loss: "stop-loss", targets: "targets", price_currency: "valuta koersniveaus", risk_profile: "risico", budget_total_eur: "budget", dca_amount_mode: "bedragregel", score_source: "totale benchmark", low_threshold: "grens lage/middenscore", high_threshold: "grens midden/hoge score", low_score_percent: "percentage lage score", mid_score_percent: "percentage middenscore", high_score_percent: "percentage hoge score", entry_signal: "instapregel" };
+    const labels = { name: "naam", setup_id: "setup", strategy_id: "strategie", symbol: "asset", timeframe: "timeframe", execution_mode: "uitvoering", base_amount: "bedrag", entry: "entry", stop_loss: "stop-loss", targets: "targets", price_currency: "valuta koersniveaus", risk_profile: "risico", budget_total_eur: "budget", dca_amount_mode: "bedragregel", score_source: "totale benchmark", benchmark_zone_percents: "percentages voor de vijf benchmarkzones", low_threshold: "grens lage/middenscore", high_threshold: "grens midden/hoge score", low_score_percent: "percentage lage score", mid_score_percent: "percentage middenscore", high_score_percent: "percentage hoge score", entry_signal: "instapregel" };
     const missing = (draft.missing_inputs || []).map((field) => at(`draftCards.inputs.${field}`, labels[field] || field));
     const formatValue = (value) => formatDraftCardValue(value, locale);
     const euro = (value) => new Intl.NumberFormat(locale || "nl-NL", { style: "currency", currency: "EUR" }).format(Number(value));
@@ -2206,9 +2212,13 @@ function AIAssistantContent({
           [at("draftCards.fieldRiskStyle", "Risicostijl"),
             at("draftCards.dcaRiskNotApplicable", ({ en: "Not a setting on a DCA strategy", de: "Keine Einstellung einer DCA-Strategie" }[locale] || "Geen instelling van een DCA-strategie"))],
           [at("draftCards.fieldScoreSource", "Scorebron"), supplied.score_source === "benchmark_score" ? at("draftCards.benchmarkSource", "Totale benchmark (markt, macro en technisch)") : null],
-          [supplied.low_threshold != null ? at("draftCards.fieldScoreBelow", "Score onder {threshold}", { threshold: supplied.low_threshold }) : at("draftCards.fieldLowScore", "Lage score"), dcaBand(supplied.low_score_percent)],
-          [supplied.low_threshold != null && supplied.high_threshold != null ? at("draftCards.fieldScoreBetween", "Score {low} tot onder {high}", { low: supplied.low_threshold, high: supplied.high_threshold }) : at("draftCards.fieldMidScore", "Middenscore"), dcaBand(supplied.mid_score_percent)],
-          [supplied.high_threshold != null ? at("draftCards.fieldScoreFrom", "Score vanaf {threshold}", { threshold: supplied.high_threshold }) : at("draftCards.fieldHighScore", "Hoge score"), dcaBand(supplied.high_score_percent)]]
+          ...(Array.isArray(supplied.benchmark_zone_percents)
+            ? MARKET_CONDITIONS.map((zone, index) => [`${zone.min}–${zone.max}`, dcaBand(supplied.benchmark_zone_percents[index])])
+            : [
+              [supplied.low_threshold != null ? at("draftCards.fieldScoreBelow", "Score onder {threshold}", { threshold: supplied.low_threshold }) : at("draftCards.fieldLowScore", "Lage score"), dcaBand(supplied.low_score_percent)],
+              [supplied.low_threshold != null && supplied.high_threshold != null ? at("draftCards.fieldScoreBetween", "Score {low} tot onder {high}", { low: supplied.low_threshold, high: supplied.high_threshold }) : at("draftCards.fieldMidScore", "Middenscore"), dcaBand(supplied.mid_score_percent)],
+              [supplied.high_threshold != null ? at("draftCards.fieldScoreFrom", "Score vanaf {threshold}", { threshold: supplied.high_threshold }) : at("draftCards.fieldHighScore", "Hoge score"), dcaBand(supplied.high_score_percent)],
+            ])]
         : [[at("draftCards.fieldExecution", "Uitvoering"), [formatExecutionMode(supplied.execution_mode, locale), supplied.base_amount ? euro(supplied.base_amount) : null].filter(Boolean).join(" · ")],
           ["Entry", supplied.entry != null ? [formatValue(supplied.entry), supplied.price_currency].filter(Boolean).join(" ") : null],
           ["Stop-loss", supplied.stop_loss != null ? [formatValue(supplied.stop_loss), supplied.price_currency].filter(Boolean).join(" ") : null],

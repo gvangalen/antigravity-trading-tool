@@ -794,10 +794,7 @@ def test_inverse_smart_dca_proposes_score_trigger_without_a_weekday():
     assert state.collected_inputs["dca_trigger_mode"] == "benchmark"
     assert "dca_day" not in state.collected_inputs
     assert state.collected_inputs["base_amount"] == 200
-    assert [state.collected_inputs[key] for key in (
-        "low_threshold", "high_threshold", "low_score_percent",
-        "mid_score_percent", "high_score_percent",
-    )] == [26, 76, 150, 100, 50]
+    assert state.collected_inputs["benchmark_zone_percents"] == [150, 125, 100, 75, 50]
 
 
 def test_inverse_smart_dca_without_calendar_day_uses_benchmark_cadence():
@@ -813,10 +810,25 @@ def test_inverse_smart_dca_without_calendar_day_uses_benchmark_cadence():
     assert state.collected_inputs["dca_trigger_mode"] == "benchmark"
     assert "dca_day" not in state.collected_inputs
     assert state.next_missing_input not in {"dca_trigger_mode", "dca_day"}
-    assert [state.collected_inputs[key] for key in (
+    assert state.collected_inputs["benchmark_zone_percents"] == [150, 125, 100, 75, 50]
+
+
+def test_smart_dca_accepts_five_explicit_benchmark_zone_percentages():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message=("Maak een Smart DCA voor BTC/USDT, 1D, wekelijks, basisbedrag €200. "
+                 "Voor de vijf benchmarkzones wil ik achtereenvolgens "
+                 "150%, 125%, 100%, 75% en 50%."),
+        explicit_asset="BTC", conversation_context={},
+        supplied_inputs={"name": "BTC vijf zones"}, model_tool_inputs=True,
+    )
+    assert state.collected_inputs["benchmark_zone_percents"] == [150, 125, 100, 75, 50]
+    assert not any(field in state.collected_inputs for field in (
         "low_threshold", "high_threshold", "low_score_percent",
         "mid_score_percent", "high_score_percent",
-    )] == [26, 76, 150, 100, 50]
+    ))
+    assert state.missing_required_inputs == []
 
 
 def test_guided_smart_dca_remembers_weekly_limit_and_requested_ladder_proposal():
@@ -899,10 +911,7 @@ def test_guided_smart_dca_replaces_weekday_question_with_benchmark_trigger():
     )
     assert ladder.missing_required_inputs == []
     assert ladder.collected_inputs["dca_amount_mode"] == "score_bands"
-    assert [ladder.collected_inputs[key] for key in (
-        "low_threshold", "high_threshold", "low_score_percent",
-        "mid_score_percent", "high_score_percent",
-    )] == [26, 76, 150, 100, 50]
+    assert ladder.collected_inputs["benchmark_zone_percents"] == [150, 125, 100, 75, 50]
 
 
 def test_live_smart_dca_wording_keeps_pair_and_skips_weekday_question():
@@ -931,10 +940,7 @@ def test_live_smart_dca_wording_keeps_pair_and_skips_weekday_question():
     assert state.collected_inputs["dca_amount_mode"] == "score_bands"
     assert state.collected_inputs["score_source"] == "benchmark_score"
     assert state.collected_inputs["base_amount"] == 200
-    assert [state.collected_inputs[key] for key in (
-        "low_threshold", "high_threshold", "low_score_percent",
-        "mid_score_percent", "high_score_percent",
-    )] == [26, 76, 150, 100, 50]
+    assert state.collected_inputs["benchmark_zone_percents"] == [150, 125, 100, 75, 50]
     assert "dca_day" not in state.collected_inputs
 
 

@@ -10,14 +10,10 @@ from decimal import Decimal, InvalidOperation
 import re
 from typing import Any, Mapping
 
+from backend.domain.benchmark_score_zones import BENCHMARK_SCORE_BANDS
 
-_BANDS = (
-    ("heavy_pressure", 0, 25, ("Zwaar onder druk", "Heavy pressure", "Stark unter Druck")),
-    ("pressure", 26, 45, ("Onder druk", "Under pressure", "Unter Druck")),
-    ("no_direction", 46, 60, ("Geen duidelijke richting", "No clear direction", "Keine klare Richtung")),
-    ("gaining_strength", 61, 75, ("De markt trekt aan", "Gaining strength", "Der Markt wird stärker")),
-    ("strong", 76, 100, ("Sterke markt", "Strong market", "Starker Markt")),
-)
+
+_BANDS = BENCHMARK_SCORE_BANDS
 _FIELDS = ("min_benchmark_score", "max_benchmark_score")
 
 

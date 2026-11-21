@@ -70,8 +70,8 @@ test("feed discussion enters the persistent FINN panel with its event identity",
   assert.match(feedSource, /onDiscuss\?\.\(item\.id,/);
   assert.match(shellSource, /resolveFeedItemContext\(item\)/);
   assert.match(assistantSource, /selectedCommandSymbol = commandRequest\?\.mode === "chat"/);
-  assert.match(assistantSource, /value=\{displayedContextSymbol\}/);
-  assert.match(assistantSource, /asset\.symbol === displayedContextSymbol \? displayedContextInstrument : asset\.symbol/);
+  assert.match(assistantSource, /value=\{displayedContextInstrument\}/);
+  assert.match(assistantSource, /contextInstrumentOptions\.map\(\(asset\)/);
   assert.match(assistantSource, /feedDraftWasEdited\(commandRequest, nextQuery\)/);
   assert.match(assistantSource, /resolveFeedDraftQuery\(/);
   assert.match(assistantSource, /aria-label=\{closeLabel \|\| at\("uiText\.closeChat"\)\}/);
@@ -79,7 +79,7 @@ test("feed discussion enters the persistent FINN panel with its event identity",
 
 test("plan card opens FINN with its own asset and quote currency", () => {
   assert.match(planSource, /quote_currency: setup\?\.quote_currency \|\| strategy\?\.quote_currency \|\| null/);
-  assert.match(assistantSource, /chatAssetOverride \|\| selectedCommandSymbol \|\| context\.symbol/);
+  assert.match(assistantSource, /activeChatAssetOverride\?\.symbol \|\| selectedCommandSymbol \|\| context\.symbol/);
 });
 
 test("a feed item closed between listing and handling reloads the current feed", async () => {

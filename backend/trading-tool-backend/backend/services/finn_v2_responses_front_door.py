@@ -1629,7 +1629,7 @@ class FinnResponsesFrontDoor:
                     if set(explicit) & {
                         "dca_trigger_mode",
                         "low_threshold", "high_threshold", "low_score_percent",
-                        "mid_score_percent", "high_score_percent",
+                        "mid_score_percent", "high_score_percent", "benchmark_zone_percents",
                     }:
                         return True
             return False
@@ -1670,6 +1670,7 @@ class FinnResponsesFrontDoor:
                 and requested_slot in {
                     "dca_frequency", "dca_trigger_mode", "dca_day", "dca_month_day", "dca_amount_mode",
                     "base_amount", "low_score_percent", "mid_score_percent", "high_score_percent",
+                    "benchmark_zone_percents",
                 } else None
             ),
         )

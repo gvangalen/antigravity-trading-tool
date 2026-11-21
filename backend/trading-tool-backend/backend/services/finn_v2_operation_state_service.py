@@ -719,6 +719,12 @@ class FinnV2OperationStateService:
             sources.pop("quote_currency", None)
             provenance.pop("quote_currency", None)
         collected.update(explicit)
+        if explicit.get("benchmark_zone_percents") is not None:
+            for legacy_field in ("low_threshold", "high_threshold", "low_score_percent",
+                                 "mid_score_percent", "high_score_percent"):
+                collected.pop(legacy_field, None)
+                sources.pop(legacy_field, None)
+                provenance.pop(legacy_field, None)
         if contract.operation_id == "create_manual_trade_plan" and collected.get("asset"):
             from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
 
@@ -736,11 +742,13 @@ class FinnV2OperationStateService:
                 and collected.get("setup_type") == "dca"
                 and collected.get("dca_amount_mode") == "score_bands"
                 and self.requests_smart_dca_ladder_suggestion(message)):
-            suggested_ladder = {
-                "low_threshold": 26, "high_threshold": 76,
-                "low_score_percent": 150, "mid_score_percent": 100,
-                "high_score_percent": 50,
-            }
+            suggested_ladder = (
+                {"low_threshold": 26, "high_threshold": 76,
+                 "low_score_percent": 150, "mid_score_percent": 100,
+                 "high_score_percent": 50}
+                if re.search(r"\b(?:drie|3|three|drei)\s+(?:staffels|schalen|scorebanden|bands|zones)\b", message, re.I)
+                else {"benchmark_zone_percents": [150, 125, 100, 75, 50]}
+            )
             if not any(field in collected for field in suggested_ladder):
                 # Editable suggestion only; confirmation is still required.
                 collected.update(suggested_ladder)
@@ -842,7 +850,8 @@ class FinnV2OperationStateService:
             sources.pop("dca_trigger_mode", None)
             provenance.pop("dca_trigger_mode", None)
             for key in ("score_source", "low_threshold", "high_threshold",
-                        "low_score_percent", "mid_score_percent", "high_score_percent"):
+                        "low_score_percent", "mid_score_percent", "high_score_percent",
+                        "benchmark_zone_percents"):
                 collected.pop(key, None)
                 sources.pop(key, None)
                 provenance.pop(key, None)
@@ -1539,7 +1548,7 @@ class FinnV2OperationStateService:
                     amount_text = amount_text.replace(explicit_name.casefold(), " ")
                 smart_amount = bool(re.search(r"\b(?:smart(?:\s*dca)?|score(?:s|gestuurd|afhankelijk)?|staffel|score\s*bands?|variab\w*)\b", amount_text))
                 if self._dca_score_percentages(text) and re.search(r"\bbenchmark(?:t)?\b", amount_text):
-                    # A follow-up can state the complete three-band ladder
+                    # A follow-up can state the complete score ladder
                     # without repeating the word Smart or score.
                     smart_amount = True
                 fixed_amount = bool(re.search(
@@ -1580,9 +1589,7 @@ class FinnV2OperationStateService:
                     # needs explicit user confirmation before any save.
                     values.update({
                         "dca_amount_mode": "score_bands", "score_source": "benchmark_score",
-                        "low_threshold": 26, "high_threshold": 76,
-                        "low_score_percent": 150, "mid_score_percent": 100,
-                        "high_score_percent": 50,
+                        "benchmark_zone_percents": [150, 125, 100, 75, 50],
                     })
                 if smart_amount:
                     market_only = re.search(
@@ -1762,7 +1769,7 @@ class FinnV2OperationStateService:
 
     @classmethod
     def _dca_score_percentages(cls, text: str) -> dict[str, object]:
-        """Extract three explicitly supplied bands without eating the middle band.
+        """Extract an explicit five-zone ladder or a legacy three-band ladder.
 
         A reference such as "basisbedrag €100 is 100%" is excluded only when
         the percentage directly describes that reference. A later "koop 100%"
@@ -1775,6 +1782,9 @@ class FinnV2OperationStateService:
             " ", str(text or "").casefold(), count=1,
         )
         matches = list(re.finditer(r"(\d+(?:[.,]\d+)?)\s*%", band_text))
+        if len(matches) == 5:
+            return {"benchmark_zone_percents": [cls._numeric_value(match.group(1))
+                                                 for match in matches]}
         if len(matches) != 3:
             return {}
         fields = ("low_score_percent", "mid_score_percent", "high_score_percent")
@@ -1943,6 +1953,8 @@ class FinnV2OperationStateService:
         value = str(text or "").strip()
         if not value:
             return None
+        if field == "benchmark_zone_percents":
+            return self._dca_score_percentages(value).get(field)
         if field == "name":
             if self.is_name_suggestion_request(value) or self.is_name_suggestion_acceptance(value):
                 return None
@@ -3022,6 +3034,11 @@ class FinnV2OperationStateService:
 
     @staticmethod
     def _canonical_input(field: str, value: object) -> object:
+        if field == "benchmark_zone_percents":
+            if not isinstance(value, (list, tuple)) or len(value) != 5:
+                return None
+            numbers = [FinnV2OperationStateService._typed_numeric_value(item) for item in value]
+            return numbers if all(type(item) in {int, float} for item in numbers) else None
         if field == "entry_signal":
             try:
                 return validate_entry_signal(value)

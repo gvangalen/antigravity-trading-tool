@@ -505,6 +505,8 @@ class FinnResponsesToolCatalog:
                         "properties": {
                             field: {
                                 "type": field_type,
+                                **({"items": {"type": "number"}, "minItems": 5, "maxItems": 5}
+                                   if field == "benchmark_zone_percents" else {}),
                                 **({"enum": list(contract.allowed_values_for(field))}
                                    if contract.allowed_values_for(field) else {}),
                             }
