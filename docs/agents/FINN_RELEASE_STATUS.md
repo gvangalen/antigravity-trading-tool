@@ -4,6 +4,49 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: scoped feed-discussion failure diagnosis (21 November 2026)
+
+Phase: `LOCAL_VALIDATED_CANDIDATE`. Branch
+`codex/finn-feed-journey-diagnostic-20261121`, based on public main
+`c7b6fe7d3cea130c9ccd20db4ab9e13153d7503d`. Independent QA tested that
+SHA with one official protected `coach_feed_journey` run (workflow
+`44903955750`) and returned `NOT_ACCEPTED`: the dated analysis card was
+published, but the first FINN Discussion failed under the combined
+`feed_journey_discuss_failed` code. The invalid-score and report steps were
+not reached. Release identity and protected authentication passed; the child
+was quarantined. The sanitized artifact SHA-256 was
+`d831b83a219326bdd58df26f3ab71cb84aa90ec9f494e64e723439d384303494`.
+This evidence does not distinguish a product answer, a runtime failure, or an
+overstrict acceptance check. QA could not inspect the quarantined child via a
+protected read-only audit route, so no cause is claimed.
+
+This repair extends only the protected profile's sanitized failure result. It
+separates incomplete FINN turns from completed answers that fail the answer
+contract and reports allowlisted terminal status, error category, booleans,
+and fixed failed-check names. Raw answers, scores, dates, IDs, and exception
+text remain absent. The synthetic child, owner, Live-execution, cleanup, and
+quarantine boundaries are unchanged. Local targeted runner/profile tests
+passed **162/162**. A synthetic success completed with cleanup and zero Live
+calls; a deliberately rejected answer produced `contract_failed`,
+`turn_status=completed`, `failed_checks=[score]`, and quarantine (sanitized
+artifact SHA-256
+`3fbacdaa7a8d4ec33acdac99cb6add6313289c695fd6126947b06003770af29c`).
+On final code, the full backend suite passed **5190**, skipped **7** (log
+SHA-256 `dbe6ca8729eb28987395af44136e88281f8482f5578542374e5aad697d4784d3`).
+The isolated prefork worker matrix passed **38/38** (artifact SHA-256
+`077dbfed40249078cbb218b86e04140d8c452af98706ae9783c659e9e69bd753`).
+Real-provider selector development passed **20/20** (artifact SHA-256
+`4d8f224ce28f14c54a31952ba689c0aaa93a5e07afedec304e8f18572916e7e1`)
+and regression **109/109** (artifact SHA-256
+`e7aba93f53c21d01b52e2f476046c172beff5e15caa2aeed8d6ccca555f26452`),
+both with zero provider, schema, parse, validation, or timeout failures. The
+isolated stack and volume were removed after validation. Frontend, mobile,
+and workflow files are unchanged by this diagnostic delta; their checks passed
+on the preceding deployed main revision and will run again in CI. Read-only
+QA, Security, and Architecture reviews found no concrete blocker in this
+delta. There is no new deployment or independent QA verdict for this repair
+yet.
+
 ## FINN 3.0: protected analysis- and report-feed journey (21 November 2026)
 
 Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_IDENTITY`. Branch

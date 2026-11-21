@@ -1,5 +1,7 @@
 """Fixture and output boundaries for the FINN feed-journey QA profile."""
 
+import asyncio
+
 import pytest
 
 from backend.scripts import probe_protected_coach_feed_journey as probe
@@ -30,6 +32,50 @@ def test_journey_runner_allowlist_never_exports_private_exception():
     assert runner.profile_error_category(
         "coach_feed_journey", RuntimeError("feed_journey_report_card_missing"),
     ) == "feed_journey_report_card_missing"
+
+
+def test_journey_discussion_diagnostic_is_allowlisted(monkeypatch):
+    async def rejected(_user, _item, *, symbol, question, diagnostic, content_check):
+        diagnostic.update({
+            "turn_status": "completed", "response_present": True,
+            "content_present": True, "proposal_present": False,
+            "confirmation_required": False, "expected_symbol_mentioned": True,
+            "error_code": "private account value",
+        })
+        assert not content_check("SOL is niet te beoordelen; vraag naar je setup.")
+        raise RuntimeError("private account value")
+
+    monkeypatch.setattr(probe.coach_probe, "_discuss", rejected)
+    trace = {}
+    with pytest.raises(RuntimeError, match="feed_journey_discuss_contract_failed"):
+        asyncio.run(probe._discuss_checked(
+            123, "synthetic-item", question="Bespreek SOL",
+            content_checks=lambda content: probe._analysis_answer_checks(
+                content, "40", "2026-11-21"), trace=trace,
+        ))
+    assert trace["discussion"] == {
+        "turn_status": "completed", "error_code": "other",
+        "response_present": True, "content_present": True,
+        "proposal_present": False, "confirmation_required": False,
+        "subject_mentioned": True,
+        "failed_checks": ["score", "score_date", "verified_current"],
+    }
+
+
+def test_journey_discussion_runtime_failure_is_distinct(monkeypatch):
+    async def failed(*_args, **_kwargs):
+        raise RuntimeError("private runtime detail")
+
+    monkeypatch.setattr(probe.coach_probe, "_discuss", failed)
+    trace = {}
+    with pytest.raises(RuntimeError, match="feed_journey_discuss_runtime_failed"):
+        asyncio.run(probe._discuss_checked(
+            123, "synthetic-item", question="Bespreek SOL",
+            content_checks=lambda _content: {"score": True}, trace=trace,
+        ))
+    assert trace["discussion"]["turn_status"] == "unknown"
+    assert trace["discussion"]["failed_checks"] == []
+    assert probe._safe_discussion({"error_code": "none"})["error_code"] == "none"
 
 
 def test_journey_probe_quarantines_failed_child_without_private_error(monkeypatch):

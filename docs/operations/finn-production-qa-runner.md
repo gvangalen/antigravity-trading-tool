@@ -97,9 +97,12 @@ usable current score, then stores a dated report snapshot and invokes the
 canonical report-feed publisher. The report card must preserve the snapshot
 attention point while FINN discusses it separately from the now incomplete
 current score. No Paper execution or shared market write is allowed. A pass
-deletes the child; a failure quarantines it inactive. The sanitized artifact
-contains only fixed stage and outcome codes, never IDs, score values, answer
-text or fixture credentials. This profile tests the server feed and chat
+deletes the child; a failure quarantines it inactive. On a discussion failure,
+the sanitized artifact distinguishes an incomplete runtime turn from a
+completed turn that failed the answer contract. It includes only allowlisted
+turn status, error category, boolean safety flags, and fixed failed-check
+names, never IDs, score values, answer text, or fixture credentials. This
+profile tests the server feed and chat
 journey; browser rendering and a naturally scheduled report remain separate
 QA checks.
 
