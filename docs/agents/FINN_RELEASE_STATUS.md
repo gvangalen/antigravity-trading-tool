@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: persoonlijke eerste analysestap (21 november 2026)
 
-Phase: `LOCAL_VALIDATED`. Branch
+Phase: `LIVE_DEPLOYED_QA_PENDING`. Branch
 `codex/finn-personalized-analysis-next-step-20261121`, gebaseerd op publieke
 main `18d79f58f89c26f069f360878f166aa095f3837e`. Een analysekaart na
 een bruikbare eigenaargebonden benchmark noemt nu de gecontroleerde score
@@ -31,8 +31,14 @@ De echte providerselector slaagde **20/20** development (SHA-256
 en **109/109** regression (SHA-256
 `846cace4be95cd2136bbababc6231dc116488ceb5a39537403388d3448766a4b`),
 zonder provider-, schema-, parse-, validatie- of timeoutfouten. De lokale
-teststack is na afloop gestopt. PR-CI, main-CI, Auto Deploy, publieke
-SHA-pariteit en onafhankelijke live QA voor deze batch staan nog open.
+teststack is na afloop gestopt. PR [#1239](https://github.com/gvangalen/antigravity-trading-tool/pull/1239)
+en kandidaat-CI `44896710693` slaagden alle vijf jobs. De PR is gemerged
+als `b88b0be6b3721951c133d74192a3c7c17e6e70db`; main-CI `44897218388`
+en Auto Deploy `44897715077` slaagden. Publieke backend-health en
+frontend-build-info gaven beide HTTP 200 en exact die merge-SHA. Deze
+statusupdate maakt zelf een nieuwe hoofdbranch-SHA; Build wacht de volgende
+CI, Auto Deploy en publieke SHA-pariteit af voordat onafhankelijke ingelogde
+QA de kaart test. Er is nog geen live acceptatie voor deze batch.
 
 ## FINN 3.0: multi-asset rapport- en botbronvergelijking (21 november 2026)
 
