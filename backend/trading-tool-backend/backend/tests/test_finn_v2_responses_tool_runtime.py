@@ -15387,7 +15387,11 @@ def test_bot_decision_question_requires_current_owner_history_before_answer(monk
         assert captured["required_read_tool_name"] == "get_decision_history"
 
 
-def test_chart_opinion_reads_displayed_pair_and_saved_trader_context(monkeypatch):
+@pytest.mark.parametrize("question", [
+    "wat vind je nu van de btc chart?",
+    "kan je onze TradingView chart niet zien?",
+])
+def test_chart_opinion_reads_displayed_pair_and_saved_trader_context(monkeypatch, question):
     front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="chart-coach")
     front.model_led_coach = True
     captured = {}
@@ -15410,7 +15414,7 @@ def test_chart_opinion_reads_displayed_pair_and_saved_trader_context(monkeypatch
         "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run", capture_loop,
     )
     asyncio.run(front.run(
-        message="wat vind je nu van de btc chart?", instructions="Lees feiten",
+        message=question, instructions="Lees feiten",
         conversation_context={}, verified_asset="BTC",
         workspace_hints={"page": "/asset", "symbol": "BTC", "quote_currency": "USDT"},
     ))
@@ -15431,6 +15435,8 @@ def test_chart_opinion_pair_prefers_explicit_market_and_rejects_other_workspace_
                    verified_asset="BTC") is None
     assert resolve("wat is de timeframe van de BTC chart?", workspace_hints=hints,
                    verified_asset="BTC") is None
+    assert resolve("kan je onze TradingView chart niet zien?", workspace_hints=hints,
+                   verified_asset="BTC") == ("BTC", "USDT")
 
 
 def test_bot_risk_evaluation_requires_owner_scoped_evaluator(monkeypatch):

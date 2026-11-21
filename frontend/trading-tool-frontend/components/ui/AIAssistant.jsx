@@ -15,11 +15,11 @@ import { useActiveSetup } from "@/app/providers/SetupProvider";
 import { useActiveBot } from "@/app/providers/ActiveBotProvider";
 import { actionButtonStyles } from "@/components/ui/actionButtonStyles";
 import { getAssistantSessionId, trackAssistantEvent } from "@/lib/api/assistantAnalytics";
-import { feedHeaderInstrument, normalizeScopedAssetSymbol, resolveFinnBotPageContext, resolveFinnContextSymbol, resolveFinnSubmissionContext, shouldBlockFinnSubmission } from "@/lib/finnAssetIsolation";
+import { feedHeaderInstrument, finnInstrumentOptions, finnPageInstrumentKey, normalizeScopedAssetSymbol, resolveFinnBotPageContext, resolveFinnContextSymbol, resolveFinnSubmissionContext, shouldBlockFinnSubmission } from "@/lib/finnAssetIsolation";
 import { normalizeTraderProfilePreferences } from "@/lib/traderProfileOptions";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import FinnCommandCenter from "@/components/finn/FinnCommandCenter";
-import { FINN_ASSETS, feedDraftWasEdited, resolveFeedDraftQuery, selectedFeedItemForSubmission, shouldAttachFeedContext } from "@/lib/finnCommandSearch";
+import { feedDraftWasEdited, resolveFeedDraftQuery, selectedFeedItemForSubmission, shouldAttachFeedContext } from "@/lib/finnCommandSearch";
 import { getActiveSetupId } from "@/lib/setup/activeSetup";
 import { indicatorDisplayName } from "@/lib/indicators/configuredIndicatorRows.mjs";
 import { formatDraftCardValue, formatExecutionMode } from "@/lib/contractValueFormatter.mjs";
@@ -814,6 +814,9 @@ function AIAssistantContent({
   };
 
   const context = getContext();
+  const pageInstrumentKey = finnPageInstrumentKey(pathname, context);
+  const activeChatAssetOverride = chatAssetOverride?.pageInstrumentKey === pageInstrumentKey
+    ? chatAssetOverride : null;
   useEffect(() => {
     setChatAssetOverride(null);
   }, [pathname, context.bot_id, context.symbol]);
@@ -1086,10 +1089,13 @@ function AIAssistantContent({
     }
   };
 
-  const changeChatAsset = async (nextAsset) => {
-    const previousAsset = (chatAssetOverride || context.symbol || globalSymbol || "").split("/")[0];
-    setChatAssetOverride(nextAsset || null);
-    if (!nextAsset || nextAsset === previousAsset) return;
+  const changeChatAsset = async (nextInstrument) => {
+    const previousInstrument = feedHeaderInstrument(
+      activeChatAssetOverride?.symbol || context.symbol || globalSymbol,
+      activeChatAssetOverride?.quote_currency || context.quote_currency,
+    );
+    setChatAssetOverride(nextInstrument ? { ...nextInstrument, pageInstrumentKey } : null);
+    if (!nextInstrument || nextInstrument.key === previousInstrument) return;
     const openIds = [...new Set(messagesRef.current.flatMap((message) =>
       (message.actions || [])
         .filter((action) => action?.type === "v2_proposal" && action.proposal_id && !message.draftCanceled)
@@ -1575,7 +1581,10 @@ function AIAssistantContent({
       );
       const requestContext = resolveFinnSubmissionContext({
         pathname, livePageContext, latestAssistantState, commandContext,
-        chatAssetOverride, locale: submissionLocale, query: nextQuery,
+        chatAssetOverride: chatAssetOverride?.pageInstrumentKey ===
+          finnPageInstrumentKey(pathname, livePageContext)
+          ? chatAssetOverride : null,
+        locale: submissionLocale, query: nextQuery,
         autoSubmitCommand: Boolean(commandRequest?.autoSubmit),
         originalCommandQuery: commandRequest?.query || "",
       });
@@ -2597,11 +2606,17 @@ function AIAssistantContent({
     ? normalizeScopedAssetSymbol(commandRequest?.context?.symbol) : null;
   const displayedContextSymbol = (isFeedHandoff && selectedCommandSymbol
     ? selectedCommandSymbol : pathname === "/bot" && context.bot_id ? context.symbol
-    : chatAssetOverride || selectedCommandSymbol || context.symbol) || globalSymbol || "BTC";
+    : activeChatAssetOverride?.symbol || selectedCommandSymbol || context.symbol) || globalSymbol || "BTC";
+  const displayedContextQuote = isFeedHandoff && selectedCommandSymbol
+    ? commandRequest?.context?.quote_currency
+    : activeChatAssetOverride?.quote_currency || (selectedCommandSymbol
+      ? commandRequest?.context?.quote_currency : context.quote_currency);
   const displayedContextInstrument = feedHeaderInstrument(
-    displayedContextSymbol, commandRequest?.context?.quote_currency,
-    isFeedHandoff && Boolean(selectedCommandSymbol),
+    displayedContextSymbol, displayedContextQuote,
   );
+  const contextInstrumentOptions = finnInstrumentOptions(watchlist.watchlist, {
+    symbol: displayedContextSymbol, quote_currency: displayedContextQuote,
+  });
   const finnContextLabel = [workspaceContextLabel, displayedContextInstrument]
     .filter(Boolean)
     .join(" · ");
@@ -2746,16 +2761,15 @@ function AIAssistantContent({
                   <span aria-hidden="true">·</span>
                   <select
                     aria-label={at("uiText.assetContext")}
-                    value={displayedContextSymbol}
+                    value={displayedContextInstrument}
                     disabled={pathname === "/bot" && Boolean(context.bot_id)}
-                    onChange={(event) => { void changeChatAsset(event.target.value || null); }}
+                    onChange={(event) => { void changeChatAsset(
+                      contextInstrumentOptions.find((item) => item.key === event.target.value) || null,
+                    ); }}
                     className="max-w-24 cursor-pointer bg-transparent font-semibold text-slate-600 outline-none disabled:cursor-default dark:text-slate-300"
                   >
-                    {!FINN_ASSETS.some((asset) => asset.symbol === displayedContextSymbol) ? (
-                      <option value={displayedContextSymbol}>{displayedContextSymbol || "—"}</option>
-                    ) : null}
-                    {FINN_ASSETS.map((asset) => <option key={asset.symbol} value={asset.symbol}>
-                      {asset.symbol === displayedContextSymbol ? displayedContextInstrument : asset.symbol}
+                    {contextInstrumentOptions.map((asset) => <option key={asset.key} value={asset.key}>
+                      {asset.key}
                     </option>)}
                   </select>
                 </div>

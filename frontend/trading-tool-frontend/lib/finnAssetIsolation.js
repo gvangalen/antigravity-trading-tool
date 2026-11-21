@@ -3,10 +3,30 @@ export function normalizeScopedAssetSymbol(value) {
   return /^[A-Z0-9._:-]{1,20}$/.test(normalized) ? normalized : null;
 }
 
-export function feedHeaderInstrument(symbol, quoteCurrency, isFeedHandoff) {
+export function feedHeaderInstrument(symbol, quoteCurrency) {
   const base = normalizeScopedAssetSymbol(symbol) || "BTC";
-  const quote = isFeedHandoff ? String(quoteCurrency || "").trim().toUpperCase() : "";
+  const quote = String(quoteCurrency || "").trim().toUpperCase();
   return /^(EUR|USDT)$/.test(quote) ? `${base}/${quote}` : base;
+}
+
+export function finnInstrumentOptions(watchlist = [], current = null) {
+  const options = [];
+  const seen = new Set();
+  for (const item of [current, ...watchlist]) {
+    const symbol = normalizeScopedAssetSymbol(item?.symbol);
+    if (!symbol) continue;
+    const quote = String(item?.quote_currency || "").trim().toUpperCase();
+    const quote_currency = /^(EUR|USDT)$/.test(quote) ? quote : null;
+    const key = feedHeaderInstrument(symbol, quote_currency);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    options.push({ key, symbol, quote_currency });
+  }
+  return options;
+}
+
+export function finnPageInstrumentKey(pathname, context) {
+  return `${pathname}:${feedHeaderInstrument(context?.symbol, context?.quote_currency)}`;
 }
 
 export function resolveScopedAssetStatus({
@@ -81,11 +101,16 @@ export function resolveFinnSubmissionContext({
     : { ...livePageContext };
   const selectedCommandSymbol = autoSubmitCommand && originalCommandQuery === query
     ? normalizeScopedAssetSymbol(commandContext.symbol) : null;
+  const overrideSymbol = normalizeScopedAssetSymbol(
+    typeof chatAssetOverride === "string" ? chatAssetOverride : chatAssetOverride?.symbol,
+  );
+  const overrideQuote = typeof chatAssetOverride === "object"
+    ? chatAssetOverride?.quote_currency || null : null;
   const request = {
     ...base,
     ...commandContext,
     locale,
-    symbol: selectedCommandSymbol || chatAssetOverride || commandContext.symbol || base.symbol,
+    symbol: selectedCommandSymbol || overrideSymbol || commandContext.symbol || base.symbol,
   };
   if (pathname === "/bot") {
     const selectedFeedSymbol = commandContext.feed_item_id
@@ -108,7 +133,8 @@ export function resolveFinnSubmissionContext({
     request.strategy_id = selectedFeedSymbol ? null : focused.strategy_id || null;
     if (selectedFeedSymbol) request.bot_id = null;
   }
-  request.quote_currency = commandContext.quote_currency || (
+  request.quote_currency = commandContext.quote_currency || (overrideSymbol ? overrideQuote : null) || (
+    overrideSymbol && overrideSymbol !== livePageContext?.symbol ? null :
     String(request.symbol || "").toUpperCase() === String(livePageContext?.symbol || "").toUpperCase()
       ? livePageContext?.quote_currency || null : null
   );
