@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: actuele score bij rapportbespreking (21 november 2026)
 
-Phase: `LIVE_DEPLOYED_QA_RETEST_PENDING`. Independent QA returned
+Phase: `LIVE_DEPLOYED_SCOPED_QA_ACCEPTED`. Independent QA returned
 `NOT_ACCEPTED` on the prior live SHA
 `65b291d75581f349c6edf9ba5a0a0ede5da4dceb`. The protected
 `report_discuss` case in workflow **44940411373-1** now passed the saved
@@ -45,9 +45,30 @@ Product PR **#1261** passed all five CI jobs in workflow **44943668772**
 and merged as `6e790bfec8016a401309ed19df6e6f34dcc9c5e2`.
 Main CI **44944272421** passed all five jobs and Auto Deploy **44944832221**
 succeeded. Public backend health and frontend build-info both returned HTTP
-200 and reported that exact product SHA. The status-only update will create
-a later main revision; its final CI, Auto Deploy and public SHA parity must
-finish before the independent authenticated report retest starts.
+200 and reported that exact product SHA. Status-only merge
+`af4191f95d3fa891459caa53cc1aa01caaf69314` passed all five main CI jobs
+in **44945582909** and Auto Deploy **44946170333**. Backend and frontend again
+returned HTTP 200 and that exact SHA; no newer deployment was pending when
+independent QA started.
+
+Independent authenticated QA returned **ACCEPTED for the agreed focused
+profiles** on live SHA `af4191f95d3fa891459caa53cc1aa01caaf69314`.
+Protected report-feed workflow **44946490098-1** passed the dated SOL analysis
+card, invalid-current-score hiding, report attention and `report_discuss`,
+including both saved numeric `snapshot_score` and distinct
+`current_incomplete`; the fixture was cleaned up (artifact SHA-256
+`2e3b66aff2785e28b02acc019f1934e4d9a64de63f1115d2908f57531e5427f1`).
+Protected three-band Smart DCA workflow **44946635124-1** passed proposal,
+confirmation, save, `already_executed` replay, owner scope and cleanup. It
+placed one virtual Paper order and no second order in the same week; zero Live
+trades, Live bots or broker keys (artifact SHA-256
+`ad4a38d05b55001e561b44275e324dd0ae27b9f07bfa4eb4ea040bdaac357dc5`).
+Authenticated live-chat historical BTC returns also passed: October -8.60%,
+November -23.29%, last week -7.36%, Q4 -29.18%, and 2026 -32.34%; the raw
+API returned 644 dated records without a visible HTTP 500. The accepted
+scope does not establish the full 37-case matrix, a naturally scheduled
+report or separate polling/SSE parity. This QA-verdict status-only update
+does not change runtime code and will create a newer deployment identity.
 
 ## FINN 3.0: Smart DCA-weekdag en chat-sessieherstel (21 november 2026)
 
