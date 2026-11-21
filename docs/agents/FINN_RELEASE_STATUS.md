@@ -4,6 +4,37 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: herstel historische forward returns (21 november 2026)
+
+Phase: `LOCAL_REPAIR_VALIDATION`. Independent QA returned `NOT_ACCEPTED` for
+the forward-return integration on live SHA
+`3f2040ef05ff8c824664a1f6de0b43a1fd2bf300`. In an authenticated
+BTC/USDT conversation, FINN reported an internal error for stored historical
+month returns and repeated the error for week, quarter and year. The visible
+return table was populated. The browser observation did not expose a tool
+error code or production traceback, so the production root cause is not
+proven. The public month, week, quarter and year aggregation endpoints returned
+HTTP 200; the raw forward-return endpoint returned HTTP 500. These are
+read-only public observations, not an independent QA acceptance.
+
+A focused local regression reproduced an `AttributeError` when a stored
+`start_date` or `end_date` is a `date` rather than a `datetime`. The adapter
+now accepts both types, matching the existing market-data service's date
+handling. The focused forward-return tests pass **3/3**. The full backend suite
+passed **5201**, skipped **7** (log SHA-256
+`37e23ab7d4f05320920b9b4523bb449fb70a993212c4621cfb0658100d6388f2`).
+The real-provider development selector passed **20/20** with zero provider,
+schema, parse, validation or timeout failures (artifact SHA-256
+`8adc634f882bf6cb9c3c3524fe6bf4fd0c3e3d19a1b5411558d908e78978a24f`).
+The isolated FastAPI/Celery/PostgreSQL/Redis matrix passed **38/38**, including
+**16/16** action contracts and **9/9** lineage checks, with zero Live bots or
+non-allowlisted executions (artifact SHA-256
+`1d4be3c018ebc1ce270bae760cb4d2cd7c549495a4a2b41b89e233a710e45459`).
+The real-provider regression selector passed **109/109** with zero provider,
+schema, parse, validation or timeout failures (artifact SHA-256
+`f50f7a7cf4f4482fdf2cf29ee3e3ce7f18f72615faa5f2d2df50217ff5b172a7`).
+Release validation remains pending; no production fix or acceptance is claimed
+yet.
 ## FINN 3.0: exact watchlist pair and five Smart DCA benchmark zones (21 november 2026)
 
 Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_STATUS_SHA`. Branch `codex/finn-pair-context`,

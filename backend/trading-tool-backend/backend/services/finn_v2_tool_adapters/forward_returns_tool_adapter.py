@@ -35,7 +35,10 @@ class ForwardReturnsToolAdapter:
             for record in records:
                 if record.period != stored_period or record.change is None:
                     continue
-                start = record.start_date.date()
+                start = self._as_date(record.start_date)
+                end = self._as_date(record.end_date)
+                if start is None or end is None:
+                    continue
                 year, index = self._calendar_position(name, start)
                 if year < first_year or year > today.year:
                     continue
@@ -46,15 +49,15 @@ class ForwardReturnsToolAdapter:
                         year=year,
                         index=index,
                         value=float(record.change),
-                        observed_through=record.end_date.date(),
+                        observed_through=end,
                     )
             periods[name] = [ForwardReturnYearData(year=year, values=values) for year, values in sorted(by_year.items())]
 
         if not any(periods.values()):
             raise LookupError("source_unavailable")
         latest_created = max((record.created_at for record in records if record.created_at), default=None)
-        history_start = min((record.start_date.date() for record in records if record.start_date), default=None)
-        latest_observed = max((record.end_date.date() for record in records if record.end_date), default=None)
+        history_start = min((value for record in records if (value := self._as_date(record.start_date))), default=None)
+        latest_observed = max((value for record in records if (value := self._as_date(record.end_date))), default=None)
         data = ForwardReturnsData(
             symbol=symbol,
             as_of=latest_created,
@@ -72,6 +75,14 @@ class ForwardReturnsToolAdapter:
             "entity_type": "forward_returns",
             "asset": symbol,
         }
+
+    @staticmethod
+    def _as_date(value: date | datetime | None) -> date | None:
+        if isinstance(value, datetime):
+            return value.date()
+        if isinstance(value, date):
+            return value
+        return None
 
     @staticmethod
     def _calendar_position(period: str, start: date) -> tuple[int, int]:
