@@ -99,6 +99,33 @@ changes have not yet received independent live QA acceptance. A separate
 earlier QA review found the historical forward-return chat tool NOT_ACCEPTED
 on the previous live revision; this release did not modify that tool.
 
+## FINN 3.0: rapportmeldingen behouden hun aandachtspunt (21 november 2026)
+
+Phase: `LOCAL_VALIDATED_CANDIDATE`. Branch
+`codex/finn3-report-recovery-attention-20261121`. Recovery of saved daily,
+weekly, monthly and quarterly reports now passes the persisted score snapshot
+to the feed publisher. An unread recent generic card can be superseded when
+that snapshot contains one verifiable pair-specific attention point. The
+deduplication revision includes the attention kind and pair, while already
+handled cards stay handled. No trading action or provider selector changed.
+
+The final backend suite passed **5201**, skipped **7** (log SHA-256
+`3bb2cc156708f529fd1e8173e0516e6e7a4f82b22d513138b0b0291bc669a65a`). Focused report/feed
+regressions passed **63/63**. Frontend typecheck, i18n lint and tests,
+command/proposal tests, production build and `audit:high` passed; the audit
+reported one moderate Next.js advisory and no high findings. The report
+recovery path is covered by saved-snapshot, generic-card upgrade and
+missing-attention regressions. The local action and real-provider selector
+matrices for the unchanged FINN runtime passed on the immediately preceding
+main product revision `5b2127b2a85e9dfb3b43caf04480a68db9f40d53`
+(38/38 local matrix; selector 20/20 development and 109/109 regression).
+This candidate has not rerun those provider and action matrices after its
+report-only change; that evidence is carried forward for unchanged contracts,
+not presented as a new run. Candidate CI, deploy identity and independent
+authenticated QA are pending. The browser observation that prompted this
+repair showed a generic daily report card despite a report containing dated
+pair scores; the protected QA profile has not yet tested this recovery route.
+
 ## FINN 3.0: historische forward returns in analyse (21 november 2026)
 
 Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_IDENTITY`. Branch
