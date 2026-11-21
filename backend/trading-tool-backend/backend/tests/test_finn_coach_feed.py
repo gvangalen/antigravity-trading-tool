@@ -11,7 +11,11 @@ from backend.services import finn_coach_feed_service as module
 from backend.services.finn_v2_confirmation_service import FinnV2ConfirmationService
 from backend.services.finn_v2_reasoning_context_service import FinnV2ReasoningContextService
 from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
-from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor, _feed_evidence_instruction
+from backend.services.finn_v2_responses_front_door import (
+    FinnResponsesFrontDoor, _complete_report_current_score_answer,
+    _feed_evidence_instruction,
+)
+from backend.services.finn_v2_responses_loop import FinnResponsesResult
 from backend.services.finn_v2_responses_answer_verifier import FinnResponsesVerifiedAnswer
 from backend.services.finn_v2_run_service import FinnV2RunService
 from backend.api.ai_assistant_api import _feed_context_boundary
@@ -1388,6 +1392,40 @@ def test_report_feed_instruction_separates_snapshot_from_missing_current_score()
     assert "current benchmark score is incomplete or unavailable" in instruction
     assert "state that number explicitly as the saved report score" in instruction
     assert "Never present the report snapshot score as current" in instruction
+
+
+def test_selected_report_answer_states_missing_current_score_without_reusing_snapshot():
+    facts = [
+        {"facts": {"event_type": "daily_report_ready", "feed_item_id": "report-1",
+                   "historical_notification": True, "selection_origin": "current_run"}},
+        {"facts": {"feed_item_id": "report-1", "current_report_pair": "SOL",
+                   "current_source_status": "missing_component",
+                   "current_component_source_status": {"market_score": "missing_score"},
+                   "current_benchmark_score": None}},
+    ]
+    answer = FinnResponsesResult(
+        text="Het opgeslagen SOL-dagrapport van 21 november toont score 34/100.",
+        response_id="report-1", tool_trace=(),
+    )
+    completed = _complete_report_current_score_answer(answer, facts, "nl")
+    assert "score 34/100" in completed.text
+    assert "De huidige benchmarkscore voor SOL is onvolledig" in completed.text
+    assert "opgeslagen rapportscore is geen actuele score" in completed.text
+    assert completed.response_id_reusable is False
+    assert _complete_report_current_score_answer(completed, facts, "nl") == completed
+
+
+def test_report_answer_does_not_claim_missing_current_score_without_selected_reread():
+    answer = FinnResponsesResult(text="Rapportscore 34/100.", response_id="r", tool_trace=())
+    selected = {"facts": {"event_type": "daily_report_ready", "feed_item_id": "r",
+                          "historical_notification": True, "selection_origin": "current_run"}}
+    assert _complete_report_current_score_answer(answer, [selected], "nl") == answer
+    available = {"facts": {"feed_item_id": "r", "current_report_pair": "SOL",
+                           "current_source_status": "available", "current_benchmark_score": 35}}
+    assert _complete_report_current_score_answer(answer, [selected, available], "nl") == answer
+    other = {"facts": {"feed_item_id": "other", "current_report_pair": "SOL",
+                       "current_source_status": "missing_component"}}
+    assert _complete_report_current_score_answer(answer, [selected, other], "nl") == answer
 
 
 def test_report_feed_does_not_guess_between_duplicate_owner_pairs(monkeypatch):

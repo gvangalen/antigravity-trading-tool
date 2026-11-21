@@ -4,6 +4,46 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: actuele score bij rapportbespreking (21 november 2026)
+
+Phase: `LOCAL_VALIDATED_CANDIDATE_PENDING_CI`. Independent QA returned
+`NOT_ACCEPTED` on the prior live SHA
+`65b291d75581f349c6edf9ba5a0a0ede5da4dceb`. The protected
+`report_discuss` case in workflow **44940411373-1** now passed the saved
+numeric `snapshot_score` check but failed only `current_incomplete`: FINN did
+not demonstrably state that the currently reread SOL benchmark was incomplete
+after its Market component was removed. The sanitized artifact has SHA-256
+`a10173cab4abf369e241c70e031b350ba6fc3dbcff5057802a322707a8a86246`;
+it does not retain answer prose, so the exact omission is not observable.
+The separately protected three-band Smart DCA workflow **44940567828-1**
+passed with one virtual Paper order, replay and cleanup; its artifact SHA-256
+is `c51032904346a5efcc65b6278f71ec374f6af8bf9c7343d5cc61e4c95df7bf77`.
+The authenticated historical BTC returns questions also passed. No Live call,
+bot activation or broker order occurred.
+
+The report discussion now adds an explicit, pair-specific current-score
+incompleteness statement when, and only when, the selected owner's feed card
+has a newly reread non-available benchmark status. It keeps the dated saved
+report score separate; a card without a verified current read cannot trigger
+that statement. Focused report/feed regressions passed **79/79**. The isolated
+local FastAPI/Celery/PostgreSQL/Redis/Responses matrix passed **17/17** action
+contracts and **28/28** adapters, plus the Smart DCA migration, confirmed
+Smart DCA and calendar DCA probes. Its artifact SHA-256 is
+`b7dedaea7cdc4f6443de7a9111bc78296a427294881845410ccbb06fe4cc2502`.
+The matrix recorded zero broker orders, Live bots, Live calls and production
+connections.
+The real-provider development selector passed **20/20** with zero provider,
+schema, timeout, parse or validation failures (artifact SHA-256
+`1c5df79a4c412d7d2d7c3d29c97433728764143c1c00b7d2ba44a865bf965869`).
+The final backend suite on the combined latest main passed **5234**, skipped
+**7** (log SHA-256
+`ef661d1d4f0177b1b7898911ea9d180288bef5ab6d9e1938f90d9fd44c2c2625`).
+The real-provider regression passed **109/109** with zero provider, schema,
+timeout, parse or validation failures (artifact SHA-256
+`f8f6f4b4341567781b1dd105598ddb0fcc87c81d736c7988ff864dfb1b5890f4`).
+Candidate CI,
+Auto Deploy, public SHA parity and independent retest remain pending.
+
 ## FINN 3.0: Smart DCA-weekdag en chat-sessieherstel (21 november 2026)
 
 Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_STATUS_SHA`. Branch
@@ -51,7 +91,7 @@ success. Geen van beide is een onafhankelijk QA-verdict voor deze nieuwe SHA.
 
 ## FINN 3.0: numerieke rapportsnapshot in coachantwoord (21 november 2026)
 
-Phase: `LIVE_DEPLOYED_QA_RETEST_PENDING`. Independent QA returned
+Phase: `LIVE_DEPLOYED_QA_NOT_ACCEPTED`. Independent QA returned
 `NOT_ACCEPTED` for the prior live SHA
 `3231f54b64b47ec452a4ae630760767e3f054b80` because the protected
 `report_discuss` profile failed only `snapshot_score` in workflow

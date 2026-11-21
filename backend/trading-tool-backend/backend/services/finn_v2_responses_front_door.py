@@ -576,6 +576,53 @@ def _feed_evidence_instruction(facts: list[dict[str, Any]] | None) -> str:
     )
 
 
+def _complete_report_current_score_answer(
+    result: FinnResponsesResult, facts: list[dict[str, Any]] | None, locale: str,
+) -> FinnResponsesResult:
+    """State a verified missing current score separately from a saved report.
+
+    The model may correctly quote the dated report yet leave the current
+    benchmark implicit. Only the selected owner's fresh feed reread may supply
+    this assertion; a historical card alone is insufficient.
+    """
+    if result.answer_kind != "free_text" or not result.text:
+        return result
+    selected = next((
+        item["facts"] for item in facts or []
+        if isinstance(item, dict) and isinstance(item.get("facts"), dict)
+        and item["facts"].get("event_type") in {"daily_report_ready", "periodic_report_ready"}
+        and item["facts"].get("historical_notification") is True
+        and item["facts"].get("selection_origin") == "current_run"
+    ), None)
+    if selected is None:
+        return result
+    current = next((
+        item["facts"] for item in facts or []
+        if isinstance(item, dict) and isinstance(item.get("facts"), dict)
+        and item["facts"].get("feed_item_id") == selected.get("feed_item_id")
+        and "current_source_status" in item["facts"]
+    ), None)
+    if current is None or current.get("current_source_status") == "available":
+        return result
+    pair = str(current.get("current_report_pair") or "").upper()
+    if not re.fullmatch(r"[A-Z0-9][A-Z0-9._-]{0,19}(?:/[A-Z]{2,12})?", pair):
+        return result
+    language = str(locale or "nl").split("-")[0].lower()
+    if language == "de":
+        already_stated = re.search(r"aktuell.{0,90}unvollständig", result.text, re.I)
+        statement = f"Der aktuelle Benchmark-Score für {pair} ist unvollständig; die gespeicherte Berichtspunktzahl ist kein aktueller Score."
+    elif language == "en":
+        already_stated = re.search(r"current.{0,90}incomplete", result.text, re.I)
+        statement = f"The current benchmark score for {pair} is incomplete; the saved report score is not a current score."
+    else:
+        already_stated = re.search(r"huidig.{0,90}onvolledig", result.text, re.I)
+        statement = f"De huidige benchmarkscore voor {pair} is onvolledig; de opgeslagen rapportscore is geen actuele score."
+    if already_stated:
+        return result
+    return replace(result, text=f"{result.text.rstrip()}\n\n{statement}",
+                   response_id_reusable=False, model_owned_repair=False)
+
+
 def _selected_paper_next_step(facts: list[dict[str, Any]] | None, locale: str) -> tuple[str, bool] | None:
     """Answer the selected setup from its owner-read current state only."""
     rows = [item.get("facts") for item in (facts or [])
@@ -6090,6 +6137,7 @@ class FinnResponsesFrontDoor:
                     model_owned_repair=False,
                     response_id_reusable=False,
                 )
+        result = _complete_report_current_score_answer(result, feed_evidence, locale)
         recent_action_result = dict(conversation_context.get("previous_action_result") or {})
         if recent_action_result.get("owner_user_id") != self.user_id or recent_action_result.get("result_status") != "succeeded":
             recent_action_result = {}
