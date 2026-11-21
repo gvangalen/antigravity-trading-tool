@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: chartanalyse met opgeslagen tradercontext (21 november 2026)
 
-Phase: `LOCAL_VALIDATED_CANDIDATE`. Branch
+Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_STATUS_SHA`. Branch
 `codex/finn-chart-coach-context`, implementation SHA `59ee3016d`. FINN binds a
 chart-opinion question to the exact displayed crypto pair and reads its market
 and technical measurements, the owner's trader profile, saved setup, and
@@ -33,8 +33,15 @@ with zero provider, schema, parse, validation, or timeout failures. A synthetic
 BTC/USDT API/worker conversation completed read-only with polling/SSE parity;
 it distinguished a previously discussed DCA idea from a saved rule (probe
 SHA-256 `615f7e8c433952b3672c29eb7334299a3ddbb698858a7465e13bd7f7a1df4023`).
-The isolated stack was stopped. Candidate CI, Auto Deploy, public identity
-checks, and independent authenticated QA are pending.
+The isolated stack was stopped. PR [#1244](https://github.com/gvangalen/antigravity-trading-tool/pull/1244)
+passed all five jobs in candidate CI `44915073921` and merged as
+`261a421428f4f82c95c333d30a766c3c5f7a1b8b`. Main CI `44915761465`
+passed all five jobs. Auto Deploy `44916322077` succeeded for that same SHA.
+GitHub main, public `https://tradamind.com/api/health`, and public
+`https://tradamind.com/build-info.json` all identified that SHA; both public
+endpoints returned HTTP 200. This status-only update creates a later main SHA,
+so Build must wait for its CI, Auto Deploy, and backend/frontend SHA parity.
+Independent authenticated QA has not yet accepted this chart-coaching change.
 
 ## FINN 3.0: synthetic feed fixture schema alignment (21 November 2026)
 
