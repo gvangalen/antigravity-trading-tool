@@ -759,6 +759,12 @@ class FinnResponsesFrontDoor:
             "For a question combining a saved plan, market context and portfolio or bot budget, "
             "read each relevant source before saying that one of them is missing. "
             "For the latest bot decision, use the persisted bot decision history. "
+            "A saved daily report freezes the verified sources available when it was "
+            "generated. Indicator scores may use the last completed candle, while its "
+            "quote and bot decision have their own source times. If a later bot "
+            "check exists, call the report decision a report snapshot and state the later "
+            "check's own time. Do not call a same-day report 'stale data' or 'verouderde "
+            "data' merely because a later check exists. "
             "A portfolio snapshot alone does not prove a bot decision. "
             "When the trader asks about a setup and an active bot separately, a missing linked bot "
             "means only that the setup has no linked bot. Check the owner-scoped Paper portfolio "
@@ -1097,7 +1103,7 @@ class FinnResponsesFrontDoor:
     def _asks_about_bot_decision(message: str) -> bool:
         """Bind explicit bot-decision questions to persisted owner evidence."""
         return bool(
-            re.search(r"\b(?:bot(?:besluit(?:en)?|beslissing(?:en)?|beoordeling(?:en)?|check(?:s)?)?|automatisering|automation)\b", message, re.I)
+            re.search(r"\b(?:bots?|bot(?:besluit(?:en)?|beslissing(?:en)?|beoordeling(?:en)?|check(?:s)?)|automatisering|automation)\b", message, re.I)
             and re.search(
                 r"\b(?:botbeslissing(?:en)?|botbesluit(?:en)?|beslissing(?:en)?|besluit(?:en)?|decision(?:s)?|"
                 r"beoordeling(?:en)?|(?:bot)?check(?:s)?|(?:bot)?reden(?:en)?|blokkeer\w*|entscheidung(?:en)?)\b",

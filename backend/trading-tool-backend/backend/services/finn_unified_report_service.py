@@ -842,7 +842,7 @@ def _report_v2_factual_fallbacks(context: dict[str, Any], facts: dict[str, Any],
         portfolio = f"Paper valuation: {paper.get('valuation_status', 'unknown')}; Live valuation: {live.get('valuation_status', 'unknown')}."
         states = "; ".join(f"{bot.get('trading_pair') or bot.get('symbol') or bot.get('bot_name') or 'Bot'}: "
                            f"{'active' if bot.get('is_active') else 'paused'}" for bot in bots)
-        automation = f"{len(bots)} bot(s) read at report time. {states}. A prior decision is not a new order."
+        automation = f"{len(bots)} bot(s) read at report time. {states}. A decision in this snapshot is not a new order."
     elif locale == "de":
         retrospective = (f"Gegenüber {comparison['previous_date']}: " + "; ".join(
             change_text(row) for row in comparisons)
@@ -850,7 +850,7 @@ def _report_v2_factual_fallbacks(context: dict[str, Any], facts: dict[str, Any],
         portfolio = f"Paper-Bewertung: {paper.get('valuation_status', 'unbekannt')}; Live-Bewertung: {live.get('valuation_status', 'unbekannt')}."
         states = "; ".join(f"{bot.get('trading_pair') or bot.get('symbol') or bot.get('bot_name') or 'Bot'}: "
                            f"{'aktiv' if bot.get('is_active') else 'pausiert'}" for bot in bots)
-        automation = f"{len(bots)} Bot(s) zum Berichtszeitpunkt gelesen. {states}. Eine ältere Entscheidung ist keine neue Order."
+        automation = f"{len(bots)} Bot(s) zum Berichtszeitpunkt gelesen. {states}. Eine Entscheidung in dieser Momentaufnahme ist keine neue Order."
     else:
         retrospective = (f"Vergeleken met {comparison['previous_date']}: " + "; ".join(
             change_text(row) for row in comparisons)
@@ -874,7 +874,7 @@ def _report_v2_factual_fallbacks(context: dict[str, Any], facts: dict[str, Any],
                            f"{'actief' if bot.get('is_active') else 'gepauzeerd'}"
                            for bot in bots)
         automation = (f"{len(bots)} bot(s) gelezen op het rapportmoment. {states}. "
-                      "Een oudere beslissing is geen nieuwe order.")
+                      "Een beslissing in deze rapportmomentopname is geen nieuwe order.")
     frequency_labels = {
         "nl": {"daily": "dagelijks", "weekly": "wekelijks", "monthly": "maandelijks"},
         "en": {"daily": "daily", "weekly": "weekly", "monthly": "monthly"},

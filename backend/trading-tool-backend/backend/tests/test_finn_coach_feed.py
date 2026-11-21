@@ -23,6 +23,15 @@ def test_watchlist_feed_copy_suggests_analysis_without_claiming_changes():
     assert "niets aan je analyse gewijzigd" in copy["nl"]["body"]
 
 
+def test_manual_plan_review_does_not_refer_to_a_nonexistent_bot():
+    copy = module._fallback("plan_review", "ETH-plan", {
+        "trading_pair": "ETH/EUR", "direction": "down",
+        "source_status": "available", "plan_status": "outside_conditions",
+    })
+    assert "bekijk de score en je plan" in copy["nl"]["body"]
+    assert "botbeslissing" not in copy["nl"]["body"]
+
+
 def test_watchlist_feed_reads_exact_owned_row_before_publishing():
     class _Result:
         def mappings(self):

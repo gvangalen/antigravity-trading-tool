@@ -382,9 +382,9 @@ def _fallback(kind: str, subject: str, evidence: dict, *, focus: str = "brief") 
         elif status == "outside_conditions":
             titles = ("Plancontrole: wacht met instappen", "Plan check: wait before entry", "Planprüfung: Einstieg abwarten")
             bodies = (
-                f"{name}{market}: de koers {movement[0]} en de gemeten score valt buiten je opgeslagen voorwaarden. Wacht met een nieuwe instap; bekijk de score en botbeslissing.",
-                f"{name}{market}: the price {movement[1]} and the measured score is outside your saved conditions. Wait before a new entry; review the score and bot decision.",
-                f"{name}{market}: Der Kurs {movement[2]} und der gemessene Score liegt außerhalb deiner gespeicherten Bedingungen. Warte vor einem neuen Einstieg; prüfe Score und Botentscheidung.",
+                f"{name}{market}: de koers {movement[0]} en de gemeten score valt buiten je opgeslagen voorwaarden. Wacht met een nieuwe instap; bekijk de score en je plan.",
+                f"{name}{market}: the price {movement[1]} and the measured score is outside your saved conditions. Wait before a new entry; review the score and your plan.",
+                f"{name}{market}: Der Kurs {movement[2]} und der gemessene Score liegt außerhalb deiner gespeicherten Bedingungen. Warte vor einem neuen Einstieg; prüfe Score und Plan.",
             )
         else:
             titles = ("Plancontrole na koersbeweging", "Plan check after price move", "Planprüfung nach Kursbewegung")

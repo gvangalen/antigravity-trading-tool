@@ -15312,6 +15312,9 @@ def test_paper_cash_position_budget_question_renders_verified_bot_facts():
 
 
 def test_bot_decision_question_binds_persisted_history_even_for_portfolio_tool():
+    assert FinnResponsesFrontDoor._asks_about_bot_decision(
+        "Vergelijk mijn BTC- en AAPL-bots met hun checks om 20:00 CET."
+    )
     catalog = FinnResponsesToolCatalog()
     selected = catalog.validate("get_saved_bots", {"asset": "AAPL"})
     bound = FinnResponsesFrontDoor._bind_bot_decision_evidence(
@@ -15349,7 +15352,11 @@ def test_bot_decision_question_binds_persisted_history_even_for_portfolio_tool()
     assert report_question.read_tools == ("read_review_history", "read_latest_report")
 
 
-def test_bot_decision_question_requires_current_owner_history_before_answer(monkeypatch):
+@pytest.mark.parametrize("message", [
+    "Vergelijk mijn actuele AAPL- en BTC-botbeslissingen met het dagrapport.",
+    "Vergelijk mijn AAPL- en BTC-bots met hun checks om 20:00 CET en het nachtrapport.",
+])
+def test_bot_decision_question_requires_current_owner_history_before_answer(monkeypatch, message):
     front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="bot-history-required")
     front.model_led_coach = True
     captured = {}
@@ -15362,7 +15369,7 @@ def test_bot_decision_question_requires_current_owner_history_before_answer(monk
         "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run", capture_loop,
     )
     asyncio.run(front.run(
-        message="Vergelijk mijn actuele AAPL- en BTC-botbeslissingen met het dagrapport.",
+        message=message,
         instructions="Lees feiten", conversation_context={}, verified_asset="AAPL",
     ))
     assert captured["required_read_tool_name"] == "get_decision_history"

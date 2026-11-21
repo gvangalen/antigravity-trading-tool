@@ -65,3 +65,4 @@ def test_report_fallback_keeps_verified_bot_time_visible():
     assert "BTC" in text
     assert "2026-11-16 05:15:18 CET" in text
     assert "04:15" not in text
+    assert "beslissing in deze rapportmomentopname" in text
