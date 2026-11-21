@@ -99,7 +99,7 @@ changes have not yet received independent live QA acceptance. A separate
 earlier QA review found the historical forward-return chat tool NOT_ACCEPTED
 on the previous live revision; this release did not modify that tool.
 
-## FINN 3.0: rapportmeldingen behouden hun aandachtspunt (21 november 2026)
+## FINN 3.0: rapportmeldingen en historische rendementen (21 november 2026)
 
 Phase: `LOCAL_VALIDATED_CANDIDATE`. Branch
 `codex/finn3-report-recovery-attention-20261121`. Recovery of saved daily,
@@ -107,11 +107,34 @@ weekly, monthly and quarterly reports now passes the persisted score snapshot
 to the feed publisher. An unread recent generic card can be superseded when
 that snapshot contains one verifiable pair-specific attention point. The
 deduplication revision includes the attention kind and pair, while already
-handled cards stay handled. No trading action or provider selector changed.
+handled cards stay handled. A separate live read-only browser check on public
+SHA `3f2040ef05ff8c824664a1f6de0b43a1fd2bf300` found that FINN could not
+read stored BTC historical returns although Analyse displayed period values.
+Production backend logs showed that date-only period bounds fail the raw
+forward-return response model. The interactive FINN worker log confirmed four
+`read_forward_returns` failures at the adapter's `.date()` call with
+`AttributeError: 'datetime.date' object has no attribute 'date'`; a local
+reproduction gave the same error. This candidate
+accepts both date-only and datetime bounds in the FINN adapter and preserves
+the raw endpoint's datetime response contract by normalizing date-only bounds
+to midnight UTC. Neither change starts a market-data sync or trading action.
 
-The final backend suite passed **5201**, skipped **7** (log SHA-256
-`3bb2cc156708f529fd1e8173e0516e6e7a4f82b22d513138b0b0291bc669a65a`). Focused report/feed
-regressions passed **63/63**. Frontend typecheck, i18n lint and tests,
+The report-only backend suite passed **5201**, skipped **7** (log SHA-256
+`3bb2cc156708f529fd1e8173e0516e6e7a4f82b22d513138b0b0291bc669a65a`).
+Focused report/feed regressions passed **63/63**; the date-bound regressions
+passed with the relevant market-data suite (**19/19**). The combined full
+backend suite passed **5203**, skipped **7** (log SHA-256
+`4c6efcad4aeb6a56a085c2de4b0d8c5d7b91516856fb4657a3e2d85e94c8a789`).
+The local worker-driven matrix passed all **17/17** action contracts through
+FastAPI, Celery, PostgreSQL, Redis and Responses, plus the follow-up adapter
+checks (artifact SHA-256
+`810e8f3e9fba30d645dcff91b1d51d4f284edc369477f4704d992725ab7da73f`).
+It recorded zero broker orders, Live bots, Live calls or production
+connections. The real-provider development selector passed **20/20** with zero
+provider, schema, timeout, parse or validation failures (artifact SHA-256
+`5b3d6eda259f4c2a15c87c44e280caa0045f1d892fa3b9b18ed0f0432e66d8e1`).
+The regression selector is running.
+Frontend typecheck, i18n lint and tests,
 command/proposal tests, production build and `audit:high` passed; the audit
 reported one moderate Next.js advisory and no high findings. The report
 recovery path is covered by saved-snapshot, generic-card upgrade and
@@ -119,9 +142,8 @@ missing-attention regressions. The local action and real-provider selector
 matrices for the unchanged FINN runtime passed on the immediately preceding
 main product revision `5b2127b2a85e9dfb3b43caf04480a68db9f40d53`
 (38/38 local matrix; selector 20/20 development and 109/109 regression).
-This candidate has not rerun those provider and action matrices after its
-report-only change; that evidence is carried forward for unchanged contracts,
-not presented as a new run. Candidate CI, deploy identity and independent
+This candidate has rerun the local action matrix and provider development
+selector after its read-adapter change. Candidate CI, deploy identity and independent
 authenticated QA are pending. The browser observation that prompted this
 repair showed a generic daily report card despite a report containing dated
 pair scores; the protected QA profile has not yet tested this recovery route.
