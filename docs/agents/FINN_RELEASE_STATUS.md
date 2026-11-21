@@ -4,6 +4,46 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: rapportmomentopname versus actuele botcheck (21 november 2026)
+
+Phase: `LOCAL_VALIDATED_PR_PENDING`. Branch
+`codex/finn-bot-decision-recency-release`, gebaseerd op main
+`a0e4a8754438948788804dba8a3d8702823ae3cb`. De vorige
+rapportaandachtrelease staat op `LIVE_DEPLOYED_QA_PENDING`; de officiële QA
+daarvoor is nog niet gestart. Deze batch neemt die productcode mee.
+
+FINN onderscheidt de bevroren bronmomentopname van het nachtrapport van een
+later gelezen botcheck. Bij een actuele botvraag gebruikt FINN de nieuwste
+eigenaargebonden beslissing; de rapportbeslissing wordt niet als actueel
+gepresenteerd. Het rapport bewaart bronnen die bij generatie beschikbaar
+waren: indicatorscores kunnen de laatst gesloten candle gebruiken, terwijl
+koers en botbeslissing elk een eigen bronmoment hebben. De tekst noemt een
+rapport van dezelfde dag niet enkel door een latere check "verouderde data".
+Een handmatig plan zonder bot verwijst niet naar een onbestaande botbeslissing.
+
+Op de gecombineerde code slaagde de volledige backend-suite met **5178 passed,
+7 skipped**; log SHA-256
+`e5b676fb4ff499a11fec720adfcb1cebf7caa75b48529b8bc798299ea3d4d33f`.
+Frontend typecheck, i18n-lint en -tests, command- en voorsteltests, build en
+`audit:high` slaagden; één matige Next.js-melding, geen hoge bevinding;
+log SHA-256 `8f56b86c4c67516b0eb94485a274c69563563db532daeb235d99f4b4fb88de27`.
+De echte provider-developmentset slaagde **20/20**, zonder provider-, schema-,
+parse-, validatie- of timeoutfouten; artifact SHA-256
+`cf44d076932c91e255d8d89635eadc319e8b354c131fc0b4d08e8175cb553e6b`.
+De geïsoleerde FastAPI/Celery/PostgreSQL/Redis/Responses-actiematrix slaagde
+**17/17** en adaptertests **28/28**, zonder brokerorders, Live-calls of
+productieverbindingen; artifact
+`.local-finn-parity-artifacts/full-action-matrix.json` SHA-256
+`f27f511c871e611b15323fbc162d4ee53ee50591b00ddfd5c9192113d4432541`.
+Een extra synthetische API/workerproef las het AAPL-dagrapport van 05:20 CET
+en de latere botcheck van 20:15:17 CET als aparte momenten; het antwoord was
+read-only en polling/SSE kwamen overeen. Artifact SHA-256
+`19fba09ae25553362d0381b02e9a7d93ace5ba68f27e25df19043a60afb64071`.
+De echte provider-regressie slaagde **109/109**, zonder provider-, schema-,
+parse-, validatie- of timeoutfouten; artifact SHA-256
+`9a954d0bd21b8143c1d110a5903bab1bf6ed5024df005b3793d2c44dbd3d2574`.
+CI, Auto Deploy, publieke SHA-pariteit en onafhankelijke ingelogde QA staan open.
+
 ## FINN 3.0: rapportaandacht en gerichte bespreking (21 november 2026)
 
 Phase: `LIVE_DEPLOYED_QA_PENDING`. Nieuwe dag-, week-, maand- en
