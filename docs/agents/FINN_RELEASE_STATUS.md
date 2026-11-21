@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: zelfstandig onderwerp wisselen in bestaande chat (21 november 2026)
 
-Phase: `LOCAL_VALIDATED_CANDIDATE_PENDING_CI`. Product candidate
+Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_STATUS_SHA`. Product candidate
 `15e11e0240eba440bae6c2ffc5a6230d4947767a` on branch
 `codex/finn-conversation-topic-switch`, based on main
 `46150f2b0ae6cfad388a2e2696ca358de64d9050`. A standalone question about
@@ -37,8 +37,16 @@ Measured local Build gates on this product candidate:
 An earlier local matrix rerun returned **0/17** after the full backend suite
 had stopped the disposable worker. Build restarted that isolated worker and
 repeated the unchanged matrix; only the final **17/17** run counts as the
-release gate. CI, Auto Deploy, public SHA parity and independent QA for this
-candidate remain pending.
+release gate. Product PR **#1265** passed all five CI jobs in workflow
+**44955891504** and merged as
+`f7bb76903b8e08ca910711da1ee57892e37a394d`. Main CI **44956528532**
+passed all five jobs. Auto Deploy **44957027899** succeeded for the same SHA.
+Public `https://tradamind.com/api/health` and
+`https://tradamind.com/build-info.json` both returned HTTP 200 and reported
+that exact deployed SHA. This status-only update creates a later main
+revision; Build must wait for its final CI, Auto Deploy and public SHA parity
+before the independent authenticated QA handoff. No authenticated production
+behavior has yet been accepted for this candidate.
 
 ## FINN 3.0: actuele score bij rapportbespreking (21 november 2026)
 
