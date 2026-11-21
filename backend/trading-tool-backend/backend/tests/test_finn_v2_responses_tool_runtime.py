@@ -58,6 +58,7 @@ from backend.services.finn_v2_run_service import (
     _explicitly_separates_new_strategy, _has_independent_strategy_inputs,
     _freeform_strategy_rule_waiver_inputs,
     _plain_setup_creation_request, _bounded_supported_smart_dca_calendar_request,
+    _bounded_fixed_dca_calendar_request,
     _plain_strategy_execution_mode_reply,
     _plain_strategy_start_request,
     _plain_strategy_guided_mode_transition,
@@ -6824,6 +6825,30 @@ def test_complete_smart_dca_friday_draft_has_bounded_rule_coverage(ending):
         assert not _bounded_supported_smart_dca_calendar_request(
             message, {**inputs, **extra_rule},
         )
+
+
+def test_bounded_fixed_calendar_dca_requires_matching_fields_and_no_extra_rule():
+    message = (
+        "Maak een gewone vaste DCA-setup voor BTC/USDT met naam BTC Vaste DCA QA. "
+        "Grafiek 1D, iedere vrijdag €200, maximaal één aankoop per week. "
+        "Het bedrag blijft altijd €200, ongeacht de Markt-, Macro- of Technisch-score. "
+        "Toon eerst de conceptkaart."
+    )
+    inputs = {
+        "symbol": "BTC", "quote_currency": "USDT", "name": "BTC Vaste DCA QA",
+        "timeframe": "1D", "setup_type": "dca", "dca_frequency": "weekly",
+        "dca_day": "friday", "dca_amount_mode": "fixed", "base_amount": 200,
+    }
+    assert _bounded_fixed_dca_calendar_request(message, inputs)
+    assert not _bounded_fixed_dca_calendar_request(
+        message + " Koop alleen als RSI stijgt.", inputs,
+    )
+    assert not _bounded_fixed_dca_calendar_request(
+        message, {**inputs, "base_amount": 300},
+    )
+    assert not _bounded_fixed_dca_calendar_request(
+        message, {**inputs, "min_benchmark_score": 70},
+    )
 
 
 def test_setup_rule_coverage_receives_calendar_trigger_and_score_fields():

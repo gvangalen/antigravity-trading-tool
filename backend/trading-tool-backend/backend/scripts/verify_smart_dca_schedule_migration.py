@@ -26,7 +26,7 @@ ALTER TABLE setups ADD CONSTRAINT dca_logic_check CHECK (
 
 def main() -> None:
     if (os.getenv("DB_HOST"), os.getenv("DB_PORT"), os.getenv("DB_NAME")) != (
-        "127.0.0.1", "55432", "finn_local"
+        "127.0.0.1", os.getenv("FINN_LOCAL_POSTGRES_PORT", "55432"), "finn_local"
     ):
         raise RuntimeError("smart_dca_constraint_probe_requires_disposable_local_db")
     connection = get_db_connection()

@@ -17,7 +17,7 @@ from backend.utils.auth_utils import create_access_token
 
 def main() -> None:
     if (os.getenv("DB_HOST"), os.getenv("DB_PORT"), os.getenv("DB_NAME")) != (
-        "127.0.0.1", "55432", "finn_local"
+        "127.0.0.1", os.getenv("FINN_LOCAL_POSTGRES_PORT", "55432"), "finn_local"
     ) or os.getenv("FINN_LOCAL_SAFE_ADAPTERS") != "1":
         raise RuntimeError("calendar_dca_probe_requires_safe_local_fixture")
     owner = _create_local_user()
