@@ -36,3 +36,18 @@ def test_forward_returns_reads_stored_periods_and_marks_partial_current_period()
         "week": 1.0, "month": 2.0, "quarter": 3.0, "year": 4.0,
     }
     adapter.repository.get_forward_returns.assert_awaited_once_with("BTC")
+
+
+def test_forward_returns_accepts_date_columns_from_existing_market_table():
+    today = datetime.now(timezone.utc).date()
+    record = SimpleNamespace(
+        period="30d", start_date=today.replace(day=1), end_date=today,
+        change=2.5, created_at=datetime.now(timezone.utc),
+    )
+    adapter = ForwardReturnsToolAdapter(object())
+    adapter.repository.get_forward_returns = AsyncMock(return_value=[record])
+
+    result = asyncio.run(adapter.execute(asset="BTC"))
+
+    assert result["data"].periods["month"][0].values[today.month - 1] == 2.5
+    assert result["data"].observed_through == today
