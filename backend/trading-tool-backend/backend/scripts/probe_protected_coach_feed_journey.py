@@ -42,6 +42,11 @@ _REPORT_SUBSTAGES = frozenset({
     "release_async_connections", "connect", "owner_scope", "insert", "commit",
     "feed_publish", "card_readback",
 })
+_ASSET_SUBSTAGES = frozenset({
+    "connect", "owner_scope", "exchange_keys", "watchlist_insert",
+    "indicator_config_copy", "macro_reading_copy", "technical_reading_copy",
+    "market_reading_copy", "setup_scope", "commit",
+})
 _REPORT_SQLSTATES = {
     "23502": "not_null", "23503": "foreign_key", "23505": "duplicate",
     "42703": "missing_column", "42P01": "missing_table",
@@ -50,8 +55,7 @@ _REPORT_SQLSTATES = {
 }
 
 
-def _safe_report_failure(error: Exception, trace: dict) -> dict[str, str]:
-    stage = trace.get("report_substage")
+def _safe_error_category(error: Exception) -> str:
     category = "other"
     for candidate in (error, getattr(error, "orig", None),
                       getattr(error, "__cause__", None)):
@@ -59,8 +63,19 @@ def _safe_report_failure(error: Exception, trace: dict) -> dict[str, str]:
         if code in _REPORT_SQLSTATES:
             category = _REPORT_SQLSTATES[code]
             break
+    return category
+
+
+def _safe_report_failure(error: Exception, trace: dict) -> dict[str, str]:
+    stage = trace.get("report_substage")
     return {"substage": stage if stage in _REPORT_SUBSTAGES else "unknown",
-            "error_category": category}
+            "error_category": _safe_error_category(error)}
+
+
+def _safe_asset_failure(error: Exception, trace: dict) -> dict[str, str]:
+    stage = trace.get("asset_substage")
+    return {"substage": stage if stage in _ASSET_SUBSTAGES else "unknown",
+            "error_category": _safe_error_category(error)}
 
 
 def _score_in_answer(content: str, score: str) -> bool:
@@ -204,11 +219,13 @@ def _require_run(namespace: str) -> int:
     return int(bound)
 
 
-def _seed_asset_only(user_id: int, namespace: str) -> None:
+def _seed_asset_only(user_id: int, namespace: str, trace: dict) -> None:
     """Copy only the child owner's dated ETH readings to an unplanned SOL asset."""
     trace["report_substage"] = "connect"
+    trace["asset_substage"] = "connect"
     connection = fixture._connection()
     try:
+        trace["asset_substage"] = "owner_scope"
         with connection.cursor() as cursor:
             cursor.execute("""SELECT is_active,ai_preferences FROM users
                               WHERE id=%s FOR UPDATE""", (user_id,))
@@ -217,11 +234,14 @@ def _seed_asset_only(user_id: int, namespace: str) -> None:
                     or (owner[1] or {}).get("qa_fixture") != fixture.FIXTURE_MARKER
                     or (owner[1] or {}).get("qa_namespace") != namespace):
                 raise RuntimeError("feed_journey_owner_scope_failed")
+            trace["asset_substage"] = "exchange_keys"
             cursor.execute("SELECT COUNT(*) FROM exchange_keys WHERE user_id=%s", (user_id,))
             if cursor.fetchone()[0]:
                 raise RuntimeError("feed_journey_owner_scope_failed")
+            trace["asset_substage"] = "watchlist_insert"
             cursor.execute("""INSERT INTO watchlists (user_id,symbol,created_at)
                               VALUES (%s,'SOL',NOW())""", (user_id,))
+            trace["asset_substage"] = "indicator_config_copy"
             cursor.execute("""INSERT INTO user_indicator_configs
                 (user_id,indicator,category,symbol,asset_class,priority,enabled,created_at,updated_at)
                 SELECT user_id,indicator,category,'SOL',asset_class,priority,enabled,created_at,updated_at
@@ -230,6 +250,11 @@ def _seed_asset_only(user_id: int, namespace: str) -> None:
             for table, column in (("macro_data", "name"),
                                   ("technical_indicators", "indicator"),
                                   ("market_data_indicators", "name")):
+                trace["asset_substage"] = {
+                    "macro_data": "macro_reading_copy",
+                    "technical_indicators": "technical_reading_copy",
+                    "market_data_indicators": "market_reading_copy",
+                }[table]
                 # The original stale-score fixture deliberately ages its
                 # market reading. This child needs a current synthetic
                 # measurement to exercise a *verified* analysis card.
@@ -241,9 +266,11 @@ def _seed_asset_only(user_id: int, namespace: str) -> None:
                     SELECT user_id,'SOL',{column},value,{source_time},{source_time}
                     FROM {table} WHERE user_id=%s AND symbol='ETH'{market_scope}""",
                     (user_id,))
+            trace["asset_substage"] = "setup_scope"
             cursor.execute("SELECT COUNT(*) FROM setups WHERE user_id=%s AND symbol='SOL'", (user_id,))
             if cursor.fetchone()[0]:
                 raise RuntimeError("feed_journey_owner_scope_failed")
+        trace["asset_substage"] = "commit"
         connection.commit()
     except Exception:
         connection.rollback()
@@ -345,8 +372,8 @@ def _store_report(user_id: int, namespace: str, score: str, source_date: str,
                 raise RuntimeError("feed_journey_owner_scope_failed")
             trace["report_substage"] = "insert"
             cursor.execute("""INSERT INTO daily_reports
-                (user_id,report_date,status,created_at,score_source_snapshot)
-                VALUES (%s,%s,'completed',NOW(),%s::jsonb)""",
+                (user_id,report_date,score_source_snapshot)
+                VALUES (%s,%s,%s::jsonb)""",
                 (user_id, report_date, json.dumps(snapshot)))
         trace["report_substage"] = "commit"
         connection.commit()
@@ -368,7 +395,7 @@ def _case(namespace: str, bound: int, *, run_async, trace: dict) -> dict:
         user_id, bot_id, _ = fixture._seed(namespace, bound, bot_active=False)
         trace["fixture_state"] = "created"
         trace["stage"] = "asset_evidence"
-        _seed_asset_only(user_id, namespace)
+        _seed_asset_only(user_id, namespace, trace)
         from backend.celery_task.store_daily_scores_task import build_daily_scores_for_user
         trace["stage"] = "score_build"
         build_daily_scores_for_user(user_id, ["SOL"], publish_feed=False)
@@ -457,6 +484,8 @@ def run(namespace: str) -> dict:
                     result["discussion"] = trace.get("discussion", _safe_discussion({}))
                 if trace["stage"] == "report_publish":
                     result["report_failure"] = _safe_report_failure(error, trace)
+                if trace["stage"] == "asset_evidence":
+                    result["asset_failure"] = _safe_asset_failure(error, trace)
             if live_attempts:
                 result = {"result": "FAIL", "reason": "feed_journey_unexpected_write",
                           "failure_stage": trace["stage"],
