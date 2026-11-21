@@ -327,6 +327,7 @@ def _cleanup(namespace: str, user_id: int, bot_id: int, *, require_safe_pair_cle
                 "bot_portfolio_snapshots", "portfolio_balance_snapshots",
                 "bot_portfolios", "bot_configs", "strategies", "setups", "daily_scores",
                 "daily_reports",
+                "finn_coach_feed_items", "watchlists",
                 "macro_data", "technical_indicators", "market_data_indicators",
                 "user_indicator_configs",
             ):
