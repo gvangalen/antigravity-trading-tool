@@ -133,24 +133,23 @@ It recorded zero broker orders, Live bots, Live calls or production
 connections. The real-provider development selector passed **20/20** with zero
 provider, schema, timeout, parse or validation failures (artifact SHA-256
 `5b3d6eda259f4c2a15c87c44e280caa0045f1d892fa3b9b18ed0f0432e66d8e1`).
-The regression selector is running.
+The real-provider regression selector passed **109/109** with zero provider,
+schema, timeout, parse or validation failures (artifact SHA-256
+`53416e5b6fb659b964c13c7f2e7462144fc320797513ec9d7839d7a6c27eeb2e`).
 Frontend typecheck, i18n lint and tests,
 command/proposal tests, production build and `audit:high` passed; the audit
 reported one moderate Next.js advisory and no high findings. The report
 recovery path is covered by saved-snapshot, generic-card upgrade and
-missing-attention regressions. The local action and real-provider selector
-matrices for the unchanged FINN runtime passed on the immediately preceding
-main product revision `5b2127b2a85e9dfb3b43caf04480a68db9f40d53`
-(38/38 local matrix; selector 20/20 development and 109/109 regression).
-This candidate has rerun the local action matrix and provider development
-selector after its read-adapter change. Candidate CI, deploy identity and independent
+missing-attention regressions. This candidate reran the local action and both
+real-provider selector matrices after its read-adapter change. Candidate CI,
+deploy identity and independent
 authenticated QA are pending. The browser observation that prompted this
 repair showed a generic daily report card despite a report containing dated
 pair scores; the protected QA profile has not yet tested this recovery route.
 
 ## FINN 3.0: historische forward returns in analyse (21 november 2026)
 
-Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_IDENTITY`. Branch
+Phase: `LIVE_DEPLOYED_NOT_ACCEPTED`. Branch
 `codex/finn-forward-returns-release-20261121`, implementation SHA `a92095642`.
 FINN has a read-only `get_forward_returns` tool for the existing stored week,
 month, quarter and year return rows. The current period is labelled partial.
@@ -185,7 +184,11 @@ merged as `5b2127b2a85e9dfb3b43caf04480a68db9f40d53`. Main CI
 Public backend `/api/health` and frontend `/build-info.json` returned HTTP
 200 and both reported that exact merge SHA. This status-only update creates
 a later main SHA; Build must wait for its CI, last Auto Deploy, and public
-backend/frontend SHA parity before independent authenticated QA.
+backend/frontend SHA parity before independent authenticated QA. On the later
+public SHA `3f2040ef05ff8c824664a1f6de0b43a1fd2bf300`, an independent
+read-only browser check found that FINN could not read BTC historical returns.
+The interactive worker log subsequently confirmed the date-only bound failure
+described in the current candidate above. This source has not been accepted.
 
 ## FINN 3.0: reportkaart leest actuele benchmark apart (21 november 2026)
 
