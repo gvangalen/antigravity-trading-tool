@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: actuele score bij rapportbespreking (21 november 2026)
 
-Phase: `LOCAL_VALIDATED_CANDIDATE_PENDING_CI`. Independent QA returned
+Phase: `LIVE_DEPLOYED_QA_RETEST_PENDING`. Independent QA returned
 `NOT_ACCEPTED` on the prior live SHA
 `65b291d75581f349c6edf9ba5a0a0ede5da4dceb`. The protected
 `report_discuss` case in workflow **44940411373-1** now passed the saved
@@ -41,8 +41,13 @@ The final backend suite on the combined latest main passed **5234**, skipped
 The real-provider regression passed **109/109** with zero provider, schema,
 timeout, parse or validation failures (artifact SHA-256
 `f8f6f4b4341567781b1dd105598ddb0fcc87c81d736c7988ff864dfb1b5890f4`).
-Candidate CI,
-Auto Deploy, public SHA parity and independent retest remain pending.
+Product PR **#1261** passed all five CI jobs in workflow **44943668772**
+and merged as `6e790bfec8016a401309ed19df6e6f34dcc9c5e2`.
+Main CI **44944272421** passed all five jobs and Auto Deploy **44944832221**
+succeeded. Public backend health and frontend build-info both returned HTTP
+200 and reported that exact product SHA. The status-only update will create
+a later main revision; its final CI, Auto Deploy and public SHA parity must
+finish before the independent authenticated report retest starts.
 
 ## FINN 3.0: Smart DCA-weekdag en chat-sessieherstel (21 november 2026)
 
