@@ -42,6 +42,19 @@ def _number(value: Any) -> str | None:
     return format(amount.normalize(), "f") if amount.is_finite() else None
 
 
+_REPORT_BLOCK_REASON_NL = {
+    # These are the labels shown by the Dutch report for stored block codes.
+    # Keep the raw decision reason separate: it can differ from the report UI.
+    "market_price_stale": "Geen recente marktprijs beschikbaar voor deze beoordeling.",
+}
+
+
+def _report_reason(decision: dict[str, Any]) -> tuple[str, str]:
+    raw = str(decision.get("reason") or "").strip()
+    display = _REPORT_BLOCK_REASON_NL.get(str(decision.get("block_code") or ""), raw)
+    return display, raw
+
+
 def render_closed_paper_exit_facts(message: str, tool_trace: Any) -> str | None:
     """Read an explicitly named Paper exit from its owner-scoped review row.
 
@@ -210,14 +223,16 @@ def render_report_bot_check_comparison(
     report_decision = report_bots[0]["latest_decision"]
     report_at = report_decision.get("at_amsterdam") or _moment(report_decision.get("at"))
     check_at = check.get("decision_at_amsterdam") or _moment(check.get("decision_at"))
-    report_reason = str(report_decision.get("reason") or "").strip()
+    report_reason, raw_report_reason = _report_reason(report_decision)
     check_reason = str(check.get("safety_reason") or "").strip()
     lines = [f"Ik heb de opgeslagen besluiten van dezelfde {symbol}-bot vergeleken."]
     lines.append(
         f"Het dagrapport{f' van {report_generated}' if report_generated else ''} is een momentopname. "
         f"Het botbesluit daarin is van {report_at or 'een onbekend bronmoment'}: "
-        f"{report_reason or 'geen controleerbare reden opgeslagen'}."
+        f"{report_reason.rstrip('.') if report_reason else 'geen controleerbare reden opgeslagen'}."
     )
+    if raw_report_reason and raw_report_reason != report_reason:
+        lines.append(f"De ruwe opgeslagen botreden in de rapportsnapshot luidt: {raw_report_reason.rstrip('.')}.")
     lines.append(
         f"De afzonderlijke botcheck van {check_at or 'een onbekend bronmoment'} vermeldt "
         f"{check_reason or 'geen controleerbare reden'}; "
@@ -230,6 +245,102 @@ def render_report_bot_check_comparison(
         "band en de nieuwe botbeslissing voordat je iets verandert of handelt."
     )
     return "\n\n".join(lines)
+
+
+def render_multi_asset_report_bot_comparison(
+    results: list[dict[str, Any]], *, symbols: tuple[str, ...],
+    named_pairs: tuple[str, ...] = (),
+) -> str:
+    """Compare several owner-read bot histories with one dated report snapshot.
+
+    The model can confuse a report decision with a newer check when several
+    assets appear in one turn. This narrow read-only answer binds each reason
+    and source moment to its own saved row, and reports gaps explicitly.
+    """
+    reports: dict[tuple[str, str], dict[str, Any]] = {}
+    histories: list[dict[str, Any]] = []
+    for result in results:
+        for row in result.get("results") or []:
+            if not isinstance(row, dict) or row.get("status") != "completed" \
+                    or not isinstance(row.get("data"), dict):
+                continue
+            data = row["data"]
+            if row.get("scope") == "read_latest_report":
+                key = (str(data.get("report_date") or ""), str(data.get("generated_at") or ""))
+                reports[key] = data
+            elif row.get("scope") == "read_review_history":
+                histories.append(data)
+    if len(reports) != 1:
+        return ("Ik kan het gevraagde dagrapport niet eenduidig teruglezen. "
+                "Ik vergelijk daarom geen botredenen of bronmomenten.")
+    report = next(iter(reports.values()))
+    report_at = report.get("generated_at_amsterdam") or _moment(report.get("generated_at"))
+    snapshot = report.get("score_source_snapshot") or {}
+    report_v2 = snapshot.get("report_v2") if isinstance(snapshot, dict) else None
+    automation = report_v2.get("automation") if isinstance(report_v2, dict) else None
+    bots = automation.get("bots") if isinstance(automation, dict) else None
+    if not report_at or not isinstance(bots, list):
+        return ("Het dagrapport mist een controleerbaar rapportmoment of de opgeslagen "
+                "botmomentopname. Ik vergelijk daarom geen botredenen.")
+    lines = [f"Dagrapport gegenereerd op {report_at}: dit is de bevroren momentopname."]
+    for symbol in symbols:
+        report_bots = [bot for bot in bots if isinstance(bot, dict)
+                       and str(bot.get("symbol") or "").upper() == symbol
+                       and bot.get("is_live") is False]
+        current = [decision for history in histories
+                   for decision in history.get("latest_bot_decisions") or []
+                   if isinstance(decision, dict)
+                   and str(decision.get("symbol") or "").upper().split("/", 1)[0] == symbol
+                   and decision.get("is_live") is False]
+        # Repeated owner reads are duplicates, not separate bot decisions.
+        current_by_bot = {str(row.get("bot_id")): row for row in current
+                          if row.get("bot_id") is not None}
+        report_ids = {str(bot.get("bot_id")) for bot in report_bots
+                      if bot.get("bot_id") is not None}
+        if not report_bots:
+            lines.append(f"{symbol}: in dit rapport is geen Paper-botbesluit vastgelegd.")
+        for bot in report_bots[:5]:
+            bot_id = bot.get("bot_id")
+            pair = str(bot.get("trading_pair") or symbol).upper()
+            saved = bot.get("latest_decision")
+            if isinstance(saved, dict):
+                at = saved.get("at_amsterdam") or _moment(saved.get("at"))
+                reason, raw = _report_reason(saved)
+                lines.append(
+                    f"{pair}, bot {bot_id}: rapportbesluit van {at or 'onbekend bronmoment'}; "
+                    f"rapportreden: {(reason or 'geen controleerbare reden').rstrip('.')}."
+                )
+                if raw and raw != reason:
+                    lines.append(f"De ruwe reden van dit rapportbesluit luidt: {raw.rstrip('.')}.")
+            else:
+                lines.append(f"{pair}, bot {bot_id}: geen besluit in de rapportmomentopname.")
+            later = current_by_bot.get(str(bot_id))
+            if later:
+                later_at = later.get("decision_at_amsterdam") or _moment(later.get("decision_at"))
+                later_reason = str(later.get("safety_reason") or "").strip()
+                lines.append(
+                    f"{pair}, bot {bot_id}: laatst gelezen Paper-check van "
+                    f"{later_at or 'onbekend bronmoment'}; reden: "
+                    f"{(later_reason or 'geen controleerbare reden').rstrip('.')}."
+                )
+            else:
+                lines.append(f"{pair}, bot {bot_id}: geen latere Paper-check eenduidig gelezen.")
+        for bot_id, row in current_by_bot.items():
+            if bot_id not in report_ids:
+                pair = str(row.get("pair") or row.get("symbol") or symbol).upper()
+                at = row.get("decision_at_amsterdam") or _moment(row.get("decision_at"))
+                lines.append(f"{pair}, bot {bot_id}: huidige Paper-check van "
+                             f"{at or 'onbekend bronmoment'}, zonder gekoppeld rapportbesluit.")
+    for pair in named_pairs:
+        if pair.split("/", 1)[0] in symbols and not any(
+            str(bot.get("trading_pair") or "").upper() == pair for bot in bots
+            if isinstance(bot, dict) and bot.get("is_live") is False
+        ):
+            lines.append(f"{pair}: in deze rapportmomentopname is geen gekoppelde Paper-bot "
+                         "vastgelegd. Een bot voor een ander BTC-paar hoort hier niet bij.")
+    lines.append("Een latere botcheck wijzigt het opgeslagen dagrapport niet; "
+                 "dit antwoord plaatst geen order en wijzigt geen bot.")
+    return "\n".join(lines)
 
 
 def render_selected_paper_feed_decision(

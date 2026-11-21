@@ -318,6 +318,71 @@ def test_missing_historical_botcheck_names_the_available_report():
     assert "botcheck is niet gevonden" in later
 
 
+def test_report_bot_comparison_keeps_displayed_and_raw_block_reasons_distinct():
+    from backend.services.finn_v2_factual_source_answer import render_report_bot_check_comparison
+
+    answer = render_report_bot_check_comparison({"results": [
+        {"scope": "read_review_history", "status": "completed", "data": {
+            "referenced_bot_decisions": [{
+                "bot_id": 130, "symbol": "AAPL", "action": "hold",
+                "decision_at": "2026-11-21T09:15:17+00:00",
+                "safety_reason": "De marktprijs is te oud voor een Paper-order.",
+            }],
+        }},
+        {"scope": "read_latest_report", "status": "completed", "data": {
+            "report_date": "2026-11-21",
+            "generated_at": "2026-11-21T04:39:26+00:00",
+            "score_source_snapshot": {
+                "report_v2": {
+                    "automation": {
+                        "bots": [{
+                            "bot_id": 130, "symbol": "AAPL", "latest_decision": {
+                                "at": "2026-11-21T04:30:32+00:00",
+                                "reason": "De marktprijs is te oud voor een Paper-order.",
+                                "block_code": "market_price_stale",
+                            },
+                        }],
+                    },
+                },
+            },
+        }},
+    ]}, symbol="AAPL", message=(
+        "Vergelijk de AAPL-botbeslissing in het dagrapport van 21 november om 05:39 CET "
+        "met de latere botcheck van 10:15 CET. Noem de exacte opgeslagen reden."
+    ))
+    assert "Het botbesluit daarin is van" in answer
+    assert "05:30" in answer
+    assert "Geen recente marktprijs beschikbaar voor deze beoordeling." in answer
+    assert "De ruwe opgeslagen botreden in de rapportsnapshot luidt: " \
+           "De marktprijs is te oud voor een Paper-order." in answer
+    assert "afzonderlijke botcheck van" in answer and "10:15" in answer
+
+
+def test_multi_asset_report_bot_without_report_decision_still_shows_current_check():
+    from backend.services.finn_v2_factual_source_answer import render_multi_asset_report_bot_comparison
+
+    result = {"results": [
+        {"scope": "read_latest_report", "status": "completed", "data": {
+            "report_date": "2026-11-21", "generated_at": "2026-11-21T04:39:26+00:00",
+            "score_source_snapshot": {"report_v2": {"automation": {"bots": [
+                {"bot_id": 130, "symbol": "AAPL", "is_live": False,
+                 "latest_decision": None},
+            ]}}},
+        }},
+        {"scope": "read_review_history", "status": "completed", "data": {
+            "latest_bot_decisions": [
+                {"bot_id": 130, "symbol": "AAPL", "is_live": False,
+                 "decision_at": "2026-11-21T09:15:17+00:00",
+                 "safety_reason": "Koerscontrole tijdens de latere Paper-check"},
+            ],
+        }},
+    ]}
+    answer = render_multi_asset_report_bot_comparison([result], symbols=("AAPL", "BTC"))
+    assert "geen besluit in de rapportmomentopname" in answer
+    assert "10:15:17 CET" in answer
+    assert "Koerscontrole tijdens de latere Paper-check" in answer
+
+
 def test_blocked_bot_decision_reports_safety_outcome_and_reason():
     response, _ = _run(
         "Wat is het laatste opgeslagen besluit van mijn ETH Paper-bot? "
