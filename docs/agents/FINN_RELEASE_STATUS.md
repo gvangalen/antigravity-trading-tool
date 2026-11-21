@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: protected report-feed stage diagnosis (21 November 2026)
 
-Phase: `LOCAL_VALIDATED_CANDIDATE`. Independent QA ran the official protected
+Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_IDENTITY`. Independent QA ran the official protected
 `coach_feed_journey` profile once on public SHA
 `ca0ebc2f66a9c9fb64f3461b5f794834a3f470ad` (workflow `44910733827`)
 and returned `NOT_ACCEPTED`. The dated analysis card, read-only FINN
@@ -29,6 +29,13 @@ QA must rerun the same protected profile to identify the failing substage.
 Local targeted profile/runner tests passed **163/163**; the full backend
 suite passed **5191**, skipped **7** (log SHA-256
 `33b51af8805eaba0558c32474beb0c68c2c538ffaca7548bb2eb211e0e8cbdf2`).
+PR [#1243](https://github.com/gvangalen/antigravity-trading-tool/pull/1243)
+merged as `ad8793eb960058431d92dfe06649026ca500be09` after candidate CI
+`44911510243` passed all five jobs. Main CI `44912132306` passed all five
+jobs and Auto Deploy `44912668921` succeeded. Public backend health and
+frontend build-info returned HTTP 200 with that exact merge SHA. This status
+update creates a later main SHA; Build must wait for its CI, Auto Deploy, and
+public backend/frontend SHA parity before handing the final revision to QA.
 
 ## FINN 3.0: feed-discussion answer contract follow-up (21 November 2026)
 
