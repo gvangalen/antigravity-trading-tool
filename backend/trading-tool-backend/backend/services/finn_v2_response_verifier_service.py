@@ -83,6 +83,7 @@ class FinnV2ResponseVerifierService:
         "active_asset": "identity_context",
         "watchlist": "identity_context",
         "market_snapshot": "market_context",
+        "forward_returns": "market_context",
         "indicator_configuration": "market_context",
         "scores": "market_context",
         "active_setup": "plan_context",
@@ -1698,6 +1699,8 @@ class FinnV2ResponseVerifierService:
             scopes.add("indicator_configuration")
         if tool_name in {"read_market_snapshot", "read_macro_snapshot", "read_technical_snapshot"}:
             scopes.add("market_snapshot")
+        if tool_name == "read_forward_returns":
+            scopes.add("forward_returns")
         if tool_name == "read_asset_scores":
             scopes.add("scores")
         if tool_name == "read_active_setup" or entity_type == "setup":

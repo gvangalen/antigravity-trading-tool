@@ -15417,7 +15417,7 @@ def test_chart_opinion_reads_displayed_pair_and_saved_trader_context(monkeypatch
     assert captured["required_read_tool_name"] == "get_market_snapshot"
     assert captured["read_call"].inputs == {"asset": "BTC", "quote_currency": "USDT"}
     assert captured["read_call"].read_tools == (
-        "read_market_snapshot", "read_technical_snapshot", "read_profile",
+        "read_market_snapshot", "read_technical_snapshot", "read_forward_returns", "read_profile",
         "read_active_setup", "read_linked_strategy",
     )
 

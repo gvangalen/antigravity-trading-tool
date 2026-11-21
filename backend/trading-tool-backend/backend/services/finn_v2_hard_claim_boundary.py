@@ -262,7 +262,7 @@ class FinnV2HardClaimBoundary:
         """Project only typed source facts needed to retract an unsupported claim."""
         factual_scopes = {
             "read_profile", "read_active_setup", "read_linked_strategy",
-            "read_market_snapshot", "read_macro_snapshot", "read_technical_snapshot",
+            "read_market_snapshot", "read_forward_returns", "read_macro_snapshot", "read_technical_snapshot",
         }
         facts = []
         for item in cls._typed_results(tool_trace):

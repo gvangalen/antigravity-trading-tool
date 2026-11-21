@@ -4,6 +4,39 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: historische forward returns in analyse (21 november 2026)
+
+Phase: `LOCAL_VALIDATED_CANDIDATE`. Branch
+`codex/finn-forward-returns-release-20261121`, implementation SHA `a92095642`.
+FINN has a read-only `get_forward_returns` tool for the existing stored week,
+month, quarter and year return rows. The current period is labelled partial.
+Chart coaching reads the series alongside its market, technical, profile and
+saved-plan sources. The rows are keyed by base asset; their exact quote
+currency is unverified. FINN must not present them as TradingView candles,
+an exact chart-pair return, or a forecast. No trading action contract or
+execution permission changed. The prior report and chart releases have not
+received independent QA acceptance; this candidate includes those runtimes.
+
+The full backend suite on the combined implementation passed **5200**, skipped
+**7** (log SHA-256 `9553c3c63e94e2abb4321fccd53b74866638724ac31726eed9de7650feb23490`).
+Frontend typecheck, i18n lint/tests, command/proposal tests, production build,
+and `audit:high` passed; the build log SHA-256 is
+`3b8ac0eb2ea6f199fd9fc31cf0d0112f9c95e3a5f17ce50eea592a71bbe0dc29`.
+The isolated FastAPI/Celery/PostgreSQL/Redis matrix on the combined
+implementation passed **38/38**, including **16/16** action contracts and
+**9/9** lineage checks, with zero Live bots or non-allowlisted executions
+(artifact SHA-256 `d3854ec0ca0120ae0eb6be1040c96c0d12f110e6d54fcf93e1754c4b6e4f47f0`).
+Real-provider selector development passed **20/20** (artifact SHA-256
+`9a681ee1105c6377bc72e742b2b1654104a8729bff2374e2879b7a744ae2414e`)
+and regression **109/109** (artifact SHA-256
+`5af7fd91e462a375130a62dcb37a3bbda4c46f9aa6deb931893ec5f6e94523c6`),
+with zero provider, schema, parse, validation or timeout failures. A synthetic
+BTC/USDT historical-return conversation completed with both read scopes and
+no proposal; a synthetic BTC chart conversation included the new source.
+The rebased code passed all five PR CI jobs in workflow `44920300908`; the
+status-only rebase requires a new candidate CI. Auto Deploy, public identity
+checks and independent authenticated QA are pending.
+
 ## FINN 3.0: reportkaart leest actuele benchmark apart (21 november 2026)
 
 Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_IDENTITY`. Independent QA tested the previous

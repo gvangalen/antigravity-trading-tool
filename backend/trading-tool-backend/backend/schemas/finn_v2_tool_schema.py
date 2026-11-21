@@ -18,6 +18,7 @@ ToolName = Literal[
     "read_asset_scores",
     "read_setup_market_matches",
     "read_market_snapshot",
+    "read_forward_returns",
     "read_macro_snapshot",
     "read_technical_snapshot",
     "read_active_setup",

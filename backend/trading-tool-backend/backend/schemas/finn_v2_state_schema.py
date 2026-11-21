@@ -54,6 +54,7 @@ class StateEdge(BaseModel):
         "has_indicator_configuration",
         "has_scores",
         "has_market_snapshot",
+        "has_forward_returns",
         "has_macro_snapshot",
         "has_technical_snapshot",
         "has_setup",

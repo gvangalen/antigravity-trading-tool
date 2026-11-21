@@ -114,6 +114,7 @@ class FinnResponsesToolCatalog:
         # Collection reads have a distinct typed read adapter. They do not
         # add a new action/evaluation operation to the sealed registry matrix.
         self.read_tools["get_saved_setup_inventory"] = ("read_saved_setup_inventory",)
+        self.read_tools["get_forward_returns"] = ("read_active_asset", "read_forward_returns")
         self.read_tools["get_saved_setup"] = ("read_active_setup", "read_asset_scores")
         self.read_tools["get_current_asset_scores"] = ("read_active_asset", "read_asset_scores")
         self.read_tools["get_setup_market_matches"] = ("read_setup_market_matches",)
@@ -299,6 +300,13 @@ class FinnResponsesToolCatalog:
                     "also read get_current_asset_scores. "
                     "Present measured values in ordinary rounded form, without binary-float artifacts."
                 )
+            if name == "get_forward_returns":
+                description += (
+                    " Use for questions about historical weekly, monthly, quarterly or yearly returns. "
+                    "The current period is partial. These are historical observations, not forward predictions. "
+                    "The stored rows are keyed by asset only; their exact quote currency is unverified. "
+                    "Do not describe them as the candles or exact pair in TradingView."
+                )
             if name == "get_saved_setup_inventory":
                 description += (
                     " Returns an owner-scoped collection, optionally filtered by asset and timeframe; "
@@ -343,7 +351,7 @@ class FinnResponsesToolCatalog:
                 "timeframe": {"type": ["string", "null"], "description": "A real timeframe such as 4H or 1D, never an object name."},
             }
             if name in {"get_current_asset_scores", "get_setup_market_matches",
-                        "get_market_snapshot", "get_saved_setup", "get_active_plan_and_strategy",
+                        "get_market_snapshot", "get_forward_returns", "get_saved_setup", "get_active_plan_and_strategy",
                         "get_indicator_snapshot", "get_current_technical_snapshot"}:
                 properties["quote_currency"] = {
                     "type": ["string", "null"], "enum": ["EUR", "USDT", None],
@@ -616,7 +624,7 @@ class FinnResponsesToolCatalog:
         if name in self.read_tools or name in self.evaluation_contracts:
             allowed = {"asset", "timeframe"}
             if name in {"get_current_asset_scores", "get_setup_market_matches",
-                        "get_market_snapshot", "get_saved_setup", "get_active_plan_and_strategy",
+                        "get_market_snapshot", "get_forward_returns", "get_saved_setup", "get_active_plan_and_strategy",
                         "get_indicator_snapshot", "get_current_technical_snapshot"}:
                 allowed.add("quote_currency")
             if name == "get_closed_trade_review":

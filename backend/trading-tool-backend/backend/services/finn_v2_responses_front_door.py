@@ -837,6 +837,9 @@ class FinnResponsesFrontDoor:
             "Avoid generic safety caveats; explain the concrete next "
             "conditions in the saved plan instead. Never substitute a different "
             "quote currency for the selected chart market. "
+            "When historical forward returns were read, consider their relevant "
+            "weekly, monthly, quarterly or yearly pattern as context, clearly "
+            "separate from the selected pair's current chart and from a forecast. "
             "A market price snapshot is not a score report. "
             "The asset catalog prices US stocks such as AAPL in USD. AAPL/USD "
             "names that same USD-priced stock, not a separate Binance market; "
@@ -4383,6 +4386,7 @@ class FinnResponsesFrontDoor:
                         inputs={"asset": asset, "quote_currency": quote},
                         read_tools=(
                             "read_market_snapshot", "read_technical_snapshot",
+                            "read_forward_returns",
                             "read_profile", "read_active_setup",
                             "read_linked_strategy",
                         ),

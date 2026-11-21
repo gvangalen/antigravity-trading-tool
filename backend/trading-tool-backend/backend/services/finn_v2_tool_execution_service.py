@@ -34,6 +34,7 @@ from backend.services.finn_v2_tool_adapters.bot_tool_adapter import BotToolAdapt
 from backend.services.finn_v2_tool_adapters.indicator_tool_adapter import IndicatorToolAdapter
 from backend.services.finn_v2_tool_adapters.macro_tool_adapter import MacroToolAdapter
 from backend.services.finn_v2_tool_adapters.market_tool_adapter import MarketToolAdapter
+from backend.services.finn_v2_tool_adapters.forward_returns_tool_adapter import ForwardReturnsToolAdapter
 from backend.services.finn_v2_tool_adapters.portfolio_tool_adapter import PortfolioToolAdapter
 from backend.services.finn_v2_tool_adapters.preferences_tool_adapter import PreferencesToolAdapter
 from backend.services.finn_v2_tool_adapters.profile_tool_adapter import ProfileToolAdapter
@@ -94,6 +95,7 @@ class FinnV2ToolExecutionService:
         self.indicator_adapter = IndicatorToolAdapter(session)
         self.score_adapter = ScoreToolAdapter(session)
         self.market_adapter = MarketToolAdapter(session)
+        self.forward_returns_adapter = ForwardReturnsToolAdapter(session)
         self.macro_adapter = MacroToolAdapter(session)
         self.technical_adapter = TechnicalToolAdapter(session)
         self.setup_adapter = SetupToolAdapter()
@@ -110,13 +112,16 @@ class FinnV2ToolExecutionService:
             return []
         if not self.flags.is_tool_shadow_canary_user(user_id):
             return []
+        # Preserve the legacy shadow chain's 15-read budget when new
+        # opt-in analysis sources are introduced.
+        shadow_tools = [name for name in FINN_V2_TOOL_ORDER if name != "read_forward_returns"]
         plan = ToolPlan(
             run_id=run_id,
             interaction_mode="UNAVAILABLE",
             required_domains=[],
             optional_domains=[],
-            tool_names=list(FINN_V2_TOOL_ORDER),
-            tool_inputs={tool_name: {} for tool_name in FINN_V2_TOOL_ORDER},
+            tool_names=shadow_tools,
+            tool_inputs={tool_name: {} for tool_name in shadow_tools},
             max_tool_calls=15,
             read_only=True,
             planning_reasons=["legacy_shadow_chain"],
@@ -647,6 +652,9 @@ class FinnV2ToolExecutionService:
             asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
             scope = await self._resolve_read_market_scope(user_id=user_id, asset=asset_state["asset"], selector=selector, run=run, shared_state=shared_state)
             return await self.market_adapter.execute(asset=asset_state["asset"], user_id=user_id, **scope)
+        if tool_name == "read_forward_returns":
+            asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
+            return await self.forward_returns_adapter.execute(asset=asset_state["asset"])
         if tool_name == "read_macro_snapshot":
             asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
             return await self.macro_adapter.execute(user_id=user_id, asset=asset_state["asset"])
