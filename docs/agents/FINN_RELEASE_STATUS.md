@@ -4,6 +4,52 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: rapportfeed, rendementen en Smart DCA-vervolg (21 november 2026)
+
+Phase: `LOCAL_VALIDATED_CI_GREEN`. Branch
+`codex/finn3-report-recovery-attention-20261121`, rebased on status-only main
+`3c985fba6` with product baseline `9c53648a2c`. Recovery of saved daily,
+weekly, monthly and quarterly reports
+now passes the persisted score snapshot to the FINN feed publisher. A recent
+unread generic card can be superseded by one verifiable pair-specific
+attention point; handled cards remain closed. The existing main fix for
+`read_forward_returns` accepts date-only period bounds. This candidate also
+normalizes those dates at the raw forward-return API response boundary, which
+previously returned HTTP 500, while preserving its datetime response shape.
+Production interactive-worker logs confirmed four failures at the old adapter
+`.date()` call on `datetime.date`; this is a verified cause for the earlier
+read-only browser failure, not yet a live acceptance of the repair.
+
+On the combined local runtime, a guided request for three Smart DCA score
+bands initially failed at proposal creation: the model supplied an unrelated
+five-zone list alongside the three-band suggestion and the domain validator
+raised `score_band_formats_mixed`. The state resolver now removes that
+conflicting model format. A focused regression passed, and the isolated
+proposal, confirmation, save and idempotent replay probe passed after the
+worker restart. No bot or order was created by that probe.
+
+The final combined backend suite passed **5219**, skipped **7** (log SHA-256
+`cffeef2ef87cbfeb0e7f35ed9a1effe704e5d4b2196d00ca1d58a1e698549391`).
+Focused date-bound, market-data and guided Smart DCA checks passed **22/22**.
+The isolated FastAPI/Celery/PostgreSQL/Redis/Responses action matrix passed
+**17/17** contracts, the adapter tests **28/28**, and the Smart DCA schedule,
+confirmed Smart DCA and calendar DCA probes passed (artifact SHA-256
+`499cca210979abfe4b360e2acd3d55a5fc53dad3f59592956ef5c92fafb791f4`).
+It recorded zero broker orders, Live bots, Live calls or production connections.
+The real-provider development selector passed **20/20** with zero provider,
+schema, timeout, parse or validation failures (artifact SHA-256
+`b08e3e6835b8e69b008839fef458f047b2a6b4d3a0232293d391c02c86c4bd0b`).
+The real-provider regression selector passed **109/109** with zero provider,
+schema, timeout, parse or
+validation failures (artifact SHA-256
+`891899948e13d2de6fc11c4e5abc080d5cbb2c40a1d66065b3c4c4d365dc43b5`).
+Frontend typecheck, i18n lint/tests, command/proposal tests, build
+and `audit:high` passed on the unchanged web code. All five CI jobs passed on
+the combined product-code SHA `e7af643357` in workflow `44929132780` before
+the status-only rebase. Deploy identity and independent authenticated QA are
+pending. The QA profile has not
+yet tested the report-recovery route on this candidate.
+
 ## FINN 3.0: herstel historische forward returns (21 november 2026)
 
 Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_IDENTITY`. Independent QA returned `NOT_ACCEPTED` for
@@ -98,54 +144,6 @@ handoff to independent authenticated QA. The pair-context and five-zone
 changes have not yet received independent live QA acceptance. A separate
 earlier QA review found the historical forward-return chat tool NOT_ACCEPTED
 on the previous live revision; this release did not modify that tool.
-
-## FINN 3.0: rapportmeldingen en historische rendementen (21 november 2026)
-
-Phase: `LOCAL_VALIDATED_CANDIDATE`. Branch
-`codex/finn3-report-recovery-attention-20261121`. Recovery of saved daily,
-weekly, monthly and quarterly reports now passes the persisted score snapshot
-to the feed publisher. An unread recent generic card can be superseded when
-that snapshot contains one verifiable pair-specific attention point. The
-deduplication revision includes the attention kind and pair, while already
-handled cards stay handled. A separate live read-only browser check on public
-SHA `3f2040ef05ff8c824664a1f6de0b43a1fd2bf300` found that FINN could not
-read stored BTC historical returns although Analyse displayed period values.
-Production backend logs showed that date-only period bounds fail the raw
-forward-return response model. The interactive FINN worker log confirmed four
-`read_forward_returns` failures at the adapter's `.date()` call with
-`AttributeError: 'datetime.date' object has no attribute 'date'`; a local
-reproduction gave the same error. This candidate
-accepts both date-only and datetime bounds in the FINN adapter and preserves
-the raw endpoint's datetime response contract by normalizing date-only bounds
-to midnight UTC. Neither change starts a market-data sync or trading action.
-
-The report-only backend suite passed **5201**, skipped **7** (log SHA-256
-`3bb2cc156708f529fd1e8173e0516e6e7a4f82b22d513138b0b0291bc669a65a`).
-Focused report/feed regressions passed **63/63**; the date-bound regressions
-passed with the relevant market-data suite (**19/19**). The combined full
-backend suite passed **5203**, skipped **7** (log SHA-256
-`4c6efcad4aeb6a56a085c2de4b0d8c5d7b91516856fb4657a3e2d85e94c8a789`).
-The local worker-driven matrix passed all **17/17** action contracts through
-FastAPI, Celery, PostgreSQL, Redis and Responses, plus the follow-up adapter
-checks (artifact SHA-256
-`810e8f3e9fba30d645dcff91b1d51d4f284edc369477f4704d992725ab7da73f`).
-It recorded zero broker orders, Live bots, Live calls or production
-connections. The real-provider development selector passed **20/20** with zero
-provider, schema, timeout, parse or validation failures (artifact SHA-256
-`5b3d6eda259f4c2a15c87c44e280caa0045f1d892fa3b9b18ed0f0432e66d8e1`).
-The real-provider regression selector passed **109/109** with zero provider,
-schema, timeout, parse or validation failures (artifact SHA-256
-`53416e5b6fb659b964c13c7f2e7462144fc320797513ec9d7839d7a6c27eeb2e`).
-Frontend typecheck, i18n lint and tests,
-command/proposal tests, production build and `audit:high` passed; the audit
-reported one moderate Next.js advisory and no high findings. The report
-recovery path is covered by saved-snapshot, generic-card upgrade and
-missing-attention regressions. This candidate reran the local action and both
-real-provider selector matrices after its read-adapter change. Candidate CI,
-deploy identity and independent
-authenticated QA are pending. The browser observation that prompted this
-repair showed a generic daily report card despite a report containing dated
-pair scores; the protected QA profile has not yet tested this recovery route.
 
 ## FINN 3.0: historische forward returns in analyse (21 november 2026)
 
