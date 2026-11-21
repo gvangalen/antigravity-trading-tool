@@ -4,6 +4,38 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: actieve werkruimtelezing na live QA (21 november 2026)
+
+Phase: `LOCAL_VALIDATED_PR_PENDING`. Onafhankelijke QA op live SHA
+`2e8021d6e7c8262a6167011de93c1551e3d9c302` testte drie bevroren,
+alleen-lezen gevallen: watchlist en vorige-antwoord-samenvatting slaagden;
+de actieve-instrumentlezing faalde met `active_asset_context_unavailable`.
+Polling/SSE, eenmalige dispatch en veiligheid bleven goed. De gesaniteerde
+trace onderscheidde niet of de owner-read faalde door een ontbrekend asset,
+een niet-uniek handelspaar of een andere readreden.
+
+De herstelbatch geeft de zichtbare werkruimteselectie en koersvaluta direct
+door aan `read_active_asset`. Alleen voor deze identiteitsread blijft een
+geverifieerd basissymbool beschikbaar wanneer het exacte handelspaar niet
+kan worden vastgesteld; prijs-, score- en actiecontracten blijven strikt
+paargebonden. De webchat leest bij verzending de actuele asset-URL, zodat
+een net gewisseld handelspaar niet uit een verouderde render komt. Gerichte
+regressies voor actieve BTC/USDT en de base-assetgrens zijn toegevoegd.
+De volledige backend-suite slaagde met **5159 passed, 7 skipped**. De
+frontendbuild, typecheck, i18n-lint en -tests, command- en voorsteltests
+slaagden; de productie-audit heeft één bestaande matige Next.js-melding en
+geen hoge bevinding. De echte Responses-provider slaagde met development
+**20/20** en regression **109/109**; in beide reeksen zijn geen gefaalde
+gevallen. De definitieve geïsoleerde worker-matrix slaagde met **38/38**
+gevallen en **16/16** veilige actiecontracten, zonder verboden uitvoering;
+artifact `.local-finn-parity-artifacts/finn-active-workspace-read-matrix-final.json`
+heeft SHA-256 `dc4cf3ed1f0a1b3cbcf26204e3131c79da9d5676e216fb6222e812bce76bde20`.
+De provider-artifacts hebben SHA-256
+`a2423097f800181d4ef0d15234708befb019f0a3557b1ff8762af839428e52ea`
+(development) en
+`36996116f45d9f0dcac704d14113b1905746bb545fe7defadd3c384468debece`
+(regression). CI, deployment en nieuwe onafhankelijke live QA staan nog open.
+
 ## FINN 3.0: samengestelde assetnamen en vorige-antwoord-samenvatting (21 november 2026)
 
 Phase: `LOCAL_VALIDATED_PR_PENDING`. Beschermde QA op live SHA

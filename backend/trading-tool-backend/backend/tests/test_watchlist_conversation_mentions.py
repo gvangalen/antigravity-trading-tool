@@ -169,7 +169,7 @@ def test_active_instrument_reads_selected_asset_even_when_watchlist_is_mentioned
 
         async def read(call):
             assert call.read_tools == ("read_active_asset",)
-            assert call.inputs == {}
+            assert call.inputs == {"asset": "BTC", "quote_currency": "USDT"}
             return {"status": "completed", "results": [{
                 "scope": "read_active_asset", "status": "completed",
                 "data": {"symbol": "BTC", "pair": "BTC/USDT"},
@@ -182,6 +182,7 @@ def test_active_instrument_reads_selected_asset_even_when_watchlist_is_mentioned
         ):
             result = await front.run(
                 message=message, instructions="", conversation_context={}, verified_asset="BTC",
+                workspace_hints={"symbol": "BTC", "quote_currency": "USDT"},
             )
             assert result.response.answer_kind == "active_asset_context"
             verified = await FinnResponsesAnswerVerifier().verify(

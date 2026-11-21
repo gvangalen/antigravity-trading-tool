@@ -195,6 +195,32 @@ def test_tool_execution_preserves_initially_empty_shared_state(monkeypatch):
     assert shared_state == {"asset": "BTC", "resolution_source": "selected_asset"}
 
 
+def test_active_asset_read_keeps_verified_symbol_when_saved_pairs_are_ambiguous():
+    for symbol, reason in (
+        ("BTC", "market_pair_ambiguous"),
+        ("BTC", "market_pair_not_supported"),
+        ("AAPL", "market_quote_not_supported"),
+    ):
+        service = FinnV2ToolExecutionService(session=_FakeSession())
+        run = SimpleNamespace(workspace_hints_json={"symbol": symbol}, client_context_json={})
+        service.resolver.resolve_asset = AsyncMock(return_value={
+            "asset": symbol, "resolution_source": "workspace_state",
+        })
+        service._resolve_read_market_scope = AsyncMock(side_effect=LookupError(reason))
+        service.asset_adapter.execute = AsyncMock(return_value={"data": {"symbol": symbol, "pair": None}})
+        state = {}
+
+        result = asyncio.run(service._dispatch_tool(
+            tool_name="read_active_asset", user_id=7, selector={}, run=run, shared_state=state,
+        ))
+
+        assert result["data"] == {"symbol": symbol, "pair": None}
+        service.asset_adapter.execute.assert_awaited_once_with(
+            asset=symbol, resolution_source="workspace_state", market_id=None, quote_currency=None,
+        )
+        assert state["asset"] == symbol
+
+
 def test_match_read_filters_workspace_asset_without_borrowing_its_pair(monkeypatch):
     seen = []
 
