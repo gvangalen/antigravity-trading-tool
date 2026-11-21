@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: herstel historische forward returns (21 november 2026)
 
-Phase: `CANDIDATE_LOCAL_GREEN_CI_PENDING`. Independent QA returned `NOT_ACCEPTED` for
+Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_IDENTITY`. Independent QA returned `NOT_ACCEPTED` for
 the forward-return integration on live SHA
 `3f2040ef05ff8c824664a1f6de0b43a1fd2bf300`. In an authenticated
 BTC/USDT conversation, FINN reported an internal error for stored historical
@@ -41,8 +41,16 @@ checks passed, with zero Live bots or non-allowlisted executions. Terminal
 p95 was **9477.76 ms**, below the unchanged **10000 ms** limit (artifact
 SHA-256 `19f77b278536bb4782ec6b8e1dd9a431bec14aae82a385510cded8fdd8416fc4`).
 The earlier failed latency measurement remains recorded as a concurrency
-observation. Candidate CI and live deployment remain pending; no production
-fix or acceptance is claimed yet.
+observation. [PR #1253](https://github.com/gvangalen/antigravity-trading-tool/pull/1253)
+passed all five jobs on the final candidate SHA `4019bc846b991094778a7971a6c36a7664d55d8f`
+in workflow `44927828895` and merged as
+`9c53648a2cb12d74c9ccd4a91001e4c2c3219248`. Main CI `44928554393`
+passed all five jobs and Auto Deploy `44929086912` succeeded. Public backend
+`/api/health` and frontend `/build-info.json` both returned HTTP 200 and
+reported that exact merge SHA. This status-only update creates a later main
+SHA; Build must verify its final CI, last Auto Deploy and public SHA parity
+before handing the forward-return retest to independent QA. The live fix has
+not yet received independent QA acceptance.
 
 ## FINN 3.0: exact watchlist pair and five Smart DCA benchmark zones (21 november 2026)
 
