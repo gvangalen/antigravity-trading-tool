@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: synthetic feed fixture schema alignment (21 November 2026)
 
-Phase: `LOCAL_VALIDATED_CANDIDATE`. Independent QA ran the protected
+Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_IDENTITY`. Independent QA ran the protected
 `coach_feed_journey` once on public SHA
 `730f0a0efce1560a13744bfc548bcef5893176f3` (workflow `44913687241`)
 and returned `NOT_ACCEPTED`: the synthetic child was quarantined after an
@@ -29,6 +29,13 @@ Targeted profile/runner tests passed **164/164**. Independent live QA is still
 required to accept the complete journey. The full backend suite passed
 **5192**, skipped **7** (log SHA-256
 `862b518da3b2909db4a61742faa69fa7a1d8068ca69e55204c95dd3711e5d342`).
+PR [#1245](https://github.com/gvangalen/antigravity-trading-tool/pull/1245)
+merged as `6b5bf1741d05fdb074edd8a2e2622e242e8dd7f6` after candidate CI
+`44914439968` passed all five jobs. Main CI `44914996398` passed all five
+jobs and Auto Deploy `44915524715` succeeded. Public backend health and
+frontend build-info returned HTTP 200 with the exact merge SHA. This status
+update creates a later main SHA; Build must wait for its CI, Auto Deploy, and
+public backend/frontend SHA parity before handing the final revision to QA.
 
 ## FINN 3.0: protected report-feed stage diagnosis (21 November 2026)
 
