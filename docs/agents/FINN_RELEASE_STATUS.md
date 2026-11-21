@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: rapportaandacht en gerichte bespreking (21 november 2026)
 
-Phase: `LIVE_DEPLOYED_QA_PENDING`. Nieuwe dag-, week-, maand- en
+Phase: `LIVE_QA_NOT_ACCEPTED_COVERAGE_GAP`. Nieuwe dag-, week-, maand- en
 kwartaalrapporten leveren bij publicatie één deterministisch aandachtspunt uit
 de opgeslagen scoresnapshot voor een exact handelspaar. De feed toont het
 rapportmoment en het aandachtspunt; `Bespreek` leest via de eigenaargebonden
@@ -37,11 +37,19 @@ en PR-CI `44883974626` slaagden. Na merge als
 frontend build-info gaven beide HTTP 200 en exact die SHA. Deze statusupdate
 maakt zelf een volgende hoofdbranch-SHA; Build wacht ook daarvoor CI, Auto
 Deploy en publieke pariteit af. Onafhankelijke ingelogde QA staat nog open.
-QA moet een
-nieuw gegenereerde rapportkaart voor een exact paar, de rapportlink,
-`Bespreek` op hetzelfde gedateerde rapport, een aangepaste chatvraag en
-web/mobile-weergave toetsen. Ontbreekt een nieuwe kaart, dan is dit een
-dekkingsgat en geen groen acceptatiebewijs.
+Onafhankelijke ingelogde QA op uiteindelijke publieke SHA
+`a0e4a8754438948788804dba8a3d8702823ae3cb` gaf **NOT_ACCEPTED** wegens
+een dekkingsgat, zonder aangetoonde productfout. De enige dagrapportkaart in
+het QA-account was om 05:39 CET gemaakt, vóór de uitrol; de kaart had nog
+algemene tekst en geen `Bespreek`-actie. De rapportlink opende het juiste
+dagrapport van 21 november en onderscheidde de opgeslagen momentopname van
+actuele Analyse. Er was geen nieuwe rapportkaart met paargebonden aandacht;
+de eigenaargebonden `Bespreek`-read, aangepaste vraag en polling/SSE van de
+nieuwe route blijven onbewezen. De rapportpagina bood geen veilige handmatige
+generatieactie; de iPhone-simulator had geen toegankelijk venster. QA voerde
+geen order, botactie of rapportgeneratie uit. Bij de volgende echte
+rapportpublicatie is een gerichte hertest op de dan exact geverifieerde live
+SHA nodig, inclusief web/mobile waar beschikbaar.
 ## FINN 3.0: AAPL-bronantwoorden na ingelogde QA (21 november 2026)
 
 Phase: `LOCAL_VALIDATED_PR_PENDING`. Branch
