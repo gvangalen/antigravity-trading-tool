@@ -9,8 +9,11 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 Phase: `LOCAL_VALIDATED_PR_PENDING`. Branch
 `codex/finn-bot-decision-recency-release`, gebaseerd op main
 `a0e4a8754438948788804dba8a3d8702823ae3cb`. De vorige
-rapportaandachtrelease staat op `LIVE_DEPLOYED_QA_PENDING`; de officiële QA
-daarvoor is nog niet gestart. Deze batch neemt die productcode mee.
+rapportaandachtrelease kreeg in de gerichte ingelogde QA `NOT_ACCEPTED`
+wegens een dekkingsgat: er was nog geen na de uitrol nieuw gegenereerde
+rapportkaart. Er werd geen productfout aangetoond. Deze batch neemt die
+productcode mee; de ongetoetste rapportkaart en Bespreek-route blijven een
+expliciet QA-vervolgpunt.
 
 FINN onderscheidt de bevroren bronmomentopname van het nachtrapport van een
 later gelezen botcheck. Bij een actuele botvraag gebruikt FINN de nieuwste
