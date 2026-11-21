@@ -4,6 +4,32 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: protected report-feed stage diagnosis (21 November 2026)
+
+Phase: `LOCAL_VALIDATED_CANDIDATE`. Independent QA ran the official protected
+`coach_feed_journey` profile once on public SHA
+`ca0ebc2f66a9c9fb64f3461b5f794834a3f470ad` (workflow `44910733827`)
+and returned `NOT_ACCEPTED`. The dated analysis card, read-only FINN
+discussion, and invalid-score-card removal passed. The journey then stopped
+at `report_publish` with `feed_journey_runtime_failed`; the report card and
+report discussion were not reached. The synthetic child was quarantined, with
+zero confirmations, executions, Live activations, and Live calls. The
+sanitized artifact SHA-256 was
+`d1b61f82d5a0d34a7cedff7c1e23ebf47b56745776ba62ea2c6bc475d69b9173`.
+QA inspected the existing workflow logs read-only and found no traceback or
+safe database/event-loop category. No product root cause is claimed.
+
+This candidate adds a fixed, allowlisted `report_failure` substage and SQL
+error category to the protected profile's sanitized failure result. It
+separates async-connection release, database connection, owner scope, insert,
+commit, feed publication, and card readback. No raw SQL, exception text,
+account data, IDs, dates, or scores are exported. The profile's owner, cleanup,
+quarantine, and Live-execution boundaries remain unchanged. Independent live
+QA must rerun the same protected profile to identify the failing substage.
+Local targeted profile/runner tests passed **163/163**; the full backend
+suite passed **5191**, skipped **7** (log SHA-256
+`33b51af8805eaba0558c32474beb0c68c2c538ffaca7548bb2eb211e0e8cbdf2`).
+
 ## FINN 3.0: feed-discussion answer contract follow-up (21 November 2026)
 
 Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_IDENTITY`. Independent QA ran the official protected
