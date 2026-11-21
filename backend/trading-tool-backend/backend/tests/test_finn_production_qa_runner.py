@@ -8,6 +8,7 @@ import os
 import re
 import socket
 import ssl
+import subprocess
 import sys
 import types
 from datetime import date, datetime, timedelta, timezone
@@ -30,6 +31,55 @@ def _module():
     assert spec and spec.loader
     spec.loader.exec_module(module)
     return module
+
+
+def test_setup_strategy_journey_dispatch_requires_bound_fixture_flags(tmp_path):
+    gh = tmp_path / "gh"
+    gh.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$QA_DISPATCH_CAPTURE"\n')
+    gh.chmod(0o700)
+    capture = tmp_path / "dispatch.args"
+    base_env = dict(os.environ, PATH=f"{tmp_path}:{os.environ['PATH']}",
+                    QA_DISPATCH_CAPTURE=str(capture))
+    arguments = [str(DISPATCH_SCRIPT_PATH), "a" * 40,
+                 "setup_strategy_journey", "none", "qa-test-dispatch"]
+
+    valid = subprocess.run(
+        ["bash", *arguments], env=dict(base_env,
+            FINN_QA_ALLOW_FIXTURE_ACTIONS="true", FINN_QA_ALLOW_FIXTURE_EXECUTION="true"),
+        capture_output=True, text=True, check=False,
+    )
+    assert valid.returncode == 0
+    dispatched = capture.read_text().splitlines()
+    assert "qa_profile=setup_strategy_journey" in dispatched
+    assert "manifest_id=none" in dispatched
+    assert "allow_fixture_actions=true" in dispatched
+    assert "allow_safe_fixture_execution=true" in dispatched
+
+    for actions, execution, manifest in (
+        ("false", "false", "none"), ("true", "false", "none"),
+        ("false", "true", "none"), ("true", "true", "other-manifest"),
+    ):
+        capture.unlink(missing_ok=True)
+        rejected = subprocess.run(
+            ["bash", str(DISPATCH_SCRIPT_PATH), "a" * 40,
+             "setup_strategy_journey", manifest, "qa-test-dispatch"],
+            env=dict(base_env, FINN_QA_ALLOW_FIXTURE_ACTIONS=actions,
+                     FINN_QA_ALLOW_FIXTURE_EXECUTION=execution),
+            capture_output=True, text=True, check=False,
+        )
+        assert rejected.returncode == 2
+        assert not capture.exists()
+
+    bundle = tmp_path / "bundle"
+    bundle.write_text("encrypted-test-bundle")
+    rejected_bundle = subprocess.run(
+        ["bash", *arguments, str(bundle)],
+        env=dict(base_env, FINN_QA_ALLOW_FIXTURE_ACTIONS="true",
+                 FINN_QA_ALLOW_FIXTURE_EXECUTION="true"),
+        capture_output=True, text=True, check=False,
+    )
+    assert rejected_bundle.returncode == 2
+    assert not capture.exists()
 
 
 def _synthetic_feed_manifest(module, root: Path) -> tuple[bytes, str]:
