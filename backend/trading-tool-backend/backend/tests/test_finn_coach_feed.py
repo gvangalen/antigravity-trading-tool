@@ -171,6 +171,9 @@ def test_journey_cards_use_exact_market_and_resolve_when_strategy_exists(monkeyp
 
         async def execute(self, query, params):
             sql = str(query)
+            if "pg_advisory_xact_lock" in sql:
+                assert params == {"key": "finn-journey:7:BTC:34"}
+                return Rows([])
             assert params["user_id"] == 7
             if "FROM watchlists w" in sql:
                 assert params["market_id"] == 34
@@ -214,6 +217,58 @@ def test_journey_cards_use_exact_market_and_resolve_when_strategy_exists(monkeyp
     linked_service.resolve.assert_any_await(user_id=7, event_key="strategy-next-step:42")
 
 
+def test_strategy_without_watchlist_still_gets_paper_next_step(monkeypatch):
+    class Rows:
+        def __init__(self, values):
+            self.values = values
+
+        def mappings(self):
+            return self
+
+        def first(self):
+            return self.values[0] if self.values else None
+
+        def all(self):
+            return self.values
+
+    class Session:
+        async def execute(self, query, params):
+            sql = str(query)
+            if "pg_advisory_xact_lock" in sql:
+                assert params == {"key": "finn-journey:7:BTC:34"}
+                return Rows([])
+            if "FROM watchlists w" in sql:
+                assert params == {"user_id": 7, "symbol": "BTC", "market_id": 34}
+                return Rows([])
+            if "FROM trading_markets" in sql:
+                assert params == {"market_id": 34, "symbol": "BTC"}
+                return Rows([{"quote_currency": "USDT"}])
+            if "FROM strategies" in sql:
+                return Rows([{"id": 91, "setup_id": 42, "name": "BTC strategy",
+                              "created_at": datetime.now(timezone.utc)}])
+            if "FROM bot_configs b" in sql or "event_type='strategy_next_step'" in sql or "event_type='paper_next_step'" in sql:
+                return Rows([])
+            raise AssertionError(sql)
+
+    class Setups:
+        def __init__(self, _session):
+            pass
+
+        async def get_all_setups(self, user_id):
+            assert user_id == 7
+            return [{"id": 42, "name": "BTC setup", "symbol": "BTC", "market_id": 34,
+                     "created_at": datetime.now(timezone.utc)}]
+
+    monkeypatch.setattr("backend.infrastructure.repositories.setup_repository.SetupRepository", Setups)
+    service = module.FinnCoachFeedService(Session())
+    service.publish = AsyncMock(return_value="paper-card")
+    service.resolve = AsyncMock()
+    assert asyncio.run(service.reconcile_journey_next_steps(
+        user_id=7, symbol="BTC", market_id=34)) == ["paper-card"]
+    assert service.publish.await_args.kwargs["event_type"] == "paper_next_step"
+    assert service.publish.await_args.kwargs["evidence"]["trading_pair"] == "BTC/USDT"
+
+
 def test_analysis_ready_requires_verified_score_and_no_setup(monkeypatch):
     class Rows:
         def __init__(self, values):
@@ -232,6 +287,8 @@ def test_analysis_ready_requires_verified_score_and_no_setup(monkeypatch):
     class Session:
         async def execute(self, query, params):
             sql = str(query)
+            if "pg_advisory_xact_lock" in sql:
+                return Rows([])
             if "FROM watchlists w" in sql:
                 return Rows([{"id": 71, "quote_currency": "USDT"}])
             if "event_type='strategy_next_step'" in sql:
@@ -295,6 +352,8 @@ def test_paper_next_step_appears_only_for_strategy_without_bot(monkeypatch):
 
         async def execute(self, query, params):
             sql = str(query)
+            if "pg_advisory_xact_lock" in sql:
+                return Rows([])
             if "FROM watchlists w" in sql:
                 return Rows([{"id": 71, "quote_currency": "USDT"}])
             if "FROM strategies" in sql:
@@ -1624,6 +1683,42 @@ def test_same_observation_does_not_reopen_after_acknowledgement_or_expiry(previo
     assert created is None
     assert len(statements) == 2
     assert not any("INSERT INTO finn_coach_feed_items" in sql for sql in statements)
+
+
+@pytest.mark.parametrize("event_type,event_key", [
+    ("strategy_next_step", "strategy-next-step:42"),
+    ("paper_next_step", "paper-next-step:42"),
+])
+def test_journey_condition_reappearing_after_resolution_opens_new_episode(event_type, event_key):
+    digest = hashlib.sha256("same-revision".encode()).hexdigest()
+    statements = []
+
+    class Result:
+        def __init__(self, row):
+            self.row = row
+
+        def mappings(self):
+            return self
+
+        def first(self):
+            return self.row
+
+    class Session:
+        async def execute(self, sql, _params):
+            statements.append(str(sql))
+            if "SELECT id, fingerprint" in str(sql):
+                return Result({"id": "old", "fingerprint": digest, "status": "resolved"})
+            if "INSERT INTO finn_coach_feed_items" in str(sql):
+                return Result(("new-card",))
+            return Result(None)
+
+    created = asyncio.run(module.FinnCoachFeedService(Session()).publish(
+        user_id=7, event_key=event_key, event_type=event_type,
+        subject_type="setup", subject_id="42", subject="BTC Setup", symbol="BTC",
+        evidence={"setup_id": 42}, revision="same-revision",
+    ))
+    assert created == "new-card"
+    assert sum("INSERT INTO finn_coach_feed_items" in sql for sql in statements) == 1
 
 
 @pytest.mark.parametrize("newer", [True, False])

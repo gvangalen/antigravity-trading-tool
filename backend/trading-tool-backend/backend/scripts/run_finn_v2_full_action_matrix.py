@@ -383,9 +383,11 @@ def _proposal_lifecycle(
         # Keeping it in the public matrix proves the execution endpoint does
         # not silently drop the post-confirmation conversation boundary.
         "execution_conversation_id": executed.get("conversation_id"),
+        "execution_journey_next_step": executed.get("journey_next_step"),
         "idempotency_replay_status": replay_status,
         "idempotency_result": replayed.get("status"),
         "idempotency_conversation_id": replayed.get("conversation_id"),
+        "idempotency_journey_next_step": replayed.get("journey_next_step"),
     }
 
 
@@ -516,6 +518,18 @@ def _run_contract(
                 mutation_pace_seconds=mutation_pace_seconds,
             )
             result.update(lifecycle)
+        if operation_id in {"create_setup", "create_strategy"}:
+            journey = result.get("execution_journey_next_step") or {}
+            replay_journey = result.get("idempotency_journey_next_step") or {}
+            expected_step = "strategy" if operation_id == "create_setup" else "paper"
+            result["journey_next_step_safe"] = bool(
+                journey.get("step") == expected_step
+                and type(journey.get("setup_id")) is int
+                and journey["setup_id"] > 0
+                and (expected_step != "paper" or
+                     type(journey.get("strategy_id")) is int and journey["strategy_id"] > 0)
+                and replay_journey == journey
+            )
         if operation_id == "create_manual_trade_plan" and result.get("execution_result") == "succeeded":
             with sync_engine.begin() as connection:
                 saved = connection.execute(text(
@@ -567,6 +581,8 @@ def _run_contract(
             observed["polling_sse_contract_projection"],
             lifecycle_ok,
             (operation_id != "create_manual_trade_plan" or result.get("manual_trade_plan_safe")),
+            (operation_id not in {"create_setup", "create_strategy"}
+             or result.get("journey_next_step_safe")),
             (operation_id != "update_strategy" or all((
                 result.get("confirmed_strategy_followup", {}).get("status") == "completed",
                 result.get("confirmed_strategy_followup", {}).get("same_conversation"),

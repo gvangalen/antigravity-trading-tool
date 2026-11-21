@@ -4,6 +4,50 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: chat- en feedvervolg na setup en strategie (21 november 2026)
+
+Phase: `LOCAL_VALIDATED_RELEASE_CANDIDATE_PENDING_CI`. Branch
+`codex/finn3-journey-followup-20261121`. Na een bevestigde losse setup vraagt
+FINN in dezelfde chat of de gebruiker een strategie wil voorbereiden; na een
+bevestigde strategie vraagt hij of een Paper-bot moet worden besproken. Een
+kort "ja" hervat alleen de laatst geverifieerde vervolgvraag. Een samengestelde
+setup-naar-strategie-opdracht houdt zijn bestaande automatische vervolgstap.
+De optionele vraag leest de opgeslagen eigenaar en het exacte strategie-ID
+opnieuw; een bot of order wordt niet automatisch aangemaakt of geactiveerd.
+
+De feed publiceert een open strategie- of Paper-vervolgstap onafhankelijk van
+scoreverversing, ook als het exacte handelspaar geen watchlistregel heeft.
+Een ingestelde Celery-route stuurt de herberekening naar de scoring-wachtrij;
+de webfeed ververst direct en nogmaals na de asynchrone verwerking. Herstel
+kan gemiste kaarten, opnieuw openstaande stappen en eerder opgeloste kaarten
+opnieuw beoordelen zonder afgehandelde kaarten telkens te openen. De
+reconciliatie leest de eigenaar/setup/strategie/bot onder een scope-lock om
+verouderde kaarten bij gelijktijdige taken te voorkomen.
+
+De definitieve lokale backend-suite slaagde **5242/5242**, met **7 skipped**
+(log SHA-256 `538ccc7224c873b0d378fd5314d4b5489e92fb1533bfa4c0d8062ba642b02bee`).
+Gerichte feed- en chatregressies: **97/97**. De worker-driven lokale
+FastAPI/Celery/PostgreSQL/Redis/Responses-matrix slaagde **17/17**, inclusief
+geverifieerde `journey_next_step` bij opslaan en identieke replay; artifact
+SHA-256 `07551452bcdc2e119ed85bc3e59a6d86ca76e417fa748ff90e326ff8b43c0a7e`.
+Adaptertests **28/28**, Smart DCA-migratie, bevestigde Smart DCA en kalender-DCA
+slaagden. Een aparte lokale scoring-worker publiceerde voor BTC/USDT zonder
+watchlistregel zowel de strategie- als de Paper-vervolgkaart. Nul brokerorders,
+Live-bots, Live-calls en productieverbindingen in de actiematrix.
+
+De echte Responses-providerselector slaagde development **20/20** (SHA-256
+`c863afcf9d2cac6c64cf47da6d268537f785601504503bdb24031bd2bf4149b6`)
+en regression **109/109** (SHA-256
+`881167b0d1e754844ef5efd4956cd4171769343a71076b1e09ebfd404a5309c8`),
+zonder provider-, schema-, timeout-, parse- of validatiefouten. De later
+gewijzigde code voor uitvoering en taakroutering raakt de selector niet.
+Frontend command-, i18n-, voorstel-, setup- en PDF-tests, typecheck, i18n-lint,
+productiebuild en `audit:high` slaagden. De audit meldde alleen een moderate
+Next.js-advisory. Een eerste nieuwe lokale contractproef ontdekte een
+ongetypeerde lege strategieparameter; na expliciete SQL-cast slaagden de twee
+gerichte contracten en de volledige matrix. Er is voor deze kandidaat nog
+geen CI, deployment of onafhankelijke ingelogde live QA uitgevoerd.
+
 ## FINN 3.0: actuele score bij rapportbespreking (21 november 2026)
 
 Phase: `LIVE_DEPLOYED_SCOPED_QA_ACCEPTED`. Independent QA returned

@@ -331,6 +331,29 @@ def reconcile_coach_feed_score(user_id: int, symbol: str, market_id: int | None 
         raise
 
 
+@shared_task(name="backend.celery_task.store_daily_scores_task.reconcile_coach_feed_journey")
+def reconcile_coach_feed_journey(user_id: int, symbol: str, market_id: int | None = None):
+    """Reconcile setup/strategy next steps independently of scoring providers."""
+    from backend.infrastructure.database import async_session_factory
+    from backend.celery_task.finn_v2_task import _run_async
+    from backend.services.finn_coach_feed_service import FinnCoachFeedService
+
+    async def run():
+        async with async_session_factory() as session:
+            item_ids = await FinnCoachFeedService(session).reconcile_journey_next_steps(
+                user_id=user_id, symbol=symbol, market_id=market_id,
+            )
+            await session.commit()
+            return item_ids
+
+    try:
+        for item_id in _run_async(run()):
+            generate_coach_feed_copy.delay(user_id, item_id)
+    except Exception:
+        logger.warning("FINN journey feed reconciliation failed for %s", symbol, exc_info=True)
+        raise
+
+
 @shared_task(name="backend.celery_task.store_daily_scores_task.generate_coach_feed_copy")
 def generate_coach_feed_copy(user_id: int, item_id: str):
     """One bounded Luna/Responses attempt with a stored factual fallback."""
@@ -473,7 +496,7 @@ def retry_coach_feed_copy():
 
 @shared_task(name="backend.celery_task.store_daily_scores_task.recover_coach_feed_events")
 def recover_coach_feed_events():
-    """Recover persisted Paper decisions and ready daily reports."""
+    """Recover persisted Paper decisions, reports and recent journey steps."""
     from backend.services.finn_report_attention import report_attention
 
     def saved_report(raw, *, snapshot_only=False):
@@ -568,6 +591,60 @@ def recover_coach_feed_events():
                 ORDER BY p.report_date DESC LIMIT 12
                 """)
                 periodic_reports = cur.fetchall()
+            cur.execute("""
+                WITH candidates AS (
+                SELECT DISTINCT s.user_id, s.symbol, s.market_id
+                FROM setups s
+                JOIN users u ON u.id=s.user_id AND u.is_active=TRUE
+                  AND COALESCE(u.ai_preferences #>> '{capacity_fixture,kind}', '') <> 'read_only_load_v1'
+                  AND COALESCE(u.ai_preferences->>'qa_fixture', '') <> 'manual_trade_temporary_v1'
+                LEFT JOIN LATERAL (
+                    SELECT id, created_at FROM strategies st
+                    WHERE st.user_id=s.user_id AND st.setup_id=s.id
+                    ORDER BY st.created_at DESC, st.id DESC LIMIT 1
+                ) st ON TRUE
+                LEFT JOIN LATERAL (
+                    SELECT status FROM finn_coach_feed_items f
+                    WHERE f.user_id=s.user_id
+                      AND f.event_key='strategy-next-step:' || s.id::TEXT
+                    ORDER BY f.created_at DESC, f.id DESC LIMIT 1
+                ) strategy_card ON TRUE
+                LEFT JOIN LATERAL (
+                    SELECT status FROM finn_coach_feed_items f
+                    WHERE f.user_id=s.user_id
+                      AND f.event_key='paper-next-step:' || s.id::TEXT
+                    ORDER BY f.created_at DESC, f.id DESC LIMIT 1
+                ) paper_card ON TRUE
+                WHERE (s.created_at >= NOW() - INTERVAL '14 days'
+                       OR st.created_at >= NOW() - INTERVAL '14 days')
+                  AND (
+                    (st.id IS NULL AND strategy_card.status IS NULL)
+                    OR (st.id IS NULL AND strategy_card.status='resolved')
+                    OR (st.id IS NOT NULL AND strategy_card.status IN ('unread','read'))
+                    OR (st.id IS NOT NULL AND NOT EXISTS (
+                      SELECT 1 FROM bot_configs b
+                      JOIN strategies linked ON linked.id=b.strategy_id
+                       AND linked.user_id=b.user_id
+                      WHERE b.user_id=s.user_id AND linked.setup_id=s.id
+                    ) AND (paper_card.status IS NULL OR paper_card.status='resolved'))
+                    OR (st.id IS NULL AND paper_card.status IN ('unread','read'))
+                    OR (st.id IS NOT NULL AND EXISTS (
+                      SELECT 1 FROM bot_configs b
+                      JOIN strategies linked ON linked.id=b.strategy_id
+                        AND linked.user_id=b.user_id
+                      WHERE b.user_id=s.user_id AND linked.setup_id=s.id
+                    ) AND paper_card.status IN ('unread','read'))
+                  )
+                )
+                SELECT user_id, symbol, market_id FROM candidates
+                -- Rotate the bounded slice every recovery interval so a
+                -- persistently failing scope cannot starve all later scopes.
+                ORDER BY md5(user_id::TEXT || ':' || symbol || ':' ||
+                             COALESCE(market_id::TEXT, 'asset') || ':' ||
+                             FLOOR(EXTRACT(EPOCH FROM NOW()) / 600)::TEXT)
+                LIMIT 12
+            """)
+            journeys = cur.fetchall()
         conn.commit()
     finally:
         conn.close()
@@ -600,6 +677,16 @@ def recover_coach_feed_events():
             dispatched += 1
         except Exception:
             logger.warning("FINN feed periodic report recovery failed", exc_info=True)
+    for user_id, symbol, market_id in journeys:
+        try:
+            from backend.celery_task.celery_app import celery_app
+            celery_app.send_task(
+                "backend.celery_task.store_daily_scores_task.reconcile_coach_feed_journey",
+                args=[user_id, symbol, market_id],
+            )
+            dispatched += 1
+        except Exception:
+            logger.warning("FINN journey feed recovery dispatch failed", exc_info=True)
     return dispatched
 
 

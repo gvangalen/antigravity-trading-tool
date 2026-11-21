@@ -436,7 +436,7 @@ def test_feed_recovery_dispatches_new_or_changed_paper_decisions(monkeypatch):
                         lambda user_id, decision_id: sent.append((user_id, decision_id)))
     assert task_module.recover_coach_feed_events() == 1
     assert sent == [(7, 91)]
-    assert len(statements) == 3
+    assert len(statements) == 4
     assert "initial_decision_id" in statements[0]
     assert "f.user_id=d.user_id" in statements[0]
     assert "f.evidence->>'status' IS DISTINCT FROM d.status" in statements[0]
@@ -446,10 +446,61 @@ def test_feed_recovery_dispatches_new_or_changed_paper_decisions(monkeypatch):
     assert "daily_reports" in statements[1]
     assert "to_jsonb(r)->'executive_summary' IS NOT NULL" in statements[1]
     assert "f.user_id=r.user_id" in statements[1]
+    assert "strategy-next-step:" in statements[3]
+    assert "paper-next-step:" in statements[3]
     assert "to_regclass('weekly_reports')" in statements[2]
     assert task_module._confirmed_component_score({
         "total_score": 10, "scores": {"unused": {"weight": 0}},
     }) is None
+
+
+def test_feed_recovery_retries_recent_setup_journey_without_scores(monkeypatch):
+    import backend.celery_task.store_daily_scores_task as task_module
+
+    dispatched = []
+
+    class Cursor:
+        query = ""
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, sql):
+            self.query = sql
+            Cursor.query = sql
+
+        def fetchall(self):
+            return [(7, "BTC", 34)] if "strategy-next-step:" in self.query else []
+
+        def fetchone(self):
+            return (None, None, None)
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def commit(self):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(task_module, "get_db_connection", Connection)
+    from backend.celery_task.celery_app import celery_app
+    monkeypatch.setattr(celery_app, "send_task",
+                        lambda name, *, args: dispatched.append((name, args)))
+    assert task_module.recover_coach_feed_events() == 1
+    assert dispatched == [(
+        "backend.celery_task.store_daily_scores_task.reconcile_coach_feed_journey",
+        [7, "BTC", 34],
+    )]
+    assert "JOIN users u ON u.id=s.user_id AND u.is_active=TRUE" in Cursor.query
+    assert "strategy_card.status='resolved'" in Cursor.query
+    assert "paper_card.status='resolved'" in Cursor.query
+    assert "FLOOR(EXTRACT(EPOCH FROM NOW()) / 600)" in Cursor.query
 
 
 def test_saved_hold_publishes_dated_paper_review_without_ai_or_order(monkeypatch):

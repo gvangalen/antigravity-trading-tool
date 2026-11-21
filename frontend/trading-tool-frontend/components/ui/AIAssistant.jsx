@@ -25,6 +25,7 @@ import { MARKET_CONDITIONS } from "@/lib/setup/scoreConditions.mjs";
 import { indicatorDisplayName } from "@/lib/indicators/configuredIndicatorRows.mjs";
 import { formatDraftCardValue, formatExecutionMode } from "@/lib/contractValueFormatter.mjs";
 import { buildFinnTaskContinuationPrompt } from "@/lib/ai/finnTaskContinuation.mjs";
+import { affirmativeJourneyReply, journeyNextStepAfterConfirmedWrite } from "@/lib/finnJourneyNextStep.mjs";
 import { clearActiveFinnConversation, readActiveFinnConversation, writeActiveFinnConversation } from "@/lib/finnActiveConversation.mjs";
 import { parseFinnChatText } from "@/lib/finnChatText.mjs";
 import { finnSubmissionLocale } from "@/lib/finnChatLocale.mjs";
@@ -1479,7 +1480,8 @@ function AIAssistantContent({
 
   async function handleChat(directQuery, isSilent = false, overrideContext = null, retryMessageIndex = null, skipWatchlistGuidance = false) {
     if (loading || activeStreamIdRef.current) return;
-    const nextQuery = directQuery !== undefined ? directQuery : activeQuery;
+    const enteredQuery = directQuery !== undefined ? directQuery : activeQuery;
+    const nextQuery = !isSilent ? affirmativeJourneyReply(enteredQuery, messagesRef.current) || enteredQuery : enteredQuery;
     if (!nextQuery.trim()) return;
     if (!skipWatchlistGuidance) pendingWatchlistReplacementRef.current = null;
     if (shouldBlockFinnSubmission({ isAuthenticated: Boolean(user?.id), assetStatus })) {
@@ -1534,7 +1536,7 @@ function AIAssistantContent({
     }
 
     if (!isSilent) {
-      setMessages(prev => [...prev, { role: "user", text: nextQuery }]);
+      setMessages(prev => [...prev, { role: "user", text: enteredQuery }]);
     }
 
     const streamId = `stream-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -1931,7 +1933,7 @@ function AIAssistantContent({
           // bind the composer to the conversation that owns this execution.
           await persistActiveFinnSessionId(confirmedConversationId);
         }
-        const operationId = displayContext.operation_id || execution.operation_id || "";
+        const operationId = execution.operation_type || displayContext.operation_id || "";
         const suppliedInputs = displayContext.supplied_inputs || {};
         const canonicalEntity = execution.action_result?.canonical_entity || {};
         const operationLabel = operationId === "create_manual_trade_plan" ? "Handmatig tradeplan" : operationId.includes("bot") ? "Paper-bot" : operationId.includes("strategy") ? "Strategie" : operationId.includes("setup") ? "Setup" : operationId.includes("indicator_configuration") ? "Indicator" : operationId.startsWith("watchlist_") ? "Watchlist" : "Actie";
@@ -1971,6 +1973,8 @@ function AIAssistantContent({
           asset: suppliedInputs.asset || execution.action_result?.asset,
           quote_currency: suppliedInputs.quote_currency || execution.action_result?.quote_currency,
         }, locale);
+        const journeyNextStep = execution.task_continuation ? null
+          : journeyNextStepAfterConfirmedWrite(operationId, execution.journey_next_step, locale);
         if (replacementFollowup) pendingWatchlistReplacementRef.current = null;
         setMessages((prev) => {
           const updated = prev.map((message) => {
@@ -2003,6 +2007,10 @@ function AIAssistantContent({
           if (watchlistNextStep) next.push({
             role: "assistant", text: watchlistNextStep.question,
             watchlistGuidance: watchlistNextStep, isComplete: true,
+          });
+          if (journeyNextStep) next.push({
+            role: "assistant", text: journeyNextStep.question,
+            watchlistGuidance: journeyNextStep, journeyGuidance: true, isComplete: true,
           });
           return next;
         });
@@ -3015,7 +3023,7 @@ function AIAssistantContent({
                 {renderBehavioralMemoryAckCard(m)}
                 {m.role === "assistant" && m.watchlistGuidance && !m.watchlistGuidanceCompleted &&
                   !messages.slice(i + 1).some((later) => later.role === "user") && (
-                    <div className="mt-3 space-y-2" aria-label="Watchlistkeuzes">
+                    <div className="mt-3 space-y-2" aria-label="Vervolgkeuzes">
                       {m.watchlistGuidance.choices.map((choice, choiceIndex) => (
                         <button key={`${i}-${choiceIndex}`} type="button"
                           disabled={loading || executingAction}

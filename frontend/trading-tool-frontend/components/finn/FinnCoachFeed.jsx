@@ -136,11 +136,21 @@ export default function FinnCoachFeed({ onDiscuss }) {
       return undefined;
     }
     void refresh();
+    let followupTimer;
+    const afterFinnWrite = () => {
+      void refresh();
+      window.clearTimeout(followupTimer);
+      // Feed reconciliation runs on a separate queue after the write commits.
+      followupTimer = window.setTimeout(() => { void refresh(); }, 3000);
+    };
+    window.addEventListener("finn-refresh-requested", afterFinnWrite);
     const timer = window.setInterval(() => {
       if (!history && document.visibilityState === "visible") void refresh();
     }, 60000);
     return () => {
       requestGenerationRef.current += 1;
+      window.removeEventListener("finn-refresh-requested", afterFinnWrite);
+      window.clearTimeout(followupTimer);
       window.clearInterval(timer);
     };
   }, [refresh, user?.id]);

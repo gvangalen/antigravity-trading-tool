@@ -42,6 +42,9 @@ class FinnV2ExecutionService:
             conversation_id = await self._conversation_id_for_run(getattr(existing, "run_id", None))
             next_step = (await self._task_continuation(conversation_id, user_id, execution_id=existing.id)
                          if existing.status == "succeeded" else None)
+            journey_next_step = (await self._journey_next_step(
+                user_id, existing.operation_type, getattr(existing, "result_json", None),
+            ) if existing.status == "succeeded" and not next_step else None)
             return ExecutionResult(
                 execution_id=existing.id,
                 proposal_id=existing.proposal_id,
@@ -56,6 +59,7 @@ class FinnV2ExecutionService:
                 completed_at=existing.completed_at,
                 conversation_id=conversation_id,
                 task_continuation=next_step,
+                journey_next_step=journey_next_step,
                 continuation_run_id=await self._dispatch_task_continuation(
                     conversation_id, user_id, existing.id, next_step,
                 ),
@@ -66,6 +70,10 @@ class FinnV2ExecutionService:
             next_step = (await self._task_continuation(
                 conversation_id, user_id, execution_id=existing_for_proposal.id,
             ) if existing_for_proposal.status == "succeeded" else None)
+            journey_next_step = (await self._journey_next_step(
+                user_id, existing_for_proposal.operation_type,
+                getattr(existing_for_proposal, "result_json", None),
+            ) if existing_for_proposal.status == "succeeded" and not next_step else None)
             return ExecutionResult(
                 execution_id=existing_for_proposal.id,
                 proposal_id=existing_for_proposal.proposal_id,
@@ -80,6 +88,7 @@ class FinnV2ExecutionService:
                 completed_at=existing_for_proposal.completed_at,
                 conversation_id=conversation_id,
                 task_continuation=next_step,
+                journey_next_step=journey_next_step,
                 continuation_run_id=await self._dispatch_task_continuation(
                     conversation_id, user_id, existing_for_proposal.id, next_step,
                 ),
@@ -224,17 +233,16 @@ class FinnV2ExecutionService:
                         added=proposal.operation_type == "watchlist_add",
                         discussed_in_chat=True,
                     )
-            if proposal.operation_type in {"create_setup", "update_setup", "delete_setup"}:
-                change = (proposal.payload_json or {}).get("change") or {}
-                fields = change.get("setup_fields") or change.get("changed_fields") or {}
-                symbol = str(getattr(proposal, "asset", None) or fields.get("symbol")
-                             or (prior_entity or {}).get("symbol") or "").strip().upper()
+            # The two domain services dispatch their own committed writes.
+            # A combined plan uses commit=False for both writes and therefore
+            # needs this single post-commit notification.
+            if proposal.operation_type == "create_setup" and safe_result_payload.get("strategy_id"):
+                saved_setup = safe_result_payload.get("setup") or {}
+                symbol = str(saved_setup.get("symbol") or "").strip().upper()
+                market_id = saved_setup.get("market_id")
                 if symbol:
-                    try:
-                        from backend.celery_task.store_daily_scores_task import reconcile_coach_feed_score
-                        reconcile_coach_feed_score.delay(user_id, symbol)
-                    except Exception:
-                        logger.warning("FINN feed setup dispatch failed", exc_info=True)
+                    from backend.services.setup_service import SetupService
+                    SetupService._notify_coach_feed(user_id, symbol, market_id)
             # ``record_action_result`` normally returns the locked runtime
             # contract, but that is a persistence convenience rather than an
             # API guarantee. Resolve the run binding independently so the
@@ -253,6 +261,9 @@ class FinnV2ExecutionService:
             next_step = await self._task_continuation(
                 conversation_id, user_id, execution_id=execution.id,
             )
+            journey_next_step = (await self._journey_next_step(
+                user_id, proposal.operation_type, safe_result_payload,
+            ) if not next_step else None)
             continuation_run_id = await self._dispatch_task_continuation(
                 conversation_id, user_id, execution.id, next_step,
             )
@@ -270,6 +281,7 @@ class FinnV2ExecutionService:
                 completed_at=execution.completed_at,
                 conversation_id=conversation_id,
                 task_continuation=next_step,
+                journey_next_step=journey_next_step,
                 continuation_run_id=continuation_run_id,
             )
         except Exception as exc:
@@ -304,6 +316,58 @@ class FinnV2ExecutionService:
                      if hasattr(self.session, "execute") else None), user_id,
                 ),
             )
+
+    async def _journey_next_step(
+        self, user_id: int, operation_type: str, result: dict | None,
+    ) -> Optional[dict]:
+        """Read the committed owner's setup before offering an optional chat step."""
+        if operation_type not in {"create_setup", "create_strategy"} or not isinstance(result, dict):
+            return None
+        setup_id = result.get("setup_id") or (result.get("setup") or {}).get("id")
+        if type(setup_id) is not int or setup_id <= 0:
+            return None
+        expected_strategy_id = result.get("strategy_id")
+        if operation_type == "create_strategy" and (
+            type(expected_strategy_id) is not int or expected_strategy_id <= 0
+        ):
+            return None
+        try:
+            row = (await self.session.execute(text("""
+                SELECT s.id, s.name, s.symbol, tm.quote_currency,
+                       (SELECT st.id FROM strategies st
+                        WHERE st.user_id=s.user_id AND st.setup_id=s.id
+                          AND (CAST(:expected_strategy_id AS INTEGER) IS NULL
+                               OR st.id=CAST(:expected_strategy_id AS INTEGER))
+                        ORDER BY st.created_at DESC, st.id DESC LIMIT 1) AS strategy_id,
+                       EXISTS(SELECT 1 FROM bot_configs b
+                              JOIN strategies st ON st.id=b.strategy_id AND st.user_id=b.user_id
+                              WHERE b.user_id=s.user_id AND st.setup_id=s.id
+                                AND (CAST(:expected_strategy_id AS INTEGER) IS NULL
+                                     OR b.strategy_id=CAST(:expected_strategy_id AS INTEGER))) AS has_bot
+                FROM setups s LEFT JOIN trading_markets tm ON tm.id=s.market_id
+                WHERE s.user_id=:user_id AND s.id=:setup_id
+            """), {"user_id": user_id, "setup_id": setup_id,
+                   "expected_strategy_id": expected_strategy_id})).mappings().first()
+        except Exception:
+            logger.warning("FINN journey follow-up lookup failed", exc_info=True)
+            return None
+        if not row:
+            return None
+        symbol = str(row.get("symbol") or "").upper()
+        quote = str(row.get("quote_currency") or "").upper()
+        if not symbol:
+            return None
+        pair = f"{symbol}/{quote}" if quote else symbol
+        if operation_type == "create_strategy" and not row.get("strategy_id"):
+            return None
+        if not row.get("strategy_id"):
+            return {"step": "strategy", "setup_id": setup_id,
+                    "setup_name": str(row.get("name") or ""), "pair": pair}
+        if not row.get("has_bot"):
+            return {"step": "paper", "setup_id": setup_id,
+                    "strategy_id": int(row["strategy_id"]),
+                    "setup_name": str(row.get("name") or ""), "pair": pair}
+        return None
 
     async def _task_continuation(
         self, conversation_id: Optional[str], user_id: int,
