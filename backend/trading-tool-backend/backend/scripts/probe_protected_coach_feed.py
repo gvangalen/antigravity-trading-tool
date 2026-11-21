@@ -12,6 +12,7 @@ import asyncio
 import os
 import time
 from datetime import datetime, timedelta, timezone
+from typing import Callable
 
 from backend.scripts import probe_protected_portfolio_paper_fx as paper
 from backend.scripts import probe_protected_score2_stale_paper as score
@@ -159,7 +160,8 @@ def _verified_plan_evidence(evidence: dict) -> bool:
 
 
 async def _discuss(user_id: int, item_id: str, *, symbol: str, question: str,
-                   diagnostic: dict | None = None) -> dict:
+                   diagnostic: dict | None = None,
+                   content_check: Callable[[str], bool] | None = None) -> dict:
     """Use the real FINN task body with the same selected-feed context as UI."""
     import uuid
 
@@ -191,7 +193,8 @@ async def _discuss(user_id: int, item_id: str, *, symbol: str, question: str,
         diagnostic.update(_discuss_diagnostic(turn, symbol=symbol))
     if (turn.status != "completed" or response is None or response.proposal_id
             or response.confirmation_required or not response.content
-            or symbol.casefold() not in response.content.casefold()):
+            or symbol.casefold() not in response.content.casefold()
+            or (content_check is not None and not content_check(response.content))):
         raise RuntimeError("coach_feed_discuss_failed")
     return {"completed": True, "named_subject": True,
             "read_only": True, "answer_length": len(response.content)}

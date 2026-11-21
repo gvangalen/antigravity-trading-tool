@@ -85,6 +85,24 @@ An absent or unmoving current ETH quote makes the score/plan scenario
 `INCONCLUSIVE` when the Paper risk scenario is otherwise green; it is not
 reported as a product failure.
 
+`coach_feed_journey` is a separate fixture-only FINN 3.0 profile. It requires
+`manifest_id=none`, `allow_fixture_actions=true`, and
+`allow_safe_fixture_execution=false`. It creates one inactive, uncredentialed
+child under the bound QA owner. The child receives synthetic, owner-scoped
+indicator readings for a watchlisted asset without a setup. The canonical
+score builder and journey reconciler must publish a new `analysis_ready` card
+with a dated verified score. The probe discusses that card through FINN's real
+run path, removes one score component to prove the card no longer presents a
+usable current score, then stores a dated report snapshot and invokes the
+canonical report-feed publisher. The report card must preserve the snapshot
+attention point while FINN discusses it separately from the now incomplete
+current score. No Paper execution or shared market write is allowed. A pass
+deletes the child; a failure quarantines it inactive. The sanitized artifact
+contains only fixed stage and outcome codes, never IDs, score values, answer
+text or fixture credentials. This profile tests the server feed and chat
+journey; browser rendering and a naturally scheduled report remain separate
+QA checks.
+
 `trader_pair_fixture_audit` is a read-only follow-up for one failed or
 incomplete `trader_pair_score_continuity` run. It requires `manifest_id=none`,
 both fixture flags `false`, and `run_label=audit-<workflow-id>-<attempt>-<sha8>`.

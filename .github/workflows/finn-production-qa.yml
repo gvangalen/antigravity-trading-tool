@@ -59,6 +59,7 @@ name: FINN Production QA
           - portfolio_paper_fx_schema
           - typed_entry_paper
           - coach_feed_triggers
+          - coach_feed_journey
       manifest_id:
         description: Approved, non-secret manifest identifier; use none for preflight and schema profiles
         required: true
@@ -132,7 +133,7 @@ jobs:
         run: |
           set -uo pipefail
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$QA_PROFILE" =~ ^(auth_preflight|watchlist_browser_ui|watchlist_context_audit|manual_trade_source_audit|manual_trade_fixture_preflight|manual_trade_fixture_prepare|manual_trade_temporary_matrix|manual_trade_temporary_diagnose|manual_trade_temporary_cleanup|trade_review_preflight|manifest_key|manifest_version|targeted_regression|runtime_acceptance|action_contract_acceptance|full_release_acceptance|safety|latency|score2_stale_paper|score2_positive_paper|score2_outside_paper|score2_exact_eur_paper|score2_exact_usdt_paper|score2_weekly_smart_dca_paper|score2_finn_weekly_smart_dca_chain|trader_pair_score_continuity|trader_account_state_readback|aapl_paper_quote_coach|trader_source_time_parity|trader_paper_exit_reconciliation|trader_paper_exit_review_chain|trader_paper_exit_fixture_audit|trader_paper_exit_review_fixture_audit|trader_paper_exit_review_fixture_cleanup|trader_pair_fixture_cleanup|trader_strategy_schema_audit|closed_paper_trade_review|closed_paper_trade_review_chat|auto_paper_trade_history|portfolio_paper_fx|portfolio_paper_fx_schema|typed_entry_paper|coach_feed_triggers)$ ]]
+          [[ "$QA_PROFILE" =~ ^(auth_preflight|watchlist_browser_ui|watchlist_context_audit|manual_trade_source_audit|manual_trade_fixture_preflight|manual_trade_fixture_prepare|manual_trade_temporary_matrix|manual_trade_temporary_diagnose|manual_trade_temporary_cleanup|trade_review_preflight|manifest_key|manifest_version|targeted_regression|runtime_acceptance|action_contract_acceptance|full_release_acceptance|safety|latency|score2_stale_paper|score2_positive_paper|score2_outside_paper|score2_exact_eur_paper|score2_exact_usdt_paper|score2_weekly_smart_dca_paper|score2_finn_weekly_smart_dca_chain|trader_pair_score_continuity|trader_account_state_readback|aapl_paper_quote_coach|trader_source_time_parity|trader_paper_exit_reconciliation|trader_paper_exit_review_chain|trader_paper_exit_fixture_audit|trader_paper_exit_review_fixture_audit|trader_paper_exit_review_fixture_cleanup|trader_pair_fixture_cleanup|trader_strategy_schema_audit|closed_paper_trade_review|closed_paper_trade_review_chat|auto_paper_trade_history|portfolio_paper_fx|portfolio_paper_fx_schema|typed_entry_paper|coach_feed_triggers|coach_feed_journey)$ ]]
           [[ "$MANIFEST_ID" =~ ^[a-z0-9][a-z0-9._-]{0,80}$ ]]
           [[ "$RUN_LABEL" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$ ]]
           [ "${#MANIFEST_BUNDLE}" -le 65535 ]
@@ -264,6 +265,10 @@ jobs:
           fi
           if [ "$QA_PROFILE" = "coach_feed_triggers" ] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ] || [ "$ALLOW_FIXTURE_ACTIONS" != "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" != "true" ]; }; then
             echo "The coach-feed probe requires no manifest and explicit fixture and Paper authorization." >&2
+            exit 1
+          fi
+          if [ "$QA_PROFILE" = "coach_feed_journey" ] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ] || [ "$ALLOW_FIXTURE_ACTIONS" != "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" != "false" ]; }; then
+            echo "The coach-feed journey probe requires no manifest and fixture-only authorization." >&2
             exit 1
           fi
           git fetch origin main --quiet
@@ -512,6 +517,9 @@ jobs:
           fi
           if [ "$qa_profile" = "coach_feed_triggers" ] && [ "$allow_fixture_actions" = "true" ] && [ "$allow_safe_fixture_execution" = "true" ]; then
             export FINN_QA_ALLOW_COACH_FEED_FIXTURE=1
+          fi
+          if [ "$qa_profile" = "coach_feed_journey" ] && [ "$allow_fixture_actions" = "true" ] && [ "$allow_safe_fixture_execution" = "false" ]; then
+            export FINN_QA_ALLOW_COACH_FEED_JOURNEY_FIXTURE=1
           fi
           if { [ "$qa_profile" = "manual_trade_fixture_prepare" ] && [ "$allow_fixture_actions" = "true" ] && [ "$allow_safe_fixture_execution" = "false" ]; } || { [ "$qa_profile" = "manual_trade_temporary_matrix" ] && [ "$allow_fixture_actions" = "true" ] && [ "$allow_safe_fixture_execution" = "true" ]; }; then
             export FINN_QA_ALLOW_MANUAL_TRADE_PREPARE=1

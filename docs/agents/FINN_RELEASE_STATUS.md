@@ -4,6 +4,47 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: protected analysis- and report-feed journey (21 November 2026)
+
+Phase: `LOCAL_VALIDATED_CANDIDATE`. Branch
+`codex/finn-feed-journey-protected-qa-20261121`, based on final public main
+`b8c276359ddcb3a5823e4191253ce339b998d644`. Independent QA marked the
+previous personalized analysis card `NOT_ACCEPTED` for missing post-deployment
+trigger coverage; it found no product defect. This batch adds a bounded
+`coach_feed_journey` profile to the protected production QA runner so QA can
+test a fresh `analysis_ready` card and report-attention card under an inactive,
+uncredentialed synthetic child of its bound owner. The profile uses canonical
+score, feed, report-publisher, and FINN chat paths, checks dated score and
+snapshot-versus-current answer facts, verifies that an incomplete current
+score does not remain a usable card, blocks Live execution, and cleans the
+child after success or quarantines it on failure. It never writes ordinary
+users or shared market data. The result artifact contains fixed codes and
+booleans only. Browser rendering, a naturally scheduled report, and
+polling/SSE parity remain separate independent QA coverage.
+
+On final code, backend `pytest -q` passed **5188**, skipped **7** (log SHA-256
+`64ea6ea9e7c0a357d142ec4b7415a8c061960aba110ddaa0322ecc44fb356523`).
+The focused profile suite passed **90/90**; adversarial answer variants are
+rejected. Frontend typecheck, i18n lint and tests, command and proposal tests,
+build, and high-severity audit passed; the audit reported one moderate Next.js
+advisory and no high finding. `actionlint` passed. The synthetic server journey
+passed with both Discussions read-only, zero Live calls, and successful cleanup
+(sanitized artifact SHA-256
+`a515d4c9aa0576141dcf74b1e11d2104b0fcd4eabebcfc2f3f195495d66c9b2d`).
+The isolated prefork worker matrix passed **38/38** (artifact SHA-256
+`e16a35f4b0e2d63a68d1bf3d069d389ca7159304d7deedacf70329868a2153e2`)
+on its second run; the first run had one non-reproduced `setup_graph` selector
+mismatch with the other 37 cases passing. Real-provider development passed
+**20/20** (artifact SHA-256
+`1b3caab1d03c14b1c93afadbf4fd2d0c15232cd51889883ac3cbcb0008f77bee`)
+and regression **109/109** (artifact SHA-256
+`f917bd4b7b3147856aeb79af541353bea0e0f829c11be8ab31f90f4b3b59f0a2`),
+both with zero provider, schema, parse, validation, or timeout failures. The
+isolated stack and volume were removed after validation. Read-only Security,
+Architecture, and code-QA reviews found no remaining concrete blocker in this
+scoped profile. No production deployment or official QA run has occurred for
+this batch yet.
+
 ## FINN 3.0: persoonlijke eerste analysestap (21 november 2026)
 
 Phase: `LIVE_DEPLOYED_QA_PENDING`. Branch
