@@ -4,6 +4,43 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: exact watchlist pair and five Smart DCA benchmark zones (21 november 2026)
+
+Phase: `CANDIDATE_LOCAL_GREEN_FINAL_CI_PENDING`. Branch `codex/finn-pair-context`,
+implementation SHA `ab2678fb8`. FINN's asset selector now follows the exact
+watchlist pair, and a chart question uses that same pair after an asset or page
+switch. Smart DCA accepts percentages for the five existing benchmark zones
+while retaining saved and explicitly requested three-band plans. FINN's
+setup-rule coverage receives the five-zone field, so a fully captured ladder
+is not mistaken for an omitted trading condition.
+
+The final backend suite passed **5216**, skipped **7** (log SHA-256
+`2f4faaedb062286565ce22465f40e830867127abb31ee2ac8657aa9b88e718a4`).
+Frontend build, typecheck, i18n lint and tests (**45/45**), command tests
+(**105/105**), proposal tests (**10/10**), setup tests (**20/20**) and
+`audit:high` passed. The isolated FastAPI/Celery/PostgreSQL/Redis/Responses
+action matrix passed **17/17** contracts with zero broker orders and Live
+calls (artifact SHA-256
+`20f25840f3595c079b4f1f02f1b6ca1f8319391ae1e3d045b1326107f8e4a388`);
+adapter tests passed **28/28**, and the migration, confirmed Smart DCA and
+calendar DCA probes all completed successfully. A separate synthetic
+BTC/USDT five-zone request produced a confirmable `create_setup` proposal
+containing exactly `[150, 125, 100, 75, 50]`, with no bot or order. Real
+provider selector development passed **20/20** (artifact SHA-256
+`70a5a400eeeaefecadf3a168e20c76524037433de0d23583a312b81e930721e5`)
+and regression **109/109** (artifact SHA-256
+`53d46e97ec23db236710b45f30a8b4e983d00ac7e822d30fc665eded1966dcfb`),
+with zero provider, schema, parse, validation or timeout failures. These
+selector runs preceded the rule-coverage wording change; selector code did not
+change, and the final worker-driven matrix and five-zone probe exercised that
+change. One earlier calendar DCA coverage attempt requested clarification;
+the standalone retry and final complete matrix passed.
+
+[PR #1251](https://github.com/gvangalen/antigravity-trading-tool/pull/1251)
+passed all five jobs on implementation SHA `ab2678fb8` in workflow
+`44924305072`. The status commit, final CI, main merge, Auto Deploy, public
+backend/frontend SHA parity and independent authenticated QA are pending.
+
 ## FINN 3.0: historische forward returns in analyse (21 november 2026)
 
 Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_IDENTITY`. Branch
