@@ -189,6 +189,9 @@ function buildAssistantUiText(at) {
     paperMode: at("uiText.paperMode"),
     conceptMode: at("uiText.conceptMode"),
     retry: at("uiText.retry"),
+    chatConnectionError: at("uiText.chatConnectionError"),
+    chatSessionExpired: at("uiText.chatSessionExpired"),
+    signIn: at("uiText.signIn"),
     copyMessage: at("uiText.copyMessage"),
     messageCopied: at("uiText.messageCopied"),
     copyMessageFailed: at("uiText.copyMessageFailed"),
@@ -1773,14 +1776,25 @@ function AIAssistantContent({
           // onError
           if (activeStreamIdRef.current !== streamId) return;
           if (stopRequestedStreamIdRef.current === streamId) stopRequestedStreamIdRef.current = null;
+          const isAuthError = errorMessage?.code === "auth_required";
+          const isTechnicalError = typeof errorMessage === "string" &&
+            /(?:Streaming request failed|Unauthorized|\btrace\s+trdm-|\bHTTP\s+\d{3}\b)/i.test(errorMessage);
+          const publicMessage = isAuthError
+            ? uiText.chatSessionExpired
+            : errorMessage?.code === "connection_failed" || isTechnicalError
+              ? uiText.chatConnectionError
+              : typeof errorMessage === "string" && errorMessage.trim()
+                ? errorMessage
+                : uiText.chatConnectionError;
           setMessages(prev => {
             const copy = [...prev];
             const msgIndex = copy.findIndex(message => message.streamId === streamId);
             if (msgIndex >= 0 && copy[msgIndex].role === "assistant") {
               copy[msgIndex] = {
                 ...copy[msgIndex],
-                text: "⚠️ " + errorMessage,
+                text: publicMessage,
                 isError: true,
+                isAuthError,
                 isComplete: true,
               };
             }
@@ -1800,7 +1814,7 @@ function AIAssistantContent({
         if (msgIndex >= 0 && copy[msgIndex].role === "assistant") {
           copy[msgIndex] = {
             ...copy[msgIndex],
-            text: "⚠️ Analyse ophalen mislukt. Probeer het opnieuw.",
+            text: uiText.chatConnectionError,
             isError: true,
             isComplete: true,
           };
@@ -2932,7 +2946,7 @@ function AIAssistantContent({
                 m.role === "user"
                   ? "bg-blue-600 text-white shadow-lg shadow-blue-600/10"
                   : m.isError
-                    ? "text-rose-700 dark:text-rose-300"
+                    ? "rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-600 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-300"
                     : "text-foreground dark:text-slate-100"
                 }`}>
                 <p className="whitespace-pre-line text-[15px] leading-7">
@@ -2955,6 +2969,14 @@ function AIAssistantContent({
                   <button type="button" onClick={() => handleChat(m.retryQuery, false, null, i)}
                     className="mt-2 text-sm font-semibold text-blue-600 hover:underline dark:text-blue-400">
                     {uiText.retry}
+                  </button>
+                ) : null}
+                {m.isAuthError ? (
+                  <button type="button" onClick={() => {
+                    const next = `${window.location.pathname}${window.location.search}`;
+                    router.push(`/login?reason=session_expired&next=${encodeURIComponent(next)}`);
+                  }} className="ml-4 mt-2 text-sm font-semibold text-blue-600 hover:underline dark:text-blue-400">
+                    {uiText.signIn}
                   </button>
                 ) : null}
 
