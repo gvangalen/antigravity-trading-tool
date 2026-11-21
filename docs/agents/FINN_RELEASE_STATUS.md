@@ -4,6 +4,32 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: synthetic feed fixture schema alignment (21 November 2026)
+
+Phase: `LOCAL_VALIDATED_CANDIDATE`. Independent QA ran the protected
+`coach_feed_journey` once on public SHA
+`730f0a0efce1560a13744bfc548bcef5893176f3` (workflow `44913687241`)
+and returned `NOT_ACCEPTED`: the synthetic child was quarantined after an
+intermittent `asset_evidence` runtime failure, before the report stage.
+The earlier report failure was not reassessed. QA measured zero confirmations,
+executions, Live activations, and Live calls. The sanitized artifact SHA-256
+was `dbea8e119c74d23a98912f793527820678c5aed4485dc740f04da9e07606094b`.
+
+This candidate aligns the synthetic `daily_reports` insert with the real
+report writer by writing only the required owner, date, and score snapshot
+columns. The previous fixture insert additionally required `status` and
+`created_at`, which are not used by the production report writer and are not
+guaranteed on older existing report tables; the previous live error did not
+expose SQLSTATE, so this remains a likely rather than proven cause. It also
+adds an allowlisted asset-copy substage and SQL error category to the
+protected failure artifact, covering the intermittent earlier-stage failure.
+No raw SQL, exception text, account data, IDs, dates, or scores are exported.
+The owner, cleanup, quarantine, and Live-execution boundaries remain intact.
+Targeted profile/runner tests passed **164/164**. Independent live QA is still
+required to accept the complete journey. The full backend suite passed
+**5192**, skipped **7** (log SHA-256
+`862b518da3b2909db4a61742faa69fa7a1d8068ca69e55204c95dd3711e5d342`).
+
 ## FINN 3.0: protected report-feed stage diagnosis (21 November 2026)
 
 Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_IDENTITY`. Independent QA ran the official protected

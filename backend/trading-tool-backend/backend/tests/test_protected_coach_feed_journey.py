@@ -91,6 +91,27 @@ def test_journey_probe_quarantines_failed_child_without_private_error(monkeypatc
     assert result == {
         "result": "FAIL", "reason": "feed_journey_runtime_failed",
         "failure_stage": "asset_evidence", "fixture_state": "quarantined",
+        "asset_failure": {"substage": "unknown", "error_category": "other"},
+        "live_calls": 0,
+    }
+
+
+def test_asset_failure_exports_only_fixed_substage_and_error_category(monkeypatch):
+    class PrivateDatabaseError(Exception):
+        sqlstate = "23505"
+
+    def failed_case(_namespace, _bound, *, run_async, trace):
+        trace["stage"] = "asset_evidence"
+        trace["asset_substage"] = "watchlist_insert"
+        trace["fixture_state"] = "quarantined"
+        raise PrivateDatabaseError("private SQL and account data")
+
+    monkeypatch.setattr(probe, "_require_run", lambda _namespace: 123)
+    monkeypatch.setattr(probe, "_case", failed_case)
+    assert probe.run(NAMESPACE) == {
+        "result": "FAIL", "reason": "feed_journey_runtime_failed",
+        "failure_stage": "asset_evidence", "fixture_state": "quarantined",
+        "asset_failure": {"substage": "watchlist_insert", "error_category": "duplicate"},
         "live_calls": 0,
     }
 
