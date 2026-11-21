@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: numerieke rapportsnapshot in coachantwoord (21 november 2026)
 
-Phase: `LOCAL_VALIDATED_QA_RETEST_PENDING`. Independent QA returned
+Phase: `LIVE_DEPLOYED_QA_RETEST_PENDING`. Independent QA returned
 `NOT_ACCEPTED` for the prior live SHA
 `3231f54b64b47ec452a4ae630760767e3f054b80` because the protected
 `report_discuss` profile failed only `snapshot_score` in workflow
@@ -27,8 +27,8 @@ Regression checks verify that the report adapter preserves a saved numeric
 score after a later current-score change. QA independently extended its
 protected scorer to recognize equivalent `score 34` wording while still
 rejecting wrong numbers and historical scores stated as current; its targeted
-regressions passed **14/14**. That QA change remains separate from product
-code and no official retest has run on this repair.
+regressions passed **14/14**. That QA-only change was merged separately from
+product code. No official retest has run on this repair.
 
 The final backend suite passed **5219**, skipped **7** (log SHA-256
 `7cc4882dce2f6f34136ac8d0686cbc6472d85450343b675f70081e3fc09b4616`).
@@ -44,8 +44,16 @@ isolated local FastAPI/Celery/PostgreSQL/Redis/Responses matrix passed
 probes (matrix SHA-256
 `c725c8007a30140ee21d64820cecae5d8d2274f4398432859ba5fc6d3b666067`).
 It recorded zero broker orders, Live bots, Live calls or production connections.
-Candidate CI, Auto Deploy, public SHA parity and independent authenticated
-retest remain pending.
+Product PR **#1257** passed all five CI jobs in run **44936552437** and merged
+as `d05ccead6f402ce171736a3ea143bfeced06ad7a`; main CI **44937156695**
+and Auto Deploy **44937764349** succeeded, with HTTP 200 and matching public
+backend/frontend SHA. QA-only scorer PR **#1258** passed CI **44936350237**
+and merged as `965cc1a464ec840032a98c510727761e3fd4729f`. Main CI
+**44937954611** and Auto Deploy **44938533699** succeeded. The public
+backend health and frontend build-info both returned HTTP 200 and that exact
+combined SHA. The independent authenticated retest of this repaired final
+candidate is pending. The later status-only deployment must also reach SHA
+parity before QA starts; this document is not the deployment identity source.
 
 ## FINN 3.0: rapportfeed, rendementen en Smart DCA-vervolg (21 november 2026)
 
