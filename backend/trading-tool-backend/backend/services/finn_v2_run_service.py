@@ -1539,6 +1539,56 @@ def _bounded_supported_smart_dca_calendar_request(
         return False
 
 
+def _bounded_fixed_dca_calendar_request(
+    message: str, collected_inputs: dict[str, object],
+) -> bool:
+    """Accept an exact fixed-amount calendar draft with no extra trade rule."""
+    text = " ".join(str(message or "").strip().split())
+    match = re.fullmatch(
+        r"Maak een gewone vaste DCA-setup voor (?P<symbol>[A-Z]{2,10})/"
+        r"(?P<quote>EUR|USDT) met naam (?P<name>[\w -]{2,80})\. "
+        r"Grafiek (?P<timeframe>\d+[HDW]), iedere "
+        r"(?P<day>maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag) "
+        r"€\s*(?P<amount>\d+(?:[,.]\d+)?), maximaal (?:één|een|1) "
+        r"aankoop per week\. Het bedrag blijft altijd €\s*(?P<repeat>\d+(?:[,.]\d+)?), "
+        r"ongeacht de Markt-, Macro- of Technisch-score\. Toon eerst de conceptkaart\.?",
+        text, re.IGNORECASE,
+    )
+    if match is None or re.search(
+        r"\b(?:als|alleen|wanneer|zodra|tenzij|onder|boven|bij|trend|rsi|"
+        r"score|voorwaarde|regel|koop|aankoop|filter|trigger)\b",
+        match.group("name"), re.IGNORECASE,
+    ):
+        return False
+    day = {
+        "maandag": "monday", "dinsdag": "tuesday", "woensdag": "wednesday",
+        "donderdag": "thursday", "vrijdag": "friday", "zaterdag": "saturday",
+        "zondag": "sunday",
+    }[match.group("day").casefold()]
+    expected = {
+        "symbol": match.group("symbol").upper(),
+        "quote_currency": match.group("quote").upper(),
+        "name": match.group("name"),
+        "timeframe": match.group("timeframe").upper(),
+        "setup_type": "dca", "dca_frequency": "weekly", "dca_day": day,
+        "dca_trigger_mode": "calendar", "dca_amount_mode": "fixed",
+    }
+    if any(collected_inputs.get(key) != value for key, value in expected.items() if key in collected_inputs):
+        return False
+    required = set(expected) - {"dca_trigger_mode"}
+    if any(key not in collected_inputs for key in required):
+        return False
+    if any(value is not None for key, value in collected_inputs.items()
+           if key not in expected and key != "base_amount"):
+        return False
+    try:
+        amount = float(match.group("amount").replace(",", "."))
+        repeat = float(match.group("repeat").replace(",", "."))
+        return amount == repeat == float(collected_inputs["base_amount"])
+    except (TypeError, ValueError, KeyError):
+        return False
+
+
 def _scheduled_dca_draft_revision(message: str, origin_inputs: dict[str, object]) -> bool:
     """A bounded schedule and amount can revise one open DCA proposal.
 
@@ -5293,6 +5343,9 @@ class FinnV2RunService:
                                     not active_block and (
                                         _plain_setup_creation_request(run_message)
                                         or _bounded_supported_smart_dca_calendar_request(
+                                            run_message, setup_inputs,
+                                        )
+                                        or _bounded_fixed_dca_calendar_request(
                                             run_message, setup_inputs,
                                         )
                                     )

@@ -4,9 +4,52 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: AAPL-bronantwoorden na ingelogde QA (21 november 2026)
+
+Phase: `LOCAL_VALIDATED_PR_PENDING`. Branch
+`codex/finn-aapl-qa-followup-20261120`, gebaseerd op main
+`85c63f50fdf6e3ae2c85863a6e02cbff20e52a55`. De voorafgaande
+ingelogde AAPL-QA op `c04d85a6a84d42b700b44efbd9341f29977be590`
+wees de historische rapportvergelijking en de brede bronvraag af. FINN
+gebruikte een later rapport alsof het gevraagde 05:21-rapport was,
+liet de positie weg, toonde een ongeformatteerd kasbedrag en gebruikte
+een afwijkend oudste-indicatorbronmoment. De voorafgaande actieve-
+werkruimtelezingrelease op `85c63f50fdf6e3ae2c85863a6e02cbff20e52a55`
+is inmiddels door onafhankelijke QA **ACCEPTED** voor vier afgesproken
+read-only cases; officiële workflow `44863545347` slaagde **4/4**.
+
+Deze batch herkent de gevraagde rapporttijd ook wanneer de datum tussen
+`rapport` en de tijd staat. Als het exact gevraagde rapport niet is gelezen,
+meldt FINN dat expliciet. De brede beantwoording vermeldt een geverifieerde
+Paper-positie of haar ontbrekende verificatie en rondt geldbedragen af op
+twee decimalen. Het oudste bronmoment volgt de daadwerkelijk gescoorde
+indicatoren. Een lokale databaseproef accepteert nu de expliciet ingestelde
+FINN-testpoort, zodat parallelle teststacks elkaar niet blokkeren. Een strak
+begrensde vaste kalender-DCA krijgt geen wisselende onterechte afwijzing als
+de gebruiker expliciet zegt dat de score het vaste bedrag niet aanpast.
+
+Na rebase slaagde de volledige backend-suite met **5169 passed, 7 skipped**;
+de frontend typecheck, command-, i18n- en voorsteltests, i18n-lint, build en
+`audit:high` slaagden (één matige Next.js-melding, geen hoge). De lokale
+AAPL-workerregressie slaagde **4/4** via FastAPI, Celery, polling en SSE;
+artifact `.local-finn-parity-artifacts/aapl-followup-source-regression-final.json`
+heeft SHA-256 `daaf629d1c36738a541981825b2003f07a91f8871ef6805c689ac2dff80bd097`.
+De echte provider slaagde met development **20/20** en regression **109/109**,
+zonder provider-, schema- of timeoutfouten; artifact-SHA-256 zijn
+`4a0e9c9fad8a5dd1f1a02fd94030211d37b5257c3df3229f691c8e85ecce5eda`
+en `8070ba4d1f3c011d6d8b6e4c530d937598993dc01db6ebcde6fdac4c28e85643`.
+De worker-matrix slaagde **17/17** actiegevallen en **28/28** adaptertests;
+de DCA-migratie-, bevestigings- en replaycontroles slaagden. Artifact
+`.local-finn-parity-artifacts/full-action-matrix.json` heeft SHA-256
+`e4f71a7652f45ffd75cbd47f357a7c3362d0df164cce9fe117700850ac28e865`.
+CI, Auto Deploy, publieke SHA-pariteit en
+onafhankelijke ingelogde AAPL-herkeuring staan nog open.
+
 ## FINN 3.0: actieve werkruimtelezing na live QA (21 november 2026)
 
-Phase: `LIVE_DEPLOYED_QA_PENDING`. Onafhankelijke QA op live SHA
+Phase: `LIVE_QA_ACCEPTED` op uiteindelijke SHA
+`85c63f50fdf6e3ae2c85863a6e02cbff20e52a55` voor de vier afgesproken
+read-only cases (workflow `44863545347`, **4/4**). De eerdere QA op live SHA
 `2e8021d6e7c8262a6167011de93c1551e3d9c302` testte drie bevroren,
 alleen-lezen gevallen: watchlist en vorige-antwoord-samenvatting slaagden;
 de actieve-instrumentlezing faalde met `active_asset_context_unavailable`.
@@ -42,7 +85,9 @@ Publieke `https://tradamind.com/api/health` en
 `https://tradamind.com/build-info.json` gaven beide HTTP 200 en exact die
 SHA. Deze statusupdate maakt zelf een nieuwere hoofdbranch-SHA; Build wacht
 ook de daaropvolgende CI en Auto Deploy af en QA bindt uitsluitend aan de
-laatst publiek geverifieerde SHA. De ingelogde live QA staat nog open.
+laatst publiek geverifieerde SHA. De daaropvolgende ingelogde live QA heeft
+de vier read-only cases geaccepteerd; dit is geen acceptatie van de volledige
+FINN-actiematrix.
 
 ## FINN 3.0: samengestelde assetnamen en vorige-antwoord-samenvatting (21 november 2026)
 
