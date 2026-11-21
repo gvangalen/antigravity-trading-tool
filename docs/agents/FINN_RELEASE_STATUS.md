@@ -4,6 +4,38 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: rapportaandacht en gerichte bespreking (21 november 2026)
+
+Phase: `LOCAL_VALIDATED_CANDIDATE_PENDING_CI`. Nieuwe dag-, week-, maand- en
+kwartaalrapporten leveren bij publicatie één deterministisch aandachtspunt uit
+de opgeslagen scoresnapshot voor een exact handelspaar. De feed toont het
+rapportmoment en het aandachtspunt; `Bespreek` leest via de eigenaargebonden
+feedkaart precies het rapporttype en de rapportdatum terug. Een door de gebruiker
+gewijzigde chatvraag blijft vrij van die binding. Zonder verifieerbare
+scoregegevens blijft de bestaande algemene rapportkaart staan. Dit is een
+coachvoorstel, geen order of automatische wijziging.
+
+De volledige backend-suite slaagde met **5171 passed, 7 skipped**. Frontend
+build, typecheck, i18n-lint en -tests, command- en voorsteltests slaagden;
+de audit meldde geen hoge en één bestaande matige Next.js-bevinding. Mobile
+typecheck, chat-tests en web/iOS/Android-bundels slaagden; lint had 0 errors en
+89 bestaande waarschuwingen. Echte Responses-provider development **20/20**
+en regression **109/109** slaagden zonder provider-, parse-, schema- of
+timeoutfouten. De definitieve geïsoleerde prefork-worker-matrix slaagde met
+**38/38** gevallen, **16/16** actiecontracten en **9/9** lineage-controles;
+geen Live-bot of verboden uitvoering. Lokale artifacts:
+`.local-finn-parity-artifacts/finn-report-attention-selector-development.json`
+SHA-256 `4a255cc76538b2414cc816bbafc6da282e1e825b79263312ec84e7ec9d53c416`,
+`finn-report-attention-selector-regression.json` SHA-256
+`6eb0b72790af6747b27aed124ea4462014342802ce78e691ac24fbb15641588f`,
+`finn-report-attention-release-matrix.json` SHA-256
+`2906e09a3653c0ed395bd49ed5abed9f1dbc7832922530d86ab958b74c804200`.
+CI, Auto Deploy en onafhankelijke ingelogde QA staan nog open. QA moet een
+nieuw gegenereerde rapportkaart voor een exact paar, de rapportlink,
+`Bespreek` op hetzelfde gedateerde rapport, een aangepaste chatvraag en
+web/mobile-weergave toetsen. Ontbreekt een nieuwe kaart, dan is dit een
+dekkingsgat en geen groen acceptatiebewijs.
+
 ## FINN 3.0: actieve werkruimtelezing na live QA (21 november 2026)
 
 Phase: `LIVE_DEPLOYED_QA_PENDING`. Onafhankelijke QA op live SHA

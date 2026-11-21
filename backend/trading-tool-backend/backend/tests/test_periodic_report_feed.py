@@ -26,7 +26,10 @@ def test_periodic_feed_publication_has_owner_date_and_stable_key(monkeypatch, re
 
     monkeypatch.setattr(database, "async_session_factory", Session)
     monkeypatch.setattr(FinnCoachFeedService, "publish", publish)
-    publish_periodic_report_ready(7, report_type, date(2026, 11, 4))
+    publish_periodic_report_ready(7, report_type, date(2026, 11, 4), {
+        "score_source_snapshot": {"assets": [{"symbol": "BTC", "pair": "BTC/USDT",
+                                             "score_status": "available", "benchmark_score": 57}]},
+    })
 
     event = recorded[0]
     assert recorded[1] == "committed"
@@ -35,3 +38,4 @@ def test_periodic_feed_publication_has_owner_date_and_stable_key(monkeypatch, re
     assert event["revision"] == "2026-11-04"
     assert event["evidence"]["report_type"] == report_type
     assert event["evidence"]["report_date"] == "2026-11-04"
+    assert event["evidence"]["attention_pair"] == "BTC/USDT"

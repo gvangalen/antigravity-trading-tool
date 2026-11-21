@@ -10,6 +10,31 @@ from backend.services.finn_v2_tool_adapters.report_tool_adapter import ReportToo
 from backend.services.finn_v2_tool_adapters.score_tool_adapter import ScoreToolAdapter
 
 
+def test_dated_periodic_report_reads_frozen_snapshot_for_selected_pair():
+    adapter = ReportToolAdapter(session=None)
+
+    class Reports:
+        async def get_latest_report(self, *_):
+            raise AssertionError("selected feed report must remain dated")
+
+        async def get_report_by_date(self, user_id, table_name, report_date):
+            assert (user_id, table_name, report_date) == (7, "weekly_reports", date(2026, 11, 20))
+            return {"report_date": report_date, "meta_json": json.dumps({
+                "score_source_snapshot": {"assets": [
+                    {"symbol": "BTC", "pair": "BTC/USDT", "benchmark_score": 47},
+                    {"symbol": "ETH", "pair": "ETH/EUR", "benchmark_score": 61},
+                ]},
+            })}
+
+    adapter.repository = Reports()
+    result = asyncio.run(adapter.execute(user_id=7, asset="BTC", selector={
+        "report_type": "weekly_reports", "report_date": "2026-11-20",
+    }))
+    assert result["data"].score_source_snapshot["assets"] == [
+        {"symbol": "BTC", "pair": "BTC/USDT", "benchmark_score": 47},
+    ]
+
+
 def test_dated_report_read_uses_owner_date_and_rejects_other_asset():
     adapter = ReportToolAdapter(session=None)
     yesterday = {"report_date": date(2026, 11, 9), "score_source_snapshot": {

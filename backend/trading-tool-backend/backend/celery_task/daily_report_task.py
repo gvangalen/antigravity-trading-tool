@@ -55,10 +55,12 @@ def jsonb(v, fallback=None):
 # 🧾 DAILY REPORT TASK
 # =====================================================
 
-def _publish_daily_report_ready_feed(user_id: int, report_date: date) -> None:
+def _publish_daily_report_ready_feed(user_id: int, report_date: date,
+                                     report: dict | None = None) -> None:
     """Publish only after the report and its snapshot have been saved."""
     from backend.infrastructure.database import async_session_factory, run_celery_coroutine
     from backend.services.finn_coach_feed_service import FinnCoachFeedService
+    from backend.services.finn_report_attention import report_attention
 
     async def publish():
         async with async_session_factory() as session:
@@ -70,7 +72,8 @@ def _publish_daily_report_ready_feed(user_id: int, report_date: date) -> None:
                 subject_id=report_date.isoformat(),
                 subject="Dagrapport",
                 symbol=None,
-                evidence={"report_type": "daily", "report_date": report_date.isoformat()},
+                evidence={"report_type": "daily", "report_date": report_date.isoformat(),
+                          **report_attention(report)},
                 source_observed_at=datetime.now(timezone.utc),
                 priority=2,
                 revision=report_date.isoformat(),
@@ -198,7 +201,7 @@ def generate_daily_report(user_id: int):
 
     # Notify only after a report was stored and its snapshot was created.
     try:
-        _publish_daily_report_ready_feed(user_id, today)
+        _publish_daily_report_ready_feed(user_id, today, report)
     except Exception:
         logger.exception("⚠️ Failed to publish report feed item for user_id=%s", user_id)
 

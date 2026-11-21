@@ -25,6 +25,15 @@ class ReportToolAdapter:
         if not row:
             raise LookupError("report_not_found")
         snapshot = row.get("score_source_snapshot") if table_name == "daily_reports" else None
+        if table_name != "daily_reports":
+            saved_report = row.get("meta_json")
+            if isinstance(saved_report, str):
+                try:
+                    saved_report = json.loads(saved_report)
+                except ValueError:
+                    saved_report = None
+            if isinstance(saved_report, dict):
+                snapshot = saved_report.get("score_source_snapshot")
         if isinstance(snapshot, str):
             try:
                 snapshot = json.loads(snapshot)

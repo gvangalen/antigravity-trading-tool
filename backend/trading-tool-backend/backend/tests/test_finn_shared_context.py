@@ -1057,7 +1057,7 @@ def test_daily_report_task_persists_typed_report_facts(monkeypatch):
     monkeypatch.setattr(daily_report_task, "ai_usage_context", lambda **_: nullcontext())
     monkeypatch.setattr(daily_report_task, "create_report_snapshot", lambda **_: (1, "local"))
     monkeypatch.setattr(daily_report_task, "_publish_daily_report_ready_feed",
-                        lambda user_id, report_date: captured.update(feed=(user_id, report_date,
+                        lambda user_id, report_date, report: captured.update(feed=(user_id, report_date,
                                                                            captured.get("committed"))))
     monkeypatch.setattr(daily_report_task, "generate_unified_daily_report_sections", lambda **_: {
         "executive_summary": "ETH plan opgeslagen; actuele benchmark onvolledig.",
@@ -1138,3 +1138,32 @@ def test_daily_report_feed_uses_owner_and_date_as_deduplication_key(monkeypatch)
     assert captured["event"]["event_key"] == "daily-report:2026-11-04"
     assert captured["event"]["revision"] == "2026-11-04"
     assert captured["event"]["subject_type"] == "report"
+
+
+def test_daily_report_feed_carries_only_verified_snapshot_attention(monkeypatch):
+    from backend.infrastructure import database
+    from backend.services import finn_coach_feed_service
+
+    captured = {}
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            pass
+
+        async def commit(self):
+            pass
+
+    async def publish(_self, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(database, "async_session_factory", Session)
+    monkeypatch.setattr(finn_coach_feed_service.FinnCoachFeedService, "publish", publish)
+    daily_report_task._publish_daily_report_ready_feed(7, date(2026, 11, 4), {
+        "score_source_snapshot": {"assets": [{"symbol": "ETH", "pair": "ETH/EUR",
+                                             "score_status": "missing", "benchmark_score": None}]},
+    })
+    assert captured["evidence"]["attention_kind"] == "benchmark_unavailable"
+    assert captured["evidence"]["attention_pair"] == "ETH/EUR"

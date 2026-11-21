@@ -54,6 +54,12 @@ export function MobileFINNFeed({ events, onArchive, onDiscuss, onViewReport, onT
               }} accessibilityRole="button">
                 <Text style={styles.link}>{translate(language, item.event_type.endsWith('_report_ready') ? 'finn.feedViewReport' : 'finn.feedDiscuss')}</Text>
               </Pressable>
+              {item.event_type.endsWith('_report_ready') &&
+               ['benchmark_unavailable', 'benchmark_available'].includes(item.evidence?.attention_kind || '') ? (
+                <Pressable onPress={async () => { await triggerHaptic('selection'); onDiscuss(item); }} accessibilityRole="button">
+                  <Text style={styles.link}>{translate(language, 'finn.feedDiscuss')}</Text>
+                </Pressable>
+              ) : null}
               <Pressable onPress={async () => { await triggerHaptic('selection'); onArchive(item.id); }} accessibilityRole="button">
                 <Text style={styles.secondary}>{translate(language, 'finn.feedHandled')}</Text>
               </Pressable>

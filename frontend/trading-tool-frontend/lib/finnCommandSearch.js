@@ -33,6 +33,13 @@ export function coachFeedDiscussionQuestion(item, locale = "nl") {
   const pairUnset = item?.evidence?.trading_pair_status === "not_saved_on_setup";
   const exactWatchlistPair = pair.startsWith(`${symbol}/`);
   const week = String(item?.evidence?.week_start || "").trim();
+  const reportDate = String(item?.evidence?.report_date || "").trim();
+  const reportPair = String(item?.evidence?.attention_pair || "").trim().toUpperCase();
+  const reportType = String(item?.evidence?.report_type || "daily").trim();
+  const reportName = {
+    daily: ["dag", "daily", "Tages"], weekly: ["week", "weekly", "Wochen"],
+    monthly: ["maand", "monthly", "Monats"], quarterly: ["kwartaal", "quarterly", "Quartals"],
+  }[reportType] || ["", "", ""];
   const labels = {
     nl: {
       bot: `Bespreek dit opgeslagen Paper-botbesluit voor ${asset}: ${title}. Controleer de beslissing, opgeslagen regels en eventuele uitvoering in de botgeschiedenis. Leg uit waarom de bot wel of niet handelde en adviseer één concrete vervolgstap. Gebruik geen actuele koers als bewijs voor een historische uitvoering; wijzig niets.`,
@@ -41,6 +48,7 @@ export function coachFeedDiscussionQuestion(item, locale = "nl") {
       plan: `Bespreek deze planupdate voor setup ${setup} (${asset}): ${title}. Lees de opgeslagen setup en bijbehorende score.${pair ? " Gebruik dit exacte handelspaar." : " Als bij de setup geen handelspaar is opgeslagen, zeg dat expliciet en kies er niet zelf een."}`,
       data: `Bespreek deze melding over ontbrekend scorebewijs voor ${setupName ? `setup ${setup}` : asset}: ${title}. Controleer de opgeslagen setup, bronstatus en score.${pair ? ` Gebruik ${pair} als exact handelspaar.` : pairUnset ? " Zeg expliciet dat bij deze setup geen handelspaar is opgeslagen." : " Leid geen handelspaar af uit alleen het assetsymbool."}`,
       weekly: `Bespreek mijn opgeslagen weekreflectie${week ? ` van ${week}` : ""}. Lees de afgesloten trades en noem alleen patronen die door de dossiers zijn onderbouwd.`,
+      report: `Bespreek het opgeslagen ${reportName[0]}rapport van ${reportDate} en het aandachtspunt voor ${reportPair}. Lees dat rapport opnieuw, onderscheid de momentopname van actuele Analyse en geef één controleerbare vervolgstap. Als dit rapport ontbreekt, zeg dat expliciet. Wijzig niets.`,
       watchlist: `Bekijk mijn watchlist-notering ${asset}. Controleer de huidige indicatoren en benchmark ${exactWatchlistPair ? "voor dit exacte handelspaar" : "voor deze asset; leid geen handelspaar af"} en adviseer welke volgende analysestap logisch is. Doe alleen een voorstel; wijzig of sla niets op.`,
       analysis: `Controleer de actuele benchmark en bronmomenten voor ${asset}. Adviseer of een setup een logische volgende stap is en welke keuze nog van mij nodig is. Maak niets aan.`,
       strategy: `Controleer of setup ${setup} voor ${asset} nog bestaat en of er inmiddels een strategie aan is gekoppeld. Zo niet, adviseer welke strategie past en welke gegevens je van mij nodig hebt. Maak niets aan.`,
@@ -54,6 +62,7 @@ export function coachFeedDiscussionQuestion(item, locale = "nl") {
       plan: `Discuss this plan update for setup ${setup} (${asset}): ${title}. Read the saved setup and related score.${pair ? " Use this exact trading pair." : " If no trading pair is saved on the setup, say so explicitly and do not choose one."}`,
       data: `Discuss this missing score evidence for ${setupName ? `setup ${setup}` : asset}: ${title}. Check the saved setup, source status and score.${pair ? ` Use ${pair} as the exact trading pair.` : pairUnset ? " State explicitly that this setup has no saved trading pair." : " Do not infer a trading pair from the asset symbol alone."}`,
       weekly: `Discuss my saved weekly reflection${week ? ` for ${week}` : ""}. Read the closed trades and mention only patterns supported by the records.`,
+      report: `Discuss the saved ${reportName[1]} report from ${reportDate} and its attention point for ${reportPair}. Read that report again, distinguish its snapshot from current Analysis and give one verifiable next step. Say so if the report is unavailable. Change nothing.`,
       watchlist: `Review my watchlist listing ${asset}. Check the current indicators and benchmark ${exactWatchlistPair ? "for this exact trading pair" : "for this asset; do not infer a trading pair"} and suggest a logical next analysis step. Only advise; do not change or save anything.`,
       analysis: `Check the current benchmark and source times for ${asset}. Advise whether a setup is a logical next step and what choice you still need from me. Create nothing.`,
       strategy: `Check whether setup ${setup} for ${asset} still exists and whether a strategy is linked now. If not, advise which strategy fits and what details you need from me. Create nothing.`,
@@ -67,6 +76,7 @@ export function coachFeedDiscussionQuestion(item, locale = "nl") {
       plan: `Besprich diese Planaktualisierung für Setup ${setup} (${asset}): ${title}. Lies das gespeicherte Setup und den zugehörigen Score.${pair ? " Verwende dieses genaue Handelspaar." : " Wenn kein Handelspaar gespeichert ist, sage dies ausdrücklich und wähle keines selbst."}`,
       data: `Besprich diese Meldung über fehlende Score-Daten für ${setupName ? `Setup ${setup}` : asset}: ${title}. Prüfe das gespeicherte Setup, den Quellenstatus und den Score.${pair ? ` Verwende ${pair} als genaues Handelspaar.` : pairUnset ? " Sage ausdrücklich, dass für dieses Setup kein Handelspaar gespeichert ist." : " Leite aus dem Assetsymbol allein kein Handelspaar ab."}`,
       weekly: `Besprich meine gespeicherte Wochenreflexion${week ? ` vom ${week}` : ""}. Lies die abgeschlossenen Trades und nenne nur belegte Muster.`,
+      report: `Besprich den gespeicherten ${reportName[2]}bericht vom ${reportDate} und den Hinweis für ${reportPair}. Lies den Bericht erneut, unterscheide die Momentaufnahme von der aktuellen Analyse und nenne einen überprüfbaren nächsten Schritt. Sage ausdrücklich, wenn der Bericht fehlt. Ändere nichts.`,
       watchlist: `Prüfe meine Watchlist-Notierung ${asset}. Prüfe die aktuellen Indikatoren und den Benchmark ${exactWatchlistPair ? "für dieses genaue Handelspaar" : "für diesen Wert; leite kein Handelspaar ab"} und schlage den nächsten sinnvollen Analyseschritt vor. Berate nur; ändere oder speichere nichts.`,
       analysis: `Prüfe den aktuellen Benchmark und die Quellenzeitpunkte für ${asset}. Empfiehl, ob ein Setup ein sinnvoller nächster Schritt ist und welche Entscheidung du von mir brauchst. Erstelle nichts.`,
       strategy: `Prüfe, ob Setup ${setup} für ${asset} noch besteht und inzwischen eine Strategie verknüpft ist. Falls nicht, empfehle eine passende Strategie und nenne die benötigten Angaben. Erstelle nichts.`,
@@ -85,6 +95,7 @@ export function coachFeedDiscussionQuestion(item, locale = "nl") {
       : item?.event_type === "strategy_next_step" ? "strategy"
       : item?.event_type === "paper_next_step" ? "paper"
       : item?.event_type === "position_risk" ? "risk"
+      : item?.event_type?.endsWith("_report_ready") ? "report"
       : item?.event_type === "weekly_reflection" ? "weekly" : "other";
   return copy[kind];
 }
