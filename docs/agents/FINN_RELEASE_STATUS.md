@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: multi-asset rapport- en botbronvergelijking (21 november 2026)
 
-Phase: `LOCAL_VALIDATED_PR_PENDING`. Branch
+Phase: `LIVE_DEPLOYED_QA_PENDING`. Branch
 `codex/finn-qa-source-coaching-20261121`, gebaseerd op main
 `6796b346d1c8fd70341b2ac482dc3589bfa6e424`. Onafhankelijke ingelogde
 QA wees die publieke SHA af voor twee gerichte read-only gevallen: de vraag
@@ -50,8 +50,15 @@ validatie- of timeoutfouten; artifact SHA-256
 `bfc4fe0dcd86033e976dce1193fbfc32f8584b149387ce5eb503d89841433d46`.
 Deze selectorproeven liepen vóór de laatste smalle rendererfix, die de
 providerselectie niet wijzigt; de definitieve HTTP/Celery- en backendproeven
-dekken die rendererfix wel. CI, deploymentidentiteit en onafhankelijke live QA
-volgen nog; deze lokale resultaten zijn geen live acceptatie.
+dekken die rendererfix wel. PR [#1238](https://github.com/gvangalen/antigravity-trading-tool/pull/1238)
+en kandidaat-CI `44892560072` slaagden alle vijf jobs. De PR is gemerged
+als `10f12d0976fe16eae0b1d69858bb6c5283ffe762`; main-CI `44893146222`
+en Auto Deploy `44893651707` slaagden. Publieke backend-health en
+frontend-build-info gaven beide HTTP 200 en exact deze merge-SHA. Deze
+statusupdate maakt zelf een nieuwe hoofdbranch-SHA; Build wacht de daarop
+volgende CI, Auto Deploy en publieke SHA-pariteit af voordat onafhankelijke
+ingelogde QA deze reparatie test. De lokale en publieke identiteitscontroles
+zijn geen live acceptatie.
 
 ## FINN 3.0: rapportmomentopname versus actuele botcheck (21 november 2026)
 
