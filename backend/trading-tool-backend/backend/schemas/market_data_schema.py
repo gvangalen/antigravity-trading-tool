@@ -1,5 +1,5 @@
-from pydantic import BaseModel, Field
-from datetime import datetime, date
+from pydantic import BaseModel, Field, validator
+from datetime import datetime, date, time, timezone
 from typing import Optional, List
 
 class MarketDataIndicatorBase(BaseModel):
@@ -69,6 +69,12 @@ class MarketForwardReturnResponse(BaseModel):
     change: Optional[float]
     avgDaily: Optional[float] = Field(alias="avg_daily")
     created_at: datetime
+
+    @validator("start", "end", pre=True)
+    def accept_date_period_bound(cls, value):
+        if isinstance(value, date) and not isinstance(value, datetime):
+            return datetime.combine(value, time.min, tzinfo=timezone.utc)
+        return value
 
     class Config:
         orm_mode = True

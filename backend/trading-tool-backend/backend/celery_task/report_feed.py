@@ -15,6 +15,8 @@ def publish_periodic_report_ready(user_id: int, report_type: str, report_date: d
     from backend.services.finn_coach_feed_service import FinnCoachFeedService
     from backend.services.finn_report_attention import report_attention
 
+    attention = report_attention(report)
+
     async def publish():
         async with async_session_factory() as session:
             await FinnCoachFeedService(session).publish(
@@ -26,10 +28,10 @@ def publish_periodic_report_ready(user_id: int, report_type: str, report_date: d
                 subject=report_type,
                 symbol=None,
                 evidence={"report_type": report_type, "report_date": report_date.isoformat(),
-                          **report_attention(report)},
+                          **attention},
                 source_observed_at=datetime.now(timezone.utc),
                 priority=2,
-                revision=report_date.isoformat(),
+                revision=f"{report_date.isoformat()}:{attention.get('attention_kind', '')}:{attention.get('attention_pair', '')}",
             )
             await session.commit()
 

@@ -1,5 +1,6 @@
 from backend.celery_task.store_daily_scores_task import run_rule_based_daily_scores
 import asyncio
+import json
 import threading
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -272,6 +273,8 @@ def test_feed_recovery_republishes_recent_saved_report_without_duplicate(monkeyp
     from backend.celery_task import daily_report_task
 
     published = []
+    snapshot = {"assets": [{"symbol": "BTC", "pair": "BTC/EUR",
+                             "score_status": "available", "benchmark_score": 40.7}]}
 
     class Cursor:
         def __enter__(self):
@@ -284,7 +287,7 @@ def test_feed_recovery_republishes_recent_saved_report_without_duplicate(monkeyp
             self.sql = sql
 
         def fetchall(self):
-            return [(7, date(2026, 11, 19))] if "FROM daily_reports" in self.sql else []
+            return [(7, date(2026, 11, 19), snapshot, None)] if "FROM daily_reports" in self.sql else []
 
         def fetchone(self):
             return (None, None, None)
@@ -301,17 +304,20 @@ def test_feed_recovery_republishes_recent_saved_report_without_duplicate(monkeyp
 
     monkeypatch.setattr(task_module, "get_db_connection", Connection)
     monkeypatch.setattr(daily_report_task, "_publish_daily_report_ready_feed",
-                        lambda user_id, report_date: published.append((user_id, report_date)))
+                        lambda user_id, report_date, report: published.append((user_id, report_date, report)))
     assert task_module.recover_coach_feed_events() == 1
-    assert published == [(7, date(2026, 11, 19))]
+    assert published == [(7, date(2026, 11, 19), {"score_source_snapshot": snapshot})]
 
 
-def test_feed_recovery_republishes_saved_periodic_report(monkeypatch):
+def test_feed_recovery_upgrades_recent_generic_report_but_skips_missing_attention(monkeypatch):
     from datetime import date
     import backend.celery_task.store_daily_scores_task as task_module
-    from backend.celery_task import report_feed
+    from backend.celery_task import daily_report_task
 
     published = []
+    with_attention = {"assets": [{"symbol": "BTC", "pair": "BTC/USDT",
+                                  "score_status": "available", "benchmark_score": 42.3}]}
+    without_attention = {"assets": []}
 
     class Cursor:
         def __enter__(self):
@@ -324,7 +330,53 @@ def test_feed_recovery_republishes_saved_periodic_report(monkeypatch):
             self.sql = sql
 
         def fetchall(self):
-            return [(7, 'weekly', date(2026, 11, 19))] if "FROM weekly_reports" in self.sql else []
+            if "FROM daily_reports" in self.sql:
+                return [(7, date(2026, 11, 20), with_attention, {"report_type": "daily"}),
+                        (8, date(2026, 11, 20), without_attention, {"report_type": "daily"})]
+            return []
+
+        def fetchone(self):
+            return (None, None, None)
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def commit(self):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(task_module, "get_db_connection", Connection)
+    monkeypatch.setattr(daily_report_task, "_publish_daily_report_ready_feed",
+                        lambda user_id, report_date, report:
+                        published.append((user_id, report_date, report)))
+    assert task_module.recover_coach_feed_events() == 1
+    assert published == [(7, date(2026, 11, 20), {"score_source_snapshot": with_attention})]
+
+
+def test_feed_recovery_republishes_saved_periodic_report(monkeypatch):
+    from datetime import date
+    import backend.celery_task.store_daily_scores_task as task_module
+    from backend.celery_task import report_feed
+
+    published = []
+    report = {"score_source_snapshot": {"assets": [
+        {"symbol": "SPY", "score_status": "missing", "benchmark_score": None}]}}
+
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, sql):
+            self.sql = sql
+
+        def fetchall(self):
+            return [(7, 'weekly', date(2026, 11, 19), json.dumps(report), None)] if "FROM weekly_reports" in self.sql else []
 
         def fetchone(self):
             return ('weekly_reports', None, None)
@@ -341,10 +393,10 @@ def test_feed_recovery_republishes_saved_periodic_report(monkeypatch):
 
     monkeypatch.setattr(task_module, "get_db_connection", Connection)
     monkeypatch.setattr(report_feed, "publish_periodic_report_ready",
-                        lambda user_id, report_type, report_date:
-                        published.append((user_id, report_type, report_date)))
+                        lambda user_id, report_type, report_date, saved:
+                        published.append((user_id, report_type, report_date, saved)))
     assert task_module.recover_coach_feed_events() == 1
-    assert published == [(7, 'weekly', date(2026, 11, 19))]
+    assert published == [(7, 'weekly', date(2026, 11, 19), report)]
 
 
 def test_feed_recovery_dispatches_new_or_changed_paper_decisions(monkeypatch):

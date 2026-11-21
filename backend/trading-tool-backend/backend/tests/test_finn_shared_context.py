@@ -1136,7 +1136,7 @@ def test_daily_report_feed_uses_owner_and_date_as_deduplication_key(monkeypatch)
     assert captured["committed"] is True
     assert captured["event"]["user_id"] == 7
     assert captured["event"]["event_key"] == "daily-report:2026-11-04"
-    assert captured["event"]["revision"] == "2026-11-04"
+    assert captured["event"]["revision"] == "2026-11-04::"
     assert captured["event"]["subject_type"] == "report"
 
 
@@ -1167,3 +1167,4 @@ def test_daily_report_feed_carries_only_verified_snapshot_attention(monkeypatch)
     })
     assert captured["evidence"]["attention_kind"] == "benchmark_unavailable"
     assert captured["evidence"]["attention_pair"] == "ETH/EUR"
+    assert captured["revision"] == "2026-11-04:benchmark_unavailable:ETH/EUR"

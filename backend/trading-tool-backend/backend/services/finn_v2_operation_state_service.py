@@ -769,6 +769,19 @@ class FinnV2OperationStateService:
             )
             if not any(field in collected for field in suggested_ladder):
                 # Editable suggestion only; confirmation is still required.
+                # A provider may have filled the other optional score-band
+                # format before this requested suggestion was created. Keep
+                # only the format the user asked FINN to suggest.
+                conflicting_fields = (
+                    ("benchmark_zone_percents",)
+                    if "low_threshold" in suggested_ladder else
+                    ("low_threshold", "high_threshold", "low_score_percent",
+                     "mid_score_percent", "high_score_percent")
+                )
+                for field in conflicting_fields:
+                    collected.pop(field, None)
+                    sources.pop(field, None)
+                    provenance.pop(field, None)
                 collected.update(suggested_ladder)
                 for field in suggested_ladder:
                     sources[field] = "requested_suggestion"

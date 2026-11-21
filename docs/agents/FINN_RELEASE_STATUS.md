@@ -4,6 +4,52 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: rapportfeed, rendementen en Smart DCA-vervolg (21 november 2026)
+
+Phase: `LOCAL_VALIDATED_CI_GREEN`. Branch
+`codex/finn3-report-recovery-attention-20261121`, rebased on status-only main
+`3c985fba6` with product baseline `9c53648a2c`. Recovery of saved daily,
+weekly, monthly and quarterly reports
+now passes the persisted score snapshot to the FINN feed publisher. A recent
+unread generic card can be superseded by one verifiable pair-specific
+attention point; handled cards remain closed. The existing main fix for
+`read_forward_returns` accepts date-only period bounds. This candidate also
+normalizes those dates at the raw forward-return API response boundary, which
+previously returned HTTP 500, while preserving its datetime response shape.
+Production interactive-worker logs confirmed four failures at the old adapter
+`.date()` call on `datetime.date`; this is a verified cause for the earlier
+read-only browser failure, not yet a live acceptance of the repair.
+
+On the combined local runtime, a guided request for three Smart DCA score
+bands initially failed at proposal creation: the model supplied an unrelated
+five-zone list alongside the three-band suggestion and the domain validator
+raised `score_band_formats_mixed`. The state resolver now removes that
+conflicting model format. A focused regression passed, and the isolated
+proposal, confirmation, save and idempotent replay probe passed after the
+worker restart. No bot or order was created by that probe.
+
+The final combined backend suite passed **5219**, skipped **7** (log SHA-256
+`cffeef2ef87cbfeb0e7f35ed9a1effe704e5d4b2196d00ca1d58a1e698549391`).
+Focused date-bound, market-data and guided Smart DCA checks passed **22/22**.
+The isolated FastAPI/Celery/PostgreSQL/Redis/Responses action matrix passed
+**17/17** contracts, the adapter tests **28/28**, and the Smart DCA schedule,
+confirmed Smart DCA and calendar DCA probes passed (artifact SHA-256
+`499cca210979abfe4b360e2acd3d55a5fc53dad3f59592956ef5c92fafb791f4`).
+It recorded zero broker orders, Live bots, Live calls or production connections.
+The real-provider development selector passed **20/20** with zero provider,
+schema, timeout, parse or validation failures (artifact SHA-256
+`b08e3e6835b8e69b008839fef458f047b2a6b4d3a0232293d391c02c86c4bd0b`).
+The real-provider regression selector passed **109/109** with zero provider,
+schema, timeout, parse or
+validation failures (artifact SHA-256
+`891899948e13d2de6fc11c4e5abc080d5cbb2c40a1d66065b3c4c4d365dc43b5`).
+Frontend typecheck, i18n lint/tests, command/proposal tests, build
+and `audit:high` passed on the unchanged web code. All five CI jobs passed on
+the combined product-code SHA `e7af643357` in workflow `44929132780` before
+the status-only rebase. Deploy identity and independent authenticated QA are
+pending. The QA profile has not
+yet tested the report-recovery route on this candidate.
+
 ## FINN 3.0: herstel historische forward returns (21 november 2026)
 
 Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_IDENTITY`. Independent QA returned `NOT_ACCEPTED` for
@@ -101,7 +147,7 @@ on the previous live revision; this release did not modify that tool.
 
 ## FINN 3.0: historische forward returns in analyse (21 november 2026)
 
-Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_IDENTITY`. Branch
+Phase: `LIVE_DEPLOYED_NOT_ACCEPTED`. Branch
 `codex/finn-forward-returns-release-20261121`, implementation SHA `a92095642`.
 FINN has a read-only `get_forward_returns` tool for the existing stored week,
 month, quarter and year return rows. The current period is labelled partial.
@@ -136,7 +182,11 @@ merged as `5b2127b2a85e9dfb3b43caf04480a68db9f40d53`. Main CI
 Public backend `/api/health` and frontend `/build-info.json` returned HTTP
 200 and both reported that exact merge SHA. This status-only update creates
 a later main SHA; Build must wait for its CI, last Auto Deploy, and public
-backend/frontend SHA parity before independent authenticated QA.
+backend/frontend SHA parity before independent authenticated QA. On the later
+public SHA `3f2040ef05ff8c824664a1f6de0b43a1fd2bf300`, an independent
+read-only browser check found that FINN could not read BTC historical returns.
+The interactive worker log subsequently confirmed the date-only bound failure
+described in the current candidate above. This source has not been accepted.
 
 ## FINN 3.0: reportkaart leest actuele benchmark apart (21 november 2026)
 

@@ -474,6 +474,18 @@ def retry_coach_feed_copy():
 @shared_task(name="backend.celery_task.store_daily_scores_task.recover_coach_feed_events")
 def recover_coach_feed_events():
     """Recover persisted Paper decisions and ready daily reports."""
+    from backend.services.finn_report_attention import report_attention
+
+    def saved_report(raw, *, snapshot_only=False):
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except (TypeError, ValueError):
+                return None
+        if not isinstance(raw, dict):
+            return None
+        return {"score_source_snapshot": raw} if snapshot_only else raw
+
     conn = get_db_connection()
     if conn is None:
         return 0
@@ -506,15 +518,20 @@ def recover_coach_feed_events():
             """)
             decisions = cur.fetchall()
             cur.execute("""
-                SELECT r.user_id, r.report_date
+                SELECT r.user_id, r.report_date,
+                       to_jsonb(r)->'score_source_snapshot' AS saved_snapshot,
+                       f.evidence AS existing_evidence
                 FROM daily_reports r
-                WHERE r.report_date >= CURRENT_DATE - 2
-                  AND to_jsonb(r)->'executive_summary' IS NOT NULL
-                  AND NOT EXISTS (
-                    SELECT 1 FROM finn_coach_feed_items f
+                LEFT JOIN LATERAL (
+                    SELECT evidence, status FROM finn_coach_feed_items f
                     WHERE f.user_id=r.user_id
                       AND f.event_key='daily-report:' || r.report_date::TEXT
-                  )
+                    ORDER BY f.created_at DESC, f.id DESC LIMIT 1
+                ) f ON TRUE
+                WHERE r.report_date >= CURRENT_DATE - 2
+                  AND to_jsonb(r)->'executive_summary' IS NOT NULL
+                  AND (f.evidence IS NULL OR (f.status IN ('unread','read')
+                       AND f.evidence->>'attention_kind' IS NULL))
                 ORDER BY r.report_date DESC LIMIT 12
             """)
             reports = cur.fetchall()
@@ -524,7 +541,8 @@ def recover_coach_feed_events():
             """)
             existing = cur.fetchone() or (None, None, None)
             sources = [
-                f"SELECT user_id, '{kind}' AS report_type, report_date FROM {table}"
+                f"SELECT p.user_id, '{kind}' AS report_type, p.report_date, "
+                f"to_jsonb(p)->'meta_json' AS saved_meta FROM {table} p"
                 for kind, table, present in zip(
                     ('weekly', 'monthly', 'quarterly'),
                     ('weekly_reports', 'monthly_reports', 'quarterly_reports'),
@@ -534,15 +552,19 @@ def recover_coach_feed_events():
             periodic_reports = []
             if sources:
                 cur.execute("""
-                SELECT p.user_id, p.report_type, p.report_date FROM (
+                SELECT p.user_id, p.report_type, p.report_date,
+                       p.saved_meta, f.evidence AS existing_evidence FROM (
                     """ + " UNION ALL ".join(sources) + """
                 ) p
-                WHERE p.report_date >= CURRENT_DATE - 2
-                  AND NOT EXISTS (
-                    SELECT 1 FROM finn_coach_feed_items f
+                LEFT JOIN LATERAL (
+                    SELECT evidence, status FROM finn_coach_feed_items f
                     WHERE f.user_id=p.user_id
                       AND f.event_key=p.report_type || '-report:' || p.report_date::TEXT
-                  )
+                    ORDER BY f.created_at DESC, f.id DESC LIMIT 1
+                ) f ON TRUE
+                WHERE p.report_date >= CURRENT_DATE - 2
+                  AND (f.evidence IS NULL OR (f.status IN ('unread','read')
+                       AND f.evidence->>'attention_kind' IS NULL))
                 ORDER BY p.report_date DESC LIMIT 12
                 """)
                 periodic_reports = cur.fetchall()
@@ -558,17 +580,23 @@ def recover_coach_feed_events():
             logger.warning("FINN feed Paper recovery dispatch failed", exc_info=True)
     if reports:
         from backend.celery_task.daily_report_task import _publish_daily_report_ready_feed
-    for user_id, report_date in reports:
+    for user_id, report_date, raw_snapshot, existing_evidence in reports:
         try:
-            _publish_daily_report_ready_feed(user_id, report_date)
+            report = saved_report(raw_snapshot, snapshot_only=True)
+            if existing_evidence is not None and not report_attention(report):
+                continue
+            _publish_daily_report_ready_feed(user_id, report_date, report)
             dispatched += 1
         except Exception:
             logger.warning("FINN feed daily report recovery failed", exc_info=True)
     if periodic_reports:
         from backend.celery_task.report_feed import publish_periodic_report_ready
-    for user_id, report_type, report_date in periodic_reports:
+    for user_id, report_type, report_date, raw_meta, existing_evidence in periodic_reports:
         try:
-            publish_periodic_report_ready(user_id, report_type, report_date)
+            report = saved_report(raw_meta)
+            if existing_evidence is not None and not report_attention(report):
+                continue
+            publish_periodic_report_ready(user_id, report_type, report_date, report)
             dispatched += 1
         except Exception:
             logger.warning("FINN feed periodic report recovery failed", exc_info=True)

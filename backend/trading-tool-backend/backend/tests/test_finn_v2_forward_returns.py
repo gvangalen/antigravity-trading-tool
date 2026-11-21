@@ -1,9 +1,10 @@
 import asyncio
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from backend.schemas.finn_v2_evidence_schema import ForwardReturnsData
+from backend.schemas.market_data_schema import MarketForwardReturnResponse
 from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCatalog
 from backend.services.finn_v2_tool_adapters.forward_returns_tool_adapter import ForwardReturnsToolAdapter
 
@@ -51,3 +52,17 @@ def test_forward_returns_accepts_date_columns_from_existing_market_table():
 
     assert result["data"].periods["month"][0].values[today.month - 1] == 2.5
     assert result["data"].observed_through == today
+
+
+def test_raw_forward_return_response_accepts_date_only_period_bounds():
+    observed_date = date(2026, 11, 21)
+    record = SimpleNamespace(
+        id=1, symbol="BTC", period="30d", start_date=observed_date,
+        end_date=observed_date, change=2.5, avg_daily=0.1,
+        created_at=datetime(2026, 11, 21, tzinfo=timezone.utc),
+    )
+
+    response = MarketForwardReturnResponse.from_orm(record)
+
+    assert response.start.date() == observed_date
+    assert response.end.date() == observed_date

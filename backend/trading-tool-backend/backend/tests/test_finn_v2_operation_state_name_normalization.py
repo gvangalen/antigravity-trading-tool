@@ -864,11 +864,14 @@ def test_guided_smart_dca_remembers_weekly_limit_and_requested_ladder_proposal()
                  "€200 als basisbedrag. Laat het bedrag meebewegen met de gezamenlijke "
                  "Markt-, Macro- en Technisch-score. Welke drie staffels stel je voor? "
                  "Toon eerst een bewerkbaar concept; start geen bot en plaats geen order."),
-        explicit_asset="BTC", conversation_context={}, supplied_inputs={}, model_tool_inputs=True,
+        explicit_asset="BTC", conversation_context={},
+        supplied_inputs={"benchmark_zone_percents": [30, 60, 100, 140, 180]},
+        model_tool_inputs=True,
     )
     assert first.collected_inputs["dca_frequency"] == "weekly"
     assert first.collected_inputs["dca_trigger_mode"] == "benchmark"
     assert first.input_sources["low_threshold"] == "requested_suggestion"
+    assert "benchmark_zone_percents" not in first.collected_inputs
     assert first.next_missing_input == "timeframe"
     second = service.resolve(
         contract=contract,
