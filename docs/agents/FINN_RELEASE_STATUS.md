@@ -37,7 +37,7 @@ web/mobile-weergave toetsen. Ontbreekt een nieuwe kaart, dan is dit een
 dekkingsgat en geen groen acceptatiebewijs.
 ## FINN 3.0: AAPL-bronantwoorden na ingelogde QA (21 november 2026)
 
-Phase: `LOCAL_VALIDATED_PR_PENDING`. Branch
+Phase: `LIVE_DEPLOYED_QA_PENDING`. Branch
 `codex/finn-aapl-qa-followup-20261120`, gebaseerd op main
 `85c63f50fdf6e3ae2c85863a6e02cbff20e52a55`. De voorafgaande
 ingelogde AAPL-QA op `c04d85a6a84d42b700b44efbd9341f29977be590`
@@ -73,8 +73,17 @@ De worker-matrix slaagde **17/17** actiegevallen en **28/28** adaptertests;
 de DCA-migratie-, bevestigings- en replaycontroles slaagden. Artifact
 `.local-finn-parity-artifacts/full-action-matrix.json` heeft SHA-256
 `e4f71a7652f45ffd75cbd47f357a7c3362d0df164cce9fe117700850ac28e865`.
-CI, Auto Deploy, publieke SHA-pariteit en
-onafhankelijke ingelogde AAPL-herkeuring staan nog open.
+PR [#1232](https://github.com/gvangalen/antigravity-trading-tool/pull/1232)
+en PR-CI `44882790965` slaagden; de productfix is gemerged als
+`dc79e9dcc553a61fbaa32b5aa4dc032bccfe7390`.
+Hoofdbranch-CI `44883310739` en Auto Deploy `44883829070` slaagden op
+de product-SHA `dc79e9dcc553a61fbaa32b5aa4dc032bccfe7390`.
+Publieke `https://tradamind.com/api/health` en
+`https://tradamind.com/build-info.json` gaven beide HTTP 200 en exact
+die SHA. Een latere coachfeed-merge maakt een nieuwere hoofdbranch-SHA. Build
+verifieert die gezamenlijke runtime en wacht met de AAPL-herkeuring totdat
+de andere FINN-release haar eigen QA-grens heeft afgerond.
+
 ## FINN 3.0: actieve werkruimtelezing na live QA (21 november 2026)
 
 Phase: `LIVE_QA_ACCEPTED` op uiteindelijke SHA
