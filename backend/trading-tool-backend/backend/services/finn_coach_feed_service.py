@@ -762,7 +762,10 @@ class FinnCoachFeedService:
         if current:
             # A handled, archived or expired observation remains acknowledged.
             # Only changed facts, or a prior condition-cleared transition, reopens it.
-            if current["fingerprint"] == digest:
+            if current["fingerprint"] == digest and not (
+                event_type in {"strategy_next_step", "paper_next_step"}
+                and current["status"] == "resolved"
+            ):
                 if (event_type == "bot_decision" and current["status"] in VISIBLE
                         and source_observed_at
                         and not _same_utc_moment(source_observed_at, previous_source)):
@@ -854,6 +857,12 @@ class FinnCoachFeedService:
             raise ValueError("asset_symbol_invalid")
         if market_id is not None and (type(market_id) is not int or market_id <= 0):
             raise ValueError("exact_market_scope_required")
+        # Both the score worker and the journey worker can reconcile this scope.
+        # Lock before reading its setup/strategy/bot state so an older read can
+        # never publish a stale suggestion after a newer write was observed.
+        await self.session.execute(text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {
+            "key": f"finn-journey:{user_id}:{asset}:{market_id}",
+        })
         scope = {"user_id": user_id, "symbol": asset, "market_id": market_id}
         listing_result = await self.session.execute(text("""
             SELECT w.id, m.quote_currency
@@ -864,6 +873,16 @@ class FinnCoachFeedService:
         """), scope)
         listing = listing_result.mappings().first()
         quote = str((listing or {}).get("quote_currency") or "").strip().upper()
+        if market_id is not None and not quote:
+            # A saved setup can exist without a watchlist row. Read its exact
+            # market identity rather than suppressing the follow-up card.
+            market_result = await self.session.execute(text("""
+                SELECT quote_currency FROM trading_markets
+                WHERE id=:market_id AND asset_symbol=:symbol
+                LIMIT 1
+            """), {"market_id": market_id, "symbol": asset})
+            market = market_result.mappings().first()
+            quote = str((market or {}).get("quote_currency") or "").strip().upper()
         if market_id is not None and not re.fullmatch(r"[A-Z]{2,12}", quote):
             return []
         pair = f"{asset}/{quote}" if quote else asset

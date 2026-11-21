@@ -29,7 +29,9 @@ def main() -> None:
     token = create_access_token({"sub": str(owner["id"]), "role": "user"})
     other_token = create_access_token({"sub": str(other["id"]), "role": "user"})
     name = f"Smart DCA Local {uuid.uuid4().hex[:8]}"
-    base_url = "http://127.0.0.1:18000"
+    base_url = os.getenv("FINN_LOCAL_BASE_URL", "http://127.0.0.1:18000")
+    if not base_url.startswith("http://127.0.0.1:"):
+        raise RuntimeError("smart_dca_runtime_probe_requires_loopback_url")
     first = run_gate(
         base_url=base_url, bearer_token=token, timeout_seconds=100,
         message=(f"Maak voor BTC/USDT een setup met de naam {name}, op 1D. "

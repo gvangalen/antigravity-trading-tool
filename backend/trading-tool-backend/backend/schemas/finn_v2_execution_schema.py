@@ -63,3 +63,6 @@ class ExecutionResult(BaseModel):
     # This is a chat continuation hint, never permission to execute a write.
     task_continuation: Optional[Dict[str, Any]] = None
     continuation_run_id: Optional[str] = None
+    # An optional, owner-verified coaching question after the requested write.
+    # It never grants permission to create a strategy or activate a bot.
+    journey_next_step: Optional[Dict[str, Any]] = None

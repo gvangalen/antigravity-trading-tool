@@ -501,6 +501,14 @@ class SetupService:
         if not symbol:
             return
         try:
+            from backend.celery_task.celery_app import celery_app
+            celery_app.send_task(
+                "backend.celery_task.store_daily_scores_task.reconcile_coach_feed_journey",
+                args=[user_id, symbol, market_id],
+            )
+        except Exception:
+            logger.warning("FINN journey feed dispatch failed", exc_info=True)
+        try:
             from backend.celery_task.store_daily_scores_task import reconcile_coach_feed_score
             if market_id is None:
                 reconcile_coach_feed_score.delay(user_id, symbol)
