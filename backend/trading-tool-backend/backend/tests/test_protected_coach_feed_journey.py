@@ -58,7 +58,7 @@ def test_journey_discussion_diagnostic_is_allowlisted(monkeypatch):
         "response_present": True, "content_present": True,
         "proposal_present": False, "confirmation_required": False,
         "subject_mentioned": True,
-        "failed_checks": ["score", "score_date", "verified_current"],
+        "failed_checks": ["score", "score_date"],
     }
 
 
@@ -121,6 +121,16 @@ def test_journey_answer_checks_require_dated_score_and_current_report_distinctio
     assert probe._analysis_answer_valid(
         "SOL heeft een actuele, brongeverifieerde benchmarkscore van "
         "40/100 op 21 november 2026. Bepaal de setupvoorwaarden.",
+        "40", "2026-11-21",
+    )
+    assert probe._analysis_answer_valid(
+        "Voor SOL is de benchmarkscore 40/100 per 21 november 2026. "
+        "Bespreek de setupvoorwaarden als volgende stap.",
+        "40", "2026-11-21",
+    )
+    assert not probe._analysis_answer_valid(
+        "Voor SOL is de benchmarkscore 40/100 per 20 november 2026. "
+        "Bespreek de setupvoorwaarden als volgende stap.",
         "40", "2026-11-21",
     )
     assert not probe._analysis_answer_valid(
