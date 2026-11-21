@@ -508,6 +508,26 @@ def test_rephrasing_a_previous_assessment_is_read_only_despite_make_verb():
     ).action_polarity == "create"
 
 
+@pytest.mark.parametrize("message", (
+    "Vat mijn laatste antwoord beknopt samen.",
+    "Summarize the previous answer in one sentence.",
+    "Fass deine letzte Antwort kurz zusammen.",
+))
+def test_summary_of_released_answer_is_a_reformulation(message):
+    facts = FinnV2RequestPreprocessorService().preprocess(message=message)
+    assert facts.action_polarity == "read"
+    assert facts.discourse_act == "reformulation"
+    assert "previous_verified_conclusion" in facts.conversation_reference_markers
+
+
+def test_summary_with_separate_setup_update_keeps_mutation_intent():
+    facts = FinnV2RequestPreprocessorService().preprocess(
+        message="Vat mijn laatste antwoord samen en wijzig mijn BTC-setup."
+    )
+    assert facts.action_polarity == "update"
+    assert facts.discourse_act != "reformulation"
+
+
 @pytest.mark.parametrize(
     "message",
     (

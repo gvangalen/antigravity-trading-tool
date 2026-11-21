@@ -348,6 +348,18 @@ class FinnV2RequestPreprocessorService:
             and not {"setup", "strategy", "bot", "indicator_configuration", "watchlist"}.intersection(entities)
         ):
             action = "read"
+        if (
+            action == "read"
+            and re.search(
+                r"\b(?:vat|summari[sz]e|fass\w*)\b.{0,100}"
+                r"\b(?:vorig\w*|laatst\w*|previous|last|vorherig\w*|letzt\w*)\b.{0,50}"
+                r"\b(?:antwoord|answer|antwort)\b",
+                normalized,
+            )
+        ):
+            # A summary of the released answer is a reformulation, even if
+            # the user says "kort samenvatten" instead of "korter".
+            references = tuple(dict.fromkeys((*references, "previous_verified_conclusion", "reformulation")))
         # A directed order remains an execution request when the user omits
         # the asset ("plaats een kooporder"). Missing inputs are resolved by
         # the action boundary, never by treating the request as a read.
