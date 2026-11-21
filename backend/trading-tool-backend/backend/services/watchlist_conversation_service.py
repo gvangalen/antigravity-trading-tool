@@ -151,6 +151,8 @@ def asks_for_watchlist_inventory(text: str) -> bool:
         return False
     if re.search(r"\b(?:voeg|toevoegen|add|verwijder|remove|vervang|replace|koop|buy|sell|verkoop)\b", value, re.I):
         return False
+    if asks_for_active_workspace_asset(value):
+        return False
     # A feed discussion can mention the watchlist while asking for analysis.
     # The inventory shortcut must not swallow its indicator/benchmark read.
     if re.search(r"\b(?:indicatoren?|benchmark|analyse|analysestap|score|bronmoment(?:en)?)\b", value, re.I):
@@ -158,4 +160,18 @@ def asks_for_watchlist_inventory(text: str) -> bool:
     return bool(
         re.search(r"\b(?:toon|laat\s+(?:me\s+)?zien|geef\s+(?:me\s+)?een\s+overzicht|show|list|zeige|auflisten)\b", value, re.I)
         or re.search(r"\b(?:welke|wat|which|what|welche|was)\b.*\b(?:staan|staat|op|in|are|is|on|stehen|steht|sind)\b", value, re.I)
+    )
+
+
+def asks_for_active_workspace_asset(text: str) -> bool:
+    """Recognize a singular read of the currently selected workspace instrument."""
+    value = str(text or "")
+    if re.search(r"\b(?:voeg|toevoegen|add|verwijder|remove|vervang|replace|koop|buy|sell|verkoop|selecteer|kies|switch|wissel)\b", value, re.I):
+        return False
+    if re.search(r"\b(?:assets|instrumenten|symbols|symbolen|paren|pairs|markets|markten)\b", value, re.I):
+        return False
+    return bool(
+        re.search(r"\b(?:actief|actieve|active|geselecteerd|geselecteerde|selected)\b", value, re.I)
+        and re.search(r"\b(?:asset|instrument|symbool|symbol|markt|market|paar|pair)\b", value, re.I)
+        and re.search(r"\b(?:welk(?:e)?|wat|which|what|toon|show|zeige|was|welches?)\b", value, re.I)
     )

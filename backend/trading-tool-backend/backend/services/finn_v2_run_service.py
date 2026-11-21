@@ -2019,6 +2019,23 @@ class FinnV2RunService:
         return None
 
     @staticmethod
+    def _verified_reformulation_operation(
+        message: str, previous_response: Dict[str, Any] | None,
+        exchange: Dict[str, Any],
+    ) -> Optional[str]:
+        """Attribute a tool-free reformulation to its released prior answer."""
+        if (
+            not previous_response
+            or previous_response.get("terminal_status") != "completed"
+            or not previous_response.get("run_id")
+            or not str(previous_response.get("answer") or "").strip()
+            or exchange.get("tool_trace")
+        ):
+            return None
+        facts = FinnV2RequestPreprocessorService().preprocess(message=message)
+        return "reformulate_previous_response" if facts.discourse_act == "reformulation" else None
+
+    @staticmethod
     def _read_repair_has_budget(remaining: float | None, *, explain_limit: bool) -> bool:
         # The provider loop retains its own terminal-persistence reserve.
         return remaining is None or remaining > (7 if explain_limit else 8)
@@ -2250,12 +2267,15 @@ class FinnV2RunService:
             and (contract_before_terminal.state_json or {}).get("final_operation_id") is None
         ):
             direct_read_operation = self._verified_direct_read_operation(exchange)
-            if direct_read_operation is not None:
+            verified_operation = direct_read_operation or self._verified_reformulation_operation(
+                run.message, previous_response, exchange,
+            )
+            if verified_operation is not None:
                 await self.runtime_contracts.record_initial_intent(
-                    run_id=run_id, operation_id=direct_read_operation, requested_mode="READ",
+                    run_id=run_id, operation_id=verified_operation, requested_mode="READ",
                 )
                 await self.runtime_contracts.record_final_operation(
-                    run_id=run_id, operation_id=direct_read_operation, mode="READ", reason=None,
+                    run_id=run_id, operation_id=verified_operation, mode="READ", reason=None,
                 )
         task_conversations = getattr(self, "conversations", None)
         record_open_task = getattr(task_conversations, "record_setup_strategy_score_open_step", None)

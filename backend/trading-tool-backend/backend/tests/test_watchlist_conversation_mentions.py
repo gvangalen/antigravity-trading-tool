@@ -1,6 +1,6 @@
 import asyncio
 
-from backend.services.watchlist_conversation_service import ambiguous_asset_change_scope, asks_for_watchlist_inventory, asset_mentions, replacement_mentions
+from backend.services.watchlist_conversation_service import ambiguous_asset_change_scope, asks_for_active_workspace_asset, asks_for_watchlist_inventory, asset_mentions, replacement_mentions
 from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor
 from backend.services.finn_v2_responses_answer_verifier import FinnResponsesAnswerVerifier
 
@@ -152,5 +152,38 @@ def test_explicit_watchlist_inventory_reads_owner_entries_without_a_selected_ass
         )
         assert verified.status == "completed", verified.reason
         assert verified.text == "Op je watchlist staan: BTC/USDT, ETH/EUR, AAPL."
+
+    asyncio.run(exercise())
+
+
+def test_active_instrument_reads_selected_asset_even_when_watchlist_is_mentioned():
+    assert asks_for_active_workspace_asset("Welk instrument is nu actief?")
+    assert asks_for_active_workspace_asset("Welke asset is actief in mijn watchlist?")
+    assert not asks_for_watchlist_inventory("Welke asset is actief in mijn watchlist?")
+    assert not asks_for_active_workspace_asset("Welke assets staan op mijn watchlist?")
+    assert not asks_for_active_workspace_asset("Selecteer BTC als actieve asset")
+
+    async def exercise():
+        front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="active-asset-test")
+
+        async def read(call):
+            assert call.read_tools == ("read_active_asset",)
+            assert call.inputs == {}
+            return {"status": "completed", "results": [{
+                "scope": "read_active_asset", "status": "completed",
+                "data": {"symbol": "BTC", "pair": "BTC/USDT"},
+            }]}
+
+        front.reads = read
+        message = "Welke asset is actief in mijn watchlist?"
+        result = await front.run(
+            message=message, instructions="", conversation_context={}, verified_asset="BTC",
+        )
+        assert result.response.answer_kind == "active_asset_context"
+        verified = await FinnResponsesAnswerVerifier().verify(
+            message=message, result=result.response, locale="nl",
+        )
+        assert verified.status == "completed", verified.reason
+        assert verified.text == "Je huidige geselecteerde instrument is BTC/USDT."
 
     asyncio.run(exercise())

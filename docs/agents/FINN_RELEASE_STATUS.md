@@ -4,9 +4,34 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: actieve asset en herformulering na live QA (21 november 2026)
+
+Phase: `LOCAL_VALIDATED_PR_PENDING`. Onafhankelijke beschermde QA op live
+SHA `584966ee1b89737b69b65d972119a1f17c38e113` wees twee van drie
+read-only cases af (workflow 44842768470). De watchlisttrace was hersteld,
+maar een vraag naar het actieve instrument las de watchlist en een korte
+herformulering miste `reformulate_previous_response` in de operationele trace.
+De ingelogde browser liet bij de eerste vraag geen eenduidig actief instrument
+zien, ondanks de BTC-context in de chatkop. De MSFT-Paper-vervolgkaart werkte
+in deze proef; de BTC/USDT-kaart was al afgehandeld.
+
+Een expliciete vraag naar het geselecteerde instrument leest nu rechtstreeks
+de eigenaargebonden actieve asset, ook als de watchlist wordt genoemd. Een
+toolvrije herformulering krijgt alleen de registry-operatie als er een
+afgerond, vrijgegeven vorig antwoord bestaat. De lokale workerproef onthulde
+ook een wisselende botrisicocasus waarin FINN wel botgegevens las maar de
+`evaluate_bot`-tool oversloeg; daarvoor is die evaluator nu verplicht bij een
+expliciete botrisicovraag. Gerichte regressies zijn groen. Volledige
+backend-suite: **5154 passed, 7 skipped**. Echte Responses-provider:
+development **20/20** en regression **109/109**, zonder provider-, schema- of
+timeoutfouten. De geïsoleerde worker-matrix slaagde met **38/38** cases,
+**16/16** actiecontracten, **9/9** lineage, terminale p95 **7526 ms** en
+maximum **8191 ms**; geen Live-bot of niet-toegestane uitvoering. CI,
+deployment en onafhankelijke QA op de nieuwe SHA staan nog open.
+
 ## FINN 3.0: directe leescontracten na beschermde QA (21 november 2026)
 
-Phase: `LOCAL_VALIDATED_PR_PENDING`. De gerichte ingelogde browserproeven op
+Phase: `LIVE_QA_REJECTED`. De gerichte ingelogde browserproeven op
 publieke SHA `dbf0041e1e6c7c29d788302916d2f2747b953e47` slaagden voor de
 MSFT- en BTC/USDT-Paper-vervolgkaart, aangepaste-vraagstatus, paarcontext en
 opruimen van tijdelijke strategieën. De beschermde `coach_feed_triggers`-run
@@ -28,8 +53,9 @@ worker-matrix slaagde met **38/38** cases, **16/16** actiecontracten,
 **9/9** lineage, terminale p95 **7240 ms** en maximum **7330 ms**; geen
 Live-bot of niet-toegestane uitvoering. Twee eerdere runs waren rood door
 wisselende selectoruitkomsten en een trage providerrespons; de laatste
-volledige run en providerherhaling zijn groen. CI op de definitieve kandidaat,
-Auto Deploy en onafhankelijke QA op de nieuwe SHA staan nog open.
+volledige run en providerherhaling zijn groen. CI en Auto Deploy slaagden op
+SHA `584966ee1b89737b69b65d972119a1f17c38e113`; de aanvullende
+beschermde QA wees de twee bovengenoemde read-only gevallen af.
 
 ## FINN 3.0: begeleide koersvaluta na live QA (20 november 2026)
 

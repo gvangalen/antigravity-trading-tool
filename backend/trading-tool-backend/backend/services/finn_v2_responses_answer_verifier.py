@@ -3506,6 +3506,32 @@ class FinnResponsesAnswerVerifier:
                 return FinnResponsesVerifiedAnswer(
                     "completed", answer, "saved_confirmation_readback", evidence,
                 )
+        if result.answer_kind == "active_asset_context":
+            active_read = next((
+                item for item in evidence
+                if item.get("scope") == "read_active_asset"
+                and item.get("status") == "completed"
+                and isinstance(item.get("data"), dict)
+                and item["data"].get("symbol")
+            ), None)
+            language = str(locale or "nl").split("-")[0].lower()
+            if active_read is None:
+                answer = {
+                    "en": "I cannot verify your currently selected instrument right now.",
+                    "de": "Ich kann dein aktuell ausgewähltes Instrument gerade nicht prüfen.",
+                }.get(language, "Ik kan je huidige geselecteerde instrument nu niet verifiëren.")
+                return FinnResponsesVerifiedAnswer(
+                    "completed", answer, "active_asset_context_unavailable", evidence,
+                )
+            data = active_read["data"]
+            label = str(data.get("pair") or data.get("symbol")).upper()
+            answer = {
+                "en": f"Your currently selected instrument is {label}.",
+                "de": f"Dein aktuell ausgewähltes Instrument ist {label}.",
+            }.get(language, f"Je huidige geselecteerde instrument is {label}.")
+            return FinnResponsesVerifiedAnswer(
+                "completed", answer, "active_asset_context", evidence,
+            )
         if result.answer_kind == "watchlist_inventory":
             watchlist_read = next((
                 item for item in evidence
