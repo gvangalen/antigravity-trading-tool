@@ -944,6 +944,78 @@ def runtime_diagnostic(run_id: str) -> Dict[str, Any]:
         return {"diagnostic_status": "unavailable"}
 
 
+ACTIVE_ASSET_CONTEXT_FIELDS = ("symbol", "asset", "quote_currency", "page")
+ACTIVE_ASSET_TOOL_STATUSES = frozenset({"requested", "executing", "completed", "failed"})
+ACTIVE_ASSET_TOOL_ERRORS = frozenset({
+    "asset_not_resolved", "asset_ambiguous", "market_pair_ambiguous",
+    "market_pair_not_supported", "market_quote_not_supported",
+    "tool_timeout", "tool_internal_error", "tool_feature_disabled",
+    "tool_readonly_violation", "tool_run_not_owned", "tool_run_invalid_state",
+})
+
+
+def _active_asset_presence(context: Any) -> Dict[str, bool]:
+    values = context if isinstance(context, dict) else {}
+    return {field: bool(values.get(field)) for field in ACTIVE_ASSET_CONTEXT_FIELDS}
+
+
+async def _load_active_asset_case_diagnostic(run_id: str) -> Dict[str, Any]:
+    """Read only allowlisted metadata for the bound QA owner's failed asset read."""
+    from sqlalchemy import select
+
+    from backend.infrastructure.database import async_session_factory
+    from backend.infrastructure.models import FinnV2Run, FinnV2ToolCall
+
+    owner = int(os.environ["FINN_QA_USER_ID"])
+    async with async_session_factory() as session:
+        run = (
+            await session.execute(
+                select(FinnV2Run)
+                .where(FinnV2Run.id == run_id, FinnV2Run.user_id == owner)
+                .limit(1)
+            )
+        ).scalars().first()
+        if run is None:
+            return {"diagnostic_status": "unavailable"}
+        tool_call = (
+            await session.execute(
+                select(FinnV2ToolCall)
+                .where(
+                    FinnV2ToolCall.run_id == run_id,
+                    FinnV2ToolCall.user_id == owner,
+                    FinnV2ToolCall.tool_name == "read_active_asset",
+                )
+                .order_by(FinnV2ToolCall.started_at.desc(), FinnV2ToolCall.id.desc())
+                .limit(1)
+            )
+        ).scalars().first()
+
+    status = getattr(tool_call, "status", None)
+    codes = getattr(tool_call, "error_codes_json", None)
+    code = codes[0] if isinstance(codes, list) and codes else None
+    return {
+        "diagnostic_status": "available",
+        "workspace_hints_present": _active_asset_presence(run.workspace_hints_json),
+        "client_context_present": _active_asset_presence(run.client_context_json),
+        "read_active_asset": {
+            "call_present": tool_call is not None,
+            "status": status if status in ACTIVE_ASSET_TOOL_STATUSES else "not_recorded",
+            "error_code": code if isinstance(code, str) and code in ACTIVE_ASSET_TOOL_ERRORS else (
+                "other" if code is not None else None
+            ),
+        },
+    }
+
+
+def active_asset_case_diagnostic(run_id: str) -> Dict[str, Any]:
+    try:
+        return _shared_database_loop().run_until_complete(
+            _load_active_asset_case_diagnostic(run_id)
+        )
+    except Exception:
+        return {"diagnostic_status": "unavailable"}
+
+
 async def _load_bot_lineage_diagnostic(run_id: str, conversation_id: str) -> Dict[str, Any]:
     """Report only typed identity-presence flags for a QA-created bot turn.
 
@@ -3019,6 +3091,13 @@ def run_cases(
                 )
         manual_wait_expected = case.get("expected_manual_trade_wait") is True
         result["operation_matches"] = case.get("expected_operation_id") is None or actual == case["expected_operation_id"]
+        if (
+            case.get("case_id") == "feed_runtime_active_asset_read"
+            and case.get("expected_operation_id") == "read_active_asset"
+            and case.get("fixture_action", "read_only") == "read_only"
+            and not result["operation_matches"]
+        ):
+            result["active_asset_case_diagnostic"] = active_asset_case_diagnostic(run_id)
         if manual_wait_expected:
             wait_evidence = manual_trade_wait_evidence(run_id)
             no_proposal = not _proposal_id(terminal)
