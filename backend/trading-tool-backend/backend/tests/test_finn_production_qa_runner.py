@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import importlib.util
 import json
 import os
@@ -29,6 +30,110 @@ def _module():
     assert spec and spec.loader
     spec.loader.exec_module(module)
     return module
+
+
+def _synthetic_feed_manifest(module, root: Path) -> tuple[bytes, str]:
+    payload = {
+        "manifest_id": module.FEED_SOURCE_MANIFEST_ID,
+        "cases": [
+            {"case_id": "feed_runtime_watchlist_read", "message": "synthetic watchlist read",
+             "expected_operation_id": "read_watchlist"},
+            {"case_id": "feed_runtime_watchlist_reformulate", "message": "synthetic reformulation",
+             "expected_operation_id": "reformulate_previous_response"},
+            {"case_id": "feed_runtime_active_asset_read", "message": "synthetic active asset read",
+             "expected_operation_id": "read_active_asset", "workspace_hints": {"page": "asset"}},
+        ],
+    }
+    original = json.dumps(payload, indent=2).encode() + b"\n"
+    (root / f"{module.FEED_SOURCE_MANIFEST_ID}.json").write_bytes(original)
+    return original, hashlib.sha256(original).hexdigest()
+
+
+def test_feed_manifest_version_archives_and_splits_only_active_asset(tmp_path, monkeypatch):
+    module = _module()
+    original, digest = _synthetic_feed_manifest(module, tmp_path)
+    monkeypatch.setattr(module, "FEED_SOURCE_MANIFEST_SHA256", digest)
+
+    result = module.version_feed_runtime_manifest(manifest_root=tmp_path, source_sha256=digest)
+    archive = tmp_path / "archive" / f"{module.FEED_SOURCE_MANIFEST_ID}.v1.json"
+    target = tmp_path / f"{module.FEED_VERSIONED_MANIFEST_ID}.json"
+    versioned = json.loads(target.read_bytes())
+    source = json.loads(original)
+    assert archive.read_bytes() == original
+    assert (tmp_path / f"{module.FEED_SOURCE_MANIFEST_ID}.json").read_bytes() == original
+    assert versioned["cases"][:2] == source["cases"][:2]
+    assert [case["case_id"] for case in versioned["cases"][2:]] == [
+        "feed_runtime_active_asset_selected_pair", "feed_runtime_active_asset_no_context",
+    ]
+    selected, no_context = versioned["cases"][2:]
+    assert selected["workspace_hints"] == {
+        "symbol": "BTC", "asset": "BTC", "quote_currency": "USDT", "page": "asset",
+    }
+    assert selected["expected_operation_id"] == "read_active_asset"
+    assert selected["expected_answer_terms"] == ["BTC/USDT"]
+    assert no_context["workspace_hints"] == {}
+    assert no_context["client_context"] == {}
+    assert no_context["expected_operation_id"] is None
+    assert no_context["expected_active_asset_unavailable"] is True
+    assert result["source_cases"] == 3 and result["versioned_cases"] == 4
+    assert set(result) == {
+        "source_manifest_id", "source_sha256", "archive_sha256",
+        "versioned_manifest_id", "versioned_sha256", "source_cases", "versioned_cases",
+    }
+    assert result == module.version_feed_runtime_manifest(manifest_root=tmp_path, source_sha256=digest)
+
+
+def test_feed_manifest_version_rejects_hash_mismatch_and_target_conflict(tmp_path, monkeypatch):
+    module = _module()
+    _, digest = _synthetic_feed_manifest(module, tmp_path)
+    monkeypatch.setattr(module, "FEED_SOURCE_MANIFEST_SHA256", digest)
+    with pytest.raises(ValueError, match="manifest_source_hash_mismatch"):
+        module.version_feed_runtime_manifest(manifest_root=tmp_path, source_sha256="0" * 64)
+    assert not (tmp_path / "archive").exists()
+    target = tmp_path / f"{module.FEED_VERSIONED_MANIFEST_ID}.json"
+    target.write_text("conflict")
+    with pytest.raises(ValueError, match="manifest_version_conflict"):
+        module.version_feed_runtime_manifest(manifest_root=tmp_path, source_sha256=digest)
+    assert target.read_text() == "conflict"
+
+
+def test_active_asset_unavailable_evidence_controls_case_verdict():
+    module = _module()
+    base = {
+        "create_http_status": 200,
+        "terminal": {"status": "completed"},
+        "polling_sse_equal": True,
+        "operation_matches": True,
+        "active_asset_unavailable_evidence": {"passed": True},
+    }
+    assert module.classify_case_failure(base) is None
+    assert module.classify_case_failure({
+        **base, "active_asset_unavailable_evidence": {"passed": False},
+    }) == "product"
+
+
+def test_manifest_version_profile_does_not_call_product_or_auth(tmp_path, monkeypatch):
+    module = _module()
+    _, digest = _synthetic_feed_manifest(module, tmp_path)
+    monkeypatch.setattr(module, "FEED_SOURCE_MANIFEST_SHA256", digest)
+    args = types.SimpleNamespace(
+        release_sha="a" * 40, run_label="synthetic-version", runner_revision="b" * 40,
+        report_path=str(tmp_path / "report.json"), fixture_namespace=None,
+        workflow_run_id="synthetic", profile="manifest_version",
+        manifest_id=module.FEED_VERSIONED_MANIFEST_ID, manifest_bundle_path=None,
+        manifest_root=str(tmp_path), checkout=str(tmp_path),
+    )
+    monkeypatch.setattr(module, "parse_args", lambda: args)
+    monkeypatch.setattr(module, "release_identity", lambda **_: pytest.fail("product preflight called"))
+    monkeypatch.setattr(module, "issue_fixture_token", lambda **_: pytest.fail("token route called"))
+    assert module.main() == 0
+    report = json.loads((tmp_path / "report.json").read_text())
+    assert report["outcome"] == "passed"
+    assert report["qa_status"] == "MANIFEST_VERSIONED"
+    assert report["cases"] == []
+    assert report["release_identity"] == {}
+    assert report["auth_preflight"] == {}
+    assert report["manifest_version"]["versioned_cases"] == 4
 
 
 def test_failed_active_asset_diagnostic_is_owner_scoped_and_value_free(monkeypatch):

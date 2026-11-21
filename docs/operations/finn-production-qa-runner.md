@@ -130,6 +130,14 @@ confirmation, after execution, and after idempotency replay.
 - `manifest_key` publishes only the server's manifest-encryption public key in
   a sanitized artifact. The private key remains in the server secret directory.
   The runner never accepts plaintext manifests through workflow inputs.
+- `manifest_version` is an explicit QA-only maintenance profile. It requires
+  `manifest_id=qa-feed-runtime-v2-20261121`, an empty bundle, and both fixture
+  flags off. On the protected host it verifies the frozen source manifest hash,
+  archives the original bytes without overwriting them, and derives a four-case
+  read-only manifest by splitting only the active-asset case into selected-pair
+  and no-context cases. It makes no product, auth, or fixture calls. The artifact
+  contains only manifest IDs, hashes, and case counts; run this profile before
+  selecting the new manifest for a later independent matrix.
 - Runtime cases remain read-only unless the active QA goal explicitly authorizes
   them and the protected workflow run sets the relevant per-run authorization
   input. Those values are exported only to the runner subprocess; they do not
@@ -144,12 +152,14 @@ confirmation, after execution, and after idempotency replay.
 
 ## Preflight
 
-Every profile first verifies the exact requested SHA against the protected
+Every product-test profile first verifies the exact requested SHA against the protected
 checkout and release marker, public backend health, and frontend build info. It
 then validates DNS/connect/TLS/client-timeout/server-response outcomes and uses
 the in-memory token only for `/api/auth/me`. A `599` is always classified as
 `dns`, `connect`, `tls`, `clienttimeout`, or `client`; SSH failures are
 separately reported as `ssh` by the workflow artifact.
+The `manifest_version` maintenance profile is the exception: it validates only
+the sealed source hash and shape and never requests a product endpoint or token.
 
 `auth_preflight` stops there. It is the only profile used to validate this
 operational provision; it does not submit a FINN content case.
