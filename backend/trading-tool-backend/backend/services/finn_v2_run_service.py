@@ -1998,6 +1998,27 @@ async def _await_selection_or_lifecycle(selection_waiter, lifecycle, *, timeout:
 
 class FinnV2RunService:
     @staticmethod
+    def _verified_direct_read_operation(exchange: Dict[str, Any]) -> Optional[str]:
+        """Attribute a direct read only when its completed owner-read is unambiguous."""
+        calls = exchange.get("tool_trace") or []
+        if not calls or any(
+            str(call.get("name") or "").endswith("_proposal")
+            for call in calls if isinstance(call, dict)
+        ):
+            return None
+        scopes = {
+            str(result.get("scope") or "")
+            for call in calls if isinstance(call, dict)
+            for result in (call.get("result") or {}).get("results") or []
+            if isinstance(result, dict) and result.get("status") == "completed"
+        }
+        if scopes == {"read_watchlist"}:
+            return "read_watchlist"
+        if scopes == {"read_active_asset"}:
+            return "read_active_asset"
+        return None
+
+    @staticmethod
     def _read_repair_has_budget(remaining: float | None, *, explain_limit: bool) -> bool:
         # The provider loop retains its own terminal-persistence reserve.
         return remaining is None or remaining > (7 if explain_limit else 8)
@@ -2223,6 +2244,19 @@ class FinnV2RunService:
             await self.runtime_contracts.record_final_operation(
                 run_id=run_id, operation_id="read_active_setup", mode="READ", reason=None,
             )
+        if (
+            status == "completed"
+            and (contract_before_terminal.state_json or {}).get("initial_operation_id") is None
+            and (contract_before_terminal.state_json or {}).get("final_operation_id") is None
+        ):
+            direct_read_operation = self._verified_direct_read_operation(exchange)
+            if direct_read_operation is not None:
+                await self.runtime_contracts.record_initial_intent(
+                    run_id=run_id, operation_id=direct_read_operation, requested_mode="READ",
+                )
+                await self.runtime_contracts.record_final_operation(
+                    run_id=run_id, operation_id=direct_read_operation, mode="READ", reason=None,
+                )
         task_conversations = getattr(self, "conversations", None)
         record_open_task = getattr(task_conversations, "record_setup_strategy_score_open_step", None)
         record_score_task = getattr(task_conversations, "record_setup_strategy_score_read", None)
