@@ -186,7 +186,7 @@ def generate_weekly_report(user_id: int):
     finally:
         conn.close()
 
-    publish_periodic_report_ready(user_id, "weekly", today)
+    publish_periodic_report_ready(user_id, "weekly", today, report)
 
     return {
         "status": "ok",

@@ -41,10 +41,12 @@ test("historical handled missing-score card remains discussable without reopenin
   assert.equal(canUpdateFeedStatus(card), false);
 });
 
-test("active cards remain discussable while old reports do not start a chat", () => {
+test("verified report attention can be discussed while generic reports remain links", () => {
   assert.equal(canDiscussFeedItem({ event_type: "bot_decision", status: "read" }, false), true);
   assert.equal(canUpdateFeedStatus({ event_type: "bot_decision", status: "read" }), true);
   assert.equal(canDiscussFeedItem({ event_type: "daily_report_ready", status: "read" }, true), false);
+  assert.equal(canDiscussFeedItem({ event_type: "daily_report_ready", status: "read",
+    evidence: { attention_kind: "benchmark_unavailable", attention_pair: "BTC/USDT" } }, false), true);
 });
 
 test("only a verified filled Paper sale offers a reflection", () => {

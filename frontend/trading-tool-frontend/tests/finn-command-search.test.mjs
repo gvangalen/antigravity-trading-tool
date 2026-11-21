@@ -57,6 +57,10 @@ test("feed discussion names the selected event and exact pair", () => {
   assert.doesNotMatch(bot, /planupdate/);
   assert.match(coachFeedDiscussionQuestion({ event_type: "weekly_reflection",
     title: "Weekreflectie", evidence: { week_start: "2026-11-09" } }), /2026-11-09/);
+  const report = coachFeedDiscussionQuestion({ event_type: "daily_report_ready",
+    title: "Dagrapport", evidence: { report_date: "2026-11-20", attention_pair: "BTC\/USDT" } });
+  assert.match(report, /BTC\/USDT/);
+  assert.match(report, /momentopname/);
 });
 
 test("feed discussion keeps the selected asset and exact market", () => {

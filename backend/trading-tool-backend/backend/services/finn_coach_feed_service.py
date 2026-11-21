@@ -292,6 +292,26 @@ def _plan_score_phrase(evidence: dict, locale: str) -> str:
     return f"{score_text}: {displayed}; {bound_text}: {condition}."
 
 
+def _report_attention_copy(evidence: dict, locale: str) -> str:
+    pair = str(evidence.get("attention_pair") or "").strip().upper()
+    if not re.fullmatch(r"[A-Z0-9][A-Z0-9._-]{0,19}(?:/[A-Z]{2,12})?", pair):
+        return ""
+    kind = evidence.get("attention_kind")
+    if kind == "benchmark_unavailable":
+        return {
+            "nl": f" Aandachtspunt: de benchmark van {pair} was in deze momentopname niet compleet. Controleer de ontbrekende bron voordat je de score gebruikt.",
+            "en": f" Attention: {pair}'s benchmark was incomplete in this snapshot. Check the missing source before using the score.",
+            "de": f" Hinweis: Der Benchmark für {pair} war in dieser Momentaufnahme unvollständig. Prüfe die fehlende Quelle, bevor du den Score nutzt.",
+        }[locale]
+    if kind == "benchmark_available":
+        return {
+            "nl": f" Aandachtspunt: de benchmark van {pair} was in deze momentopname beschikbaar. Bespreek of je opgeslagen setupvoorwaarden daarbij passen.",
+            "en": f" Attention: {pair}'s benchmark was available in this snapshot. Review whether your saved setup conditions fit it.",
+            "de": f" Hinweis: Der Benchmark für {pair} war in dieser Momentaufnahme verfügbar. Prüfe, ob deine gespeicherten Setupbedingungen dazu passen.",
+        }[locale]
+    return ""
+
+
 def _fallback(kind: str, subject: str, evidence: dict, *, focus: str = "brief") -> dict:
     name = str(subject or "").strip()[:120]
     if kind == "watchlist_added":
@@ -380,9 +400,9 @@ def _fallback(kind: str, subject: str, evidence: dict, *, focus: str = "brief") 
     if kind == "daily_report_ready":
         report_date = str(evidence.get("report_date") or "")[:10]
         return {
-            "nl": {"title": "Je dagrapport staat klaar", "body": f"Dagrapport van {report_date}. Lees wat er is veranderd en wat volgens je plan aandacht vraagt."},
-            "en": {"title": "Your daily report is ready", "body": f"Daily report for {report_date}. See what changed and what needs attention in your plan."},
-            "de": {"title": "Dein Tagesbericht ist bereit", "body": f"Tagesbericht für {report_date}. Lies, was sich geändert hat und was in deinem Plan Aufmerksamkeit braucht."},
+            "nl": {"title": "Je dagrapport staat klaar", "body": f"Dagrapport van {report_date}. Lees wat er is veranderd en wat volgens je plan aandacht vraagt." + _report_attention_copy(evidence, "nl")},
+            "en": {"title": "Your daily report is ready", "body": f"Daily report for {report_date}. See what changed and what needs attention in your plan." + _report_attention_copy(evidence, "en")},
+            "de": {"title": "Dein Tagesbericht ist bereit", "body": f"Tagesbericht für {report_date}. Lies, was sich geändert hat und was in deinem Plan Aufmerksamkeit braucht." + _report_attention_copy(evidence, "de")},
         }
     if kind == "weekly_reflection":
         try:
@@ -475,9 +495,9 @@ def _fallback(kind: str, subject: str, evidence: dict, *, focus: str = "brief") 
         }
         title = titles.get(report_type, titles["weekly"])
         return {
-            "nl": {"title": title[0], "body": "Bekijk de terugblik en waar je de komende periode op let."},
-            "en": {"title": title[1], "body": "Review what happened and what to watch in the coming period."},
-            "de": {"title": title[2], "body": "Sieh dir den Rückblick an und worauf du in der nächsten Zeit achten solltest."},
+            "nl": {"title": title[0], "body": "Bekijk de terugblik en waar je de komende periode op let." + _report_attention_copy(evidence, "nl")},
+            "en": {"title": title[1], "body": "Review what happened and what to watch in the coming period." + _report_attention_copy(evidence, "en")},
+            "de": {"title": title[2], "body": "Sieh dir den Rückblick an und worauf du in der nächsten Zeit achten solltest." + _report_attention_copy(evidence, "de")},
         }
     if kind == "plan_match":
         body = {
@@ -758,7 +778,7 @@ class FinnCoachFeedService:
             "copy_json": _json(_fallback(event_type, subject, facts)),
             "copy_source": ("verified_facts" if event_type in {
                                 "position_risk", "weekly_reflection", "improvement_suggestion",
-                                "bot_decision", "watchlist_added", "analysis_ready", "strategy_next_step", "paper_next_step"} or event_type == "data_blocked" and facts.get("bot_id")
+                                "bot_decision", "watchlist_added", "analysis_ready", "strategy_next_step", "paper_next_step", "daily_report_ready", "periodic_report_ready"} or event_type == "data_blocked" and facts.get("bot_id")
                             else "fact_fallback"),
             "expires_at": expires_at,
         })

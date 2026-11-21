@@ -134,7 +134,7 @@ def generate_quarterly_report(user_id: int):
     finally:
         conn.close()
 
-    publish_periodic_report_ready(user_id, "quarterly", today)
+    publish_periodic_report_ready(user_id, "quarterly", today, report)
 
     return {
         "status": "ok",

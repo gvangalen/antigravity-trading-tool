@@ -167,7 +167,7 @@ def generate_monthly_report(user_id: int):
     finally:
         conn.close()
 
-    publish_periodic_report_ready(user_id, "monthly", today)
+    publish_periodic_report_ready(user_id, "monthly", today, report)
 
     return {
         "status": "ok",

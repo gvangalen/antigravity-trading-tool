@@ -6,12 +6,14 @@ from datetime import date, datetime, timezone
 logger = logging.getLogger(__name__)
 
 
-def publish_periodic_report_ready(user_id: int, report_type: str, report_date: date) -> None:
+def publish_periodic_report_ready(user_id: int, report_type: str, report_date: date,
+                                  report: dict | None = None) -> None:
     if report_type not in {"weekly", "monthly", "quarterly"}:
         raise ValueError("Unsupported report type")
 
     from backend.infrastructure.database import async_session_factory, run_celery_coroutine
     from backend.services.finn_coach_feed_service import FinnCoachFeedService
+    from backend.services.finn_report_attention import report_attention
 
     async def publish():
         async with async_session_factory() as session:
@@ -23,7 +25,8 @@ def publish_periodic_report_ready(user_id: int, report_type: str, report_date: d
                 subject_id=f"{report_type}:{report_date.isoformat()}",
                 subject=report_type,
                 symbol=None,
-                evidence={"report_type": report_type, "report_date": report_date.isoformat()},
+                evidence={"report_type": report_type, "report_date": report_date.isoformat(),
+                          **report_attention(report)},
                 source_observed_at=datetime.now(timezone.utc),
                 priority=2,
                 revision=report_date.isoformat(),

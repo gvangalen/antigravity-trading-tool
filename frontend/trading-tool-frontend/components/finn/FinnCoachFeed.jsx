@@ -210,7 +210,7 @@ export default function FinnCoachFeed({ onDiscuss }) {
                   <h3 className="text-base font-bold text-slate-950 dark:text-slate-50">{title}</h3>
                   {presentation.badge ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{presentation.badge}</span> : null}
                 </div>
-                {!isReport && presentation.description ? <p className="mt-0.5 line-clamp-2 text-sm text-slate-600 dark:text-slate-300">{presentation.description}</p> : null}
+                {presentation.description ? <p className="mt-0.5 line-clamp-2 text-sm text-slate-600 dark:text-slate-300">{presentation.description}</p> : null}
                 <time className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400" dateTime={moment.value}>
                   {moment.label}
                 </time>

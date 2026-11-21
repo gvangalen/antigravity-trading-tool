@@ -54,6 +54,20 @@ from backend.services.platform_metrics import increment_execution_safety_counter
 logger = logging.getLogger(__name__)
 
 
+def _selected_report_scope(item: dict | None) -> tuple[dict[str, str], str | None]:
+    """Use only the already owner-verified feed item as a dated report target."""
+    if not item or item.get("event_type") not in {"daily_report_ready", "periodic_report_ready"}:
+        return {}, None
+    facts = item.get("evidence") or {}
+    report_type = str(facts.get("report_type") or "")
+    report_date = str(facts.get("report_date") or "")
+    if report_type not in {"daily", "weekly", "monthly", "quarterly"} or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", report_date):
+        return {}, None
+    pair = str(facts.get("attention_pair") or "").upper()
+    asset = pair.split("/", 1)[0] if re.fullmatch(r"[A-Z0-9][A-Z0-9._-]{0,19}(?:/[A-Z]{2,12})?", pair) else None
+    return {"report_type": f"{report_type}_reports", "report_date": report_date}, asset
+
+
 class FinnV2ToolExecutionService:
     def __init__(self, session: AsyncSession, flag_service: Optional[FinnV2FlagService] = None):
         self.session = session
@@ -744,8 +758,20 @@ class FinnV2ToolExecutionService:
                 environment=selector.get("environment"),
             )
         if tool_name == "read_latest_report":
-            asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
-            return await self.report_adapter.execute(user_id=user_id, asset=asset_state["asset"], selector=selector)
+            feed_context = getattr(run, "client_context_json", {}) or {}
+            feed_item_id = str(feed_context.get("feed_item_id") or "").strip()
+            selected_asset = None
+            if feed_item_id and feed_context.get("feed_draft_edited") is not True:
+                from backend.services.finn_coach_feed_service import FinnCoachFeedService
+                selected = await FinnCoachFeedService(self.session).detail(
+                    user_id=user_id, item_id=feed_item_id,
+                )
+                selected_scope, selected_asset = _selected_report_scope(selected)
+                selector = {**selector, **selected_scope}
+            if selected_asset is None:
+                asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
+                selected_asset = asset_state["asset"]
+            return await self.report_adapter.execute(user_id=user_id, asset=selected_asset, selector=selector)
         if tool_name == "read_review_history":
             message_review_id = self.review_adapter.requested_review_id(getattr(run, "message", ""))
             verified_review_id = selector.get("_verified_review_id")
