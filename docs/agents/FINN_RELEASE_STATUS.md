@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: rapportmomentopname versus actuele botcheck (21 november 2026)
 
-Phase: `LOCAL_VALIDATED_PR_PENDING`. Branch
+Phase: `LIVE_DEPLOYED_QA_PENDING`. Branch
 `codex/finn-bot-decision-recency-release`, gebaseerd op main
 `a0e4a8754438948788804dba8a3d8702823ae3cb`. De vorige
 rapportaandachtrelease kreeg in de gerichte ingelogde QA `NOT_ACCEPTED`
@@ -45,7 +45,14 @@ read-only en polling/SSE kwamen overeen. Artifact SHA-256
 De echte provider-regressie slaagde **109/109**, zonder provider-, schema-,
 parse-, validatie- of timeoutfouten; artifact SHA-256
 `9a954d0bd21b8143c1d110a5903bab1bf6ed5024df005b3793d2c44dbd3d2574`.
-CI, Auto Deploy, publieke SHA-pariteit en onafhankelijke ingelogde QA staan open.
+PR [#1236](https://github.com/gvangalen/antigravity-trading-tool/pull/1236)
+en kandidaat-CI `44886677768` slaagden. De PR is gemerged als
+`2ec1ecf60e136601fbab36b313375e71853b39b9`; hoofdbranch-CI
+`44887856277` en Auto Deploy `44888337645` slaagden. Publieke backend-health
+en frontend-build-info gaven beide HTTP 200 en exact die SHA. Deze
+statusupdate maakt zelf een nieuwe hoofdbranch-SHA; Build wacht de daarop
+volgende CI, Auto Deploy en publieke SHA-pariteit af. Onafhankelijke ingelogde
+QA voor deze botbeslissing/rapportvergelijking staat nog open.
 
 ## FINN 3.0: rapportaandacht en gerichte bespreking (21 november 2026)
 
