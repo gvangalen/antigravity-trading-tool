@@ -89,9 +89,12 @@ def _same_moment(claim: tuple[datetime, bool], observed: datetime) -> bool:
     return stated == (expected if has_seconds else expected.replace(second=0))
 
 
-def _bot_decision_clocks_supported(answer: str, evidence: tuple[dict[str, Any], ...]) -> bool:
+def _bot_decision_clocks_supported(
+    answer: str, evidence: tuple[dict[str, Any], ...], *, question: str | None = None,
+) -> bool:
     """Check bot clocks in prose against saved report or current decision rows."""
     decisions: list[tuple[int | None, str, datetime]] = []
+    current_decisions: list[tuple[int | None, str, datetime]] = []
     for item in evidence:
         if item.get("status") != "completed" or not isinstance(item.get("data"), dict):
             continue
@@ -103,7 +106,9 @@ def _bot_decision_clocks_supported(answer: str, evidence: tuple[dict[str, Any], 
                     continue
                 instant = _utc(row.get("decision_at"))
                 if instant:
-                    decisions.append((row.get("bot_id"), str(row.get("symbol") or "").upper(), instant))
+                    decision = (row.get("bot_id"), str(row.get("symbol") or "").upper(), instant)
+                    decisions.append(decision)
+                    current_decisions.append(decision)
         elif item.get("scope") == "read_latest_report":
             snapshot = data.get("score_source_snapshot") or {}
             report = (snapshot.get("report_v2") or {}) if isinstance(snapshot, dict) else {}
@@ -119,7 +124,10 @@ def _bot_decision_clocks_supported(answer: str, evidence: tuple[dict[str, Any], 
         return True
     marker = re.compile(r"\b(?:bot\w*|beoordeling\w*|besluit\w*|beslissing\w*)\b", re.I)
     invalid = re.compile(r"\b(?:fout|onjuist|incorrect|wrong|not\s+correct|falsch)\b", re.I)
-    for clause in re.split(r"(?<=[.!?])\s+|\n+|;\s*", answer):
+    current_requested = bool(question and re.search(r"\b(?:bot\w*|besliss\w*)\b", question, re.I)
+                             and re.search(r"\b(?:actuele|huidige|laatste|nieuwste|vandaag|nu|latest|current|"
+                                           r"(?:bot)?check\w*)\b", question, re.I))
+    for clause in re.split(r"(?<=[.!?])\s+|\n+|;\s*|,\s*(?:maar|terwijl|but|however)\s+", answer, flags=re.I):
         subject = marker.search(clause)
         if subject is None:
             continue
@@ -131,6 +139,19 @@ def _bot_decision_clocks_supported(answer: str, evidence: tuple[dict[str, Any], 
         relevant = named or relevant
         if not relevant:
             continue
+        # A report can correctly show its own earlier bot snapshot. An
+        # unqualified claim about the latest/current decision must instead
+        # match the owner-scoped decision read for that bot.
+        latest_claim = bool(re.search(r"\b(?:laatste|nieuwste|actuele|huidige|latest|current)\b", clause, re.I))
+        report_claim = bool(re.search(r"\b(?:dagrapport|ochtendrapport|rapportmomentopname|rapport)\b", clause, re.I))
+        if (latest_claim or current_requested) and not report_claim:
+            current = [(bot_id, symbol, at) for bot_id, symbol, at in current_decisions
+                       if not ids or bot_id in ids]
+            named_current = [(bot_id, symbol, at) for bot_id, symbol, at in current
+                             if symbol and re.search(rf"\b{re.escape(symbol)}\b", clause, re.I)]
+            relevant = named_current or current
+            if not relevant:
+                return False
         following = clause[subject.end():]
         dated = list(_DATED_MOMENT.finditer(following))
         if dated:
@@ -264,7 +285,7 @@ def current_source_moments_supported(
             diagnostics.append(rule)
         return False
 
-    if not _bot_decision_clocks_supported(answer, evidence):
+    if not _bot_decision_clocks_supported(answer, evidence, question=question):
         return reject("bot_decision_clock_mismatch")
 
     market_rows: dict[tuple[str, str], datetime] = {}

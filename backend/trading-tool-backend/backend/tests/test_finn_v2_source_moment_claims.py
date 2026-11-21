@@ -67,6 +67,50 @@ def test_bot_decision_clocks_match_saved_report_or_latest_owner_read():
         "report_bot_decision": "2026-11-16T05:15:18+01:00",
         "current_bot_decision": "2026-11-16T09:45:18+01:00",
     }
+
+
+def test_report_decision_cannot_be_called_latest_when_later_bot_checks_were_read():
+    evidence = (
+        {"scope": "read_latest_report", "status": "completed", "data": {
+            "score_source_snapshot": {"report_v2": {"automation": {"bots": [
+                {"bot_id": 129, "symbol": "BTC", "latest_decision": {"at": "2026-11-20T04:15:18"}},
+                {"bot_id": 130, "symbol": "AAPL", "latest_decision": {"at": "2026-11-20T04:15:17"}},
+            ]}}},
+        }},
+        {"scope": "read_review_history", "status": "completed", "data": {
+            "latest_bot_decisions": [
+                {"bot_id": 129, "symbol": "BTC", "decision_at": "2026-11-20T19:15:17+00:00"},
+                {"bot_id": 130, "symbol": "AAPL", "decision_at": "2026-11-20T19:15:17+00:00"},
+            ],
+        }},
+    )
+    assert current_source_moments_supported(
+        "De AAPL-botbeslissing in de rapportmomentopname was om 05:15 CET. "
+        "De nieuwste AAPL-botbeslissing was om 20:15 CET.", evidence,
+    )
+    assert not current_source_moments_supported(
+        "De nieuwste AAPL-botbeslissing was om 05:15 CET.", evidence,
+    )
+    assert not current_source_moments_supported(
+        "De laatste BTC-botcheck was om 05:15 CET.", evidence,
+    )
+    assert not current_source_moments_supported(
+        "Het dagrapport toont de AAPL-bot om 05:15 CET, maar de laatste AAPL-botcheck was om 05:15 CET.",
+        evidence,
+    )
+    assert not current_source_moments_supported(
+        "De AAPL-botbeslissing was om 05:15 CET.", evidence,
+        question="Vergelijk mijn actuele AAPL- en BTC-botchecks met het nachtrapport.",
+    )
+    assert current_source_moments_supported(
+        "De AAPL-botbeslissing in de rapportmomentopname was om 05:15 CET. "
+        "De latere AAPL-botcheck was om 20:15 CET.", evidence,
+        question="Vergelijk mijn actuele AAPL- en BTC-botchecks met het nachtrapport.",
+    )
+    assert not current_source_moments_supported(
+        "De laatste AAPL-botbeslissing was om 05:15 CET.", evidence[:1],
+    )
+
 from backend.services.finn_v2_run_service import _minimal_read_answer
 from types import SimpleNamespace
 
