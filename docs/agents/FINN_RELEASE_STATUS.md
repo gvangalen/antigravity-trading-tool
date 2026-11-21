@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: historische forward returns in analyse (21 november 2026)
 
-Phase: `LOCAL_VALIDATED_CANDIDATE`. Branch
+Phase: `LIVE_DEPLOYED_QA_PENDING_FINAL_IDENTITY`. Branch
 `codex/finn-forward-returns-release-20261121`, implementation SHA `a92095642`.
 FINN has a read-only `get_forward_returns` tool for the existing stored week,
 month, quarter and year return rows. The current period is labelled partial.
@@ -34,8 +34,14 @@ with zero provider, schema, parse, validation or timeout failures. A synthetic
 BTC/USDT historical-return conversation completed with both read scopes and
 no proposal; a synthetic BTC chart conversation included the new source.
 The rebased code passed all five PR CI jobs in workflow `44920300908`; the
-status-only rebase requires a new candidate CI. Auto Deploy, public identity
-checks and independent authenticated QA are pending.
+final candidate with release evidence passed all five jobs in `44921384631`.
+[PR #1248](https://github.com/gvangalen/antigravity-trading-tool/pull/1248)
+merged as `5b2127b2a85e9dfb3b43caf04480a68db9f40d53`. Main CI
+`44921975923` passed all five jobs and Auto Deploy `44922523102` succeeded.
+Public backend `/api/health` and frontend `/build-info.json` returned HTTP
+200 and both reported that exact merge SHA. This status-only update creates
+a later main SHA; Build must wait for its CI, last Auto Deploy, and public
+backend/frontend SHA parity before independent authenticated QA.
 
 ## FINN 3.0: reportkaart leest actuele benchmark apart (21 november 2026)
 
