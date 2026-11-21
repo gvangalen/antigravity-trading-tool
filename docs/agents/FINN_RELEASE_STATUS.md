@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: directe leescontracten na beschermde QA (21 november 2026)
 
-Phase: `LOCAL_VALIDATION_IN_PROGRESS`. De gerichte ingelogde browserproeven op
+Phase: `LOCAL_VALIDATED_PR_PENDING`. De gerichte ingelogde browserproeven op
 publieke SHA `dbf0041e1e6c7c29d788302916d2f2747b953e47` slaagden voor de
 MSFT- en BTC/USDT-Paper-vervolgkaart, aangepaste-vraagstatus, paarcontext en
 opruimen van tijdelijke strategieën. De beschermde `coach_feed_triggers`-run
@@ -21,8 +21,15 @@ trace als de voltooide owner-read eenduidig uitsluitend `read_watchlist` of
 `read_active_asset` bevat en er geen voorstel-toolcall is. Dit volgt de
 bestaande bewijsgebonden behandeling van `read_active_setup`; antwoorden,
 fixturedata en uitvoeringsgrenzen blijven ongewijzigd. Gerichte regressie:
-**2 passed**. Volledige lokale releasecontroles, CI, deploy en onafhankelijke
-QA op de nieuwe SHA staan nog open.
+**2 passed**. Volledige backend-suite: **5151 passed, 7 skipped**. Echte
+Responses-provider: development **20/20** en geisoleerde regression
+**109/109**, zonder provider-, schema- of timeoutfouten. De geisoleerde
+worker-matrix slaagde met **38/38** cases, **16/16** actiecontracten,
+**9/9** lineage, terminale p95 **7240 ms** en maximum **7330 ms**; geen
+Live-bot of niet-toegestane uitvoering. Twee eerdere runs waren rood door
+wisselende selectoruitkomsten en een trage providerrespons; de laatste
+volledige run en providerherhaling zijn groen. CI op de definitieve kandidaat,
+Auto Deploy en onafhankelijke QA op de nieuwe SHA staan nog open.
 
 ## FINN 3.0: begeleide koersvaluta na live QA (20 november 2026)
 
