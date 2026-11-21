@@ -31,6 +31,111 @@ def _module():
     return module
 
 
+def test_failed_active_asset_diagnostic_is_owner_scoped_and_value_free(monkeypatch):
+    module = _module()
+    from backend.infrastructure import database
+
+    monkeypatch.setenv("FINN_QA_USER_ID", "42")
+    private_value = "private-fixture-value"
+    statements = []
+
+    class Result:
+        def __init__(self, row):
+            self.row = row
+
+        def scalars(self):
+            return self
+
+        def first(self):
+            return self.row
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+        async def execute(self, statement):
+            sql = str(statement)
+            params = tuple(statement.compile().params.values())
+            statements.append((sql, params))
+            assert 42 in params and "qa-run" in params
+            if "finn_v2_tool_calls" in sql:
+                assert "read_active_asset" in params
+                return Result(types.SimpleNamespace(
+                    status="failed", error_codes_json=["asset_not_resolved", private_value],
+                ))
+            return Result(types.SimpleNamespace(
+                workspace_hints_json={"symbol": private_value, "page": "asset"},
+                client_context_json={"quote_currency": private_value, "owner_id": private_value},
+            ))
+
+    monkeypatch.setattr(database, "async_session_factory", Session)
+    diagnostic = asyncio.run(module._load_active_asset_case_diagnostic("qa-run"))
+    assert diagnostic == {
+        "diagnostic_status": "available",
+        "workspace_hints_present": {
+            "symbol": True, "asset": False, "quote_currency": False, "page": True,
+        },
+        "client_context_present": {
+            "symbol": False, "asset": False, "quote_currency": True, "page": False,
+        },
+        "read_active_asset": {
+            "call_present": True, "status": "failed", "error_code": "asset_not_resolved",
+        },
+    }
+    assert private_value not in json.dumps(diagnostic)
+    assert len(statements) == 2
+    assert all("user_id" in sql for sql, _ in statements)
+
+
+def test_failed_active_asset_diagnostic_allowlists_tool_metadata(monkeypatch):
+    module = _module()
+    from backend.infrastructure import database
+
+    monkeypatch.setenv("FINN_QA_USER_ID", "42")
+    tool_row = types.SimpleNamespace(
+        status="private-status", error_codes_json=["private-error"],
+    )
+
+    class Result:
+        def __init__(self, row):
+            self.row = row
+
+        def scalars(self):
+            return self
+
+        def first(self):
+            return self.row
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+        async def execute(self, statement):
+            if "finn_v2_tool_calls" in str(statement):
+                return Result(tool_row)
+            return Result(types.SimpleNamespace(
+                workspace_hints_json={}, client_context_json={},
+            ))
+
+    monkeypatch.setattr(database, "async_session_factory", Session)
+    diagnostic = asyncio.run(module._load_active_asset_case_diagnostic("qa-run"))
+    assert diagnostic["read_active_asset"] == {
+        "call_present": True, "status": "not_recorded", "error_code": "other",
+    }
+    assert "private" not in json.dumps(diagnostic)
+    tool_row = None
+    missing_call = asyncio.run(module._load_active_asset_case_diagnostic("qa-run"))
+    assert missing_call["read_active_asset"] == {
+        "call_present": False, "status": "not_recorded", "error_code": None,
+    }
+
+
 def test_manual_trade_candle_diagnostics_are_bounded_and_redacted():
     module = _module()
     samples = (
