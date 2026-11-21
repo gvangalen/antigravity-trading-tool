@@ -10705,6 +10705,7 @@ def test_model_led_read_uses_registry_tool_without_a_second_tool_selector():
 
 @pytest.mark.parametrize("message, tool_name", [
     ("Mijn trader profiel die kan je toch gewoon ophalen?", "get_my_profile_and_risk_style"),
+    ("Wat kun je over mijn traderprofiel vertellen?", "get_my_profile_and_risk_style"),
     ("Kan je me wat vertellen over mijn profiel?", "get_my_profile_and_risk_style"),
     ("Kan je mijn portfolio bekijken?", "get_portfolio_and_exposure"),
     ("Maar als ik je nu een vraag stel over mijn portfolio kan je die toch ook beantwoorden?",
