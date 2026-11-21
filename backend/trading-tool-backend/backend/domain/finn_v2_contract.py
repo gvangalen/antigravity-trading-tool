@@ -149,6 +149,7 @@ class InformationScope(str, Enum):
     ACTIVE_ASSET = "active_asset"
     INDICATOR_CONFIGURATION = "indicator_configuration"
     MARKET_SNAPSHOT = "market_snapshot"
+    FORWARD_RETURNS = "forward_returns"
     MACRO_SNAPSHOT = "macro_snapshot"
     TECHNICAL_SNAPSHOT = "technical_snapshot"
     WATCHLIST = "watchlist"
@@ -178,6 +179,7 @@ INFORMATION_SCOPE_ALIASES: Mapping[str, str] = {
     "bot": InformationScope.LINKED_BOT.value,
     "linked_bot": InformationScope.LINKED_BOT.value,
     "analysis": InformationScope.MARKET_SNAPSHOT.value,
+    "forward_returns": InformationScope.FORWARD_RETURNS.value,
     "macro_snapshot": InformationScope.MACRO_SNAPSHOT.value,
     "technical_snapshot": InformationScope.TECHNICAL_SNAPSHOT.value,
     "user_preferences": InformationScope.PREFERENCES.value,
@@ -194,6 +196,7 @@ TOOL_OUTPUT_SCOPES: Mapping[str, InformationScope] = {
     "read_asset_scores": InformationScope.SCORES,
     "read_setup_market_matches": InformationScope.SCORES,
     "read_market_snapshot": InformationScope.MARKET_SNAPSHOT,
+    "read_forward_returns": InformationScope.FORWARD_RETURNS,
     "read_macro_snapshot": InformationScope.MACRO_SNAPSHOT,
     "read_technical_snapshot": InformationScope.TECHNICAL_SNAPSHOT,
     "read_active_setup": InformationScope.ACTIVE_SETUP,
@@ -216,6 +219,7 @@ PRIMARY_TOOL_BY_INFORMATION_SCOPE: Mapping[InformationScope, str] = {
     InformationScope.ACTIVE_ASSET: "read_active_asset",
     InformationScope.INDICATOR_CONFIGURATION: "read_indicator_configuration",
     InformationScope.MARKET_SNAPSHOT: "read_market_snapshot",
+    InformationScope.FORWARD_RETURNS: "read_forward_returns",
     InformationScope.MACRO_SNAPSHOT: "read_macro_snapshot",
     InformationScope.TECHNICAL_SNAPSHOT: "read_technical_snapshot",
     InformationScope.WATCHLIST: "read_watchlist",

@@ -281,6 +281,15 @@ class FinnResponsesReadExecutor:
                 "Without a fresh verified current score and execution evidence, do not assert "
                 "that the condition is met or that an order will be placed."
             )
+        if any(item["scope"] == "read_forward_returns" and item["status"] == "completed" for item in results):
+            output["evidence_boundary"] = (
+                output.get("evidence_boundary", "") +
+                " Historical returns are measured week, month, quarter and year periods, "
+                "not predicted future performance. A current-period value is incomplete. "
+                "The source is keyed by base asset and does not verify the exact chart quote currency. "
+                "Use it as dated asset context; do not claim it is a TradingView candle series "
+                "or the exact selected pair's return."
+            ).strip()
         if call.evaluation_operation_id:
             contract = FinnV2OperationRegistry().require_supported(call.evaluation_operation_id)
             if contract.mode != "EVALUATE":

@@ -127,6 +127,28 @@ class MarketSnapshotData(BaseModel):
     source_observed_at: Optional[datetime] = None
 
 
+class ForwardReturnYearData(BaseModel):
+    year: int
+    values: List[Optional[float]]
+
+
+class ForwardReturnPartialData(BaseModel):
+    year: int
+    index: int
+    value: float
+    observed_through: date
+
+
+class ForwardReturnsData(BaseModel):
+    symbol: str
+    quote_currency_status: Literal["unverified"] = "unverified"
+    as_of: Optional[datetime] = None
+    history_start: Optional[date] = None
+    observed_through: Optional[date] = None
+    periods: Dict[str, List[ForwardReturnYearData]] = Field(default_factory=dict)
+    partial: Dict[str, ForwardReturnPartialData] = Field(default_factory=dict)
+
+
 class MacroSnapshotItem(BaseModel):
     indicator: str
     value: Optional[float] = None
@@ -419,6 +441,7 @@ ToolDataUnion = Union[
     AssetScoresData,
     SetupMarketMatchesData,
     MarketSnapshotData,
+    ForwardReturnsData,
     MacroSnapshotData,
     TechnicalSnapshotData,
     ActiveSetupData,
@@ -441,6 +464,7 @@ TOOL_DATA_MODEL_BY_NAME = {
     "AssetScoresData": AssetScoresData,
     "SetupMarketMatchesData": SetupMarketMatchesData,
     "MarketSnapshotData": MarketSnapshotData,
+    "ForwardReturnsData": ForwardReturnsData,
     "MacroSnapshotData": MacroSnapshotData,
     "TechnicalSnapshotData": TechnicalSnapshotData,
     "ActiveSetupData": ActiveSetupData,
@@ -463,6 +487,7 @@ PAYLOAD_TYPE_TO_SCHEMA_NAME = {
     "asset_scores": "AssetScoresData",
     "setup_market_matches": "SetupMarketMatchesData",
     "market_snapshot": "MarketSnapshotData",
+    "forward_returns": "ForwardReturnsData",
     "macro_snapshot": "MacroSnapshotData",
     "technical_snapshot": "TechnicalSnapshotData",
     "active_setup": "ActiveSetupData",

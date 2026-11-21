@@ -13,6 +13,7 @@ ToolName = Literal[
     "read_asset_scores",
     "read_setup_market_matches",
     "read_market_snapshot",
+    "read_forward_returns",
     "read_macro_snapshot",
     "read_technical_snapshot",
     "read_active_setup",
@@ -38,6 +39,7 @@ FINN_V2_TOOL_ORDER: List[ToolName] = [
     "read_asset_scores",
     "read_setup_market_matches",
     "read_market_snapshot",
+    "read_forward_returns",
     "read_macro_snapshot",
     "read_technical_snapshot",
     "read_active_setup",
@@ -85,6 +87,7 @@ TOOL_FRESHNESS_MAX_AGE_SECONDS: Dict[str, Optional[int]] = {
     "read_asset_scores": 86400,
     "read_setup_market_matches": 86400,
     "read_market_snapshot": 900,
+    "read_forward_returns": 86400,
     # The macro adapter evaluates each observation with Score 2.0's
     # indicator-specific source window; a generic TTL has no valid meaning.
     "read_macro_snapshot": None,

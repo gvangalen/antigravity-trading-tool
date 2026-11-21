@@ -45,6 +45,7 @@ class FinnV2ReasoningContextService:
         "read_indicator_configuration": "market_context",
         "read_asset_scores": "market_context",
         "read_market_snapshot": "market_context",
+        "read_forward_returns": "market_context",
         "read_macro_snapshot": "market_context",
         "read_technical_snapshot": "market_context",
         "read_active_setup": "plan_context",
@@ -66,6 +67,7 @@ class FinnV2ReasoningContextService:
         "asset_scores": "market_context",
         "scores": "market_context",
         "market_snapshot": "market_context",
+        "forward_returns": "market_context",
         "macro_snapshot": "market_context",
         "technical_snapshot": "market_context",
         "active_setup": "plan_context",
@@ -821,6 +823,10 @@ class FinnV2ReasoningContextService:
                 "symbol", "price", "quote_currency", "price_provider",
                 "change_24h", "volume", "source", "as_of",
             ] if payload.get(key) is not None}
+        if tool_name == "read_forward_returns":
+            return {key: payload.get(key) for key in (
+                "symbol", "quote_currency_status", "as_of", "history_start", "observed_through", "periods", "partial",
+            ) if payload.get(key) is not None}
         if tool_name == "read_macro_snapshot":
             return {"symbol": payload.get("symbol"), "items": payload.get("items", [])[:8]}
         if tool_name == "read_technical_snapshot":
