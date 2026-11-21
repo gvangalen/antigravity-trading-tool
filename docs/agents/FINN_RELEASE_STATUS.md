@@ -47,6 +47,41 @@ Next.js-advisory. Een eerste nieuwe lokale contractproef ontdekte een
 ongetypeerde lege strategieparameter; na expliciete SQL-cast slaagden de twee
 gerichte contracten en de volledige matrix. Er is voor deze kandidaat nog
 geen CI, deployment of onafhankelijke ingelogde live QA uitgevoerd.
+## FINN 3.0: zelfstandig onderwerp wisselen in bestaande chat (21 november 2026)
+
+Phase: `LOCAL_VALIDATED_CANDIDATE_PENDING_CI`. Product candidate
+`15e11e0240eba440bae6c2ffc5a6230d4947767a` on branch
+`codex/finn-conversation-topic-switch`, based on main
+`46150f2b0ae6cfad388a2e2696ca358de64d9050`. A standalone question about
+the trader profile, portfolio, a named market chart or historical asset
+context now starts a fresh owner-scoped read instead of carrying an earlier
+Smart DCA model cursor and answer into that topic. A genuine setup follow-up
+retains its context. The Dutch compound `traderprofiel` is recognized.
+
+Measured local Build gates on this product candidate:
+
+- Complete isolated FastAPI/Celery/PostgreSQL/Redis/Responses action matrix:
+  **17/17** contracts, **28/28** adapters; Smart DCA schedule migration,
+  confirmed Smart DCA and calendar DCA probes passed. Zero broker orders,
+  Live bots, Live trading calls or production connections. Matrix artifact
+  SHA-256 `0eef8fb3fd003b924d88c75aa4b54ffeead75c9396dfef5eae9c72e028c5c6bd`.
+- Complete backend suite: **5242 passed, 7 skipped**, log SHA-256
+  `70e899917303e1cb80b193eb973882b2ad24b40243a813135ebe910a60dc0cfa`.
+- Real-provider selector: development **20/20**, artifact SHA-256
+  `a9e4d960946b7b8fa83f6a3c8d407457f9693b8f318f1fed4bd5ef4536f0e3f3`;
+  regression **109/109**, artifact SHA-256
+  `86acbbdbcd0a01011510edadaef23792151deea2a08f1ab5f228cf418f9bd805`.
+  Both had zero provider, schema, timeout, parse or validation failures.
+- Synthetic three-turn real-provider chat probe after a Smart DCA answer passed:
+  profile, portfolio and historical BTC questions each used their matching
+  read tool and answered without DCA carryover. Probe SHA-256
+  `087a9959d2e7cd01308212b0513ab747f3ae111cc3a23a06a0d262b6b06f784d`.
+
+An earlier local matrix rerun returned **0/17** after the full backend suite
+had stopped the disposable worker. Build restarted that isolated worker and
+repeated the unchanged matrix; only the final **17/17** run counts as the
+release gate. CI, Auto Deploy, public SHA parity and independent QA for this
+candidate remain pending.
 
 ## FINN 3.0: actuele score bij rapportbespreking (21 november 2026)
 

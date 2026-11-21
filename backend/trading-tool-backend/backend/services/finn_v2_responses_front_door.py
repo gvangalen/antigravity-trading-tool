@@ -97,6 +97,32 @@ def _named_asset_quote_question(message: str) -> bool:
     return bool(_QUOTE_QUESTION.search(message) and mentioned_catalog_symbols(message))
 
 
+def _standalone_read_subject(message: str, facts: Any) -> str | None:
+    """Select a fresh read when the latest question names its own subject.
+
+    A prior proposal or answer is useful for elliptical follow-ups, but it must
+    not narrow the tools available for a new owner-scoped question.
+    """
+    if facts.conversation_reference_markers or facts.linked_graph_relationship:
+        return None
+    if facts.action_polarity != "read" and "?" not in message:
+        return None
+    entities = set(facts.explicit_entities)
+    if entities & {"setup", "strategy", "plan", "bot"}:
+        return None
+    if entities == {"profile"}:
+        return "get_my_profile_and_risk_style"
+    if entities == {"portfolio"}:
+        return "get_portfolio_and_exposure"
+    if not mentioned_catalog_symbols(message):
+        return None
+    if re.search(r"\b(?:historisch\w*|geschiedenis|historical|history)\b", message, re.I):
+        return "get_forward_returns"
+    if re.search(r"\b(?:chart|grafiek|koers\w*|prijs\w*|price|prices)\b", message, re.I):
+        return "get_market_snapshot"
+    return None
+
+
 def _saved_indicator_configuration_read(facts) -> bool:
     """A stored indicator setting needs its owner-scoped indicator read first."""
     return (
@@ -2860,6 +2886,18 @@ class FinnResponsesFrontDoor:
             and request_facts.action_polarity == "read"
             and not imperative_operation
         )
+        independent_read_tool = (
+            _standalone_read_subject(message, request_facts)
+            if not (imperative_operation or explicit_create_request
+                    or explicit_closed_review_read or contextual_closed_review_read)
+            else None
+        )
+        if independent_read_tool:
+            # Keep an unfinished draft in storage, but do not let it claim
+            # this unrelated turn or carry its model cursor into a new topic.
+            pending_operation = None
+            resuming_clarification = False
+            model_message = None
         if contextual_closed_review_read and isinstance(self.reads, FinnResponsesReadExecutor):
             self.reads.verified_review_id = previous_closed_review_id
         # "bevestigde les" describes a stored lesson; it is not an instruction
@@ -2875,6 +2913,9 @@ class FinnResponsesFrontDoor:
                 explicit_closed_review_read=explicit_closed_review_read,
             )
         )
+        if independent_read_tool:
+            is_read_request = True
+            is_read_only_turn = True
         # "Kan ik extra kopen?" in a quantified position/cash/budget question
         # asks for verified capacity, not an instruction to place an order.
         paper_position_cash_question = bool(
@@ -5786,7 +5827,10 @@ class FinnResponsesFrontDoor:
                 )
                 await session.commit()
 
-        use_verified_turn = not resuming_clarification or getattr(self, "model_led_coach", False)
+        use_verified_turn = (
+            not independent_read_tool
+            and (not resuming_clarification or getattr(self, "model_led_coach", False))
+        )
         verified_turn = project_verified_turn(previous_response) if use_verified_turn else None
         continued_bot_id = focused_bot_id(message, previous_response)
         loop_started = monotonic()
@@ -5869,7 +5913,7 @@ class FinnResponsesFrontDoor:
             verified_turn_context=verified_turn,
             previous_response_id=(
                 previous_response_id
-                if previous_response_id and not resuming_clarification
+                if previous_response_id and not independent_read_tool and not resuming_clarification
                 and not previous_response_id.startswith("guided-")
                 else None
             ),
@@ -5930,7 +5974,9 @@ class FinnResponsesFrontDoor:
             locale=locale,
             force_read_repair=force_read_repair,
             required_read_tool_name=(
-                "get_open_plan_draft"
+                independent_read_tool
+                if independent_read_tool
+                else "get_open_plan_draft"
                 if guided_draft_question
                 else "get_market_snapshot"
                 if chart_coaching_pair and pending_operation is None and not resuming_clarification
