@@ -38,6 +38,29 @@ _ANSWER_CHECKS = frozenset({
     "no_score_denial", "snapshot_score", "report_date", "report", "snapshot",
     "current_incomplete", "no_current_score_claim",
 })
+_REPORT_SUBSTAGES = frozenset({
+    "release_async_connections", "connect", "owner_scope", "insert", "commit",
+    "feed_publish", "card_readback",
+})
+_REPORT_SQLSTATES = {
+    "23502": "not_null", "23503": "foreign_key", "23505": "duplicate",
+    "42703": "missing_column", "42P01": "missing_table",
+    "42804": "type_mismatch", "22P02": "invalid_text",
+    "40P01": "deadlock", "55P03": "lock_unavailable",
+}
+
+
+def _safe_report_failure(error: Exception, trace: dict) -> dict[str, str]:
+    stage = trace.get("report_substage")
+    category = "other"
+    for candidate in (error, getattr(error, "orig", None),
+                      getattr(error, "__cause__", None)):
+        code = getattr(candidate, "sqlstate", None) or getattr(candidate, "pgcode", None)
+        if code in _REPORT_SQLSTATES:
+            category = _REPORT_SQLSTATES[code]
+            break
+    return {"substage": stage if stage in _REPORT_SUBSTAGES else "unknown",
+            "error_category": category}
 
 
 def _score_in_answer(content: str, score: str) -> bool:
@@ -183,6 +206,7 @@ def _require_run(namespace: str) -> int:
 
 def _seed_asset_only(user_id: int, namespace: str) -> None:
     """Copy only the child owner's dated ETH readings to an unplanned SOL asset."""
+    trace["report_substage"] = "connect"
     connection = fixture._connection()
     try:
         with connection.cursor() as cursor:
@@ -298,7 +322,8 @@ async def _invalidate_score(user_id: int) -> None:
             raise RuntimeError("feed_journey_invalid_score_visible")
 
 
-def _store_report(user_id: int, namespace: str, score: str, source_date: str) -> dict:
+def _store_report(user_id: int, namespace: str, score: str, source_date: str,
+                  trace: dict) -> dict:
     from backend.celery_task.daily_report_task import _publish_daily_report_ready_feed
 
     report_date = datetime.now(timezone.utc).date()
@@ -309,6 +334,7 @@ def _store_report(user_id: int, namespace: str, score: str, source_date: str) ->
     report = {"score_source_snapshot": snapshot}
     connection = fixture._connection()
     try:
+        trace["report_substage"] = "owner_scope"
         with connection.cursor() as cursor:
             cursor.execute("""SELECT is_active,ai_preferences FROM users
                               WHERE id=%s FOR UPDATE""", (user_id,))
@@ -317,16 +343,19 @@ def _store_report(user_id: int, namespace: str, score: str, source_date: str) ->
                     or (owner[1] or {}).get("qa_fixture") != fixture.FIXTURE_MARKER
                     or (owner[1] or {}).get("qa_namespace") != namespace):
                 raise RuntimeError("feed_journey_owner_scope_failed")
+            trace["report_substage"] = "insert"
             cursor.execute("""INSERT INTO daily_reports
                 (user_id,report_date,status,created_at,score_source_snapshot)
                 VALUES (%s,%s,'completed',NOW(),%s::jsonb)""",
                 (user_id, report_date, json.dumps(snapshot)))
+        trace["report_substage"] = "commit"
         connection.commit()
     except Exception:
         connection.rollback()
         raise
     finally:
         connection.close()
+    trace["report_substage"] = "feed_publish"
     _publish_daily_report_ready_feed(user_id, report_date, report)
     return {"report_date": report_date.isoformat(), "attention_pair": "SOL"}
 
@@ -360,8 +389,10 @@ def _case(namespace: str, bound: int, *, run_async, trace: dict) -> dict:
         # The production publisher owns a fresh synchronous Celery event loop.
         # Release connections from this probe's loop before calling it.
         from backend.infrastructure.database import engine
+        trace["report_substage"] = "release_async_connections"
         run_async(engine.dispose())
-        report = _store_report(user_id, namespace, saved_score, source_date)
+        report = _store_report(user_id, namespace, saved_score, source_date, trace)
+        trace["report_substage"] = "card_readback"
         item = run_async(_card(user_id, "daily_report_ready"))
         evidence = item.get("evidence") or {}
         if (evidence.get("report_date") != report["report_date"]
@@ -424,6 +455,8 @@ def run(namespace: str) -> dict:
                           "fixture_state": trace["fixture_state"]}
                 if trace["stage"] in {"analysis_discuss", "report_discuss"}:
                     result["discussion"] = trace.get("discussion", _safe_discussion({}))
+                if trace["stage"] == "report_publish":
+                    result["report_failure"] = _safe_report_failure(error, trace)
             if live_attempts:
                 result = {"result": "FAIL", "reason": "feed_journey_unexpected_write",
                           "failure_stage": trace["stage"],

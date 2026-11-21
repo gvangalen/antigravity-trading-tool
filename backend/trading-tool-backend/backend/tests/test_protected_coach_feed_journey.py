@@ -95,6 +95,32 @@ def test_journey_probe_quarantines_failed_child_without_private_error(monkeypatc
     }
 
 
+def test_report_failure_exports_only_fixed_substage_and_error_category(monkeypatch):
+    class PrivateDatabaseError(Exception):
+        sqlstate = "42703"
+
+    def failed_case(_namespace, _bound, *, run_async, trace):
+        trace["stage"] = "report_publish"
+        trace["report_substage"] = "insert"
+        trace["fixture_state"] = "quarantined"
+        raise PrivateDatabaseError("private SQL and account data")
+
+    monkeypatch.setattr(probe, "_require_run", lambda _namespace: 123)
+    monkeypatch.setattr(probe, "_case", failed_case)
+    assert probe.run(NAMESPACE) == {
+        "result": "FAIL", "reason": "feed_journey_runtime_failed",
+        "failure_stage": "report_publish", "fixture_state": "quarantined",
+        "report_failure": {"substage": "insert", "error_category": "missing_column"},
+        "live_calls": 0,
+    }
+    assert probe._safe_report_failure(
+        PrivateDatabaseError("private"), {"report_substage": "private"},
+    ) == {"substage": "unknown", "error_category": "missing_column"}
+    assert probe._safe_report_failure(
+        RuntimeError("private"), {"report_substage": "feed_publish"},
+    ) == {"substage": "feed_publish", "error_category": "other"}
+
+
 def test_journey_probe_reports_only_fixed_success_fields(monkeypatch):
     monkeypatch.setattr(probe, "_require_run", lambda namespace: 123)
     monkeypatch.setattr(probe, "_case", lambda *args, **kwargs: {
