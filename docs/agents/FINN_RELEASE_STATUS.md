@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: rapportaandacht en gerichte bespreking (21 november 2026)
 
-Phase: `LOCAL_VALIDATED_CANDIDATE_PENDING_CI`. Nieuwe dag-, week-, maand- en
+Phase: `LIVE_DEPLOYED_QA_PENDING`. Nieuwe dag-, week-, maand- en
 kwartaalrapporten leveren bij publicatie één deterministisch aandachtspunt uit
 de opgeslagen scoresnapshot voor een exact handelspaar. De feed toont het
 rapportmoment en het aandachtspunt; `Bespreek` leest via de eigenaargebonden
@@ -30,7 +30,14 @@ SHA-256 `4a255cc76538b2414cc816bbafc6da282e1e825b79263312ec84e7ec9d53c416`,
 `6eb0b72790af6747b27aed124ea4462014342802ce78e691ac24fbb15641588f`,
 `finn-report-attention-release-matrix.json` SHA-256
 `2906e09a3653c0ed395bd49ed5abed9f1dbc7832922530d86ab958b74c804200`.
-CI, Auto Deploy en onafhankelijke ingelogde QA staan nog open. QA moet een
+PR [#1233](https://github.com/gvangalen/antigravity-trading-tool/pull/1233)
+en PR-CI `44883974626` slaagden. Na merge als
+`1861a9f26e5cef679fdea40aceff128470e287d6` slaagden hoofdbranch-CI
+`44884486747` en Auto Deploy `44885028476`. Publieke backend health en
+frontend build-info gaven beide HTTP 200 en exact die SHA. Deze statusupdate
+maakt zelf een volgende hoofdbranch-SHA; Build wacht ook daarvoor CI, Auto
+Deploy en publieke pariteit af. Onafhankelijke ingelogde QA staat nog open.
+QA moet een
 nieuw gegenereerde rapportkaart voor een exact paar, de rapportlink,
 `Bespreek` op hetzelfde gedateerde rapport, een aangepaste chatvraag en
 web/mobile-weergave toetsen. Ontbreekt een nieuwe kaart, dan is dit een
