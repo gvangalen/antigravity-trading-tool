@@ -6,7 +6,10 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: natuurlijke strategienaam na setupvervolg (22 november 2026)
 
-Phase: `LOCAL_VALIDATED_PENDING_CI`. De onafhankelijke live journey-proef op
+Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`. Product-PR
+[#1287](https://github.com/gvangalen/antigravity-trading-tool/pull/1287)
+is gemerged als `ea4cab30771a2da9ecacb95eb5627f2f19f188b9`. De
+onafhankelijke live journey-proef op
 SHA `999bd3553f615b5a73a430f32be63576edf30afe` was `NOT_ACCEPTED`:
 na de opgeslagen setup en een geslaagde korte bevestiging met `ja` leverde
 “Noem die strategie …” geen strategievoorstel op. Build reproduceerde de
@@ -31,9 +34,18 @@ development **20/20** (artifact SHA-256
 `69cf5511927b19f7bdd4a5db5702b37219702f7f246947e021dc645b0bc29a48`)
 en regression **109/109** (artifact SHA-256
 `9bd389314e707d0a30effa4fc4652215ce9d3ed11d339709092af07cafa707b7`),
-zonder provider-, schema-, timeout-, parse- of validatiefouten. CI,
-Auto Deploy, publieke SHA-pariteit en onafhankelijke ingelogde live QA
-zijn voor deze kandidaat nog niet uitgevoerd.
+zonder provider-, schema-, timeout-, parse- of validatiefouten.
+Product-PR-CI **45017709073** en main-CI **45018409448** voltooiden elk
+alle vijf jobs met succes. Auto Deploy **45018994353** voltooide met succes
+op `ea4cab30771a2da9ecacb95eb5627f2f19f188b9`. Publieke backend
+`/api/health` en frontend `/build-info.json` gaven op 22 november 2026
+beide HTTP 200 en exact diezelfde SHA, gelijk aan GitHub `main`. De
+QA-agent heeft de vorige inactieve child exact opgeruimd (`CLEANED`) en met
+een read-only heraudit `NO_RETAINED_FIXTURE` bevestigd; hij heeft geen nieuwe
+functionele proef gestart. Deze status-only wijziging maakt zelf een nieuwe
+main-SHA; vóór de QA-handoff moeten de laatste main-CI, Auto Deploy en
+publieke SHA-pariteit opnieuw zijn bevestigd. Onafhankelijke ingelogde live
+acceptatie van de nieuwe productkandidaat staat nog open.
 
 ## FINN 3.0: kort bevestigend antwoord hervat setup- en strategievervolg (22 november 2026)
 
