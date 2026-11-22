@@ -242,7 +242,7 @@ jobs:
             echo "The prior pair cleanup requires scoped fixture authorization and no execution." >&2
             exit 1
           fi
-          if [ "$QA_PROFILE" = "setup_strategy_journey_fixture_cleanup" ] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ] || [ "$ALLOW_FIXTURE_ACTIONS" != "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" != "false" ] || [[ ! "$RUN_LABEL" =~ ^(audit-44968391213-1-e2872eb9|audit-44972794086-1-da950aac|audit-44974889786-1-76d282df|audit-44977345882-1-f5cfb7a3|audit-45006104528-1-50cc25ca|audit-45015412389-1-999bd355|audit-45020771853-1-ea64f391)$ ]]; }; then
+          if [ "$QA_PROFILE" = "setup_strategy_journey_fixture_cleanup" ] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ] || [ "$ALLOW_FIXTURE_ACTIONS" != "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" != "false" ] || [[ ! "$RUN_LABEL" =~ ^(audit-44968391213-1-e2872eb9|audit-44972794086-1-da950aac|audit-44974889786-1-76d282df|audit-44977345882-1-f5cfb7a3|audit-45006104528-1-50cc25ca|audit-45015412389-1-999bd355|audit-45020771853-1-ea64f391|audit-45027057156-1-1c7ac643)$ ]]; }; then
             echo "The journey cleanup is restricted to the audited inactive child and requires no execution." >&2
             exit 1
           fi

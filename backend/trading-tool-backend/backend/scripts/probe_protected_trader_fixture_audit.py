@@ -31,6 +31,7 @@ JOURNEY_TRANSPORT_LABEL = "audit-44977345882-1-f5cfb7a3"
 JOURNEY_YES_DIAGNOSTIC_LABEL = "audit-45006104528-1-50cc25ca"
 JOURNEY_STRATEGY_DIAGNOSTIC_LABEL = "audit-45015412389-1-999bd355"
 JOURNEY_STRATEGY_RETEST_LABEL = "audit-45020771853-1-ea64f391"
+JOURNEY_STRATEGY_SLOT_LABEL = "audit-45027057156-1-1c7ac643"
 JOURNEY_CLEANUP_LABELS = frozenset({
     JOURNEY_CLEANUP_LABEL,
     "audit-44972794086-1-da950aac",
@@ -39,6 +40,7 @@ JOURNEY_CLEANUP_LABELS = frozenset({
     JOURNEY_YES_DIAGNOSTIC_LABEL,
     JOURNEY_STRATEGY_DIAGNOSTIC_LABEL,
     JOURNEY_STRATEGY_RETEST_LABEL,
+    JOURNEY_STRATEGY_SLOT_LABEL,
 })
 JOURNEY_EXECUTION_CODES = frozenset({
     "proposal_not_confirmed", "proposal_expired", "proposal_payload_hash_mismatch",
@@ -172,7 +174,7 @@ def _journey_strategy_diagnostic(cur, user_id: int, namespace: str) -> dict:
     )
     cur.execute(
         """SELECT r.conversation_id,r.status,r.error_code,r.response_json,
-                  c.terminal_projection_json FROM finn_v2_runs r
+                  c.terminal_projection_json,c.state_json FROM finn_v2_runs r
            LEFT JOIN finn_v2_runtime_contracts c ON c.run_id=r.id AND c.user_id=r.user_id
            WHERE r.user_id=%s AND r.client_context_json->>'surface'='qa_setup_strategy_journey'
              AND r.message=%s""",
@@ -184,7 +186,7 @@ def _journey_strategy_diagnostic(cur, user_id: int, namespace: str) -> dict:
                 "yes_turn_unique": len(yes_turns) == 1,
                 "strategy_turn_unique": len(strategy_turns) == 1}
     yes_conversation, raw_yes_projection = yes_turns[0]
-    conversation, status, error_code, raw_response, raw_projection = strategy_turns[0]
+    conversation, status, error_code, raw_response, raw_projection, raw_state = strategy_turns[0]
     yes_projection = raw_yes_projection if isinstance(raw_yes_projection, dict) else {}
     projection = raw_projection if isinstance(raw_projection, dict) else {}
     response = raw_response if isinstance(raw_response, dict) else {}
@@ -194,6 +196,23 @@ def _journey_strategy_diagnostic(cur, user_id: int, namespace: str) -> dict:
     inputs = projection.get("supplied_inputs") or {}
     if not isinstance(inputs, dict):
         inputs = {}
+    state = raw_state if isinstance(raw_state, dict) else {}
+    guided = state.get("guided_state") or {}
+    if not isinstance(guided, dict):
+        guided = {}
+    collected = guided.get("collected_inputs") or {}
+    if not isinstance(collected, dict):
+        collected = {}
+    allowed_slots = {
+        "setup_id", "name", "execution_mode", "base_amount", "entry",
+        "stop_loss", "targets", "price_currency", "risk_profile",
+        "symbol", "timeframe", "setup_type", "quote_currency",
+    }
+    raw_missing = guided.get("missing_required_inputs")
+    missing = raw_missing if isinstance(raw_missing, list) else []
+    safe_slots = sorted({slot if slot in allowed_slots else "other"
+                         for slot in missing[:16] if isinstance(slot, str)})
+    next_slot = guided.get("next_missing_input")
     operation = projection.get("final_operation_id") or projection.get("initial_operation_id")
     def safe_operation(value: object) -> str:
         return value if value in {"create_setup", "create_strategy", "create_bot"} else (
@@ -222,6 +241,12 @@ def _journey_strategy_diagnostic(cur, user_id: int, namespace: str) -> dict:
             "guided_proposal_tool_call_required", "responses_tool_round_limit",
             "responses_provider_error", "finn_v2_internal_error",
         } else "none" if error_code is None else "other",
+        "strategy_state_guided_operation": safe_operation(guided.get("operation_id")),
+        "strategy_state_setup_id_match": str(collected.get("setup_id")) == str(setups[0][0]),
+        "strategy_state_name_present": bool(collected.get("name")),
+        "strategy_missing_slots": safe_slots,
+        "strategy_next_missing_slot": (next_slot if next_slot in allowed_slots else
+                                       "missing" if next_slot is None else "other"),
     }
 
 
@@ -327,7 +352,8 @@ def run(label: str, *, expected_profile: str = "trader_paper_exit_reconciliation
                 strategy_diagnostic = (
                     _journey_strategy_diagnostic(cur, user_id, namespace)
                     if label in {JOURNEY_STRATEGY_DIAGNOSTIC_LABEL,
-                                 JOURNEY_STRATEGY_RETEST_LABEL} else {}
+                                 JOURNEY_STRATEGY_RETEST_LABEL,
+                                 JOURNEY_STRATEGY_SLOT_LABEL} else {}
                 )
                 if label == JOURNEY_CARD_LABEL:
                     cur.execute(
@@ -469,7 +495,8 @@ def cleanup_journey(label: str) -> dict:
         journey.get("failure_stage"), journey.get("reason")) == (
             "strategy_guided", "journey_strategy_guided_failed")
     proposal_failure = label in {JOURNEY_STRATEGY_DIAGNOSTIC_LABEL,
-                                 JOURNEY_STRATEGY_RETEST_LABEL} and (
+                                 JOURNEY_STRATEGY_RETEST_LABEL,
+                                 JOURNEY_STRATEGY_SLOT_LABEL} and (
         journey.get("failure_stage"), journey.get("reason")) == (
             "strategy_proposal", "journey_strategy_proposal_missing")
     if (journey.get("fixture_state") != "quarantined"
@@ -520,7 +547,8 @@ def cleanup_journey(label: str) -> dict:
             if label in {JOURNEY_CARD_LABEL, JOURNEY_TRANSPORT_LABEL,
                          JOURNEY_YES_DIAGNOSTIC_LABEL,
                          JOURNEY_STRATEGY_DIAGNOSTIC_LABEL,
-                         JOURNEY_STRATEGY_RETEST_LABEL}:
+                         JOURNEY_STRATEGY_RETEST_LABEL,
+                         JOURNEY_STRATEGY_SLOT_LABEL}:
                 cur.execute("SELECT name,symbol FROM setups WHERE user_id=%s", (user_id,))
                 expected_setups = {(namespace, "ETH"), (f"QA BTC Setup {namespace}", "BTC")}
                 setups = cur.fetchall()
