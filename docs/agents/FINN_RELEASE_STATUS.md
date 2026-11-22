@@ -6,8 +6,9 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN: inactieve bot-eigenaar blokkeert uitvoeringsroute (22 november 2026)
 
-Phase: `LOCAL_GATES_PASSED_PENDING_PR_CI_DEPLOY_QA`. Candidate branch
-`codex/bot-inactive-owner-guard-20261122`. Onafhankelijke Security-review
+Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`. Product-PR
+[#1305](https://github.com/gvangalen/antigravity-trading-tool/pull/1305)
+op branch `codex/bot-inactive-owner-guard-20261122`. Onafhankelijke Security-review
 stelde een P1-grens vast: de normale dispatcher selecteert actieve gebruikers,
 maar een al gequeue'de of directe botrun controleerde de eigenaar niet opnieuw.
 Een inactieve eigenaar met een actieve Paper-bot kon daardoor nog een besluit
@@ -41,6 +42,26 @@ zonder provider-, schema-, timeout-, parse- of validatiefouten. Onafhankelijke
 live QA voor de nieuwe grens en het afzonderlijke protected AAPL-bot-CRUD-
 profiel staat nog open. De huidige protected inactieve child mag na deze fix
 niet door de normale botworker worden verwerkt.
+
+Product-PR-CI **45079852576** en main-CI **45080578653** voltooiden elk alle
+vijf jobs met succes. Auto Deploy **45081330232** slaagde op
+`baf2901920c680300443e788826db35536d5d28f`; publieke backend health,
+frontend build-info en GitHub `main` meldden exact die SHA (beide HTTP 200).
+De afzonderlijke QA-only PR
+[#1306](https://github.com/gvangalen/antigravity-trading-tool/pull/1306)
+op head `f2428219b416dd07ea9bedf320f455a5070aa9af` voegde de afgeschermde
+`aapl_paper_bot_crud`- en `aapl_stale_quote_read`-profielen toe. Lokale
+gerichte QA-tests: **190 passed, 1 skipped**. Onafhankelijke Security-review
+vond op die head geen blokkerende bevinding, onder de voorwaarde dat de
+inactieve-owner-productguard op dezelfde live SHA staat. QA-PR-CI
+**45080335611** en gecombineerde main-CI **45081525653** voltooiden elk
+alle vijf jobs met succes. Auto Deploy **45082252664** slaagde op
+`7ad0423121246ff3383c010940bd7492781b1afc`; publieke backend health,
+frontend build-info en GitHub `main` meldden exact die SHA (beide HTTP 200).
+De profielen bewijzen bot-CRUD/replay zonder order en de quote-validator
+afzonderlijk; zij bewijzen geen nieuw geweigerd Paper-orderbesluit. Deze
+status-only update vereist opnieuw de laatste main-CI, Auto Deploy en
+publieke SHA-pariteit vóór de officiële QA-run op de definitieve SHA.
 
 ## FINN: gedateerde accountvergelijking en bevestigde vervolgstap (22 november 2026)
 
