@@ -218,6 +218,7 @@ def test_exact_yes_diagnostic_rejects_ambiguous_turns_without_exposing_rows(monk
 @pytest.mark.parametrize("label,namespace", [
     (audit.JOURNEY_STRATEGY_DIAGNOSTIC_LABEL, "qa-45015412389-1-999bd355-1234abcd"),
     (audit.JOURNEY_STRATEGY_RETEST_LABEL, "qa-45020771853-1-ea64f391-1234abcd"),
+    (audit.JOURNEY_STRATEGY_SLOT_LABEL, "qa-45027057156-1-1c7ac643-1234abcd"),
 ])
 @pytest.mark.parametrize("status", ["clarification_required", "unavailable", "rejected"])
 def test_exact_strategy_diagnostic_reports_failed_proposal_conditions_only(
@@ -231,7 +232,11 @@ def test_exact_strategy_diagnostic_reports_failed_proposal_conditions_only(
           {"proposal_id": None, "confirmation_required": False, "content": "private answer"},
           {"initial_operation_id": "create_strategy", "action_draft": {"operation_id": "create_strategy"},
            "supplied_inputs": {"setup_id": 42, "private": "secret"},
-           "dispatch_count": 1, "attempt_count": 1})],
+           "dispatch_count": 1, "attempt_count": 1},
+          {"guided_state": {"operation_id": "create_strategy",
+                            "collected_inputs": {"setup_id": 42, "private": "secret"},
+                            "missing_required_inputs": ["name", "base_amount", "private_slot"],
+                            "next_missing_input": "name"}})],
     ])
     monkeypatch.setattr(audit, "_verify_prior_report", lambda *_args: None)
     monkeypatch.setattr(audit.fixture, "_connection", lambda: conn)
@@ -249,6 +254,11 @@ def test_exact_strategy_diagnostic_reports_failed_proposal_conditions_only(
     assert result["strategy_dispatch_count"] == 1
     assert result["strategy_attempt_count"] == 1
     assert result["strategy_error_code"] == "none"
+    assert result["strategy_state_guided_operation"] == "create_strategy"
+    assert result["strategy_state_setup_id_match"] is True
+    assert result["strategy_state_name_present"] is False
+    assert result["strategy_missing_slots"] == ["base_amount", "name", "other"]
+    assert result["strategy_next_missing_slot"] == "name"
     assert "private" not in str(result) and "42" not in str(result)
 
 
@@ -452,6 +462,7 @@ def test_exact_short_yes_child_cleanup_requires_guided_failure_and_safe_rows(
 @pytest.mark.parametrize("label,namespace", [
     (audit.JOURNEY_STRATEGY_DIAGNOSTIC_LABEL, "qa-45015412389-1-999bd355-1234abcd"),
     (audit.JOURNEY_STRATEGY_RETEST_LABEL, "qa-45020771853-1-ea64f391-1234abcd"),
+    (audit.JOURNEY_STRATEGY_SLOT_LABEL, "qa-45027057156-1-1c7ac643-1234abcd"),
 ])
 @pytest.mark.parametrize("failure_stage,expected_error", [
     ("strategy_proposal", None),
