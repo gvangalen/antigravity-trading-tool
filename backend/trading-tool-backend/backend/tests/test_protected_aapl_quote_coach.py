@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -6,6 +7,131 @@ from types import SimpleNamespace
 
 from backend.scripts import probe_protected_aapl_quote_coach as probe
 from backend.scripts.run_finn_production_qa import ALLOWED_PROFILES, profile_error_category
+
+
+def test_terminal_diagnostic_classifies_verifier_and_last_read_without_values():
+    state = {"responses_progress": {"response_id": "private-response-id", "tool_trace": [
+        {"result": {"results": [
+            {"scope": "read_market_snapshot", "status": "completed", "price": 123456},
+            {"scope": "read_latest_report", "status": "unavailable", "secret": "private"},
+        ]}},
+    ]}}
+    result = probe._bounded_terminal_diagnostic(
+        error_code="current_quote_source_prose_mismatch",
+        verifier_action="reject",
+        verifier_reasons=["current_quote_source_prose_mismatch"],
+        state=state,
+    )
+    assert result == {
+        "failure_category": "verifier_reject",
+        "verifier_action": "reject",
+        "verifier_reason_class": "quote_source",
+        "responses_phase": "progress",
+        "last_read_scope": "read_latest_report",
+        "last_read_status": "unavailable",
+    }
+    assert "private" not in str(result)
+    assert "123456" not in str(result)
+
+
+@pytest.mark.parametrize("code,category", [
+    ("responses_tool_round_limit", "tool_round_limit"),
+    ("responses_provider_error", "provider"),
+    ("selector_phase_timeout", "selector_timeout"),
+    ("lifecycle_deadline_exceeded", "runtime_timeout"),
+    ("private-unknown-error", "other"),
+])
+def test_terminal_diagnostic_has_fixed_error_categories(code, category):
+    result = probe._bounded_terminal_diagnostic(
+        error_code=code, verifier_action=None, verifier_reasons=[], state={},
+    )
+    assert result["failure_category"] == category
+    assert result["last_read_scope"] == "none"
+    assert code not in str(result)
+
+
+def test_uncompleted_turns_record_only_bounded_diagnostic(monkeypatch):
+    async def chat_turn(_user_id, _message, *, conversation_id=None):
+        return SimpleNamespace(status="unavailable", response=None, run_id="private-run-id",
+                               conversation_id=conversation_id or "private-conversation-id")
+
+    async def diagnostic(_user_id, _turn):
+        return {"failure_category": "provider", "responses_phase": "before_checkpoint"}
+
+    monkeypatch.setattr(probe, "_chat_turn", chat_turn)
+    monkeypatch.setattr(probe, "_terminal_diagnostic", diagnostic)
+    result = asyncio.run(probe._turns(42, {}, {}))
+    assert [item["status"] for item in result["turn_diagnostics"]] == ["not_completed"] * 3
+    assert all(item["failure_category"] == "provider" for item in result["turn_diagnostics"])
+    assert "private" not in str(result)
+
+
+def test_terminal_diagnostic_refuses_other_owner(monkeypatch):
+    from backend.infrastructure import database
+    from backend.infrastructure.repositories import finn_v2_runtime_contract_repository as contracts
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return False
+
+        async def execute(self, _query):
+            pytest.fail("foreign verifier read")
+
+    class Repository:
+        def __init__(self, _session):
+            pass
+
+        async def get_for_run(self, *, run_id):
+            assert run_id == "private-run-id"
+            return SimpleNamespace(user_id=99, conversation_id="private-conversation-id")
+
+    monkeypatch.setattr(database, "async_session_factory", lambda: Session())
+    monkeypatch.setattr(contracts, "FinnV2RuntimeContractRepository", Repository)
+    turn = SimpleNamespace(run_id="private-run-id", conversation_id="private-conversation-id",
+                           error_code="responses_tool_round_limit")
+    assert asyncio.run(probe._terminal_diagnostic(42, turn)) == {
+        "failure_category": "diagnostic_unavailable",
+    }
+
+
+def test_terminal_diagnostic_reads_only_bound_verifier_and_checkpoint(monkeypatch):
+    from backend.infrastructure import database
+    from backend.infrastructure.repositories import finn_v2_runtime_contract_repository as contracts
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return False
+
+        async def execute(self, _query):
+            verifier = SimpleNamespace(action="reject", reason_codes_json=[
+                "current_quote_source_prose_mismatch",
+            ])
+            return SimpleNamespace(scalars=lambda: SimpleNamespace(first=lambda: verifier))
+
+    class Repository:
+        def __init__(self, _session):
+            pass
+
+        async def get_for_run(self, *, run_id):
+            assert run_id == "private-run-id"
+            return SimpleNamespace(user_id=42, conversation_id="private-conversation-id",
+                                   state_json={"responses_progress": {"response_id": "private-id"}})
+
+    monkeypatch.setattr(database, "async_session_factory", lambda: Session())
+    monkeypatch.setattr(contracts, "FinnV2RuntimeContractRepository", Repository)
+    turn = SimpleNamespace(run_id="private-run-id", conversation_id="private-conversation-id",
+                           error_code="private-error")
+    result = asyncio.run(probe._terminal_diagnostic(42, turn))
+    assert result["failure_category"] == "verifier_reject"
+    assert result["verifier_reason_class"] == "quote_source"
+    assert result["responses_phase"] == "progress"
+    assert "private" not in str(result)
 
 
 def test_old_quote_is_rejected_only_when_mislabeled_current():

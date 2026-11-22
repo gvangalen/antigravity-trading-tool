@@ -58,6 +58,11 @@ under owner, bot, key and trade guards; any failure quarantines it disabled.
 The historical report and bot decision are controlled fixture evidence, so
 this profile verifies FINN's handling of their age and safety reason, not the
 original user's private report or a live Paper executor decision.
+For a non-completed turn, the sanitized artifact contains only a fixed
+failure category, verifier action/reason class, Responses checkpoint phase,
+and the last allowlisted read scope/status when available. Inspect that
+artifact before exact-run cleanup, which removes the child's terminal rows.
+No raw error, tool result, answer, FINN run ID or child identity is exported.
 
 The one failed AAPL coach run `45033782172-1` has exact-run follow-ups
 `aapl_paper_quote_fixture_audit` and `aapl_paper_quote_fixture_cleanup`, both

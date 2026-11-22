@@ -52,6 +52,20 @@ REQUIRED_SCOPES = frozenset({
     "read_active_setup", "read_linked_strategy", "read_asset_scores",
     "read_market_snapshot", "read_latest_report", "read_bot_status",
 })
+TERMINAL_CATEGORIES = {
+    "responses_tool_round_limit": "tool_round_limit",
+    "responses_provider_error": "provider",
+    "responses_provider_quota_unavailable": "provider_quota",
+    "responses_context_length_exceeded": "provider_context",
+    "selector_phase_timeout": "selector_timeout",
+    "lifecycle_deadline_exceeded": "runtime_timeout",
+    "dispatch_claim_timeout": "dispatch_timeout",
+    "orchestrator_failed": "orchestrator",
+}
+QUOTE_VERIFIER_REASONS = frozenset({
+    "quote_source_table_row_mismatch", "current_quote_source_prose_mismatch",
+})
+SAFE_TRACE_STATUSES = frozenset({"completed", "partial", "unavailable", "error", "failed"})
 CURRENT_MARKER = re.compile(r"\b(?:actuele|huidige|nieuwste|laatste|current|latest)\b.{0,70}?\b(?:koers\w*|prijs\w*|quote\w*|snapshot)\b", re.I)
 OLD_AMOUNT = re.compile(r"(?:USD\s*351[,.]19|351[,.]19\s*USD|\$\s*351[,.]19)", re.I)
 MONTHS = ("januari", "februari", "maart", "april", "mei", "juni", "juli",
@@ -144,6 +158,83 @@ def _same_source(first: dict, second: dict) -> bool:
     return (first["measurement_id"] == second["measurement_id"]
             and first["at"] == second["at"]
             and first["price"] == second["price"])
+
+
+def _bounded_terminal_diagnostic(*, error_code, verifier_action, verifier_reasons,
+                                 state) -> dict:
+    action = (verifier_action if isinstance(verifier_action, str)
+              and verifier_action in {"reject", "downgrade_to_unavailable", "repair_once"}
+              else "none")
+    reasons = ([reason for reason in verifier_reasons if isinstance(reason, str)]
+               if isinstance(verifier_reasons, list) else [])
+    if action == "reject":
+        category = "verifier_reject"
+    elif action == "downgrade_to_unavailable":
+        category = "verifier_downgrade"
+    else:
+        category = (TERMINAL_CATEGORIES.get(error_code, "other")
+                    if isinstance(error_code, str) else "other")
+    reason_class = ("quote_source" if any(reason in QUOTE_VERIFIER_REASONS for reason in reasons) else
+                    "other_verifier" if reasons else "none")
+    state = state if isinstance(state, dict) else {}
+    exchange = state.get("responses_exchange") or {}
+    progress = state.get("responses_progress") or {}
+    exchange = exchange if isinstance(exchange, dict) else {}
+    progress = progress if isinstance(progress, dict) else {}
+    phase = ("exchange" if exchange.get("response_id") else
+             "progress" if progress.get("response_id") else "before_checkpoint")
+    trace = exchange.get("tool_trace") or progress.get("tool_trace") or []
+    last_scope, last_status = "none", "none"
+    if isinstance(trace, list):
+        for call in trace:
+            if not isinstance(call, dict):
+                continue
+            result = call.get("result") or {}
+            rows = (result.get("results") or []) if isinstance(result, dict) else []
+            if not isinstance(rows, list):
+                continue
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                scope = row.get("scope")
+                if isinstance(scope, str) and scope in REQUIRED_SCOPES:
+                    last_scope = scope
+                    status = row.get("status")
+                    last_status = (status if isinstance(status, str)
+                                   and status in SAFE_TRACE_STATUSES else "other")
+    return {"failure_category": category, "verifier_action": action,
+            "verifier_reason_class": reason_class, "responses_phase": phase,
+            "last_read_scope": last_scope, "last_read_status": last_status}
+
+
+async def _terminal_diagnostic(user_id: int, turn) -> dict:
+    from sqlalchemy import select
+    from backend.infrastructure.database import async_session_factory
+    from backend.infrastructure.models import FinnV2VerifierResult
+    from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import (
+        FinnV2RuntimeContractRepository,
+    )
+
+    try:
+        async with async_session_factory() as session:
+            contract = await FinnV2RuntimeContractRepository(session).get_for_run(run_id=turn.run_id)
+            if (contract is None or contract.user_id != user_id
+                    or contract.conversation_id != turn.conversation_id):
+                return {"failure_category": "diagnostic_unavailable"}
+            verifier = (await session.execute(
+                select(FinnV2VerifierResult).where(
+                    FinnV2VerifierResult.run_id == turn.run_id,
+                    FinnV2VerifierResult.user_id == user_id,
+                ).order_by(FinnV2VerifierResult.created_at.desc())
+            )).scalars().first()
+            return _bounded_terminal_diagnostic(
+                error_code=getattr(turn, "error_code", None),
+                verifier_action=getattr(verifier, "action", None),
+                verifier_reasons=getattr(verifier, "reason_codes_json", None),
+                state=contract.state_json,
+            )
+    except Exception:
+        return {"failure_category": "diagnostic_unavailable"}
 
 
 def _result(failures: list[str], *, source_advanced: bool) -> str:
@@ -460,7 +551,8 @@ async def _turns(user_id: int, source: dict, ids: dict) -> dict:
         response = turn.response
         if turn.status != "completed" or response is None:
             failures.append("turn_not_completed")
-            diagnostics.append({"turn": label, "status": "not_completed"})
+            diagnostics.append({"turn": label, "status": "not_completed",
+                                **await _terminal_diagnostic(user_id, turn)})
             continue
         if response.proposal_id or response.confirmation_required or (turn.policy and turn.policy.execute_allowed):
             failures.append("unexpected_action")
