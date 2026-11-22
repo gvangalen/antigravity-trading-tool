@@ -6,9 +6,11 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: kort bevestigend antwoord hervat setup- en strategievervolg (22 november 2026)
 
-Phase: `LOCAL_VALIDATED_CANDIDATE_NOT_DEPLOYED`. Productcode op branch
-`codex/finn-chat-journey-yes-20261122`, commit
-`4bd9df9ed` (vóór deze statusregistratie). De eerdere onafhankelijke
+Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`. Product PR
+[#1282](https://github.com/gvangalen/antigravity-trading-tool/pull/1282)
+op branch `codex/finn-chat-journey-yes-20261122`, productcodecommit
+`4bd9df9ed`, gemerged als `86fd6ccbbea6969d4b317009e152d9bb3c5b1a59`.
+De eerdere onafhankelijke
 live journey-proef op SHA `50cc25ca40ea10f2997fca449654fe4a9d360634`
 was `NOT_ACCEPTED`: na een opgeslagen setup selecteerde een letterlijk kort
 "ja" via de directe FINN-chatroute niet de begeleide strategieactie. De
@@ -45,9 +47,15 @@ De echte Responses-providerselector slaagde development **20/20** (artifact
 SHA-256 `56e05b9b8c652d57bc60279f14a2bececd9a7c727c332b9613be45b61e1b8bc0`)
 en regression **109/109** (artifact SHA-256
 `a380b01dd965f2d8c0dba0468098ae2b0f8e446e56233a5b4289b9d62c85a7f7`),
-zonder provider-, schema-, timeout-, parse- of validatiefouten. CI,
-Auto Deploy, publieke SHA-pariteit en de onafhankelijke ingelogde live
-acceptatie voor deze productkandidaat zijn nog niet uitgevoerd.
+zonder provider-, schema-, timeout-, parse- of validatiefouten.
+Product-PR-CI **45008508082** en main-CI **45009180047** voltooiden elk alle
+vijf jobs met succes. Auto Deploy **45009796649** voltooide met succes op
+`86fd6ccbbea6969d4b317009e152d9bb3c5b1a59`. Op 22 november 2026
+gaven publieke backend health en frontend build-info beide HTTP 200 met exact
+diezelfde SHA, gelijk aan GitHub `main`. Deze statusregistratie veroorzaakt
+zelf een nieuwe main-SHA; vóór de QA-handoff moeten de laatste main-CI,
+Auto Deploy en publieke SHA-pariteit opnieuw worden bevestigd. Onafhankelijke
+ingelogde live acceptatie voor deze productkandidaat is nog niet uitgevoerd.
 
 ## FINN-selector: alleen concrete handelsparen (22 november 2026)
 
