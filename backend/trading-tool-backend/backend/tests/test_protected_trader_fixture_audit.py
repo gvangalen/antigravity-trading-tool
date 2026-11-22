@@ -77,6 +77,41 @@ def test_review_audit_requires_exact_failed_review_profile(monkeypatch):
         audit.run(LABEL)
 
 
+def test_journey_audit_requires_exact_prior_profile_and_reports_only_status(monkeypatch):
+    conn = Connection([
+        [(17, False, {"qa_namespace": NAMESPACE})], [(False, False)], [(0,)],
+        [(2,)], [(2,)], [(1,)], [(0,)], [(0,)], [(1,)], [(1,)],
+    ])
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: conn)
+    monkeypatch.setattr(audit.Path, "read_text", lambda *_a, **_k: json.dumps({
+        "workflow_run_id": "42502525173-1", "profile": "setup_strategy_journey",
+        "target_sha": "9a72d5e4c8e10533a6a7359861e242efdd2c4808",
+        "protected_profile_attempted": True, "outcome": "incomplete",
+    }))
+    result = audit.run(LABEL, expected_profile="setup_strategy_journey")
+    assert result == {
+        "fixture_state": "QUARANTINED_INACTIVE", "cleanup_verified": False,
+        "owner_active": False, "exchange_keys_present": False,
+        "setups_present": True, "strategies_present": True, "bots_present": True,
+        "active_or_live_bots_present": False, "journey_setup_present": True,
+        "journey_strategy_present": True, "orders_present": False,
+        "executions_present": False,
+    }
+    assert NAMESPACE not in str(result) and "17" not in str(result)
+    assert conn.closed
+
+
+def test_journey_audit_rejects_other_prior_profile_before_database(monkeypatch):
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: pytest.fail("database touched"))
+    monkeypatch.setattr(audit.Path, "read_text", lambda *_a, **_k: json.dumps({
+        "workflow_run_id": "42502525173-1", "profile": "trader_pair_score_continuity",
+        "target_sha": "9a72d5e4c8e10533a6a7359861e242efdd2c4808",
+        "protected_profile_attempted": True, "outcome": "incomplete",
+    }))
+    with pytest.raises(RuntimeError, match="trader_fixture_audit_prior_report_mismatch"):
+        audit.run(LABEL, expected_profile="setup_strategy_journey")
+
+
 @pytest.mark.parametrize("analysis_status,expected_status", [
     ("failed", "failed"), ("private_status", "other"),
 ])

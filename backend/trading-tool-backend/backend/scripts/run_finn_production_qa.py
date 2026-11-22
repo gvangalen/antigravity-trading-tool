@@ -64,6 +64,7 @@ ALLOWED_PROFILES = {
     "trader_paper_exit_review_fixture_audit",
     "trader_paper_exit_review_fixture_cleanup",
     "trader_pair_fixture_audit",
+    "setup_strategy_journey_fixture_audit",
     "trader_pair_fixture_cleanup",
     "trader_strategy_schema_audit",
     "score2_exact_usdt_paper",
@@ -580,7 +581,7 @@ def profile_error_category(profile: str, error: Exception) -> str:
             "paper_exit_rendered_projection_failed",
             "paper_exit_source_parity_failed",
         } else "paper_exit_probe_runtime_error")
-    if profile in {"trader_paper_exit_fixture_audit", "trader_paper_exit_review_fixture_audit", "trader_pair_fixture_audit"}:
+    if profile in {"trader_paper_exit_fixture_audit", "trader_paper_exit_review_fixture_audit", "trader_pair_fixture_audit", "setup_strategy_journey_fixture_audit"}:
         code = str(error)
         return (code if code in {
             "trader_fixture_audit_label_invalid", "trader_fixture_audit_scope_invalid",
@@ -4222,7 +4223,7 @@ def main() -> int:
                     "INCOMPLETE" if report[args.profile]["result"] == "INCONCLUSIVE"
                     else "COMPLETED"
                 )
-            elif args.profile in {"trader_paper_exit_fixture_audit", "trader_paper_exit_review_fixture_audit", "trader_pair_fixture_audit"}:
+            elif args.profile in {"trader_paper_exit_fixture_audit", "trader_paper_exit_review_fixture_audit", "trader_pair_fixture_audit", "setup_strategy_journey_fixture_audit"}:
                 if args.manifest_id != "none" or args.manifest_bundle_path:
                     raise ValueError("trader_fixture_audit_manifest_forbidden")
                 report["protected_profile_attempted"] = True
@@ -4232,7 +4233,9 @@ def main() -> int:
 
                 report[args.profile] = audit_fixture(
                     args.run_label,
-                    expected_profile=("trader_pair_score_continuity"
+                    expected_profile=("setup_strategy_journey"
+                                      if args.profile == "setup_strategy_journey_fixture_audit"
+                                      else "trader_pair_score_continuity"
                                       if args.profile == "trader_pair_fixture_audit"
                                       else "trader_paper_exit_review_chain"
                                       if args.profile == "trader_paper_exit_review_fixture_audit"

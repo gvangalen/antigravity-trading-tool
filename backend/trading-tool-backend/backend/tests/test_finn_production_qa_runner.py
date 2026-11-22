@@ -663,7 +663,7 @@ def test_prior_trader_fixture_audits_are_read_only_and_bounded():
     module = _module()
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
     dispatch = DISPATCH_SCRIPT_PATH.read_text(encoding="utf-8")
-    for profile in ("trader_paper_exit_fixture_audit", "trader_paper_exit_review_fixture_audit", "trader_pair_fixture_audit"):
+    for profile in ("trader_paper_exit_fixture_audit", "trader_paper_exit_review_fixture_audit", "trader_pair_fixture_audit", "setup_strategy_journey_fixture_audit"):
         assert profile in module.ALLOWED_PROFILES
         assert profile in workflow and profile in dispatch
     assert '"$ALLOW_FIXTURE_ACTIONS" != "false"' in workflow
@@ -672,11 +672,11 @@ def test_prior_trader_fixture_audits_are_read_only_and_bounded():
     assert '"$allow_safe_fixture_execution" != "false"' in dispatch
     source = SCRIPT_PATH.read_text(encoding="utf-8")
     audit_branch = source.split(
-        'elif args.profile in {"trader_paper_exit_fixture_audit", "trader_paper_exit_review_fixture_audit", "trader_pair_fixture_audit"}:', 1
+        'elif args.profile in {"trader_paper_exit_fixture_audit", "trader_paper_exit_review_fixture_audit", "trader_pair_fixture_audit", "setup_strategy_journey_fixture_audit"}:', 1
     )[1].split(
         'elif args.profile == "trader_pair_fixture_cleanup":', 1
     )[0]
-    assert 'expected_profile=("trader_pair_score_continuity"' in audit_branch
+    assert 'expected_profile=("setup_strategy_journey"' in audit_branch
     assert 'execution_calls' not in audit_branch
     assert 'else "incomplete"' in audit_branch
     assert '"INCOMPLETE"' in audit_branch
