@@ -215,8 +215,13 @@ def test_exact_yes_diagnostic_rejects_ambiguous_turns_without_exposing_rows(monk
     assert "private" not in str(result)
 
 
-def test_exact_strategy_diagnostic_reports_failed_proposal_conditions_only(monkeypatch):
-    namespace = "qa-45015412389-1-999bd355-1234abcd"
+@pytest.mark.parametrize("label,namespace", [
+    (audit.JOURNEY_STRATEGY_DIAGNOSTIC_LABEL, "qa-45015412389-1-999bd355-1234abcd"),
+    (audit.JOURNEY_STRATEGY_RETEST_LABEL, "qa-45020771853-1-ea64f391-1234abcd"),
+])
+def test_exact_strategy_diagnostic_reports_failed_proposal_conditions_only(
+    monkeypatch, label, namespace,
+):
     conn = Connection([
         [(17, False, {"qa_namespace": namespace})], [(False, False)], [(0,)],
         [(2,)], [(1,)], [(1,)], [(0,)], [(0,)], [(1,)], [(0,)],
@@ -229,7 +234,7 @@ def test_exact_strategy_diagnostic_reports_failed_proposal_conditions_only(monke
     ])
     monkeypatch.setattr(audit, "_verify_prior_report", lambda *_args: None)
     monkeypatch.setattr(audit.fixture, "_connection", lambda: conn)
-    result = audit.run(audit.JOURNEY_STRATEGY_DIAGNOSTIC_LABEL,
+    result = audit.run(label,
                        expected_profile="setup_strategy_journey")
     assert result["strategy_diagnostic_state"] == "available"
     assert result["strategy_status"] == "clarification_required"
@@ -443,14 +448,17 @@ def test_exact_short_yes_child_cleanup_requires_guided_failure_and_safe_rows(
         assert calls == [((namespace, 17, 22), {"require_safe_pair_cleanup": True})]
 
 
+@pytest.mark.parametrize("label,namespace", [
+    (audit.JOURNEY_STRATEGY_DIAGNOSTIC_LABEL, "qa-45015412389-1-999bd355-1234abcd"),
+    (audit.JOURNEY_STRATEGY_RETEST_LABEL, "qa-45020771853-1-ea64f391-1234abcd"),
+])
 @pytest.mark.parametrize("failure_stage,expected_error", [
     ("strategy_proposal", None),
     ("strategy_confirmation", "journey_cleanup_prior_state_mismatch"),
 ])
 def test_exact_strategy_proposal_child_cleanup_requires_failure_and_safe_rows(
-    monkeypatch, failure_stage, expected_error,
+    monkeypatch, label, namespace, failure_stage, expected_error,
 ):
-    namespace = "qa-45015412389-1-999bd355-1234abcd"
     saved_name = f"QA BTC Setup {namespace}"
     prior = {"setup_strategy_journey": {"fixture_state": "quarantined",
         "failure_stage": failure_stage, "reason": "journey_strategy_proposal_missing"}}
@@ -469,10 +477,10 @@ def test_exact_strategy_proposal_child_cleanup_requires_failure_and_safe_rows(
     monkeypatch.setattr(audit.fixture, "_cleanup", lambda *args, **kwargs: calls.append((args, kwargs)))
     if expected_error:
         with pytest.raises(RuntimeError, match=f"^{expected_error}$"):
-            audit.cleanup_journey(audit.JOURNEY_STRATEGY_DIAGNOSTIC_LABEL)
+            audit.cleanup_journey(label)
         assert not calls
     else:
-        assert audit.cleanup_journey(audit.JOURNEY_STRATEGY_DIAGNOSTIC_LABEL) == {
+        assert audit.cleanup_journey(label) == {
             "fixture_state": "CLEANED", "cleanup_verified": True,
         }
         assert calls == [((namespace, 17, 22), {"require_safe_pair_cleanup": True})]

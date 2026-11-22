@@ -105,7 +105,8 @@ def test_journey_cleanup_dispatch_is_exact_label_and_non_execution(tmp_path):
                           "audit-44974889786-1-76d282df",
                           "audit-44977345882-1-f5cfb7a3",
                           "audit-45006104528-1-50cc25ca",
-                          "audit-45015412389-1-999bd355"):
+                          "audit-45015412389-1-999bd355",
+                          "audit-45020771853-1-ea64f391"):
         args = ["bash", str(DISPATCH_SCRIPT_PATH), "a" * 40, profile, "none", allowed_label]
         valid = subprocess.run(args, env=dict(base_env,
             FINN_QA_ALLOW_FIXTURE_ACTIONS="true", FINN_QA_ALLOW_FIXTURE_EXECUTION="false"),
@@ -169,12 +170,16 @@ def test_exact_short_yes_cleanup_is_allowlisted_across_all_protected_gates():
     assert 'cleanup_journey(args.run_label)' in runner
 
 
-def test_exact_strategy_proposal_cleanup_uses_same_protected_gates():
+@pytest.mark.parametrize("label", [
+    "audit-45015412389-1-999bd355",
+    "audit-45020771853-1-ea64f391",
+])
+def test_exact_strategy_proposal_cleanup_uses_same_protected_gates(label):
     from backend.scripts import probe_protected_trader_fixture_audit as audit
 
-    label = "audit-45015412389-1-999bd355"
     assert label in audit.JOURNEY_CLEANUP_LABELS
-    assert label == audit.JOURNEY_STRATEGY_DIAGNOSTIC_LABEL
+    assert label in {audit.JOURNEY_STRATEGY_DIAGNOSTIC_LABEL,
+                     audit.JOURNEY_STRATEGY_RETEST_LABEL}
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
     dispatch = DISPATCH_SCRIPT_PATH.read_text(encoding="utf-8")
     for source, anchor in (
