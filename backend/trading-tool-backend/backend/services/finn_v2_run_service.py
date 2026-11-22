@@ -83,6 +83,72 @@ from backend.utils import openai_client
 logger = logging.getLogger(__name__)
 
 
+async def _verified_journey_affirmative_message(
+    session: AsyncSession, *, context: dict, message: str, user_id: int,
+) -> str | None:
+    """Expand an immediate yes only from this conversation's confirmed action."""
+    if not re.fullmatch(r"(?:ja|ja graag|graag|yes|yes please|sure|ok|okay|ja bitte)",
+                        str(message or "").strip(), re.IGNORECASE):
+        return None
+    if not context.get("strict_immediate_action_lineage"):
+        return None
+    action = dict(context.get("immediate_previous_action_result") or {})
+    operation = action.get("operation_id")
+    if (action.get("owner_user_id") != user_id
+            or action.get("result_status") != "succeeded"
+            or operation not in {"create_setup", "create_strategy"}):
+        return None
+    entity_id = str(action.get("entity_id") or "")
+    if not entity_id.isdigit() or int(entity_id) <= 0:
+        return None
+    canonical = dict(action.get("canonical_entity") or {})
+    if operation == "create_setup":
+        # A combined setup/strategy task has its own continuation and did
+        # not offer the optional strategy step.
+        if canonical.get("strategy_id"):
+            return None
+        result = {"setup_id": int(entity_id)}
+    else:
+        setup_id = str(action.get("parent_entity_id") or canonical.get("setup_id") or "")
+        if not setup_id.isdigit() or int(setup_id) <= 0:
+            return None
+        result = {"setup_id": int(setup_id), "strategy_id": int(entity_id)}
+    from backend.services.finn_v2_execution_service import FinnV2ExecutionService
+
+    next_step = await FinnV2ExecutionService(session)._journey_next_step(
+        user_id, operation, result,
+    )
+    if not next_step or not next_step.get("pair"):
+        return None
+    pair = str(next_step["pair"])
+    setup_id = int(next_step["setup_id"])
+    language = str(context.get("locale") or "nl").split("-")[0].lower()
+    if next_step.get("step") == "strategy" and operation == "create_setup":
+        if language == "en":
+            return (f"Prepare a strategy for my existing {pair} setup with ID {setup_id}. "
+                    "Do not create another setup. Ask for missing choices and present the strategy for confirmation.")
+        if language == "de":
+            return (f"Bereite eine Strategie für mein bestehendes {pair}-Setup mit ID {setup_id} vor. "
+                    "Erstelle kein weiteres Setup. Frage nach fehlenden Angaben und lege die Strategie zur Bestätigung vor.")
+        return (f"Bereid een strategie voor mijn bestaande {pair}-setup met ID {setup_id} voor. "
+                "Maak geen nieuwe setup. Vraag naar ontbrekende keuzes en leg de strategie ter bevestiging voor.")
+    if next_step.get("step") == "paper" and operation == "create_strategy":
+        strategy_id = int(next_step["strategy_id"])
+        if language == "en":
+            return (f"Prepare a Paper bot proposal for my saved {pair} strategy with ID {strategy_id} "
+                    f"for setup ID {setup_id}. Ask for missing risk and budget choices and present "
+                    "the bot separately for confirmation. Do not activate or place an order.")
+        if language == "de":
+            return (f"Bereite einen Paper-Bot-Vorschlag für meine gespeicherte {pair}-Strategie "
+                    f"mit ID {strategy_id} für Setup ID {setup_id} vor. Frage nach fehlenden Risiko- "
+                    "und Budgetangaben und lege den Bot gesondert zur Bestätigung vor. "
+                    "Aktiviere nichts und platziere keine Order.")
+        return (f"Bereid een Paper-botvoorstel voor mijn opgeslagen {pair}-strategie met ID {strategy_id} "
+                f"voor setup ID {setup_id} voor. Vraag naar ontbrekende risico- en budgetkeuzes "
+                "en leg de bot apart ter bevestiging voor. Activeer niets en plaats geen order.")
+    return None
+
+
 def _trusted_cursor_previous_response(prior_contract, cursor: dict, *, user_id: int,
                                       conversation_id: str, locale: str) -> dict | None:
     """Project only a completed prior turn verified for this owner and conversation."""
@@ -2410,6 +2476,10 @@ class FinnV2RunService:
                 message=message,
                 has_prior_run=(run.client_context_json or {}).get("_conversation_has_prior_run"),
             )
+            if conversation_id:
+                message = (await _verified_journey_affirmative_message(
+                    session, context=context, message=message, user_id=user_id,
+                )) or message
             # The sealed prior run can rehydrate a card through
             # proposal_revision even without an active guided projection.
             # A separately named complete request starts from its own fields.
