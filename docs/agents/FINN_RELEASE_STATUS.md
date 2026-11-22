@@ -4,6 +4,37 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: volledig strategieantwoord blijft bij opgeslagen setup (22 november 2026)
+
+Phase: `PRODUCT_MERGED_DEPLOY_PENDING`. Onafhankelijke QA keurde de vorige
+live kandidaat af: de setup werd opgeslagen, het korte `ja` hield de juiste
+setupbinding vast, maar het daaropvolgende volledige strategieantwoord eindigde
+zonder voorstel (`clarification_required`). Product-PR
+[#1290](https://github.com/gvangalen/antigravity-trading-tool/pull/1290)
+is gemerged als `f7868a2b11919921f318b8ea5b1bc49329ca8275`.
+Bij een actief begeleid `create_strategy`-contract, een opgeslagen setup-ID
+en alle vereiste expliciete strategievelden houdt de runtime de beantwoorde
+opdracht op de bestaande voorstelroute. Bevestiging, opslag en een bot of order
+blijven afzonderlijke acties.
+
+Lokale Build-metingen: backend **5302 passed, 8 skipped**; frontend build,
+typecheck, i18n-lint/tests, command- en voorsteltests en high audit geslaagd.
+De volledige geïsoleerde FastAPI/Celery/PostgreSQL/Redis-actiematrix slaagde
+**17/17** (artifact SHA-256
+`ec6eff7e946d8cb940716825a8ac9e000399bb2f58b30d1f281d4981fe0341d0`).
+De BTC/USDT-driebeurtenproef eindigde met één conceptstrategie voor dezelfde
+setup, nul ontbrekende invoervelden en één dispatch/poging; er waren nul
+brokerorders, Live-bots, Live-calls of productieverbindingen. De echte
+Responses-providerselectie slaagde development **20/20** (artifact SHA-256
+`7a3c6a4ec4647aae669aaa0fb185a5910ea44ba8608d0c62c2c864f4f5c454b3`)
+en regression **109/109** (artifact SHA-256
+`0cb2566e6b356d6ff8050f5a0cc121c1f1212608374d75ae9a505b5693757be7`),
+zonder provider-, schema-, timeout-, parse- of validatiefouten. PR-CI
+**45024552959** slaagde met alle vijf jobs. Main-CI, Auto Deploy, publieke
+SHA-pariteit en onafhankelijke ingelogde QA voor de nieuwe kandidaat staan
+nog open. De vorige live QA-uitkomst blijft `NOT_ACCEPTED` totdat een nieuwe
+proef op de uiteindelijke gedeployde SHA slaagt.
+
 ## FINN 3.0: natuurlijke strategienaam na setupvervolg (22 november 2026)
 
 Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`. Product-PR
