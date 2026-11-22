@@ -703,6 +703,7 @@ def test_worker_records_score_2_decision_for_missing_and_complete_sources(
     monkeypatch, paper_engines, available, quote_ready,
 ):
     from backend.engine import trading_bot_execution as worker
+    monkeypatch.setattr(worker, "_lock_active_owner", lambda *_args: True)
 
     class Connection:
         committed = False

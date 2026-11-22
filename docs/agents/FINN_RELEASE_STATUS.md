@@ -4,6 +4,44 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN: inactieve bot-eigenaar blokkeert uitvoeringsroute (22 november 2026)
+
+Phase: `LOCAL_GATES_PASSED_PENDING_PR_CI_DEPLOY_QA`. Candidate branch
+`codex/bot-inactive-owner-guard-20261122`. Onafhankelijke Security-review
+stelde een P1-grens vast: de normale dispatcher selecteert actieve gebruikers,
+maar een al gequeue'de of directe botrun controleerde de eigenaar niet opnieuw.
+Een inactieve eigenaar met een actieve Paper-bot kon daardoor nog een besluit
+of orderrij krijgen. FINN's create_bot zet alleen Live uit; de nieuwe
+Paper-config is standaard actief. Dit is een productveiligheidsreparatie,
+geen bewijs van een eerder uitgevoerde order.
+
+De kandidaat vergrendelt `users.is_active=TRUE` met `FOR SHARE` vóór
+botselectie en vóór een handmatige beslisclaim; de botquery bevat bovendien
+een actieve-eigenaar-JOIN. Een inactieve owner geeft bij een gewone botrun
+een lege, geslaagde no-op en bij `paper_only` een getypeerde stop. De lock
+blijft tijdens de Paper-bottransactie tot commit/rollback bestaan. Een lokale
+PostgreSQL-concurrencyproef liet een gelijktijdige deactivering op de lock
+wachten, zonder rijwijziging te committen. Security zag in de concrete diff
+geen directe lockinversie. Bestaande al-duurzaam gemaakte Live-intenties
+worden met deze guard niet geannuleerd; de Live-exchange-call ligt in een
+ander pad na een commit. Claim dus geen volledige Live-annuleringsgarantie.
+
+Lokale Build-gates: backend **5362 passed, 8 skipped**; gerichte bot- en
+scoreketentests **191/191**; frontend typecheck, i18n-lint/tests, commandotests,
+productiebuild en `audit:high` geslaagd (één bestaande moderate
+Next.js-advisory). Geïsoleerde worker-actiematrix **17/17**, artifact SHA-256
+`a13444dd37b30c82dc3bde51123de5a5d8a5692568fa78b98b9b61d37e35ead4`,
+adapters **28/28**, Smart DCA en calendar DCA groen, zonder brokerorders,
+Live-calls of productieverbindingen. Echte providerselectie development
+**20/20** (artifact SHA-256
+`3b8316e8062cd49bd28349baa1a61c332c57cdc4a99de02fa13bfb2f470ecbc7`)
+en regression **109/109** (artifact SHA-256
+`f3737e2b05b43aa53d41a590b4a9079a77079ae5047b1fbe078abef2f6126738`),
+zonder provider-, schema-, timeout-, parse- of validatiefouten. Onafhankelijke
+live QA voor de nieuwe grens en het afzonderlijke protected AAPL-bot-CRUD-
+profiel staat nog open. De huidige protected inactieve child mag na deze fix
+niet door de normale botworker worden verwerkt.
+
 ## FINN: gedateerde accountvergelijking en bevestigde vervolgstap (22 november 2026)
 
 Phase: `LIVE_DEPLOYED_QA_NOT_ACCEPTED`. Product-PR

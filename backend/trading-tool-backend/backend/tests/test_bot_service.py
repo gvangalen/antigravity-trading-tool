@@ -2058,6 +2058,7 @@ def test_paper_only_worker_does_not_assess_live_bot(monkeypatch):
             pass
 
     monkeypatch.setattr(worker, "get_db_connection", Connection)
+    monkeypatch.setattr(worker, "_lock_active_owner", lambda *_args: True)
     monkeypatch.setattr(worker, "_get_active_bots", lambda *_args: [{
         "bot_id": 9, "is_live": True, "is_active": True,
     }])
