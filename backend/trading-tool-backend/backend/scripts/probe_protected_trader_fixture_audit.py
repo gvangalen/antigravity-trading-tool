@@ -28,6 +28,7 @@ PAIR_CLEANUP_LABELS = frozenset({
 JOURNEY_CLEANUP_LABEL = "audit-44968391213-1-e2872eb9"
 JOURNEY_CARD_LABEL = "audit-44974889786-1-76d282df"
 JOURNEY_TRANSPORT_LABEL = "audit-44977345882-1-f5cfb7a3"
+JOURNEY_YES_DIAGNOSTIC_LABEL = "audit-45006104528-1-50cc25ca"
 JOURNEY_CLEANUP_LABELS = frozenset({
     JOURNEY_CLEANUP_LABEL,
     "audit-44972794086-1-da950aac",
@@ -65,6 +66,79 @@ def _journey_execution_status(cur, user_id: int) -> dict:
             for code in codes[:8]
         }),
         "replay_status": "not_recorded",
+    }
+
+
+def _journey_yes_diagnostic(cur, user_id: int, namespace: str) -> dict:
+    """Compare the three QA turns without exposing their content or identifiers."""
+    cur.execute(
+        "SELECT id FROM setups WHERE user_id=%s AND symbol='BTC' AND name=%s",
+        (user_id, f"QA BTC Setup {namespace}"),
+    )
+    setups = cur.fetchall()
+    if len(setups) != 1:
+        return {"yes_diagnostic_state": "setup_missing_or_ambiguous"}
+    setup_id = setups[0][0]
+    cur.execute(
+        """SELECT conversation_id FROM finn_v2_runs
+           WHERE user_id=%s AND client_context_json->>'surface'='qa_setup_strategy_journey'
+             AND message=%s""",
+        (user_id, f"Ik wil los een swing-setup voor BTC/USDT op 4 uur, genaamd QA BTC Setup {namespace}. "
+                  "Bereid alleen de setup voor en toon eerst het voorstel."),
+    )
+    setup_turns = cur.fetchall()
+    cur.execute(
+        """SELECT conversation_id FROM finn_v2_runs
+           WHERE user_id=%s AND client_context_json->>'surface'='qa_coach_feed'
+             AND message=%s""",
+        (user_id, "Bespreek de volgende stap voor mijn BTC/USDT-setup. "
+                  "Lees het opgeslagen plan; wijzig niets."),
+    )
+    feed_turns = cur.fetchall()
+    cur.execute(
+        """SELECT r.conversation_id,r.status,c.terminal_projection_json
+           FROM finn_v2_runs r LEFT JOIN finn_v2_runtime_contracts c
+             ON c.run_id=r.id AND c.user_id=r.user_id
+           WHERE r.user_id=%s AND r.client_context_json->>'surface'='qa_setup_strategy_journey'
+             AND r.message=%s""",
+        (user_id, "ja"),
+    )
+    yes_turns = cur.fetchall()
+    if len(setup_turns) != 1 or len(yes_turns) != 1:
+        return {"yes_diagnostic_state": "turn_missing_or_ambiguous",
+                "setup_turn_unique": len(setup_turns) == 1,
+                "yes_turn_unique": len(yes_turns) == 1,
+                "feed_turn_unique": len(feed_turns) == 1}
+    setup_conversation = setup_turns[0][0]
+    yes_conversation, status, raw_projection = yes_turns[0]
+    projection = raw_projection if isinstance(raw_projection, dict) else {}
+    action_draft = projection.get("action_draft") or {}
+    if not isinstance(action_draft, dict):
+        action_draft = {}
+    inputs = projection.get("supplied_inputs") or {}
+    if not isinstance(inputs, dict):
+        inputs = {}
+    operation = projection.get("final_operation_id") or projection.get("initial_operation_id")
+    guided = action_draft.get("operation_id")
+    def safe_operation(value: object) -> str:
+        return value if value in {"create_setup", "create_strategy", "create_bot"} else (
+            "missing" if value is None else "other")
+    def safe_count(value: object) -> int | str:
+        return value if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 3 else "other"
+    return {
+        "yes_diagnostic_state": "available",
+        "yes_status": status if status in {"completed", "clarification_required", "failed", "running"} else "other",
+        "yes_operation": safe_operation(operation),
+        "yes_guided_operation": safe_operation(guided),
+        "yes_setup_id_match": str(inputs.get("setup_id")) == str(setup_id),
+        "yes_setup_conversation_match": yes_conversation == setup_conversation,
+        "feed_turn_unique": len(feed_turns) == 1,
+        "feed_setup_conversation_match": (feed_turns[0][0] == setup_conversation
+                                           if len(feed_turns) == 1 else None),
+        "feed_yes_conversation_match": (feed_turns[0][0] == yes_conversation
+                                         if len(feed_turns) == 1 else None),
+        "yes_dispatch_count": safe_count(projection.get("dispatch_count")),
+        "yes_attempt_count": safe_count(projection.get("attempt_count")),
     }
 
 
@@ -163,6 +237,10 @@ def run(label: str, *, expected_profile: str = "trader_paper_exit_reconciliation
                     if label == JOURNEY_CLEANUP_LABEL else {}
                 )
                 card_diagnostic = {}
+                yes_diagnostic = (
+                    _journey_yes_diagnostic(cur, user_id, namespace)
+                    if label == JOURNEY_YES_DIAGNOSTIC_LABEL else {}
+                )
                 if label == JOURNEY_CARD_LABEL:
                     cur.execute(
                         """SELECT id FROM setups WHERE user_id=%s AND symbol='BTC' AND name=%s""",
@@ -201,6 +279,7 @@ def run(label: str, *, expected_profile: str = "trader_paper_exit_reconciliation
                     "executions_present": bool(present["bot_executions"]),
                     **execution_diagnostic,
                     **card_diagnostic,
+                    **yes_diagnostic,
                     **transport_diagnostic,
                 }
             if expected_profile == "trader_pair_score_continuity":
