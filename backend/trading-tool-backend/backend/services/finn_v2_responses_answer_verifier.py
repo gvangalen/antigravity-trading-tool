@@ -94,7 +94,8 @@ class FinnResponsesAnswerVerifier:
         # dated report prices and saved entry/stop levels free to be discussed.
         price_word = r"(?:koers\w*|prijs\w*|quote\w*|price\w*|snapshot|noteert)"
         marker = re.compile(
-            rf"\b(?:actuele|huidige|nieuwste|laatste|current|latest)\b[^;.!?\n]{{0,70}}\b{price_word}\b"
+            rf"\b(?:actuele|huidige|nieuwste|laatste|laatst\s+(?:beschikbare|bekende)|"
+            rf"current|latest|last\s+(?:available|known))\b[^;.!?\n]{{0,70}}\b{price_word}\b"
             rf"|\b{price_word}\b[^;.!?\n]{{0,50}}\b(?:nu|momenteel|actueel|current)\b",
             re.I,
         )
@@ -1943,13 +1944,28 @@ class FinnResponsesAnswerVerifier:
         for item in evidence:
             if item.get("status") == "completed":
                 monetary_fields(item.get("data"))
-                if item.get("scope") == "read_market_snapshot" and item.get("freshness") == "fresh":
+                if item.get("scope") == "read_market_snapshot":
                     market = item.get("data") or {}
                     if isinstance(market, dict) and (item.get("as_of") or market.get("as_of")):
                         quote = str(market.get("quote_currency") or "").upper()
                         price = market.get("price")
                         if quote in {"EUR", "USD", "USDT"} and price is not None:
-                            grounded.update(cls._currency_amounts(f"{price} {quote}"))
+                            stale_dated_quote = (
+                                item.get("freshness") == "stale"
+                                and re.search(
+                                    r"\b(?:nieuwste|laatste|laatst\s+(?:beschikbare|bekende)|"
+                                    r"latest|last\s+(?:available|known))\b[^.!?\n]{0,70}"
+                                    r"\b(?:koers\w*|prijs\w*|quote\w*|price\w*)\b",
+                                    answer, re.I,
+                                )
+                                and cls._latest_quote_claim_supported(answer, evidence)
+                            )
+                            # A dated last-known quote can ground a read-only
+                            # answer after the close. The quote verifier above
+                            # checks its exact source moment and rejects an
+                            # undated or falsely current stale quote.
+                            if item.get("freshness") == "fresh" or stale_dated_quote:
+                                grounded.update(cls._currency_amounts(f"{price} {quote}"))
                 if item.get("scope") == "read_linked_strategy":
                     strategy = item.get("data") or {}
                     if isinstance(strategy, dict):

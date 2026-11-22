@@ -4,6 +4,35 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN: laatste koers na beursluiting als gedateerde bron (22 november 2026)
+
+Phase: `LOCAL_VALIDATED_RELEASE_PENDING`. Candidate branch
+`codex/finn-closed-market-read-20261122`. FINN's antwoordcontrole wees een
+gedateerde laatst beschikbare AAPL-koers af zodra de marktmeting als `stale`
+was gemarkeerd. De reparatie laat deze koers uitsluitend als historische,
+read-only bron in een antwoord toe wanneer bedrag, valuta en volledig
+bronmoment overeenkomen met de laatst opgeslagen marktmeting. Een oude koers
+als actuele koers, een bedrag zonder bronmoment of een afwijkend bedrag
+blijft afgewezen. Setup, strategie en Paper-botconfiguratie hebben geen verse
+uitvoeringskoers nodig; de bestaande Paper-ordergrens blijft een ongeldige
+of verouderde uitvoeringskoers blokkeren.
+
+Gemeten lokale Build-controles: backend **5337 passed, 8 skipped**;
+frontend productiebuild, typecheck, i18n-lint/tests, command-/voorsteltests
+en `audit:high` geslaagd (één moderate Next.js-advisory). De volledige
+geïsoleerde FastAPI/Celery/PostgreSQL/Redis-actiematrix slaagde **17/17**,
+artifact SHA-256 `c8788bec84c2032f1766f468b0b881de8cdd857e39281d4e6bff6663ae2ae40e`,
+zonder brokerorders, Live-bots, Live-calls of productieverbindingen.
+Daarnaast **28/28** action-adaptertests, de Smart DCA-migratie en de
+bevestigde Smart DCA- en calendar-DCA-runtimes geslaagd. Echte
+Responses-providerselectie: development **20/20**, artifact SHA-256
+`c71e92df520dc7619da7da1604edf41533a9fa484d60e3bc973b59cd62ba2589`,
+en regression **109/109**, artifact SHA-256
+`3d43426ac1d40a7592ac4890878f36a17398d9b0a5cfc231ccdd4c5ab762b41c`,
+zonder provider-, schema-, timeout-, parse- of validatiefouten. Onafhankelijke
+ingelogde live QA voor de gesloten-markt-flow staat nog open; deze lokale
+resultaten bewijzen de oorzaak van de eerdere `unavailable`-beurten niet.
+
 ## FINN: opgeslagen traderprofiel uitlezen (22 november 2026)
 
 Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`. Product-PR
