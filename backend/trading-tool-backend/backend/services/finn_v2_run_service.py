@@ -990,6 +990,29 @@ def _pure_strategy_price_reentry(message: str) -> bool:
     ))
 
 
+def _complete_named_guided_strategy_proposal(
+    message: str, guided_inputs: dict[str, Any],
+) -> bool:
+    """Keep a complete answer on its verified, saved setup's proposal path."""
+    if not re.match(r"^\s*noem\s+(?:die|de|deze)\s+strategie\b", message, re.I):
+        return False
+    if ("?" in message or FinnV2OperationStateService.is_cancel_intent(message)
+            or _strategy_rule_is_unencoded(message)):
+        return False
+    setup_id = guided_inputs.get("setup_id")
+    if not str(setup_id or "").isdigit() or int(setup_id) <= 0:
+        return False
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    supplied = FinnV2OperationStateService().explicit_inputs(
+        contract=contract, message=message, explicit_asset=None,
+        known_setup_type="trade",
+    )
+    return all(supplied.get(field) is not None for field in (
+        "name", "execution_mode", "base_amount", "entry", "stop_loss",
+        "targets", "risk_profile", "price_currency",
+    ))
+
+
 def _inherits_blocked_strategy_rules(message: str) -> bool:
     """A new name does not make a draft independent when it inherits old rules."""
     normalized = re.sub(r"\s+", " ", str(message or "").casefold())
@@ -3231,7 +3254,11 @@ class FinnV2RunService:
             design_focus_superseded_strategy = True
         else:
             design_focus_superseded_strategy = False
-        if pending_clarification:
+        complete_named_guided_strategy = (
+            pending_guided == "create_strategy"
+            and _complete_named_guided_strategy_proposal(message, guided_inputs)
+        )
+        if pending_clarification and not complete_named_guided_strategy:
             relevance = FinnResponsesToolRelevanceGuard(client)
             if not await relevance.continues_clarification(
                 message=message,
@@ -3251,6 +3278,10 @@ class FinnV2RunService:
                     # A fresh request must not inherit an unrelated choice as its answer.
                     previous_response = None
         corrected_guided_operation_id: str | None = asset_corrected_operation_id
+        if complete_named_guided_strategy and not corrected_guided_operation_id:
+            # The owner-bound setup and all typed fields are already known.
+            # Do not let a relevance/model round discard this pending action.
+            corrected_guided_operation_id = "create_strategy"
         unresolved_asset_correction = dict(context.get("proposal_correction_result") or {})
         if (
             not corrected_guided_operation_id
@@ -3321,7 +3352,9 @@ class FinnV2RunService:
                     for target in explicit_targets
                 )
             )
-            if pending_guided == "create_bot" and guided.get("target_choice_required") is True:
+            if complete_named_guided_strategy:
+                continuation = True
+            elif pending_guided == "create_bot" and guided.get("target_choice_required") is True:
                 # A strategy name answers this bot draft's target slot. It is
                 # not an instruction to start creating a new strategy, even
                 # though the named object belongs to the strategy domain.

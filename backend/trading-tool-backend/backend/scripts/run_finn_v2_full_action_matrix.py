@@ -33,7 +33,7 @@ ACTION_SPECS = (
     ("create_indicator_configuration", "Maak een technische RSI indicatorconfiguratie voor ADA.", "Maak een technische RSI indicatorconfiguratie.", "Voor ADA."),
     ("update_indicator_configuration", "Wijzig alleen de weging van Volume voor BTC/EUR naar laag; laat BTC/USDT ongemoeid.", "Pas de weging van mijn Volume-indicator aan.", "Voor BTC/EUR naar laag; laat BTC/USDT ongemoeid."),
     ("delete_indicator_configuration", "Verwijder mijn technische RSI indicatorconfiguratie voor SOL.", "Verwijder mijn technische RSI indicatorconfiguratie.", "Voor SOL."),
-    ("create_setup", "Maak een swing setup voor SOL/USDT op 4 uur met de naam Matrix Nieuwe Setup.", "Maak een swing setup voor SOL.", "Op 4 uur met de naam Matrix Nieuwe Setup voor SOL/USDT."),
+    ("create_setup", "Maak een swing setup voor BTC/USDT op 4 uur met de naam Matrix Nieuwe Setup.", "Maak een swing setup voor BTC.", "Op 4 uur met de naam Matrix Nieuwe Setup voor BTC/USDT."),
     ("update_setup", "Werk Matrix Update Setup bij en zet het tijdframe naar 1 uur.", "Werk een setup bij.", "Werk Matrix Update Setup bij en zet het tijdframe naar 1 uur."),
     ("delete_setup", "Verwijder de setup Matrix Delete Setup.", "Verwijder een setup.", "Verwijder de setup Matrix Delete Setup."),
     ("create_strategy", "Maak voor Matrix Strategy Parent een strategie met de naam Matrix Nieuwe Strategie, vaste uitvoering van 100 euro, entry 76000 EUR, stop-loss 72000 EUR, targets 83000 en 87000 EUR en gebalanceerd risico.", "Maak een strategie voor Matrix Strategy Parent.", "Maak voor Matrix Strategy Parent een strategie met de naam Matrix Nieuwe Strategie, vaste uitvoering van 100 euro, entry 76000 EUR, stop-loss 72000 EUR, targets 83000 en 87000 EUR en gebalanceerd risico."),
@@ -61,7 +61,7 @@ GUIDED_SLOT_ANSWERS = {
     "update_indicator_configuration": ("Voor BTC/EUR.", "Zet de weging naar laag; laat BTC/USDT ongemoeid."),
     "delete_indicator_configuration": ("Voor SOL.",),
     "create_setup": {
-        "quote_currency": "USDT als koersvaluta; SOL/USDT.",
+        "quote_currency": "USDT als koersvaluta; BTC/USDT.",
         "timeframe": "Op 4 uur.",
         "name": "Noem hem Matrix Nieuwe Setup.",
     },
@@ -564,9 +564,9 @@ def _run_contract(
                     detailed = run_gate(
                         base_url=base_url, bearer_token=token,
                         conversation_id=result.get("execution_conversation_id"),
-                        message=("Noem die strategie Matrix Vervolg Strategie. "
-                                 "Vaste uitvoering van 10 euro, entry 200 USDT, "
-                                 "stop-loss 180 USDT, target 220 USDT, gebalanceerd risico. "
+                        message=("Noem die strategie QA BTC Strategy matrix-20261122-abc123def456ghi789. "
+                                 "Vaste uitvoering van 10 euro, entry 76000 USDT, "
+                                 "stop-loss 72000 USDT, target 83000 USDT, gebalanceerd risico. "
                                  "Toon eerst een voorstel, maak geen bot."),
                         timeout_seconds=75,
                     )
