@@ -219,14 +219,15 @@ def test_exact_yes_diagnostic_rejects_ambiguous_turns_without_exposing_rows(monk
     (audit.JOURNEY_STRATEGY_DIAGNOSTIC_LABEL, "qa-45015412389-1-999bd355-1234abcd"),
     (audit.JOURNEY_STRATEGY_RETEST_LABEL, "qa-45020771853-1-ea64f391-1234abcd"),
 ])
+@pytest.mark.parametrize("status", ["clarification_required", "unavailable", "rejected"])
 def test_exact_strategy_diagnostic_reports_failed_proposal_conditions_only(
-    monkeypatch, label, namespace,
+    monkeypatch, label, namespace, status,
 ):
     conn = Connection([
         [(17, False, {"qa_namespace": namespace})], [(False, False)], [(0,)],
         [(2,)], [(1,)], [(1,)], [(0,)], [(0,)], [(1,)], [(0,)],
         [(42,)], [("conversation-private", {"action_draft": {"operation_id": "create_strategy"}})],
-        [("conversation-private", "clarification_required", None,
+        [("conversation-private", status, None,
           {"proposal_id": None, "confirmation_required": False, "content": "private answer"},
           {"initial_operation_id": "create_strategy", "action_draft": {"operation_id": "create_strategy"},
            "supplied_inputs": {"setup_id": 42, "private": "secret"},
@@ -237,7 +238,7 @@ def test_exact_strategy_diagnostic_reports_failed_proposal_conditions_only(
     result = audit.run(label,
                        expected_profile="setup_strategy_journey")
     assert result["strategy_diagnostic_state"] == "available"
-    assert result["strategy_status"] == "clarification_required"
+    assert result["strategy_status"] == status
     assert result["strategy_operation"] == "create_strategy"
     assert result["strategy_guided_operation"] == "create_strategy"
     assert result["prior_yes_guided_operation"] == "create_strategy"

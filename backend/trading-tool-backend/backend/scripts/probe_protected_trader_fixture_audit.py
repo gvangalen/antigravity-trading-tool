@@ -202,7 +202,11 @@ def _journey_strategy_diagnostic(cur, user_id: int, namespace: str) -> dict:
         return value if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 3 else "other"
     return {
         "strategy_diagnostic_state": "available",
-        "strategy_status": status if status in {"completed", "clarification_required", "failed", "running"} else "other",
+        "strategy_status": status if status in {
+            "created", "queued", "collecting", "planned", "reasoning", "verifying",
+            "clarification_required", "unavailable", "downgraded", "rejected",
+            "blocked", "completed", "failed", "canceled",
+        } else "other",
         "strategy_operation": safe_operation(operation),
         "strategy_guided_operation": safe_operation(draft.get("operation_id")),
         "prior_yes_guided_operation": safe_operation(
