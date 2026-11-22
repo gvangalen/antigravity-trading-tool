@@ -223,6 +223,11 @@ class FinnV2ExecutionService:
             # terminal lifecycle together here so an immediate replay observes
             # ``already_executed`` rather than a transient ``started`` row.
             await self._commit_terminal_execution()
+            await self._reconcile_journey_feed_after_commit(
+                user_id=user_id,
+                operation_type=proposal.operation_type,
+                result=safe_result_payload,
+            )
             if proposal.operation_type in {"watchlist_add", "watchlist_remove"}:
                 if proposal.operation_type == "watchlist_remove" or safe_result_payload.get("created"):
                     from backend.services.finn_coach_feed_service import record_watchlist_feed_change
@@ -472,6 +477,40 @@ class FinnV2ExecutionService:
         commit = getattr(self.session, "commit", None)
         if callable(commit):
             await commit()
+
+    async def _reconcile_journey_feed_after_commit(
+        self, *, user_id: int, operation_type: str, result: dict,
+    ) -> None:
+        """Publish the verified next step without waiting for a scoring worker.
+
+        The domain services also queue reconciliation for other write routes.
+        This owner-scoped pass makes a confirmed FINN action visible in the
+        feed immediately; stable event keys make the queued pass idempotent.
+        A feed failure cannot turn a committed setup or strategy into a failed
+        execution response.
+        """
+        if operation_type not in {"create_setup", "create_strategy"}:
+            return
+        if not isinstance(self.session, AsyncSession):
+            return
+        saved = result.get("setup") if operation_type == "create_setup" else result
+        if not isinstance(saved, dict):
+            return
+        symbol = str(saved.get("symbol") or "").strip().upper()
+        market_id = saved.get("market_id")
+        if not symbol or (market_id is not None and (type(market_id) is not int or market_id <= 0)):
+            return
+        try:
+            from backend.infrastructure.database import async_session_factory
+            from backend.services.finn_coach_feed_service import FinnCoachFeedService
+
+            async with async_session_factory() as feed_session:
+                await FinnCoachFeedService(feed_session).reconcile_journey_next_steps(
+                    user_id=user_id, symbol=symbol, market_id=market_id,
+                )
+                await feed_session.commit()
+        except Exception:
+            logger.warning("FINN journey feed reconciliation failed after confirmed action", exc_info=True)
 
     async def _record_verified_conversation_target(self, runtime_contract) -> None:
         """Publish the confirmed postcondition for an immediate next turn.
