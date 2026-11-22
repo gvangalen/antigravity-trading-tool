@@ -157,8 +157,8 @@ The historical replay response was not persisted and is reported as
 `not_recorded`, never inferred from the stored execution row. Its label is
 `audit-44968391213-1-e2872eb9`, with both fixture flags off.
 
-`setup_strategy_journey_fixture_cleanup` accepts only the two exact audited
-labels above and below,
+`setup_strategy_journey_fixture_cleanup` accepts only the exact audited
+labels listed here,
 `manifest_id=none`, `allow_fixture_actions=true`, and
 `allow_safe_fixture_execution=false`. It verifies the failed prior report,
 the fixture marker and namespace, one inactive non-Live bot, no exchange key,
@@ -167,6 +167,14 @@ rechecks owner and safety before deletion; the profile then checks absence of
 the child and its rows. No other QA namespace or ordinary account is eligible.
 The same locked cleanup profile also accepts the separately audited failed
 workflow `44972794086-1` with label `audit-44972794086-1-da950aac`.
+For failed workflow `44974889786-1`, `setup_strategy_journey_fixture_audit`
+additionally reports only a bounded `strategy_next_step` row count and its
+allowlisted status (`unread`, `read`, `resolved`, `missing`, or
+`multiple_or_other`) for the exact owner/setup. The corresponding cleanup
+label is `audit-44974889786-1-76d282df`. It requires exactly the original
+ETH seed plus one namespace-named BTC/USDT setup, no BTC strategy or watchlist
+row, and the existing inactive/no-key/no-trade checks before deleting the
+isolated child. This does not expose setup IDs, names, user text or task logs.
 
 `action_contract_acceptance` is the strict registry-wide profile. Before any
 product request it requires exactly one independent case for every active

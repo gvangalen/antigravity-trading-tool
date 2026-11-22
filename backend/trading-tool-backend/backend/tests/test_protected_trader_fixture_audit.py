@@ -128,6 +128,27 @@ def test_exact_journey_diagnostic_keeps_only_typed_execution_codes(monkeypatch):
     assert namespace not in str(result) and "private detail" not in str(result)
 
 
+@pytest.mark.parametrize("statuses,expected", [
+    ([], "missing"), ([('unread',)], "unread"),
+    ([('read',)], "read"), ([('resolved',)], "resolved"),
+    ([('unread',), ('read',)], "multiple_or_other"),
+])
+def test_exact_journey_card_audit_reports_only_bounded_status(monkeypatch, statuses, expected):
+    namespace = "qa-44974889786-1-76d282df-1234abcd"
+    conn = Connection([
+        [(17, False, {"qa_namespace": namespace})], [(False, False)], [(0,)],
+        [(2,)], [(1,)], [(1,)], [(0,)], [(0,)], [(1,)], [(0,)],
+        [(42,)], statuses,
+    ])
+    monkeypatch.setattr(audit, "_verify_prior_report", lambda *_args: None)
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: conn)
+    result = audit.run(audit.JOURNEY_CARD_LABEL, expected_profile="setup_strategy_journey")
+    assert result["strategy_card_status"] == expected
+    assert result["strategy_card_count"] == len(statuses)
+    assert namespace not in str(result) and "42" not in str(result)
+    assert conn.closed
+
+
 def test_journey_cleanup_rejects_other_label_before_database(monkeypatch):
     monkeypatch.setattr(audit.fixture, "_connection", lambda: pytest.fail("database touched"))
     with pytest.raises(RuntimeError, match="^journey_cleanup_label_not_allowed$"):
@@ -215,6 +236,44 @@ def test_journey_cleanup_removes_only_exact_safe_child_and_checks_postcondition(
     }
     assert calls == [((namespace, 17, 22), {"require_safe_pair_cleanup": True})]
     assert before.closed and after.closed
+
+
+@pytest.mark.parametrize("new_setup,expected_error", [
+    (True, None), (False, "journey_cleanup_btc_row_unsafe"),
+])
+def test_exact_journey_card_cleanup_requires_only_expected_saved_setup(
+    monkeypatch, new_setup, expected_error,
+):
+    namespace = "qa-44974889786-1-76d282df-1234abcd"
+    prior = {
+        "workflow_run_id": "44974889786-1", "profile": "setup_strategy_journey",
+        "target_sha": "76d282dfe2aab6f9c97cb3b342cf6d97e50a244b",
+        "protected_profile_attempted": True, "outcome": "failed",
+        "setup_strategy_journey": {"fixture_state": "quarantined",
+            "failure_stage": "setup_card", "reason": "journey_strategy_card_missing"},
+    }
+    saved_name = f"QA BTC Setup {namespace}" if new_setup else "other BTC setup"
+    before = Connection([
+        [(17, False, {"qa_namespace": namespace})], [(22, False, False)],
+        *([[(0,)]] * 6),
+        [(namespace, "ETH"), (saved_name, "BTC")], [(namespace, "ETH")],
+        [(saved_name, "BTC", "USDT")], [(0,)], [(0,)],
+    ])
+    after = Connection([[(0,)] for _ in range(8)])
+    connections = iter((before, after))
+    calls = []
+    monkeypatch.setattr(audit.Path, "read_text", lambda *_a, **_k: json.dumps(prior))
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: next(connections))
+    monkeypatch.setattr(audit.fixture, "_cleanup", lambda *args, **kwargs: calls.append((args, kwargs)))
+    if expected_error:
+        with pytest.raises(RuntimeError, match=f"^{expected_error}$"):
+            audit.cleanup_journey(audit.JOURNEY_CARD_LABEL)
+        assert not calls
+    else:
+        assert audit.cleanup_journey(audit.JOURNEY_CARD_LABEL) == {
+            "fixture_state": "CLEANED", "cleanup_verified": True,
+        }
+        assert calls == [((namespace, 17, 22), {"require_safe_pair_cleanup": True})]
 
 
 @pytest.mark.parametrize("analysis_status,expected_status", [
