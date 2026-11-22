@@ -5,6 +5,7 @@ from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor
 from backend.services.finn_v2_responses_answer_verifier import FinnResponsesAnswerVerifier
 from backend.services.finn_v2_factual_source_answer import (
     mentions_technical_indicator, render_bot_decision, render_closed_paper_exit_facts,
+    render_account_market_report_facts,
 )
 from backend.services.asset_catalog_service import requested_catalog_trading_pair
 
@@ -28,6 +29,62 @@ def _run(message, results, *, verified_asset=None, workspace_hints=None):
     assert checked.status == "completed", (checked.reason, checked.rejection_details)
     assert checked.text == prepared.response.text
     return prepared.response, calls[0]
+
+
+def _dated_aapl_account_rows():
+    return [
+        {"scope": "read_active_setup", "source": "setups", "status": "completed",
+         "data": {"symbol": "AAPL", "setup_id": 11}},
+        {"scope": "read_linked_strategy", "source": "strategies", "status": "completed",
+         "data": {"symbol": "AAPL", "setup_id": 11, "strategy_id": 12}},
+        {"scope": "read_asset_scores", "source": "daily_scores_and_source_indicators",
+         "status": "completed", "data": {"symbol": "AAPL", "benchmark_score": 52.7,
+                                        "reported_scores": {"market_score": 52.7}}},
+        {"scope": "read_market_snapshot", "source": "market_data", "status": "completed",
+         "data": {"symbol": "AAPL", "quote_currency": "USD", "price": 341.92,
+                  "source_observed_at_utc": "2026-11-20T20:58:00+00:00"}},
+        {"scope": "read_latest_report", "source": "daily_reports", "status": "completed",
+         "data": {"report_date": "2026-11-09", "score_source_snapshot": {"assets": [{
+             "symbol": "AAPL", "market_snapshot": {"price": 351.19,
+                 "quote_currency": "USD", "as_of": "2026-11-09T19:03:00+00:00"}}]}}},
+        {"scope": "read_bot_status", "source": "bot_configs", "status": "completed",
+         "data": {"bot_id": 13, "is_live": False,
+                  "latest_decision": {"reason_code": "market_price_stale"}}},
+    ]
+
+
+def test_closed_market_account_comparison_completes_without_a_second_model_round():
+    question = ("Lees mijn AAPL-plan en score, de nieuwste AAPL-marktkoers met exact UTC-bronmoment, "
+                "het oudere opgeslagen dagrapport met USD 351,19 op 9 november 19:03 UTC, "
+                "en de Paper-botstatus met market_price_stale. Welke koers is nu de nieuwste bron? "
+                "Bespreek alleen; wijzig niets en plaats geen order.")
+    answer, call = _run(question, _dated_aapl_account_rows(), verified_asset="AAPL")
+    assert answer.answer_kind == "factual_source"
+    assert set(call.read_tools) == {row["scope"] for row in _dated_aapl_account_rows()}
+    assert call.inputs["report_date"] == "2026-11-09"
+    assert "benchmarkscore is 52.7/100" in answer.text
+    assert "USD 341,92 met bronmoment 2026-11-20 20:58 UTC" in answer.text
+    assert "historisch USD 351,19 met bronmoment 2026-11-09 19:03 UTC" in answer.text
+    assert "geen geverifieerde uitvoeringskoers" in answer.text
+
+
+def test_closed_market_account_followup_rechecks_both_sources():
+    question = ("Eerder noemden we USD 351,19 om 19:03 UTC. Is dat nu de actuele AAPL-koers? "
+                "Controleer opnieuw plan, score, marktbron, oud rapport en Paper-botstatus. "
+                "Geef de twee UTC-bronmomenten en wijzig niets.")
+    answer, call = _run(question, _dated_aapl_account_rows(), verified_asset="AAPL")
+    assert answer.answer_kind == "factual_source"
+    assert call.name == "get_active_plan_and_strategy"
+    assert "2026-11-20 20:58 UTC" in answer.text
+    assert "2026-11-09 19:03 UTC" in answer.text
+
+
+def test_account_market_report_refuses_cross_asset_or_unlinked_sources():
+    rows = _dated_aapl_account_rows()
+    rows[1]["data"] = {**rows[1]["data"], "setup_id": 99}
+    answer = render_account_market_report_facts({"results": rows}, symbol="AAPL")
+    assert "niet eenduidig koppelen" in answer
+    assert "341,92" not in answer
 
 
 def test_named_paper_exit_facts_use_exact_owner_review_and_both_currencies():

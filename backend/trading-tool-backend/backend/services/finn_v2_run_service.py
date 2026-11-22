@@ -125,6 +125,9 @@ async def _verified_journey_affirmative_message(
     setup_id = int(next_step["setup_id"])
     language = str(context.get("locale") or "nl").split("-")[0].lower()
     if next_step.get("step") == "strategy" and operation == "create_setup":
+        context["verified_journey_affirmative"] = {
+            "operation_id": "create_strategy", "setup_id": setup_id,
+        }
         if language == "en":
             return (f"Prepare a strategy for my existing {pair} setup with ID {setup_id}. "
                     "Do not create another setup. Ask for missing choices and present the strategy for confirmation.")
@@ -135,6 +138,10 @@ async def _verified_journey_affirmative_message(
                 "Maak geen nieuwe setup. Vraag naar ontbrekende keuzes en leg de strategie ter bevestiging voor.")
     if next_step.get("step") == "paper" and operation == "create_strategy":
         strategy_id = int(next_step["strategy_id"])
+        context["verified_journey_affirmative"] = {
+            "operation_id": "create_bot", "setup_id": setup_id,
+            "strategy_id": strategy_id,
+        }
         if language == "en":
             return (f"Prepare a Paper bot proposal for my saved {pair} strategy with ID {strategy_id} "
                     f"for setup ID {setup_id}. Ask for missing risk and budget choices and present "
