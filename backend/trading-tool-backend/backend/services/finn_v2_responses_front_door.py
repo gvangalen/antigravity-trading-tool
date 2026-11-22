@@ -101,8 +101,11 @@ def _personal_allocation_coaching(message: str, previous_response: Mapping[str, 
     """A personal portfolio example needs the current owner profile, including on a short follow-up."""
     personal = re.search(r"\b(?:mijn|mij|ik|me|my|mine|mein\w*|ich)\b", message, re.I)
     allocation = re.search(
-        r"\b(?:verdeling|allocatie|portefeuille|portfolio|allocation|portfolio mix|"
+        r"\b(?:verdeling|allocatie|allocation|portfolio mix|"
         r"hoeveel\s+(?:cash|belegd)|wie\s+viel\s+(?:cash|investiert))\b", message, re.I,
+    ) or (
+        re.search(r"\b(?:portefeuille|portfolio)\b", message, re.I)
+        and re.search(r"\b(?:hoe|how|wie)\b.*\b(?:eruit|uitzien|look|verdelen|allocate)\b", message, re.I)
     )
     if personal and allocation:
         return True

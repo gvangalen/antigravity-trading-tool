@@ -510,7 +510,7 @@ def test_request_analysis_routes_complete_asset_plan_to_full_plan_contract():
     assert result.request_plan.required_information_scopes == [
         "profile", "preferences", "active_asset", "indicator_configuration",
         "market_snapshot", "macro_snapshot", "technical_snapshot",
-        "active_setup", "linked_strategy", "linked_bot", "bot_status", "scores",
+        "active_setup", "linked_strategy", "linked_bot", "bot_status", "scores", "portfolio",
     ]
 
 

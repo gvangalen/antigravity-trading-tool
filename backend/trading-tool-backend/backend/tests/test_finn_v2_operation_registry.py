@@ -118,16 +118,32 @@ def test_evaluate_setup_contract_distinguishes_multilingual_assessment_from_read
     }
 
 
-def test_evaluate_strategy_requires_only_the_persisted_strategy_graph():
+def test_evaluate_strategy_reads_profile_and_portfolio_with_persisted_strategy_graph():
     contract = FinnV2OperationRegistry().require_supported("evaluate_strategy")
 
     assert contract.required_scopes == (
-        "active_asset", "active_setup", "linked_strategy",
+        "profile", "active_asset", "active_setup", "linked_strategy", "portfolio",
     )
-    assert contract.optional_scopes == ("profile", "preferences")
+    assert contract.optional_scopes == ("preferences",)
     assert contract.tool_names == (
-        "read_active_asset", "read_active_setup", "read_linked_strategy",
+        "read_profile", "read_active_asset", "read_active_setup",
+        "read_linked_strategy", "read_portfolio",
     )
+
+
+def test_personal_design_and_review_contracts_read_current_profile_and_portfolio():
+    registry = FinnV2OperationRegistry()
+    for operation_id in (
+        "create_setup", "create_strategy", "create_bot",
+        "evaluate_setup", "evaluate_strategy", "evaluate_bot", "evaluate_plan",
+    ):
+        contract = registry.require_supported(operation_id)
+        assert {"profile", "portfolio"} <= set(contract.required_scopes)
+        assert {"read_profile", "read_portfolio"} <= set(contract.tool_names)
+    for operation_id in ("activate_paper_bot", "deactivate_bot"):
+        contract = registry.require_supported(operation_id)
+        assert "profile" not in contract.required_scopes
+        assert "portfolio" not in contract.required_scopes
 
 
 def test_evaluate_indicator_configuration_collects_live_indicator_evidence():

@@ -7,6 +7,8 @@ from backend.services.finn_v2_responses_front_door import (
     FinnResponsesFrontDoor, _personal_allocation_coaching,
 )
 from backend.services.finn_v2_responses_loop import FinnResponsesResult
+from backend.services.finn_v2_responses_read_executor import FinnResponsesReadExecutor
+from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCall
 
 
 def test_model_led_allocation_followup_avoids_stale_balance_recap_and_goal_drift():
@@ -31,6 +33,9 @@ def test_short_example_followup_requires_current_profile_read(monkeypatch):
         "Wat is een goede verdeling, hoeveel cash en hoeveel belegd?",
         {"terminal_status": "completed", "answer": "Jouw Paper-portefeuille bevat €10.000 cash."},
     )
+    assert not _personal_allocation_coaching(
+        "Hoe past dat bij mijn vrijdagplan, de scores en mijn portefeuille?", None,
+    )
     assert not _personal_allocation_coaching("Wat is een ETF?", prior)
 
     front = FinnResponsesFrontDoor(
@@ -50,3 +55,26 @@ def test_short_example_followup_requires_current_profile_read(monkeypatch):
         conversation_context={}, verified_asset="BTC", previous_response=prior,
     ))
     assert loop_run.await_args.kwargs["required_read_tool_name"] == "get_my_profile_and_risk_style"
+
+
+def test_plan_review_reads_account_wide_portfolio_beside_selected_asset():
+    selectors = {}
+
+    class Reads:
+        async def execute_tool(self, **kwargs):
+            selectors[kwargs["tool_name"]] = kwargs["selector"]
+            return type("Result", (), {
+                "success": True, "availability": "available", "freshness_status": "unknown",
+                "source": "owner_database", "asset": "BTC", "result": {}, "error_codes": [],
+            })()
+
+    reader = FinnResponsesReadExecutor(session=object(), user_id=7, run_id="plan-review")
+    reader.reads = Reads()
+    call = FinnResponsesToolCall(
+        name="evaluate_plan", operation_id=None, inputs={"asset": "BTC"},
+        read_tools=("read_profile", "read_portfolio"), required_inputs=(), missing_inputs=(),
+        evaluation_operation_id="evaluate_plan",
+    )
+    asyncio.run(reader(call))
+    assert selectors["read_profile"] == {"asset": "BTC"}
+    assert selectors["read_portfolio"] == {}

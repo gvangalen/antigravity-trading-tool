@@ -40,13 +40,21 @@ class FinnV2ReasoningPromptService:
             "Make the observation specific to the user's actual profile, risk posture, horizon, configured indicators, "
             "setup timeframe, strategy and bot relationship. Prefer the most decision-relevant tension shown in the evidence; "
             "do not reuse a generic indicator-pair template when the evidence differs. "
-            "For an integrated plan evaluation, explicitly ground the answer in the saved asset, profile, configured indicators, "
+            "For an integrated plan evaluation, explicitly ground the answer in the saved asset, profile, portfolio exposure, configured indicators, "
             "setup, strategy and bot whenever those evidence items are present. Cite every evidence item used in "
             "evidence_refs_used, and do not infer diversification, market claims or missing plan components that are not supported by evidence. "
             "This is read-only analysis: do not recommend or imply an operational change to a setup, strategy or bot, "
             "and never recommend enabling live trading or changing a bot's live or paper status."
         ),
-        "CREATE_PROPOSAL": "Prepare a controlled draft concept only; do not imply any change was executed.",
+        "CREATE_PROPOSAL": (
+            "Prepare a controlled draft concept only; do not imply any change was executed. "
+            "Use the owner-read trader profile and unfiltered portfolio snapshot as context for the "
+            "proposed setup, strategy or Paper bot when available. Distinguish saved preferences "
+            "from explicit instructions in this request; the latest explicit choice wins. "
+            "Keep Paper cash and Live broker balances separate; an unavailable valuation is unknown. "
+            "Do not turn a risk label or current cash into an inferred amount, allocation, "
+            "order, or bot budget. Ask for missing action inputs instead."
+        ),
         "ACTION_PROPOSAL": "Interpret the intent safely, prepare a non-executed draft, and respect confirmation boundaries.",
         "CLARIFICATION": "Ask one concise clarification question that is strictly necessary before any financial conclusion.",
         "CONFIRMATION": "Summarize the exact pending change, state that execution still requires explicit confirmation, and do not imply it already happened.",

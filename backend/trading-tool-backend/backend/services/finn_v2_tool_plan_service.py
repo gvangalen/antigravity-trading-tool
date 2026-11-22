@@ -96,7 +96,15 @@ class FinnV2ToolPlanService:
             required_domains=list(domain_plan.required_domains),
             optional_domains=list(domain_plan.optional_domains),
             tool_names=ordered_tools,
-            tool_inputs={tool_name: dict(selector) for tool_name in ordered_tools},
+            tool_inputs={
+                tool_name: (
+                    {key: value for key, value in selector.items() if key != "asset"}
+                    if tool_name == "read_portfolio"
+                    and operation_id not in {"read_portfolio", "evaluate_portfolio"}
+                    else dict(selector)
+                )
+                for tool_name in ordered_tools
+            },
             required_evidence=self._required_evidence_for(analysis=analysis),
             optional_evidence=self._optional_evidence_for(analysis=analysis),
             entity_selectors=dict(selector),

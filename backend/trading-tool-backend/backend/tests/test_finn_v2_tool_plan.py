@@ -26,6 +26,7 @@ def test_tool_plan_uses_canonical_order_and_explicit_selector():
         "read_linked_strategy",
         "read_linked_bot",
         "read_bot_status",
+        "read_portfolio",
     ]
     assert plan.tool_inputs["read_active_asset"] == {"asset": "BTC"}
     assert plan.required_evidence == [
@@ -41,6 +42,7 @@ def test_tool_plan_uses_canonical_order_and_explicit_selector():
         "linked_bot",
         "bot_status",
         "scores",
+        "portfolio",
     ]
     assert plan.read_only is True
 
@@ -175,8 +177,9 @@ def test_tool_plan_routes_setup_creation_and_watchlist_actions_through_proposal_
 
     # A missing descriptive field does not suppress the contract's explicit
     # active-asset read. Only unresolved contextual IDs can skip tools.
-    assert setup_plan.tool_names == ["read_active_asset"]
-    assert setup_plan.required_evidence == ["active_asset"]
+    assert setup_plan.tool_names == ["read_profile", "read_active_asset", "read_portfolio"]
+    assert setup_plan.required_evidence == ["profile", "active_asset", "portfolio"]
+    assert setup_plan.tool_inputs["read_portfolio"] == {}
     assert watchlist_plan.tool_names == ["read_active_asset", "read_watchlist"]
     assert watchlist_plan.tool_inputs["read_active_asset"] == {"asset": "ETH"}
     assert watchlist_plan.tool_inputs["read_watchlist"] == {"asset": "ETH"}
