@@ -17633,6 +17633,54 @@ def test_responses_money_claims_require_current_or_immediate_verified_evidence()
     )
 
 
+def test_closed_market_last_known_quote_is_readable_but_not_current():
+    verifier = FinnResponsesAnswerVerifier()
+    evidence = ({
+        "scope": "read_market_snapshot", "status": "completed", "freshness": "stale",
+        "as_of": "2026-11-20T21:00:00+00:00",
+        "data": {"symbol": "AAPL", "price": 350.81, "quote_currency": "USD",
+                 "source_observed_at": "2026-11-20T21:00:00+00:00"},
+    },)
+    dated = ("De nieuwste AAPL-koers is 350,81 USD met bronmoment "
+             "20 november 2026 22:00 CET. De beurs is nu gesloten.")
+    assert verifier._amounts_supported(
+        answer=dated, message="Wat is de nieuwste AAPL-koers?", previous_answer="",
+        evidence=evidence,
+    )
+    assert verifier._latest_quote_claim_supported(dated, evidence)
+    last_known = ("De laatst beschikbare AAPL-koers is 350,81 USD van "
+                  "20 november 2026 22:00 CET.")
+    assert verifier._amounts_supported(
+        answer=last_known, message="Wat is de nieuwste AAPL-koers?",
+        previous_answer="", evidence=evidence,
+    )
+    assert verifier._latest_quote_claim_supported(last_known, evidence)
+    for unsupported in (
+        "De actuele AAPL-koers is 350,81 USD. Koop nu.",
+        "De nieuwste AAPL-koers is 350,81 USD.",
+    ):
+        assert not verifier._amounts_supported(
+            answer=unsupported, message="Wat is de nieuwste AAPL-koers?",
+            previous_answer="", evidence=evidence,
+        )
+        assert not verifier._latest_quote_claim_supported(unsupported, evidence)
+    assert not verifier._amounts_supported(
+        answer="De laatst beschikbare AAPL-koers is 375 USD van 20 november 2026 22:00 CET.",
+        message="Wat is de nieuwste AAPL-koers?", previous_answer="", evidence=evidence,
+    )
+    second_quote = {
+        "scope": "read_market_snapshot", "status": "completed", "freshness": "stale",
+        "as_of": "2026-11-20T21:00:00+00:00",
+        "data": {"symbol": "BTC", "price": 76000, "quote_currency": "USDT",
+                 "source_observed_at": "2026-11-20T21:00:00+00:00"},
+    }
+    assert not verifier._amounts_supported(
+        answer=dated + " BTC noteerde 76000 USDT.",
+        message="Geef de laatst bekende koersen van AAPL en BTC.",
+        previous_answer="", evidence=(*evidence, second_quote),
+    )
+
+
 def test_closed_review_decimal_pnl_grounds_only_its_recorded_eur_amount():
     verifier = FinnResponsesAnswerVerifier()
     evidence = ({
