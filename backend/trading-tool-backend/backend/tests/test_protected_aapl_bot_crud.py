@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import inspect
 import subprocess
 from pathlib import Path
 
@@ -65,6 +66,29 @@ def test_proposal_diagnostic_unknown_values_do_not_escape():
         "dispatch_count": "other", "attempt_count": "other",
     }
     assert "private" not in str(result)
+
+
+def test_proposal_diagnostic_rejects_unexpected_json_shapes():
+    result = bot._proposal_diagnostic(
+        {"status": "private"}, {"error": "private"},
+        {"final_mode": {"mode": "private"}, "missing_inputs": [{"slot": "private"}],
+         "action_draft": {"next_missing_input": ["private"]},
+         "dispatch_count": True, "attempt_count": [1]},
+    )
+    assert result["status"] == "other"
+    assert result["error_category"] == "other"
+    assert result["answer_mode"] == "other"
+    assert result["missing_inputs"] == []
+    assert result["requested_slot"] == "other"
+    assert result["dispatch_count"] == "other"
+    assert result["attempt_count"] == "other"
+    assert "private" not in str(result)
+
+
+def test_proposal_diagnostic_reads_are_owner_and_run_scoped():
+    source = inspect.getsource(bot._proposal)
+    assert "FROM finn_v2_runtime_contracts\n            WHERE run_id=:run_id AND user_id=:user_id" in source
+    assert "FROM finn_v2_tool_calls WHERE run_id=:run_id AND user_id=:user_id" in source
 
 
 @pytest.mark.parametrize("rows,expected", [

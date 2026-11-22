@@ -72,17 +72,20 @@ def _proposal_diagnostic(status: object, error_code: object, projection: object)
     requested = draft.get("next_missing_input")
     mode = data.get("final_mode")
     response_type = data.get("terminal_response_type")
+    def allowed(value: object, choices: frozenset[str] | set[str]) -> bool:
+        return isinstance(value, str) and value in choices
+
     return {
-        "status": status if status in PROPOSAL_STATUSES else "other",
-        "error_category": error_code if error_code in PROPOSAL_ERRORS else ("none" if not error_code else "other"),
-        "answer_mode": mode if mode in PROPOSAL_MODES else ("none" if not mode else "other"),
-        "response_type": response_type if response_type in {"response", "failure"} else "other",
+        "status": status if allowed(status, PROPOSAL_STATUSES) else "other",
+        "error_category": error_code if allowed(error_code, PROPOSAL_ERRORS) else ("none" if not error_code else "other"),
+        "answer_mode": mode if allowed(mode, PROPOSAL_MODES) else ("none" if not mode else "other"),
+        "response_type": response_type if allowed(response_type, {"response", "failure"}) else "other",
         "operation": operation if operation == "create_bot" else ("none" if not operation else "other"),
         "guided_operation": guided if guided == "create_bot" else ("none" if not guided else "other"),
-        "missing_inputs": sorted({slot for slot in raw_missing[:8] if slot in PROPOSAL_SLOTS}),
-        "requested_slot": requested if requested in PROPOSAL_SLOTS else ("none" if not requested else "other"),
-        "dispatch_count": data.get("dispatch_count") if data.get("dispatch_count") in (0, 1, 2) else "other",
-        "attempt_count": data.get("attempt_count") if data.get("attempt_count") in (0, 1, 2) else "other",
+        "missing_inputs": sorted({slot for slot in raw_missing[:8] if allowed(slot, PROPOSAL_SLOTS)}),
+        "requested_slot": requested if allowed(requested, PROPOSAL_SLOTS) else ("none" if not requested else "other"),
+        "dispatch_count": data.get("dispatch_count") if type(data.get("dispatch_count")) is int and data.get("dispatch_count") in (0, 1, 2) else "other",
+        "attempt_count": data.get("attempt_count") if type(data.get("attempt_count")) is int and data.get("attempt_count") in (0, 1, 2) else "other",
     }
 
 
@@ -90,6 +93,7 @@ def _strategy_read_status(rows: object) -> str:
     if not isinstance(rows, (list, tuple)):
         return "unknown"
     matching = [row for row in rows if isinstance(row, (list, tuple)) and len(row) == 3
+                and isinstance(row[0], str)
                 and row[0] in {"read_linked_strategy", "read_linked_strategies"}]
     if not matching:
         return "not_requested"
@@ -223,7 +227,9 @@ async def _proposal(user_id: int, strategy_name: str, bot_name: str) -> dict:
         envelope = await gateway.run_service.envelope_from_run(saved)
         response = envelope.response
         projection_row = await session.execute(text("""SELECT terminal_projection_json
-            FROM finn_v2_runtime_contracts WHERE run_id=:run_id"""), {"run_id": run_id})
+            FROM finn_v2_runtime_contracts
+            WHERE run_id=:run_id AND user_id=:user_id"""),
+            {"run_id": run_id, "user_id": user_id})
         tool_rows = await session.execute(text("""SELECT tool_name,status,success
             FROM finn_v2_tool_calls WHERE run_id=:run_id AND user_id=:user_id
             AND tool_name IN ('read_linked_strategy','read_linked_strategies')"""),
