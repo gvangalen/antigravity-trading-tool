@@ -57,6 +57,8 @@ ALLOWED_PROFILES = {
     "trader_pair_score_continuity",
     "trader_account_state_readback",
     "aapl_paper_quote_coach",
+    "aapl_paper_quote_fixture_audit",
+    "aapl_paper_quote_fixture_cleanup",
     "trader_source_time_parity",
     "trader_paper_exit_reconciliation",
     "trader_paper_exit_review_chain",
@@ -434,6 +436,16 @@ def profile_error_category(profile: str, error: Exception) -> str:
         from backend.scripts.probe_protected_aapl_quote_coach import SAFE_FAILURES
         code = str(error)
         return code if code in SAFE_FAILURES else "aapl_probe_runtime_error"
+    if profile in {"aapl_paper_quote_fixture_audit", "aapl_paper_quote_fixture_cleanup"}:
+        code = str(error)
+        return code if code in {
+            "aapl_fixture_audit_label_invalid", "aapl_fixture_audit_scope_ambiguous",
+            "trader_fixture_audit_prior_report_unavailable",
+            "trader_fixture_audit_prior_report_mismatch", "fixture_binding_invalid",
+            "aapl_fixture_audit_manifest_forbidden", "aapl_fixture_cleanup_not_authorized",
+            "aapl_fixture_cleanup_unsafe", "aapl_fixture_cleanup_scope_changed",
+            "aapl_fixture_cleanup_postcondition_failed",
+        } else "aapl_fixture_audit_runtime_error"
     if profile == "trader_pair_score_continuity":
         code = str(error)
         from backend.scripts.probe_protected_account_answer import (
@@ -4215,6 +4227,29 @@ def main() -> int:
                 report["outcome"] = ({"PASS": "passed", "FAIL": "failed",
                                      "INCONCLUSIVE": "incomplete"}[report[args.profile]["result"]])
                 report["qa_status"] = "INCOMPLETE" if report["outcome"] == "incomplete" else "COMPLETED"
+            elif args.profile in {"aapl_paper_quote_fixture_audit", "aapl_paper_quote_fixture_cleanup"}:
+                if args.manifest_id != "none" or args.manifest_bundle_path:
+                    raise ValueError("aapl_fixture_audit_manifest_forbidden")
+                if args.profile == "aapl_paper_quote_fixture_cleanup" and (
+                    os.getenv("FINN_QA_ALLOW_FIXTURE_ACTIONS") != "1"
+                    or os.getenv("FINN_QA_ALLOW_FIXTURE_EXECUTION") == "1"
+                ):
+                    raise ValueError("aapl_fixture_cleanup_not_authorized")
+                report["protected_profile_attempted"] = True
+                report["qa_status"] = "INCOMPLETE"
+                report["outcome"] = "incomplete"
+                from backend.scripts.probe_protected_aapl_fixture_audit import audit, cleanup
+
+                if args.profile == "aapl_paper_quote_fixture_audit":
+                    report[args.profile] = audit(args.run_label)
+                    if report[args.profile]["fixture_state"] == "UNSAFE_OR_AMBIGUOUS":
+                        report["outcome"] = "failed"
+                        report["qa_status"] = "COMPLETED_WITH_FAILURES"
+                else:
+                    report["safety"]["read_only_profile"] = False
+                    report[args.profile] = cleanup(args.run_label)
+                    report["outcome"] = "passed" if report[args.profile]["cleanup_verified"] else "incomplete"
+                    report["qa_status"] = "COMPLETED" if report["outcome"] == "passed" else "INCOMPLETE"
             elif args.profile in {"trader_paper_exit_reconciliation", "trader_paper_exit_review_chain", "trader_source_time_parity"}:
                 if args.manifest_id != "none" or args.manifest_bundle_path:
                     raise ValueError("paper_exit_fixture_manifest_forbidden")

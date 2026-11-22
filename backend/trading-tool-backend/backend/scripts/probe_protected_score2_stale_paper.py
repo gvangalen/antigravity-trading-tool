@@ -263,7 +263,8 @@ def _age_market_reading(user_id: int) -> None:
 
 def _cleanup(namespace: str, user_id: int, bot_id: int, *, require_safe_pair_cleanup: bool = False,
              allow_planned_decisions: bool = False,
-             require_safe_review_cleanup: bool = False) -> None:
+             require_safe_review_cleanup: bool = False,
+             require_aapl_quote_fixture: bool = False) -> None:
     conn = _connection()
     try:
         with conn.cursor() as cur:
@@ -305,6 +306,20 @@ def _cleanup(namespace: str, user_id: int, bot_id: int, *, require_safe_pair_cle
                     cur.execute("SELECT COUNT(*) FROM bot_decisions WHERE user_id=%s", (user_id,))
                 if cur.fetchone()[0]:
                     raise RuntimeError("fixture_cleanup_trade_present")
+                if require_aapl_quote_fixture:
+                    for table in ("setups", "strategies", "daily_reports"):
+                        cur.execute(f"SELECT COUNT(*) FROM {table} WHERE user_id=%s", (user_id,))
+                        if cur.fetchone()[0] != 1:
+                            raise RuntimeError("fixture_cleanup_aapl_shape_mismatch")
+                    for table in ("setups", "strategies", "bot_configs"):
+                        cur.execute(f"SELECT symbol FROM {table} WHERE user_id=%s", (user_id,))
+                        if cur.fetchall() != [("AAPL",)]:
+                            raise RuntimeError("fixture_cleanup_aapl_shape_mismatch")
+                    from backend.scripts.finn_v2_matrix_transport import TERMINAL_STATUSES
+                    cur.execute("SELECT status FROM finn_v2_runs WHERE user_id=%s", (user_id,))
+                    statuses = [item[0] for item in cur.fetchall()]
+                    if len(statuses) != 3 or any(status not in TERMINAL_STATUSES for status in statuses):
+                        raise RuntimeError("fixture_cleanup_aapl_turns_unsafe")
             if require_safe_review_cleanup:
                 cur.execute("SELECT is_active FROM users WHERE id=%s", (user_id,))
                 if cur.fetchone()[0]:
