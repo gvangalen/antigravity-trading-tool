@@ -79,6 +79,19 @@ def test_read_only_fomo_plan_questions_bypass_capability_explainer():
     )
 
 
+@pytest.mark.parametrize("question", [
+    "kan je mij vertellen wat mijn trader profiel zegt?",
+    "Kan je mijn traderprofiel uitlezen?",
+    "Can you tell me what my trader profile says?",
+    "Kannst du mir zeigen, was mein Traderprofil sagt?",
+])
+def test_saved_trader_profile_read_bypasses_capability_explainer(question):
+    assert not requests_execution_capability_question(question, {})
+    assert not requests_execution_capability_question(
+        question, {"plan_design_focus": {"kind": "unsaved_capability_design"}},
+    )
+
+
 def test_two_saved_plan_checks_bypass_capability_explainer():
     question = (
         "Dus moet ik alleen wachten, of kan ik mijn voorbereiding vandaag zinvol verbeteren? "

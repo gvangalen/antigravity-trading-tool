@@ -107,7 +107,11 @@ class FinnV2RequestPreprocessorService:
             "ma_200",
             "marktregime",
         ),
-        "profile": ("profiel", "traderprofiel", "risicoprofiel", "tradingstijl", "risk profile", "trading style"),
+        "profile": (
+            "profiel", "traderprofiel", "risicoprofiel", "tradingstijl",
+            "profile", "trader profile", "trading profile", "risk profile", "trading style",
+            "traderprofil", "risikoprofil", "risikostil",
+        ),
         "setup": ("setup", "set-up", "opzet", "positie-opzet"),
         "strategy": ("strategie", "strategy", "methode", "method"),
         "scores": (
