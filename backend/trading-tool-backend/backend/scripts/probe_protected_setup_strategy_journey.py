@@ -366,12 +366,13 @@ async def _case(namespace: str, bound: int, trace: dict) -> dict:
 def run(namespace: str) -> dict:
     bound = _bound_owner(namespace)
     from backend.infrastructure.database import engine
+    from backend.scripts.probe_protected_paper_exit_reconciliation import _guard_live_exchange
 
     trace = {"stage": "seed", "fixture_state": "not_created"}
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
-        with feed_probe._guard_live_exchange() as live_attempts:
+        with _guard_live_exchange() as live_attempts:
             try:
                 result = loop.run_until_complete(_case(namespace, bound, trace))
                 result["fixture_state"] = trace["fixture_state"]
