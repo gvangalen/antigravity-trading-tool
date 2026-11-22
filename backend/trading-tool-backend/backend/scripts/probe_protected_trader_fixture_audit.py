@@ -30,6 +30,7 @@ JOURNEY_CARD_LABEL = "audit-44974889786-1-76d282df"
 JOURNEY_TRANSPORT_LABEL = "audit-44977345882-1-f5cfb7a3"
 JOURNEY_YES_DIAGNOSTIC_LABEL = "audit-45006104528-1-50cc25ca"
 JOURNEY_STRATEGY_DIAGNOSTIC_LABEL = "audit-45015412389-1-999bd355"
+JOURNEY_STRATEGY_RETEST_LABEL = "audit-45020771853-1-ea64f391"
 JOURNEY_CLEANUP_LABELS = frozenset({
     JOURNEY_CLEANUP_LABEL,
     "audit-44972794086-1-da950aac",
@@ -37,6 +38,7 @@ JOURNEY_CLEANUP_LABELS = frozenset({
     JOURNEY_TRANSPORT_LABEL,
     JOURNEY_YES_DIAGNOSTIC_LABEL,
     JOURNEY_STRATEGY_DIAGNOSTIC_LABEL,
+    JOURNEY_STRATEGY_RETEST_LABEL,
 })
 JOURNEY_EXECUTION_CODES = frozenset({
     "proposal_not_confirmed", "proposal_expired", "proposal_payload_hash_mismatch",
@@ -200,7 +202,11 @@ def _journey_strategy_diagnostic(cur, user_id: int, namespace: str) -> dict:
         return value if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 3 else "other"
     return {
         "strategy_diagnostic_state": "available",
-        "strategy_status": status if status in {"completed", "clarification_required", "failed", "running"} else "other",
+        "strategy_status": status if status in {
+            "created", "queued", "collecting", "planned", "reasoning", "verifying",
+            "clarification_required", "unavailable", "downgraded", "rejected",
+            "blocked", "completed", "failed", "canceled",
+        } else "other",
         "strategy_operation": safe_operation(operation),
         "strategy_guided_operation": safe_operation(draft.get("operation_id")),
         "prior_yes_guided_operation": safe_operation(
@@ -320,7 +326,8 @@ def run(label: str, *, expected_profile: str = "trader_paper_exit_reconciliation
                 )
                 strategy_diagnostic = (
                     _journey_strategy_diagnostic(cur, user_id, namespace)
-                    if label == JOURNEY_STRATEGY_DIAGNOSTIC_LABEL else {}
+                    if label in {JOURNEY_STRATEGY_DIAGNOSTIC_LABEL,
+                                 JOURNEY_STRATEGY_RETEST_LABEL} else {}
                 )
                 if label == JOURNEY_CARD_LABEL:
                     cur.execute(
@@ -461,7 +468,8 @@ def cleanup_journey(label: str) -> dict:
     guided_failure = label == JOURNEY_YES_DIAGNOSTIC_LABEL and (
         journey.get("failure_stage"), journey.get("reason")) == (
             "strategy_guided", "journey_strategy_guided_failed")
-    proposal_failure = label == JOURNEY_STRATEGY_DIAGNOSTIC_LABEL and (
+    proposal_failure = label in {JOURNEY_STRATEGY_DIAGNOSTIC_LABEL,
+                                 JOURNEY_STRATEGY_RETEST_LABEL} and (
         journey.get("failure_stage"), journey.get("reason")) == (
             "strategy_proposal", "journey_strategy_proposal_missing")
     if (journey.get("fixture_state") != "quarantined"
@@ -511,7 +519,8 @@ def cleanup_journey(label: str) -> dict:
                     raise RuntimeError("journey_cleanup_trade_unsafe")
             if label in {JOURNEY_CARD_LABEL, JOURNEY_TRANSPORT_LABEL,
                          JOURNEY_YES_DIAGNOSTIC_LABEL,
-                         JOURNEY_STRATEGY_DIAGNOSTIC_LABEL}:
+                         JOURNEY_STRATEGY_DIAGNOSTIC_LABEL,
+                         JOURNEY_STRATEGY_RETEST_LABEL}:
                 cur.execute("SELECT name,symbol FROM setups WHERE user_id=%s", (user_id,))
                 expected_setups = {(namespace, "ETH"), (f"QA BTC Setup {namespace}", "BTC")}
                 setups = cur.fetchall()
