@@ -95,9 +95,10 @@ def test_aapl_scope_rejects_any_other_run_before_read(monkeypatch):
         probe._scope("audit-45033782173-1-775c4259")
 
 
+@pytest.mark.parametrize("label", [probe.LABEL, probe.NEW_LABEL])
 @pytest.mark.parametrize("keys,allowed", [(0, True), (1, False)])
-def test_aapl_scope_requires_bound_qa_owner_without_keys(monkeypatch, keys, allowed):
-    namespace = "qa-45033782172-1-775c4259-deadbeef"
+def test_aapl_scope_requires_bound_qa_owner_without_keys(monkeypatch, label, keys, allowed):
+    namespace = label.replace("audit-", "qa-", 1) + "-deadbeef"
 
     class ScopeConnection(FakeConnection):
         def execute(self, query, _args):
@@ -113,13 +114,38 @@ def test_aapl_scope_requires_bound_qa_owner_without_keys(monkeypatch, keys, allo
                 raise AssertionError(query)
 
     monkeypatch.setenv("FINN_QA_USER_ID", "42")
-    monkeypatch.setattr(probe, "_verify_prior_report", lambda *_: None)
+    verified = []
+    monkeypatch.setattr(probe, "_verify_prior_report", lambda *args: verified.append(args))
     monkeypatch.setattr(probe.fixture, "_connection", ScopeConnection)
     if allowed:
-        assert probe._scope(probe.LABEL) == (12, False, namespace)
+        assert probe._scope(label) == (12, False, namespace)
     else:
         with pytest.raises(RuntimeError, match="fixture_binding_invalid"):
-            probe._scope(probe.LABEL)
+            probe._scope(label)
+    assert verified == [(*probe.RUNS[label], "aapl_paper_quote_coach")]
+
+
+def test_aapl_scope_rejects_other_run_namespace(monkeypatch):
+    other = probe.LABEL.replace("audit-", "qa-", 1) + "-deadbeef"
+
+    class ScopeConnection(FakeConnection):
+        def execute(self, query, _args):
+            if "SELECT role,is_active,ai_preferences" in query:
+                self.rows = [("user", True, {"qa_fixture": probe.fixture.QA_OWNER_MARKER})]
+            elif "SELECT COUNT(*) FROM exchange_keys" in query:
+                self.rows = [(0,)]
+            elif "SELECT id,is_active,ai_preferences,email" in query:
+                self.rows = [(12, False, {"qa_fixture": probe.fixture.FIXTURE_MARKER,
+                                          "qa_namespace": other},
+                              f"score2-stale-{other}@tradamind.example")]
+            else:
+                raise AssertionError(query)
+
+    monkeypatch.setenv("FINN_QA_USER_ID", "42")
+    monkeypatch.setattr(probe, "_verify_prior_report", lambda *_: None)
+    monkeypatch.setattr(probe.fixture, "_connection", ScopeConnection)
+    with pytest.raises(RuntimeError, match="aapl_fixture_audit_scope_ambiguous"):
+        probe._scope(probe.NEW_LABEL)
 
 
 def test_aapl_cleanup_requires_safe_audit_and_checks_postcondition(monkeypatch):
@@ -157,6 +183,7 @@ def test_aapl_profiles_are_exactly_guarded_in_both_dispatch_paths():
         assert "aapl_paper_quote_fixture_audit" in source
         assert "aapl_paper_quote_fixture_cleanup" in source
         assert probe.LABEL in source
+        assert probe.NEW_LABEL in source
     assert {"aapl_paper_quote_fixture_audit", "aapl_paper_quote_fixture_cleanup"} <= ALLOWED_PROFILES
     assert profile_error_category("aapl_paper_quote_fixture_cleanup", RuntimeError(
         "aapl_fixture_cleanup_unsafe",

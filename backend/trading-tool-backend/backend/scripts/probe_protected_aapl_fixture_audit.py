@@ -10,7 +10,11 @@ from backend.scripts.probe_protected_trader_fixture_audit import _verify_prior_r
 
 
 LABEL = "audit-45033782172-1-775c4259"
-NAMESPACE_PREFIX = "qa-45033782172-1-775c4259-"
+NEW_LABEL = "audit-45061684671-1-0fc2d876"
+RUNS = {
+    LABEL: ("45033782172", "1", "775c4259"),
+    NEW_LABEL: ("45061684671", "1", "0fc2d876"),
+}
 SAFE_ERRORS = frozenset({
     "dispatch_claim_timeout", "lifecycle_owner_failed", "orchestrator_failed",
     "selector_phase_timeout", "lifecycle_deadline_exceeded", "run_canceled",
@@ -20,9 +24,12 @@ SAFE_ERRORS = frozenset({
 
 
 def _scope(label: str):
-    if label != LABEL:
+    run = RUNS.get(label)
+    if run is None:
         raise RuntimeError("aapl_fixture_audit_label_invalid")
-    _verify_prior_report("45033782172", "1", "775c4259", "aapl_paper_quote_coach")
+    workflow_id, attempt, sha_prefix = run
+    namespace_prefix = f"qa-{workflow_id}-{attempt}-{sha_prefix}-"
+    _verify_prior_report(workflow_id, attempt, sha_prefix, "aapl_paper_quote_coach")
     bound = os.getenv("FINN_QA_USER_ID", "")
     if not bound.isdecimal() or int(bound) <= 0:
         raise RuntimeError("fixture_binding_invalid")
@@ -41,7 +48,7 @@ def _scope(label: str):
                 """SELECT id,is_active,ai_preferences,email FROM users
                    WHERE ai_preferences->>'qa_fixture'=%s
                      AND ai_preferences->>'qa_namespace' LIKE %s""",
-                (fixture.FIXTURE_MARKER, NAMESPACE_PREFIX + "%"),
+                (fixture.FIXTURE_MARKER, namespace_prefix + "%"),
             )
             owners = cur.fetchall()
             if not owners:
@@ -51,7 +58,7 @@ def _scope(label: str):
             user_id, active, preferences, email = owners[0]
             namespace = (preferences or {}).get("qa_namespace", "")
             if (not fixture.NAMESPACE_PATTERN.fullmatch(namespace)
-                    or not namespace.startswith(NAMESPACE_PREFIX)
+                    or not namespace.startswith(namespace_prefix)
                     or email != f"score2-stale-{namespace}@tradamind.example"):
                 raise RuntimeError("aapl_fixture_audit_scope_ambiguous")
             return user_id, bool(active), namespace

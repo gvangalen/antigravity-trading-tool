@@ -79,10 +79,10 @@ fi
 if [[ "$qa_profile" == "aapl_paper_quote_coach" && ( "$manifest_id" != "none" || -n "$manifest_bundle_path" || "$allow_fixture_actions" != "true" || "$allow_safe_fixture_execution" != "false" ) ]]; then
   usage
 fi
-if [[ "$qa_profile" == "aapl_paper_quote_fixture_audit" && ( "$manifest_id" != "none" || -n "$manifest_bundle_path" || "$allow_fixture_actions" != "false" || "$allow_safe_fixture_execution" != "false" || "$run_label" != "audit-45033782172-1-775c4259" ) ]]; then
+if [[ "$qa_profile" == "aapl_paper_quote_fixture_audit" && ( "$manifest_id" != "none" || -n "$manifest_bundle_path" || "$allow_fixture_actions" != "false" || "$allow_safe_fixture_execution" != "false" || ! "$run_label" =~ ^(audit-45033782172-1-775c4259|audit-45061684671-1-0fc2d876)$ ) ]]; then
   usage
 fi
-if [[ "$qa_profile" == "aapl_paper_quote_fixture_cleanup" && ( "$manifest_id" != "none" || -n "$manifest_bundle_path" || "$allow_fixture_actions" != "true" || "$allow_safe_fixture_execution" != "false" || "$run_label" != "audit-45033782172-1-775c4259" ) ]]; then
+if [[ "$qa_profile" == "aapl_paper_quote_fixture_cleanup" && ( "$manifest_id" != "none" || -n "$manifest_bundle_path" || "$allow_fixture_actions" != "true" || "$allow_safe_fixture_execution" != "false" || ! "$run_label" =~ ^(audit-45033782172-1-775c4259|audit-45061684671-1-0fc2d876)$ ) ]]; then
   usage
 fi
 if [[ "$qa_profile" == "trader_paper_exit_reconciliation" && ( "$manifest_id" != "none" || -n "$manifest_bundle_path" || "$allow_fixture_actions" != "true" || "$allow_safe_fixture_execution" != "true" ) ]]; then
