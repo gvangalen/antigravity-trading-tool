@@ -955,6 +955,21 @@ def _enforce_setup_match_on_buy(
 # =====================================================
 # 📦 Actieve bots + strategy context
 # =====================================================
+def _lock_active_owner(conn, user_id: int) -> bool:
+    """Keep the owner active throughout a bot transaction.
+
+    The dispatcher normally filters inactive owners, but a queued or direct
+    worker call can outlive account deactivation.  FOR SHARE serializes that
+    change with the decision/order transaction.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id FROM users WHERE id=%s AND is_active=TRUE FOR SHARE",
+            (user_id,),
+        )
+        return cur.fetchone() is not None
+
+
 def _get_active_bots(conn, user_id: int) -> List[Dict[str, Any]]:
     if not _table_exists(conn, "bot_configs"):
         return []
@@ -989,6 +1004,7 @@ def _get_active_bots(conn, user_id: int) -> List[Dict[str, Any]]:
               ,b.market_id
 
             FROM bot_configs b
+            JOIN users u ON u.id = b.user_id AND u.is_active = TRUE
             JOIN strategies s ON s.id = b.strategy_id
             JOIN setups st    ON st.id = s.setup_id
             WHERE b.user_id = %s
@@ -2438,6 +2454,11 @@ def run_trading_bot_execution(
         return {"ok": False, "error": "db_unavailable"}
 
     try:
+        if not _lock_active_owner(conn, user_id):
+            if paper_only:
+                return {"ok": False, "error": "paper_mode_changed"}
+            return {"ok": True, "date": str(report_date), "bots": 0,
+                    "decisions": [], "bot_ids": []}
         bots = _get_active_bots(conn, user_id)
 
         if bot_id is not None:
@@ -3679,6 +3700,8 @@ def execute_manual_decision(
     bot_id: int,
     decision_id: int,
 ):
+    if not _lock_active_owner(conn, user_id):
+        raise BotSafetyBlock("De gebruiker is niet actief; deze botbeslissing kan niet worden uitgevoerd.")
     # Match the automatic executor's lock order: bot, decision, order, then
     # Paper portfolio. This serializes all debits for a bot without creating
     # a manual-versus-auto lock inversion.

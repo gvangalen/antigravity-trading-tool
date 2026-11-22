@@ -136,7 +136,9 @@ class _Cursor:
         return False
 
     def execute(self, sql, params):
-        if "SELECT symbol FROM watchlists" in sql:
+        if "SELECT id FROM users WHERE id=%s AND is_active=TRUE FOR SHARE" in sql:
+            self.rows = [(params[0],)]
+        elif "SELECT symbol FROM watchlists" in sql:
             self.rows = [("ETH",)]
         elif "INSERT INTO daily_scores" in sql:
             self.store.daily = {
@@ -268,6 +270,7 @@ def test_pair_bound_auto_bot_cannot_execute_queued_base_asset_order():
 
 
 def test_legacy_manual_live_bot_decision_cannot_book_unconfirmed_fill(monkeypatch):
+    monkeypatch.setattr(paper_worker, "_lock_active_owner", lambda *_args: True)
     class BotCursor:
         def __enter__(self):
             return self
