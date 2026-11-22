@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN: opgeslagen traderprofiel uitlezen (22 november 2026)
 
-Phase: `LOCAL_VALIDATED_PR_PENDING`. Product-PR
+Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`. Product-PR
 [#1295](https://github.com/gvangalen/antigravity-trading-tool/pull/1295)
 bevat de reparatie op `codex/finn-trader-profile-readback-20261122`.
 Een directe vraag over het eigen traderprofiel mag niet via de uitleg over
@@ -35,9 +35,14 @@ productiebuild, typecheck, i18n-lint/tests, command-/voorsteltests en
 Een lokale synthetische run van de exacte gebruikersvraag gaf de opgeslagen
 risicostijl en doelen terug met gelijke polling- en SSE-uitkomst.
 
-PR-CI, main-CI, Auto Deploy, publieke SHA-pariteit en onafhankelijke
-ingelogde QA op deze profielfix staan nog open. Er is voor deze kandidaat
-nog niets gedeployd of live geaccepteerd.
+Product-PR-CI **45039188971** en main-CI **45039920296** voltooiden elk
+alle vijf jobs met succes. Auto Deploy **45040616006** slaagde op
+`ae01a9e7ae7747f390757ff7dd087bf3f3a4937e`. Op 22 november 2026
+gaven publieke backend health en frontend build-info beide HTTP 200 met
+exact die SHA, gelijk aan GitHub `main`. Deze status-only update vereist
+opnieuw bevestiging van de laatste main-CI, Auto Deploy en publieke
+SHA-pariteit. Onafhankelijke ingelogde live QA voor de profielfix staat
+nog open; er is nog geen QA-acceptatie.
 
 ## FINN 3.0: strategienaam mag bevestigde setup niet ombinden (22 november 2026)
 
