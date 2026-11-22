@@ -224,11 +224,11 @@ jobs:
             echo "The AAPL quote probe requires only fixture-action authorization and no manifest or execution." >&2
             exit 1
           fi
-          if [ "$QA_PROFILE" = "aapl_paper_quote_fixture_audit" ] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ] || [ "$ALLOW_FIXTURE_ACTIONS" != "false" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" != "false" ] || [ "$RUN_LABEL" != "audit-45033782172-1-775c4259" ]; }; then
+          if [ "$QA_PROFILE" = "aapl_paper_quote_fixture_audit" ] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ] || [ "$ALLOW_FIXTURE_ACTIONS" != "false" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" != "false" ] || [[ ! "$RUN_LABEL" =~ ^(audit-45033782172-1-775c4259|audit-45061684671-1-0fc2d876)$ ]]; }; then
             echo "The exact AAPL fixture audit is read-only and requires its prior-run label." >&2
             exit 1
           fi
-          if [ "$QA_PROFILE" = "aapl_paper_quote_fixture_cleanup" ] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ] || [ "$ALLOW_FIXTURE_ACTIONS" != "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" != "false" ] || [ "$RUN_LABEL" != "audit-45033782172-1-775c4259" ]; }; then
+          if [ "$QA_PROFILE" = "aapl_paper_quote_fixture_cleanup" ] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ] || [ "$ALLOW_FIXTURE_ACTIONS" != "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" != "false" ] || [[ ! "$RUN_LABEL" =~ ^(audit-45033782172-1-775c4259|audit-45061684671-1-0fc2d876)$ ]]; }; then
             echo "The exact AAPL fixture cleanup requires scoped fixture authorization and no execution." >&2
             exit 1
           fi

@@ -62,6 +62,9 @@ original user's private report or a live Paper executor decision.
 The one failed AAPL coach run `45033782172-1` has exact-run follow-ups
 `aapl_paper_quote_fixture_audit` and `aapl_paper_quote_fixture_cleanup`, both
 bound to `audit-45033782172-1-775c4259` and the prior protected report.
+The later failed run `45061684671-1` is separately bound to
+`audit-45061684671-1-0fc2d876`; use its read-only audit first and cleanup
+only if that audit reports `safe_to_cleanup=true`.
 The audit is read-only and emits only fixed status/error categories for its
 three FINN turns, a conversation-equality boolean, and fixture safety flags.
 Cleanup requires fixture actions but no safe execution; it deletes only the
