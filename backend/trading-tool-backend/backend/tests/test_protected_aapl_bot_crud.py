@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import inspect
 import subprocess
 from pathlib import Path
 
@@ -28,6 +29,77 @@ def test_bot_proposal_requires_exact_inactive_owner_safe_fields():
         assert not bot._safe_bot_fields(
             {**safe, **change}, strategy_id=17, bot_name="QA Bot",
         )
+
+
+def test_proposal_diagnostic_allowlists_only_typed_fields():
+    projection = {
+        "final_operation_id": "create_bot", "final_mode": "CLARIFICATION",
+        "terminal_response_type": "response", "missing_inputs": ["budget_total_eur", "secret"],
+        "action_draft": {"operation_id": "create_bot", "next_missing_input": "budget_total_eur"},
+        "dispatch_count": 1, "attempt_count": 1,
+        "response": {"content": "private answer"},
+    }
+    result = bot._proposal_diagnostic("clarification_required", None, projection)
+    assert result == {
+        "status": "clarification_required", "error_category": "none",
+        "answer_mode": "CLARIFICATION", "response_type": "response",
+        "operation": "create_bot", "guided_operation": "create_bot",
+        "missing_inputs": ["budget_total_eur"], "requested_slot": "budget_total_eur",
+        "dispatch_count": 1, "attempt_count": 1,
+    }
+    assert "private answer" not in str(result)
+    assert "secret" not in str(result)
+
+
+def test_proposal_diagnostic_unknown_values_do_not_escape():
+    result = bot._proposal_diagnostic(
+        "private status", "private error",
+        {"final_mode": "private mode", "terminal_response_type": "private type",
+         "final_operation_id": "private operation", "missing_inputs": ["private slot"],
+         "action_draft": {"operation_id": "private guided", "next_missing_input": "private slot"},
+         "dispatch_count": 999, "attempt_count": 999},
+    )
+    assert result == {
+        "status": "other", "error_category": "other", "answer_mode": "other",
+        "response_type": "other", "operation": "other", "guided_operation": "other",
+        "missing_inputs": [], "requested_slot": "other",
+        "dispatch_count": "other", "attempt_count": "other",
+    }
+    assert "private" not in str(result)
+
+
+def test_proposal_diagnostic_rejects_unexpected_json_shapes():
+    result = bot._proposal_diagnostic(
+        {"status": "private"}, {"error": "private"},
+        {"final_mode": {"mode": "private"}, "missing_inputs": [{"slot": "private"}],
+         "action_draft": {"next_missing_input": ["private"]},
+         "dispatch_count": True, "attempt_count": [1]},
+    )
+    assert result["status"] == "other"
+    assert result["error_category"] == "other"
+    assert result["answer_mode"] == "other"
+    assert result["missing_inputs"] == []
+    assert result["requested_slot"] == "other"
+    assert result["dispatch_count"] == "other"
+    assert result["attempt_count"] == "other"
+    assert "private" not in str(result)
+
+
+def test_proposal_diagnostic_reads_are_owner_and_run_scoped():
+    source = inspect.getsource(bot._proposal)
+    assert "FROM finn_v2_runtime_contracts\n            WHERE run_id=:run_id AND user_id=:user_id" in source
+    assert "FROM finn_v2_tool_calls WHERE run_id=:run_id AND user_id=:user_id" in source
+
+
+@pytest.mark.parametrize("rows,expected", [
+    ([], "not_requested"),
+    ([("read_linked_strategy", "completed", True)], "available"),
+    ([("read_linked_strategies", "failed", False)], "failed"),
+    ([("read_linked_strategy", "requested", None)], "requested_not_completed"),
+    ([("read_linked_strategy", "completed", True), ("read_linked_strategy", "failed", False)], "available"),
+])
+def test_strategy_read_status_is_allowlisted(rows, expected):
+    assert bot._strategy_read_status(rows) == expected
 
 
 def test_profile_guards_require_exact_flags_and_bound_owner(monkeypatch):
