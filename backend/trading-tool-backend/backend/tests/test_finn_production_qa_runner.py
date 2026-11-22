@@ -145,6 +145,29 @@ def test_journey_cleanup_runner_has_fixed_error_projection_and_no_product_execut
     assert 'execute(' not in branch
 
 
+def test_exact_short_yes_cleanup_is_allowlisted_across_all_protected_gates():
+    from backend.scripts import probe_protected_trader_fixture_audit as audit
+
+    label = "audit-45006104528-1-50cc25ca"
+    assert label in audit.JOURNEY_CLEANUP_LABELS
+    assert label == audit.JOURNEY_YES_DIAGNOSTIC_LABEL
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    workflow_guard = workflow.split(
+        'if [ "$QA_PROFILE" = "setup_strategy_journey_fixture_cleanup" ]', 1
+    )[1].splitlines()[0]
+    dispatch = DISPATCH_SCRIPT_PATH.read_text(encoding="utf-8")
+    dispatch_guard = dispatch.split(
+        'if [[ "$qa_profile" == "setup_strategy_journey_fixture_cleanup"', 1
+    )[1].splitlines()[0]
+    for guard in (workflow_guard, dispatch_guard):
+        assert label in guard
+        assert '"none"' in guard
+        assert '"true"' in guard
+        assert '"false"' in guard
+    runner = SCRIPT_PATH.read_text(encoding="utf-8")
+    assert 'cleanup_journey(args.run_label)' in runner
+
+
 def test_journey_safe_crud_policy_is_profile_scoped_in_protected_subprocess():
     source = WORKFLOW_PATH.read_text(encoding="utf-8")
     script = source.split('cat > "$state_dir/run.sh" <<RUNNER', 1)[1].split("RUNNER", 1)[0]
