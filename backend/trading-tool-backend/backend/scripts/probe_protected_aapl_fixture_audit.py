@@ -11,9 +11,11 @@ from backend.scripts.probe_protected_trader_fixture_audit import _verify_prior_r
 
 LABEL = "audit-45033782172-1-775c4259"
 NEW_LABEL = "audit-45061684671-1-0fc2d876"
+LATEST_LABEL = "audit-45067081565-1-8b64780e"
 RUNS = {
     LABEL: ("45033782172", "1", "775c4259"),
     NEW_LABEL: ("45061684671", "1", "0fc2d876"),
+    LATEST_LABEL: ("45067081565", "1", "8b64780e"),
 }
 SAFE_ERRORS = frozenset({
     "dispatch_claim_timeout", "lifecycle_owner_failed", "orchestrator_failed",
@@ -21,6 +23,69 @@ SAFE_ERRORS = frozenset({
     "responses_tool_round_limit", "responses_provider_error",
     "responses_provider_quota_unavailable", "responses_context_length_exceeded",
 })
+ERROR_CLASSES = {
+    "responses_tool_round_limit": "tool_round_limit",
+    "responses_provider_error": "provider",
+    "responses_provider_quota_unavailable": "provider_quota",
+    "responses_context_length_exceeded": "provider_context",
+    "selector_phase_timeout": "selector_timeout",
+    "lifecycle_deadline_exceeded": "runtime_timeout",
+    "dispatch_claim_timeout": "dispatch_timeout",
+    "quote_source_table_row_mismatch": "source_moment_claim",
+    "current_quote_source_prose_mismatch": "source_moment_claim",
+    "latest_price_context_clock_mismatch": "source_moment_claim",
+}
+PHASE_EVENTS = frozenset({
+    "evidence_validation_started", "evidence_validation_failed",
+    "response_draft_built", "response_verification_started",
+    "response_verification_completed", "response_repair_started",
+    "response_repair_completed", "verified_response_persisted",
+    "delivery_envelope_built",
+})
+TERMINAL_EVENTS = frozenset({"orchestrator_failed", "orchestrator_rejected", "orchestrator_completed"})
+
+
+def _code_class(codes) -> str:
+    if not isinstance(codes, list):
+        return "none"
+    for code in codes:
+        if isinstance(code, str) and code:
+            return ERROR_CLASSES.get(code, "other")
+    return "none"
+
+
+def _bounded_phase(events) -> dict:
+    phase, terminal = "none", "none"
+    for event in events:
+        if not isinstance(event, str):
+            continue
+        if event in PHASE_EVENTS:
+            phase = event
+        elif event in TERMINAL_EVENTS:
+            terminal = event
+    return {"last_phase": phase, "orchestrator_terminal": terminal}
+
+
+def _failure_diagnostics(cur, user_id: int, run_ids: list[str]) -> list[dict]:
+    result = []
+    for run_id in run_ids:
+        cur.execute(
+            """SELECT outcome,unavailable_codes_json FROM finn_v2_orchestrator_results
+               WHERE user_id=%s AND run_id=%s ORDER BY created_at DESC LIMIT 1""",
+            (user_id, run_id),
+        )
+        row = cur.fetchone()
+        outcome = row[0] if row and row[0] in {"completed", "unavailable", "failed"} else "other" if row else "missing"
+        code_class = _code_class(row[1]) if row else "none"
+        cur.execute(
+            """SELECT event_type FROM finn_v2_run_traces
+               WHERE user_id=%s AND run_id=%s ORDER BY event_order""",
+            (user_id, run_id),
+        )
+        phase = _bounded_phase([event for (event,) in cur.fetchall() if isinstance(event, str)])
+        result.append({"orchestrator_outcome": outcome,
+                       "unavailable_code_class": code_class, **phase})
+    return result
 
 
 def _scope(label: str):
@@ -93,7 +158,7 @@ def audit(label: str) -> dict:
             )
             decisions = cur.fetchall()
             cur.execute(
-                """SELECT status,error_code,conversation_id FROM finn_v2_runs
+                """SELECT id,status,error_code,conversation_id FROM finn_v2_runs
                    WHERE user_id=%s AND client_context_json->>'surface'='qa_closed_paper_review'
                    ORDER BY created_at,id""",
                 (user_id,),
@@ -107,18 +172,23 @@ def audit(label: str) -> dict:
                       and counts["bot_decisions"] == 1
                       and all(counts[table] == 0 for table in
                               ("bot_trade_plans", "bot_orders", "bot_executions", "bot_ledger")))
-        turns_terminal = len(rows) == 3 and all(row[0] in TERMINAL_STATUSES for row in rows)
+        turns_terminal = len(rows) == 3 and all(row[1] in TERMINAL_STATUSES for row in rows)
         safe = not owner_active and not keys and bot_safe and decision_safe and shape_safe and turns_terminal
+        diagnostics = []
+        if safe and label == LATEST_LABEL:
+            with conn.cursor() as cur:
+                diagnostics = _failure_diagnostics(cur, user_id, [row[0] for row in rows])
         return {
             "fixture_state": "QUARANTINED_INACTIVE" if safe else "UNSAFE_OR_AMBIGUOUS",
             "safe_to_cleanup": safe,
             "turns": [
                 {"status": status if status in TERMINAL_STATUSES else "nonterminal_or_other",
                  "error_code": code if code in SAFE_ERRORS else "missing" if code is None else "other"}
-                for status, code, _ in rows[:4]
+                for _, status, code, _ in rows[:4]
             ],
+            "terminal_diagnostics": diagnostics,
             "followup_same_conversation": (
-                rows[2][2] == rows[0][2] if len(rows) == 3 else None
+                rows[2][3] == rows[0][3] if len(rows) == 3 else None
             ),
             "owner_active": owner_active,
             "active_or_live_bot": any(active or live for _, active, live, _ in bots),

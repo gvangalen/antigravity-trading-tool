@@ -37,9 +37,14 @@ class FakeConnection:
             self.rows = [("AAPL",)]
         elif "SELECT bot_id,status,action" in query:
             self.rows = [(77, "planned", "hold")]
-        elif "SELECT status,error_code,conversation_id" in query:
-            self.rows = [(status, "responses_tool_round_limit", "first" if index != 1 else "repeat")
+        elif "SELECT id,status,error_code,conversation_id" in query:
+            self.rows = [(f"synthetic-{index}", status, "responses_tool_round_limit",
+                          "first" if index != 1 else "repeat")
                          for index, status in enumerate(self.statuses)]
+        elif "FROM finn_v2_orchestrator_results" in query:
+            self.rows = [("failed", ["current_quote_source_prose_mismatch"])]
+        elif "FROM finn_v2_run_traces" in query:
+            self.rows = [("response_draft_built",), ("orchestrator_failed",)]
         elif "SELECT id FROM bot_configs" in query:
             self.rows = [(77,)]
         else:
@@ -66,6 +71,41 @@ def test_aapl_audit_reports_only_typed_terminal_state(monkeypatch):
     ] * 3
     assert result["trade_rows_present"] is False
     assert "qa-synthetic" not in str(result)
+
+
+def test_latest_aapl_audit_reports_only_fixed_failure_phase(monkeypatch):
+    monkeypatch.setattr(probe, "_scope", lambda _label: (12, False, "qa-synthetic"))
+    monkeypatch.setattr(probe.fixture, "_connection", lambda: FakeConnection())
+
+    result = probe.audit(probe.LATEST_LABEL)
+
+    assert result["safe_to_cleanup"] is True
+    assert result["terminal_diagnostics"] == [{
+        "orchestrator_outcome": "failed",
+        "unavailable_code_class": "source_moment_claim",
+        "last_phase": "response_draft_built",
+        "orchestrator_terminal": "orchestrator_failed",
+    }] * 3
+    assert "synthetic-" not in str(result)
+    assert "current_quote_source_prose_mismatch" not in str(result)
+
+
+def test_latest_aapl_audit_skips_diagnostics_when_fixture_unsafe(monkeypatch):
+    monkeypatch.setattr(probe, "_scope", lambda _label: (12, False, "qa-synthetic"))
+    monkeypatch.setattr(probe.fixture, "_connection", lambda: FakeConnection(orders=1))
+    result = probe.audit(probe.LATEST_LABEL)
+    assert result["safe_to_cleanup"] is False
+    assert result["terminal_diagnostics"] == []
+
+
+def test_aapl_failure_classes_never_export_unknown_codes():
+    assert probe._code_class(["private user data in exception"]) == "other"
+    assert probe._code_class(["responses_tool_round_limit"]) == "tool_round_limit"
+    assert probe._bounded_phase(["private event", "response_verification_started",
+                                 "orchestrator_failed"]) == {
+        "last_phase": "response_verification_started",
+        "orchestrator_terminal": "orchestrator_failed",
+    }
 
 
 def test_aapl_audit_blocks_nonterminal_child(monkeypatch):
@@ -95,7 +135,7 @@ def test_aapl_scope_rejects_any_other_run_before_read(monkeypatch):
         probe._scope("audit-45033782173-1-775c4259")
 
 
-@pytest.mark.parametrize("label", [probe.LABEL, probe.NEW_LABEL])
+@pytest.mark.parametrize("label", [probe.LABEL, probe.NEW_LABEL, probe.LATEST_LABEL])
 @pytest.mark.parametrize("keys,allowed", [(0, True), (1, False)])
 def test_aapl_scope_requires_bound_qa_owner_without_keys(monkeypatch, label, keys, allowed):
     namespace = label.replace("audit-", "qa-", 1) + "-deadbeef"
@@ -184,6 +224,7 @@ def test_aapl_profiles_are_exactly_guarded_in_both_dispatch_paths():
         assert "aapl_paper_quote_fixture_cleanup" in source
         assert probe.LABEL in source
         assert probe.NEW_LABEL in source
+        assert probe.LATEST_LABEL in source
     assert {"aapl_paper_quote_fixture_audit", "aapl_paper_quote_fixture_cleanup"} <= ALLOWED_PROFILES
     assert profile_error_category("aapl_paper_quote_fixture_cleanup", RuntimeError(
         "aapl_fixture_cleanup_unsafe",
