@@ -560,6 +560,42 @@ def _run_contract(
                     guided["dispatch_count"] == 1,
                     guided["attempt_count"] == 1,
                 ))
+                if operation_id == "create_setup" and result["journey_short_yes_safe"]:
+                    detailed = run_gate(
+                        base_url=base_url, bearer_token=token,
+                        conversation_id=result.get("execution_conversation_id"),
+                        message=("Noem die strategie Matrix Vervolg Strategie. "
+                                 "Vaste uitvoering van 10 euro, entry 200 USDT, "
+                                 "stop-loss 180 USDT, target 220 USDT, gebalanceerd risico. "
+                                 "Toon eerst een voorstel, maak geen bot."),
+                        timeout_seconds=75,
+                    )
+                    detailed_record = _runtime_record(detailed["run_id"])
+                    detailed_projection = detailed_record["terminal_projection"]
+                    detailed_proposal = detailed_record["proposal"]
+                    result["journey_detailed_strategy"] = {
+                        "status": detailed["status"],
+                        "operation_id": detailed["final_operation_id"],
+                        "guided_operation": (detailed_projection.get("action_draft") or {}).get("operation_id"),
+                        "proposal_present": bool(detailed_proposal),
+                        "proposal_status": detailed_proposal.get("status") if detailed_proposal else None,
+                        "setup_matches": str((detailed_projection.get("supplied_inputs") or {}).get("setup_id"))
+                        == str(journey.get("setup_id")),
+                        "missing_inputs": detailed_projection.get("missing_inputs"),
+                        "dispatch_count": detailed_projection.get("dispatch_count"),
+                        "attempt_count": detailed_projection.get("attempt_count"),
+                    }
+                    detail = result["journey_detailed_strategy"]
+                    result["journey_detailed_strategy_safe"] = all((
+                        detail["status"] == "completed",
+                        detail["operation_id"] == "create_strategy",
+                        detail["proposal_present"],
+                        detail["proposal_status"] == "draft",
+                        detail["setup_matches"],
+                        not detail["missing_inputs"],
+                        detail["dispatch_count"] == 1,
+                        detail["attempt_count"] == 1,
+                    ))
         if operation_id == "create_manual_trade_plan" and result.get("execution_result") == "succeeded":
             with sync_engine.begin() as connection:
                 saved = connection.execute(text(
@@ -613,6 +649,7 @@ def _run_contract(
             (operation_id != "create_manual_trade_plan" or result.get("manual_trade_plan_safe")),
             (operation_id not in {"create_setup", "create_strategy"}
              or (result.get("journey_next_step_safe") and result.get("journey_short_yes_safe"))),
+            (operation_id != "create_setup" or result.get("journey_detailed_strategy_safe")),
             (operation_id != "update_strategy" or all((
                 result.get("confirmed_strategy_followup", {}).get("status") == "completed",
                 result.get("confirmed_strategy_followup", {}).get("same_conversation"),

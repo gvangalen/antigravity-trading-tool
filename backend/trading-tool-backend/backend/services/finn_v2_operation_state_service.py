@@ -2615,7 +2615,7 @@ class FinnV2OperationStateService:
             return natural_title.group(1).strip(" .\"'“”‘’") or None
         quoted = re.search(
             r"\b(?:met\s+(?:de\s+)?naam|naam|name|named|called|"
-            r"noem\s+(?:hem|haar|het|(?:deze|dit|de|het|een)\s+(?:nieuwe?\s+)?(?:setup|strategie|plan|bot)))"
+            r"noem\s+(?:hem|haar|het|(?:deze|dit|die|de|het|een)\s+(?:nieuwe?\s+)?(?:setup|strategie|plan|bot)))"
             r"\s*(?:exact\s+)?(?:is|:|=)?\s*([\"'“‘])([\w .-]{2,80})[\"'”’]",
             text, re.IGNORECASE,
         )
@@ -2624,7 +2624,7 @@ class FinnV2OperationStateService:
         named = re.search(
             r"\b(?:mit\s+dem\s+namen|unter\s+dem\s+namen|dem\s+namen|met\s+de\s+naam|namens|genannt|"
             r"genaamd|named|called|call\s+it|nenne\s+(?:ihn|sie|es)|"
-            r"noem\s+(?:hem|haar|het|(?:deze|dit|de|het|een)\s+(?:(?:nieuw|nieuwe)\s+)?(?:setup|strategie|plan|bot)|deze|dit)|"
+            r"noem\s+(?:hem|haar|het|(?:deze|dit|die|de|het|een)\s+(?:(?:nieuw|nieuwe)\s+)?(?:setup|strategie|plan|bot)|deze|dit)|"
             r"ik\s+noem\s+(?:hem|haar|het|deze|dit)|"
             r"hij\s+heet|het\s+heet|naam\s+van\s+(?:alleen\s+)?(?:dit|deze)\s+concept|"
             r"(?:conceptnaam|naam|name|titel|title))\b"
