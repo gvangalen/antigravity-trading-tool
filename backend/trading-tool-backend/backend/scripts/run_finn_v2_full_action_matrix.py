@@ -455,6 +455,13 @@ def _run_contract(
     follow_up_user = _create_local_user()
     user_id = int(primary["id"])
     fields = _seed_fixtures(user_id)
+    if operation_id == "create_setup":
+        # An older owner setup whose name appears in the new strategy's name
+        # must not steal the parent of the newly confirmed setup.
+        with sync_engine.begin() as connection:
+            fields["older_strategy_named_setup"] = _insert_setup(
+                connection, user_id, "BTC Strategy",
+            )
     token = create_access_token({"sub": str(user_id), "role": str(primary.get("role") or "user")})
     other_token = create_access_token({"sub": str(other["id"]), "role": str(other.get("role") or "user")})
     # The primary path deliberately executes once. The incomplete-flow path

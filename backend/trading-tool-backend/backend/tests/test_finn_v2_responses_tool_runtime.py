@@ -7957,6 +7957,51 @@ def test_price_reentry_parent_ignores_recent_different_setup(monkeypatch):
     assert parent == {"setup_id": 42, "setup_type": "trade", "symbol": "BTC", "timeframe": "1D"}
 
 
+def test_named_guided_strategy_keeps_its_owner_bound_setup(monkeypatch):
+    checked = []
+
+    class Resolver:
+        def __init__(self, _session):
+            self.setups = SimpleNamespace(get_setup_by_id=self.get_setup_by_id)
+
+        async def get_setup_by_id(self, setup_id, user_id):
+            checked.append((setup_id, user_id))
+            if setup_id == 42 and user_id == 7:
+                return {"setup_type": "trade", "symbol": "BTC", "timeframe": "4H"}
+            return None
+
+        async def resolve_canonical_target(self, **_kwargs):
+            raise AssertionError("The new strategy name cannot select an older setup")
+
+    @asynccontextmanager
+    async def session_factory():
+        yield object()
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnV2EntityResolutionService", Resolver,
+    )
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.user_id = 7
+    front.reads = SimpleNamespace(session_factory=session_factory)
+    context = {"active_guided_operation": {
+        "operation_id": "create_strategy", "status": "collecting",
+        "collected_inputs": {"setup_id": 42},
+        "missing_required_inputs": ["name"],
+    }}
+    parent = asyncio.run(front._verified_strategy_parent(
+        message="Noem die strategie QA BTC Strategy matrix-20261122. Vaste uitvoering van 10 euro.",
+        conversation_context=context,
+    ))
+    assert checked == [(42, 7)]
+    assert parent == {"setup_id": 42, "setup_type": "trade", "symbol": "BTC", "timeframe": "4H"}
+
+    front.user_id = 8
+    assert asyncio.run(front._verified_strategy_parent(
+        message="Noem die strategie QA BTC Strategy matrix-20261122.",
+        conversation_context=context,
+    )) == {}
+
+
 def test_blocked_strategy_does_not_treat_currency_offsets_as_fixed_levels():
     unsafe_inputs = {
         "setup_id": 42, "name": "Relative", "symbol": "BTC", "base_amount": 100,

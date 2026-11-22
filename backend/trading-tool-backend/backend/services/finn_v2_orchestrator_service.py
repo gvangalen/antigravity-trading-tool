@@ -449,6 +449,24 @@ class FinnV2OrchestratorService:
                 "source": "owner_scoped_reference",
             }
             resolved = {}
+        if (
+            operation_id == "create_strategy"
+            and re.match(r"^\s*noem\s+(?:die|de|deze)\s+strategie\b", message, re.I)
+            and not re.search(
+                r"\b(?:voor|bij|aan)\s+(?:(?:mijn|de|het|een)\s+)?(?:setup|plan)\b",
+                message, re.I,
+            )
+            and dict(operation_state.get("input_sources") or {}).get("setup_id")
+                == "verified_parent_setup"
+        ):
+            # A strategy name can contain an older setup's name. The parent
+            # already came from an owner-scoped guided draft, so a second
+            # name scan must not silently rebind this proposal.
+            parent_id = collected_inputs.get("setup_id")
+            if str(parent_id or "").isdigit() and await self.entities.setups.get_setup_by_id(
+                int(parent_id), user_id,
+            ):
+                resolved["setup_id"] = int(parent_id)
         if explicit_bot_strategy_choice is not None:
             resolved["strategy_id"] = explicit_bot_strategy_choice
         if unbound_current_levels:

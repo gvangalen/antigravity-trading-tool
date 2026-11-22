@@ -4,6 +4,41 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: strategienaam mag bevestigde setup niet ombinden (22 november 2026)
+
+Phase: `CANDIDATE_PR_CI_PENDING`. De onafhankelijke live journey-proef op
+`1c7ac643b922f1652001d893bff41d9b2301c976` was `NOT_ACCEPTED`:
+setup-opslag en idempotente replay slaagden, maar het volledige
+strategieantwoord eindigde zonder bevestigbaar voorstel. De gesaniteerde
+QA-audit vond een aanwezige naam en geen ontbrekende velden, maar een
+`setup_id` die niet overeenkwam met de zojuist opgeslagen BTC/USDT-setup.
+De beschermde QA-fixture is exact opgeruimd en read-only als niet
+achtergebleven gecontroleerd.
+
+Product-PR [#1293](https://github.com/gvangalen/antigravity-trading-tool/pull/1293)
+verankert de parent van een begeleid strategieantwoord aan de eigenaar-
+gecontroleerde, opgeslagen setup. Een oudere setupnaam in de nieuw opgegeven
+strategienaam mag die parent niet vervangen. Build reproduceerde dit lokaal
+met een oudere setup `BTC Strategy`: vóór de fix bleef de korte `ja`-beurt
+correct, maar werd het derde voorstel aan de oude setup gekoppeld; na de fix
+werd één conceptvoorstel aan de nieuwe setup gekoppeld, zonder ontbrekende
+velden, bot of order.
+
+Gemeten lokale Build-controles: backend **5317 passed, 8 skipped**; frontend
+build, typecheck, i18n-lint/tests, command-/voorsteltests en high audit
+geslaagd. De volledige geïsoleerde worker-actiematrix slaagde **17/17**
+(artifact SHA-256
+`c8d585d3b4b3decf64a775abffcb03b5b2a2dfc1fa79fdae996e9ebb9bcb46e6`),
+met nul brokerorders, Live-bots, Live-calls en productieverbindingen.
+De echte Responses-providerselectie slaagde development **20/20**
+(`caa4ceb30c2e84a5e4dc7dd9e576d6c0664172fbe73ea3368fdf7684f6af1f23`)
+en regression **109/109**
+(`1330633394ad0d9982c578aad1cf6068c9c993ff0d51edbd38b0c375e0120334`),
+zonder provider-, schema-, timeout-, parse- of validatiefouten.
+PR-CI, main-CI, Auto Deploy, publieke SHA-pariteit en onafhankelijke
+ingelogde QA op deze kandidaat staan nog open. Tot die QA groen is, blijft
+het live oordeel over deze flow `NOT_ACCEPTED`.
+
 ## FINN 3.0: volledig strategieantwoord blijft bij opgeslagen setup (22 november 2026)
 
 Phase: `PRODUCT_MERGED_DEPLOY_PENDING`. Onafhankelijke QA keurde de vorige
