@@ -122,6 +122,12 @@ contains only booleans, bounded counts, fixed stages and fixed error codes,
 not user text, IDs or credentials. This server-side profile does not prove
 browser rendering, a natural beat schedule, or independent polling/SSE parity;
 those require separate authenticated browser and transport checks.
+On proposal lifecycle failure, the sanitized report keeps only the operation,
+fixed stage, allowlisted first-execution and replay statuses, known gate codes
+or `other`, next-step equality, and a bounded exception class. The first
+status is recorded before the direct QA session closes, including a blocked
+gate whose execution row is not committed. Raw exception text, proposal IDs,
+and fixture values are never exported.
 
 `trader_pair_fixture_audit` is a read-only follow-up for one failed or
 incomplete `trader_pair_score_continuity` run. It requires `manifest_id=none`,

@@ -1,11 +1,103 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
 import pytest
 
 from backend.scripts import probe_protected_setup_strategy_journey as probe
+
+
+def _mock_lifecycle_services(monkeypatch, execute):
+    from backend.infrastructure import database
+    from backend.infrastructure.repositories import finn_v2_proposal_repository as proposal_repository
+    from backend.services import finn_v2_confirmation_service as confirmation_service
+    from backend.services import finn_v2_execution_service as execution_service
+
+    @asynccontextmanager
+    async def session_factory():
+        yield object()
+
+    async def get_proposal(**_kwargs):
+        return SimpleNamespace(operation_type="create_setup", payload_hash="synthetic-hash")
+
+    async def issue_token(**_kwargs):
+        return "synthetic-token", None
+
+    async def confirm(**_kwargs):
+        return SimpleNamespace(confirmed=True)
+
+    monkeypatch.setattr(database, "async_session_factory", session_factory)
+    monkeypatch.setattr(proposal_repository, "FinnV2ProposalRepository", lambda _session:
+        SimpleNamespace(get_by_id_for_user=get_proposal))
+    monkeypatch.setattr(confirmation_service, "FinnV2ConfirmationService", lambda _session:
+        SimpleNamespace(issue_confirmation_token=issue_token, confirm=confirm))
+    monkeypatch.setattr(execution_service, "FinnV2ExecutionService", lambda _session:
+        SimpleNamespace(execute=execute))
+
+
+@pytest.mark.parametrize("first_status,first_codes", [
+    ("blocked", ["proposal_not_confirmed"]),
+    ("failed", ["private database detail"]),
+])
+def test_lifecycle_diagnostic_captures_typed_first_and_replay_status(
+    monkeypatch, first_status, first_codes,
+):
+    async def execute(**_kwargs):
+        return SimpleNamespace(status=first_status, error_codes=first_codes,
+                               journey_next_step=None, conversation_id="synthetic")
+
+    _mock_lifecycle_services(monkeypatch, execute)
+    trace = {}
+    with pytest.raises(RuntimeError, match="^journey_replay_failed$"):
+        asyncio.run(probe._confirm_and_execute(42, "synthetic-proposal", trace))
+    diagnostic = trace["execution_diagnostic"]
+    assert diagnostic["operation"] == "create_setup"
+    assert diagnostic["first_status"] == first_status
+    assert diagnostic["first_codes"] == (
+        first_codes if first_status == "blocked" else ["other"])
+    assert diagnostic["replay_status"] == first_status
+    assert diagnostic["exception_stage"] == "replay_check"
+    assert "private database detail" not in str(diagnostic)
+
+
+def test_lifecycle_diagnostic_captures_raise_before_execution_row(monkeypatch):
+    async def execute(**_kwargs):
+        raise ValueError("private proposal or database detail")
+
+    _mock_lifecycle_services(monkeypatch, execute)
+    trace = {}
+    with pytest.raises(ValueError, match="private proposal"):
+        asyncio.run(probe._confirm_and_execute(42, "synthetic-proposal", trace))
+    diagnostic = trace["execution_diagnostic"]
+    assert diagnostic["first_status"] == "raised"
+    assert diagnostic["replay_status"] == "not_called"
+    assert diagnostic["exception_stage"] == "first_execute"
+    assert diagnostic["exception_class"] == "ValueError"
+    assert "private proposal" not in str(diagnostic)
+
+
+def test_lifecycle_diagnostic_separates_replay_mismatch(monkeypatch):
+    results = iter((
+        SimpleNamespace(status="succeeded", error_codes=[],
+                        journey_next_step={"step": "strategy"}, conversation_id="synthetic"),
+        SimpleNamespace(status="already_executed", error_codes=[],
+                        journey_next_step={"step": "paper"}, conversation_id="synthetic"),
+    ))
+
+    async def execute(**_kwargs):
+        return next(results)
+
+    _mock_lifecycle_services(monkeypatch, execute)
+    trace = {}
+    with pytest.raises(RuntimeError, match="^journey_replay_failed$"):
+        asyncio.run(probe._confirm_and_execute(42, "synthetic-proposal", trace))
+    diagnostic = trace["execution_diagnostic"]
+    assert diagnostic["first_status"] == "succeeded"
+    assert diagnostic["replay_status"] == "already_executed"
+    assert diagnostic["next_step_match"] is False
+    assert diagnostic["exception_stage"] == "replay_check"
 
 
 def test_runner_uses_existing_live_exchange_guard(monkeypatch):
@@ -30,6 +122,38 @@ def test_runner_uses_existing_live_exchange_guard(monkeypatch):
     assert result["result"] == "PASS"
     assert result["live_calls"] == 0
     assert execution._execute_on_exchange_sync is original_exchange
+
+
+def test_runner_projects_only_typed_lifecycle_diagnostic_on_failure(monkeypatch):
+    from backend.infrastructure import database
+
+    async def case(_namespace, _owner, trace):
+        trace["stage"] = "setup_confirmation"
+        trace["fixture_state"] = "quarantined"
+        trace["execution_diagnostic"] = {
+            "operation": "create_setup", "stage": "replay_check",
+            "first_status": "blocked", "first_codes": ["proposal_not_confirmed"],
+            "replay_status": "blocked", "replay_codes": ["proposal_not_confirmed"],
+            "next_step_match": True, "exception_class": "RuntimeError",
+            "exception_stage": "replay_check",
+        }
+        raise RuntimeError("journey_replay_failed")
+
+    async def dispose():
+        pass
+
+    monkeypatch.setenv("FINN_QA_USER_ID", "42")
+    monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_ACTIONS", "1")
+    monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_EXECUTION", "1")
+    monkeypatch.setenv("FINN_QA_ALLOW_SETUP_STRATEGY_JOURNEY", "1")
+    monkeypatch.setattr(probe, "_case", case)
+    monkeypatch.setattr(database, "engine", SimpleNamespace(dispose=dispose))
+    result = probe.run("qa-20261122-1-abcdef12-34567890")
+    assert result["result"] == "FAIL"
+    assert result["reason"] == "journey_replay_failed"
+    assert result["execution_diagnostic"]["first_status"] == "blocked"
+    assert result["execution_diagnostic"]["replay_status"] == "blocked"
+    assert "42" not in str(result) and "synthetic" not in str(result)
 
 
 def test_owner_binding_requires_all_protected_flags(monkeypatch):
