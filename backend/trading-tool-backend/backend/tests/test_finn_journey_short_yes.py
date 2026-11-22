@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 
 from backend.services.finn_v2_execution_service import FinnV2ExecutionService
+from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor
 from backend.services.finn_v2_run_service import (
     _complete_named_guided_strategy_proposal,
     _verified_journey_affirmative_message,
@@ -36,6 +37,9 @@ def test_short_yes_resumes_only_the_confirmed_owner_setup(monkeypatch):
     assert "BTC/USDT" in answer
     assert "setup met ID 17" in answer
     assert "Maak geen nieuwe setup" in answer
+    assert context["verified_journey_affirmative"] == {
+        "operation_id": "create_strategy", "setup_id": 17,
+    }
     assert seen == [(42, "create_setup", {"setup_id": 17})]
     assert asyncio.run(_verified_journey_affirmative_message(
         object(), context=_context("create_setup", owner=43), message="ja", user_id=42,
@@ -71,6 +75,25 @@ def test_short_yes_resumes_confirmed_strategy_without_authorizing_trade(monkeypa
     ))
     assert "Paper-bot" in answer
     assert "Activeer niets en plaats geen order" in answer
+
+
+def test_verified_short_yes_selects_next_contract_without_model_owned_parent():
+    context = _context("create_setup")
+    context["verified_journey_affirmative"] = {
+        "operation_id": "create_strategy", "setup_id": 17,
+    }
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=42,
+                                   run_id="journey-strategy-test", model_led_coach=True)
+    prepared = asyncio.run(front.run(
+        message=("Bereid een strategie voor mijn bestaande BTC/USDT-setup met ID 17 voor. "
+                 "Maak geen nieuwe setup. Vraag naar ontbrekende keuzes en leg de strategie ter bevestiging voor."),
+        instructions="", conversation_context=context, verified_asset="BTC", locale="nl",
+    ))
+    assert prepared.proposal_analysis is not None
+    plan = prepared.proposal_analysis.request_plan
+    assert plan.operation_id == "create_strategy"
+    assert plan.operation_state.get("collected_inputs", {}).get("setup_id") == 17
+    assert prepared.response.response_id_reusable is False
 
 
 def test_short_yes_rejects_combined_or_resolved_journey(monkeypatch):

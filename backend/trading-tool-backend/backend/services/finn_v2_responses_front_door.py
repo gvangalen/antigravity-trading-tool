@@ -69,7 +69,7 @@ from backend.services.finn_v2_factual_source_answer import (
     render_paper_exit_position_status,
     render_portfolio_read_time, render_report_and_quote_times,
     render_report_and_technical_read, render_report_bot_check_comparison,
-    render_multi_asset_report_bot_comparison,
+    render_multi_asset_report_bot_comparison, render_account_market_report_facts,
 )
 
 logger = logging.getLogger(__name__)
@@ -2079,7 +2079,16 @@ class FinnResponsesFrontDoor:
                     bot_reason_followup = True
             report_technical_comparison = is_report_technical_comparison_request(message)
             fact_kind = None
-            if pair and re.search(r"\b(?:dagrapport|ochtendrapport)\b", message, re.I) \
+            if (len(symbols) == 1 and not pair_mentions
+                    and re.search(r"\b(?:plan|setup)\b", message, re.I)
+                    and re.search(r"\bscore\w*\b", message, re.I)
+                    and re.search(r"\b(?:dagrapport|rapport)\b", message, re.I)
+                    and re.search(r"\bbot\w*\b", message, re.I)
+                    and re.search(r"\b(?:bronmoment\w*|marktbron)\b", message, re.I)
+                    and re.search(r"\b(?:nieuwste|laatste|actuele)\b", message, re.I)):
+                fact_kind = "account_market_report"
+                symbol = next(iter(symbols))
+            elif pair and re.search(r"\b(?:dagrapport|ochtendrapport)\b", message, re.I) \
                     and re.search(r"\b(?:nieuwste|huidige|actuele)\b", message, re.I) \
                     and re.search(r"\b(?:koersbron|bronmoment|koers)\b", message, re.I):
                 fact_kind = "report_quote_times"
@@ -2148,7 +2157,16 @@ class FinnResponsesFrontDoor:
                     ), None, previous_response, locale=locale,
                 )
             if fact_kind:
-                if fact_kind == "report_quote_times":
+                if fact_kind == "account_market_report":
+                    call = replace(catalog.validate("get_active_plan_and_strategy", {"asset": symbol}),
+                                   read_tools=("read_active_setup", "read_linked_strategy",
+                                               "read_asset_scores", "read_market_snapshot",
+                                               "read_latest_report", "read_bot_status"))
+                    call = self._bind_explicit_report_evidence(
+                        call, message=message, read_only=True,
+                        previous_response=previous_response, owner_user_id=self.user_id,
+                    )
+                elif fact_kind == "report_quote_times":
                     call = replace(catalog.validate("get_decision_history", {"asset": symbol}),
                                    read_tools=("read_latest_report", "read_market_snapshot"))
                     call = self._bind_explicit_report_evidence(
@@ -2198,7 +2216,9 @@ class FinnResponsesFrontDoor:
                 except Exception:
                     logger.exception("FINN factual source read failed kind=%s", fact_kind)
                     read_result = {"status": "unavailable", "results": []}
-                if fact_kind == "report_quote_times":
+                if fact_kind == "account_market_report":
+                    fact_text = render_account_market_report_facts(read_result, symbol=symbol)
+                elif fact_kind == "report_quote_times":
                     fact_text = render_report_and_quote_times(
                         read_result, symbol=symbol, quote_currency=pair[1],
                     )
@@ -2999,6 +3019,43 @@ class FinnResponsesFrontDoor:
             and immediate_action.get("result_status") == "succeeded"
             else {}
         )
+        journey = dict(conversation_context.get("verified_journey_affirmative") or {})
+        journey_operation = journey.get("operation_id")
+        journey_parent = ("setup_id" if journey_operation == "create_strategy" else
+                          "strategy_id" if journey_operation == "create_bot" else None)
+        parent_id = journey.get(journey_parent) if journey_parent else None
+        expected_action = ("create_setup" if journey_operation == "create_strategy" else
+                           "create_strategy" if journey_operation == "create_bot" else None)
+        if (journey_parent and isinstance(parent_id, int) and parent_id > 0
+                and conversation_context.get("strict_immediate_action_lineage")
+                and linked_action.get("operation_id") == expected_action
+                and str(linked_action.get("entity_id") or "") == str(parent_id)):
+            # The preceding confirmed action and owner-scoped next-step check
+            # already resolved the parent. A short "ja" must not ask the model
+            # to supply server-owned symbol, timeframe or parent ID again.
+            contract = self.proposals.registry.require_supported(journey_operation)
+            selected = self.proposals.from_call(
+                call=FinnResponsesToolCall(
+                    name=catalog.proposal_tool_for_operation(journey_operation),
+                    operation_id=journey_operation, inputs={}, read_tools=(),
+                    required_inputs=contract.required_inputs, missing_inputs=(),
+                    draft_intent="new", target_reference="confirmed_previous_plan",
+                ),
+                message=message, conversation_context=conversation_context,
+                verified_asset=verified_asset,
+                verified_target_inputs={journey_parent: parent_id},
+            )
+            return FinnResponsesFrontDoorResult(
+                FinnResponsesResult(
+                    text=("Ik bereid de volgende stap voor en vraag naar de ontbrekende keuzes. "
+                          "Opslaan volgt pas na jouw bevestiging."),
+                    response_id=f"verified-journey-next-{self.run_id}",
+                    tool_trace=({"name": "verified_journey_next_step", "status": "completed",
+                                 "result": {"operation_id": journey_operation}},),
+                    response_id_reusable=False,
+                ),
+                selected, previous_response, locale=locale,
+            )
         if (
             imperative_operation == "update_strategy"
             and request_facts.action_polarity == "update"

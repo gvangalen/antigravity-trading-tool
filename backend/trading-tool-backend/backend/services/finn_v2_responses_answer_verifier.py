@@ -49,6 +49,7 @@ from backend.services.finn_v2_factual_source_answer import (
     render_bot_decision, render_closed_paper_exit_facts, render_selected_paper_feed_decision, render_latest_quote, render_portfolio_read_time,
     render_report_and_quote_times, render_report_and_technical_read,
     render_report_bot_check_comparison, render_multi_asset_report_bot_comparison,
+    render_account_market_report_facts,
 )
 
 
@@ -3184,6 +3185,11 @@ class FinnResponsesAnswerVerifier:
                     message, result.tool_trace,
                     asset=next(iter(named_paper_assets)), locale=locale or "nl",
                 ) or PAPER_POSITION_CASH_UNAVAILABLE
+            elif (call.get("name") == "get_active_plan_and_strategy" and symbol
+                  and scopes == {"read_active_setup", "read_linked_strategy",
+                                 "read_asset_scores", "read_market_snapshot",
+                                 "read_latest_report", "read_bot_status"}):
+                expected = render_account_market_report_facts(read, symbol=symbol)
             elif scopes == {"read_latest_report", "read_market_snapshot"} and symbol:
                 quote = str(args.get("quote_currency") or "").upper()
                 expected = render_report_and_quote_times(read, symbol=symbol, quote_currency=quote)

@@ -4,9 +4,51 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN: gedateerde accountvergelijking en bevestigde vervolgstap (22 november 2026)
+
+Phase: `LOCAL_GATES_PASSED_PENDING_PR_CI_DEPLOY_QA`. Candidate branch
+`codex/finn-response-exchange-terminal-20261122`. De beschermde AAPL-proef
+op live SHA `8b64780e8c64e4ad3566ff2ac4515322cd2b7636` eindigde drie keer
+`unavailable` na voltooide eigenaargebonden reads. De audit gaf geen
+orchestratorresultaat of verifierrecord; een provider-timeout in de
+antwoordronde is de sterkste codehypothese, geen bewezen terminaloorzaak.
+De afgeschermde child is exact opgeruimd (`NO_RETAINED_FIXTURE`).
+
+De kandidaat beantwoordt een expliciete, read-only vergelijking van één
+assetplan, score, Paper-botreden, oud rapport en nieuwste koers rechtstreeks
+uit dezelfde zes getypeerde owner-reads. Het antwoord noemt beide UTC-
+bronmomenten afzonderlijk en behandelt een laatst bekende koers niet als
+uitvoeringskoers. De bestaande antwoordverifier berekent dezelfde tekst
+opnieuw uit de bronnen. Ontbrekende, conflicterende of verkeerd gekoppelde
+bronnen leveren geen numerieke vergelijking op. Een setup en strategie
+opslaan en een Paper-bot voorbereiden blijven afzonderlijke bevestigbare
+acties; de Paper-ordergrens blijft ongewijzigd.
+
+De lokale volledige actiematrix vond daarnaast een reproduceerbare fout na
+het bevestigen van een setup: een kort `ja` naar de strategie liet het model
+servervelden invullen en strandde op `server_resolved_input_in_model_arguments`.
+De bevestigde, owner-gebonden vervolgstap kiest nu het bestaande
+`create_strategy`- of `create_bot`-contract rechtstreeks, met het opgeslagen
+parent-ID; geen botactivatie of order volgt uit `ja`.
+
+Lokale Build-gates op deze kandidaat: backend **5358 passed, 8 skipped**;
+frontend typecheck, i18n-lint/tests, commandotests, productiebuild en
+`audit:high` geslaagd (één moderate Next.js-advisory). Geïsoleerde
+FastAPI/Celery/PostgreSQL/Redis-actiematrix **17/17**, artifact SHA-256
+`2368d9b721064b2be492477c337744f017f4ad62e293365bdc475c07ac276b90`,
+met nul brokerorders, Live-calls en productieverbindingen; **28/28** adapters
+en Smart DCA/calendar DCA-verificaties groen. Echte providerselectie:
+development **20/20** (artifact SHA-256
+`6f7be558d54651803956966b7bc3ef6bcb5ed0440adf8341e562df34e96e51a0`)
+en regression **109/109** (artifact SHA-256
+`1f3026bba21124e6115ebf4863d32a6f47d61dd7fdfb1e8f048288e12d34225d`),
+zonder provider-, schema-, timeout-, parse- of validatiefouten. Onafhankelijke
+ingelogde live QA moet zowel de drie AAPL-bronvragen als de gesloten-markt
+setup → strategie → Paper-bot-keten en orderweigering nog toetsen.
+
 ## FINN: laatste koers na beursluiting als gedateerde bron (22 november 2026)
 
-Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`. Product-PR
+Phase: `LIVE_DEPLOYED_QA_NOT_ACCEPTED`. Product-PR
 [#1297](https://github.com/gvangalen/antigravity-trading-tool/pull/1297)
 bevat de reparatie op `codex/finn-closed-market-read-20261122`.
 FINN's antwoordcontrole wees een

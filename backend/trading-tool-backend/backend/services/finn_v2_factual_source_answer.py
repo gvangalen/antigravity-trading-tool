@@ -510,6 +510,115 @@ def render_report_and_quote_times(
             f"niet het bronmoment van het opgeslagen rapport.")
 
 
+def render_account_market_report_facts(result: dict[str, Any], *, symbol: str) -> str:
+    """Compare a saved plan, Paper decision and two dated prices from one owner read.
+
+    A stale market row is useful planning context, but never an execution quote.
+    Every requested source must be present and internally consistent before a
+    numeric comparison is shown.
+    """
+    required = {
+        "read_active_setup": "setups",
+        "read_linked_strategy": "strategies",
+        "read_asset_scores": "daily_scores_and_source_indicators",
+        "read_market_snapshot": "market_data",
+        "read_latest_report": "daily_reports",
+        "read_bot_status": "bot_configs",
+    }
+    rows: dict[str, dict[str, Any]] = {}
+    for row in result.get("results") or []:
+        if not isinstance(row, dict) or row.get("scope") not in required:
+            continue
+        scope = row["scope"]
+        if (row.get("status") != "completed" or row.get("source") != required[scope]
+                or not isinstance(row.get("data"), dict)):
+            return f"Ik kan de opgeslagen bronnen voor {symbol} niet volledig verifiëren."
+        if scope in rows and rows[scope] != row["data"]:
+            return f"Ik kan de opgeslagen bronnen voor {symbol} niet eenduidig koppelen."
+        rows[scope] = row["data"]
+    missing = [scope for scope in required if scope not in rows]
+    if missing:
+        return (f"Ik kan de vergelijking voor {symbol} niet afronden: "
+                f"de bron {', '.join(missing)} ontbreekt.")
+
+    setup, strategy = rows["read_active_setup"], rows["read_linked_strategy"]
+    scores, market = rows["read_asset_scores"], rows["read_market_snapshot"]
+    report, bot = rows["read_latest_report"], rows["read_bot_status"]
+    if (any(str(data.get("symbol") or "").upper() != symbol
+            for data in (setup, strategy, scores, market))
+            or not isinstance(setup.get("setup_id"), int)
+            or strategy.get("setup_id") != setup["setup_id"]
+            or not isinstance(strategy.get("strategy_id"), int)
+            or not isinstance(bot.get("bot_id"), int)
+            or (bot.get("strategy_id") is not None
+                and bot.get("strategy_id") != strategy["strategy_id"])
+            or (bot.get("symbol") is not None
+                and str(bot["symbol"]).upper() != symbol)
+            or bot.get("is_live") is not False):
+        return f"Ik kan het plan, de strategie en de Paper-bot voor {symbol} niet eenduidig koppelen."
+    score_values = scores.get("reported_scores")
+    if not isinstance(score_values, dict) or not any(
+        isinstance(value, (int, float)) and not isinstance(value, bool)
+        for value in score_values.values()
+    ):
+        return f"Ik heb het plan voor {symbol} gelezen, maar de opgeslagen score ontbreekt."
+    assets = (report.get("score_source_snapshot") or {}).get("assets") or []
+    matching = [row for row in assets if isinstance(row, dict)
+                and str(row.get("symbol") or "").upper() == symbol]
+    if len(matching) != 1 or not isinstance(matching[0].get("market_snapshot"), dict):
+        return f"Ik kan de historische rapportkoers voor {symbol} niet eenduidig koppelen."
+    old = matching[0]["market_snapshot"]
+    decision = bot.get("latest_decision")
+    if (not isinstance(decision, dict) or not decision.get("reason_code")
+            or str(market.get("quote_currency") or "").upper() != "USD"
+            or str(old.get("quote_currency") or "").upper() != "USD"):
+        return f"Ik kan de Paper-botreden en de twee USD-koersen voor {symbol} niet verifiëren."
+
+    def utc_instant(value: Any) -> datetime | None:
+        try:
+            parsed = value if isinstance(value, datetime) else datetime.fromisoformat(
+                str(value).replace("Z", "+00:00")
+            )
+        except (TypeError, ValueError):
+            return None
+        return parsed.astimezone(timezone.utc) if parsed.tzinfo else None
+
+    current_at = utc_instant(market.get("source_observed_at_utc") or market.get("source_observed_at"))
+    old_at = utc_instant(old.get("as_of") or old.get("source_observed_at_utc"))
+    try:
+        current_price = Decimal(str(market.get("price")))
+        old_price = Decimal(str(old.get("price")))
+    except (InvalidOperation, TypeError, ValueError):
+        return f"Ik kan de twee koerswaarden voor {symbol} niet verifiëren."
+    if (not current_at or not old_at or current_at <= old_at
+            or not current_price.is_finite() or not old_price.is_finite()
+            or current_price <= 0 or old_price <= 0):
+        return f"Ik kan de volgorde van de gedateerde koersbronnen voor {symbol} niet verifiëren."
+
+    benchmark = _number(scores.get("benchmark_score"))
+    score_text = (f"De opgeslagen benchmarkscore is {benchmark}/100. " if benchmark is not None
+                  else "Er is nog geen complete benchmarkscore; deelmetingen zijn wel opgeslagen. ")
+
+    def amount(value: Decimal) -> str:
+        return format(value, ".2f").replace(".", ",")
+
+    def clock(value: datetime) -> str:
+        return value.strftime("%Y-%m-%d %H:%M UTC")
+
+    reason_text = ("een te oude marktprijs voor een Paper-order"
+                   if decision["reason_code"] == "market_price_stale"
+                   else "een opgeslagen blokkadereden die ik hier niet kan duiden")
+    return (
+        f"Ik heb je opgeslagen {symbol}-setup en gekoppelde strategie gelezen. {score_text}"
+        f"De nieuwste beschikbare {symbol}-koersbron is USD {amount(current_price)} "
+        f"met bronmoment {clock(current_at)}. "
+        f"Het oudere opgeslagen dagrapport bevatte historisch USD {amount(old_price)} "
+        f"met bronmoment {clock(old_at)}. "
+        f"De Paper-bot vermeldt {reason_text}; die laatst bekende koers is geen "
+        "geverifieerde uitvoeringskoers. Ik plaats geen order."
+    )
+
+
 def _requested_technical_names(message: str, names: set[str]) -> list[str]:
     """Match measured indicator names, including generic moving-average phrasing."""
     selected = []
