@@ -57,6 +57,8 @@ ALLOWED_PROFILES = {
     "trader_pair_score_continuity",
     "trader_account_state_readback",
     "aapl_paper_quote_coach",
+    "aapl_stale_quote_read",
+    "aapl_paper_bot_crud",
     "aapl_paper_quote_fixture_audit",
     "aapl_paper_quote_fixture_cleanup",
     "trader_source_time_parity",
@@ -436,6 +438,14 @@ def profile_error_category(profile: str, error: Exception) -> str:
         from backend.scripts.probe_protected_aapl_quote_coach import SAFE_FAILURES
         code = str(error)
         return code if code in SAFE_FAILURES else "aapl_probe_runtime_error"
+    if profile == "aapl_stale_quote_read":
+        from backend.scripts.probe_protected_aapl_stale_quote_read import FAILURES
+        code = str(error)
+        return code if code in FAILURES else "aapl_quote_read_runtime_failed"
+    if profile == "aapl_paper_bot_crud":
+        from backend.scripts.probe_protected_aapl_bot_crud import FAILURES
+        code = str(error)
+        return code if code in FAILURES else "aapl_bot_runtime_failed"
     if profile in {"aapl_paper_quote_fixture_audit", "aapl_paper_quote_fixture_cleanup"}:
         code = str(error)
         return code if code in {
@@ -4207,6 +4217,41 @@ def main() -> int:
                 report["outcome"] = (
                     "passed" if report[args.profile]["result"] == "PASS" else "failed"
                 )
+                report["qa_status"] = "COMPLETED"
+            elif args.profile == "aapl_stale_quote_read":
+                if (args.manifest_id != "none" or args.manifest_bundle_path
+                        or os.getenv("FINN_QA_ALLOW_AAPL_STALE_QUOTE_READ") != "1"
+                        or os.getenv("FINN_QA_ALLOW_FIXTURE_ACTIONS") != "0"
+                        or os.getenv("FINN_QA_ALLOW_FIXTURE_EXECUTION") != "0"):
+                    raise ValueError("aapl_quote_read_not_authorized")
+                from backend.scripts.probe_protected_aapl_stale_quote_read import run as read_quote
+
+                report[args.profile] = read_quote()
+                report["outcome"] = {"PASS": "passed", "INCONCLUSIVE": "incomplete"}[
+                    report[args.profile]["result"]]
+                report["qa_status"] = "COMPLETED" if report["outcome"] == "passed" else "INCOMPLETE"
+                report["safety"]["read_only_profile"] = True
+                report["safety"]["execution_calls"] = 0
+                report["safety"]["live_trading_calls"] = 0
+            elif args.profile == "aapl_paper_bot_crud":
+                if (args.manifest_id != "none" or args.manifest_bundle_path
+                        or os.getenv("FINN_QA_ALLOW_AAPL_BOT_CRUD") != "1"
+                        or os.getenv("FINN_QA_ALLOW_FIXTURE_ACTIONS") != "1"
+                        or os.getenv("FINN_QA_ALLOW_FIXTURE_EXECUTION") != "1"):
+                    raise ValueError("aapl_bot_not_authorized")
+                from backend.scripts.probe_protected_aapl_bot_crud import run as run_bot_crud
+
+                report["protected_profile_attempted"] = True
+                report["qa_status"] = "INCOMPLETE"
+                report["outcome"] = "incomplete"
+                report["safety"]["read_only_profile"] = False
+                report["safety"]["execution_calls"] = None
+                report["safety"]["live_trading_calls"] = None
+                report[args.profile] = run_bot_crud(fixture_namespace or "")
+                report["safety"]["execution_calls"] = (
+                    1 if report[args.profile].get("first_status") == "succeeded" else 0)
+                report["safety"]["live_trading_calls"] = report[args.profile]["live_calls"]
+                report["outcome"] = "passed" if report[args.profile]["result"] == "PASS" else "failed"
                 report["qa_status"] = "COMPLETED"
             elif args.profile == "aapl_paper_quote_coach":
                 if args.manifest_id != "none" or args.manifest_bundle_path:

@@ -204,7 +204,8 @@ def test_journey_safe_crud_policy_is_profile_scoped_in_protected_subprocess():
     assert block in script
     assert source.count("export FINN_V2_EXECUTE_SETUP_CHANGES=true") == 1
     assert source.count("export FINN_V2_EXECUTE_STRATEGY_CHANGES=true") == 1
-    assert "FINN_V2_EXECUTE_BOT_CHANGES" not in script
+    assert script.count("export FINN_V2_EXECUTE_BOT_CHANGES=true") == 1
+    assert "if [ $(printf '%q' \"$qa_profile\") = aapl_paper_bot_crud ]; then" in script
     assert "FINN_V2_LIVE" not in script
     for profile, expected in (
         ("setup_strategy_journey", ("true", "true")),
