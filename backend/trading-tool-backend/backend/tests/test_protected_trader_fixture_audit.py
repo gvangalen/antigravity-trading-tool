@@ -168,6 +168,53 @@ def test_transport_audit_reports_only_terminal_marker_and_fixed_failure(monkeypa
     assert namespace not in str(result)
 
 
+def test_exact_yes_diagnostic_reports_only_typed_predicates(monkeypatch):
+    namespace = "qa-45006104528-1-50cc25ca-1234abcd"
+    conn = Connection([
+        [(17, False, {"qa_namespace": namespace})], [(False, False)], [(0,)],
+        [(2,)], [(1,)], [(1,)], [(0,)], [(0,)], [(1,)], [(0,)],
+        [(42,)], [("setup-conversation-private",)], [("feed-conversation-private",)],
+        [("setup-conversation-private", "completed", {
+            "initial_operation_id": "read_setup", "action_draft": {"operation_id": "create_strategy"},
+            "supplied_inputs": {"setup_id": 42, "private": "secret"},
+            "dispatch_count": 1, "attempt_count": 1,
+        })],
+    ])
+    monkeypatch.setattr(audit, "_verify_prior_report", lambda *_args: None)
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: conn)
+    result = audit.run(audit.JOURNEY_YES_DIAGNOSTIC_LABEL,
+                       expected_profile="setup_strategy_journey")
+    assert result["yes_diagnostic_state"] == "available"
+    assert result["yes_status"] == "completed"
+    assert result["yes_operation"] == "other"
+    assert result["yes_guided_operation"] == "create_strategy"
+    assert result["yes_setup_id_match"] is True
+    assert result["yes_setup_conversation_match"] is True
+    assert result["feed_turn_unique"] is True
+    assert result["feed_setup_conversation_match"] is False
+    assert result["feed_yes_conversation_match"] is False
+    assert result["yes_dispatch_count"] == 1
+    assert result["yes_attempt_count"] == 1
+    assert "private" not in str(result) and "42" not in str(result)
+
+
+def test_exact_yes_diagnostic_rejects_ambiguous_turns_without_exposing_rows(monkeypatch):
+    namespace = "qa-45006104528-1-50cc25ca-1234abcd"
+    conn = Connection([
+        [(17, False, {"qa_namespace": namespace})], [(False, False)], [(0,)],
+        [(2,)], [(1,)], [(1,)], [(0,)], [(0,)], [(1,)], [(0,)],
+        [(42,)], [("private-one",), ("private-two",)], [], [],
+    ])
+    monkeypatch.setattr(audit, "_verify_prior_report", lambda *_args: None)
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: conn)
+    result = audit.run(audit.JOURNEY_YES_DIAGNOSTIC_LABEL,
+                       expected_profile="setup_strategy_journey")
+    assert result["yes_diagnostic_state"] == "turn_missing_or_ambiguous"
+    assert result["setup_turn_unique"] is False
+    assert result["yes_turn_unique"] is False
+    assert "private" not in str(result)
+
+
 def test_journey_cleanup_rejects_other_label_before_database(monkeypatch):
     monkeypatch.setattr(audit.fixture, "_connection", lambda: pytest.fail("database touched"))
     with pytest.raises(RuntimeError, match="^journey_cleanup_label_not_allowed$"):
