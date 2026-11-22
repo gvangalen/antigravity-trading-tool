@@ -4,9 +4,51 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN: opgeslagen traderprofiel uitlezen (22 november 2026)
+
+Phase: `LOCAL_VALIDATED_PR_PENDING`. Product-PR
+[#1295](https://github.com/gvangalen/antigravity-trading-tool/pull/1295)
+bevat de reparatie op `codex/finn-trader-profile-readback-20261122`.
+Een directe vraag over het eigen traderprofiel mag niet via de uitleg over
+uitvoerbare handelsregels lopen. De productie-run
+`finn-v2-run-92be92d658664e1fa458ceaa9b76eceb` eindigde op
+`plan_execution_capability` zonder profielbewijs, terwijl de ingelogde
+profielpagina ingevulde voorkeuren toonde. `trader` werd als `trade`
+herkend. De kandidaat routeert de vraag naar de bestaande eigenaar-gebonden
+profielactie en bouwt het antwoord uit de actuele profieluitlezing. Een
+ontbrekend-profielclaim die botst met de read wordt afgewezen.
+
+Gemeten lokale Build-controles op productcommit
+`dc6540a0c8c12dc6477247cfb4109bbcdd29b4b2`: backend **5336 passed,
+8 skipped**; volledige geïsoleerde FastAPI/Celery/PostgreSQL/Redis-matrix
+**17/17** (artifact SHA-256
+`86aeb344f8abf3b32c0d75f40d4b771810e91e3d5dc76ea5eefc5557ff52c6f8`),
+**28/28** adapters, Smart DCA-migratie en bevestigde Smart DCA/calendar DCA
+geslaagd. De matrix registreerde nul brokerorders, Live-bots, Live-calls of
+productieverbindingen. Echte Responses-providerselectie: development
+**20/20** (`9853de057a36e3c01fdbfc43f42fb342c5eabf73001428d3edfef3f4e4376115`)
+en regression **109/109**
+(`93ff2e77b2bb15bf77cb6ceb26d6c6e4a6e231824a6fa28fb9b0dae66e01f8cc`),
+zonder provider-, schema-, timeout-, parse- of validatiefouten. Frontend
+productiebuild, typecheck, i18n-lint/tests, command-/voorsteltests en
+`audit:high` slaagden; de audit meldde alleen een moderate Next.js-advisory.
+Een lokale synthetische run van de exacte gebruikersvraag gaf de opgeslagen
+risicostijl en doelen terug met gelijke polling- en SSE-uitkomst.
+
+PR-CI, main-CI, Auto Deploy, publieke SHA-pariteit en onafhankelijke
+ingelogde QA op deze profielfix staan nog open. Er is voor deze kandidaat
+nog niets gedeployd of live geaccepteerd.
+
 ## FINN 3.0: strategienaam mag bevestigde setup niet ombinden (22 november 2026)
 
-Phase: `CANDIDATE_PR_CI_PENDING`. De onafhankelijke live journey-proef op
+Phase: `LIVE_DEPLOYED_QA_NOT_ACCEPTED`. Main-CI **45035812424** en Auto
+Deploy **45036621676** slaagden voor `609b001373db4f01f1aab6c62381f88a0e7c0a29`.
+Op 22 november 2026 om 15:34 UTC gaven publieke backend health en frontend
+build-info beide HTTP 200 met die SHA, gelijk aan GitHub `main`. De
+onafhankelijke QA-audit op dezelfde SHA vond drie AAPL-coachbeurten met
+`unavailable`, geen aangetoonde lineagefout en geen productacceptatie. De
+beschermde child is veilig opgeruimd; de nacontrole gaf `NO_RETAINED_FIXTURE`.
+De onafhankelijke live journey-proef op
 `1c7ac643b922f1652001d893bff41d9b2301c976` was `NOT_ACCEPTED`:
 setup-opslag en idempotente replay slaagden, maar het volledige
 strategieantwoord eindigde zonder bevestigbaar voorstel. De gesaniteerde
@@ -35,9 +77,9 @@ De echte Responses-providerselectie slaagde development **20/20**
 en regression **109/109**
 (`1330633394ad0d9982c578aad1cf6068c9c993ff0d51edbd38b0c375e0120334`),
 zonder provider-, schema-, timeout-, parse- of validatiefouten.
-PR-CI, main-CI, Auto Deploy, publieke SHA-pariteit en onafhankelijke
-ingelogde QA op deze kandidaat staan nog open. Tot die QA groen is, blijft
-het live oordeel over deze flow `NOT_ACCEPTED`.
+De product-PR is gemerged. De hoofdbranch en publieke deployment zijn
+hierboven bevestigd; de afgeronde QA-audit gaf geen productacceptatie voor
+de AAPL-coachflow. Het live oordeel over die flow blijft `NOT_ACCEPTED`.
 
 ## FINN 3.0: volledig strategieantwoord blijft bij opgeslagen setup (22 november 2026)
 

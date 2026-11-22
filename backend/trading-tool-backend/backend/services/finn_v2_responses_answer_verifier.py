@@ -911,6 +911,13 @@ class FinnResponsesAnswerVerifier:
 
     @staticmethod
     def _profile_presence_claim_supported(text: str, evidence: tuple[dict[str, Any], ...]) -> bool:
+        has_saved_profile = any(
+            item.get("scope") == "read_profile"
+            and item.get("status") == "completed"
+            and isinstance(item.get("data"), dict)
+            and item["data"].get("has_profile") is True
+            for item in evidence
+        )
         has_saved_risk_profile = any(
             item.get("scope") == "read_profile"
             and item.get("status") == "completed"
@@ -918,6 +925,16 @@ class FinnResponsesAnswerVerifier:
             and bool((item["data"].get("trader_profile") or {}).get("risk_profiles"))
             for item in evidence
         )
+        if has_saved_profile:
+            missing_profile_claims = (
+                r"\b(?:ik\s+kan\s+)?(?:je|jouw)\s+trader\s*profiel\s+niet\b[^.!?]{0,90}"
+                r"\b(?:afleiden|zien|vinden|uitlezen|ophalen)\b",
+                r"\bgeen\s+(?:persoonlijke\s+)?profielgegevens\b",
+                r"\b(?:no|without)\s+(?:personal\s+)?profile\s+(?:data|information)\b",
+                r"\b(?:keine|ohne)\s+(?:persönlichen\s+)?profildaten\b",
+            )
+            if any(re.search(pattern, text.casefold()) for pattern in missing_profile_claims):
+                return False
         if not has_saved_risk_profile:
             return True
         missing_profile_claims = (

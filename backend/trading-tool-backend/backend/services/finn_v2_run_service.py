@@ -47,6 +47,7 @@ from backend.services.finn_v2_responses_answer_verifier import FinnResponsesVeri
 from backend.services.finn_v2_responses_answer_verifier import FinnResponsesAnswerVerifier
 from backend.services.finn_v2_responses_front_door import (
     FinnResponsesFrontDoor, FinnResponsesFrontDoorResult,
+    _standalone_read_subject,
     _explicit_create_operation_request,
     _explicit_fresh_create_operation_request,
     _explicit_strategy_proposal_request,
@@ -1780,6 +1781,33 @@ def _minimal_read_answer(
             if isinstance(item, dict)
         )
     text = prepared.response.text.strip()
+    # A direct question about the owner's saved profile is a readback of
+    # typed database facts. The model can otherwise deny a profile that the
+    # same turn successfully read, and this minimal path skips the semantic
+    # answer verifier. Keep the result bound to the current owner's read.
+    request_facts = FinnV2RequestPreprocessorService().preprocess(message=message)
+    if _standalone_read_subject(message, request_facts) == "get_my_profile_and_risk_style":
+        profile_read = next((
+            item for item in current_evidence
+            if item.get("scope") == "read_profile" and item.get("status") == "completed"
+            and isinstance(item.get("data"), dict)
+        ), None)
+        if profile_read is None:
+            return FinnResponsesVerifiedAnswer(
+                "unavailable",
+                {
+                    "en": "I can't retrieve your saved trader profile right now.",
+                    "de": "Ich kann dein gespeichertes Traderprofil gerade nicht abrufen.",
+                }.get(str(getattr(prepared, "locale", "nl") or "nl").split("-")[0].lower(),
+                      "Ik kan je opgeslagen traderprofiel nu niet ophalen."),
+                "profile_read_unavailable", current_evidence,
+            )
+        from backend.services.finn_v2_profile_readback import render_profile_readback
+        return FinnResponsesVerifiedAnswer(
+            "completed", render_profile_readback(
+                profile_read["data"], locale=getattr(prepared, "locale", "nl"),
+            ), None, current_evidence,
+        )
     coach_plan = (getattr(prepared.response, "turn_contract", None) or {}).get("coach_evidence_plan") or {}
     def source_bound_coach_recovery() -> FinnResponsesVerifiedAnswer | None:
         from backend.services.finn_v2_coach_source_fallback import render_coach_source_fallback
@@ -1839,6 +1867,15 @@ def _minimal_read_answer(
             "unavailable", "Ik kan dit nog niet onderbouwen met betrouwbare gegevens.",
             "saved_entity_type_unverified", evidence,
             rejection_details={"unsupported_claims": {"saved_entity_type": text}},
+        )
+    if not FinnResponsesAnswerVerifier._profile_presence_claim_supported(text, evidence):
+        language = str(getattr(prepared, "locale", "nl") or "nl").split("-")[0].lower()
+        return FinnResponsesVerifiedAnswer(
+            "unavailable", {
+                "en": "This answer conflicts with your saved profile.",
+                "de": "Diese Antwort widerspricht deinem gespeicherten Profil.",
+            }.get(language, "Dit antwoord klopt niet met je opgeslagen profiel."),
+            "profile_presence_conflicts_with_source", evidence,
         )
     if not FinnResponsesAnswerVerifier._price_relation_claim_supported(text, evidence):
         return FinnResponsesVerifiedAnswer(
@@ -5849,6 +5886,7 @@ class FinnV2RunService:
                                     "saved_action_claim_unverified", "trading_outcome_claim_unverified",
                                     "user_condition_bypass_blocked", "saved_entity_type_unverified",
                                     "turn_contract_mismatch", "price_relation_conflicts_with_source",
+                                    "profile_presence_conflicts_with_source",
                                     "latest_quote_conflicts_with_source", "source_moment_conflicts_with_source",
                                 }
                                 and cls._read_only_repair_eligible(prepared.response.tool_trace)

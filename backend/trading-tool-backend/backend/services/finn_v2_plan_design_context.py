@@ -47,7 +47,7 @@ _DESIGN_SUBJECT = re.compile(
     r"indicator\w*|score\w*|benchmark\w*|sma\d*|ma\d+|"
     r"kruising\w*|cross(?:over)?\w*|trendlijn\w*|trendline\w*|"
     r"koop\w*|kopen|aankoop\w*|"
-    r"buy|sell|verkoop\w*|trade\w*|bedrag\w*|amount\w*|"
+    r"buy|sell|verkoop\w*|trade|trades|trading|bedrag\w*|amount\w*|"
     r"kauf\w*|verkauf\w*|betrag\w*|linie\w*)\b",
     re.I,
 )
@@ -161,6 +161,21 @@ def asks_read_only_impulse_plan_coaching(message: str) -> bool:
 def requests_execution_capability_question(message: str, context: dict[str, Any] | None = None) -> bool:
     """Route explicit feasibility questions through the executable contracts."""
     text = str(message or "")
+    if (
+        re.search(
+            r"\b(?:mijn|my|mein(?:e|en|er|es)?)\b.{0,80}"
+            r"\b(?:trader\s*profiel|trader\s*profile|trading\s*profile|"
+            r"traderprofil|risico\s*profiel|risk\s*profile|risikoprofil)\b",
+            text, re.I,
+        )
+        and re.search(r"\b(?:wat|welk\w*|vertel|zeg\w*|toon|lees|uitlez\w*|"
+                      r"haal|ophaal\w*|"
+                      r"beschrijf|what|which|tell|show|read|describe|was|"
+                      r"welch\w*|sag\w*|zeig\w*|lies|beschreib\w*)\b", text, re.I)
+    ):
+        # A saved profile read must reach owner-scoped evidence even while an
+        # unrelated plan-design focus is active.
+        return False
     if asks_read_only_impulse_plan_coaching(text):
         return False
     if (

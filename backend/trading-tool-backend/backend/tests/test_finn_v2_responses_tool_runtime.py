@@ -684,6 +684,92 @@ def test_raw_coach_keeps_general_answer_but_rejects_unread_saved_strategy_claim(
     assert unsupported.reason == "saved_entity_type_unverified"
 
 
+def test_direct_trader_profile_question_reads_back_owner_evidence_even_if_model_denies_it():
+    profile = {
+        "has_profile": True,
+        "trader_profile": {
+            "trader_types": ["swing_trader"], "primary_timeframes": ["1d"],
+            "investment_goals": ["wealth_building"], "risk_profiles": ["balanced"],
+        },
+    }
+    prepared = SimpleNamespace(locale="nl", response=SimpleNamespace(
+        text=("Ik kan je traderprofiel niet uit deze informatie afleiden. "
+              "Er staan geen persoonlijke profielgegevens in."),
+        uses_previous_response=False, turn_contract=None,
+        tool_trace=({"name": "get_my_profile_and_risk_style", "status": "completed",
+                     "result": {"results": [{"scope": "read_profile", "status": "completed",
+                                            "data": profile}]}},),
+    ))
+    answer = _minimal_read_answer(
+        message="kan je mij vertellen wat mijn trader profiel zegt?", prepared=prepared,
+    )
+    assert answer.status == "completed"
+    assert "swing trader" in answer.text
+    assert "Risicoprofiel: normaal" in answer.text
+    assert "vermogen opbouwen" in answer.text
+    assert "geen persoonlijke profielgegevens" not in answer.text
+
+
+@pytest.mark.parametrize("locale, question, expected", [
+    ("en", "What does my trader profile say?", "Risk profile: balanced"),
+    ("de", "Was steht in meinem Traderprofil?", "Risikoprofil: ausgewogen"),
+])
+def test_direct_trader_profile_readback_uses_effective_locale(locale, question, expected):
+    prepared = SimpleNamespace(locale=locale, response=SimpleNamespace(
+        text="No profile data found.", uses_previous_response=False, turn_contract=None,
+        tool_trace=({"name": "get_my_profile_and_risk_style", "status": "completed",
+                     "result": {"results": [{"scope": "read_profile", "status": "completed",
+                                            "data": {"has_profile": True, "trader_profile": {
+                                                "risk_profiles": ["balanced"],
+                                            }}}]}},),
+    ))
+    answer = _minimal_read_answer(message=question, prepared=prepared)
+    assert answer.status == "completed"
+    assert expected in answer.text
+
+
+def test_direct_trader_profile_question_distinguishes_empty_from_failed_read():
+    prepared = SimpleNamespace(locale="nl", previous_response={
+        "terminal_status": "completed", "tool_trace": [{"result": {"results": [{
+            "scope": "read_profile", "status": "completed",
+            "data": {"has_profile": True, "trader_profile": {"risk_profiles": ["aggressive"]}},
+        }]}}],
+    }, response=SimpleNamespace(
+        text="Ik kan je profiel niet zien.", uses_previous_response=False,
+        turn_contract=None, tool_trace=(),
+    ))
+    missing = _minimal_read_answer(message="Wat zegt mijn traderprofiel?", prepared=prepared)
+    assert missing.status == "unavailable"
+    assert missing.reason == "profile_read_unavailable"
+    assert "niet ophalen" in missing.text
+
+    prepared.response.tool_trace = ({"name": "get_my_profile_and_risk_style",
+                                     "status": "completed", "result": {"results": [{
+                                         "scope": "read_profile", "status": "completed",
+                                         "data": {"has_profile": False, "trader_profile": {}},
+                                     }]}},)
+    empty = _minimal_read_answer(message="Wat zegt mijn traderprofiel?", prepared=prepared)
+    assert empty.status == "completed"
+    assert "nog geen profielkeuzes ingevuld" in empty.text
+
+
+def test_mixed_profile_answer_rejects_false_missing_profile_claim():
+    profile = {"scope": "read_profile", "status": "completed", "data": {
+        "has_profile": True, "trader_profile": {"trader_types": ["swing_trader"]},
+    }}
+    prepared = SimpleNamespace(locale="nl", response=SimpleNamespace(
+        text="Er staan geen persoonlijke profielgegevens in, dus ik kan je stijl niet duiden.",
+        uses_previous_response=False, turn_contract=None,
+        tool_trace=({"name": "evaluate_plan", "status": "partial",
+                     "result": {"results": [profile]}},),
+    ))
+    answer = _minimal_read_answer(
+        message="Wat zegt mijn traderprofiel over mijn plan?", prepared=prepared,
+    )
+    assert answer.status == "unavailable"
+    assert answer.reason == "profile_presence_conflicts_with_source"
+
+
 def test_minimal_read_answer_can_reuse_previous_owner_scoped_strategy_only_for_same_asset():
     previous = {
         "terminal_status": "completed",
@@ -4602,6 +4688,10 @@ def test_verified_saved_risk_profile_cannot_be_reported_missing():
     assert not supported("Die aktuellen Marktdaten und deine spezifischen Risikoeinstellungen fehlen.", evidence)
     assert not supported("We hebben geen inzicht in je risicoprofiel.", evidence)
     assert not supported("We have no insight into your risk profile.", evidence)
+    assert not supported(
+        "Ik kan je traderprofiel niet uit deze informatie afleiden. "
+        "Er staan geen persoonlijke profielgegevens in.", evidence,
+    )
     assert supported("Je risicoprofiel is voorzichtig, maar de actuele marktdata ontbreken.", evidence)
     assert supported("Dein Risikoprofil ist vorsichtig, aber aktuelle Marktdaten fehlen.", evidence)
 
@@ -10749,6 +10839,7 @@ def test_model_led_read_uses_registry_tool_without_a_second_tool_selector():
 
 
 @pytest.mark.parametrize("message, tool_name", [
+    ("kan je mij vertellen wat mijn trader profiel zegt?", "get_my_profile_and_risk_style"),
     ("Mijn trader profiel die kan je toch gewoon ophalen?", "get_my_profile_and_risk_style"),
     ("Wat kun je over mijn traderprofiel vertellen?", "get_my_profile_and_risk_style"),
     ("Kan je me wat vertellen over mijn profiel?", "get_my_profile_and_risk_style"),
