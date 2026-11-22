@@ -215,6 +215,37 @@ def test_exact_yes_diagnostic_rejects_ambiguous_turns_without_exposing_rows(monk
     assert "private" not in str(result)
 
 
+def test_exact_strategy_diagnostic_reports_failed_proposal_conditions_only(monkeypatch):
+    namespace = "qa-45015412389-1-999bd355-1234abcd"
+    conn = Connection([
+        [(17, False, {"qa_namespace": namespace})], [(False, False)], [(0,)],
+        [(2,)], [(1,)], [(1,)], [(0,)], [(0,)], [(1,)], [(0,)],
+        [(42,)], [("conversation-private", {"action_draft": {"operation_id": "create_strategy"}})],
+        [("conversation-private", "clarification_required", None,
+          {"proposal_id": None, "confirmation_required": False, "content": "private answer"},
+          {"initial_operation_id": "create_strategy", "action_draft": {"operation_id": "create_strategy"},
+           "supplied_inputs": {"setup_id": 42, "private": "secret"},
+           "dispatch_count": 1, "attempt_count": 1})],
+    ])
+    monkeypatch.setattr(audit, "_verify_prior_report", lambda *_args: None)
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: conn)
+    result = audit.run(audit.JOURNEY_STRATEGY_DIAGNOSTIC_LABEL,
+                       expected_profile="setup_strategy_journey")
+    assert result["strategy_diagnostic_state"] == "available"
+    assert result["strategy_status"] == "clarification_required"
+    assert result["strategy_operation"] == "create_strategy"
+    assert result["strategy_guided_operation"] == "create_strategy"
+    assert result["prior_yes_guided_operation"] == "create_strategy"
+    assert result["strategy_proposal_present"] is False
+    assert result["strategy_confirmation_required"] is False
+    assert result["strategy_setup_id_match"] is True
+    assert result["strategy_same_conversation_as_yes"] is True
+    assert result["strategy_dispatch_count"] == 1
+    assert result["strategy_attempt_count"] == 1
+    assert result["strategy_error_code"] == "none"
+    assert "private" not in str(result) and "42" not in str(result)
+
+
 def test_journey_cleanup_rejects_other_label_before_database(monkeypatch):
     monkeypatch.setattr(audit.fixture, "_connection", lambda: pytest.fail("database touched"))
     with pytest.raises(RuntimeError, match="^journey_cleanup_label_not_allowed$"):
