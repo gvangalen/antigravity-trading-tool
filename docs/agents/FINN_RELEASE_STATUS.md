@@ -6,8 +6,10 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN: laatste koers na beursluiting als gedateerde bron (22 november 2026)
 
-Phase: `LOCAL_VALIDATED_RELEASE_PENDING`. Candidate branch
-`codex/finn-closed-market-read-20261122`. FINN's antwoordcontrole wees een
+Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`. Product-PR
+[#1297](https://github.com/gvangalen/antigravity-trading-tool/pull/1297)
+bevat de reparatie op `codex/finn-closed-market-read-20261122`.
+FINN's antwoordcontrole wees een
 gedateerde laatst beschikbare AAPL-koers af zodra de marktmeting als `stale`
 was gemarkeerd. De reparatie laat deze koers uitsluitend als historische,
 read-only bron in een antwoord toe wanneer bedrag, valuta en volledig
@@ -33,6 +35,14 @@ en regression **109/109**, artifact SHA-256
 zonder provider-, schema-, timeout-, parse- of validatiefouten. Onafhankelijke
 ingelogde live QA voor de gesloten-markt-flow staat nog open; deze lokale
 resultaten bewijzen de oorzaak van de eerdere `unavailable`-beurten niet.
+
+Product-PR-CI **45057844146** en main-CI **45058695251** voltooiden elk
+alle vijf jobs met succes. Auto Deploy **45059517530** slaagde op
+`a6a546405cd83b4c6a05dd858d325daa200c1b27`. Op 22 november 2026
+gaven publieke backend health en frontend build-info beide HTTP 200 met
+exact die SHA, gelijk aan GitHub `main`. Deze status-only update vereist
+opnieuw bevestiging van de laatste main-CI, Auto Deploy en publieke
+SHA-pariteit voordat de onafhankelijke QA de definitieve live SHA test.
 
 ## FINN: opgeslagen traderprofiel uitlezen (22 november 2026)
 
