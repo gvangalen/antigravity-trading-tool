@@ -13,6 +13,7 @@ import uuid
 
 from backend.scripts import probe_protected_coach_feed as feed_probe
 from backend.scripts import probe_protected_score2_stale_paper as fixture
+from backend.scripts.probe_protected_trader_fixture_audit import JOURNEY_EXECUTION_CODES
 
 
 FAILURES = frozenset({
@@ -26,6 +27,25 @@ FAILURES = frozenset({
     "journey_unexpected_bot_or_order", "journey_cleanup_failed",
     "journey_runtime_failed",
 })
+EXECUTION_STATUSES = frozenset({"started", "blocked", "succeeded", "failed", "already_executed"})
+EXCEPTION_CLASSES = frozenset({
+    "AttributeError", "DataError", "IntegrityError", "KeyError", "LookupError",
+    "OperationalError", "ProgrammingError", "RuntimeError", "TimeoutError",
+    "TypeError", "ValueError",
+})
+
+
+def _safe_status(value: object) -> str:
+    return value if isinstance(value, str) and value in EXECUTION_STATUSES else "other"
+
+
+def _safe_codes(value: object) -> list[str]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    return sorted({
+        code if isinstance(code, str) and code in JOURNEY_EXECUTION_CODES else "other"
+        for code in value[:8]
+    })
 
 
 def _bound_owner(namespace: str) -> int:
@@ -108,6 +128,24 @@ async def _turn(user_id: int, message: str, *, conversation_id: str | None = Non
 
 
 async def _confirm_and_execute(user_id: int, proposal_id: str, trace: dict) -> dict:
+    diagnostic = {
+        "operation": "unknown", "stage": "proposal_lookup",
+        "first_status": "not_called", "first_codes": [],
+        "replay_status": "not_called", "replay_codes": [],
+        "next_step_match": None, "exception_class": None, "exception_stage": None,
+    }
+    trace["execution_diagnostic"] = diagnostic
+    try:
+        return await _confirm_and_execute_impl(user_id, proposal_id, trace, diagnostic)
+    except Exception as error:
+        name = type(error).__name__
+        diagnostic["exception_class"] = name if name in EXCEPTION_CLASSES else "other"
+        diagnostic["exception_stage"] = diagnostic["stage"]
+        raise
+
+
+async def _confirm_and_execute_impl(user_id: int, proposal_id: str, trace: dict,
+                                    diagnostic: dict) -> dict:
     from backend.infrastructure.database import async_session_factory
     from backend.infrastructure.repositories.finn_v2_proposal_repository import FinnV2ProposalRepository
     from backend.schemas.finn_v2_confirmation_schema import FinnV2ConfirmationRequest
@@ -120,10 +158,13 @@ async def _confirm_and_execute(user_id: int, proposal_id: str, trace: dict) -> d
         )
         if proposal is None or proposal.operation_type not in {"create_setup", "create_strategy"}:
             raise RuntimeError("journey_fixture_unsafe")
+        diagnostic["operation"] = proposal.operation_type
         payload_hash = proposal.payload_hash
+        diagnostic["stage"] = "token_issue"
         token, _ = await FinnV2ConfirmationService(session).issue_confirmation_token(
             proposal_id=proposal_id, user_id=user_id,
         )
+        diagnostic["stage"] = "confirmation"
         confirmed = await FinnV2ConfirmationService(session).confirm(
             user_id=user_id,
             request=FinnV2ConfirmationRequest(
@@ -135,20 +176,36 @@ async def _confirm_and_execute(user_id: int, proposal_id: str, trace: dict) -> d
             raise RuntimeError("journey_fixture_unsafe")
         trace["confirmed_count"] = trace.get("confirmed_count", 0) + 1
     key = f"qa-journey-execute-{uuid.uuid4().hex}"
+    diagnostic["stage"] = "first_execute"
     async with async_session_factory() as session:
-        executed = await FinnV2ExecutionService(session).execute(
-            proposal_id=proposal_id, user_id=user_id,
-            idempotency_key=key, expected_payload_hash=payload_hash,
-        )
+        try:
+            executed = await FinnV2ExecutionService(session).execute(
+                proposal_id=proposal_id, user_id=user_id,
+                idempotency_key=key, expected_payload_hash=payload_hash,
+            )
+        except Exception:
+            diagnostic["first_status"] = "raised"
+            raise
+        diagnostic["first_status"] = _safe_status(executed.status)
+        diagnostic["first_codes"] = _safe_codes(getattr(executed, "error_codes", None))
     if executed.status == "succeeded":
         trace["executed_count"] = trace.get("executed_count", 0) + 1
+    diagnostic["stage"] = "replay_execute"
     async with async_session_factory() as session:
-        replay = await FinnV2ExecutionService(session).execute(
-            proposal_id=proposal_id, user_id=user_id,
-            idempotency_key=key, expected_payload_hash=payload_hash,
-        )
+        try:
+            replay = await FinnV2ExecutionService(session).execute(
+                proposal_id=proposal_id, user_id=user_id,
+                idempotency_key=key, expected_payload_hash=payload_hash,
+            )
+        except Exception:
+            diagnostic["replay_status"] = "raised"
+            raise
+        diagnostic["replay_status"] = _safe_status(replay.status)
+        diagnostic["replay_codes"] = _safe_codes(getattr(replay, "error_codes", None))
+    diagnostic["stage"] = "replay_check"
+    diagnostic["next_step_match"] = replay.journey_next_step == executed.journey_next_step
     if (executed.status != "succeeded" or replay.status != "already_executed"
-            or replay.journey_next_step != executed.journey_next_step):
+            or not diagnostic["next_step_match"]):
         raise RuntimeError("journey_replay_failed")
     return {
         "conversation_id": executed.conversation_id,
@@ -382,6 +439,8 @@ def run(namespace: str) -> dict:
                           "reason": code if code in FAILURES else "journey_runtime_failed",
                           "failure_stage": trace.get("stage_before_cleanup", trace["stage"]),
                           "fixture_state": trace["fixture_state"]}
+            if "execution_diagnostic" in trace:
+                result["execution_diagnostic"] = trace["execution_diagnostic"].copy()
             result["live_calls"] = len(live_attempts)
             result["fixture_executions"] = trace.get("executed_count", 0)
             result["fixture_confirmations"] = trace.get("confirmed_count", 0)
