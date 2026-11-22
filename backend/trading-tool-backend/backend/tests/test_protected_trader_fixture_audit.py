@@ -149,6 +149,25 @@ def test_exact_journey_card_audit_reports_only_bounded_status(monkeypatch, statu
     assert conn.closed
 
 
+def test_transport_audit_reports_only_terminal_marker_and_fixed_failure(monkeypatch):
+    namespace = "qa-44977345882-1-f5cfb7a3-1234abcd"
+    prior = {"setup_strategy_journey": {"failure_stage": "setup_card",
+        "reason": "journey_strategy_card_missing"}}
+    monkeypatch.setattr(audit, "_verify_prior_report", lambda *_args: None)
+    monkeypatch.setattr(audit.Path, "read_text", lambda path, **_kw:
+                        "1" if path.name == "runner.exit" else json.dumps(prior))
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: Connection([
+        [(17, False, {"qa_namespace": namespace})], [(False, False)], [(0,)],
+        [(2,)], [(1,)], [(1,)], [(0,)], [(0,)], [(1,)], [(0,)],
+    ]))
+    result = audit.run(audit.JOURNEY_TRANSPORT_LABEL, expected_profile="setup_strategy_journey")
+    assert result["runner_terminal_status"] == "failed"
+    assert result["checkpoint_present"] is True
+    assert result["prior_failure_stage"] == "setup_card"
+    assert result["prior_failure_reason"] == "journey_strategy_card_missing"
+    assert namespace not in str(result)
+
+
 def test_journey_cleanup_rejects_other_label_before_database(monkeypatch):
     monkeypatch.setattr(audit.fixture, "_connection", lambda: pytest.fail("database touched"))
     with pytest.raises(RuntimeError, match="^journey_cleanup_label_not_allowed$"):
@@ -271,6 +290,41 @@ def test_exact_journey_card_cleanup_requires_only_expected_saved_setup(
         assert not calls
     else:
         assert audit.cleanup_journey(audit.JOURNEY_CARD_LABEL) == {
+            "fixture_state": "CLEANED", "cleanup_verified": True,
+        }
+        assert calls == [((namespace, 17, 22), {"require_safe_pair_cleanup": True})]
+
+
+@pytest.mark.parametrize("terminal,expected_error", [
+    ("1", None), ("", "journey_cleanup_runner_not_terminal"),
+])
+def test_transport_child_cleanup_requires_terminal_runner_and_exact_setup(
+    monkeypatch, terminal, expected_error,
+):
+    namespace = "qa-44977345882-1-f5cfb7a3-1234abcd"
+    saved_name = f"QA BTC Setup {namespace}"
+    prior = {"setup_strategy_journey": {"fixture_state": "quarantined",
+        "failure_stage": "setup_card", "reason": "journey_strategy_card_missing"}}
+    before = Connection([
+        [(17, False, {"qa_namespace": namespace})], [(22, False, False)],
+        *([[(0,)]] * 6),
+        [(namespace, "ETH"), (saved_name, "BTC")], [(namespace, "ETH")],
+        [(saved_name, "BTC", "USDT")], [(0,)], [(0,)],
+    ])
+    after = Connection([[(0,)] for _ in range(8)])
+    connections = iter((before, after))
+    calls = []
+    monkeypatch.setattr(audit, "_verify_prior_report", lambda *_args: None)
+    monkeypatch.setattr(audit.Path, "read_text", lambda path, **_kw:
+                        terminal if path.name == "runner.exit" else json.dumps(prior))
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: next(connections))
+    monkeypatch.setattr(audit.fixture, "_cleanup", lambda *args, **kwargs: calls.append((args, kwargs)))
+    if expected_error:
+        with pytest.raises(RuntimeError, match=f"^{expected_error}$"):
+            audit.cleanup_journey(audit.JOURNEY_TRANSPORT_LABEL)
+        assert not calls
+    else:
+        assert audit.cleanup_journey(audit.JOURNEY_TRANSPORT_LABEL) == {
             "fixture_state": "CLEANED", "cleanup_verified": True,
         }
         assert calls == [((namespace, 17, 22), {"require_safe_pair_cleanup": True})]
