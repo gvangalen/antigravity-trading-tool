@@ -4,6 +4,51 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: kort bevestigend antwoord hervat setup- en strategievervolg (22 november 2026)
+
+Phase: `LOCAL_VALIDATED_CANDIDATE_NOT_DEPLOYED`. Productcode op branch
+`codex/finn-chat-journey-yes-20261122`, commit
+`4bd9df9ed` (vóór deze statusregistratie). De eerdere onafhankelijke
+live journey-proef op SHA `50cc25ca40ea10f2997fca449654fe4a9d360634`
+was `NOT_ACCEPTED`: na een opgeslagen setup selecteerde een letterlijk kort
+"ja" via de directe FINN-chatroute niet de begeleide strategieactie. De
+read-only diagnose van dezelfde run (workflow **45008357573**) bevestigde:
+de beurt was `completed` met één dispatch en één poging in dezelfde
+setupconversatie, maar zonder `operation_id`, `guided_operation` of passend
+`supplied_inputs.setup_id`. Er is geen nieuwe journey-proef of fixturewrite
+uitgevoerd; de eerdere inactieve QA-fixture blijft in quarantaine.
+
+Build heeft de backend-chatroute voor een onmiddellijk "ja" na een bevestigde
+actie aan dezelfde geverifieerde eigenaar, conversatie en opgeslagen entiteit
+gekoppeld. Na een losse setup leidt dit naar het voorstel voor een strategie;
+na een opgeslagen strategie naar een afzonderlijk Paper-botvoorstel. De
+opgeslagen parent-ID's worden opnieuw gelezen. De frontendvervolgtekst vraagt
+expliciet om een botvoorstel, met ontbrekende risico- en budgetkeuzes en een
+afzonderlijke bevestiging. Een gecombineerde setup/strategie-opdracht houdt
+zijn eigen vervolgroute. Deze wijziging activeert geen bot en plaatst geen order.
+
+Gemeten lokale Build-controles: backend **5292 passed, 8 skipped**; gerichte
+backend journey/feedtests **9/9** en frontend journeytests **4/4**;
+frontend productiebuild, typecheck, i18n-lint, i18n-, command- en
+voorsteltests geslaagd; `audit:high` geslaagd met uitsluitend een bestaande
+moderate Next.js-melding. De geïsoleerde lokale
+FastAPI/Celery/PostgreSQL/Redis/Responses-actiematrix slaagde **17/17**
+(artifact SHA-256
+`d5d692cc620a2f9f45c2d2b084598d0d126d61b8316385f575fb25afd670fc5d`).
+Daarin gingen de twee korte "ja"-beurten in dezelfde conversatie naar
+`create_strategy` respectievelijk `create_bot`, elk met de juiste parent-ID,
+één dispatch en één poging. **28/28** adapters, de Smart DCA-migratie en
+bevestigde Smart DCA- en kalender-DCA-proeven slaagden. De matrix telde nul
+brokerorders, Live-bots, Live-calls en productieverbindingen.
+
+De echte Responses-providerselector slaagde development **20/20** (artifact
+SHA-256 `56e05b9b8c652d57bc60279f14a2bececd9a7c727c332b9613be45b61e1b8bc0`)
+en regression **109/109** (artifact SHA-256
+`a380b01dd965f2d8c0dba0468098ae2b0f8e446e56233a5b4289b9d62c85a7f7`),
+zonder provider-, schema-, timeout-, parse- of validatiefouten. CI,
+Auto Deploy, publieke SHA-pariteit en de onafhankelijke ingelogde live
+acceptatie voor deze productkandidaat zijn nog niet uitgevoerd.
+
 ## FINN-selector: alleen concrete handelsparen (22 november 2026)
 
 Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`. Product PR [#1277](https://github.com/gvangalen/antigravity-trading-tool/pull/1277),

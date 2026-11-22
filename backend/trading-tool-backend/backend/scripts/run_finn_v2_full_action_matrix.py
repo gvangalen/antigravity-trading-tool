@@ -530,6 +530,36 @@ def _run_contract(
                      type(journey.get("strategy_id")) is int and journey["strategy_id"] > 0)
                 and replay_journey == journey
             )
+            if result["journey_next_step_safe"]:
+                affirmative = run_gate(
+                    base_url=base_url, bearer_token=token, message="ja",
+                    conversation_id=result.get("execution_conversation_id"),
+                    timeout_seconds=75,
+                )
+                projection = _runtime_record(affirmative["run_id"])["terminal_projection"]
+                expected_operation = ("create_strategy" if operation_id == "create_setup"
+                                      else "create_bot")
+                expected_parent = ("setup_id" if operation_id == "create_setup"
+                                   else "strategy_id")
+                result["journey_short_yes"] = {
+                    "status": affirmative["status"],
+                    "same_conversation": affirmative["conversation_id"] == result.get("execution_conversation_id"),
+                    "operation_id": affirmative["final_operation_id"],
+                    "guided_operation": (projection.get("action_draft") or {}).get("operation_id"),
+                    "parent_matches": str((projection.get("supplied_inputs") or {}).get(expected_parent))
+                    == str(journey.get(expected_parent)),
+                    "dispatch_count": projection.get("dispatch_count"),
+                    "attempt_count": projection.get("attempt_count"),
+                }
+                guided = result["journey_short_yes"]
+                result["journey_short_yes_safe"] = all((
+                    guided["status"] in {"completed", "clarification_required"},
+                    guided["same_conversation"],
+                    expected_operation in {guided["operation_id"], guided["guided_operation"]},
+                    guided["parent_matches"],
+                    guided["dispatch_count"] == 1,
+                    guided["attempt_count"] == 1,
+                ))
         if operation_id == "create_manual_trade_plan" and result.get("execution_result") == "succeeded":
             with sync_engine.begin() as connection:
                 saved = connection.execute(text(
@@ -582,7 +612,7 @@ def _run_contract(
             lifecycle_ok,
             (operation_id != "create_manual_trade_plan" or result.get("manual_trade_plan_safe")),
             (operation_id not in {"create_setup", "create_strategy"}
-             or result.get("journey_next_step_safe")),
+             or (result.get("journey_next_step_safe") and result.get("journey_short_yes_safe"))),
             (operation_id != "update_strategy" or all((
                 result.get("confirmed_strategy_followup", {}).get("status") == "completed",
                 result.get("confirmed_strategy_followup", {}).get("same_conversation"),
