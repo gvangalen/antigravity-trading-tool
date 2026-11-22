@@ -58,6 +58,30 @@ under owner, bot, key and trade guards; any failure quarantines it disabled.
 The historical report and bot decision are controlled fixture evidence, so
 this profile verifies FINN's handling of their age and safety reason, not the
 original user's private report or a live Paper executor decision.
+
+`aapl_stale_quote_read` is a separate read-only AAPL Paper quote-gate profile.
+It requires `manifest_id=none` and both fixture flags `false`. It checks the
+same dated quote/FX validator used by Paper execution, including fixed 29- and
+31-minute boundary cases. It also reads the latest AAPL source without writing
+market data or invoking a bot worker. A live stale source must produce
+`market_price_stale` with no executable EUR price; a fresh or unavailable
+source is `INCONCLUSIVE` for that live branch. This profile does not prove a
+real Paper worker refuses an order.
+
+`aapl_paper_bot_crud` requires `manifest_id=none` and both fixture flags
+`true`. It creates a single inactive, uncredentialed child of the bound QA
+owner, with one AAPL setup and strategy, then uses FINN's actual chat,
+confirmation and execution services to create at most one manual Paper bot.
+`users.is_active` remains `false` throughout; the bot alone may briefly be
+active. The proposal is rejected before confirmation unless its strategy,
+asset, name, mode, Live flag, budget and zero Paper-startkapitaal are exact.
+No bot worker, manual execution, funding, order or broker API is invoked.
+The probe checks idempotent replay and zero trade/ledger/cash effects, then
+deactivates and deletes only its exact child under owner, namespace and 0/1
+bot guards. Unexpected rows cause quarantine, never broad cleanup. Its artifact
+contains only fixed statuses and booleans. This profile proves configuration
+CRUD, not a real stale-price Paper-order refusal. Security must review this QA
+profile and the inactive-owner product guard before an official run.
 For a non-completed turn, the sanitized artifact contains only a fixed
 failure category, verifier action/reason class, Responses checkpoint phase,
 and the last allowlisted read scope/status when available. Inspect that
