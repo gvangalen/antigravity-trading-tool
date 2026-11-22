@@ -140,6 +140,21 @@ or executions. The cleanup helper verifies namespace and ownership again
 inside its transaction. The profile reports `CLEANED` only after a second
 owner- and row-absence check; otherwise it fails closed.
 
+`setup_strategy_journey_fixture_audit` can inspect one prior failed journey
+namespace read-only. For the failed workflow `44968391213-1`, it additionally
+returns only an allowlisted stored setup-execution status and gate codes.
+The historical replay response was not persisted and is reported as
+`not_recorded`, never inferred from the stored execution row. Its label is
+`audit-44968391213-1-e2872eb9`, with both fixture flags off.
+
+`setup_strategy_journey_fixture_cleanup` accepts only that exact label,
+`manifest_id=none`, `allow_fixture_actions=true`, and
+`allow_safe_fixture_execution=false`. It verifies the failed prior report,
+the fixture marker and namespace, one inactive non-Live bot, no exchange key,
+trade row or new BTC journey object. The existing locked fixture cleanup
+rechecks owner and safety before deletion; the profile then checks absence of
+the child and its rows. No other QA namespace or ordinary account is eligible.
+
 `action_contract_acceptance` is the strict registry-wide profile. Before any
 product request it requires exactly one independent case for every active
 registry contract, all 16 safe write contracts, all nine declared natural

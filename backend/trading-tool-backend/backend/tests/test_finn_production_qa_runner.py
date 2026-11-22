@@ -92,6 +92,55 @@ def test_setup_strategy_journey_dispatch_requires_bound_fixture_flags(tmp_path):
     assert not capture.exists()
 
 
+def test_journey_cleanup_dispatch_is_exact_label_and_non_execution(tmp_path):
+    gh = tmp_path / "gh"
+    gh.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$QA_DISPATCH_CAPTURE"\n')
+    gh.chmod(0o700)
+    capture = tmp_path / "dispatch.args"
+    base_env = dict(os.environ, PATH=f"{tmp_path}:{os.environ['PATH']}",
+                    QA_DISPATCH_CAPTURE=str(capture))
+    profile = "setup_strategy_journey_fixture_cleanup"
+    label = "audit-44968391213-1-e2872eb9"
+    args = ["bash", str(DISPATCH_SCRIPT_PATH), "a" * 40, profile, "none", label]
+    valid = subprocess.run(args, env=dict(base_env,
+        FINN_QA_ALLOW_FIXTURE_ACTIONS="true", FINN_QA_ALLOW_FIXTURE_EXECUTION="false"),
+        capture_output=True, text=True, check=False)
+    assert valid.returncode == 0
+    assert f"qa_profile={profile}" in capture.read_text()
+    for actions, execution, manifest, run_label in (
+        ("false", "false", "none", label),
+        ("true", "true", "none", label),
+        ("true", "false", "other", label),
+        ("true", "false", "none", "audit-44968391213-1-e2872eb8"),
+    ):
+        capture.unlink(missing_ok=True)
+        rejected = subprocess.run(
+            ["bash", str(DISPATCH_SCRIPT_PATH), "a" * 40, profile, manifest, run_label],
+            env=dict(base_env, FINN_QA_ALLOW_FIXTURE_ACTIONS=actions,
+                     FINN_QA_ALLOW_FIXTURE_EXECUTION=execution),
+            capture_output=True, text=True, check=False,
+        )
+        assert rejected.returncode == 2
+        assert not capture.exists()
+
+
+def test_journey_cleanup_runner_has_fixed_error_projection_and_no_product_execution():
+    module = _module()
+    assert "setup_strategy_journey_fixture_cleanup" in module.ALLOWED_PROFILES
+    assert module.profile_error_category(
+        "setup_strategy_journey_fixture_cleanup", RuntimeError("journey_cleanup_owner_unsafe")
+    ) == "journey_cleanup_owner_unsafe"
+    assert module.profile_error_category(
+        "setup_strategy_journey_fixture_cleanup", RuntimeError("private fixture data")
+    ) == "journey_cleanup_runtime_error"
+    source = SCRIPT_PATH.read_text(encoding="utf-8")
+    branch = source.split('elif args.profile == "setup_strategy_journey_fixture_cleanup":', 1)[1].split(
+        'elif args.profile == "trader_paper_exit_review_fixture_cleanup":', 1)[0]
+    assert 'cleanup_journey(args.run_label)' in branch
+    assert 'FINN_QA_ALLOW_FIXTURE_EXECUTION") == "1"' in branch
+    assert 'execute(' not in branch
+
+
 def _synthetic_feed_manifest(module, root: Path) -> tuple[bytes, str]:
     payload = {
         "manifest_id": module.FEED_SOURCE_MANIFEST_ID,

@@ -112,6 +112,104 @@ def test_journey_audit_rejects_other_prior_profile_before_database(monkeypatch):
         audit.run(LABEL, expected_profile="setup_strategy_journey")
 
 
+def test_exact_journey_diagnostic_keeps_only_typed_execution_codes(monkeypatch):
+    namespace = "qa-44968391213-1-e2872eb9-1234abcd"
+    conn = Connection([
+        [(17, False, {"qa_namespace": namespace})], [(False, False)], [(0,)],
+        [(1,)], [(1,)], [(1,)], [(0,)], [(0,)], [(0,)], [(0,)],
+        [("create_setup", "blocked", ["proposal_not_confirmed", "private detail 17"])],
+    ])
+    monkeypatch.setattr(audit, "_verify_prior_report", lambda *_args: None)
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: conn)
+    result = audit.run(audit.JOURNEY_CLEANUP_LABEL, expected_profile="setup_strategy_journey")
+    assert result["setup_execution_status"] == "blocked"
+    assert result["setup_execution_codes"] == ["other", "proposal_not_confirmed"]
+    assert result["replay_status"] == "not_recorded"
+    assert namespace not in str(result) and "private detail" not in str(result)
+
+
+def test_journey_cleanup_rejects_other_label_before_database(monkeypatch):
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: pytest.fail("database touched"))
+    with pytest.raises(RuntimeError, match="^journey_cleanup_label_not_allowed$"):
+        audit.cleanup_journey(LABEL)
+
+
+def test_journey_cleanup_rejects_active_child_without_write(monkeypatch):
+    namespace = "qa-44968391213-1-e2872eb9-1234abcd"
+    monkeypatch.setattr(audit, "_verify_prior_report", lambda *_args: None)
+    monkeypatch.setattr(audit.Path, "read_text", lambda *_a, **_k: json.dumps({
+        "setup_strategy_journey": {"fixture_state": "quarantined",
+            "failure_stage": "setup_confirmation", "reason": "journey_replay_failed"},
+    }))
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: Connection([
+        [(17, True, {"qa_namespace": namespace})],
+    ]))
+    monkeypatch.setattr(audit.fixture, "_cleanup", lambda *_a, **_k: pytest.fail("write called"))
+    with pytest.raises(RuntimeError, match="^journey_cleanup_owner_unsafe$"):
+        audit.cleanup_journey(audit.JOURNEY_CLEANUP_LABEL)
+
+
+def test_journey_cleanup_requires_failed_quarantined_report_before_database(monkeypatch):
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: pytest.fail("database touched"))
+    monkeypatch.setattr(audit.Path, "read_text", lambda *_a, **_k: json.dumps({
+        "workflow_run_id": "44968391213-1", "profile": "setup_strategy_journey",
+        "target_sha": "e2872eb9ad15376beb37c4e1ac79d50ccc874b27",
+        "protected_profile_attempted": True, "outcome": "failed",
+        "setup_strategy_journey": {"fixture_state": "cleaned",
+            "failure_stage": "setup_confirmation", "reason": "journey_replay_failed"},
+    }))
+    with pytest.raises(RuntimeError, match="^journey_cleanup_prior_state_mismatch$"):
+        audit.cleanup_journey(audit.JOURNEY_CLEANUP_LABEL)
+
+
+@pytest.mark.parametrize("blocked_index,code", [
+    (2, "journey_cleanup_keys_unsafe"),
+    (3, "journey_cleanup_trade_unsafe"),
+    (8, "journey_cleanup_btc_row_unsafe"),
+])
+def test_journey_cleanup_refuses_unsafe_rows_without_write(monkeypatch, blocked_index, code):
+    namespace = "qa-44968391213-1-e2872eb9-1234abcd"
+    prior = {"setup_strategy_journey": {"fixture_state": "quarantined",
+        "failure_stage": "setup_confirmation", "reason": "journey_replay_failed"}}
+    responses = [
+        [(17, False, {"qa_namespace": namespace})], [(22, False, False)],
+        *([[(0,)]] * 8),
+    ]
+    responses[blocked_index] = [(1,)]
+    monkeypatch.setattr(audit, "_verify_prior_report", lambda *_args: None)
+    monkeypatch.setattr(audit.Path, "read_text", lambda *_a, **_k: json.dumps(prior))
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: Connection(responses))
+    monkeypatch.setattr(audit.fixture, "_cleanup", lambda *_a, **_k: pytest.fail("write called"))
+    with pytest.raises(RuntimeError, match=f"^{code}$"):
+        audit.cleanup_journey(audit.JOURNEY_CLEANUP_LABEL)
+
+
+def test_journey_cleanup_removes_only_exact_safe_child_and_checks_postcondition(monkeypatch):
+    namespace = "qa-44968391213-1-e2872eb9-1234abcd"
+    prior = {
+        "workflow_run_id": "44968391213-1", "profile": "setup_strategy_journey",
+        "target_sha": "e2872eb9ad15376beb37c4e1ac79d50ccc874b27",
+        "protected_profile_attempted": True, "outcome": "failed",
+        "setup_strategy_journey": {"fixture_state": "quarantined",
+            "failure_stage": "setup_confirmation", "reason": "journey_replay_failed"},
+    }
+    before = Connection([
+        [(17, False, {"qa_namespace": namespace})], [(22, False, False)],
+        *([[(0,)]] * 8),
+    ])
+    after = Connection([[ (0,) ] for _ in range(8)])
+    connections = iter((before, after))
+    calls = []
+    monkeypatch.setattr(audit.Path, "read_text", lambda *_a, **_k: json.dumps(prior))
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: next(connections))
+    monkeypatch.setattr(audit.fixture, "_cleanup", lambda *args, **kwargs: calls.append((args, kwargs)))
+    assert audit.cleanup_journey(audit.JOURNEY_CLEANUP_LABEL) == {
+        "fixture_state": "CLEANED", "cleanup_verified": True,
+    }
+    assert calls == [((namespace, 17, 22), {"require_safe_pair_cleanup": True})]
+    assert before.closed and after.closed
+
+
 @pytest.mark.parametrize("analysis_status,expected_status", [
     ("failed", "failed"), ("private_status", "other"),
 ])

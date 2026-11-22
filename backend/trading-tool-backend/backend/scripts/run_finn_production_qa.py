@@ -65,6 +65,7 @@ ALLOWED_PROFILES = {
     "trader_paper_exit_review_fixture_cleanup",
     "trader_pair_fixture_audit",
     "setup_strategy_journey_fixture_audit",
+    "setup_strategy_journey_fixture_cleanup",
     "trader_pair_fixture_cleanup",
     "trader_strategy_schema_audit",
     "score2_exact_usdt_paper",
@@ -607,6 +608,25 @@ def profile_error_category(profile: str, error: Exception) -> str:
             "trader_pair_cleanup_postcondition_failed",
             "trader_pair_cleanup_label_not_allowed",
         } else "trader_pair_cleanup_runtime_error")
+    if profile == "setup_strategy_journey_fixture_cleanup":
+        code = str(error)
+        return (code if code in {
+            "trader_fixture_audit_label_invalid",
+            "trader_fixture_audit_prior_report_unavailable",
+            "trader_fixture_audit_prior_report_mismatch",
+            "journey_cleanup_manifest_forbidden",
+            "journey_cleanup_not_authorized",
+            "journey_cleanup_label_not_allowed",
+            "journey_cleanup_prior_state_mismatch",
+            "journey_cleanup_scope_ambiguous",
+            "journey_cleanup_owner_unsafe",
+            "journey_cleanup_bot_unsafe",
+            "journey_cleanup_keys_unsafe",
+            "journey_cleanup_trade_unsafe",
+            "journey_cleanup_btc_row_unsafe",
+            "journey_cleanup_failed",
+            "journey_cleanup_postcondition_failed",
+        } else "journey_cleanup_runtime_error")
     if profile == "trader_paper_exit_review_fixture_cleanup":
         code = str(error)
         return (code if code in {
@@ -4259,6 +4279,25 @@ def main() -> int:
                 from backend.scripts.probe_protected_trader_fixture_audit import cleanup_pair
 
                 report[args.profile] = cleanup_pair(args.run_label)
+                report["outcome"] = (
+                    "passed" if report[args.profile]["cleanup_verified"] else "incomplete"
+                )
+                report["qa_status"] = (
+                    "COMPLETED" if report[args.profile]["cleanup_verified"] else "INCOMPLETE"
+                )
+            elif args.profile == "setup_strategy_journey_fixture_cleanup":
+                if args.manifest_id != "none" or args.manifest_bundle_path:
+                    raise ValueError("journey_cleanup_manifest_forbidden")
+                if os.getenv("FINN_QA_ALLOW_FIXTURE_ACTIONS") != "1" or os.getenv(
+                    "FINN_QA_ALLOW_FIXTURE_EXECUTION") == "1":
+                    raise ValueError("journey_cleanup_not_authorized")
+                report["protected_profile_attempted"] = True
+                report["qa_status"] = "INCOMPLETE"
+                report["outcome"] = "incomplete"
+                report["safety"]["read_only_profile"] = False
+                from backend.scripts.probe_protected_trader_fixture_audit import cleanup_journey
+
+                report[args.profile] = cleanup_journey(args.run_label)
                 report["outcome"] = (
                     "passed" if report[args.profile]["cleanup_verified"] else "incomplete"
                 )

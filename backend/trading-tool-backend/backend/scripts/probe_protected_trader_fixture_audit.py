@@ -25,6 +25,39 @@ PAIR_CLEANUP_LABELS = frozenset({
     "audit-42665642208-1-3c0ce3f4",
     "audit-42668760580-1-e20b92fb",
 })
+JOURNEY_CLEANUP_LABEL = "audit-44968391213-1-e2872eb9"
+JOURNEY_EXECUTION_CODES = frozenset({
+    "proposal_not_confirmed", "proposal_expired", "proposal_payload_hash_mismatch",
+    "proposal_evidence_hash_mismatch", "step_up_required", "kill_switch_enabled",
+    "feature_disabled", "setup_action_disabled", "strategy_action_disabled",
+    "live_action_disabled", "shadow_mode_execution_blocked",
+})
+
+
+def _journey_execution_status(cur, user_id: int) -> dict:
+    cur.execute(
+        """SELECT operation_type,status,error_codes_json FROM finn_v2_executions
+           WHERE user_id=%s""", (user_id,),
+    )
+    rows = cur.fetchall()
+    if not rows:
+        return {"setup_execution_status": "missing", "setup_execution_codes": [],
+                "replay_status": "not_recorded"}
+    if len(rows) != 1 or rows[0][0] != "create_setup":
+        return {"setup_execution_status": "multiple_or_other", "setup_execution_codes": [],
+                "replay_status": "not_recorded"}
+    _, status, raw_codes = rows[0]
+    codes = raw_codes if isinstance(raw_codes, list) else []
+    return {
+        "setup_execution_status": status if status in {
+            "started", "blocked", "succeeded", "failed",
+        } else "other",
+        "setup_execution_codes": sorted({
+            code if isinstance(code, str) and code in JOURNEY_EXECUTION_CODES else "other"
+            for code in codes[:8]
+        }),
+        "replay_status": "not_recorded",
+    }
 
 
 def _verify_prior_report(workflow_id: str, attempt: str, sha_prefix: str,
@@ -85,6 +118,10 @@ def run(label: str, *, expected_profile: str = "trader_paper_exit_reconciliation
                 btc_setups = int(cur.fetchone()[0])
                 cur.execute("SELECT COUNT(*) FROM strategies WHERE user_id=%s AND symbol='BTC'", (user_id,))
                 btc_strategies = int(cur.fetchone()[0])
+                execution_diagnostic = (
+                    _journey_execution_status(cur, user_id)
+                    if label == JOURNEY_CLEANUP_LABEL else {}
+                )
                 return {
                     "fixture_state": "UNSAFE_ACTIVE" if unsafe else "QUARANTINED_INACTIVE",
                     "cleanup_verified": False,
@@ -98,6 +135,7 @@ def run(label: str, *, expected_profile: str = "trader_paper_exit_reconciliation
                     "journey_strategy_present": bool(btc_strategies),
                     "orders_present": bool(present["bot_orders"]),
                     "executions_present": bool(present["bot_executions"]),
+                    **execution_diagnostic,
                 }
             if expected_profile == "trader_pair_score_continuity":
                 present = {}
@@ -165,6 +203,85 @@ def run(label: str, *, expected_profile: str = "trader_paper_exit_reconciliation
             }
     finally:
         conn.close()
+
+
+def cleanup_journey(label: str) -> dict:
+    """Remove only the quarantined child from the failed setup confirmation run."""
+    if label != JOURNEY_CLEANUP_LABEL:
+        raise RuntimeError("journey_cleanup_label_not_allowed")
+    match = LABEL.fullmatch(label)
+    if not match:
+        raise RuntimeError("trader_fixture_audit_label_invalid")
+    workflow_id, attempt, sha_prefix = match.groups()
+    _verify_prior_report(workflow_id, attempt, sha_prefix, "setup_strategy_journey")
+    report_path = (Path("/tmp") / f"finn-production-qa-{workflow_id}-{attempt}"
+                   / f"finn-production-qa-{workflow_id}-{attempt}.json")
+    try:
+        prior = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        raise RuntimeError("trader_fixture_audit_prior_report_unavailable") from None
+    journey = prior.get("setup_strategy_journey") or {}
+    if (journey.get("fixture_state") != "quarantined"
+            or journey.get("failure_stage") != "setup_confirmation"
+            or journey.get("reason") != "journey_replay_failed"):
+        raise RuntimeError("journey_cleanup_prior_state_mismatch")
+    namespace_prefix = f"qa-{workflow_id}-{attempt}-{sha_prefix}-"
+    conn = fixture._connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT id,is_active,ai_preferences FROM users
+                   WHERE ai_preferences->>'qa_fixture'=%s
+                     AND ai_preferences->>'qa_namespace' LIKE %s""",
+                (fixture.FIXTURE_MARKER, namespace_prefix + "%"),
+            )
+            owners = cur.fetchall()
+            if not owners:
+                return {"fixture_state": "NO_RETAINED_FIXTURE", "cleanup_verified": False}
+            if len(owners) != 1:
+                raise RuntimeError("journey_cleanup_scope_ambiguous")
+            user_id, active, preferences = owners[0]
+            namespace = (preferences or {}).get("qa_namespace", "")
+            if (active or not fixture.NAMESPACE_PATTERN.fullmatch(namespace)
+                    or not namespace.startswith(namespace_prefix)):
+                raise RuntimeError("journey_cleanup_owner_unsafe")
+            cur.execute("SELECT id,is_active,is_live FROM bot_configs WHERE user_id=%s", (user_id,))
+            bots = cur.fetchall()
+            if len(bots) != 1 or bots[0][1:] != (False, False):
+                raise RuntimeError("journey_cleanup_bot_unsafe")
+            bot_id = bots[0][0]
+            cur.execute("SELECT COUNT(*) FROM exchange_keys WHERE user_id=%s", (user_id,))
+            if cur.fetchone()[0]:
+                raise RuntimeError("journey_cleanup_keys_unsafe")
+            for table in ("bot_trade_plans", "bot_orders", "bot_executions",
+                          "bot_ledger", "bot_decisions"):
+                cur.execute(f"SELECT COUNT(*) FROM {table} WHERE user_id=%s", (user_id,))
+                if cur.fetchone()[0]:
+                    raise RuntimeError("journey_cleanup_trade_unsafe")
+            for table in ("setups", "strategies"):
+                cur.execute(f"SELECT COUNT(*) FROM {table} WHERE user_id=%s AND symbol='BTC'", (user_id,))
+                if cur.fetchone()[0]:
+                    raise RuntimeError("journey_cleanup_btc_row_unsafe")
+    finally:
+        conn.close()
+    try:
+        fixture._cleanup(namespace, user_id, bot_id, require_safe_pair_cleanup=True)
+    except Exception:
+        raise RuntimeError("journey_cleanup_failed") from None
+    conn = fixture._connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM users WHERE id=%s", (user_id,))
+            if cur.fetchone()[0]:
+                raise RuntimeError("journey_cleanup_postcondition_failed")
+            for table in ("setups", "strategies", "bot_configs", "bot_orders",
+                          "bot_executions", "finn_v2_runs", "finn_v2_executions"):
+                cur.execute(f"SELECT COUNT(*) FROM {table} WHERE user_id=%s", (user_id,))
+                if cur.fetchone()[0]:
+                    raise RuntimeError("journey_cleanup_postcondition_failed")
+    finally:
+        conn.close()
+    return {"fixture_state": "CLEANED", "cleanup_verified": True}
 
 
 def cleanup_pair(label: str) -> dict:
