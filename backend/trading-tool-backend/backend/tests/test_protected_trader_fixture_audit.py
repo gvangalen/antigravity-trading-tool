@@ -215,6 +215,37 @@ def test_exact_yes_diagnostic_rejects_ambiguous_turns_without_exposing_rows(monk
     assert "private" not in str(result)
 
 
+def test_exact_strategy_diagnostic_reports_failed_proposal_conditions_only(monkeypatch):
+    namespace = "qa-45015412389-1-999bd355-1234abcd"
+    conn = Connection([
+        [(17, False, {"qa_namespace": namespace})], [(False, False)], [(0,)],
+        [(2,)], [(1,)], [(1,)], [(0,)], [(0,)], [(1,)], [(0,)],
+        [(42,)], [("conversation-private", {"action_draft": {"operation_id": "create_strategy"}})],
+        [("conversation-private", "clarification_required", None,
+          {"proposal_id": None, "confirmation_required": False, "content": "private answer"},
+          {"initial_operation_id": "create_strategy", "action_draft": {"operation_id": "create_strategy"},
+           "supplied_inputs": {"setup_id": 42, "private": "secret"},
+           "dispatch_count": 1, "attempt_count": 1})],
+    ])
+    monkeypatch.setattr(audit, "_verify_prior_report", lambda *_args: None)
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: conn)
+    result = audit.run(audit.JOURNEY_STRATEGY_DIAGNOSTIC_LABEL,
+                       expected_profile="setup_strategy_journey")
+    assert result["strategy_diagnostic_state"] == "available"
+    assert result["strategy_status"] == "clarification_required"
+    assert result["strategy_operation"] == "create_strategy"
+    assert result["strategy_guided_operation"] == "create_strategy"
+    assert result["prior_yes_guided_operation"] == "create_strategy"
+    assert result["strategy_proposal_present"] is False
+    assert result["strategy_confirmation_required"] is False
+    assert result["strategy_setup_id_match"] is True
+    assert result["strategy_same_conversation_as_yes"] is True
+    assert result["strategy_dispatch_count"] == 1
+    assert result["strategy_attempt_count"] == 1
+    assert result["strategy_error_code"] == "none"
+    assert "private" not in str(result) and "42" not in str(result)
+
+
 def test_journey_cleanup_rejects_other_label_before_database(monkeypatch):
     monkeypatch.setattr(audit.fixture, "_connection", lambda: pytest.fail("database touched"))
     with pytest.raises(RuntimeError, match="^journey_cleanup_label_not_allowed$"):
@@ -407,6 +438,41 @@ def test_exact_short_yes_child_cleanup_requires_guided_failure_and_safe_rows(
         assert not calls
     else:
         assert audit.cleanup_journey(audit.JOURNEY_YES_DIAGNOSTIC_LABEL) == {
+            "fixture_state": "CLEANED", "cleanup_verified": True,
+        }
+        assert calls == [((namespace, 17, 22), {"require_safe_pair_cleanup": True})]
+
+
+@pytest.mark.parametrize("failure_stage,expected_error", [
+    ("strategy_proposal", None),
+    ("strategy_confirmation", "journey_cleanup_prior_state_mismatch"),
+])
+def test_exact_strategy_proposal_child_cleanup_requires_failure_and_safe_rows(
+    monkeypatch, failure_stage, expected_error,
+):
+    namespace = "qa-45015412389-1-999bd355-1234abcd"
+    saved_name = f"QA BTC Setup {namespace}"
+    prior = {"setup_strategy_journey": {"fixture_state": "quarantined",
+        "failure_stage": failure_stage, "reason": "journey_strategy_proposal_missing"}}
+    before = Connection([
+        [(17, False, {"qa_namespace": namespace})], [(22, False, False)],
+        *([[(0,)]] * 6),
+        [(namespace, "ETH"), (saved_name, "BTC")], [(namespace, "ETH")],
+        [(saved_name, "BTC", "USDT")], [(0,)], [(0,)],
+    ])
+    after = Connection([[(0,)] for _ in range(8)])
+    connections = iter((before, after))
+    calls = []
+    monkeypatch.setattr(audit, "_verify_prior_report", lambda *_args: None)
+    monkeypatch.setattr(audit.Path, "read_text", lambda *_a, **_k: json.dumps(prior))
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: next(connections))
+    monkeypatch.setattr(audit.fixture, "_cleanup", lambda *args, **kwargs: calls.append((args, kwargs)))
+    if expected_error:
+        with pytest.raises(RuntimeError, match=f"^{expected_error}$"):
+            audit.cleanup_journey(audit.JOURNEY_STRATEGY_DIAGNOSTIC_LABEL)
+        assert not calls
+    else:
+        assert audit.cleanup_journey(audit.JOURNEY_STRATEGY_DIAGNOSTIC_LABEL) == {
             "fixture_state": "CLEANED", "cleanup_verified": True,
         }
         assert calls == [((namespace, 17, 22), {"require_safe_pair_cleanup": True})]

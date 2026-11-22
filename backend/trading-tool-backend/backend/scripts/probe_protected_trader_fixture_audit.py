@@ -29,12 +29,14 @@ JOURNEY_CLEANUP_LABEL = "audit-44968391213-1-e2872eb9"
 JOURNEY_CARD_LABEL = "audit-44974889786-1-76d282df"
 JOURNEY_TRANSPORT_LABEL = "audit-44977345882-1-f5cfb7a3"
 JOURNEY_YES_DIAGNOSTIC_LABEL = "audit-45006104528-1-50cc25ca"
+JOURNEY_STRATEGY_DIAGNOSTIC_LABEL = "audit-45015412389-1-999bd355"
 JOURNEY_CLEANUP_LABELS = frozenset({
     JOURNEY_CLEANUP_LABEL,
     "audit-44972794086-1-da950aac",
     JOURNEY_CARD_LABEL,
     JOURNEY_TRANSPORT_LABEL,
     JOURNEY_YES_DIAGNOSTIC_LABEL,
+    JOURNEY_STRATEGY_DIAGNOSTIC_LABEL,
 })
 JOURNEY_EXECUTION_CODES = frozenset({
     "proposal_not_confirmed", "proposal_expired", "proposal_payload_hash_mismatch",
@@ -143,6 +145,80 @@ def _journey_yes_diagnostic(cur, user_id: int, namespace: str) -> dict:
     }
 
 
+def _journey_strategy_diagnostic(cur, user_id: int, namespace: str) -> dict:
+    """Inspect one failed proposal turn, returning only typed conditions."""
+    cur.execute(
+        "SELECT id FROM setups WHERE user_id=%s AND symbol='BTC' AND name=%s",
+        (user_id, f"QA BTC Setup {namespace}"),
+    )
+    setups = cur.fetchall()
+    if len(setups) != 1:
+        return {"strategy_diagnostic_state": "setup_missing_or_ambiguous"}
+    cur.execute(
+        """SELECT r.conversation_id,c.terminal_projection_json FROM finn_v2_runs r
+           LEFT JOIN finn_v2_runtime_contracts c ON c.run_id=r.id AND c.user_id=r.user_id
+           WHERE r.user_id=%s AND r.client_context_json->>'surface'='qa_setup_strategy_journey'
+             AND r.message='ja'""",
+        (user_id,),
+    )
+    yes_turns = cur.fetchall()
+    strategy_name = f"QA BTC Strategy {namespace}"
+    message = (
+        f"Noem die strategie {strategy_name}. Vaste uitvoering van 10 euro, "
+        "entry 76000 USDT, stop-loss 72000 USDT, target 83000 USDT, "
+        "gebalanceerd risico. Toon eerst een voorstel, maak geen bot."
+    )
+    cur.execute(
+        """SELECT r.conversation_id,r.status,r.error_code,r.response_json,
+                  c.terminal_projection_json FROM finn_v2_runs r
+           LEFT JOIN finn_v2_runtime_contracts c ON c.run_id=r.id AND c.user_id=r.user_id
+           WHERE r.user_id=%s AND r.client_context_json->>'surface'='qa_setup_strategy_journey'
+             AND r.message=%s""",
+        (user_id, message),
+    )
+    strategy_turns = cur.fetchall()
+    if len(yes_turns) != 1 or len(strategy_turns) != 1:
+        return {"strategy_diagnostic_state": "turn_missing_or_ambiguous",
+                "yes_turn_unique": len(yes_turns) == 1,
+                "strategy_turn_unique": len(strategy_turns) == 1}
+    yes_conversation, raw_yes_projection = yes_turns[0]
+    conversation, status, error_code, raw_response, raw_projection = strategy_turns[0]
+    yes_projection = raw_yes_projection if isinstance(raw_yes_projection, dict) else {}
+    projection = raw_projection if isinstance(raw_projection, dict) else {}
+    response = raw_response if isinstance(raw_response, dict) else {}
+    draft = projection.get("action_draft") or {}
+    if not isinstance(draft, dict):
+        draft = {}
+    inputs = projection.get("supplied_inputs") or {}
+    if not isinstance(inputs, dict):
+        inputs = {}
+    operation = projection.get("final_operation_id") or projection.get("initial_operation_id")
+    def safe_operation(value: object) -> str:
+        return value if value in {"create_setup", "create_strategy", "create_bot"} else (
+            "missing" if value is None else "other")
+    def safe_count(value: object) -> int | str:
+        return value if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 3 else "other"
+    return {
+        "strategy_diagnostic_state": "available",
+        "strategy_status": status if status in {"completed", "clarification_required", "failed", "running"} else "other",
+        "strategy_operation": safe_operation(operation),
+        "strategy_guided_operation": safe_operation(draft.get("operation_id")),
+        "prior_yes_guided_operation": safe_operation(
+            (yes_projection.get("action_draft") or {}).get("operation_id")
+            if isinstance(yes_projection.get("action_draft"), dict) else None),
+        "strategy_proposal_present": bool(response.get("proposal_id")),
+        "strategy_confirmation_required": response.get("confirmation_required") is True,
+        "strategy_setup_id_match": str(inputs.get("setup_id")) == str(setups[0][0]),
+        "strategy_same_conversation_as_yes": conversation == yes_conversation,
+        "strategy_dispatch_count": safe_count(projection.get("dispatch_count")),
+        "strategy_attempt_count": safe_count(projection.get("attempt_count")),
+        "strategy_error_code": error_code if error_code in {
+            "guided_proposal_tool_call_required", "responses_tool_round_limit",
+            "responses_provider_error", "finn_v2_internal_error",
+        } else "none" if error_code is None else "other",
+    }
+
+
 def _verify_prior_report(workflow_id: str, attempt: str, sha_prefix: str,
                          expected_profile: str = "trader_paper_exit_reconciliation") -> None:
     run_id = f"{workflow_id}-{attempt}"
@@ -242,6 +318,10 @@ def run(label: str, *, expected_profile: str = "trader_paper_exit_reconciliation
                     _journey_yes_diagnostic(cur, user_id, namespace)
                     if label == JOURNEY_YES_DIAGNOSTIC_LABEL else {}
                 )
+                strategy_diagnostic = (
+                    _journey_strategy_diagnostic(cur, user_id, namespace)
+                    if label == JOURNEY_STRATEGY_DIAGNOSTIC_LABEL else {}
+                )
                 if label == JOURNEY_CARD_LABEL:
                     cur.execute(
                         """SELECT id FROM setups WHERE user_id=%s AND symbol='BTC' AND name=%s""",
@@ -281,6 +361,7 @@ def run(label: str, *, expected_profile: str = "trader_paper_exit_reconciliation
                     **execution_diagnostic,
                     **card_diagnostic,
                     **yes_diagnostic,
+                    **strategy_diagnostic,
                     **transport_diagnostic,
                 }
             if expected_profile == "trader_pair_score_continuity":
@@ -380,8 +461,11 @@ def cleanup_journey(label: str) -> dict:
     guided_failure = label == JOURNEY_YES_DIAGNOSTIC_LABEL and (
         journey.get("failure_stage"), journey.get("reason")) == (
             "strategy_guided", "journey_strategy_guided_failed")
+    proposal_failure = label == JOURNEY_STRATEGY_DIAGNOSTIC_LABEL and (
+        journey.get("failure_stage"), journey.get("reason")) == (
+            "strategy_proposal", "journey_strategy_proposal_missing")
     if (journey.get("fixture_state") != "quarantined"
-            or not (transport_failure or guided_failure or
+            or not (transport_failure or guided_failure or proposal_failure or
                     (journey.get("failure_stage"), journey.get("reason")) == expected_failure)):
         raise RuntimeError("journey_cleanup_prior_state_mismatch")
     if label == JOURNEY_TRANSPORT_LABEL:
@@ -426,7 +510,8 @@ def cleanup_journey(label: str) -> dict:
                 if cur.fetchone()[0]:
                     raise RuntimeError("journey_cleanup_trade_unsafe")
             if label in {JOURNEY_CARD_LABEL, JOURNEY_TRANSPORT_LABEL,
-                         JOURNEY_YES_DIAGNOSTIC_LABEL}:
+                         JOURNEY_YES_DIAGNOSTIC_LABEL,
+                         JOURNEY_STRATEGY_DIAGNOSTIC_LABEL}:
                 cur.execute("SELECT name,symbol FROM setups WHERE user_id=%s", (user_id,))
                 expected_setups = {(namespace, "ETH"), (f"QA BTC Setup {namespace}", "BTC")}
                 setups = cur.fetchall()
