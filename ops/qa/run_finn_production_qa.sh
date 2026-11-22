@@ -94,7 +94,7 @@ fi
 if [[ "$qa_profile" == "trader_pair_fixture_cleanup" && ( "$manifest_id" != "none" || -n "$manifest_bundle_path" || "$allow_fixture_actions" != "true" || "$allow_safe_fixture_execution" != "false" || ! "$run_label" =~ ^audit-[1-9][0-9]{5,15}-[1-9][0-9]*-[0-9a-f]{8}$ ) ]]; then
   usage
 fi
-if [[ "$qa_profile" == "setup_strategy_journey_fixture_cleanup" && ( "$manifest_id" != "none" || -n "$manifest_bundle_path" || "$allow_fixture_actions" != "true" || "$allow_safe_fixture_execution" != "false" || ! "$run_label" =~ ^(audit-44968391213-1-e2872eb9|audit-44972794086-1-da950aac|audit-44974889786-1-76d282df|audit-44977345882-1-f5cfb7a3)$ ) ]]; then
+if [[ "$qa_profile" == "setup_strategy_journey_fixture_cleanup" && ( "$manifest_id" != "none" || -n "$manifest_bundle_path" || "$allow_fixture_actions" != "true" || "$allow_safe_fixture_execution" != "false" || ! "$run_label" =~ ^(audit-44968391213-1-e2872eb9|audit-44972794086-1-da950aac|audit-44974889786-1-76d282df|audit-44977345882-1-f5cfb7a3|audit-45006104528-1-50cc25ca)$ ) ]]; then
   usage
 fi
 if [[ "$qa_profile" == "trader_paper_exit_review_fixture_cleanup" && ( "$manifest_id" != "none" || -n "$manifest_bundle_path" || "$allow_fixture_actions" != "true" || "$allow_safe_fixture_execution" != "false" || ! "$run_label" =~ ^audit-[1-9][0-9]{5,15}-[1-9][0-9]*-[0-9a-f]{8}$ ) ]]; then

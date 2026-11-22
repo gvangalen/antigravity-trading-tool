@@ -103,7 +103,8 @@ def test_journey_cleanup_dispatch_is_exact_label_and_non_execution(tmp_path):
     label = "audit-44968391213-1-e2872eb9"
     for allowed_label in (label, "audit-44972794086-1-da950aac",
                           "audit-44974889786-1-76d282df",
-                          "audit-44977345882-1-f5cfb7a3"):
+                          "audit-44977345882-1-f5cfb7a3",
+                          "audit-45006104528-1-50cc25ca"):
         args = ["bash", str(DISPATCH_SCRIPT_PATH), "a" * 40, profile, "none", allowed_label]
         valid = subprocess.run(args, env=dict(base_env,
             FINN_QA_ALLOW_FIXTURE_ACTIONS="true", FINN_QA_ALLOW_FIXTURE_EXECUTION="false"),
