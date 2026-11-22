@@ -34,6 +34,9 @@ def _scope(label: str):
             if (not parent or parent[0] != "user" or parent[1] is not True
                     or (parent[2] or {}).get("qa_fixture") != fixture.QA_OWNER_MARKER):
                 raise RuntimeError("fixture_binding_invalid")
+            cur.execute("SELECT COUNT(*) FROM exchange_keys WHERE user_id=%s", (int(bound),))
+            if cur.fetchone()[0]:
+                raise RuntimeError("fixture_binding_invalid")
             cur.execute(
                 """SELECT id,is_active,ai_preferences,email FROM users
                    WHERE ai_preferences->>'qa_fixture'=%s

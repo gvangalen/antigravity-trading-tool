@@ -95,6 +95,33 @@ def test_aapl_scope_rejects_any_other_run_before_read(monkeypatch):
         probe._scope("audit-45033782173-1-775c4259")
 
 
+@pytest.mark.parametrize("keys,allowed", [(0, True), (1, False)])
+def test_aapl_scope_requires_bound_qa_owner_without_keys(monkeypatch, keys, allowed):
+    namespace = "qa-45033782172-1-775c4259-deadbeef"
+
+    class ScopeConnection(FakeConnection):
+        def execute(self, query, _args):
+            if "SELECT role,is_active,ai_preferences" in query:
+                self.rows = [("user", True, {"qa_fixture": probe.fixture.QA_OWNER_MARKER})]
+            elif "SELECT COUNT(*) FROM exchange_keys" in query:
+                self.rows = [(keys,)]
+            elif "SELECT id,is_active,ai_preferences,email" in query:
+                self.rows = [(12, False, {"qa_fixture": probe.fixture.FIXTURE_MARKER,
+                                          "qa_namespace": namespace},
+                              f"score2-stale-{namespace}@tradamind.example")]
+            else:
+                raise AssertionError(query)
+
+    monkeypatch.setenv("FINN_QA_USER_ID", "42")
+    monkeypatch.setattr(probe, "_verify_prior_report", lambda *_: None)
+    monkeypatch.setattr(probe.fixture, "_connection", ScopeConnection)
+    if allowed:
+        assert probe._scope(probe.LABEL) == (12, False, namespace)
+    else:
+        with pytest.raises(RuntimeError, match="fixture_binding_invalid"):
+            probe._scope(probe.LABEL)
+
+
 def test_aapl_cleanup_requires_safe_audit_and_checks_postcondition(monkeypatch):
     states = iter([
         {"fixture_state": "QUARANTINED_INACTIVE", "safe_to_cleanup": True},
