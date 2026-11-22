@@ -101,12 +101,13 @@ def test_journey_cleanup_dispatch_is_exact_label_and_non_execution(tmp_path):
                     QA_DISPATCH_CAPTURE=str(capture))
     profile = "setup_strategy_journey_fixture_cleanup"
     label = "audit-44968391213-1-e2872eb9"
-    args = ["bash", str(DISPATCH_SCRIPT_PATH), "a" * 40, profile, "none", label]
-    valid = subprocess.run(args, env=dict(base_env,
-        FINN_QA_ALLOW_FIXTURE_ACTIONS="true", FINN_QA_ALLOW_FIXTURE_EXECUTION="false"),
-        capture_output=True, text=True, check=False)
-    assert valid.returncode == 0
-    assert f"qa_profile={profile}" in capture.read_text()
+    for allowed_label in (label, "audit-44972794086-1-da950aac"):
+        args = ["bash", str(DISPATCH_SCRIPT_PATH), "a" * 40, profile, "none", allowed_label]
+        valid = subprocess.run(args, env=dict(base_env,
+            FINN_QA_ALLOW_FIXTURE_ACTIONS="true", FINN_QA_ALLOW_FIXTURE_EXECUTION="false"),
+            capture_output=True, text=True, check=False)
+        assert valid.returncode == 0
+        assert f"qa_profile={profile}" in capture.read_text()
     for actions, execution, manifest, run_label in (
         ("false", "false", "none", label),
         ("true", "true", "none", label),
@@ -139,6 +140,37 @@ def test_journey_cleanup_runner_has_fixed_error_projection_and_no_product_execut
     assert 'cleanup_journey(args.run_label)' in branch
     assert 'FINN_QA_ALLOW_FIXTURE_EXECUTION") == "1"' in branch
     assert 'execute(' not in branch
+
+
+def test_journey_safe_crud_policy_is_profile_scoped_in_protected_subprocess():
+    source = WORKFLOW_PATH.read_text(encoding="utf-8")
+    script = source.split('cat > "$state_dir/run.sh" <<RUNNER', 1)[1].split("RUNNER", 1)[0]
+    block = '''if [ $(printf '%q' "$qa_profile") = setup_strategy_journey ]; then
+            export FINN_V2_EXECUTE_SETUP_CHANGES=true
+            export FINN_V2_EXECUTE_STRATEGY_CHANGES=true
+          fi'''
+    assert block in script
+    assert source.count("export FINN_V2_EXECUTE_SETUP_CHANGES=true") == 1
+    assert source.count("export FINN_V2_EXECUTE_STRATEGY_CHANGES=true") == 1
+    assert "FINN_V2_EXECUTE_BOT_CHANGES" not in script
+    assert "FINN_V2_LIVE" not in script
+    for profile, expected in (
+        ("setup_strategy_journey", ("true", "true")),
+        ("coach_feed_journey", ("false", "false")),
+        ("setup_strategy_journey_fixture_cleanup", ("false", "false")),
+    ):
+        rendered = block.replace('$(printf \'%q\' "$qa_profile")', profile)
+        command = f'''{rendered}
+printf '%s %s %s %s' "$FINN_V2_EXECUTE_SETUP_CHANGES" \
+    "$FINN_V2_EXECUTE_STRATEGY_CHANGES" "$FINN_V2_EXECUTE_BOT_CHANGES" \
+    "$FINN_V2_LIVE_TRADING_ENABLED"'''
+        env = dict(os.environ, FINN_V2_EXECUTE_SETUP_CHANGES="false",
+                   FINN_V2_EXECUTE_STRATEGY_CHANGES="false",
+                   FINN_V2_EXECUTE_BOT_CHANGES="false",
+                   FINN_V2_LIVE_TRADING_ENABLED="false")
+        result = subprocess.run(["bash", "-c", command], env=env,
+                                capture_output=True, text=True, check=True)
+        assert result.stdout.split() == [*expected, "false", "false"]
 
 
 def _synthetic_feed_manifest(module, root: Path) -> tuple[bytes, str]:
