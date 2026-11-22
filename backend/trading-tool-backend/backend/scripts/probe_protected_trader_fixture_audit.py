@@ -26,9 +26,11 @@ PAIR_CLEANUP_LABELS = frozenset({
     "audit-42668760580-1-e20b92fb",
 })
 JOURNEY_CLEANUP_LABEL = "audit-44968391213-1-e2872eb9"
+JOURNEY_CARD_LABEL = "audit-44974889786-1-76d282df"
 JOURNEY_CLEANUP_LABELS = frozenset({
     JOURNEY_CLEANUP_LABEL,
     "audit-44972794086-1-da950aac",
+    JOURNEY_CARD_LABEL,
 })
 JOURNEY_EXECUTION_CODES = frozenset({
     "proposal_not_confirmed", "proposal_expired", "proposal_payload_hash_mismatch",
@@ -126,6 +128,30 @@ def run(label: str, *, expected_profile: str = "trader_paper_exit_reconciliation
                     _journey_execution_status(cur, user_id)
                     if label == JOURNEY_CLEANUP_LABEL else {}
                 )
+                card_diagnostic = {}
+                if label == JOURNEY_CARD_LABEL:
+                    cur.execute(
+                        """SELECT id FROM setups WHERE user_id=%s AND symbol='BTC' AND name=%s""",
+                        (user_id, f"QA BTC Setup {namespace}"),
+                    )
+                    setup_rows = cur.fetchall()
+                    statuses = []
+                    if len(setup_rows) == 1:
+                        cur.execute(
+                            """SELECT status FROM finn_coach_feed_items
+                               WHERE user_id=%s AND event_type='strategy_next_step'
+                                 AND subject_type='setup' AND subject_id=%s""",
+                            (user_id, str(setup_rows[0][0])),
+                        )
+                        statuses = [row[0] for row in cur.fetchall()]
+                    card_diagnostic = {
+                        "strategy_card_count": min(len(statuses), 3),
+                        "strategy_card_status": (
+                            "missing" if not statuses else
+                            statuses[0] if len(statuses) == 1 and statuses[0] in
+                            {"unread", "read", "resolved"} else "multiple_or_other"
+                        ),
+                    }
                 return {
                     "fixture_state": "UNSAFE_ACTIVE" if unsafe else "QUARANTINED_INACTIVE",
                     "cleanup_verified": False,
@@ -140,6 +166,7 @@ def run(label: str, *, expected_profile: str = "trader_paper_exit_reconciliation
                     "orders_present": bool(present["bot_orders"]),
                     "executions_present": bool(present["bot_executions"]),
                     **execution_diagnostic,
+                    **card_diagnostic,
                 }
             if expected_profile == "trader_pair_score_continuity":
                 present = {}
@@ -225,9 +252,11 @@ def cleanup_journey(label: str) -> dict:
     except (OSError, ValueError):
         raise RuntimeError("trader_fixture_audit_prior_report_unavailable") from None
     journey = prior.get("setup_strategy_journey") or {}
+    expected_failure = (("setup_card", "journey_strategy_card_missing")
+                        if label == JOURNEY_CARD_LABEL else
+                        ("setup_confirmation", "journey_replay_failed"))
     if (journey.get("fixture_state") != "quarantined"
-            or journey.get("failure_stage") != "setup_confirmation"
-            or journey.get("reason") != "journey_replay_failed"):
+            or (journey.get("failure_stage"), journey.get("reason")) != expected_failure):
         raise RuntimeError("journey_cleanup_prior_state_mismatch")
     namespace_prefix = f"qa-{workflow_id}-{attempt}-{sha_prefix}-"
     conn = fixture._connection()
@@ -262,10 +291,31 @@ def cleanup_journey(label: str) -> dict:
                 cur.execute(f"SELECT COUNT(*) FROM {table} WHERE user_id=%s", (user_id,))
                 if cur.fetchone()[0]:
                     raise RuntimeError("journey_cleanup_trade_unsafe")
-            for table in ("setups", "strategies"):
-                cur.execute(f"SELECT COUNT(*) FROM {table} WHERE user_id=%s AND symbol='BTC'", (user_id,))
-                if cur.fetchone()[0]:
+            if label == JOURNEY_CARD_LABEL:
+                cur.execute("SELECT name,symbol FROM setups WHERE user_id=%s", (user_id,))
+                expected_setups = {(namespace, "ETH"), (f"QA BTC Setup {namespace}", "BTC")}
+                setups = cur.fetchall()
+                if len(setups) != 2 or set(setups) != expected_setups:
                     raise RuntimeError("journey_cleanup_btc_row_unsafe")
+                cur.execute("SELECT name,symbol FROM strategies WHERE user_id=%s", (user_id,))
+                if cur.fetchall() != [(namespace, "ETH")]:
+                    raise RuntimeError("journey_cleanup_btc_row_unsafe")
+                cur.execute(
+                    """SELECT s.name,s.symbol,m.quote_currency FROM setups s
+                       LEFT JOIN trading_markets m ON m.id=s.market_id
+                       WHERE s.user_id=%s AND s.symbol='BTC'""", (user_id,),
+                )
+                if cur.fetchall() != [(f"QA BTC Setup {namespace}", "BTC", "USDT")]:
+                    raise RuntimeError("journey_cleanup_btc_row_unsafe")
+                for table in ("strategies", "watchlists"):
+                    cur.execute(f"SELECT COUNT(*) FROM {table} WHERE user_id=%s AND symbol='BTC'", (user_id,))
+                    if cur.fetchone()[0]:
+                        raise RuntimeError("journey_cleanup_btc_row_unsafe")
+            else:
+                for table in ("setups", "strategies"):
+                    cur.execute(f"SELECT COUNT(*) FROM {table} WHERE user_id=%s AND symbol='BTC'", (user_id,))
+                    if cur.fetchone()[0]:
+                        raise RuntimeError("journey_cleanup_btc_row_unsafe")
     finally:
         conn.close()
     try:
