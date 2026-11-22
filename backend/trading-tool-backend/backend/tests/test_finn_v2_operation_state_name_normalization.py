@@ -2288,6 +2288,13 @@ def test_requested_name_slot_extracts_only_name_from_followup_instructions():
         text="Noem de nieuwe strategie ETH Extra Variant. Toon de kaart, bevestig niets.",
         contract=strategy_contract,
     ) == "ETH Extra Variant"
+    assert service._requested_slot_value(
+        field="name",
+        text=("Noem die strategie QA BTC Strategy 2211. Vaste uitvoering van 10 euro, "
+              "entry 76000 USDT, stop-loss 72000 USDT, target 83000 USDT, "
+              "gebalanceerd risico. Toon eerst een voorstel, maak geen bot."),
+        contract=strategy_contract,
+    ) == "QA BTC Strategy 2211"
 
 
 def test_explicit_draft_rename_reads_name_without_followup_command():

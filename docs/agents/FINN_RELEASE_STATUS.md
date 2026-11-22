@@ -4,6 +4,37 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: natuurlijke strategienaam na setupvervolg (22 november 2026)
+
+Phase: `LOCAL_VALIDATED_PENDING_CI`. De onafhankelijke live journey-proef op
+SHA `999bd3553f615b5a73a430f32be63576edf30afe` was `NOT_ACCEPTED`:
+na de opgeslagen setup en een geslaagde korte bevestiging met `ja` leverde
+“Noem die strategie …” geen strategievoorstel op. Build reproduceerde de
+exacte zinsvorm in de geïsoleerde lokale chat. De setupbinding en één
+dispatch/poging bleven intact; `name` ontbrak bij de parser. De parser herkent
+nu ook “die strategie” als expliciete naamopdracht. De regressietest en de
+worker-gestuurde driebeurtenproef controleren dat het voorstel een concept
+voor dezelfde setup is, zonder automatisch opslaan, bot of order.
+
+Gemeten lokale Build-controles: backend **5297 passed, 8 skipped**;
+frontend build, typecheck, i18n-lint/tests, command- en voorsteltests geslaagd;
+`audit:high` geslaagd met alleen de bestaande moderate Next.js-melding.
+De geïsoleerde FastAPI/Celery/PostgreSQL/Redis/Responses-actiematrix slaagde
+**17/17** (artifact SHA-256
+`3063340edb759de402eaf93a93c360e96c534a081fc8ed513698d038b562e757`).
+De nieuwe setupvervolgproef gaf een concept `create_strategy` met de juiste
+setupbinding, zonder ontbrekende invoer en met één dispatch/poging. De matrix
+telde nul brokerorders, Live-bots, Live-calls en productieverbindingen.
+**28/28** adapters, de Smart DCA-migratie en bevestigde Smart DCA- en
+kalender-DCA-proeven slaagden. De echte Responses-providerselector slaagde
+development **20/20** (artifact SHA-256
+`69cf5511927b19f7bdd4a5db5702b37219702f7f246947e021dc645b0bc29a48`)
+en regression **109/109** (artifact SHA-256
+`9bd389314e707d0a30effa4fc4652215ce9d3ed11d339709092af07cafa707b7`),
+zonder provider-, schema-, timeout-, parse- of validatiefouten. CI,
+Auto Deploy, publieke SHA-pariteit en onafhankelijke ingelogde live QA
+zijn voor deze kandidaat nog niet uitgevoerd.
+
 ## FINN 3.0: kort bevestigend antwoord hervat setup- en strategievervolg (22 november 2026)
 
 Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`. Product PR
