@@ -3,7 +3,10 @@ from __future__ import annotations
 import asyncio
 
 from backend.services.finn_v2_execution_service import FinnV2ExecutionService
-from backend.services.finn_v2_run_service import _verified_journey_affirmative_message
+from backend.services.finn_v2_run_service import (
+    _complete_named_guided_strategy_proposal,
+    _verified_journey_affirmative_message,
+)
 
 
 def _context(operation: str, *, owner: int = 42, entity_id: str = "17",
@@ -82,3 +85,20 @@ def test_short_yes_rejects_combined_or_resolved_journey(monkeypatch):
     assert asyncio.run(_verified_journey_affirmative_message(
         object(), context=_context("create_setup"), message="ja", user_id=42,
     )) is None
+
+
+def test_complete_named_strategy_answer_keeps_verified_setup_proposal_path():
+    answer = (
+        "Noem die strategie QA BTC Strategy matrix-20261122-abc123def456ghi789. "
+        "Vaste uitvoering van 10 euro, entry 76000 USDT, stop-loss 72000 USDT, "
+        "target 83000 USDT, gebalanceerd risico. Toon eerst een voorstel, maak geen bot."
+    )
+    assert _complete_named_guided_strategy_proposal(answer, {"setup_id": 17})
+    assert not _complete_named_guided_strategy_proposal(answer, {})
+    assert not _complete_named_guided_strategy_proposal(answer, {"setup_id": "wrong"})
+    assert not _complete_named_guided_strategy_proposal(
+        answer.replace("entry 76000 USDT, ", ""), {"setup_id": 17},
+    )
+    assert not _complete_named_guided_strategy_proposal(
+        "Noem die strategie straks, wat raad je aan?", {"setup_id": 17},
+    )
