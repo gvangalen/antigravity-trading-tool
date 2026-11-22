@@ -22,7 +22,16 @@ export function finnInstrumentOptions(watchlist = [], current = null) {
     seen.add(key);
     options.push({ key, symbol, quote_currency });
   }
-  return options;
+  const pairedSymbols = new Set(options.filter((item) => item.quote_currency).map((item) => item.symbol));
+  return options.filter((item) => item.quote_currency || !pairedSymbols.has(item.symbol));
+}
+
+export function finnSelectedInstrument(options = [], current = null) {
+  const symbol = normalizeScopedAssetSymbol(current?.symbol);
+  const key = feedHeaderInstrument(symbol, current?.quote_currency);
+  return options.find((item) => item.key === key)
+    || options.find((item) => item.symbol === symbol)
+    || null;
 }
 
 export function finnPageInstrumentKey(pathname, context) {
@@ -91,6 +100,7 @@ export function resolveFinnSubmissionContext({
   latestAssistantState = null,
   commandContext = {},
   chatAssetOverride = null,
+  watchlist = [],
   locale,
   query = "",
   autoSubmitCommand = false,
@@ -138,6 +148,13 @@ export function resolveFinnSubmissionContext({
     String(request.symbol || "").toUpperCase() === String(livePageContext?.symbol || "").toUpperCase()
       ? livePageContext?.quote_currency || null : null
   );
+  if (!request.quote_currency && request.symbol && !request.bot_id && !request.setup_id && !request.strategy_id) {
+    const selectedPair = finnSelectedInstrument(
+      finnInstrumentOptions(watchlist, { symbol: request.symbol }),
+      { symbol: request.symbol },
+    );
+    request.quote_currency = selectedPair?.quote_currency || null;
+  }
   return request;
 }
 
