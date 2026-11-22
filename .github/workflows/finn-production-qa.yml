@@ -307,6 +307,18 @@ jobs:
           printf 'host=%s\n' "$QA_HOST" >> "$GITHUB_OUTPUT"
           printf 'remote_dir=%s\n' "$QA_REMOTE_DIR" >> "$GITHUB_OUTPUT"
 
+      - name: Diagnose protected SSH binding without revealing endpoints
+        if: ${{ inputs.qa_profile == 'auth_preflight' && inputs.run_label == 'qa-host-diagnostic-44977345882' }}
+        shell: bash
+        env:
+          QA_SELECTED_HOST: ${{ secrets.QA_SSH_HOST || secrets.HOST || secrets.SERVER_IP }}
+          DEPLOY_SELECTED_HOST: ${{ secrets.HOST || secrets.SERVER_IP || vars.HOST || vars.SERVER_IP }}
+          QA_KNOWN_HOSTS: ${{ secrets.QA_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          set +x
+          python3 ops/qa/diagnose_finn_ssh_binding.py
+
       - name: Create isolated fixture namespace
         id: fixture_namespace
         shell: bash

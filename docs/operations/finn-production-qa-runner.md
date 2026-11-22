@@ -294,6 +294,13 @@ holdout.
 
 ## Start An Independent QA Run
 
+For the one-off SSH transport investigation, the read-only `auth_preflight`
+label `qa-host-diagnostic-44977345882` prints only whether QA selects the
+same host as deployment, whether the selected QA host has a pinned key, and
+whether a network-observed deploy-host key matches that pin. A failed keyscan
+is reported as `unavailable`, not as a match. The diagnostic does not print
+hostnames, addresses, keys, or credentials and does not change the pin.
+
 After the live candidate and agreed QA scope are documented, the existing QA
 Agent can receive the assignment from Build and start or follow the protected
 runner without SSH. Build cannot run this workflow or access its protected
