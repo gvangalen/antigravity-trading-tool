@@ -27,10 +27,12 @@ PAIR_CLEANUP_LABELS = frozenset({
 })
 JOURNEY_CLEANUP_LABEL = "audit-44968391213-1-e2872eb9"
 JOURNEY_CARD_LABEL = "audit-44974889786-1-76d282df"
+JOURNEY_TRANSPORT_LABEL = "audit-44977345882-1-f5cfb7a3"
 JOURNEY_CLEANUP_LABELS = frozenset({
     JOURNEY_CLEANUP_LABEL,
     "audit-44972794086-1-da950aac",
     JOURNEY_CARD_LABEL,
+    JOURNEY_TRANSPORT_LABEL,
 })
 JOURNEY_EXECUTION_CODES = frozenset({
     "proposal_not_confirmed", "proposal_expired", "proposal_payload_hash_mismatch",
@@ -90,6 +92,37 @@ def run(label: str, *, expected_profile: str = "trader_paper_exit_reconciliation
         raise RuntimeError("trader_fixture_audit_label_invalid")
     workflow_id, attempt, sha_prefix = match.groups()
     _verify_prior_report(workflow_id, attempt, sha_prefix, expected_profile)
+    transport_diagnostic = {}
+    if label == JOURNEY_TRANSPORT_LABEL and expected_profile == "setup_strategy_journey":
+        state_dir = Path("/tmp") / f"finn-production-qa-{workflow_id}-{attempt}"
+        marker = state_dir / "runner.exit"
+        try:
+            exit_code = marker.read_text(encoding="utf-8").strip()
+        except OSError:
+            exit_code = ""
+        try:
+            prior = json.loads((state_dir / f"finn-production-qa-{workflow_id}-{attempt}.json")
+                               .read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            prior = {}
+        journey = prior.get("setup_strategy_journey") or {}
+        stage = journey.get("failure_stage")
+        reason = journey.get("reason")
+        transport_diagnostic = {
+            "runner_terminal_status": ("succeeded" if exit_code == "0" else
+                                       "failed" if exit_code.isdecimal() else "missing"),
+            "checkpoint_present": bool(prior),
+            "prior_failure_stage": stage if stage in {
+                "setup_confirmation", "setup_card", "setup_discuss",
+                "strategy_guided", "strategy_proposal", "strategy_confirmation",
+                "paper_card", "paper_discuss", "paper_guided", "safety",
+            } else "other",
+            "prior_failure_reason": reason if reason in {
+                "journey_strategy_card_missing", "journey_feed_discuss_failed",
+                "journey_strategy_guided_failed", "journey_strategy_proposal_missing",
+                "journey_setup_confirmation_failed", "journey_runtime_failed",
+            } else "other",
+        }
     namespace_prefix = f"qa-{workflow_id}-{attempt}-{sha_prefix}-"
     conn = fixture._connection()
     try:
@@ -103,7 +136,8 @@ def run(label: str, *, expected_profile: str = "trader_paper_exit_reconciliation
             owners = cur.fetchall()
             if not owners:
                 return {"fixture_state": "NO_RETAINED_FIXTURE",
-                        "cleanup_verified": False, "stage": "BEFORE_SEED_OR_CLEANED"}
+                        "cleanup_verified": False, "stage": "BEFORE_SEED_OR_CLEANED",
+                        **transport_diagnostic}
             if len(owners) != 1:
                 return {"fixture_state": "AMBIGUOUS", "cleanup_verified": False}
             user_id, owner_active, preferences = owners[0]
@@ -167,6 +201,7 @@ def run(label: str, *, expected_profile: str = "trader_paper_exit_reconciliation
                     "executions_present": bool(present["bot_executions"]),
                     **execution_diagnostic,
                     **card_diagnostic,
+                    **transport_diagnostic,
                 }
             if expected_profile == "trader_pair_score_continuity":
                 present = {}
@@ -255,9 +290,25 @@ def cleanup_journey(label: str) -> dict:
     expected_failure = (("setup_card", "journey_strategy_card_missing")
                         if label == JOURNEY_CARD_LABEL else
                         ("setup_confirmation", "journey_replay_failed"))
+    transport_failure = label == JOURNEY_TRANSPORT_LABEL and (
+        journey.get("failure_stage"), journey.get("reason")) in {
+            ("setup_card", "journey_strategy_card_missing"),
+            ("setup_discuss", "journey_feed_discuss_failed"),
+            ("strategy_guided", "journey_strategy_guided_failed"),
+            ("strategy_proposal", "journey_strategy_proposal_missing"),
+        }
     if (journey.get("fixture_state") != "quarantined"
-            or (journey.get("failure_stage"), journey.get("reason")) != expected_failure):
+            or not (transport_failure or
+                    (journey.get("failure_stage"), journey.get("reason")) == expected_failure)):
         raise RuntimeError("journey_cleanup_prior_state_mismatch")
+    if label == JOURNEY_TRANSPORT_LABEL:
+        marker = Path("/tmp") / f"finn-production-qa-{workflow_id}-{attempt}" / "runner.exit"
+        try:
+            exit_code = marker.read_text(encoding="utf-8").strip()
+        except OSError:
+            exit_code = ""
+        if not exit_code.isdecimal():
+            raise RuntimeError("journey_cleanup_runner_not_terminal")
     namespace_prefix = f"qa-{workflow_id}-{attempt}-{sha_prefix}-"
     conn = fixture._connection()
     try:
@@ -291,7 +342,7 @@ def cleanup_journey(label: str) -> dict:
                 cur.execute(f"SELECT COUNT(*) FROM {table} WHERE user_id=%s", (user_id,))
                 if cur.fetchone()[0]:
                     raise RuntimeError("journey_cleanup_trade_unsafe")
-            if label == JOURNEY_CARD_LABEL:
+            if label in {JOURNEY_CARD_LABEL, JOURNEY_TRANSPORT_LABEL}:
                 cur.execute("SELECT name,symbol FROM setups WHERE user_id=%s", (user_id,))
                 expected_setups = {(namespace, "ETH"), (f"QA BTC Setup {namespace}", "BTC")}
                 setups = cur.fetchall()

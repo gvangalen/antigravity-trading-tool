@@ -175,6 +175,13 @@ label is `audit-44974889786-1-76d282df`. It requires exactly the original
 ETH seed plus one namespace-named BTC/USDT setup, no BTC strategy or watchlist
 row, and the existing inactive/no-key/no-trade checks before deleting the
 isolated child. This does not expose setup IDs, names, user text or task logs.
+The transport-interrupted journey `44977345882-1` has a separate exact label
+`audit-44977345882-1-f5cfb7a3`. Its read-only audit reports only whether the
+remote runner wrote a terminal marker and checkpoint, plus allowlisted failure
+stage/reason. Cleanup additionally requires that terminal marker and the same
+strict original ETH seed plus one namespace-named BTC/USDT setup with no new
+strategy, watchlist, key, bot activity or trade. It cannot delete an active
+or still-running child.
 
 `action_contract_acceptance` is the strict registry-wide profile. Before any
 product request it requires exactly one independent case for every active
