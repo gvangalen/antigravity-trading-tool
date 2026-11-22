@@ -104,7 +104,8 @@ def test_journey_cleanup_dispatch_is_exact_label_and_non_execution(tmp_path):
     for allowed_label in (label, "audit-44972794086-1-da950aac",
                           "audit-44974889786-1-76d282df",
                           "audit-44977345882-1-f5cfb7a3",
-                          "audit-45006104528-1-50cc25ca"):
+                          "audit-45006104528-1-50cc25ca",
+                          "audit-45015412389-1-999bd355"):
         args = ["bash", str(DISPATCH_SCRIPT_PATH), "a" * 40, profile, "none", allowed_label]
         valid = subprocess.run(args, env=dict(base_env,
             FINN_QA_ALLOW_FIXTURE_ACTIONS="true", FINN_QA_ALLOW_FIXTURE_EXECUTION="false"),
@@ -166,6 +167,23 @@ def test_exact_short_yes_cleanup_is_allowlisted_across_all_protected_gates():
         assert '"false"' in guard
     runner = SCRIPT_PATH.read_text(encoding="utf-8")
     assert 'cleanup_journey(args.run_label)' in runner
+
+
+def test_exact_strategy_proposal_cleanup_uses_same_protected_gates():
+    from backend.scripts import probe_protected_trader_fixture_audit as audit
+
+    label = "audit-45015412389-1-999bd355"
+    assert label in audit.JOURNEY_CLEANUP_LABELS
+    assert label == audit.JOURNEY_STRATEGY_DIAGNOSTIC_LABEL
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    dispatch = DISPATCH_SCRIPT_PATH.read_text(encoding="utf-8")
+    for source, anchor in (
+        (workflow, 'if [ "$QA_PROFILE" = "setup_strategy_journey_fixture_cleanup" ]'),
+        (dispatch, 'if [[ "$qa_profile" == "setup_strategy_journey_fixture_cleanup"'),
+    ):
+        guard = source.split(anchor, 1)[1].splitlines()[0]
+        assert label in guard
+        assert '"none"' in guard and '"true"' in guard and '"false"' in guard
 
 
 def test_journey_safe_crud_policy_is_profile_scoped_in_protected_subprocess():

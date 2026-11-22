@@ -36,6 +36,7 @@ JOURNEY_CLEANUP_LABELS = frozenset({
     JOURNEY_CARD_LABEL,
     JOURNEY_TRANSPORT_LABEL,
     JOURNEY_YES_DIAGNOSTIC_LABEL,
+    JOURNEY_STRATEGY_DIAGNOSTIC_LABEL,
 })
 JOURNEY_EXECUTION_CODES = frozenset({
     "proposal_not_confirmed", "proposal_expired", "proposal_payload_hash_mismatch",
@@ -460,8 +461,11 @@ def cleanup_journey(label: str) -> dict:
     guided_failure = label == JOURNEY_YES_DIAGNOSTIC_LABEL and (
         journey.get("failure_stage"), journey.get("reason")) == (
             "strategy_guided", "journey_strategy_guided_failed")
+    proposal_failure = label == JOURNEY_STRATEGY_DIAGNOSTIC_LABEL and (
+        journey.get("failure_stage"), journey.get("reason")) == (
+            "strategy_proposal", "journey_strategy_proposal_missing")
     if (journey.get("fixture_state") != "quarantined"
-            or not (transport_failure or guided_failure or
+            or not (transport_failure or guided_failure or proposal_failure or
                     (journey.get("failure_stage"), journey.get("reason")) == expected_failure)):
         raise RuntimeError("journey_cleanup_prior_state_mismatch")
     if label == JOURNEY_TRANSPORT_LABEL:
@@ -506,7 +510,8 @@ def cleanup_journey(label: str) -> dict:
                 if cur.fetchone()[0]:
                     raise RuntimeError("journey_cleanup_trade_unsafe")
             if label in {JOURNEY_CARD_LABEL, JOURNEY_TRANSPORT_LABEL,
-                         JOURNEY_YES_DIAGNOSTIC_LABEL}:
+                         JOURNEY_YES_DIAGNOSTIC_LABEL,
+                         JOURNEY_STRATEGY_DIAGNOSTIC_LABEL}:
                 cur.execute("SELECT name,symbol FROM setups WHERE user_id=%s", (user_id,))
                 expected_setups = {(namespace, "ETH"), (f"QA BTC Setup {namespace}", "BTC")}
                 setups = cur.fetchall()
