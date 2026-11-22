@@ -44,7 +44,7 @@ def _verify_prior_report(workflow_id: str, attempt: str, sha_prefix: str,
 
 
 def run(label: str, *, expected_profile: str = "trader_paper_exit_reconciliation") -> dict:
-    if expected_profile not in {"trader_paper_exit_reconciliation", "trader_paper_exit_review_chain", "trader_pair_score_continuity"}:
+    if expected_profile not in {"trader_paper_exit_reconciliation", "trader_paper_exit_review_chain", "trader_pair_score_continuity", "setup_strategy_journey"}:
         raise RuntimeError("trader_fixture_audit_profile_invalid")
     match = LABEL.fullmatch(label)
     if not match:
@@ -76,6 +76,29 @@ def run(label: str, *, expected_profile: str = "trader_paper_exit_reconciliation
             cur.execute("SELECT COUNT(*) FROM exchange_keys WHERE user_id=%s", (user_id,))
             keys = int(cur.fetchone()[0])
             unsafe = bool(owner_active or keys or any(active or live for active, live in bots))
+            if expected_profile == "setup_strategy_journey":
+                present = {}
+                for table in ("setups", "strategies", "bot_configs", "bot_orders", "bot_executions"):
+                    cur.execute(f"SELECT COUNT(*) FROM {table} WHERE user_id=%s", (user_id,))
+                    present[table] = int(cur.fetchone()[0])
+                cur.execute("SELECT COUNT(*) FROM setups WHERE user_id=%s AND symbol='BTC'", (user_id,))
+                btc_setups = int(cur.fetchone()[0])
+                cur.execute("SELECT COUNT(*) FROM strategies WHERE user_id=%s AND symbol='BTC'", (user_id,))
+                btc_strategies = int(cur.fetchone()[0])
+                return {
+                    "fixture_state": "UNSAFE_ACTIVE" if unsafe else "QUARANTINED_INACTIVE",
+                    "cleanup_verified": False,
+                    "owner_active": bool(owner_active),
+                    "exchange_keys_present": bool(keys),
+                    "setups_present": bool(present["setups"]),
+                    "strategies_present": bool(present["strategies"]),
+                    "bots_present": bool(present["bot_configs"]),
+                    "active_or_live_bots_present": any(active or live for active, live in bots),
+                    "journey_setup_present": bool(btc_setups),
+                    "journey_strategy_present": bool(btc_strategies),
+                    "orders_present": bool(present["bot_orders"]),
+                    "executions_present": bool(present["bot_executions"]),
+                }
             if expected_profile == "trader_pair_score_continuity":
                 present = {}
                 for table in ("user_indicator_configs", "market_data_indicators",

@@ -33,6 +33,16 @@ def _module():
     return module
 
 
+def test_journey_runner_diagnostic_exposes_only_allowlisted_labels():
+    module = _module()
+    assert module.safe_journey_runner_diagnostic("probe_start", KeyError("private fixture id")) == {
+        "stage": "probe_start", "exception_class": "KeyError",
+    }
+    assert module.safe_journey_runner_diagnostic("private stage", ValueError("secret")) == {
+        "stage": "unknown", "exception_class": "other",
+    }
+
+
 def test_setup_strategy_journey_dispatch_requires_bound_fixture_flags(tmp_path):
     gh = tmp_path / "gh"
     gh.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$QA_DISPATCH_CAPTURE"\n')
@@ -653,7 +663,7 @@ def test_prior_trader_fixture_audits_are_read_only_and_bounded():
     module = _module()
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
     dispatch = DISPATCH_SCRIPT_PATH.read_text(encoding="utf-8")
-    for profile in ("trader_paper_exit_fixture_audit", "trader_paper_exit_review_fixture_audit", "trader_pair_fixture_audit"):
+    for profile in ("trader_paper_exit_fixture_audit", "trader_paper_exit_review_fixture_audit", "trader_pair_fixture_audit", "setup_strategy_journey_fixture_audit"):
         assert profile in module.ALLOWED_PROFILES
         assert profile in workflow and profile in dispatch
     assert '"$ALLOW_FIXTURE_ACTIONS" != "false"' in workflow
@@ -662,11 +672,11 @@ def test_prior_trader_fixture_audits_are_read_only_and_bounded():
     assert '"$allow_safe_fixture_execution" != "false"' in dispatch
     source = SCRIPT_PATH.read_text(encoding="utf-8")
     audit_branch = source.split(
-        'elif args.profile in {"trader_paper_exit_fixture_audit", "trader_paper_exit_review_fixture_audit", "trader_pair_fixture_audit"}:', 1
+        'elif args.profile in {"trader_paper_exit_fixture_audit", "trader_paper_exit_review_fixture_audit", "trader_pair_fixture_audit", "setup_strategy_journey_fixture_audit"}:', 1
     )[1].split(
         'elif args.profile == "trader_pair_fixture_cleanup":', 1
     )[0]
-    assert 'expected_profile=("trader_pair_score_continuity"' in audit_branch
+    assert 'expected_profile=("setup_strategy_journey"' in audit_branch
     assert 'execution_calls' not in audit_branch
     assert 'else "incomplete"' in audit_branch
     assert '"INCOMPLETE"' in audit_branch
