@@ -59,6 +59,17 @@ The historical report and bot decision are controlled fixture evidence, so
 this profile verifies FINN's handling of their age and safety reason, not the
 original user's private report or a live Paper executor decision.
 
+The one failed AAPL coach run `45033782172-1` has exact-run follow-ups
+`aapl_paper_quote_fixture_audit` and `aapl_paper_quote_fixture_cleanup`, both
+bound to `audit-45033782172-1-775c4259` and the prior protected report.
+The audit is read-only and emits only fixed status/error categories for its
+three FINN turns, a conversation-equality boolean, and fixture safety flags.
+Cleanup requires fixture actions but no safe execution; it deletes only the
+single inactive child after verifying its AAPL setup, strategy, bot, report,
+planned hold decision, three terminal turns, and absence of keys and trade
+rows. A second audit must show `NO_RETAINED_FIXTURE`. Neither profile reads
+an ordinary user or permits a new FINN turn, order, or bot action.
+
 `coach_feed_triggers` is a separately authorized, one-shot protected FINN 3.0
 feed profile. It requires `manifest_id=none`, `allow_fixture_actions=true`, and
 `allow_safe_fixture_execution=true`. It creates two inactive, uncredentialed
