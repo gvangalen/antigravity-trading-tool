@@ -4,6 +4,28 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN-selector: alleen concrete handelsparen (22 november 2026)
+
+Phase: `CANDIDATE_READY_FOR_FINAL_CI`. Product PR [#1277](https://github.com/gvangalen/antigravity-trading-tool/pull/1277),
+candidate code SHA `e5e86a8381e4885bcfb8ee21ae7021f684e655a1` on
+`codex/finn-pair-selector-20261122`. Een losse crypto-basisnotering zoals `BTC`
+komt niet meer in de FINN-keuzelijst, ook niet vóór de watchlist is geladen of
+wanneer er geen pair is. Bestaande watchlistparen blijven selecteerbaar; een
+oude basiscontext kiest een bestaand paar en stuurt dezelfde quote currency bij
+een gewone chatvraag mee. Een gekoppelde bot- of setupcontext wordt niet
+overschreven. Aandelen en ETF's uit de watchlist blijven beschikbaar.
+
+Lokale Build-controles: gerichte FINN-account- en shelltests **28/28**;
+frontend commandtests **112/112**; `typecheck`, `lint:i18n` en productiebuild
+geslaagd. De bijbehorende getrackte frontendexport is in de kandidaat
+opgenomen. PR-CI-run **45000557214** voltooide alle vijf jobs met succes.
+Deze wijziging raakt geen backend-actiecontract, providerselector of
+workerroute; de eerdere volledige actie- en echte-providerproeven in dit
+bestand gelden voor de ongewijzigde backend, niet als nieuwe meting van deze
+frontendkandidaat. Onafhankelijke ingelogde live QA voor deze selector is nog
+niet uitgevoerd. Productmerge, laatste main-CI, Auto Deploy en publieke
+SHA-pariteit moeten nog worden bevestigd.
+
 ## FINN 3.0: chat- en feedvervolg na setup en strategie (21 november 2026)
 
 Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`. Product PR [#1267](https://github.com/gvangalen/antigravity-trading-tool/pull/1267)

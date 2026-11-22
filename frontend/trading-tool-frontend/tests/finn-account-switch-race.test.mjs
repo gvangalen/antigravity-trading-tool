@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   feedHeaderInstrument,
   finnInstrumentOptions,
+  finnSelectedInstrument,
   finnPageInstrumentKey,
   normalizeScopedAssetSymbol,
   resolveFinnBotPageContext,
@@ -26,6 +27,58 @@ test("FINN offers the watchlist's exact pairs and keeps the displayed route pair
     { symbol: "ETH", quote_currency: "USDT" },
   ], { symbol: "BTC", quote_currency: "USDT" });
   assert.deepEqual(options.map((item) => item.key), ["BTC/USDT", "BTC/EUR", "ETH/USDT"]);
+});
+
+test("FINN replaces a bare BTC selection with its watchlist pairs", () => {
+  const watchlist = [
+    { symbol: "BTC" },
+    { symbol: "BTC", quote_currency: "USDT" },
+    { symbol: "BTC", quote_currency: "EUR" },
+    { symbol: "SPY", asset_class: "etf" },
+  ];
+  const current = { symbol: "BTC", quote_currency: null };
+  const options = finnInstrumentOptions(watchlist, current);
+  assert.deepEqual(options.map((item) => item.key), ["BTC/USDT", "BTC/EUR", "SPY"]);
+  const selected = finnSelectedInstrument(options, current);
+  assert.equal(selected.key, "BTC/USDT");
+  const submitted = resolveFinnSubmissionContext({
+    pathname: "/asset", livePageContext: current, watchlist,
+  });
+  assert.equal(submitted.symbol, "BTC");
+  assert.equal(submitted.quote_currency, "USDT");
+});
+
+test("FINN never offers a bare crypto symbol, including before pairs load", () => {
+  const current = { symbol: "BTC" };
+  assert.deepEqual(finnInstrumentOptions([], current), []);
+  assert.equal(finnSelectedInstrument([], current), null);
+  assert.deepEqual(finnInstrumentOptions([
+    { symbol: "BTC", asset_class: "crypto" },
+    { symbol: "AAPL", asset_class: "stock" },
+  ], current).map((item) => item.key), ["AAPL"]);
+});
+
+test("FINN uses the requested asset's pair when a command switches away from the page", () => {
+  const submitted = resolveFinnSubmissionContext({
+    pathname: "/asset",
+    livePageContext: { symbol: "AAPL" },
+    commandContext: { symbol: "BTC" },
+    watchlist: [{ symbol: "BTC", quote_currency: "EUR" }],
+  });
+  assert.equal(submitted.symbol, "BTC");
+  assert.equal(submitted.quote_currency, "EUR");
+});
+
+test("FINN preserves an explicitly selected pair and standalone stock", () => {
+  const watchlist = [
+    { symbol: "BTC", quote_currency: "USDT" },
+    { symbol: "BTC", quote_currency: "EUR" },
+    { symbol: "AAPL", asset_class: "stock" },
+  ];
+  const options = finnInstrumentOptions(watchlist, { symbol: "BTC", quote_currency: "EUR" });
+  assert.deepEqual(options.map((item) => item.key), ["BTC/EUR", "BTC/USDT", "AAPL"]);
+  assert.equal(finnSelectedInstrument(options, { symbol: "BTC", quote_currency: "EUR" }).key, "BTC/EUR");
+  assert.equal(finnSelectedInstrument(options, { symbol: "AAPL" }).key, "AAPL");
 });
 
 test("a page switch invalidates a prior FINN pair choice, including the same base with another quote", () => {

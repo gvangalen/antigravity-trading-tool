@@ -17,12 +17,24 @@ export function finnInstrumentOptions(watchlist = [], current = null) {
     if (!symbol) continue;
     const quote = String(item?.quote_currency || "").trim().toUpperCase();
     const quote_currency = /^(EUR|USDT)$/.test(quote) ? quote : null;
+    // A base crypto symbol is not a tradable instrument. The current page may
+    // provide a base symbol, but only an explicit pair belongs in this list.
+    const assetClass = String(item?.asset_class || "").trim().toLowerCase();
+    if (!quote_currency && (item === current || !assetClass || assetClass === "crypto")) continue;
     const key = feedHeaderInstrument(symbol, quote_currency);
     if (seen.has(key)) continue;
     seen.add(key);
     options.push({ key, symbol, quote_currency });
   }
   return options;
+}
+
+export function finnSelectedInstrument(options = [], current = null) {
+  const symbol = normalizeScopedAssetSymbol(current?.symbol);
+  const key = feedHeaderInstrument(symbol, current?.quote_currency);
+  return options.find((item) => item.key === key)
+    || options.find((item) => item.symbol === symbol)
+    || null;
 }
 
 export function finnPageInstrumentKey(pathname, context) {
@@ -91,6 +103,7 @@ export function resolveFinnSubmissionContext({
   latestAssistantState = null,
   commandContext = {},
   chatAssetOverride = null,
+  watchlist = [],
   locale,
   query = "",
   autoSubmitCommand = false,
@@ -138,6 +151,13 @@ export function resolveFinnSubmissionContext({
     String(request.symbol || "").toUpperCase() === String(livePageContext?.symbol || "").toUpperCase()
       ? livePageContext?.quote_currency || null : null
   );
+  if (!request.quote_currency && request.symbol && !request.bot_id && !request.setup_id && !request.strategy_id) {
+    const selectedPair = finnSelectedInstrument(
+      finnInstrumentOptions(watchlist, { symbol: request.symbol }),
+      { symbol: request.symbol },
+    );
+    request.quote_currency = selectedPair?.quote_currency || null;
+  }
   return request;
 }
 

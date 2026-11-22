@@ -15,7 +15,7 @@ import { useActiveSetup } from "@/app/providers/SetupProvider";
 import { useActiveBot } from "@/app/providers/ActiveBotProvider";
 import { actionButtonStyles } from "@/components/ui/actionButtonStyles";
 import { getAssistantSessionId, trackAssistantEvent } from "@/lib/api/assistantAnalytics";
-import { feedHeaderInstrument, finnInstrumentOptions, finnPageInstrumentKey, normalizeScopedAssetSymbol, resolveFinnBotPageContext, resolveFinnContextSymbol, resolveFinnSubmissionContext, shouldBlockFinnSubmission } from "@/lib/finnAssetIsolation";
+import { feedHeaderInstrument, finnInstrumentOptions, finnPageInstrumentKey, finnSelectedInstrument, normalizeScopedAssetSymbol, resolveFinnBotPageContext, resolveFinnContextSymbol, resolveFinnSubmissionContext, shouldBlockFinnSubmission } from "@/lib/finnAssetIsolation";
 import { normalizeTraderProfilePreferences } from "@/lib/traderProfileOptions";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import FinnCommandCenter from "@/components/finn/FinnCommandCenter";
@@ -1587,6 +1587,7 @@ function AIAssistantContent({
       );
       const requestContext = resolveFinnSubmissionContext({
         pathname, livePageContext, latestAssistantState, commandContext,
+        watchlist: watchlist.watchlist,
         chatAssetOverride: chatAssetOverride?.pageInstrumentKey ===
           finnPageInstrumentKey(pathname, livePageContext)
           ? chatAssetOverride : null,
@@ -2643,12 +2644,12 @@ function AIAssistantContent({
     ? commandRequest?.context?.quote_currency
     : activeChatAssetOverride?.quote_currency || (selectedCommandSymbol
       ? commandRequest?.context?.quote_currency : context.quote_currency);
-  const displayedContextInstrument = feedHeaderInstrument(
-    displayedContextSymbol, displayedContextQuote,
-  );
   const contextInstrumentOptions = finnInstrumentOptions(watchlist.watchlist, {
     symbol: displayedContextSymbol, quote_currency: displayedContextQuote,
   });
+  const displayedContextInstrument = finnSelectedInstrument(contextInstrumentOptions, {
+    symbol: displayedContextSymbol, quote_currency: displayedContextQuote,
+  })?.key || "";
   const finnContextLabel = [workspaceContextLabel, displayedContextInstrument]
     .filter(Boolean)
     .join(" · ");
@@ -2794,12 +2795,13 @@ function AIAssistantContent({
                   <select
                     aria-label={at("uiText.assetContext")}
                     value={displayedContextInstrument}
-                    disabled={pathname === "/bot" && Boolean(context.bot_id)}
+                    disabled={!contextInstrumentOptions.length || (pathname === "/bot" && Boolean(context.bot_id))}
                     onChange={(event) => { void changeChatAsset(
                       contextInstrumentOptions.find((item) => item.key === event.target.value) || null,
                     ); }}
                     className="max-w-24 cursor-pointer bg-transparent font-semibold text-slate-600 outline-none disabled:cursor-default dark:text-slate-300"
                   >
+                    <option value="" disabled>{at("uiText.assetContext")}</option>
                     {contextInstrumentOptions.map((asset) => <option key={asset.key} value={asset.key}>
                       {asset.key}
                     </option>)}
