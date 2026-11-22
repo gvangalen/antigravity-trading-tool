@@ -1771,10 +1771,19 @@ class FinnResponsesFrontDoor:
         guided_inputs = dict(guided.get("collected_inputs") or {}) if guided.get("operation_id") == "create_strategy" else {}
         async with session_factory() as session:
             resolver = FinnV2EntityResolutionService(session)
-            if guided.get("awaiting_price_currency_reentry") and guided_inputs.get("setup_id"):
-                # This ID came from an owner-scoped proposal that was just
-                # withdrawn. Recent conversation references must not rebind
-                # its replacement strategy to a different setup.
+            if guided_inputs.get("setup_id") and (
+                guided.get("awaiting_price_currency_reentry")
+                or (
+                    re.match(r"^\s*noem\s+(?:die|de|deze)\s+strategie\b", message, re.I)
+                    and not re.search(
+                        r"\b(?:voor|bij|aan)\s+(?:(?:mijn|de|het|een)\s+)?(?:setup|plan)\b",
+                        message, re.I,
+                    )
+                )
+            ):
+                # This ID came from the owner-bound guided strategy. A name
+                # being assigned to that strategy may contain the name of an
+                # older setup; it is not a request to change its parent.
                 setup = await resolver.setups.get_setup_by_id(guided_inputs["setup_id"], self.user_id)
                 if not setup:
                     return {}
