@@ -2649,7 +2649,7 @@ function AIAssistantContent({
   });
   const displayedContextInstrument = finnSelectedInstrument(contextInstrumentOptions, {
     symbol: displayedContextSymbol, quote_currency: displayedContextQuote,
-  })?.key || feedHeaderInstrument(displayedContextSymbol, displayedContextQuote);
+  })?.key || "";
   const finnContextLabel = [workspaceContextLabel, displayedContextInstrument]
     .filter(Boolean)
     .join(" · ");
@@ -2795,12 +2795,13 @@ function AIAssistantContent({
                   <select
                     aria-label={at("uiText.assetContext")}
                     value={displayedContextInstrument}
-                    disabled={pathname === "/bot" && Boolean(context.bot_id)}
+                    disabled={!contextInstrumentOptions.length || (pathname === "/bot" && Boolean(context.bot_id))}
                     onChange={(event) => { void changeChatAsset(
                       contextInstrumentOptions.find((item) => item.key === event.target.value) || null,
                     ); }}
                     className="max-w-24 cursor-pointer bg-transparent font-semibold text-slate-600 outline-none disabled:cursor-default dark:text-slate-300"
                   >
+                    <option value="" disabled>{at("uiText.assetContext")}</option>
                     {contextInstrumentOptions.map((asset) => <option key={asset.key} value={asset.key}>
                       {asset.key}
                     </option>)}

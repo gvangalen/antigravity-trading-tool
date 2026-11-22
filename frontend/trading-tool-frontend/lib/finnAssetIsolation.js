@@ -17,13 +17,16 @@ export function finnInstrumentOptions(watchlist = [], current = null) {
     if (!symbol) continue;
     const quote = String(item?.quote_currency || "").trim().toUpperCase();
     const quote_currency = /^(EUR|USDT)$/.test(quote) ? quote : null;
+    // A base crypto symbol is not a tradable instrument. The current page may
+    // provide a base symbol, but only an explicit pair belongs in this list.
+    const assetClass = String(item?.asset_class || "").trim().toLowerCase();
+    if (!quote_currency && (item === current || !assetClass || assetClass === "crypto")) continue;
     const key = feedHeaderInstrument(symbol, quote_currency);
     if (seen.has(key)) continue;
     seen.add(key);
     options.push({ key, symbol, quote_currency });
   }
-  const pairedSymbols = new Set(options.filter((item) => item.quote_currency).map((item) => item.symbol));
-  return options.filter((item) => item.quote_currency || !pairedSymbols.has(item.symbol));
+  return options;
 }
 
 export function finnSelectedInstrument(options = [], current = null) {
