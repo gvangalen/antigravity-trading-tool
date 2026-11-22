@@ -1950,20 +1950,24 @@ class FinnResponsesAnswerVerifier:
                         quote = str(market.get("quote_currency") or "").upper()
                         price = market.get("price")
                         if quote in {"EUR", "USD", "USDT"} and price is not None:
-                            stale_dated_quote = (
-                                item.get("freshness") == "stale"
-                                and re.search(
+                            market_rows = tuple(row for row in evidence
+                                                if row.get("scope") == "read_market_snapshot"
+                                                and row.get("status") == "completed")
+                            stale_dated_quote = item.get("freshness") == "stale" and any(
+                                re.search(
                                     r"\b(?:nieuwste|laatste|laatst\s+(?:beschikbare|bekende)|"
                                     r"latest|last\s+(?:available|known))\b[^.!?\n]{0,70}"
                                     r"\b(?:koers\w*|prijs\w*|quote\w*|price\w*)\b",
-                                    answer, re.I,
+                                    sentence, re.I,
                                 )
-                                and cls._latest_quote_claim_supported(answer, evidence)
+                                and (len(market_rows) == 1 or str(market.get("symbol") or "").upper()
+                                     in mentioned_catalog_symbols(sentence))
+                                and cls._latest_quote_claim_supported(sentence, (item,))
+                                for sentence in re.split(r"(?<=[.!?])\s+(?=[A-ZÀ-Ö])|\n+", answer)
                             )
-                            # A dated last-known quote can ground a read-only
-                            # answer after the close. The quote verifier above
-                            # checks its exact source moment and rejects an
-                            # undated or falsely current stale quote.
+                            # Each dated last-known quote grounds only its own
+                            # read-only source. Another stale quote in the
+                            # same answer must carry its own date and amount.
                             if item.get("freshness") == "fresh" or stale_dated_quote:
                                 grounded.update(cls._currency_amounts(f"{price} {quote}"))
                 if item.get("scope") == "read_linked_strategy":

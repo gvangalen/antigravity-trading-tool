@@ -17668,6 +17668,17 @@ def test_closed_market_last_known_quote_is_readable_but_not_current():
         answer="De laatst beschikbare AAPL-koers is 375 USD van 20 november 2026 22:00 CET.",
         message="Wat is de nieuwste AAPL-koers?", previous_answer="", evidence=evidence,
     )
+    second_quote = {
+        "scope": "read_market_snapshot", "status": "completed", "freshness": "stale",
+        "as_of": "2026-11-20T21:00:00+00:00",
+        "data": {"symbol": "BTC", "price": 76000, "quote_currency": "USDT",
+                 "source_observed_at": "2026-11-20T21:00:00+00:00"},
+    }
+    assert not verifier._amounts_supported(
+        answer=dated + " BTC noteerde 76000 USDT.",
+        message="Geef de laatst bekende koersen van AAPL en BTC.",
+        previous_answer="", evidence=(*evidence, second_quote),
+    )
 
 
 def test_closed_review_decimal_pnl_grounds_only_its_recorded_eur_amount():
