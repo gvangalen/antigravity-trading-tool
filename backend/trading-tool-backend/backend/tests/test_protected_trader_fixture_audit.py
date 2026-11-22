@@ -377,6 +377,41 @@ def test_transport_child_cleanup_requires_terminal_runner_and_exact_setup(
         assert calls == [((namespace, 17, 22), {"require_safe_pair_cleanup": True})]
 
 
+@pytest.mark.parametrize("failure_stage,expected_error", [
+    ("strategy_guided", None),
+    ("strategy_confirmation", "journey_cleanup_prior_state_mismatch"),
+])
+def test_exact_short_yes_child_cleanup_requires_guided_failure_and_safe_rows(
+    monkeypatch, failure_stage, expected_error,
+):
+    namespace = "qa-45006104528-1-50cc25ca-1234abcd"
+    saved_name = f"QA BTC Setup {namespace}"
+    prior = {"setup_strategy_journey": {"fixture_state": "quarantined",
+        "failure_stage": failure_stage, "reason": "journey_strategy_guided_failed"}}
+    before = Connection([
+        [(17, False, {"qa_namespace": namespace})], [(22, False, False)],
+        *([[(0,)]] * 6),
+        [(namespace, "ETH"), (saved_name, "BTC")], [(namespace, "ETH")],
+        [(saved_name, "BTC", "USDT")], [(0,)], [(0,)],
+    ])
+    after = Connection([[(0,)] for _ in range(8)])
+    connections = iter((before, after))
+    calls = []
+    monkeypatch.setattr(audit, "_verify_prior_report", lambda *_args: None)
+    monkeypatch.setattr(audit.Path, "read_text", lambda *_a, **_k: json.dumps(prior))
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: next(connections))
+    monkeypatch.setattr(audit.fixture, "_cleanup", lambda *args, **kwargs: calls.append((args, kwargs)))
+    if expected_error:
+        with pytest.raises(RuntimeError, match=f"^{expected_error}$"):
+            audit.cleanup_journey(audit.JOURNEY_YES_DIAGNOSTIC_LABEL)
+        assert not calls
+    else:
+        assert audit.cleanup_journey(audit.JOURNEY_YES_DIAGNOSTIC_LABEL) == {
+            "fixture_state": "CLEANED", "cleanup_verified": True,
+        }
+        assert calls == [((namespace, 17, 22), {"require_safe_pair_cleanup": True})]
+
+
 @pytest.mark.parametrize("analysis_status,expected_status", [
     ("failed", "failed"), ("private_status", "other"),
 ])
