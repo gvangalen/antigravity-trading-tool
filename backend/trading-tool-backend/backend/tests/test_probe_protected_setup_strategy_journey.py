@@ -1,10 +1,35 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 
 import pytest
 
 from backend.scripts import probe_protected_setup_strategy_journey as probe
+
+
+def test_runner_uses_existing_live_exchange_guard(monkeypatch):
+    from backend.engine import trading_bot_execution as execution
+    from backend.infrastructure import database
+
+    async def case(_namespace, _owner, _trace):
+        assert execution._execute_on_exchange_sync is not original_exchange
+        return {"result": "PASS"}
+
+    async def dispose():
+        pass
+
+    original_exchange = execution._execute_on_exchange_sync
+    monkeypatch.setenv("FINN_QA_USER_ID", "42")
+    monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_ACTIONS", "1")
+    monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_EXECUTION", "1")
+    monkeypatch.setenv("FINN_QA_ALLOW_SETUP_STRATEGY_JOURNEY", "1")
+    monkeypatch.setattr(probe, "_case", case)
+    monkeypatch.setattr(database, "engine", SimpleNamespace(dispose=dispose))
+    result = probe.run("qa-20261122-1-abcdef12-34567890")
+    assert result["result"] == "PASS"
+    assert result["live_calls"] == 0
+    assert execution._execute_on_exchange_sync is original_exchange
 
 
 def test_owner_binding_requires_all_protected_flags(monkeypatch):
