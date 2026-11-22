@@ -26,6 +26,10 @@ PAIR_CLEANUP_LABELS = frozenset({
     "audit-42668760580-1-e20b92fb",
 })
 JOURNEY_CLEANUP_LABEL = "audit-44968391213-1-e2872eb9"
+JOURNEY_CLEANUP_LABELS = frozenset({
+    JOURNEY_CLEANUP_LABEL,
+    "audit-44972794086-1-da950aac",
+})
 JOURNEY_EXECUTION_CODES = frozenset({
     "proposal_not_confirmed", "proposal_expired", "proposal_payload_hash_mismatch",
     "proposal_evidence_hash_mismatch", "step_up_required", "kill_switch_enabled",
@@ -207,7 +211,7 @@ def run(label: str, *, expected_profile: str = "trader_paper_exit_reconciliation
 
 def cleanup_journey(label: str) -> dict:
     """Remove only the quarantined child from the failed setup confirmation run."""
-    if label != JOURNEY_CLEANUP_LABEL:
+    if label not in JOURNEY_CLEANUP_LABELS:
         raise RuntimeError("journey_cleanup_label_not_allowed")
     match = LABEL.fullmatch(label)
     if not match:

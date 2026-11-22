@@ -184,11 +184,18 @@ def test_journey_cleanup_refuses_unsafe_rows_without_write(monkeypatch, blocked_
         audit.cleanup_journey(audit.JOURNEY_CLEANUP_LABEL)
 
 
-def test_journey_cleanup_removes_only_exact_safe_child_and_checks_postcondition(monkeypatch):
-    namespace = "qa-44968391213-1-e2872eb9-1234abcd"
+@pytest.mark.parametrize("workflow_id,sha_prefix,target_sha", [
+    ("44968391213", "e2872eb9", "e2872eb9ad15376beb37c4e1ac79d50ccc874b27"),
+    ("44972794086", "da950aac", "da950aace77443e0c3660400234338b56e3da5b8"),
+])
+def test_journey_cleanup_removes_only_exact_safe_child_and_checks_postcondition(
+    monkeypatch, workflow_id, sha_prefix, target_sha,
+):
+    namespace = f"qa-{workflow_id}-1-{sha_prefix}-1234abcd"
+    label = f"audit-{workflow_id}-1-{sha_prefix}"
     prior = {
-        "workflow_run_id": "44968391213-1", "profile": "setup_strategy_journey",
-        "target_sha": "e2872eb9ad15376beb37c4e1ac79d50ccc874b27",
+        "workflow_run_id": f"{workflow_id}-1", "profile": "setup_strategy_journey",
+        "target_sha": target_sha,
         "protected_profile_attempted": True, "outcome": "failed",
         "setup_strategy_journey": {"fixture_state": "quarantined",
             "failure_stage": "setup_confirmation", "reason": "journey_replay_failed"},
@@ -203,7 +210,7 @@ def test_journey_cleanup_removes_only_exact_safe_child_and_checks_postcondition(
     monkeypatch.setattr(audit.Path, "read_text", lambda *_a, **_k: json.dumps(prior))
     monkeypatch.setattr(audit.fixture, "_connection", lambda: next(connections))
     monkeypatch.setattr(audit.fixture, "_cleanup", lambda *args, **kwargs: calls.append((args, kwargs)))
-    assert audit.cleanup_journey(audit.JOURNEY_CLEANUP_LABEL) == {
+    assert audit.cleanup_journey(label) == {
         "fixture_state": "CLEANED", "cleanup_verified": True,
     }
     assert calls == [((namespace, 17, 22), {"require_safe_pair_cleanup": True})]

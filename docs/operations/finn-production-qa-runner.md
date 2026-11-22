@@ -122,6 +122,10 @@ contains only booleans, bounded counts, fixed stages and fixed error codes,
 not user text, IDs or credentials. This server-side profile does not prove
 browser rendering, a natural beat schedule, or independent polling/SSE parity;
 those require separate authenticated browser and transport checks.
+Its standalone QA subprocess explicitly inherits the deployed non-financial
+`FINN_V2_EXECUTE_SETUP_CHANGES=true` and
+`FINN_V2_EXECUTE_STRATEGY_CHANGES=true` policy. No other QA profile receives
+these overrides, and no bot, broker, Live, or Paper execution policy is changed.
 On proposal lifecycle failure, the sanitized report keeps only the operation,
 fixed stage, allowlisted first-execution and replay statuses, known gate codes
 or `other`, next-step equality, and a bounded exception class. The first
@@ -153,13 +157,16 @@ The historical replay response was not persisted and is reported as
 `not_recorded`, never inferred from the stored execution row. Its label is
 `audit-44968391213-1-e2872eb9`, with both fixture flags off.
 
-`setup_strategy_journey_fixture_cleanup` accepts only that exact label,
+`setup_strategy_journey_fixture_cleanup` accepts only the two exact audited
+labels above and below,
 `manifest_id=none`, `allow_fixture_actions=true`, and
 `allow_safe_fixture_execution=false`. It verifies the failed prior report,
 the fixture marker and namespace, one inactive non-Live bot, no exchange key,
 trade row or new BTC journey object. The existing locked fixture cleanup
 rechecks owner and safety before deletion; the profile then checks absence of
 the child and its rows. No other QA namespace or ordinary account is eligible.
+The same locked cleanup profile also accepts the separately audited failed
+workflow `44972794086-1` with label `audit-44972794086-1-da950aac`.
 
 `action_contract_acceptance` is the strict registry-wide profile. Before any
 product request it requires exactly one independent case for every active

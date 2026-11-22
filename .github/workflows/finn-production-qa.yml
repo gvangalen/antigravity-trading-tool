@@ -242,7 +242,7 @@ jobs:
             echo "The prior pair cleanup requires scoped fixture authorization and no execution." >&2
             exit 1
           fi
-          if [ "$QA_PROFILE" = "setup_strategy_journey_fixture_cleanup" ] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ] || [ "$ALLOW_FIXTURE_ACTIONS" != "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" != "false" ] || [ "$RUN_LABEL" != "audit-44968391213-1-e2872eb9" ]; }; then
+          if [ "$QA_PROFILE" = "setup_strategy_journey_fixture_cleanup" ] && { [ "$MANIFEST_ID" != "none" ] || [ -n "$MANIFEST_BUNDLE" ] || [ "$ALLOW_FIXTURE_ACTIONS" != "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" != "false" ] || [[ ! "$RUN_LABEL" =~ ^(audit-44968391213-1-e2872eb9|audit-44972794086-1-da950aac)$ ]]; }; then
             echo "The journey cleanup is restricted to the audited inactive child and requires no execution." >&2
             exit 1
           fi
@@ -582,6 +582,10 @@ jobs:
           export FINN_QA_ALLOW_PORTFOLIO_PAPER_FX_FIXTURE=$(printf '%q' "$FINN_QA_ALLOW_PORTFOLIO_PAPER_FX_FIXTURE")
           export FINN_QA_ALLOW_TYPED_ENTRY_PAPER_FIXTURE=$(printf '%q' "$FINN_QA_ALLOW_TYPED_ENTRY_PAPER_FIXTURE")
           export FINN_QA_ALLOW_SETUP_STRATEGY_JOURNEY=$(printf '%q' "$FINN_QA_ALLOW_SETUP_STRATEGY_JOURNEY")
+          if [ $(printf '%q' "$qa_profile") = setup_strategy_journey ]; then
+            export FINN_V2_EXECUTE_SETUP_CHANGES=true
+            export FINN_V2_EXECUTE_STRATEGY_CHANGES=true
+          fi
           export FINN_QA_ALLOW_MANUAL_TRADE_PREPARE=$(printf '%q' "$FINN_QA_ALLOW_MANUAL_TRADE_PREPARE")
           # Preserve both a partial checkpoint and an exit code.  `set -e`
           # would otherwise skip runner.exit after a crash and make a later
