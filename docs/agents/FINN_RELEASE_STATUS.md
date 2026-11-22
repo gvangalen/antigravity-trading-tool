@@ -6,8 +6,9 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN: gedateerde accountvergelijking en bevestigde vervolgstap (22 november 2026)
 
-Phase: `LOCAL_GATES_PASSED_PENDING_PR_CI_DEPLOY_QA`. Candidate branch
-`codex/finn-response-exchange-terminal-20261122`. De beschermde AAPL-proef
+Phase: `LIVE_DEPLOYED_QA_NOT_ACCEPTED`. Product-PR
+[#1303](https://github.com/gvangalen/antigravity-trading-tool/pull/1303)
+op branch `codex/finn-response-exchange-terminal-20261122`. De beschermde AAPL-proef
 op live SHA `8b64780e8c64e4ad3566ff2ac4515322cd2b7636` eindigde drie keer
 `unavailable` na voltooide eigenaargebonden reads. De audit gaf geen
 orchestratorresultaat of verifierrecord; een provider-timeout in de
@@ -45,6 +46,14 @@ en regression **109/109** (artifact SHA-256
 zonder provider-, schema-, timeout-, parse- of validatiefouten. Onafhankelijke
 ingelogde live QA moet zowel de drie AAPL-bronvragen als de gesloten-markt
 setup → strategie → Paper-bot-keten en orderweigering nog toetsen.
+
+Product-PR-CI **45073991914** en main-CI **45074778161** voltooiden elk alle
+vijf jobs met succes. Auto Deploy **45075528380** slaagde op
+`40eec567a2ba64b27315d5c154aced546eec38f9`. Op 22 november 2026
+gaven publieke backend health en frontend build-info beide HTTP 200 met
+exact die SHA, gelijk aan GitHub `main`. Deze status-only update vereist
+opnieuw bevestiging van de laatste main-CI, Auto Deploy en publieke
+SHA-pariteit voordat de onafhankelijke QA de definitieve live SHA test.
 
 ## FINN: laatste koers na beursluiting als gedateerde bron (22 november 2026)
 
