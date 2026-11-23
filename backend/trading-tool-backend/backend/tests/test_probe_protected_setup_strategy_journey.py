@@ -244,6 +244,9 @@ def test_strategy_feed_discussion_requires_current_owner_read_and_advice(monkeyp
         assert kwargs == {"run_id": "run", "conversation_id": "feed-conv", "user_id": 42}
         return [{"scope": "read_active_setup", "source": "setups", "status": "completed",
                  "data": {"setup_id": 90, "name": "BTC setup", "pair": "BTC/USDT"}},
+                {"scope": "read_linked_strategies", "source": "strategies", "status": "completed",
+                 "data": {"setup_id": 90, "complete": True,
+                          "strategy_count": 0, "strategies": []}},
                 {"scope": "read_asset_scores", "source": "daily_scores_and_source_indicators",
                  "status": "completed", "data": {"symbol": "BTC", "pair": "BTC/USDT",
                                                   "source_status": "missing_scores",
@@ -251,6 +254,12 @@ def test_strategy_feed_discussion_requires_current_owner_read_and_advice(monkeyp
     monkeypatch.setattr(probe, "_turn", turn)
     monkeypatch.setattr(probe, "_read_tool_results", reads)
     assert asyncio.run(probe._discuss_strategy_card(42, card, 90, "BTC setup"))["conversation_id"] == "feed-conv"
+
+    async def no_strategy_collection(**_kwargs):
+        return [row for row in await reads(**_kwargs) if row["scope"] != "read_linked_strategies"]
+    monkeypatch.setattr(probe, "_read_tool_results", no_strategy_collection)
+    with pytest.raises(RuntimeError, match="^journey_strategy_absence_unverified$"):
+        asyncio.run(probe._discuss_strategy_card(42, card, 90, "BTC setup"))
 
     async def wrong_owner_read(**_kwargs):
         return [{"scope": "read_active_setup", "source": "setups", "status": "completed",
@@ -272,10 +281,28 @@ def test_strategy_feed_card_rejects_wrong_pair_or_stale_copy():
 
 def test_strategy_source_accepts_only_matching_saved_setup_inventory():
     rows = [{"scope": "read_saved_setup_inventory", "source": "setups", "status": "completed",
-             "data": {"setups": [{"setup_id": 90, "name": "BTC setup", "pair": "BTC/USDT"}]}}]
+             "data": {"complete": True, "setups": [{"setup_id": 90, "name": "BTC setup",
+                                                   "pair": "BTC/USDT", "linked_strategies": []}]}}]
     assert probe._strategy_source_valid(rows, 90, "BTC setup")
+    assert probe._strategy_absence_verified(rows, 90)
     assert not probe._strategy_source_valid(rows, 91, "BTC setup")
+    assert not probe._strategy_absence_verified(rows, 91)
+    linked = {"complete": True, "setups": [{"setup_id": 90,
+                                               "linked_strategies": [{"strategy_id": 3}]}]}
+    assert not probe._strategy_absence_verified([dict(rows[0], data=linked)], 90)
     assert not probe._strategy_source_valid([dict(rows[0], status="unavailable")], 90, "BTC setup")
+
+
+def test_strategy_absence_requires_complete_owner_scoped_collection():
+    row = {"scope": "read_linked_strategies", "source": "strategies", "status": "completed",
+           "data": {"setup_id": 90, "complete": True, "strategy_count": 0, "strategies": []}}
+    assert probe._strategy_absence_verified([row], 90)
+    assert not probe._strategy_absence_verified([dict(row, data=dict(row["data"], complete=False))], 90)
+    assert not probe._strategy_absence_verified([dict(row, data=dict(row["data"], strategy_count=1))], 90)
+    assert not probe._strategy_absence_verified([dict(row, data=dict(row["data"], setup_id=91))], 90)
+    assert not probe._strategy_absence_verified([dict(row, status="unavailable")], 90)
+    assert not probe._strategy_absence_verified([{"scope": "read_linked_strategy", "status": "unavailable",
+                                                  "reason": "strategy_not_resolved"}], 90)
 
 
 def test_current_score_source_requires_exact_pair_and_verified_status():
@@ -304,6 +331,9 @@ def test_strategy_feed_discussion_checks_available_score_and_date(monkeypatch, a
     async def reads(**_kwargs):
         return [{"scope": "read_active_setup", "source": "setups", "status": "completed",
                  "data": {"setup_id": 90, "name": "BTC setup", "pair": "BTC/USDT"}},
+                {"scope": "read_linked_strategies", "source": "strategies", "status": "completed",
+                 "data": {"setup_id": 90, "complete": True,
+                          "strategy_count": 0, "strategies": []}},
                 {"scope": "read_asset_scores", "source": "daily_scores_and_source_indicators",
                  "status": "completed", "data": {"symbol": "BTC", "pair": "BTC/USDT",
                                                   "source_status": "available", "benchmark_score": 63,

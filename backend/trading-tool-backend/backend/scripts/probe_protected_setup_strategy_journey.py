@@ -27,7 +27,8 @@ FAILURES = frozenset({
     "journey_owner_scope_failed", "journey_replay_failed",
     "journey_feed_discuss_failed",
     "journey_strategy_card_copy_failed", "journey_strategy_source_missing",
-    "journey_strategy_score_source_missing", "journey_strategy_advice_missing",
+    "journey_strategy_absence_unverified", "journey_strategy_score_source_missing",
+    "journey_strategy_advice_missing",
     "journey_feed_lineage_failed",
     "journey_unexpected_bot_or_order", "journey_cleanup_failed",
     "journey_runtime_failed",
@@ -311,6 +312,30 @@ def _strategy_source_valid(rows: list[dict], setup_id: int, setup_name: str) -> 
     return False
 
 
+def _strategy_absence_verified(rows: list[dict], setup_id: int) -> bool:
+    for row in rows:
+        if not isinstance(row, dict) or row.get("status") != "completed":
+            continue
+        data = row.get("data") or {}
+        if not isinstance(data, dict):
+            continue
+        if (row.get("scope") == "read_linked_strategies"
+                and row.get("source") == "strategies"
+                and str(data.get("setup_id")) == str(setup_id)
+                and data.get("complete") is True
+                and data.get("strategy_count") == 0
+                and data.get("strategies") == []):
+            return True
+        if (row.get("scope") == "read_saved_setup_inventory"
+                and row.get("source") == "setups" and data.get("complete") is True):
+            matches = [setup for setup in data.get("setups") or []
+                       if isinstance(setup, dict)
+                       and str(setup.get("setup_id")) == str(setup_id)]
+            if len(matches) == 1 and matches[0].get("linked_strategies") == []:
+                return True
+    return False
+
+
 def _current_score_evidence(rows: list[dict]) -> dict | None:
     for row in rows:
         if not isinstance(row, dict) or row.get("scope") != "read_asset_scores":
@@ -353,6 +378,8 @@ async def _discuss_strategy_card(user_id: int, card: dict, setup_id: int,
         raise RuntimeError("journey_strategy_source_missing") from None
     if not _strategy_source_valid(rows, setup_id, setup_name):
         raise RuntimeError("journey_strategy_source_missing")
+    if not _strategy_absence_verified(rows, setup_id):
+        raise RuntimeError("journey_strategy_absence_unverified")
     score = _current_score_evidence(rows)
     if score is None:
         raise RuntimeError("journey_strategy_score_source_missing")
