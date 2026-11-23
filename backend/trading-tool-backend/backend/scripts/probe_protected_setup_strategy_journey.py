@@ -7,6 +7,7 @@ confirmed; a Paper bot is neither proposed for execution nor created.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import time
 import uuid
@@ -135,6 +136,43 @@ async def _turn(user_id: int, message: str, *, conversation_id: str | None = Non
             "dispatch_count": projection.get("dispatch_count"),
             "attempt_count": projection.get("attempt_count"),
         }
+
+
+async def _terminal_transport_parity(user_id: int, run_id: str) -> bool:
+    """Compare owner-bound API projections without issuing an inactive-user token."""
+    from fastapi.encoders import jsonable_encoder
+    from backend.api.finn_v2_api import get_finn_v2_run, stream_finn_v2_run
+
+    class _Request:
+        async def is_disconnected(self) -> bool:
+            return False
+
+    owner = {"id": user_id}
+    polling = await get_finn_v2_run(run_id=run_id, current_user=owner)
+    if polling.status not in {"completed", "clarification_required", "unavailable", "failed", "cancelled"}:
+        return False
+    stream = await stream_finn_v2_run(run_id=run_id, raw_request=_Request(), current_user=owner)
+    async def read_events() -> list[str]:
+        events = []
+        async for event in stream.body_iterator:
+            events.append(event)
+            if len(events) == 2:
+                break
+        return events
+
+    try:
+        events = await asyncio.wait_for(read_events(), timeout=5)
+    except TimeoutError:
+        return False
+    if len(events) != 1:
+        return False
+    lines = [line for line in events[0].splitlines() if line]
+    if len(lines) != 2 or lines[0] != f"event: run.{polling.status}" or not lines[1].startswith("data: "):
+        return False
+    try:
+        return json.loads(lines[1][6:]) == jsonable_encoder(polling.dict())
+    except json.JSONDecodeError:
+        return False
 
 
 async def _confirm_and_execute(user_id: int, proposal_id: str, trace: dict) -> dict:
@@ -465,11 +503,13 @@ async def _case(namespace: str, bound: int, trace: dict) -> dict:
         trace["stage"] = "setup_discuss"
         discussed = await _discuss_strategy_card(user_id, strategy_card,
                                                  ids["setup_id"], setup_name)
+        discussion_transport_parity = await _terminal_transport_parity(user_id, discussed["run_id"])
         discussion_id = discussed.get("conversation_id")
         if not discussion_id or discussion_id == setup["conversation_id"]:
             raise RuntimeError("journey_feed_lineage_failed")
         trace["stage"] = "strategy_guided"
         yes = await _turn(user_id, "ja", conversation_id=discussion_id)
+        yes_transport_parity = await _terminal_transport_parity(user_id, yes["run_id"])
         if (yes["conversation_id"] != discussion_id or
                 yes["status"] not in {"completed", "clarification_required"}
                 or "create_strategy" not in {yes["operation_id"], yes["guided_operation"]}
@@ -530,7 +570,12 @@ async def _case(namespace: str, bound: int, trace: dict) -> dict:
                     "active_or_live_bots", "btc_watchlist"))):
             raise RuntimeError("journey_unexpected_bot_or_order")
         passed = True
-        return {"result": "PASS", "setup_confirmation": True,
+        transport_parity = discussion_transport_parity and yes_transport_parity
+        return {"result": "PASS" if transport_parity else "FAIL",
+                **({} if transport_parity else {"reason": "journey_transport_parity_failed"}),
+                "transport_parity": transport_parity,
+                "transport_scope": "owner_bound_in_process_api",
+                "setup_confirmation": True,
                 "strategy_confirmation": True, "setup_lineage": True,
                 "strategy_card": bool(strategy_card), "paper_card": bool(paper_card),
                 "feed_discussions": True, "feed_strategy_lineage": True,
