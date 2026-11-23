@@ -646,6 +646,8 @@ def test_smart_dca_score_band_question_stays_in_setup_draft():
     )
     assert _explicit_create_operation_request(message) == "create_setup"
     assert _explicit_create_operation_request(message.replace("Toon eerst een bewerkbaar concept", "Toon geen voorstel")) is None
+    assert _explicit_create_operation_request(message.replace("Ik wil voor", "Ik wil niet voor")) is None
+    assert _explicit_create_operation_request(message.replace("Ik wil voor", "Ik wil weten hoe ik voor")) is None
 
 
 def test_declassified_action_contract_acceptance_handoff_is_complete_and_immutable():

@@ -336,6 +336,7 @@ def _explicit_create_operation_request(message: str) -> str | None:
     # proposal, not for a read-only explanation of an existing plan.
     if (not _proposal_explicitly_excluded(message)
             and not _explicit_discussion_only(message)
+            and not re.match(r"^\s*ik\s+wil\s+(?:niet|weten\s+hoe)\b", message, re.I)
             and re.match(r"^\s*ik\s+wil\b[^.!?\n]{0,100}\been\s+smart\s+dca\s+maken\b", message, re.I)
             and re.search(r"\btoon\s+eerst\s+een\s+bewerkbaar\s+concept\b", message, re.I)):
         return "create_setup"
