@@ -1,12 +1,61 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
 import pytest
 
 from backend.scripts import probe_protected_setup_strategy_journey as probe
+
+
+def test_terminal_transport_parity_is_owner_bound_and_compares_full_envelope(monkeypatch):
+    from backend.api import finn_v2_api
+
+    seen = []
+    payload = {"run_id": "synthetic-run", "status": "completed",
+               "response": {"content": "synthetic answer"}}
+    envelope = SimpleNamespace(status="completed", dict=lambda: payload)
+
+    async def poll(*, run_id, current_user):
+        seen.append(("poll", run_id, current_user["id"]))
+        return envelope
+
+    async def stream(*, run_id, raw_request, current_user):
+        assert not await raw_request.is_disconnected()
+        seen.append(("stream", run_id, current_user["id"]))
+
+        async def events():
+            yield f"event: run.completed\ndata: {json.dumps(payload)}\n\n"
+
+        return SimpleNamespace(body_iterator=events())
+
+    monkeypatch.setattr(finn_v2_api, "get_finn_v2_run", poll)
+    monkeypatch.setattr(finn_v2_api, "stream_finn_v2_run", stream)
+    assert asyncio.run(probe._terminal_transport_parity(42, "synthetic-run")) is True
+    assert seen == [("poll", "synthetic-run", 42), ("stream", "synthetic-run", 42)]
+
+    async def divergent_stream(**kwargs):
+        result = await stream(**kwargs)
+
+        async def events():
+            yield 'event: run.completed\ndata: {"run_id":"synthetic-run","status":"completed"}\n\n'
+
+        return SimpleNamespace(body_iterator=events())
+
+    monkeypatch.setattr(finn_v2_api, "stream_finn_v2_run", divergent_stream)
+    assert asyncio.run(probe._terminal_transport_parity(42, "synthetic-run")) is False
+
+    async def never_terminal(**_kwargs):
+        async def events():
+            while True:
+                yield 'event: run.completed\ndata: {}\n\n'
+
+        return SimpleNamespace(body_iterator=events())
+
+    monkeypatch.setattr(finn_v2_api, "stream_finn_v2_run", never_terminal)
+    assert asyncio.run(probe._terminal_transport_parity(42, "synthetic-run")) is False
 
 
 def _mock_lifecycle_services(monkeypatch, execute):
@@ -171,7 +220,8 @@ def test_owner_binding_requires_all_protected_flags(monkeypatch):
         probe._bound_owner(namespace)
 
 
-def test_full_journey_keeps_bot_uncreated_and_cleans(monkeypatch):
+@pytest.mark.parametrize("transport_parity", [True, False])
+def test_full_journey_keeps_bot_uncreated_and_cleans(monkeypatch, transport_parity):
     events = []
     namespace = "qa-20261122-1-abcdef12-34567890"
     monkeypatch.setattr(probe.fixture, "_seed", lambda *_args, **_kwargs: (70, 80, ""))
@@ -198,7 +248,7 @@ def test_full_journey_keeps_bot_uncreated_and_cleans(monkeypatch):
     ))
     async def turn(*_args, **_kwargs):
         turn_contexts.append(_kwargs.get("conversation_id"))
-        return next(turns)
+        return {**next(turns), "run_id": "synthetic-run"}
     async def confirm(_user_id, proposal_id, trace):
         trace["confirmed_count"] = trace.get("confirmed_count", 0) + 1
         trace["executed_count"] = trace.get("executed_count", 0) + 1
@@ -211,7 +261,7 @@ def test_full_journey_keeps_bot_uncreated_and_cleans(monkeypatch):
                 "description": "Deze opgeslagen setup voor BTC/USDT heeft nog geen gekoppelde strategie."}
     async def discuss(*_args):
         events.append("discuss")
-        return {"conversation_id": "feed-conv"}
+        return {"conversation_id": "feed-conv", "run_id": "synthetic-discussion"}
     async def resolved(*_args):
         events.append("resolved")
     monkeypatch.setattr(probe, "_turn", turn)
@@ -219,11 +269,17 @@ def test_full_journey_keeps_bot_uncreated_and_cleans(monkeypatch):
     monkeypatch.setattr(probe, "_card", card)
     monkeypatch.setattr(probe, "_discuss_strategy_card", discuss)
     monkeypatch.setattr(probe, "_discuss_paper_card", discuss)
+    async def parity(*_args):
+        return transport_parity
+    monkeypatch.setattr(probe, "_terminal_transport_parity", parity)
     monkeypatch.setattr(probe, "_wait_resolved", resolved)
     monkeypatch.setattr(probe, "_saved_pair", lambda *_args: {"setup_id": 90, "strategy_id": 91})
     trace = {"stage": "seed", "fixture_state": "not_created"}
     result = asyncio.run(probe._case(namespace, 42, trace))
-    assert result["result"] == "PASS"
+    assert result["result"] == ("PASS" if transport_parity else "FAIL")
+    assert result["transport_parity"] is transport_parity
+    if not transport_parity:
+        assert result["reason"] == "journey_transport_parity_failed"
     assert result["replay"] and result["no_bot_or_order"]
     assert result["feed_strategy_lineage"] and result["strategy_source_verified"]
     assert turn_contexts == [None, "feed-conv", "feed-conv", "feed-conv"]

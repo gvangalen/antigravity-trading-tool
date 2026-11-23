@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 
 import { canDiscussFeedItem, canUpdateFeedStatus } from "../lib/finnCoachFeedActions.mjs";
 import { coachFeedDiscussionQuestion } from "../lib/finnCommandSearch.js";
@@ -32,6 +33,23 @@ test("journey feed questions reread current scores and strategy state", () => {
     evidence: { trading_pair: "BTC/USDT", setup_name: "BTC plan" } }, "nl");
   assert.match(paper, /Paper-proef/);
   assert.match(paper, /Activeer of verhandel niets/);
+});
+
+test("fresh strategy card exposes direct Bespreek and separate mark-read action", () => {
+  const card = { id: "synthetic-card", event_type: "strategy_next_step", status: "unread",
+    symbol: "BTC", evidence: { trading_pair: "BTC/USDT", setup_name: "QA plan" } };
+  assert.equal(canDiscussFeedItem(card, false), true);
+  assert.equal(canUpdateFeedStatus(card), true);
+  assert.match(coachFeedDiscussionQuestion(card, "nl"), /BTC\/USDT/);
+
+  const source = readFileSync(new URL("../components/finn/FinnCoachFeed.jsx", import.meta.url), "utf8");
+  assert.match(source, /DIRECT_DISCUSS_EVENTS = new Set\(\[[\s\S]*?"strategy_next_step"/);
+  assert.match(source, /directDiscuss && canDiscuss \? \([\s\S]*?onClick=\{\(\) => discuss\(item\)\}/);
+  assert.match(source, /onDiscuss\?\.\(item\.id, coachFeedDiscussionQuestion\(item, locale\), item\)/);
+  assert.match(source, /showMarkRead = item\.status === "unread"/);
+  assert.match(source, /showMarkRead \? <button[^>]*onClick=\{\(\) => \{ menuRef\.current\.open = false; onMarkRead\(\); \}\}/);
+  assert.match(source, /onMarkRead=\{\(\) => void setStatus\(item\.id, "read"\)\}/);
+  assert.match(source, /fetchAuth\(`\/api\/assistant\/feed\/\$\{encodeURIComponent\(id\)\}\/\$\{action\}`/);
 });
 
 test("report discussion asks for the saved numeric score separately from current Analyse", () => {
