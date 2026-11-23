@@ -4,6 +4,49 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN: Paper-botconfiguratie bij gesloten markt (23 november 2026)
+
+Phase: `LOCAL_BUILD_VALIDATED_PENDING_CI_DEPLOY_QA`. De onafhankelijke
+proposal-only QA op live SHA `d1573e548736e8d6e373f471809f3a2f4aa296cd`
+(workflow 45089300742-1) eindigde `clarification_required` vóór enige
+strategielezing: de operatie was niet `create_bot`, er was geen bevestigbaar
+voorstel. De beschermde child werd opgeruimd; er waren nul bevestigingen,
+executions, orders en Live-calls. De afzonderlijke AAPL-quotevalidator was
+eerder PASS voor `market_price_stale` zonder uitvoerbare koers. Dit was geen
+bewijs van een werkende botaanmaak of een echte geweigerde Paper-order.
+
+Lokale reproductie wees twee routeringsfouten aan. De expliciete
+`Paper-botconfiguratie` matchte de `create_bot`-term niet; vervolgens kon de
+Responses-frontdoor de vermelding van een *bestaande strategie* alsnog als
+nieuw `create_strategy`-voorstel kiezen. Een verwante zin, "maak een bot voor
+een strategie", raakte ook de te brede strategieheuristiek. De kandidaat
+herkent de botterm, kiest bij een direct botobject vóór die heuristiek het
+botcontract en laat de strategie-fallback geen reeds gekozen andere
+create-operatie overschrijven. Het bestaande bevestigings- en Paper-uitvoeringscontract is
+niet verruimd. De nieuwe regressie gebruikt de AAPL-formulering uit de
+gesaniteerde QA-handoff; de worker-matrix gebruikt dezelfde zinsbouw met
+alleen lokale synthetische objecten.
+
+Lokale Build-gates op de definitieve code: gerichte classifier/Responses/
+entity-tests **1289 passed**; volledige backend **5394 passed, 7 skipped**;
+worker-actiematrix **17/17** (artifact SHA-256
+`fb2fb8d077d95562f05bf242884d45d0eb81ec785f226035d0317ee629dffe75`),
+waaronder de Paper-botconfiguratie met voorstel, bevestiging, opslag en
+idempotente herhaling; adapters **28/28**, Smart DCA en calendar DCA groen,
+zonder brokerorders, Live-calls of productieverbindingen. Frontend typecheck,
+i18n-lint, i18n-tests **45/45**, commandotests **112/112**, productiebuild en
+`audit:high` geslaagd; de audit noemt één bestaande moderate Next.js-melding.
+Echte providerselectie op development **20/20** (artifact SHA-256
+`240753c4a2473dcad04b06eed7402de71ec8ea67dc7e046e958bb2c8487a4c8a`)
+en regression **109/109** (artifact SHA-256
+`6ba196de38f6d32eb8dc1eef2ae04e678db1a8657c8eade3c7ac2ec798768e24`),
+zonder provider-, schema-, timeout-, parse- of validatiefouten. CI,
+deploymentidentiteit en onafhankelijke live QA moeten nog worden voltooid.
+De beoogde live QA blijft gescheiden: een beschermde
+AAPL-bot-CRUD/replay-proef zonder order, plus de al bewezen read-only
+quotegrens. Een daadwerkelijk geweigerde nieuwe Paper-order is daarmee nog
+geen acceptatieclaim.
+
 ## FINN: inactieve bot-eigenaar blokkeert uitvoeringsroute (22 november 2026)
 
 Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`. Product-PR

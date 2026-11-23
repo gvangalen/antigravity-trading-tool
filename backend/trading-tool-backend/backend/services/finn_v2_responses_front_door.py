@@ -405,7 +405,7 @@ def _explicit_strategy_proposal_request(message: str) -> bool:
     explicit_operation = _explicit_create_operation_request(message)
     if explicit_operation == "create_strategy":
         return True
-    if explicit_operation == "create_setup":
+    if explicit_operation is not None:
         return False
     # The request preprocessor can read "Paper-strategie" or "per uitvoering"
     # as contextual/execute language. A clear imperative to prepare a new

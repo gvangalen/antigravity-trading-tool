@@ -6296,6 +6296,17 @@ def test_strategy_draft_request_does_not_capture_coaching(message):
     assert not _explicit_strategy_proposal_request(message)
 
 
+def test_paper_bot_configuration_request_does_not_become_strategy_creation():
+    message = (
+        "Maak een handmatige Paper-botconfiguratie met naam QA AAPL Bot voor mijn "
+        "bestaande AAPL-strategie QA AAPL Strategy. Totaalbudget 10 euro en "
+        "Paper-startkapitaal 0 euro. Toon eerst een voorstel; plaats geen order "
+        "en activeer geen live trading."
+    )
+    assert _explicit_create_operation_request(message) == "create_bot"
+    assert not _explicit_strategy_proposal_request(message)
+
+
 def test_new_strategy_request_does_not_fill_an_older_setup_question():
     registry = FinnV2OperationRegistry()
     setup = registry.require_supported("create_setup")
