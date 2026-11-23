@@ -355,6 +355,10 @@ class FinnV2ReasoningContextService:
                     from backend.infrastructure.repositories.setup_repository import SetupRepository
                     owned_setup = await SetupRepository(self.session).get_setup_by_id(
                         int(selected_setup_id), run.user_id)
+                    if owned_setup and str(owned_setup.get("symbol") or "").upper() != str(symbol).upper():
+                        # A card's symbol is historical context. Do not use an
+                        # owner-bound setup of another asset as its current state.
+                        owned_setup = None
                     assessment = await matcher.for_asset(
                         run.user_id, symbol,
                         setups=[dict(owned_setup)] if owned_setup else [],
@@ -386,7 +390,7 @@ class FinnV2ReasoningContextService:
                                                 "name": current.get("name") if current else owned_setup.get("name"),
                                                 "status": current.get("status") if current else "not_assessed",
                                                 "trading_pair": (
-                                                    f"{symbol}/{owned_setup['quote_currency']}"
+                                                    f"{owned_setup['symbol']}/{owned_setup['quote_currency']}"
                                                     if owned_setup and owned_setup.get("market_id")
                                                     and owned_setup.get("quote_currency") else None),
                                                 "trading_pair_status": (
