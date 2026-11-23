@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: geselecteerde strategiekaart zonder providerafhankelijk antwoord (23 november 2026)
 
-Phase: `LOCAL_VALIDATED_PENDING_RELEASE`. Onafhankelijke QA op live SHA
+Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`. Onafhankelijke QA op live SHA
 `13956779351ea9d13ba0a4f9f65e2b6be397af76` heeft de beschermde
 `setup_strategy_journey` **niet geaccepteerd**: setupbevestiging, opslag en
 idempotente replay slaagden, maar de geselecteerde `strategy_next_step`-
@@ -48,9 +48,17 @@ drempelwijziging slaagde de volledige herhaling **109/109**, met nul
 provider-, schema-, timeout-, parse- of validatiefouten; artifact SHA-256
 `ad9178b84a9467fb8c30e8da84e386e975a4d58022c2710013dc07a48a04672e`.
 De eerste rode reeks blijft expliciet diagnostisch bewijs en is niet als groen
-geteld. Frontendbron is niet gewijzigd; de PR-CI controleert frontend en
-mobiel opnieuw. Er is nog geen product-PR, deploy of onafhankelijke live QA
-voor deze kandidaat.
+geteld. Frontendbron is niet gewijzigd. Product-PR
+[#1335](https://github.com/gvangalen/antigravity-trading-tool/pull/1335)
+had vijf groene PR-CI-jobs in workflow `45229045869` en is gemerged als
+`861c52937c21f98024aef8c286aaac01f6b719a7`. Main-CI `45230620373`
+had vijf groene jobs; Auto Deploy `45232126232` slaagde. GitHub main,
+publieke backend-health en frontend-buildinfo meldden op 23 november 2026
+alle drie exact `861c52937c21f98024aef8c286aaac01f6b719a7`; beide
+publieke endpoints gaven HTTP 200. Deze statuswijziging creëert zelf een
+volgende main-SHA. De laatste main-CI, Auto Deploy en publieke SHA-pariteit
+moeten opnieuw bevestigd worden vóór de onafhankelijke beschermde QA-run.
+Er is nog geen live QA-verdict op deze productfix.
 
 ## FINN 3.0: geselecteerde strategiekaart geeft stabiel vervolgadvies (23 november 2026)
 
