@@ -2,6 +2,7 @@
 
 from contextlib import contextmanager
 import json
+from uuid import UUID
 
 import pytest
 
@@ -604,12 +605,14 @@ def test_advice_audit_reads_only_exact_selected_run_and_emits_bools(monkeypatch)
     from backend.scripts import probe_protected_setup_strategy_journey as journey
 
     namespace = "qa-45191412655-1-c84ce339-1234abcd"
-    state = {"responses_exchange": {"run_id": "synthetic-run", "response_id": "synthetic-response",
-             "conversation_id": "synthetic-conversation", "tool_trace": [
+    run_id = UUID("11111111-1111-4111-8111-111111111111")
+    conversation_id = UUID("22222222-2222-4222-8222-222222222222")
+    state = {"responses_exchange": {"run_id": str(run_id), "response_id": "synthetic-response",
+             "conversation_id": str(conversation_id), "tool_trace": [
                  {"result": {"results": [{"scope": "read_asset_scores"}]}}
              ]}}
     cursor = Cursor([
-        [("synthetic-run", "synthetic-conversation", "completed",
+        [(run_id, conversation_id, "completed",
           {"content": "BTC/USDT strategie score"}, {"feed_item_id": "synthetic-card"}, state)],
         [(1,)],
     ])
@@ -623,12 +626,12 @@ def test_advice_audit_reads_only_exact_selected_run_and_emits_bools(monkeypatch)
         "score_source_kind": "missing_or_other",
         "failed_checks": ["next_step", "missing_score_acknowledgement"],
     }
-    assert "synthetic-run" not in str(result)
+    assert str(run_id) not in str(result)
     assert "synthetic-card" not in str(result)
 
     state["responses_exchange"]["response_id"] = ""
     invalid = Cursor([
-        [("synthetic-run", "synthetic-conversation", "completed",
+        [(run_id, conversation_id, "completed",
           {"content": "BTC/USDT strategie score"}, {"feed_item_id": "synthetic-card"}, state)],
         [(1,)],
     ])

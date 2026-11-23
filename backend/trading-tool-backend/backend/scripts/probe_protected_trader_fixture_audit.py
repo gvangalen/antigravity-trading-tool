@@ -346,10 +346,9 @@ def _journey_advice_diagnostic(cur, user_id: int, namespace: str) -> dict:
     exchange = exchange if isinstance(exchange, dict) else {}
     trace = exchange.get("tool_trace")
     lineage_valid = (
-        exchange.get("run_id") == run_id
-        and exchange.get("conversation_id") == conversation_id
-        and isinstance(exchange.get("response_id"), str)
-        and bool(exchange["response_id"])
+        str(exchange.get("run_id")) == str(run_id)
+        and str(exchange.get("conversation_id")) == str(conversation_id)
+        and bool(exchange.get("response_id"))
         and isinstance(trace, list)
     )
     rows = []
