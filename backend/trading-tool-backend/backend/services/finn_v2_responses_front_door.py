@@ -2062,6 +2062,119 @@ class FinnResponsesFrontDoor:
                     model_led_coach=True, response_id_reusable=False,
                 ), None, previous_response, locale=locale,
             )
+        if (workspace_hints.get("feed_draft_edited") is not True
+                and _explicit_discussion_only(message)
+                and re.search(r"\b(?:strategie|strategy|strategien|strategieën)\b", message, re.I)):
+            # The selected card and its current setup, linked strategy and
+            # score were freshly reread for this owner before the front door.
+            # Finish this bounded read-only discussion from those facts. A
+            # provider timeout must not turn an already verified next step
+            # into an unavailable conversation.
+            seed = FinnResponsesResult(text="selected strategy read", response_id="", tool_trace=())
+            selected_strategy_step = _complete_selected_strategy_advice(seed, feed_evidence, locale)
+            if selected_strategy_step is not seed:
+                selected_facts = next(
+                    item["facts"] for item in feed_evidence or []
+                    if isinstance(item, dict) and isinstance(item.get("facts"), dict)
+                    and item["facts"].get("event_type") == "strategy_next_step"
+                    and item["facts"].get("selection_origin") == "current_run"
+                )
+                current = next(
+                    item["facts"] for item in feed_evidence or []
+                    if isinstance(item, dict) and isinstance(item.get("facts"), dict)
+                    and item["facts"].get("feed_item_id") == selected_facts["feed_item_id"]
+                    and isinstance(item["facts"].get("current_setup"), dict)
+                )
+                setup = current["current_setup"]
+                asset, quote = setup["trading_pair"].split("/", 1)
+                setup_call = catalog.validate("get_linked_strategies", {
+                    "asset": asset, "setup_name": setup["name"],
+                })
+                score_call = catalog.validate("get_current_asset_scores", {
+                    "asset": asset, "quote_currency": quote,
+                })
+                try:
+                    setup_read = await self.reads(setup_call)
+                    score_read = await self.reads(score_call)
+                except Exception:
+                    logger.exception("FINN selected strategy feed reread failed")
+                    setup_read, score_read = {}, {}
+                trace = (
+                    {"name": setup_call.name, "status": setup_read.get("status", "unavailable"),
+                     "arguments": setup_call.inputs, "result": setup_read},
+                    {"name": score_call.name, "status": score_read.get("status", "unavailable"),
+                     "arguments": score_call.inputs, "result": score_read},
+                )
+                setup_rows = {row.get("scope"): row for row in setup_read.get("results") or []
+                              if isinstance(row, dict)}
+                score_rows = {row.get("scope"): row for row in score_read.get("results") or []
+                              if isinstance(row, dict)}
+                active = setup_rows.get("read_active_setup") or {}
+                linked = setup_rows.get("read_linked_strategies") or {}
+                scored = score_rows.get("read_asset_scores") or {}
+                active_data = active.get("data") if active.get("status") == "completed" else None
+                linked_data = linked.get("data") if linked.get("status") == "completed" else None
+                score_data = scored.get("data") if scored.get("status") == "completed" else None
+                setup_id = setup.get("id")
+                linked_state = current["current_linked_strategy"]
+                strategies = linked_data.get("strategies") if isinstance(linked_data, dict) else None
+                strategy_matches = (
+                    isinstance(strategies, list)
+                    and linked_data.get("complete") is True
+                    and type(linked_data.get("strategy_count")) is int
+                    and linked_data["strategy_count"] == len(strategies)
+                    and all(isinstance(row, dict)
+                            and str(row.get("setup_id")) == str(setup.get("id"))
+                            for row in strategies)
+                    and (
+                        (linked_state.get("status") == "missing" and not strategies)
+                        or (linked_state.get("id") and any(
+                            str(row.get("strategy_id")) == str(linked_state["id"])
+                            for row in strategies if isinstance(row, dict)))
+                    )
+                )
+                score_matches = (
+                    isinstance(score_data, dict)
+                    and str(score_data.get("symbol") or "").upper() == asset
+                    and str(score_data.get("pair") or "").upper() == setup["trading_pair"]
+                    and (
+                        (current.get("current_source_status") == "available"
+                         and score_data.get("source_status") == "available"
+                         and score_data.get("benchmark_score") == current.get("current_benchmark_score")
+                         and bool(current.get("current_score_as_of"))
+                         and str(score_data.get("as_of") or "")
+                         == str(current.get("current_score_as_of")))
+                        or (current.get("current_source_status") != "available"
+                            and score_data.get("benchmark_score") is None)
+                    )
+                )
+                verified = (
+                    isinstance(active_data, dict)
+                    and str(active_data.get("setup_id")) == str(setup_id)
+                    and str(active_data.get("name") or "") == str(setup.get("name") or "")
+                    and str(active_data.get("pair") or "").upper() == setup["trading_pair"]
+                    and isinstance(linked_data, dict)
+                    and str(linked_data.get("setup_id")) == str(setup_id)
+                    and strategy_matches and score_matches
+                )
+                if not verified:
+                    return FinnResponsesFrontDoorResult(
+                        FinnResponsesResult(
+                            text="Ik kan de geselecteerde setup, strategie en score nu niet samen verifiëren.",
+                            response_id=f"selected-strategy-unavailable-{self.run_id}",
+                            tool_trace=trace, answer_kind="selected_strategy_next_step_unavailable",
+                            response_id_reusable=False,
+                        ), None, previous_response, locale=locale,
+                    )
+                return FinnResponsesFrontDoorResult(
+                    replace(
+                        selected_strategy_step,
+                        response_id=f"selected-strategy-step-{self.run_id}",
+                        tool_trace=trace,
+                        answer_kind="selected_strategy_next_step",
+                        model_led_coach=False,
+                    ), None, previous_response, locale=locale,
+                )
         asks_exit_position = bool(re.search(
             r"\b(?:positie|position)\b[^.!?]{0,80}\b(?:gesloten|closed|verkocht|sold)\b"
             r"|\b(?:gesloten|closed|verkocht|sold)\b[^.!?]{0,80}\b(?:positie|position)\b",

@@ -3109,6 +3109,47 @@ class FinnResponsesAnswerVerifier:
             for item in (call.get("result", {}).get("results") or [])
             if isinstance(item, dict)
         )
+        if result.answer_kind in {"selected_strategy_next_step", "selected_strategy_next_step_unavailable"}:
+            # These are real owner-bound setup, strategy-collection and exact
+            # pair-score reads. A front-door marker alone is not evidence.
+            scopes = {row.get("scope"): row for row in evidence if isinstance(row, dict)}
+            setup = scopes.get("read_active_setup") or {}
+            linked = scopes.get("read_linked_strategies") or {}
+            scored = scopes.get("read_asset_scores") or {}
+            setup_data = setup.get("data") if setup.get("status") == "completed" else None
+            linked_data = linked.get("data") if linked.get("status") == "completed" else None
+            score_data = scored.get("data") if scored.get("status") == "completed" else None
+            verified = (
+                len(result.tool_trace) == 2
+                and {call.get("name") for call in result.tool_trace}
+                == {"get_linked_strategies", "get_current_asset_scores"}
+                and isinstance(setup_data, dict)
+                and isinstance(linked_data, dict)
+                and isinstance(score_data, dict)
+                and str(setup_data.get("setup_id")) == str(linked_data.get("setup_id"))
+                and linked_data.get("complete") is True
+                and type(linked_data.get("strategy_count")) is int
+                and isinstance(linked_data.get("strategies"), list)
+                and linked_data["strategy_count"] == len(linked_data["strategies"])
+                and all(isinstance(row, dict)
+                        and str(row.get("setup_id")) == str(setup_data.get("setup_id"))
+                        for row in linked_data["strategies"])
+                and str(score_data.get("symbol") or "").upper()
+                == str(setup_data.get("symbol") or "").upper()
+                and bool(score_data.get("pair"))
+                and str(score_data.get("pair") or "").upper()
+                == str(setup_data.get("pair") or "").upper()
+                and str(score_data.get("pair") or "").upper() in result.text.upper()
+                and (score_data.get("source_status") != "available"
+                     or (bool(score_data.get("as_of"))
+                         and str(score_data["as_of"]) in result.text))
+            )
+            if verified and result.answer_kind == "selected_strategy_next_step":
+                return FinnResponsesVerifiedAnswer("completed", result.text, None, evidence)
+            return FinnResponsesVerifiedAnswer(
+                "unavailable", "Ik kan de geselecteerde strategiekaart nu niet verifiëren.",
+                "selected_strategy_next_step_unavailable", evidence,
+            )
         if result.answer_kind in {"selected_paper_next_step", "selected_paper_next_step_unavailable"}:
             # This text is rendered by the front door from the selected,
             # owner-reread feed facts, not composed by the model. The marker
