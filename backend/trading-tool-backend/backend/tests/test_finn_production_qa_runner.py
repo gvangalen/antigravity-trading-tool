@@ -139,7 +139,8 @@ def test_journey_cleanup_dispatch_is_exact_label_and_non_execution(tmp_path):
                           "audit-45020771853-1-ea64f391",
                           "audit-45027057156-1-1c7ac643",
                           "audit-45176449317-1-41a256b5",
-                          "audit-45191412655-1-c84ce339"):
+                          "audit-45191412655-1-c84ce339",
+                          "audit-45210144088-1-13956779"):
         args = ["bash", str(DISPATCH_SCRIPT_PATH), "a" * 40, profile, "none", allowed_label]
         valid = subprocess.run(args, env=dict(base_env,
             FINN_QA_ALLOW_FIXTURE_ACTIONS="true", FINN_QA_ALLOW_FIXTURE_EXECUTION="false"),
@@ -220,10 +221,11 @@ def test_exact_feed_yes_cleanup_is_allowlisted_across_all_protected_gates():
     assert 'cleanup_journey(args.run_label)' in SCRIPT_PATH.read_text(encoding="utf-8")
 
 
-def test_exact_advice_cleanup_is_allowlisted_across_all_protected_gates():
+@pytest.mark.parametrize("label_name", ["JOURNEY_ADVICE_LABEL", "JOURNEY_DISCUSS_LABEL"])
+def test_exact_advice_cleanup_is_allowlisted_across_all_protected_gates(label_name):
     from backend.scripts import probe_protected_trader_fixture_audit as audit
 
-    label = audit.JOURNEY_ADVICE_LABEL
+    label = getattr(audit, label_name)
     assert label in audit.JOURNEY_CLEANUP_LABELS
     for source, anchor in (
         (WORKFLOW_PATH.read_text(encoding="utf-8"),
