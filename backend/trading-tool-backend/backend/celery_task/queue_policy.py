@@ -53,6 +53,7 @@ TASK_QUEUE_ROUTES: Dict[str, str] = {
     "backend.celery_task.store_daily_scores_task.publish_coach_bot_decision": "scoring",
     "backend.celery_task.store_daily_scores_task.retry_coach_feed_copy": "ai_generation",
     "backend.celery_task.store_daily_scores_task.recover_coach_feed_events": "scoring",
+    "backend.celery_task.store_daily_scores_task.recover_daily_report_feed": "scoring",
     "backend.celery_task.user_scoring_sync_task.sync_all_users_scores": "scoring",
     "backend.celery_task.portfolio_snapshot_task.run_portfolio_snapshot": "portfolio",
     "backend.celery_task.portfolio_fx_task.refresh_portfolio_fx_rates": "market_data",
