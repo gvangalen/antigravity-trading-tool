@@ -215,6 +215,83 @@ def test_exact_yes_diagnostic_rejects_ambiguous_turns_without_exposing_rows(monk
     assert "private" not in str(result)
 
 
+def test_feed_yes_audit_reports_only_owner_bound_typed_lineage(monkeypatch):
+    namespace = "qa-45176449317-1-41a256b5-1234abcd"
+    conn = Connection([
+        [(17, False, {"qa_namespace": namespace})], [("user",)],
+        [(False, False)], [(0,)],
+        [(2,)], [(1,)], [(1,)], [(0,)], [(0,)], [(1,)], [(0,)],
+        [(42,)], [("setup-conversation-private",)],
+        [("feed-conversation-private", "completed", {"feed_item_id": "private-card"})],
+        [("feed-conversation-private", "clarification_required", "private-error",
+          {"content": "private response", "proposal_id": None},
+          {"initial_operation_id": "read_active_setup",
+           "action_draft": {"operation_id": "create_strategy"},
+           "supplied_inputs": {"setup_id": 42, "private": "secret"},
+           "dispatch_count": 1, "attempt_count": 1},
+          {"guided_state": {"operation_id": "create_strategy",
+                            "collected_inputs": {"setup_id": 42, "private": "secret"},
+                            "missing_required_inputs": ["name", "private_slot"],
+                            "next_missing_input": "name"}})],
+        [("read",)],
+    ])
+    monkeypatch.setattr(audit, "_verify_prior_report", lambda *_args: None)
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: conn)
+    result = audit.run(audit.JOURNEY_FEED_YES_LABEL,
+                       expected_profile="setup_strategy_journey")
+    assert result["feed_yes_diagnostic_state"] == "available"
+    assert result["feed_card_selected_and_owner_bound"] is True
+    assert result["feed_card_status"] == "read"
+    assert result["feed_same_conversation_as_setup"] is False
+    assert result["yes_same_conversation_as_feed"] is True
+    assert result["yes_status"] == "clarification_required"
+    assert result["yes_error_code"] == "other"
+    assert result["yes_operation"] == "other"
+    assert result["yes_guided_operation"] == "create_strategy"
+    assert result["yes_state_guided_operation"] == "create_strategy"
+    assert result["yes_supplied_setup_match"] is True
+    assert result["yes_guided_setup_match"] is True
+    assert result["yes_missing_slots"] == ["name", "other"]
+    assert result["yes_next_missing_slot"] == "name"
+    assert result["yes_dispatch_count"] == 1
+    assert result["yes_attempt_count"] == 1
+    assert all(value not in str(result) for value in
+               (namespace, "private-card", "private response", "private-error", "secret", "42"))
+
+
+def test_feed_yes_audit_fails_closed_for_duplicate_turns(monkeypatch):
+    namespace = "qa-45176449317-1-41a256b5-1234abcd"
+    conn = Connection([
+        [(17, False, {"qa_namespace": namespace})], [("user",)],
+        [(False, False)], [(0,)],
+        [(2,)], [(1,)], [(1,)], [(0,)], [(0,)], [(1,)], [(0,)],
+        [(42,)], [("private-one",)], [("private-feed", "completed", {})],
+        [("private-one", "completed", None, {}, {}, {}),
+         ("private-two", "completed", None, {}, {}, {})],
+    ])
+    monkeypatch.setattr(audit, "_verify_prior_report", lambda *_args: None)
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: conn)
+    result = audit.run(audit.JOURNEY_FEED_YES_LABEL,
+                       expected_profile="setup_strategy_journey")
+    assert result["feed_yes_diagnostic_state"] == "turn_missing_or_ambiguous"
+    assert result["yes_turn_unique"] is False
+    assert "private" not in str(result)
+
+
+def test_feed_yes_audit_refuses_changed_role_before_reading_turns(monkeypatch):
+    namespace = "qa-45176449317-1-41a256b5-1234abcd"
+    conn = Connection([
+        [(17, False, {"qa_namespace": namespace})], [("admin",)],
+    ])
+    monkeypatch.setattr(audit, "_verify_prior_report", lambda *_args: None)
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: conn)
+    assert audit.run(audit.JOURNEY_FEED_YES_LABEL,
+                     expected_profile="setup_strategy_journey") == {
+        "fixture_state": "AMBIGUOUS", "cleanup_verified": False,
+    }
+    assert conn.closed
+
+
 @pytest.mark.parametrize("label,namespace", [
     (audit.JOURNEY_STRATEGY_DIAGNOSTIC_LABEL, "qa-45015412389-1-999bd355-1234abcd"),
     (audit.JOURNEY_STRATEGY_RETEST_LABEL, "qa-45020771853-1-ea64f391-1234abcd"),
@@ -457,6 +534,60 @@ def test_exact_short_yes_child_cleanup_requires_guided_failure_and_safe_rows(
             "fixture_state": "CLEANED", "cleanup_verified": True,
         }
         assert calls == [((namespace, 17, 22), {"require_safe_pair_cleanup": True})]
+
+
+@pytest.mark.parametrize("safe_prior,wrong_stage,expected_error", [
+    (True, False, None),
+    (False, False, "journey_cleanup_prior_state_mismatch"),
+    (True, True, "journey_cleanup_prior_state_mismatch"),
+])
+def test_feed_yes_cleanup_requires_exact_terminal_replay_and_fixture_shape(
+    monkeypatch, safe_prior, wrong_stage, expected_error,
+):
+    namespace = "qa-45176449317-1-41a256b5-1234abcd"
+    saved_name = f"QA BTC Setup {namespace}"
+    prior = {
+        "workflow_run_id": "45176449317-1", "profile": "setup_strategy_journey",
+        "target_sha": "41a256b562e600d53fc7c35fdbfde245c201abf4",
+        "protected_profile_attempted": True, "outcome": "failed",
+        "qa_status": "COMPLETED",
+        "safety": {"live_trading_calls": 0, "live_bot_activation_calls": 0},
+        "setup_strategy_journey": {
+            "fixture_state": "quarantined", "failure_stage": "strategy_guided",
+            "reason": "journey_strategy_guided_failed", "fixture_confirmations": 1,
+            "fixture_executions": 1,
+            "execution_diagnostic": {"first_status": "succeeded",
+                                     "replay_status": "already_executed"},
+        },
+    }
+    if not safe_prior:
+        prior["setup_strategy_journey"]["execution_diagnostic"]["replay_status"] = "missing"
+    if wrong_stage:
+        prior["setup_strategy_journey"]["failure_stage"] = "setup_confirmation"
+        prior["setup_strategy_journey"]["reason"] = "journey_replay_failed"
+    before = Connection([
+        [(17, False, {"qa_namespace": namespace})], [(22, False, False)],
+        *([[(0,)]] * 6),
+        [(namespace, "ETH"), (saved_name, "BTC")], [(namespace, "ETH")],
+        [(saved_name, "BTC", "USDT")], [(0,)], [(0,)],
+    ])
+    after = Connection([[(0,)] for _ in range(8)])
+    connections = iter((before, after))
+    calls = []
+    monkeypatch.setattr(audit.Path, "read_text", lambda *_a, **_k: json.dumps(prior))
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: next(connections))
+    monkeypatch.setattr(audit.fixture, "_cleanup", lambda *args, **kwargs: calls.append((args, kwargs)))
+    if expected_error:
+        with pytest.raises(RuntimeError, match=f"^{expected_error}$"):
+            audit.cleanup_journey(audit.JOURNEY_FEED_YES_LABEL)
+        assert not calls
+    else:
+        assert audit.cleanup_journey(audit.JOURNEY_FEED_YES_LABEL) == {
+            "fixture_state": "CLEANED", "cleanup_verified": True,
+        }
+        assert calls == [((namespace, 17, 22), {
+            "require_safe_pair_cleanup": True, "required_role": "user",
+        })]
 
 
 @pytest.mark.parametrize("label,namespace", [
@@ -709,6 +840,38 @@ def test_locked_cleanup_blocks_prior_decisions_and_trades_without_delete(monkeyp
     assert conn.rolled_back and not conn.committed
     assert "FOR UPDATE" in queries[0] and "FOR UPDATE" in queries[2]
     assert blocked_table in queries[-1]
+    assert not any("DELETE FROM" in query for query in queries)
+
+
+def test_locked_journey_cleanup_refuses_changed_owner_role(monkeypatch):
+    queries = []
+    class LockedCursor:
+        def execute(self, query, _params):
+            queries.append(query)
+        def fetchone(self):
+            return ("admin", {"qa_fixture": audit.fixture.FIXTURE_MARKER,
+                              "qa_namespace": NAMESPACE})
+    class LockedConnection:
+        rolled_back = False
+        committed = False
+        @contextmanager
+        def cursor(self):
+            yield LockedCursor()
+        def rollback(self):
+            self.rolled_back = True
+        def commit(self):
+            self.committed = True
+        def close(self):
+            pass
+    conn = LockedConnection()
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: conn)
+    with pytest.raises(RuntimeError, match="^fixture_cleanup_failed$"):
+        audit.fixture._cleanup(
+            NAMESPACE, 17, 22, require_safe_pair_cleanup=True,
+            required_role="user",
+        )
+    assert conn.rolled_back and not conn.committed
+    assert len(queries) == 1 and "FOR UPDATE" in queries[0]
     assert not any("DELETE FROM" in query for query in queries)
 
 

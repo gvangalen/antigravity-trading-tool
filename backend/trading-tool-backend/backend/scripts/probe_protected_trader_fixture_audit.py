@@ -32,6 +32,7 @@ JOURNEY_YES_DIAGNOSTIC_LABEL = "audit-45006104528-1-50cc25ca"
 JOURNEY_STRATEGY_DIAGNOSTIC_LABEL = "audit-45015412389-1-999bd355"
 JOURNEY_STRATEGY_RETEST_LABEL = "audit-45020771853-1-ea64f391"
 JOURNEY_STRATEGY_SLOT_LABEL = "audit-45027057156-1-1c7ac643"
+JOURNEY_FEED_YES_LABEL = "audit-45176449317-1-41a256b5"
 JOURNEY_CLEANUP_LABELS = frozenset({
     JOURNEY_CLEANUP_LABEL,
     "audit-44972794086-1-da950aac",
@@ -41,6 +42,7 @@ JOURNEY_CLEANUP_LABELS = frozenset({
     JOURNEY_STRATEGY_DIAGNOSTIC_LABEL,
     JOURNEY_STRATEGY_RETEST_LABEL,
     JOURNEY_STRATEGY_SLOT_LABEL,
+    JOURNEY_FEED_YES_LABEL,
 })
 JOURNEY_EXECUTION_CODES = frozenset({
     "proposal_not_confirmed", "proposal_expired", "proposal_payload_hash_mismatch",
@@ -144,6 +146,138 @@ def _journey_yes_diagnostic(cur, user_id: int, namespace: str) -> dict:
                                            if len(feed_turns) == 1 else None),
         "feed_yes_conversation_match": (feed_turns[0][0] == yes_conversation
                                          if len(feed_turns) == 1 else None),
+        "yes_dispatch_count": safe_count(projection.get("dispatch_count")),
+        "yes_attempt_count": safe_count(projection.get("attempt_count")),
+    }
+
+
+def _journey_feed_yes_diagnostic(cur, user_id: int, namespace: str) -> dict:
+    """Report only typed conditions for the exact feed-discussion follow-up."""
+    setup_name = f"QA BTC Setup {namespace}"
+    cur.execute(
+        "SELECT id FROM setups WHERE user_id=%s AND symbol='BTC' AND name=%s",
+        (user_id, setup_name),
+    )
+    setups = cur.fetchall()
+    if len(setups) != 1:
+        return {"feed_yes_diagnostic_state": "setup_missing_or_ambiguous"}
+    setup_id = setups[0][0]
+    setup_message = (f"Ik wil los een swing-setup voor BTC/USDT op 4 uur, genaamd {setup_name}. "
+                     "Bereid alleen de setup voor en toon eerst het voorstel.")
+    feed_message = (
+        f"Controleer of setup {setup_name} voor BTC/USDT nog bestaat en of er inmiddels "
+        "een strategie aan is gekoppeld. Zo niet, adviseer welke strategie past en "
+        "welke gegevens je van mij nodig hebt. Lees ook de actuele scorestatus en "
+        "noem een ontbrekende bron eerlijk. Maak niets aan."
+    )
+    cur.execute(
+        """SELECT conversation_id FROM finn_v2_runs
+           WHERE user_id=%s AND client_context_json->>'surface'='qa_setup_strategy_journey'
+             AND message=%s""",
+        (user_id, setup_message),
+    )
+    setup_turns = cur.fetchall()
+    cur.execute(
+        """SELECT conversation_id,status,client_context_json FROM finn_v2_runs
+           WHERE user_id=%s AND client_context_json->>'surface'='qa_setup_strategy_journey'
+             AND message=%s""",
+        (user_id, feed_message),
+    )
+    feed_turns = cur.fetchall()
+    cur.execute(
+        """SELECT r.conversation_id,r.status,r.error_code,r.response_json,
+                  c.terminal_projection_json,c.state_json
+           FROM finn_v2_runs r LEFT JOIN finn_v2_runtime_contracts c
+             ON c.run_id=r.id AND c.user_id=r.user_id
+           WHERE r.user_id=%s
+             AND r.client_context_json->>'surface'='qa_setup_strategy_journey'
+             AND r.message='ja'""",
+        (user_id,),
+    )
+    yes_turns = cur.fetchall()
+    if any(len(turns) != 1 for turns in (setup_turns, feed_turns, yes_turns)):
+        return {
+            "feed_yes_diagnostic_state": "turn_missing_or_ambiguous",
+            "setup_turn_unique": len(setup_turns) == 1,
+            "feed_turn_unique": len(feed_turns) == 1,
+            "yes_turn_unique": len(yes_turns) == 1,
+        }
+
+    setup_conversation = setup_turns[0][0]
+    feed_conversation, feed_status, raw_context = feed_turns[0]
+    yes_conversation, yes_status, error_code, raw_response, raw_projection, raw_state = yes_turns[0]
+    context = raw_context if isinstance(raw_context, dict) else {}
+    response = raw_response if isinstance(raw_response, dict) else {}
+    projection = raw_projection if isinstance(raw_projection, dict) else {}
+    state = raw_state if isinstance(raw_state, dict) else {}
+    draft = projection.get("action_draft")
+    draft = draft if isinstance(draft, dict) else {}
+    inputs = projection.get("supplied_inputs")
+    inputs = inputs if isinstance(inputs, dict) else {}
+    guided = state.get("guided_state")
+    guided = guided if isinstance(guided, dict) else {}
+    collected = guided.get("collected_inputs")
+    collected = collected if isinstance(collected, dict) else {}
+    raw_missing = guided.get("missing_required_inputs")
+    raw_missing = raw_missing if isinstance(raw_missing, list) else []
+    allowed_slots = {
+        "setup_id", "name", "execution_mode", "base_amount", "entry",
+        "stop_loss", "targets", "price_currency", "risk_profile",
+        "symbol", "timeframe", "setup_type", "quote_currency",
+    }
+    missing_slots = sorted({
+        slot if slot in allowed_slots else "other"
+        for slot in raw_missing[:16] if isinstance(slot, str)
+    })
+    next_slot = guided.get("next_missing_input")
+    feed_item_id = context.get("feed_item_id")
+    feed_item_id = feed_item_id if isinstance(feed_item_id, str) else ""
+    cur.execute(
+        """SELECT status FROM finn_coach_feed_items
+           WHERE id::text=%s AND user_id=%s AND event_type='strategy_next_step'
+             AND subject_type='setup' AND subject_id=%s""",
+        (feed_item_id, user_id, str(setup_id)),
+    )
+    cards = cur.fetchall()
+
+    def safe_operation(value: object) -> str:
+        return value if isinstance(value, str) and value in {
+            "create_setup", "create_strategy", "create_bot",
+        } else "missing" if value is None else "other"
+
+    def safe_status(value: object) -> str:
+        return value if isinstance(value, str) and value in {
+            "completed", "clarification_required", "unavailable", "rejected",
+            "blocked", "failed", "canceled",
+        } else "other"
+
+    def safe_count(value: object) -> int | str:
+        return value if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 3 else "other"
+
+    return {
+        "feed_yes_diagnostic_state": "available",
+        "feed_turn_status": safe_status(feed_status),
+        "feed_card_selected_and_owner_bound": len(cards) == 1,
+        "feed_card_status": (cards[0][0] if len(cards) == 1 and cards[0][0] in
+                             {"unread", "read", "resolved"} else "missing_or_other"),
+        "feed_same_conversation_as_setup": feed_conversation == setup_conversation,
+        "yes_same_conversation_as_feed": yes_conversation == feed_conversation,
+        "yes_status": safe_status(yes_status),
+        "yes_error_code": error_code if isinstance(error_code, str) and error_code in {
+            "guided_proposal_tool_call_required", "responses_tool_round_limit",
+            "responses_provider_error", "finn_v2_internal_error",
+        } else "none" if error_code is None else "other",
+        "yes_operation": safe_operation(projection.get("final_operation_id") or
+                                        projection.get("initial_operation_id")),
+        "yes_guided_operation": safe_operation(draft.get("operation_id")),
+        "yes_state_guided_operation": safe_operation(guided.get("operation_id")),
+        "yes_supplied_setup_match": str(inputs.get("setup_id")) == str(setup_id),
+        "yes_guided_setup_match": str(collected.get("setup_id")) == str(setup_id),
+        "yes_proposal_present": bool(response.get("proposal_id")),
+        "yes_missing_slots": missing_slots,
+        "yes_next_missing_slot": (next_slot if isinstance(next_slot, str) and
+                                  next_slot in allowed_slots else
+                                  "missing" if next_slot is None else "other"),
         "yes_dispatch_count": safe_count(projection.get("dispatch_count")),
         "yes_attempt_count": safe_count(projection.get("attempt_count")),
     }
@@ -326,6 +460,10 @@ def run(label: str, *, expected_profile: str = "trader_paper_exit_reconciliation
             namespace = (preferences or {}).get("qa_namespace", "")
             if not fixture.NAMESPACE_PATTERN.fullmatch(namespace) or not namespace.startswith(namespace_prefix):
                 raise RuntimeError("trader_fixture_audit_scope_invalid")
+            if label == JOURNEY_FEED_YES_LABEL:
+                cur.execute("SELECT role FROM users WHERE id=%s", (user_id,))
+                if cur.fetchall() != [("user",)]:
+                    return {"fixture_state": "AMBIGUOUS", "cleanup_verified": False}
             cur.execute("SELECT is_active,is_live FROM bot_configs WHERE user_id=%s", (user_id,))
             bots = cur.fetchall()
             cur.execute("SELECT COUNT(*) FROM exchange_keys WHERE user_id=%s", (user_id,))
@@ -354,6 +492,10 @@ def run(label: str, *, expected_profile: str = "trader_paper_exit_reconciliation
                     if label in {JOURNEY_STRATEGY_DIAGNOSTIC_LABEL,
                                  JOURNEY_STRATEGY_RETEST_LABEL,
                                  JOURNEY_STRATEGY_SLOT_LABEL} else {}
+                )
+                feed_yes_diagnostic = (
+                    _journey_feed_yes_diagnostic(cur, user_id, namespace)
+                    if label == JOURNEY_FEED_YES_LABEL else {}
                 )
                 if label == JOURNEY_CARD_LABEL:
                     cur.execute(
@@ -395,6 +537,7 @@ def run(label: str, *, expected_profile: str = "trader_paper_exit_reconciliation
                     **card_diagnostic,
                     **yes_diagnostic,
                     **strategy_diagnostic,
+                    **feed_yes_diagnostic,
                     **transport_diagnostic,
                 }
             if expected_profile == "trader_pair_score_continuity":
@@ -494,14 +637,26 @@ def cleanup_journey(label: str) -> dict:
     guided_failure = label == JOURNEY_YES_DIAGNOSTIC_LABEL and (
         journey.get("failure_stage"), journey.get("reason")) == (
             "strategy_guided", "journey_strategy_guided_failed")
+    feed_yes_failure = label == JOURNEY_FEED_YES_LABEL and (
+        journey.get("failure_stage"), journey.get("reason")) == (
+            "strategy_guided", "journey_strategy_guided_failed") and (
+        prior.get("qa_status") == "COMPLETED"
+        and journey.get("fixture_confirmations") == 1
+        and journey.get("fixture_executions") == 1
+        and (journey.get("execution_diagnostic") or {}).get("first_status") == "succeeded"
+        and (journey.get("execution_diagnostic") or {}).get("replay_status") == "already_executed"
+        and (prior.get("safety") or {}).get("live_trading_calls") == 0
+        and (prior.get("safety") or {}).get("live_bot_activation_calls") == 0)
     proposal_failure = label in {JOURNEY_STRATEGY_DIAGNOSTIC_LABEL,
                                  JOURNEY_STRATEGY_RETEST_LABEL,
                                  JOURNEY_STRATEGY_SLOT_LABEL} and (
         journey.get("failure_stage"), journey.get("reason")) == (
             "strategy_proposal", "journey_strategy_proposal_missing")
+    legacy_failure = label != JOURNEY_FEED_YES_LABEL and (
+        journey.get("failure_stage"), journey.get("reason")) == expected_failure
     if (journey.get("fixture_state") != "quarantined"
-            or not (transport_failure or guided_failure or proposal_failure or
-                    (journey.get("failure_stage"), journey.get("reason")) == expected_failure)):
+            or not (transport_failure or guided_failure or feed_yes_failure or proposal_failure or
+                    legacy_failure)):
         raise RuntimeError("journey_cleanup_prior_state_mismatch")
     if label == JOURNEY_TRANSPORT_LABEL:
         marker = Path("/tmp") / f"finn-production-qa-{workflow_id}-{attempt}" / "runner.exit"
@@ -546,6 +701,7 @@ def cleanup_journey(label: str) -> dict:
                     raise RuntimeError("journey_cleanup_trade_unsafe")
             if label in {JOURNEY_CARD_LABEL, JOURNEY_TRANSPORT_LABEL,
                          JOURNEY_YES_DIAGNOSTIC_LABEL,
+                         JOURNEY_FEED_YES_LABEL,
                          JOURNEY_STRATEGY_DIAGNOSTIC_LABEL,
                          JOURNEY_STRATEGY_RETEST_LABEL,
                          JOURNEY_STRATEGY_SLOT_LABEL}:
@@ -576,7 +732,10 @@ def cleanup_journey(label: str) -> dict:
     finally:
         conn.close()
     try:
-        fixture._cleanup(namespace, user_id, bot_id, require_safe_pair_cleanup=True)
+        fixture._cleanup(
+            namespace, user_id, bot_id, require_safe_pair_cleanup=True,
+            **({"required_role": "user"} if label == JOURNEY_FEED_YES_LABEL else {}),
+        )
     except Exception:
         raise RuntimeError("journey_cleanup_failed") from None
     conn = fixture._connection()

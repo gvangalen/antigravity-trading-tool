@@ -264,16 +264,23 @@ def _age_market_reading(user_id: int) -> None:
 def _cleanup(namespace: str, user_id: int, bot_id: int, *, require_safe_pair_cleanup: bool = False,
              allow_planned_decisions: bool = False,
              require_safe_review_cleanup: bool = False,
-             require_aapl_quote_fixture: bool = False) -> None:
+             require_aapl_quote_fixture: bool = False,
+             required_role: str | None = None) -> None:
     conn = _connection()
     try:
         with conn.cursor() as cur:
             cur.execute(
+                """SELECT role,ai_preferences FROM users WHERE id=%s FOR UPDATE"""
+                if required_role else
                 """SELECT ai_preferences FROM users WHERE id=%s FOR UPDATE""",
                 (user_id,),
             )
             row = cur.fetchone()
-            if not row or (row[0] or {}).get("qa_fixture") != FIXTURE_MARKER or (row[0] or {}).get("qa_namespace") != namespace:
+            role, preferences = (row[0], row[1]) if required_role and row else (
+                None, row[0] if row else None)
+            if (not row or (required_role and role != required_role)
+                    or (preferences or {}).get("qa_fixture") != FIXTURE_MARKER
+                    or (preferences or {}).get("qa_namespace") != namespace):
                 raise RuntimeError("fixture_cleanup_owner_mismatch")
             if require_safe_pair_cleanup:
                 cur.execute("SELECT is_active FROM users WHERE id=%s", (user_id,))
