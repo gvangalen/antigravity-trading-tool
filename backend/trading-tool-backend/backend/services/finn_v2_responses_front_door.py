@@ -45,7 +45,7 @@ from backend.services.finn_v2_turn_contract import (
     build_turn_contract, can_compose_after_first_read, referenced_setup_rows,
     requests_comparison,
 )
-from backend.services.finn_v2_coach_evidence_plan import coach_evidence_plan
+from backend.services.finn_v2_coach_evidence_plan import CoachEvidencePlan, coach_evidence_plan
 from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
 from backend.services import finn_v2_entity_resolution_service as entity_resolution_module
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
@@ -101,7 +101,7 @@ def _personal_allocation_coaching(message: str, previous_response: Mapping[str, 
     """A personal portfolio example needs the current owner profile, including on a short follow-up."""
     personal = re.search(r"\b(?:mijn|mij|ik|me|my|mine|mein\w*|ich)\b", message, re.I)
     allocation = re.search(
-        r"\b(?:verdeling|allocatie|allocation|portfolio mix|"
+        r"\b(?:verdeling|verdelen|verdeel\w*|allocatie|allocation|portfolio mix|"
         r"hoeveel\s+(?:cash|belegd)|wie\s+viel\s+(?:cash|investiert))\b", message, re.I,
     ) or (
         re.search(r"\b(?:portefeuille|portfolio)\b", message, re.I)
@@ -126,6 +126,32 @@ def _personal_allocation_coaching(message: str, previous_response: Mapping[str, 
     )
 
 
+def _mixed_profile_portfolio_question(message: str) -> bool:
+    """Keep a personal cross-source question on its profile and portfolio reads."""
+    return bool(
+        re.search(r"\b(?:profiel|traderstijl|traderprofiel)\b", message, re.I)
+        and re.search(r"\b(?:bot\w*|portefeuille|portfolio|kas|belegd|budget|allocatie|verdel\w*)\b",
+                      message, re.I)
+    )
+
+
+def _coaching_plan_for_question(
+    message: str, previous_response: Mapping[str, Any] | None, *,
+    named_asset_count: int, read_only: bool,
+) -> CoachEvidencePlan | None:
+    plan = coach_evidence_plan(
+        message, named_asset_count=named_asset_count, read_only=read_only,
+    )
+    simple_profile_portfolio = (
+        _personal_allocation_coaching(message, previous_response)
+        or _mixed_profile_portfolio_question(message)
+    )
+    if (simple_profile_portfolio and plan and not plan.decision_required
+            and not set(plan.topics).intersection({"setup", "score", "report", "quote"})):
+        return None
+    return plan
+
+
 def _standalone_read_subject(message: str, facts: Any) -> str | None:
     """Select a fresh read when the latest question names its own subject.
 
@@ -140,6 +166,11 @@ def _standalone_read_subject(message: str, facts: Any) -> str | None:
     if entities & {"setup", "strategy", "plan", "bot"}:
         return None
     if entities == {"profile"}:
+        if _personal_allocation_coaching(message, None) or re.search(
+            r"\b(?:paper[-\s]*kas|botlimiet\w*|botbudget\w*|belegd|portefeuille|portfolio)\b",
+            message, re.I,
+        ):
+            return None
         return "get_my_profile_and_risk_style"
     if entities == {"portfolio"}:
         return "get_portfolio_and_exposure"
@@ -1274,6 +1305,11 @@ class FinnResponsesFrontDoor:
             (
                 re.search(r"\b(?:kas|kassaldo|cash|saldo|balance)\b", message, re.I)
                 and re.search(r"\b(?:positie|posities|position|positions|positionen)\b", message, re.I)
+            )
+            or (
+                re.search(r"\b(?:budgetlimiet|botbudget|budget)\b", message, re.I)
+                and re.search(r"\b(?:belegd|positie|posities)\b", message, re.I)
+                and re.search(r"\b(?:kas|kassaldo|cash)\b", message, re.I)
             )
             or (
                 re.search(
@@ -3449,8 +3485,9 @@ class FinnResponsesFrontDoor:
                 message, workspace_hints=workspace_hints, verified_asset=verified_asset,
             ) if is_read_only_turn and not pending_operation and not unsupported_pair else None
         )
-        coach_plan = coach_evidence_plan(
-            message, named_asset_count=len(mentioned_assets), read_only=is_read_only_turn,
+        coach_plan = _coaching_plan_for_question(
+            message, previous_response,
+            named_asset_count=len(mentioned_assets), read_only=is_read_only_turn,
         )
         mentioned_pairs = {
             (asset.upper(), quote.upper())
@@ -4824,6 +4861,10 @@ class FinnResponsesFrontDoor:
                     call.name == "get_portfolio_and_exposure"
                     and set(call.read_tools) == {"read_portfolio"}
                 )
+                if (call.name == "get_profile_portfolio_and_bots"
+                        and re.search(r"\bPaper\b", message, re.I)
+                        and not re.search(r"\bLive\b", message, re.I)):
+                    call = replace(call, inputs={**call.inputs, "environment": "paper"})
                 if full_portfolio_requested and portfolio_only_read:
                     portfolio_inputs = {key: value for key, value in call.inputs.items() if key != "asset"}
                     if re.search(r"\bPaper\b", message, re.I) and not re.search(r"\bLive\b", message, re.I):
@@ -6144,14 +6185,20 @@ class FinnResponsesFrontDoor:
                 else "get_saved_setup_inventory"
                 if normalized_inventory_read and pending_operation is None
                 and not resuming_clarification
+                else "get_profile_portfolio_and_bots"
+                if is_read_only_turn and _mixed_profile_portfolio_question(message)
+                and pending_operation is None and not resuming_clarification
                 else "get_portfolio_and_exposure"
                 if is_read_only_turn and (
                     self._asks_about_open_position(message)
                     or self._asks_about_aggregate_portfolio(message)
                 )
                 and pending_operation is None and not resuming_clarification
-                else "get_my_profile_and_risk_style"
+                else "get_profile_portfolio_and_bots"
                 if is_read_only_turn and _personal_allocation_coaching(message, previous_response)
+                and pending_operation is None and not resuming_clarification
+                else "get_my_profile_and_risk_style"
+                if is_read_only_turn and re.search(r"\b(?:profiel|traderstijl|traderprofiel)\b", message, re.I)
                 and pending_operation is None and not resuming_clarification
                 else "evaluate_bot"
                 if is_read_only_turn and request_facts.action_polarity == "evaluate"

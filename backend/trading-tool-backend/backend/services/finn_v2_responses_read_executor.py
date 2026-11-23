@@ -99,9 +99,9 @@ class FinnResponsesReadExecutor:
         shared_state: dict[str, Any] = {}
         for read_tool in call.read_tools:
             selector = call.inputs
-            if read_tool == "read_portfolio" and call.evaluation_operation_id in {
+            if read_tool == "read_portfolio" and (call.name == "get_profile_portfolio_and_bots" or call.evaluation_operation_id in {
                 "evaluate_plan", "evaluate_setup", "evaluate_strategy", "evaluate_bot",
-            }:
+            }):
                 # Personal plan advice needs the owner's account-wide exposure;
                 # the selected setup asset remains scoped on the other reads.
                 selector = {key: value for key, value in call.inputs.items() if key != "asset"}
@@ -163,7 +163,7 @@ class FinnResponsesReadExecutor:
                 "freshness": result.freshness_status,
                 "source": result.source,
                 "as_of": as_of,
-                "asset": result.asset or call.inputs.get("asset"),
+                "asset": result.asset or selector.get("asset"),
                 "data": data,
                 "reason": result.error_codes[0] if result.error_codes else None,
             }

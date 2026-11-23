@@ -3177,8 +3177,9 @@ class FinnResponsesAnswerVerifier:
             elif (call.get("name") == "get_portfolio_and_exposure"
                     and args.get("environment") == "paper"
                     and len(named_paper_assets) == 1
-                    and re.search(r"\bbotbudget\b", message, re.I)
-                    and re.search(r"\b(?:positie|posities)\b", message, re.I)
+                    and (re.search(r"\bbotbudget\b", message, re.I)
+                         or re.search(r"\bbudgetlimiet\b", message, re.I))
+                    and re.search(r"\b(?:positie|posities|belegd)\b", message, re.I)
                     and re.search(r"\b(?:kas|kassaldo|cash|saldo)\b", message, re.I)
                     and str(locale or "nl").lower().startswith("nl")):
                 expected = render_paper_position_cash_answer(
