@@ -17,15 +17,21 @@ def calculate_rsi(closes, period=14):
     if len(closes) < period + 1:
         return None
 
-    gains, losses = [], []
-    for i in range(1, period + 1):
-        delta = closes[-i] - closes[-i - 1]
-        gains.append(max(delta, 0))
-        losses.append(max(-delta, 0))
+    # Match TradingView's Wilder/RMA RSI: seed with the first period's SMA,
+    # then smooth every later completed candle. Using only the last 14 price
+    # differences exaggerates a recent sell-off and is a different indicator.
+    changes = [float(closes[index]) - float(closes[index - 1])
+               for index in range(1, len(closes))]
+    if not all(math.isfinite(change) for change in changes):
+        return None
+    avg_gain = sum(max(change, 0.0) for change in changes[:period]) / period
+    avg_loss = sum(max(-change, 0.0) for change in changes[:period]) / period
+    for change in changes[period:]:
+        avg_gain = (avg_gain * (period - 1) + max(change, 0.0)) / period
+        avg_loss = (avg_loss * (period - 1) + max(-change, 0.0)) / period
 
-    avg_gain = sum(gains) / period
-    avg_loss = sum(losses) / period
-
+    if avg_gain == 0 and avg_loss == 0:
+        return 50.0
     if avg_loss == 0:
         return 100.0
 
@@ -190,10 +196,23 @@ def normalize_technical_value(indicator: str, value: float) -> float:
 def normalize_technical_value_for_rules(conn, indicator: str, value: float,
                                         user_id: int, symbol: str | None = None,
                                         market_id: int | None = None) -> float:
-    """Keep existing owner MA curves on their original distance scale."""
+    """Normalize standard templates while preserving owner custom curves."""
     if not math.isfinite(float(value)):
         raise ValueError("Non-finite technical indicator reading")
     normalized = normalize_indicator_name(indicator)
+    if normalized == "rsi":
+        from backend.utils.scoring_engine import fetch_rules_for_indicator
+        rules = fetch_rules_for_indicator(
+            conn, category="technical", indicator=normalized,
+            user_id=user_id, symbol=symbol, enforce_fixed_buckets=False,
+            market_id=market_id,
+        )
+        if rules and all(rule.score_mode == "custom" for rule in rules):
+            return normalize_technical_value(normalized, value)
+        # User-selected momentum calibration: RSI 12 -> 0, RSI 90 -> 100.
+        # Values outside the anchors remain possible and are clipped, not
+        # mistaken for a TradingView chart axis or a changed RSI definition.
+        return max(0.0, min(100.0, (float(value) - 12.0) * 100.0 / 78.0))
     if normalized in {"ma_50", "ma_200"}:
         from backend.utils.scoring_engine import fetch_rules_for_indicator
         rules = fetch_rules_for_indicator(

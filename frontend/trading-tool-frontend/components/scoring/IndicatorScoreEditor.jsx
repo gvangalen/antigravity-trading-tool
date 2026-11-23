@@ -17,7 +17,7 @@ import ScoreModeBadge from "./ScoreModeBadge";
  * ✅ Units (%, USD, index) zichtbaar in de UI header (0–100, unit)
  *
  * UX regels:
- * - Tabel ranges blijven ALTIJD 0–100 (design), ook al clampen we scores naar 10–100
+ * - Tabel ranges en scores blijven 0–100; nul is een geldige momentumscore.
  * - Custom save doet GEEN dubbele writes: Editor stuurt 1 payload naar Panel
  *
  * Props:
@@ -39,8 +39,9 @@ const FIXED_BUCKETS = [
   { min: 80, max: 100 },
 ];
 
-// Stable template scores for Standard mode
+// Fallback template scores for Standard mode. RSI uses its calibrated curve.
 const STANDARD_TEMPLATE_SCORES = [10, 25, 50, 75, 100];
+const RSI_TEMPLATE_SCORES = [0, 25, 50, 75, 100];
 
 // Keep consistent with backend normalize_indicator_name
 const NAME_ALIASES = {
@@ -81,7 +82,7 @@ function normalizeIndicatorName(name) {
 const clampScore = (v) => {
   const n = Number(v);
   if (!Number.isFinite(n)) return 50;
-  if (n < 10) return 10;
+  if (n < 0) return 0;
   if (n > 100) return 100;
   return n;
 };
@@ -217,7 +218,7 @@ export default function IndicatorScoreEditor({
   -------------------------------------------------- */
   const templateRows = useMemo(() => {
     return FIXED_BUCKETS.map((b, idx) => {
-      const s = clampScore(STANDARD_TEMPLATE_SCORES[idx]);
+      const s = clampScore((normalizedIndicator === "rsi" ? RSI_TEMPLATE_SCORES : STANDARD_TEMPLATE_SCORES)[idx]);
       return {
         range_min: b.min,
         range_max: b.max,
@@ -225,7 +226,7 @@ export default function IndicatorScoreEditor({
         trend: getTrend(s),
       };
     });
-  }, []);
+  }, [normalizedIndicator]);
 
   /* --------------------------------------------------
      Display transform for contrarian
@@ -475,7 +476,7 @@ export default function IndicatorScoreEditor({
                           <div className="relative group/input">
                              <input
                                type="number"
-                               min="10"
+                               min="0"
                                max="100"
                                step="5"
                                value={rawScore}

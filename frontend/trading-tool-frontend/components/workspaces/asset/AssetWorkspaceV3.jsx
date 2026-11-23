@@ -230,6 +230,7 @@ function getUiCopy(locale = "nl") {
       dxyRangeMethod: (position) => `Measured DXY position in its recent 90-day range: ${position}/100. Higher dollar strength lowers this broad risk-context score; this is not an asset signal.`,
       volumeMethod: (position) => `Trading volume relative to its recent median: ${position}/100 (50 is the median). Volume alone says nothing about price direction.`,
       change24hMethod: (position, score) => `The 24-hour change normalizes to ${position}/100 (values outside -20% to +20% are capped). The indicator score is ${score}/100 under the selected rule. This is not an entry signal.`,
+      rsiMethod: (position, score) => `RSI is mapped from the selected 12–90 momentum range to ${position}/100. Its five-step momentum score is ${score}/100; a low RSI is not a buy signal by itself.`,
       normalizedInput: "Normalized reading",
       market: "Market",
       macro: "Macro",
@@ -455,6 +456,7 @@ function getUiCopy(locale = "nl") {
       dxyRangeMethod: (position) => `Gemessene DXY-Position im jüngsten 90-Tage-Bereich: ${position}/100. Ein stärkerer Dollar senkt diesen allgemeinen Risikokontext-Score; das ist kein Assetsignal.`,
       volumeMethod: (position) => `Handelsvolumen relativ zum jüngsten Median: ${position}/100 (50 entspricht dem Median). Volumen allein zeigt keine Preisrichtung.`,
       change24hMethod: (position, score) => `Die 24-Stunden-Änderung wird auf ${position}/100 normiert (Werte außerhalb von -20 % bis +20 % werden begrenzt). Der Indikatorwert ist ${score}/100 gemäß der gewählten Regel. Das ist kein Einstiegssignal.`,
+      rsiMethod: (position, score) => `Der RSI wird anhand des gewählten Momentum-Bereichs 12–90 auf ${position}/100 abgebildet. Der Momentumwert in fünf Stufen beträgt ${score}/100; ein niedriger RSI ist allein kein Kaufsignal.`,
       normalizedInput: "Normierter Messwert",
       market: "Markt",
       macro: "Makro",
@@ -679,6 +681,7 @@ function getUiCopy(locale = "nl") {
     dxyRangeMethod: (position) => `Gemeten DXY-positie in het recente 90-daagse bereik: ${position}/100. Een sterkere dollar verlaagt deze algemene risicocontextscore; dit is geen assetsignaal.`,
     volumeMethod: (position) => `Handelsvolume ten opzichte van de recente mediaan: ${position}/100 (50 is de mediaan). Volume alleen zegt niets over de koersrichting.`,
     change24hMethod: (position, score) => `De koersverandering in 24 uur is genormaliseerd naar ${position}/100 (waarden buiten -20% tot +20% worden begrensd). De indicatorscore is ${score}/100 volgens de scoreregel. Dit is geen instapsignaal.`,
+    rsiMethod: (position, score) => `RSI wordt vanuit het gekozen momentumbereik 12–90 omgerekend naar ${position}/100. De vijfstaps momentumscore is ${score}/100; een lage RSI is op zichzelf geen koopsignaal.`,
     normalizedInput: "Genormaliseerde meting",
     market: "Markt",
     macro: "Macro",
@@ -1559,6 +1562,8 @@ function buildRows(items, locale, ui, currentEvidence = null, categoryScore = nu
             ? ui.volumeMethod(Math.round(normalizedPosition))
             : String(name).toLowerCase() === "change_24h"
               ? ui.change24hMethod(Math.round(normalizedPosition), Math.round(score))
+            : String(name).toLowerCase() === "rsi" && (item?.score_mode || "standard") === "standard"
+              ? ui.rsiMethod(Math.round(normalizedPosition), Math.round(score))
           : null
       : null;
     const detail = pendingWithPriorIndicator

@@ -136,7 +136,7 @@ class AssetBenchmarkCopyService:
             if len(rules) != 5 or any(
                 not isinstance(rule, dict) or rule.get("range_min") != low or
                 rule.get("range_max") != high or type(rule.get("score")) not in {int, float} or
-                not isfinite(rule["score"]) or not 10 <= rule["score"] <= 100
+                not isfinite(rule["score"]) or not 0 <= rule["score"] <= 100
                 for (low, high), rule in zip(FIXED_BUCKETS, rules)
             ):
                 return "invalid_custom_rules"
