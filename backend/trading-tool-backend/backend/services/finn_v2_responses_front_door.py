@@ -45,7 +45,7 @@ from backend.services.finn_v2_turn_contract import (
     build_turn_contract, can_compose_after_first_read, referenced_setup_rows,
     requests_comparison,
 )
-from backend.services.finn_v2_coach_evidence_plan import coach_evidence_plan
+from backend.services.finn_v2_coach_evidence_plan import CoachEvidencePlan, coach_evidence_plan
 from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
 from backend.services import finn_v2_entity_resolution_service as entity_resolution_module
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
@@ -133,6 +133,23 @@ def _mixed_profile_portfolio_question(message: str) -> bool:
         and re.search(r"\b(?:bot\w*|portefeuille|portfolio|kas|belegd|budget|allocatie|verdel\w*)\b",
                       message, re.I)
     )
+
+
+def _coaching_plan_for_question(
+    message: str, previous_response: Mapping[str, Any] | None, *,
+    named_asset_count: int, read_only: bool,
+) -> CoachEvidencePlan | None:
+    plan = coach_evidence_plan(
+        message, named_asset_count=named_asset_count, read_only=read_only,
+    )
+    simple_profile_portfolio = (
+        _personal_allocation_coaching(message, previous_response)
+        or _mixed_profile_portfolio_question(message)
+    )
+    if (simple_profile_portfolio and plan and not plan.decision_required
+            and not set(plan.topics).intersection({"setup", "score", "report", "quote"})):
+        return None
+    return plan
 
 
 def _standalone_read_subject(message: str, facts: Any) -> str | None:
@@ -3468,9 +3485,9 @@ class FinnResponsesFrontDoor:
                 message, workspace_hints=workspace_hints, verified_asset=verified_asset,
             ) if is_read_only_turn and not pending_operation and not unsupported_pair else None
         )
-        coach_plan = None if (_personal_allocation_coaching(message, previous_response)
-                              or _mixed_profile_portfolio_question(message)) else coach_evidence_plan(
-            message, named_asset_count=len(mentioned_assets), read_only=is_read_only_turn,
+        coach_plan = _coaching_plan_for_question(
+            message, previous_response,
+            named_asset_count=len(mentioned_assets), read_only=is_read_only_turn,
         )
         mentioned_pairs = {
             (asset.upper(), quote.upper())

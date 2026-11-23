@@ -4,7 +4,8 @@ import asyncio
 from unittest.mock import AsyncMock
 
 from backend.services.finn_v2_responses_front_door import (
-    FinnResponsesFrontDoor, _personal_allocation_coaching, _standalone_read_subject,
+    FinnResponsesFrontDoor, _coaching_plan_for_question, _personal_allocation_coaching,
+    _standalone_read_subject,
 )
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
 from backend.services.finn_v2_responses_loop import FinnResponsesResult
@@ -68,6 +69,22 @@ def test_live_qa_profile_allocation_question_is_not_reduced_to_readback():
     facts = FinnV2RequestPreprocessorService().preprocess(message=question)
     assert _personal_allocation_coaching(question, None)
     assert _standalone_read_subject(question, facts) is None
+    assert _coaching_plan_for_question(
+        question, None, named_asset_count=1, read_only=True,
+    ) is None
+
+
+def test_mixed_profile_question_keeps_decision_score_and_quote_coverage():
+    question = (
+        "Waarom besloot mijn BTC-bot niet te kopen; vergelijk dat met mijn profiel, "
+        "portefeuille, score en koers?"
+    )
+    plan = _coaching_plan_for_question(
+        question, None, named_asset_count=1, read_only=True,
+    )
+    assert plan is not None
+    assert {"bot", "portfolio", "score", "quote"} <= set(plan.topics)
+    assert plan.decision_required
 
 
 def test_live_qa_bot_profile_portfolio_comparison_reads_both_sources(monkeypatch):
