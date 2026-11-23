@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN: AAPL-setupvoorstel en gesloten-marktreis (23 november 2026)
 
-Phase: `LOCAL_VALIDATED_RELEASE_CANDIDATE`. De onafhankelijke protected QA op
+Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`. De onafhankelijke protected QA op
 live SHA `06acf1af732f37e680b02b68d3d3ae835a76bfb4` (workflow
 45115936290-1) bevestigde de gedateerde AAPL/USD-koers met bronmoment,
 maar stopte daarna bij `aapl_journey_setup_proposal_missing`; nul
@@ -39,8 +39,16 @@ en regression **109/109** (artifact SHA-256
 `5489c2d5cedaf1ed44e8d8c3fcf7f7262a2057b7a6987d744596c6570f03fc6c`).
 Frontend typecheck, i18n-lint/tests, commandotests, proposaltests, build en
 `audit:high` slaagden; één bestaande moderate Next.js-melding bleef.
-De volledige backend-suite gaf **5418 passed, 7 skipped**. Release-CI en
-deploy zijn nog niet gemeten.
+De volledige backend-suite gaf **5418 passed, 7 skipped**. Product-PR
+[#1318](https://github.com/gvangalen/antigravity-trading-tool/pull/1318)
+op head `eae79cc96670d5dfcd44b9115f8e8bc361548cf7` kreeg vijf groene
+PR-CI-jobs in workflow **45118159831**. Main-CI **45119143073** had ook
+vijf groene jobs. Auto Deploy **45120035632** slaagde op
+`6f9a380084a57463c6e90c2db0d4306ebca5d24b`; GitHub main,
+publieke backend health en frontend build-info meldden exact die SHA,
+beide publieke endpoints HTTP 200. Deze status-only wijziging creëert
+zelf een nieuwe main-SHA; de laatste main-CI, Auto Deploy en publieke
+SHA-pariteit moeten opnieuw zijn bevestigd vóór officiële QA.
 Onafhankelijke QA-codebeoordeling en Security-herbeoordeling van de
 voorstelgrens vonden geen blocker; dit zijn geen live-runtimeverdicts.
 
