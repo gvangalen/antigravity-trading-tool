@@ -2044,10 +2044,12 @@ class FinnResponsesFrontDoor:
         # Narrow factual source questions have a server-owned answer. The
         # source read and its dated facts must not depend on a model deciding
         # to call a tool or transcribing UTC/CET correctly in a later round.
+        # A prohibition on placing an order is not an order instruction.
+        factual_read_message = re.sub(r"\bplaats geen order\b", "", message, flags=re.I)
         if str(locale).lower().startswith("nl") and not resuming_clarification \
                 and not conversation_context.get("active_guided_operation") \
                 and (_explicit_discussion_only(message) or not re.search(
-                    r"\b(?:wijzig|verwijder|maak|plaats|koop|verkoop|activeer)\b", message, re.I)):
+                    r"\b(?:wijzig|verwijder|maak|plaats|koop|verkoop|activeer)\b", factual_read_message, re.I)):
             pair = requested_catalog_trading_pair(message)
             pair_mentions = re.findall(r"\b[A-Z][A-Z0-9]*/(?:EUR|USDT)\b", message, re.I)
             symbols = mentioned_catalog_symbols(message)
@@ -2116,7 +2118,7 @@ class FinnResponsesFrontDoor:
                 fact_kind = "portfolio_read_time"
             elif len(symbols) == 1 and len({item.upper() for item in pair_mentions}) <= 1 \
                     and _named_asset_quote_question(message) \
-                    and re.search(r"\b(?:nieuwste|laatste|huidige|actuele)\b", message, re.I) \
+                    and re.search(r"\b(?:nieuwste|laatste|laatst\s+beschikbare|huidige|actuele)\b", message, re.I) \
                     and not re.search(r"\b(?:setup|plan|bot|rapport|score|indicator|portefeuille)\b", message, re.I):
                 fact_kind = "latest_quote"
                 symbol = next(iter(symbols))
