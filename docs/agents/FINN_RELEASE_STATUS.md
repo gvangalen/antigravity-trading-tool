@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: ontbrekende dagrapportmeldingen in de feed (23 november 2026)
 
-Phase: `CANDIDATE_CI_PENDING`. In het ingelogde Gerrit-account stond het
+Phase: `LIVE_DEPLOYED_AWAITING_INDEPENDENT_QA`. In het ingelogde Gerrit-account stond het
 dagrapport van 23 november klaar om 05:33 CET, maar de volledige feedgeschiedenis
 bevatte geen dagrapportkaart voor 22 of 23 november; de kaart van 21 november
 bestond wel. Dit bewijst een breuk tussen opgeslagen rapport en feedpublicatie,
@@ -26,9 +26,14 @@ Lokale gerichte rapport/feed-regressies: **17/17**. Volledige backend-suite:
 **5472 passed, 7 skipped**, 47 waarschuwingen. `git diff --check` schoon.
 Onafhankelijke QA-codebeoordeling op producthead `6b0b70c7a` vond geen
 blocker en controleerde Celery-planning/wachtroute. PR-CI `45246722095`
-slaagde met vijf groene jobs op die head. De statusaanvulling zelf vereist
-een nieuwe definitieve PR-CI. Nog geen merge, Auto Deploy, publieke SHA-pariteit
-of onafhankelijke live acceptatie. Na deploy moet QA de eigenaargebonden
+en definitieve PR-CI `45249983728` slaagden elk met vijf groene jobs.
+PR #1337 is gemerged als `2b85eceae0ced4e45f36d4c89359c7eeff630510`.
+Main-CI `45251432639` slaagde met vijf groene jobs; Auto Deploy
+`45252796076` slaagde. GitHub main, publieke backend `/api/health` en
+frontend `/build-info.json` meldden op 23 november 2026 dezelfde merge-SHA;
+beide publieke endpoints gaven HTTP 200. Deze statusregistratie maakt een
+nieuwe main-SHA; de daaropvolgende CI, Auto Deploy en publieke pariteit
+moeten opnieuw worden geverifieerd vóór onafhankelijke QA. QA moet de eigenaargebonden
 kaarten van 22/23 november, afwezigheid van dubbelen en een volgend natuurlijk
 dagrapport controleren. Een gedeelde publisherfout blijft mogelijk totdat
 die live meting is gedaan.
