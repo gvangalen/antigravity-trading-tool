@@ -6,6 +6,7 @@ from backend.services.finn_v2_execution_service import FinnV2ExecutionService
 from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor
 from backend.services.finn_v2_run_service import (
     _complete_named_guided_strategy_proposal,
+    _verified_feed_strategy_affirmative_message,
     _verified_journey_affirmative_message,
 )
 
@@ -105,6 +106,134 @@ def test_short_yes_rejects_combined_or_resolved_journey(monkeypatch):
         object(), context=_context("create_setup", canonical={"strategy_id": 22}),
         message="ja", user_id=42,
     )) is None
+
+
+def test_feed_discussion_short_yes_prepares_only_owner_bound_strategy(monkeypatch):
+    from types import SimpleNamespace
+    from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2RunRepository
+    from backend.infrastructure.repositories.setup_repository import SetupRepository
+    from backend.services.finn_coach_feed_service import FinnCoachFeedService
+
+    item_id = "feed-strategy-11"
+    context = {"locale": "nl", "feed_event": {
+        "item_id": item_id, "event_type": "strategy_next_step",
+        "subject_type": "setup", "subject_id": "11", "symbol": "BTC",
+        "read_only_context": True, "action_authorized": False,
+    }, "responses_cursor": {"run_id": "discussion-run"}}
+    async def previous(_self, *, run_id, user_id):
+        assert (run_id, user_id) == ("discussion-run", 42)
+        return SimpleNamespace(conversation_id="conversation-1", status="completed",
+                               client_context_json={"feed_item_id": item_id})
+    async def detail(_self, *, user_id, item_id):
+        assert (user_id, item_id) == (42, "feed-strategy-11")
+        return {"status": "handled", "event_type": "strategy_next_step", "subject_type": "setup",
+                "subject_id": "11", "symbol": "BTC",
+                "evidence": {"market_id": 31, "trading_pair": "BTC/USDT"}}
+    async def setup(_self, setup_id, user_id):
+        assert (setup_id, user_id) == (11, 42)
+        return {"id": 11, "symbol": "BTC", "market_id": 31,
+                "quote_currency": "USDT"}
+    class Result:
+        def scalar_one_or_none(self):
+            return None
+    class Session:
+        async def execute(self, query, params):
+            assert "FROM strategies" in str(query)
+            assert params == {"user_id": 42, "setup_id": 11}
+            return Result()
+    monkeypatch.setattr(FinnV2RunRepository, "get_by_id_for_user", previous)
+    monkeypatch.setattr(FinnCoachFeedService, "detail", detail)
+    monkeypatch.setattr(SetupRepository, "get_setup_by_id", setup)
+    answer = asyncio.run(_verified_feed_strategy_affirmative_message(
+        Session(), context=context, message="ja", user_id=42,
+        conversation_id="conversation-1",
+    ))
+    assert "BTC/USDT" in answer and "Sla nog niets op" in answer
+    assert context["verified_feed_strategy_affirmative"] == {
+        "operation_id": "create_strategy", "setup_id": 11,
+        "source_run_id": "discussion-run",
+    }
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=42,
+                                   run_id="feed-strategy-test", model_led_coach=True)
+    prepared = asyncio.run(front.run(
+        message=answer, instructions="", conversation_context=context,
+        verified_asset="BTC", locale="nl",
+    ))
+    assert prepared.proposal_analysis is not None
+    assert prepared.proposal_analysis.request_plan.operation_id == "create_strategy"
+    assert prepared.proposal_analysis.request_plan.operation_state.get(
+        "collected_inputs", {}).get("setup_id") == 11
+
+
+def test_feed_short_yes_rejects_other_turn_or_existing_strategy(monkeypatch):
+    from types import SimpleNamespace
+    from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2RunRepository
+    from backend.infrastructure.repositories.setup_repository import SetupRepository
+    from backend.services.finn_coach_feed_service import FinnCoachFeedService
+
+    context = {"feed_event": {"item_id": "feed-11", "event_type": "strategy_next_step",
+              "subject_type": "setup", "subject_id": "11", "symbol": "BTC",
+              "read_only_context": True, "action_authorized": False},
+              "responses_cursor": {"run_id": "previous-run"}}
+    async def previous(_self, *, run_id, user_id):
+        return SimpleNamespace(conversation_id="conversation-1", status="completed",
+                               client_context_json={"feed_item_id": "other-feed"})
+    monkeypatch.setattr(FinnV2RunRepository, "get_by_id_for_user", previous)
+    assert asyncio.run(_verified_feed_strategy_affirmative_message(
+        object(), context=context, message="ja", user_id=42,
+        conversation_id="conversation-1",
+    )) is None
+    assert "verified_feed_strategy_affirmative" not in context
+    async def edited_previous(_self, *, run_id, user_id):
+        return SimpleNamespace(conversation_id="conversation-1", status="completed",
+                               client_context_json={"feed_item_id": "feed-11",
+                                                    "feed_draft_edited": True})
+    monkeypatch.setattr(FinnV2RunRepository, "get_by_id_for_user", edited_previous)
+    assert asyncio.run(_verified_feed_strategy_affirmative_message(
+        object(), context=context, message="ja", user_id=42,
+        conversation_id="conversation-1",
+    )) is None
+    async def exact_previous(_self, *, run_id, user_id):
+        return SimpleNamespace(conversation_id="conversation-1", status="completed",
+                               client_context_json={"feed_item_id": "feed-11"})
+    async def detail(_self, *, user_id, item_id):
+        return {"status": "handled", "event_type": "strategy_next_step", "subject_type": "setup",
+                "subject_id": "11", "symbol": "BTC",
+                "evidence": {"market_id": 31, "trading_pair": "BTC/USDT"}}
+    async def setup(_self, setup_id, user_id):
+        return {"id": 11, "symbol": "BTC", "market_id": 31,
+                "quote_currency": "USDT"}
+    class Result:
+        def scalar_one_or_none(self):
+            return 91
+    class Session:
+        async def execute(self, query, params):
+            return Result()
+    monkeypatch.setattr(FinnV2RunRepository, "get_by_id_for_user", exact_previous)
+    monkeypatch.setattr(FinnCoachFeedService, "detail", detail)
+    monkeypatch.setattr(SetupRepository, "get_setup_by_id", setup)
+    assert asyncio.run(_verified_feed_strategy_affirmative_message(
+        Session(), context=context, message="ja", user_id=42,
+        conversation_id="conversation-1",
+    )) is None
+    assert "verified_feed_strategy_affirmative" not in context
+    class NoStrategy:
+        def scalar_one_or_none(self):
+            return None
+    class EmptySession:
+        async def execute(self, query, params):
+            return NoStrategy()
+    for status in ("resolved", "archived", "read"):
+        async def stale_detail(_self, *, user_id, item_id):
+            return {"status": status, "event_type": "strategy_next_step",
+                    "subject_type": "setup", "subject_id": "11", "symbol": "BTC",
+                    "evidence": {"market_id": 31, "trading_pair": "BTC/USDT"}}
+        monkeypatch.setattr(FinnCoachFeedService, "detail", stale_detail)
+        assert asyncio.run(_verified_feed_strategy_affirmative_message(
+            EmptySession(), context=context, message="ja", user_id=42,
+            conversation_id="conversation-1",
+        )) is None
+        assert "verified_feed_strategy_affirmative" not in context
     assert asyncio.run(_verified_journey_affirmative_message(
         object(), context=_context("create_setup"), message="ja", user_id=42,
     )) is None

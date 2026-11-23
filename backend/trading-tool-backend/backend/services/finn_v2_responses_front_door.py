@@ -3127,6 +3127,7 @@ class FinnResponsesFrontDoor:
             else {}
         )
         journey = dict(conversation_context.get("verified_journey_affirmative") or {})
+        feed_journey = dict(conversation_context.get("verified_feed_strategy_affirmative") or {})
         journey_operation = journey.get("operation_id")
         journey_parent = ("setup_id" if journey_operation == "create_strategy" else
                           "strategy_id" if journey_operation == "create_bot" else None)
@@ -3159,6 +3160,36 @@ class FinnResponsesFrontDoor:
                     response_id=f"verified-journey-next-{self.run_id}",
                     tool_trace=({"name": "verified_journey_next_step", "status": "completed",
                                  "result": {"operation_id": journey_operation}},),
+                    response_id_reusable=False,
+                ),
+                selected, previous_response, locale=locale,
+            )
+        if (feed_journey.get("operation_id") == "create_strategy"
+                and type(feed_journey.get("setup_id")) is int
+                and feed_journey["setup_id"] > 0
+                and str(feed_journey.get("source_run_id") or "")
+                and conversation_context.get("feed_event", {}).get("event_type") == "strategy_next_step"):
+            # The worker just re-read the exact owner-bound setup, feed item,
+            # and absence of a linked strategy. This selects a proposal
+            # contract only; persistence still requires separate confirmation.
+            contract = self.proposals.registry.require_supported("create_strategy")
+            selected = self.proposals.from_call(
+                call=FinnResponsesToolCall(
+                    name=catalog.proposal_tool_for_operation("create_strategy"),
+                    operation_id="create_strategy", inputs={}, read_tools=(),
+                    required_inputs=contract.required_inputs, missing_inputs=(),
+                    draft_intent="new", target_reference="verified_feed_setup",
+                ),
+                message=message, conversation_context=conversation_context,
+                verified_asset=verified_asset,
+                verified_target_inputs={"setup_id": feed_journey["setup_id"]},
+            )
+            return FinnResponsesFrontDoorResult(
+                FinnResponsesResult(
+                    text="Ik bereid een strategie voor en vraag naar de ontbrekende keuzes. Opslaan volgt pas na jouw bevestiging.",
+                    response_id=f"verified-feed-strategy-{self.run_id}",
+                    tool_trace=({"name": "verified_feed_strategy_next_step", "status": "completed",
+                                 "result": {"operation_id": "create_strategy"}},),
                     response_id_reusable=False,
                 ),
                 selected, previous_response, locale=locale,
