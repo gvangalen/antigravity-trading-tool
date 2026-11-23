@@ -126,6 +126,15 @@ def _personal_allocation_coaching(message: str, previous_response: Mapping[str, 
     )
 
 
+def _mixed_profile_portfolio_question(message: str) -> bool:
+    """Keep a personal cross-source question on its profile and portfolio reads."""
+    return bool(
+        re.search(r"\b(?:profiel|traderstijl|traderprofiel)\b", message, re.I)
+        and re.search(r"\b(?:bot\w*|portefeuille|portfolio|kas|belegd|budget|allocatie|verdel\w*)\b",
+                      message, re.I)
+    )
+
+
 def _standalone_read_subject(message: str, facts: Any) -> str | None:
     """Select a fresh read when the latest question names its own subject.
 
@@ -3459,7 +3468,8 @@ class FinnResponsesFrontDoor:
                 message, workspace_hints=workspace_hints, verified_asset=verified_asset,
             ) if is_read_only_turn and not pending_operation and not unsupported_pair else None
         )
-        coach_plan = coach_evidence_plan(
+        coach_plan = None if (_personal_allocation_coaching(message, previous_response)
+                              or _mixed_profile_portfolio_question(message)) else coach_evidence_plan(
             message, named_asset_count=len(mentioned_assets), read_only=is_read_only_turn,
         )
         mentioned_pairs = {
@@ -6159,8 +6169,7 @@ class FinnResponsesFrontDoor:
                 if normalized_inventory_read and pending_operation is None
                 and not resuming_clarification
                 else "get_profile_portfolio_and_bots"
-                if is_read_only_turn and re.search(r"\b(?:profiel|traderstijl|traderprofiel)\b", message, re.I)
-                and re.search(r"\b(?:bot|portefeuille|portfolio|kas|belegd|budget|allocatie|verdel\w*)\b", message, re.I)
+                if is_read_only_turn and _mixed_profile_portfolio_question(message)
                 and pending_operation is None and not resuming_clarification
                 else "get_portfolio_and_exposure"
                 if is_read_only_turn and (

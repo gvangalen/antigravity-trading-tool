@@ -32,17 +32,28 @@ De lokale reparatie richt een gecombineerde owner-scoped profiel-/volledige
 portefeuillelezing in voor gemengde adviesvragen, scheidt botlimiet,
 botkas, werkelijk belegd en totale Paper-kas in de brongebonden budgetread,
 en beperkt de profielafsluiter tot één vraag. De exacte QA-vragen hebben
-gerichte lokale regressies (**61/61** in de relevante selectie). De volledige
-backend-suite gaf **5427 passed, 7 skipped, 47 warnings**. Frontend typecheck,
+gerichte lokale regressies (**64/64** in de relevante selectie). De volledige
+backend-suite gaf op de eerste reparatiediff **5427 passed, 7 skipped, 47 warnings**;
+een definitieve herhaling na de bronmetadata- en verifierfix loopt nog.
+Frontend typecheck,
 i18n-lint/tests, command-/voorsteltests, productiebuild en `audit:high`
 slaagden; de audit meldde één bestaande moderate Next.js-advisory. De echte
 provider-developmentselectie via de canonieke lokale FINN-omgeving gaf
 **20/20**, artifact SHA-256
 `2ac4db7ef79f8a2ed789fb05a80c3c83725a7f3ebfa8b931ee78a4d78ee78a79`,
+en provider-regression **109/109**, artifact SHA-256
+`ec875ba9bf7aa68008bc327cfdd5afa4cb785f9857904ffaf4ed583ce785d0d4`,
 zonder provider-, schema-, timeout-, parse- of validatiefouten. Een eerdere
 ongeldige providerpoging zonder geladen lokale sleutel is verworpen en telt
-niet als releasebewijs. Provider-regression, workerpoorten, CI, deploy en
-onafhankelijke hertest moeten nog worden gemeten.
+niet als releasebewijs. Een synthetisch lokaal Paper-account met twee bots,
+BTC-botlimiet €100, BTC-botkas €9.599,97 en totale kas €10.005,45 doorliep
+de drie exacte QA-vragen via FastAPI/Celery/Responses. Alle drie eindigden
+voltooid met polling/SSE-pariteit, zonder voorstel. De illustratieve
+verdeling bleef als voorbeeld begrensd; de budgetvraag scheidde limiet,
+belegd bedrag en totale kas; de botvergelijking noemde de ontbrekende
+eenduidige setupbron en één controlepunt. Dit is lokaal Build-bewijs, geen
+onafhankelijke live-acceptatie. De finale workeractiematrix, laatste CI,
+deploy en onafhankelijke hertest moeten nog worden gemeten.
 
 Productcode op
 `db49e541b` is bovenop de laatste geverifieerde AAPL-release

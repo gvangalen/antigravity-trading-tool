@@ -52,7 +52,7 @@ def test_live_qa_budget_invested_and_total_cash_are_separate():
                 "lees alleen en verander niets.")
     trace = ({"result": {"results": [{"scope": "read_portfolio", "status": "completed",
              "asset": None, "data": {"environment": "paper", "global": {
-                 "cash_balance": 10005.45, "invested_value": 0}, "bots": [
+                 "cash_balance": 10005.449999999999, "invested_value": 0}, "bots": [
                      {"symbol": "BTC", "is_live": False, "position_qty": 0,
                       "invested_eur": 0, "paper_cash_eur": 9599.97, "budget_total_eur": 100},
                      {"symbol": "AAPL", "is_live": False, "position_qty": 0,
@@ -65,3 +65,10 @@ def test_live_qa_budget_invested_and_total_cash_are_separate():
     assert "BTC-botkas is daarvan €9599,97" in answer
     trace[0]["result"]["results"][0]["asset"] = "BTC"
     assert render_paper_position_cash_answer(question, trace, asset="BTC", locale="nl") is None
+
+
+def test_bot_profile_review_is_not_replaced_by_factual_cash_readback():
+    question = ("Past mijn bestaande BTC Paper-bot bij mijn opgeslagen traderstijl? "
+                "Vergelijk het botbudget met de belegde positie en totale kas.")
+    assert render_paper_position_cash_answer(question, _trace(rows=[]),
+                                             asset="BTC", locale="nl") is None

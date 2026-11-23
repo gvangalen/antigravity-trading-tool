@@ -24,6 +24,14 @@ def _amount(value: Any) -> str | None:
     return format(number.normalize(), "f").replace(".", ",")
 
 
+def _money(value: Any) -> str | None:
+    try:
+        number = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+    return _amount(number.quantize(Decimal("0.01"))) if number.is_finite() else None
+
+
 def render_paper_position_cash_answer(
     message: str, tool_trace: tuple[dict[str, Any], ...], *, asset: str, locale: str,
 ) -> str | None:
@@ -34,6 +42,7 @@ def render_paper_position_cash_answer(
         and re.search(r"\b(?:kas|kassaldo|cash)\b", message, re.I)
     )
     if (not locale.lower().startswith("nl") or not asset
+            or re.search(r"\b(?:past\b.{0,90}\bbij|beoordeel\w*|vergelijk\w*)", message, re.I)
             or not (account_question or (
                 re.search(r"\b(?:positie|posities)\b", message, re.I)
                 and re.search(r"\b(?:kas|kassaldo|cash|saldo)\b", message, re.I)
@@ -69,15 +78,15 @@ def render_paper_position_cash_answer(
                 continue
             row = rows[0]
             quantity = _amount(row.get("position_qty"))
-            cash = _amount(row.get("paper_cash_eur"))
-            budget = _amount(row.get("budget_total_eur"))
+            cash = _money(row.get("paper_cash_eur"))
+            budget = _money(row.get("budget_total_eur"))
             if quantity is None or cash is None or budget is None:
                 continue
             if account_question:
                 global_data = data.get("global") or {}
-                total_cash = _amount(global_data.get("cash_balance"))
-                total_invested = _amount(global_data.get("invested_value"))
-                bot_invested = _amount(row.get("invested_eur"))
+                total_cash = _money(global_data.get("cash_balance"))
+                total_invested = _money(global_data.get("invested_value"))
+                bot_invested = _money(row.get("invested_eur"))
                 if total_cash is None or total_invested is None or bot_invested is None:
                     continue
                 return (
