@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: ontbrekende dagrapportmeldingen in de feed (23 november 2026)
 
-Phase: `REPAIR_CANDIDATE_CI_PENDING`. In het ingelogde Gerrit-account stond het
+Phase: `LIVE_BACKFILL_ACCEPTED_NATURAL_TRIGGER_PENDING`. In het ingelogde Gerrit-account stond het
 dagrapport van 23 november klaar om 05:33 CET, maar de volledige feedgeschiedenis
 bevatte geen dagrapportkaart voor 22 of 23 november; de kaart van 21 november
 bestond wel. Dit bewijst een breuk tussen opgeslagen rapport en feedpublicatie,
@@ -51,8 +51,24 @@ Een falende datum kan de andere dagen daardoor niet volledig verdringen.
 De SQL-selectie is in geïsoleerde PostgreSQL 16 met synthetische 16/22/23-
 rapporten uitgevoerd: 22/23 geselecteerd, 16 uitgesloten. Gerichte test
 voor het contract is groen; de volledige backend-suite slaagde met
-**5472 passed, 7 skipped**, 47 waarschuwingen. PR-CI, deploy en live QA
-staan open.
+**5472 passed, 7 skipped**, 47 waarschuwingen. Product-PR
+[#1340](https://github.com/gvangalen/antigravity-trading-tool/pull/1340)
+is gemerged als `51905e6b64fbabde1022f95eae9875d892853808`.
+PR-CI slaagde met vijf groene jobs; main-CI `45261509713` en Auto Deploy
+`45261771994`/`45262964847` slaagden. GitHub main, publieke backend health
+en frontend build-info gaven HTTP 200 en dezelfde product-SHA.
+
+De eerste onafhankelijke ingelogde hertest op deze SHA was nog rood: 23
+november had een kaart, 22 november niet. Read-only productiediagnose toonde
+dat API en scoringworker dezelfde database gebruikten en dat de nieuwe worker
+vanaf 20:50 UTC per tienminutenronde twaalf kaarten per recente rapportdatum
+publiceerde. Om 21:10 UTC werd ook de ontbrekende 22-novemberkaart van Gerrit
+gepubliceerd. Onafhankelijke ingelogde QA accepteerde daarna de **backfill**:
+beide rapporten staan `KLAAR`, 22 en 23 november hebben elk precies één
+zichtbare kaart met de juiste deep link, en er zijn geen dubbele rapportkaarten
+in de gecontroleerde geschiedenis. De kaart van 22 november verscheen om
+22:10 CET. Deze acceptatie bewijst niet dat de volgende natuurlijk gegenereerde
+rapportmelding verschijnt; die trigger blijft afzonderlijk te controleren.
 
 ## FINN 3.0: geselecteerde strategiekaart zonder providerafhankelijk antwoord (23 november 2026)
 
