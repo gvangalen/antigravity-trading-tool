@@ -4,6 +4,54 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: geselecteerde strategiekaart zonder providerafhankelijk antwoord (23 november 2026)
+
+Phase: `LOCAL_VALIDATED_PENDING_RELEASE`. Onafhankelijke QA op live SHA
+`13956779351ea9d13ba0a4f9f65e2b6be397af76` heeft de beschermde
+`setup_strategy_journey` **niet geaccepteerd**: setupbevestiging, opslag en
+idempotente replay slaagden, maar de geselecteerde `strategy_next_step`-
+Bespreek-beurt eindigde `unavailable` vóór aantoonbare owner-read of advies.
+De exacte read-only audit bevestigde de juiste eigenaargebonden kaart; de
+foutcode bleef `other`. De geïsoleerde fixture werd bewaakt opgeruimd en de
+nacontrole vond geen behouden fixture. Kort ‘ja’, strategieopslag en
+polling/SSE-pariteit werden in die run niet bereikt. Een verse zichtbare
+browserkaart ontbrak voor een UI-klikproef.
+
+Productbranch `codex/finn-strategy-feed-reliable-20261123` gebruikt voor deze
+exact geselecteerde, onbewerkte read-only kaart de actuele eigenaargebonden
+feedgegevens en voert vóór het antwoord twee echte toolreads uit:
+`get_linked_strategies` voor de opgeslagen setup en complete gekoppelde
+strategieën, en `get_current_asset_scores` voor het exacte paar. Setup-ID,
+naam, paar, strategiecollectie, scorewaarde, bronstatus en scorerapportdatum
+moeten overeenkomen; anders zegt FINN dat de bronnen nu niet samen te
+verifiëren zijn. Bij overeenstemming volgt het concrete strategievoorstel als
+gesprek, zonder actievoorstel of wijziging. Het antwoord wacht niet op een
+extra Responses-providerbeurt. De bestaande afzonderlijke bevestiging voor
+strategieopslag blijft vereist. Onafhankelijke QA- en Security-codebeoordeling
+van producthead `e214094c585201a0bb11be9be4b27663223df213` vond geen
+blocker; dit is nog geen live verdict.
+
+De definitieve lokale backend-suite slaagde met **5471 passed, 7 skipped**.
+De geïsoleerde FastAPI/Celery/PostgreSQL/Redis/Responses-actiecontractmatrix
+slaagde **17/17**, zonder mislukte contracten, brokerorders, Live-bots,
+Live-tradingcalls of productieverbindingen; artifact SHA-256
+`7e373638f179fbdb12e2b8f18e7f05c475f1799b7c404f5eb55984868bb155e5`.
+De 28 action-adaptertests, Smart-DCA-migratie, bevestigde Smart DCA en
+kalender-DCA slaagden. De echte Responses-provider-developmentselectie
+slaagde **20/20**, met nul provider-, schema-, timeout-, parse- of
+validatiefouten; artifact SHA-256
+`e089f5c50a8f5c236ecf597c459ac741780086a0da3079217dd386d8a33339ab`.
+De eerste echte providerregressie had **108/109** geslaagde gevallen: één
+synthetische `activate_bot`-vraag eindigde na 30 seconden als
+`provider_unavailable`; er waren geen schemafouten. Zonder code- of
+drempelwijziging slaagde de volledige herhaling **109/109**, met nul
+provider-, schema-, timeout-, parse- of validatiefouten; artifact SHA-256
+`ad9178b84a9467fb8c30e8da84e386e975a4d58022c2710013dc07a48a04672e`.
+De eerste rode reeks blijft expliciet diagnostisch bewijs en is niet als groen
+geteld. Frontendbron is niet gewijzigd; de PR-CI controleert frontend en
+mobiel opnieuw. Er is nog geen product-PR, deploy of onafhankelijke live QA
+voor deze kandidaat.
+
 ## FINN 3.0: geselecteerde strategiekaart geeft stabiel vervolgadvies (23 november 2026)
 
 Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`; productcode staat live,
