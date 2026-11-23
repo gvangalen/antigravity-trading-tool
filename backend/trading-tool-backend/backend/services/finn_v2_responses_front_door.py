@@ -2062,6 +2062,28 @@ class FinnResponsesFrontDoor:
                     model_led_coach=True, response_id_reusable=False,
                 ), None, previous_response, locale=locale,
             )
+        if (workspace_hints.get("feed_draft_edited") is not True
+                and _explicit_discussion_only(message)
+                and re.search(r"\b(?:strategie|strategy|strategien|strategieën)\b", message, re.I)):
+            # The selected card and its current setup, linked strategy and
+            # score were freshly reread for this owner before the front door.
+            # Finish this bounded read-only discussion from those facts. A
+            # provider timeout must not turn an already verified next step
+            # into an unavailable conversation.
+            seed = FinnResponsesResult(text="selected strategy read", response_id="", tool_trace=())
+            selected_strategy_step = _complete_selected_strategy_advice(seed, feed_evidence, locale)
+            if selected_strategy_step is not seed:
+                return FinnResponsesFrontDoorResult(
+                    replace(
+                        selected_strategy_step,
+                        response_id=f"selected-strategy-step-{self.run_id}",
+                        tool_trace=({"name": "read_selected_strategy_next_step",
+                                     "status": "completed", "arguments": {},
+                                     "result": {"verified": True}},),
+                        answer_kind="selected_strategy_next_step",
+                        model_led_coach=True,
+                    ), None, previous_response, locale=locale,
+                )
         asks_exit_position = bool(re.search(
             r"\b(?:positie|position)\b[^.!?]{0,80}\b(?:gesloten|closed|verkocht|sold)\b"
             r"|\b(?:gesloten|closed|verkocht|sold)\b[^.!?]{0,80}\b(?:positie|position)\b",

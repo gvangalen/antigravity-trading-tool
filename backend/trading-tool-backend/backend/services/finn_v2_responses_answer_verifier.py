@@ -3109,6 +3109,20 @@ class FinnResponsesAnswerVerifier:
             for item in (call.get("result", {}).get("results") or [])
             if isinstance(item, dict)
         )
+        if result.answer_kind == "selected_strategy_next_step":
+            # The front door renders this answer only after the selected
+            # owner-bound feed item and its current setup/strategy/score reread
+            # agree on the exact saved pair. It is never a proposal.
+            verified = (len(result.tool_trace) == 1
+                        and result.tool_trace[0].get("name") == "read_selected_strategy_next_step"
+                        and result.tool_trace[0].get("status") == "completed"
+                        and (result.tool_trace[0].get("result") or {}).get("verified") is True)
+            if verified:
+                return FinnResponsesVerifiedAnswer("completed", result.text, None, evidence)
+            return FinnResponsesVerifiedAnswer(
+                "unavailable", "Ik kan de geselecteerde strategiekaart nu niet verifiëren.",
+                "selected_strategy_next_step_unavailable", evidence,
+            )
         if result.answer_kind in {"selected_paper_next_step", "selected_paper_next_step_unavailable"}:
             # This text is rendered by the front door from the selected,
             # owner-reread feed facts, not composed by the model. The marker
