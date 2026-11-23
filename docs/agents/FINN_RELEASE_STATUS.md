@@ -4,9 +4,49 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN: AAPL/USD-bronread voor de gesloten-marktreis (23 november 2026)
+
+Phase: `LOCAL_VALIDATED_PENDING_PR_CI`. De onafhankelijke protected
+`aapl_closed_market_journey` QA op live SHA
+`0818ee863fc08caa86b487fe15b0f5c2c0ccd537` (workflow 45109991734-1)
+stopte nog bij de eerste koersvraag. De globale AAPL/USD-bron was gelezen,
+maar de voltooide FINN-beurt noemde prijs noch bronmoment. Er volgden geen
+bevestigingen, uitvoeringen of Live-calls; de fixture werd opgeruimd.
+
+De lokale root cause zat een niveau na de al herstelde vraagherkenning:
+`read_market_snapshot` behandelde de USD-werkruimtehint van een aandeel als
+een cryptopaar en weigerde die vóór de globale, gedateerde AAPL/USD-bronread.
+De kandidaat behandelt de catalogusvaluta van aandelen en ETF's als
+bronvaluta zonder Binance-market-ID, controleert symbool en valuta van de
+gelezen bron en weigert afwijkende hints of opgeslagen setupvaluta. De
+BTC/EUR- en BTC/USDT-pairselectie blijft exact. Security heeft de definitieve
+read-only diff onafhankelijk beoordeeld: geen blokkades; geen auth- of
+uitvoeringspad is veranderd.
+
+Gerichte regressies zijn eerst rood en daarna groen; de definitieve
+scope- en factual-source-selectie gaf **51/51**. De volledige backend gaf
+**5415 passed, 7 skipped**. Frontend typecheck, i18n-lint, i18n-tests
+**45/45**, commandotests **112/112**, proposaltests **10/10**,
+productiebuild en `audit:high` slaagden; de audit houdt één bestaande
+moderate Next.js-melding over. De geïsoleerde FINN-worker-actiematrix gaf
+**17/17** (artifact SHA-256
+`ed3d46c7fbb8db3bd8fc28cf430c2c93d38ab6249312bf9ac9c363efb61c1ff8`),
+de adapters **28/28** en de Smart DCA- en kalender-DCA-proeven slaagden.
+Een afzonderlijke lokale chat/workerbeurt met de exacte AAPL-vraag en een
+USD-werkruimtehint gaf een gedateerde koers, bronmoment, gelijke
+polling/SSE-uitkomst, zonder voorstel of order. Echte providerselectie:
+development **20/20** (artifact SHA-256
+`ffed124b8680fa54f615861dea7d85ffda4f46e24445eded6e74c41eb4944076`),
+regression **109/109** (artifact SHA-256
+`6c78cd856549a437b25ed62d8575ee89c671e286e34a936e8bfbb08c4b7a5e69`),
+zonder provider-, schema-, timeout-, parse- of validatiefouten. Deze lokale proeven zijn geen onafhankelijke
+live-acceptatie. Een echte door de Paper-worker geweigerde order blijft
+afzonderlijk onbewezen en mag alleen in een geïsoleerde testdatabase worden
+onderzocht.
+
 ## FINN: laatst beschikbare AAPL-koers voor planning (23 november 2026)
 
-Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`. Onafhankelijke protected
+Phase: `NOT_ACCEPTED`. Onafhankelijke protected
 `aapl_closed_market_journey` QA op live SHA
 `013086c98a51d97fbb56a4b4de36717bfaada760` (workflow 45103307207-1)
 stopte vóór de eerste setup: een gedateerde globale AAPL/USD-bron was
