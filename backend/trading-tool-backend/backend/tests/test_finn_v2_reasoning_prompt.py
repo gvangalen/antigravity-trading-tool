@@ -89,6 +89,16 @@ def test_evaluate_prompt_keeps_plan_reviews_read_only_and_blocks_live_activation
 
     assert "read-only analysis" in instruction
     assert "never recommend enabling live trading" in instruction
+    assert "portfolio exposure" in instruction
+
+
+def test_proposal_prompt_uses_personal_context_without_inventing_amounts():
+    instruction = FinnV2ReasoningPromptService().mode_instruction_for("CREATE_PROPOSAL")
+
+    assert "owner-read trader profile and unfiltered portfolio snapshot" in instruction
+    assert "latest explicit choice wins" in instruction
+    assert "Keep Paper cash and Live broker balances separate" in instruction
+    assert "inferred amount, allocation" in instruction
 
 
 def test_integrated_plan_prompt_preserves_bot_status_semantics_and_personal_grounding():

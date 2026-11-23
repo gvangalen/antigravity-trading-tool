@@ -97,6 +97,35 @@ def _named_asset_quote_question(message: str) -> bool:
     return bool(_QUOTE_QUESTION.search(message) and mentioned_catalog_symbols(message))
 
 
+def _personal_allocation_coaching(message: str, previous_response: Mapping[str, Any] | None) -> bool:
+    """A personal portfolio example needs the current owner profile, including on a short follow-up."""
+    personal = re.search(r"\b(?:mijn|mij|ik|me|my|mine|mein\w*|ich)\b", message, re.I)
+    allocation = re.search(
+        r"\b(?:verdeling|allocatie|allocation|portfolio mix|"
+        r"hoeveel\s+(?:cash|belegd)|wie\s+viel\s+(?:cash|investiert))\b", message, re.I,
+    ) or (
+        re.search(r"\b(?:portefeuille|portfolio)\b", message, re.I)
+        and re.search(r"\b(?:hoe|how|wie)\b.*\b(?:eruit|uitzien|look|verdelen|allocate)\b", message, re.I)
+    )
+    if personal and allocation:
+        return True
+    prior_answer = str((previous_response or {}).get("answer") or "")
+    if allocation and (previous_response or {}).get("terminal_status") == "completed" and re.search(
+        r"\b(?:paper[-\s]*portefeuille|paper portfolio|jouw portefeuille|your portfolio)\b",
+        prior_answer, re.I,
+    ):
+        return True
+    if personal and re.search(r"\b(?:btc|bitcoin)\b", message, re.I) and re.search(
+        r"\b(?:etf|aandelenfonds|indexfonds|voorstel|proposal)\b", message, re.I,
+    ):
+        return True
+    return bool(
+        (previous_response or {}).get("terminal_status") == "completed"
+        and re.search(r"\b(?:voorbeeldverdeling|example allocation|beispielaufteilung)\b", prior_answer, re.I)
+        and re.search(r"\b(?:voorbeeld|example|beispiel)\b", message, re.I)
+    )
+
+
 def _standalone_read_subject(message: str, facts: Any) -> str | None:
     """Select a fresh read when the latest question names its own subject.
 
@@ -867,6 +896,26 @@ class FinnResponsesFrontDoor:
             "Lead the conversation: answer directly when general reasoning suffices, ask one "
             "useful follow-up when a choice is missing, and call one or more FINN tools when "
             "the answer needs saved account facts, a personal assessment, or current data. "
+            "When discussing the saved trader profile, connect one relevant saved preference "
+            "to the user's current goal, plan, setup, or bot proposal. If the next choice is "
+            "unclear, ask one concrete question about it; do not ask for profile facts already "
+            "saved or suggest a trade size or allocation from profile labels alone. Do not "
+            "repeat a follow-up question the user has already answered. "
+            "In a follow-up, answer the new question without recapping unchanged account facts. "
+            "Do not repeat the Paper cash, invested balance, or bot budget just because they "
+            "appeared in the preceding answer. Bring them back only if the user asks about "
+            "current holdings or spending capacity, or a specific misconception needs correcting. "
+            "A bot budget remains a limit, never a target allocation or invested amount. "
+            "For an illustrative allocation, carry forward the trader's stated investment "
+            "focus and any verified saved profile focus; a newer explicit preference wins. "
+            "If the trader prioritizes BTC, do not "
+            "present an ETF-majority example as though it satisfies that BTC-first request. "
+            "Explain the concentration tradeoff without silently replacing their goal with "
+            "a diversified one. When asked for an example, provide a clearly illustrative "
+            "example that reflects that focus; if the desired BTC share is unclear, label "
+            "distinct options or ask one focused question afterward. Do not infer that BTC "
+            "focus means all-in BTC or "
+            "that an example is personally suitable. "
             "For a question combining a saved plan, market context and portfolio or bot budget, "
             "read each relevant source before saying that one of them is missing. "
             "For the latest bot decision, use the persisted bot decision history. "
@@ -6100,6 +6149,9 @@ class FinnResponsesFrontDoor:
                     self._asks_about_open_position(message)
                     or self._asks_about_aggregate_portfolio(message)
                 )
+                and pending_operation is None and not resuming_clarification
+                else "get_my_profile_and_risk_style"
+                if is_read_only_turn and _personal_allocation_coaching(message, previous_response)
                 and pending_operation is None and not resuming_clarification
                 else "evaluate_bot"
                 if is_read_only_turn and request_facts.action_polarity == "evaluate"

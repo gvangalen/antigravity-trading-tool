@@ -99,6 +99,12 @@ class FinnResponsesReadExecutor:
         shared_state: dict[str, Any] = {}
         for read_tool in call.read_tools:
             selector = call.inputs
+            if read_tool == "read_portfolio" and call.evaluation_operation_id in {
+                "evaluate_plan", "evaluate_setup", "evaluate_strategy", "evaluate_bot",
+            }:
+                # Personal plan advice needs the owner's account-wide exposure;
+                # the selected setup asset remains scoped on the other reads.
+                selector = {key: value for key, value in call.inputs.items() if key != "asset"}
             if (read_tool == "read_review_history" and call.name == "get_closed_trade_review"
                     and self.verified_review_id is not None):
                 selector = {**call.inputs, "_verified_review_id": self.verified_review_id}

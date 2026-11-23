@@ -728,6 +728,25 @@ def test_direct_trader_profile_readback_uses_effective_locale(locale, question, 
     assert expected in answer.text
 
 
+def test_direct_profile_readback_asks_about_saved_long_term_and_active_focus():
+    prepared = SimpleNamespace(locale="nl", response=SimpleNamespace(
+        text="Je profiel is onbekend.", uses_previous_response=False, turn_contract=None,
+        tool_trace=({"name": "get_my_profile_and_risk_style", "status": "completed",
+                     "result": {"results": [{"scope": "read_profile", "status": "completed",
+                                            "data": {"has_profile": True, "trader_profile": {
+                                                "trader_types": ["dca_investor", "swing_trader"],
+                                                "asset_focus": ["bitcoin"],
+                                                "risk_profiles": ["balanced"],
+                                            }}}]}},),
+    ))
+    answer = _minimal_read_answer(message="Wat zegt mijn traderprofiel?", prepared=prepared)
+    assert answer.status == "completed"
+    assert "Risicoprofiel: normaal" in answer.text
+    assert "voor Bitcoin eerst een opbouwplan of een actieve setup" in answer.text
+    assert answer.text.count("?") == 1
+    assert "€" not in answer.text
+
+
 def test_direct_trader_profile_question_distinguishes_empty_from_failed_read():
     prepared = SimpleNamespace(locale="nl", previous_response={
         "terminal_status": "completed", "tool_trace": [{"result": {"results": [{
