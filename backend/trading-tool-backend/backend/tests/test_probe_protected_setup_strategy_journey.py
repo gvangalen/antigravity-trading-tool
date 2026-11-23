@@ -183,44 +183,168 @@ def test_full_journey_keeps_bot_uncreated_and_cleans(monkeypatch):
     after = dict(baseline, setups=1, strategies=1)
     snapshots = iter((baseline, baseline, dict(baseline, setups=1), after))
     monkeypatch.setattr(probe, "_snapshot", lambda _user_id: next(snapshots))
+    turn_contexts = []
     turns = iter((
         {"status": "completed", "conversation_id": "conv", "proposal_id": "setup", "confirmation_required": True,
          "operation_id": "create_setup", "dispatch_count": 1, "attempt_count": 1},
-        {"status": "clarification_required", "conversation_id": "conv", "proposal_id": None,
+        {"status": "clarification_required", "conversation_id": "feed-conv", "proposal_id": None,
          "operation_id": "clarify_request", "guided_operation": "create_strategy", "supplied_inputs": {"setup_id": 90},
          "dispatch_count": 1, "attempt_count": 1},
-        {"status": "completed", "conversation_id": "conv", "proposal_id": "strategy", "confirmation_required": True,
+        {"status": "completed", "conversation_id": "feed-conv", "proposal_id": "strategy", "confirmation_required": True,
          "operation_id": "create_strategy", "supplied_inputs": {"setup_id": 90}, "dispatch_count": 1, "attempt_count": 1},
-        {"status": "clarification_required", "conversation_id": "conv", "proposal_id": None,
+        {"status": "clarification_required", "conversation_id": "feed-conv", "proposal_id": None,
          "operation_id": "clarify_request", "guided_operation": "create_bot", "supplied_inputs": {"strategy_id": 91},
          "dispatch_count": 1, "attempt_count": 1},
     ))
     async def turn(*_args, **_kwargs):
+        turn_contexts.append(_kwargs.get("conversation_id"))
         return next(turns)
     async def confirm(_user_id, proposal_id, trace):
         trace["confirmed_count"] = trace.get("confirmed_count", 0) + 1
         trace["executed_count"] = trace.get("executed_count", 0) + 1
         if proposal_id == "setup":
             return {"conversation_id": "conv", "next_step": {"step": "strategy", "setup_id": 90}}
-        return {"conversation_id": "conv", "next_step": {"step": "paper", "setup_id": 90, "strategy_id": 91}}
+        return {"conversation_id": "feed-conv", "next_step": {"step": "paper", "setup_id": 90, "strategy_id": 91}}
     async def card(*_args):
-        return {"id": "card"}
+        return {"id": "card", "status": "unread",
+                "title": f"Strategie voor QA BTC Setup {namespace} ontbreekt",
+                "description": "Deze opgeslagen setup voor BTC/USDT heeft nog geen gekoppelde strategie."}
     async def discuss(*_args):
         events.append("discuss")
+        return {"conversation_id": "feed-conv"}
     async def resolved(*_args):
         events.append("resolved")
     monkeypatch.setattr(probe, "_turn", turn)
     monkeypatch.setattr(probe, "_confirm_and_execute", confirm)
     monkeypatch.setattr(probe, "_card", card)
-    monkeypatch.setattr(probe, "_discuss_card", discuss)
+    monkeypatch.setattr(probe, "_discuss_strategy_card", discuss)
+    monkeypatch.setattr(probe, "_discuss_paper_card", discuss)
     monkeypatch.setattr(probe, "_wait_resolved", resolved)
     monkeypatch.setattr(probe, "_saved_pair", lambda *_args: {"setup_id": 90, "strategy_id": 91})
     trace = {"stage": "seed", "fixture_state": "not_created"}
     result = asyncio.run(probe._case(namespace, 42, trace))
     assert result["result"] == "PASS"
     assert result["replay"] and result["no_bot_or_order"]
+    assert result["feed_strategy_lineage"] and result["strategy_source_verified"]
+    assert turn_contexts == [None, "feed-conv", "feed-conv", "feed-conv"]
     assert events == ["discuss", "resolved", "discuss", "cleanup"]
     assert trace["fixture_state"] == "cleaned"
+
+
+def test_strategy_feed_discussion_requires_current_owner_read_and_advice(monkeypatch):
+    card = {"id": "card", "status": "unread",
+            "title": "Strategie voor BTC setup ontbreekt",
+            "description": "Deze opgeslagen setup voor BTC/USDT heeft nog geen gekoppelde strategie."}
+    async def turn(*_args, **kwargs):
+        assert kwargs["feed_item_id"] == "card"
+        return {"run_id": "run", "conversation_id": "feed-conv", "status": "completed",
+                "proposal_id": None, "confirmation_required": False,
+                "content": "Voor BTC/USDT ontbreekt een strategie. De score is onbekend; welke entry en stop heb je nodig?"}
+    async def reads(**kwargs):
+        assert kwargs == {"run_id": "run", "conversation_id": "feed-conv", "user_id": 42}
+        return [{"scope": "read_active_setup", "source": "setups", "status": "completed",
+                 "data": {"setup_id": 90, "name": "BTC setup", "pair": "BTC/USDT"}},
+                {"scope": "read_linked_strategies", "source": "strategies", "status": "completed",
+                 "data": {"setup_id": 90, "complete": True,
+                          "strategy_count": 0, "strategies": []}},
+                {"scope": "read_asset_scores", "source": "daily_scores_and_source_indicators",
+                 "status": "completed", "data": {"symbol": "BTC", "pair": "BTC/USDT",
+                                                  "source_status": "missing_scores",
+                                                  "benchmark_score": None, "as_of": None}}]
+    monkeypatch.setattr(probe, "_turn", turn)
+    monkeypatch.setattr(probe, "_read_tool_results", reads)
+    assert asyncio.run(probe._discuss_strategy_card(42, card, 90, "BTC setup"))["conversation_id"] == "feed-conv"
+
+    async def no_strategy_collection(**_kwargs):
+        return [row for row in await reads(**_kwargs) if row["scope"] != "read_linked_strategies"]
+    monkeypatch.setattr(probe, "_read_tool_results", no_strategy_collection)
+    with pytest.raises(RuntimeError, match="^journey_strategy_absence_unverified$"):
+        asyncio.run(probe._discuss_strategy_card(42, card, 90, "BTC setup"))
+
+    async def wrong_owner_read(**_kwargs):
+        return [{"scope": "read_active_setup", "source": "setups", "status": "completed",
+                 "data": {"setup_id": 91, "name": "BTC setup", "pair": "BTC/USDT"}}]
+    monkeypatch.setattr(probe, "_read_tool_results", wrong_owner_read)
+    with pytest.raises(RuntimeError, match="^journey_strategy_source_missing$"):
+        asyncio.run(probe._discuss_strategy_card(42, card, 90, "BTC setup"))
+
+
+def test_strategy_feed_card_rejects_wrong_pair_or_stale_copy():
+    card = {"status": "unread", "title": "Strategie voor BTC setup ontbreekt",
+            "description": "Deze opgeslagen setup voor BTC/USDT heeft nog geen gekoppelde strategie."}
+    assert probe._strategy_card_copy_valid(card, "BTC setup")
+    assert not probe._strategy_card_copy_valid(dict(card, status="resolved"), "BTC setup")
+    assert not probe._strategy_card_copy_valid(dict(card, description=card["description"].replace(
+        "BTC/USDT", "BTC/EUR")), "BTC setup")
+    assert not probe._strategy_card_copy_valid(dict(card, title="Strategie aanwezig"), "BTC setup")
+
+
+def test_strategy_source_accepts_only_matching_saved_setup_inventory():
+    rows = [{"scope": "read_saved_setup_inventory", "source": "setups", "status": "completed",
+             "data": {"complete": True, "setups": [{"setup_id": 90, "name": "BTC setup",
+                                                   "pair": "BTC/USDT", "linked_strategies": []}]}}]
+    assert probe._strategy_source_valid(rows, 90, "BTC setup")
+    assert probe._strategy_absence_verified(rows, 90)
+    assert not probe._strategy_source_valid(rows, 91, "BTC setup")
+    assert not probe._strategy_absence_verified(rows, 91)
+    linked = {"complete": True, "setups": [{"setup_id": 90,
+                                               "linked_strategies": [{"strategy_id": 3}]}]}
+    assert not probe._strategy_absence_verified([dict(rows[0], data=linked)], 90)
+    assert not probe._strategy_source_valid([dict(rows[0], status="unavailable")], 90, "BTC setup")
+
+
+def test_strategy_absence_requires_complete_owner_scoped_collection():
+    row = {"scope": "read_linked_strategies", "source": "strategies", "status": "completed",
+           "data": {"setup_id": 90, "complete": True, "strategy_count": 0, "strategies": []}}
+    assert probe._strategy_absence_verified([row], 90)
+    assert not probe._strategy_absence_verified([dict(row, data=dict(row["data"], complete=False))], 90)
+    assert not probe._strategy_absence_verified([dict(row, data=dict(row["data"], strategy_count=1))], 90)
+    assert not probe._strategy_absence_verified([dict(row, data=dict(row["data"], setup_id=91))], 90)
+    assert not probe._strategy_absence_verified([dict(row, status="unavailable")], 90)
+    assert not probe._strategy_absence_verified([{"scope": "read_linked_strategy", "status": "unavailable",
+                                                  "reason": "strategy_not_resolved"}], 90)
+
+
+def test_current_score_source_requires_exact_pair_and_verified_status():
+    row = {"scope": "read_asset_scores", "source": "daily_scores_and_source_indicators",
+           "status": "completed", "data": {"symbol": "BTC", "pair": "BTC/USDT",
+                                            "source_status": "available",
+                                            "benchmark_score": 63, "as_of": "2026-11-23"}}
+    assert probe._current_score_evidence([row]) == row["data"]
+    assert probe._current_score_evidence([dict(row, data=dict(row["data"], pair="BTC/EUR"))]) is None
+    assert probe._current_score_evidence([dict(row, status="unavailable")]) is None
+    assert probe._current_score_evidence([dict(row, data=dict(row["data"], as_of=None))]) is None
+
+
+@pytest.mark.parametrize("answer,valid", [
+    ("Voor BTC/USDT ontbreekt een strategie. De benchmarkscore is 63/100 op 23 november 2026. Welke entry wil je?", True),
+    ("Voor BTC/USDT ontbreekt een strategie. De benchmarkscore is 82/100 op 23 november 2026. Welke entry wil je?", False),
+    ("Voor BTC/USDT ontbreekt een strategie. De benchmarkscore is 63/100. Welke entry wil je?", False),
+])
+def test_strategy_feed_discussion_checks_available_score_and_date(monkeypatch, answer, valid):
+    card = {"id": "card", "status": "unread",
+            "title": "Strategie voor BTC setup ontbreekt",
+            "description": "Deze opgeslagen setup voor BTC/USDT heeft nog geen gekoppelde strategie."}
+    async def turn(*_args, **_kwargs):
+        return {"run_id": "run", "conversation_id": "feed-conv", "status": "completed",
+                "proposal_id": None, "confirmation_required": False, "content": answer}
+    async def reads(**_kwargs):
+        return [{"scope": "read_active_setup", "source": "setups", "status": "completed",
+                 "data": {"setup_id": 90, "name": "BTC setup", "pair": "BTC/USDT"}},
+                {"scope": "read_linked_strategies", "source": "strategies", "status": "completed",
+                 "data": {"setup_id": 90, "complete": True,
+                          "strategy_count": 0, "strategies": []}},
+                {"scope": "read_asset_scores", "source": "daily_scores_and_source_indicators",
+                 "status": "completed", "data": {"symbol": "BTC", "pair": "BTC/USDT",
+                                                  "source_status": "available", "benchmark_score": 63,
+                                                  "as_of": "2026-11-23"}}]
+    monkeypatch.setattr(probe, "_turn", turn)
+    monkeypatch.setattr(probe, "_read_tool_results", reads)
+    if valid:
+        assert asyncio.run(probe._discuss_strategy_card(42, card, 90, "BTC setup"))["status"] == "completed"
+    else:
+        with pytest.raises(RuntimeError, match="^journey_strategy_advice_missing$"):
+            asyncio.run(probe._discuss_strategy_card(42, card, 90, "BTC setup"))
 
 
 def test_failed_guided_turn_quarantines(monkeypatch):

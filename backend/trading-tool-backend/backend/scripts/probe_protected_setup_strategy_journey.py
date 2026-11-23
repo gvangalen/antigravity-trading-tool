@@ -12,6 +12,8 @@ import time
 import uuid
 
 from backend.scripts import probe_protected_coach_feed as feed_probe
+from backend.scripts.probe_protected_account_answer import _read_tool_results
+from backend.scripts.probe_protected_coach_feed_journey import _date_in_answer, _score_in_answer
 from backend.scripts import probe_protected_score2_stale_paper as fixture
 from backend.scripts.probe_protected_trader_fixture_audit import JOURNEY_EXECUTION_CODES
 
@@ -24,6 +26,10 @@ FAILURES = frozenset({
     "journey_paper_card_missing", "journey_paper_guided_failed",
     "journey_owner_scope_failed", "journey_replay_failed",
     "journey_feed_discuss_failed",
+    "journey_strategy_card_copy_failed", "journey_strategy_source_missing",
+    "journey_strategy_absence_unverified", "journey_strategy_score_source_missing",
+    "journey_strategy_advice_missing",
+    "journey_feed_lineage_failed",
     "journey_unexpected_bot_or_order", "journey_cleanup_failed",
     "journey_runtime_failed",
 })
@@ -80,7 +86,8 @@ def _snapshot(user_id: int) -> dict:
         connection.close()
 
 
-async def _turn(user_id: int, message: str, *, conversation_id: str | None = None) -> dict:
+async def _turn(user_id: int, message: str, *, conversation_id: str | None = None,
+                feed_item_id: str | None = None) -> dict:
     from backend.celery_task.finn_v2_task import _process_finn_v2_run
     from backend.infrastructure.database import async_session_factory
     from backend.schemas.finn_v2_schema import AgentRunRequest
@@ -94,7 +101,8 @@ async def _turn(user_id: int, message: str, *, conversation_id: str | None = Non
             request=AgentRunRequest(
                 message=message, conversation_id=conversation_id, transport="chat",
                 workspace_hints={"symbol": "BTC", "quote_currency": "USDT"},
-                client_context={"surface": "qa_setup_strategy_journey"},
+                client_context={"surface": "qa_setup_strategy_journey",
+                                **({"feed_item_id": feed_item_id} if feed_item_id else {})},
             ),
             request_path="/api/assistant/chat",
             request_id=f"qa-journey-{uuid.uuid4().hex}",
@@ -115,7 +123,9 @@ async def _turn(user_id: int, message: str, *, conversation_id: str | None = Non
         projection = dict(projection_row.scalar_one_or_none() or {})
         return {
             "status": envelope.status,
+            "run_id": run_id,
             "conversation_id": saved.conversation_id,
+            "content": response.content if response else None,
             "proposal_id": response.proposal_id if response else None,
             "confirmation_required": bool(response and response.confirmation_required),
             "error_code": envelope.error_code,
@@ -271,10 +281,129 @@ async def _card(user_id: int, event_type: str, setup_id: int,
                        else "journey_paper_card_missing")
 
 
-async def _discuss_card(user_id: int, card: dict, question: str) -> None:
+def _strategy_card_copy_valid(card: dict, setup_name: str) -> bool:
+    title = str(card.get("title") or "").casefold()
+    description = str(card.get("description") or "").casefold()
+    return (card.get("status") in {"unread", "read"}
+            and setup_name.casefold() in title
+            and "strategie" in title and "ontbreekt" in title
+            and "BTC/USDT" in str(card.get("description") or "")
+            and "geen gekoppelde strategie" in description)
+
+
+def _strategy_source_valid(rows: list[dict], setup_id: int, setup_name: str) -> bool:
+    for row in rows:
+        if not isinstance(row, dict) or row.get("status") != "completed":
+            continue
+        if row.get("scope") == "read_active_setup" and row.get("source") == "setups":
+            data = row.get("data") or {}
+            if (isinstance(data, dict) and str(data.get("setup_id")) == str(setup_id)
+                    and data.get("name") == setup_name and data.get("pair") == "BTC/USDT"):
+                return True
+        if row.get("scope") == "read_saved_setup_inventory" and row.get("source") == "setups":
+            data = row.get("data") or {}
+            setups = data.get("setups") if isinstance(data, dict) else None
+            if isinstance(setups, list) and any(
+                isinstance(setup, dict) and str(setup.get("setup_id")) == str(setup_id)
+                and setup.get("name") == setup_name and setup.get("pair") == "BTC/USDT"
+                for setup in setups
+            ):
+                return True
+    return False
+
+
+def _strategy_absence_verified(rows: list[dict], setup_id: int) -> bool:
+    for row in rows:
+        if not isinstance(row, dict) or row.get("status") != "completed":
+            continue
+        data = row.get("data") or {}
+        if not isinstance(data, dict):
+            continue
+        if (row.get("scope") == "read_linked_strategies"
+                and row.get("source") == "strategies"
+                and str(data.get("setup_id")) == str(setup_id)
+                and data.get("complete") is True
+                and data.get("strategy_count") == 0
+                and data.get("strategies") == []):
+            return True
+        if (row.get("scope") == "read_saved_setup_inventory"
+                and row.get("source") == "setups" and data.get("complete") is True):
+            matches = [setup for setup in data.get("setups") or []
+                       if isinstance(setup, dict)
+                       and str(setup.get("setup_id")) == str(setup_id)]
+            if len(matches) == 1 and matches[0].get("linked_strategies") == []:
+                return True
+    return False
+
+
+def _current_score_evidence(rows: list[dict]) -> dict | None:
+    for row in rows:
+        if not isinstance(row, dict) or row.get("scope") != "read_asset_scores":
+            continue
+        if row.get("status") != "completed" or row.get("source") != "daily_scores_and_source_indicators":
+            continue
+        data = row.get("data") or {}
+        if (not isinstance(data, dict) or data.get("symbol") != "BTC"
+                or data.get("pair") != "BTC/USDT"
+                or not isinstance(data.get("source_status"), str)):
+            continue
+        if data["source_status"] == "available" and (
+                data.get("benchmark_score") is None or not data.get("as_of")):
+            continue
+        return data
+    return None
+
+
+async def _discuss_strategy_card(user_id: int, card: dict, setup_id: int,
+                                 setup_name: str) -> dict:
+    if not _strategy_card_copy_valid(card, setup_name):
+        raise RuntimeError("journey_strategy_card_copy_failed")
+    turn = await _turn(
+        user_id,
+        f"Controleer of setup {setup_name} voor BTC/USDT nog bestaat en of er inmiddels "
+        "een strategie aan is gekoppeld. Zo niet, adviseer welke strategie past en "
+        "welke gegevens je van mij nodig hebt. Lees ook de actuele scorestatus en "
+        "noem een ontbrekende bron eerlijk. Maak niets aan.",
+        feed_item_id=str(card["id"]),
+    )
+    content = str(turn.get("content") or "")
+    if (turn.get("status") != "completed" or turn.get("proposal_id")
+            or turn.get("confirmation_required") or "BTC/USDT" not in content):
+        raise RuntimeError("journey_feed_discuss_failed")
+    try:
+        rows = await _read_tool_results(run_id=turn["run_id"],
+                                        conversation_id=turn["conversation_id"],
+                                        user_id=user_id)
+    except RuntimeError:
+        raise RuntimeError("journey_strategy_source_missing") from None
+    if not _strategy_source_valid(rows, setup_id, setup_name):
+        raise RuntimeError("journey_strategy_source_missing")
+    if not _strategy_absence_verified(rows, setup_id):
+        raise RuntimeError("journey_strategy_absence_unverified")
+    score = _current_score_evidence(rows)
+    if score is None:
+        raise RuntimeError("journey_strategy_score_source_missing")
+    if ("strategie" not in content.casefold()
+            or not any(word in content.casefold() for word in
+                       ("nodig", "welke", "kies", "bespreek", "voorstel", "past"))
+            or not any(word in content.casefold() for word in ("score", "benchmark"))
+            or (score.get("source_status") != "available" and not any(
+                word in content.casefold() for word in
+                ("ontbreekt", "onbekend", "niet beschikbaar", "niet verifieerbaar",
+                 "verouderd", "geen actuele", "niet actueel")))
+            or (score.get("source_status") == "available" and not (
+                score.get("as_of") and _score_in_answer(content, str(score["benchmark_score"]))
+                and _date_in_answer(content, str(score["as_of"]))))):
+        raise RuntimeError("journey_strategy_advice_missing")
+    return turn
+
+
+async def _discuss_paper_card(user_id: int, card: dict) -> None:
     try:
         await feed_probe._discuss(
-            user_id, str(card["id"]), symbol="BTC", question=question,
+            user_id, str(card["id"]), symbol="BTC",
+            question="Bespreek of voor deze BTC/USDT-strategie een Paper-bot "
+                     "voorbereid kan worden. Maak er geen aan.",
             content_check=lambda answer: "BTC/USDT" in answer,
         )
     except Exception:
@@ -334,11 +463,14 @@ async def _case(namespace: str, bound: int, trace: dict) -> dict:
         trace["stage"] = "setup_card"
         strategy_card = await _card(user_id, "strategy_next_step", ids["setup_id"])
         trace["stage"] = "setup_discuss"
-        await _discuss_card(user_id, strategy_card, "Bespreek de volgende stap voor mijn BTC/USDT-setup. "
-                            "Lees het opgeslagen plan; wijzig niets.")
+        discussed = await _discuss_strategy_card(user_id, strategy_card,
+                                                 ids["setup_id"], setup_name)
+        discussion_id = discussed.get("conversation_id")
+        if not discussion_id or discussion_id == setup["conversation_id"]:
+            raise RuntimeError("journey_feed_lineage_failed")
         trace["stage"] = "strategy_guided"
-        yes = await _turn(user_id, "ja", conversation_id=setup["conversation_id"])
-        if (yes["conversation_id"] != setup["conversation_id"] or
+        yes = await _turn(user_id, "ja", conversation_id=discussion_id)
+        if (yes["conversation_id"] != discussion_id or
                 yes["status"] not in {"completed", "clarification_required"}
                 or "create_strategy" not in {yes["operation_id"], yes["guided_operation"]}
                 or str(yes["supplied_inputs"].get("setup_id")) != str(ids["setup_id"])
@@ -350,8 +482,9 @@ async def _case(namespace: str, bound: int, trace: dict) -> dict:
             f"Noem die strategie {strategy_name}. Vaste uitvoering van 10 euro, "
             "entry 76000 USDT, stop-loss 72000 USDT, target 83000 USDT, "
             "gebalanceerd risico. Toon eerst een voorstel, maak geen bot.",
-            conversation_id=setup["conversation_id"])
-        if (strategy["status"] != "completed" or not strategy["proposal_id"]
+            conversation_id=discussion_id)
+        if (strategy["conversation_id"] != discussion_id
+                or strategy["status"] != "completed" or not strategy["proposal_id"]
                 or not strategy["confirmation_required"]
                 or strategy["operation_id"] != "create_strategy"
                 or str(strategy["supplied_inputs"].get("setup_id")) != str(ids["setup_id"])
@@ -366,7 +499,7 @@ async def _case(namespace: str, bound: int, trace: dict) -> dict:
         trace["stage"] = "strategy_confirmation"
         created_strategy = await _confirm_and_execute(user_id, strategy["proposal_id"], trace)
         ids = _saved_pair(user_id, setup_name, strategy_name)
-        if (created_strategy["conversation_id"] != setup["conversation_id"]
+        if (created_strategy["conversation_id"] != discussion_id
                 or (created_strategy["next_step"] or {}).get("step") != "paper"
                 or (created_strategy["next_step"] or {}).get("setup_id") != ids["setup_id"]
                 or (created_strategy["next_step"] or {}).get("strategy_id") != ids["strategy_id"]):
@@ -376,11 +509,10 @@ async def _case(namespace: str, bound: int, trace: dict) -> dict:
                                  ids["strategy_id"])
         await _wait_resolved(user_id, str(strategy_card["id"]))
         trace["stage"] = "paper_discuss"
-        await _discuss_card(user_id, paper_card, "Bespreek of voor deze BTC/USDT-strategie "
-                            "een Paper-bot voorbereid kan worden. Maak er geen aan.")
+        await _discuss_paper_card(user_id, paper_card)
         trace["stage"] = "paper_guided"
-        paper_yes = await _turn(user_id, "ja", conversation_id=setup["conversation_id"])
-        if (paper_yes["conversation_id"] != setup["conversation_id"]
+        paper_yes = await _turn(user_id, "ja", conversation_id=discussion_id)
+        if (paper_yes["conversation_id"] != discussion_id
                 or paper_yes["status"] not in {"completed", "clarification_required"}
                 or paper_yes["proposal_id"]
                 or "create_bot" not in {paper_yes["operation_id"], paper_yes["guided_operation"]}
@@ -401,7 +533,8 @@ async def _case(namespace: str, bound: int, trace: dict) -> dict:
         return {"result": "PASS", "setup_confirmation": True,
                 "strategy_confirmation": True, "setup_lineage": True,
                 "strategy_card": bool(strategy_card), "paper_card": bool(paper_card),
-                "feed_discussions": True, "short_yes_continuity": True, "replay": True,
+                "feed_discussions": True, "feed_strategy_lineage": True,
+                "strategy_source_verified": True, "short_yes_continuity": True, "replay": True,
                 "no_watchlist_required": True, "no_bot_or_order": True}
     finally:
         if user_id is not None and bot_id is not None:
