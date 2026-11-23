@@ -192,6 +192,21 @@ async def _turn(user_id: int, message: str, *, conversation_id: str | None = Non
                 "attempt_count": projection.get("attempt_count")}
 
 
+def _quote_diagnostic(turn: dict, source: dict) -> dict:
+    answer = turn.get("answer") or ""
+    status = turn.get("status")
+    return {
+        "source_read": True,
+        "turn_returned": True,
+        "turn_status": (status if status in
+                        {"completed", "partial", "unavailable", "failed", "error"} else "other"),
+        "proposal_present": bool(turn.get("proposal_id")),
+        "price_mentioned": quote._answer_current_price(answer, source["price"]),
+        "source_moment_mentioned": quote._answer_moments(
+            answer, source["at"], source["price"])["current_source_time_explained"],
+    }
+
+
 async def _case(namespace: str, owner: int, trace: dict) -> dict:
     user_id = None
     try:
@@ -205,12 +220,14 @@ async def _case(namespace: str, owner: int, trace: dict) -> dict:
 
         trace["stage"] = "quote"
         source = quote._source()
+        trace["quote_diagnostic"] = {"source_read": True, "turn_returned": False}
         quote_turn = await _turn(user_id,
             "Wat is de laatst beschikbare AAPL-koers in USD met bronmoment? "
             "Gebruik die alleen voor planning; dit is geen actuele uitvoeringskoers. Plaats geen order.")
-        if (quote_turn["status"] != "completed" or quote_turn["proposal_id"]
-                or not quote._answer_current_price(quote_turn["answer"], source["price"])
-                or not quote._answer_moments(quote_turn["answer"], source["at"], source["price"])["current_source_time_explained"]):
+        trace["quote_diagnostic"] = _quote_diagnostic(quote_turn, source)
+        diagnostic = trace["quote_diagnostic"]
+        if (diagnostic["turn_status"] != "completed" or diagnostic["proposal_present"]
+                or not diagnostic["price_mentioned"] or not diagnostic["source_moment_mentioned"]):
             raise RuntimeError("aapl_journey_quote_missing")
 
         setup_name, strategy_name, bot_name = bot._names(namespace)
@@ -334,6 +351,8 @@ def run(namespace: str) -> dict:
                           "failure_stage": trace.get("stage_before_cleanup", trace["stage"])}
             if "execution_diagnostic" in trace:
                 result["execution_diagnostic"] = trace["execution_diagnostic"].copy()
+            if "quote_diagnostic" in trace:
+                result["quote_diagnostic"] = trace["quote_diagnostic"].copy()
             result["fixture_state"] = trace["fixture_state"]
             bot_known = trace.get("bot_execution_succeeded")
             result["confirmations"] = (None if trace.get("bot_confirmation_started") and not trace.get("bot_confirmed")
