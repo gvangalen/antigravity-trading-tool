@@ -4212,6 +4212,23 @@ def test_feed_discussion_uses_current_owner_read_without_provider(monkeypatch):
     )
     front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="feed-discuss")
     front.model_led_coach = True
+    async def read(call):
+        if call.name == "get_linked_strategies":
+            return {"status": "completed", "results": [
+                {"scope": "read_active_setup", "status": "completed", "data": {
+                    "setup_id": 11, "name": "BTC USDT", "symbol": "BTC", "pair": "BTC/USDT"}},
+                {"scope": "read_linked_strategies", "status": "completed", "data": {
+                    "setup_id": 11, "complete": True, "strategy_count": 0,
+                    "strategies": []}},
+            ]}
+        assert call.name == "get_current_asset_scores"
+        assert call.inputs["quote_currency"] == "USDT"
+        return {"status": "completed", "results": [
+            {"scope": "read_asset_scores", "status": "completed", "data": {
+                "symbol": "BTC", "pair": "BTC/USDT", "source_status": "missing_scores",
+                "benchmark_score": None}},
+        ]}
+    front.reads = read
     result = asyncio.run(front.run(
         message=("Controleer of setup BTC USDT voor BTC/USDT nog bestaat en of er inmiddels "
                  "een strategie aan is gekoppeld. Zo niet, adviseer welke strategie past en "
@@ -4224,7 +4241,9 @@ def test_feed_discussion_uses_current_owner_read_without_provider(monkeypatch):
     assert "gekoppelde strategie ontbreekt" in result.response.text
     assert "geen complete actuele benchmarkscore" in result.response.text
     assert "Zal ik een bewerkbaar strategievoorstel voorbereiden?" in result.response.text
-    assert result.response.tool_trace[0]["name"] == "read_selected_strategy_next_step"
+    assert [call["name"] for call in result.response.tool_trace] == [
+        "get_linked_strategies", "get_current_asset_scores",
+    ]
     verified = asyncio.run(FinnResponsesAnswerVerifier().verify(
         message="Bespreek deze strategiekaart", result=result.response, locale="nl",
     ))
@@ -4234,8 +4253,8 @@ def test_feed_discussion_uses_current_owner_read_without_provider(monkeypatch):
 def test_selected_strategy_step_verifier_rejects_unverified_marker():
     result = FinnResponsesResult(
         text="Setup BTC USDT (BTC/USDT) heeft geen strategie.", response_id="selected-strategy-test",
-        tool_trace=({"name": "read_selected_strategy_next_step", "status": "unavailable",
-                     "result": {"verified": False}},),
+        tool_trace=({"name": "get_linked_strategies", "status": "unavailable",
+                     "result": {"results": []}},),
         answer_kind="selected_strategy_next_step",
     )
     answer = asyncio.run(FinnResponsesAnswerVerifier().verify(
