@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN: AAPL/USD-bronread voor de gesloten-marktreis (23 november 2026)
 
-Phase: `LOCAL_VALIDATED_PENDING_PR_CI`. De onafhankelijke protected
+Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`. De onafhankelijke protected
 `aapl_closed_market_journey` QA op live SHA
 `0818ee863fc08caa86b487fe15b0f5c2c0ccd537` (workflow 45109991734-1)
 stopte nog bij de eerste koersvraag. De globale AAPL/USD-bron was gelezen,
@@ -43,6 +43,17 @@ zonder provider-, schema-, timeout-, parse- of validatiefouten. Deze lokale proe
 live-acceptatie. Een echte door de Paper-worker geweigerde order blijft
 afzonderlijk onbewezen en mag alleen in een geïsoleerde testdatabase worden
 onderzocht.
+
+Product-PR [#1316](https://github.com/gvangalen/antigravity-trading-tool/pull/1316)
+op head `2afbdb5a3bb94ae01b21272e31147f3c6060ddfb` kreeg
+onafhankelijke QA- en Security-codebeoordeling zonder blocker.
+PR-CI **45112385932** en main-CI **45113198608** hadden elk vijf geslaagde
+jobs. Auto Deploy **45113953283** slaagde op
+`2882c169e17544f403dc8e9412a89440e338a372`; GitHub `main`, publieke
+backend health en frontend build-info meldden exact die SHA, beide HTTP 200.
+Deze status-only wijziging creëert zelf een nieuwe main-SHA. Vóór de
+officiële beschermde hertest moeten de laatste main-CI en Auto Deploy
+slagen en beide publieke SHA's die definitieve revisie tonen.
 
 ## FINN: laatst beschikbare AAPL-koers voor planning (23 november 2026)
 
