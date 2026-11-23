@@ -158,6 +158,14 @@ def _standalone_read_subject(message: str, facts: Any) -> str | None:
     A prior proposal or answer is useful for elliptical follow-ups, but it must
     not narrow the tools available for a new owner-scoped question.
     """
+    if (facts.action_polarity == "read" and facts.explicit_plan_subject
+            and {"setup", "strategy", "bot"}.issubset(set(facts.explicit_entities))
+            and re.match(r"^\s*(?:toon|show|zeige)\b", message, re.I)
+            and not facts.conversation_reference_markers):
+        # An explicit full-plan read needs the selected plan plus its linked
+        # strategy and bot in one owner-bound source. A separate inventory and
+        # bot read can omit the exact parent relationship.
+        return "get_active_plan_and_strategy"
     if facts.conversation_reference_markers or facts.linked_graph_relationship:
         return None
     if facts.action_polarity != "read" and "?" not in message:
@@ -3127,6 +3135,7 @@ class FinnResponsesFrontDoor:
             else {}
         )
         journey = dict(conversation_context.get("verified_journey_affirmative") or {})
+        feed_journey = dict(conversation_context.get("verified_feed_strategy_affirmative") or {})
         journey_operation = journey.get("operation_id")
         journey_parent = ("setup_id" if journey_operation == "create_strategy" else
                           "strategy_id" if journey_operation == "create_bot" else None)
@@ -3159,6 +3168,36 @@ class FinnResponsesFrontDoor:
                     response_id=f"verified-journey-next-{self.run_id}",
                     tool_trace=({"name": "verified_journey_next_step", "status": "completed",
                                  "result": {"operation_id": journey_operation}},),
+                    response_id_reusable=False,
+                ),
+                selected, previous_response, locale=locale,
+            )
+        if (feed_journey.get("operation_id") == "create_strategy"
+                and type(feed_journey.get("setup_id")) is int
+                and feed_journey["setup_id"] > 0
+                and str(feed_journey.get("source_run_id") or "")
+                and conversation_context.get("feed_event", {}).get("event_type") == "strategy_next_step"):
+            # The worker just re-read the exact owner-bound setup, feed item,
+            # and absence of a linked strategy. This selects a proposal
+            # contract only; persistence still requires separate confirmation.
+            contract = self.proposals.registry.require_supported("create_strategy")
+            selected = self.proposals.from_call(
+                call=FinnResponsesToolCall(
+                    name=catalog.proposal_tool_for_operation("create_strategy"),
+                    operation_id="create_strategy", inputs={}, read_tools=(),
+                    required_inputs=contract.required_inputs, missing_inputs=(),
+                    draft_intent="new", target_reference="verified_feed_setup",
+                ),
+                message=message, conversation_context=conversation_context,
+                verified_asset=verified_asset,
+                verified_target_inputs={"setup_id": feed_journey["setup_id"]},
+            )
+            return FinnResponsesFrontDoorResult(
+                FinnResponsesResult(
+                    text="Ik bereid een strategie voor en vraag naar de ontbrekende keuzes. Opslaan volgt pas na jouw bevestiging.",
+                    response_id=f"verified-feed-strategy-{self.run_id}",
+                    tool_trace=({"name": "verified_feed_strategy_next_step", "status": "completed",
+                                 "result": {"operation_id": "create_strategy"}},),
                     response_id_reusable=False,
                 ),
                 selected, previous_response, locale=locale,

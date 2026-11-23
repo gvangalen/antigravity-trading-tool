@@ -13,7 +13,7 @@ from time import monotonic
 from types import SimpleNamespace
 from typing import Any, Dict, Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.domain.finn_v2_contract import (
@@ -82,6 +82,82 @@ from backend.utils import openai_client
 
 
 logger = logging.getLogger(__name__)
+
+
+async def _verified_feed_strategy_affirmative_message(
+    session: AsyncSession, *, context: dict, message: str, user_id: int,
+    conversation_id: str,
+) -> str | None:
+    """Turn a direct feed discussion's immediate yes into an unconfirmed draft.
+
+    The selected card is only a referent. Re-read the owner-bound setup and
+    linked strategies before choosing a parent; a historical card alone never
+    authorizes a proposal or a write.
+    """
+    context.pop("verified_feed_strategy_affirmative", None)
+    if not re.fullmatch(r"(?:ja|ja graag|graag|yes|yes please|sure|ok|okay|ja bitte)",
+                        str(message or "").strip(), re.IGNORECASE):
+        return None
+    selected = context.get("feed_event") or {}
+    if (not isinstance(selected, dict)
+            or selected.get("event_type") != "strategy_next_step"
+            or selected.get("subject_type") != "setup"
+            or selected.get("read_only_context") is not True
+            or selected.get("action_authorized") is not False):
+        return None
+    item_id = str(selected.get("item_id") or "")
+    setup_id = str(selected.get("subject_id") or "")
+    cursor = context.get("responses_cursor") or {}
+    previous_run_id = str(cursor.get("run_id") or "") if isinstance(cursor, dict) else ""
+    if not item_id or not setup_id.isdigit() or not previous_run_id:
+        return None
+    previous_run = await FinnV2RunRepository(session).get_by_id_for_user(
+        run_id=previous_run_id, user_id=user_id,
+    )
+    if (previous_run is None or previous_run.conversation_id != conversation_id
+            or previous_run.status != "completed"
+            or (previous_run.client_context_json or {}).get("feed_draft_edited") is True
+            or str((previous_run.client_context_json or {}).get("feed_item_id") or "") != item_id):
+        return None
+    from backend.services.finn_coach_feed_service import FinnCoachFeedService
+    item = await FinnCoachFeedService(session).detail(user_id=user_id, item_id=item_id)
+    if (not item or item.get("status") != "handled"
+            or item.get("event_type") != "strategy_next_step"
+            or item.get("subject_type") != "setup"
+            or str(item.get("subject_id") or "") != setup_id):
+        return None
+    setup = await SetupRepository(session).get_setup_by_id(int(setup_id), user_id)
+    if not setup or str(setup.get("symbol") or "").upper() != str(item.get("symbol") or "").upper():
+        return None
+    market_id = setup.get("market_id")
+    quote = str(setup.get("quote_currency") or "").upper()
+    asset = str(setup["symbol"]).upper()
+    pair = f"{asset}/{quote}" if market_id is not None else asset
+    evidence = item.get("evidence") or {}
+    if ((market_id is not None and (type(market_id) is not int or market_id <= 0
+                                    or not re.fullmatch(r"[A-Z]{2,12}", quote)))
+            or evidence.get("market_id") != market_id
+            or str(evidence.get("trading_pair") or "").upper() != pair
+            or not re.fullmatch(r"[A-Z0-9][A-Z0-9._-]{0,19}(?:/[A-Z]{2,12})?", pair)):
+        return None
+    linked = await session.execute(text("""
+        SELECT id FROM strategies WHERE user_id=:user_id AND setup_id=:setup_id LIMIT 1
+    """), {"user_id": user_id, "setup_id": int(setup_id)})
+    if linked.scalar_one_or_none() is not None:
+        return None
+    context["verified_feed_strategy_affirmative"] = {
+        "operation_id": "create_strategy", "setup_id": int(setup_id),
+        "source_run_id": previous_run_id,
+    }
+    language = str(context.get("locale") or "nl").split("-")[0].lower()
+    if language == "en":
+        return (f"Prepare a strategy for my existing {pair} setup with ID {setup_id}. "
+                "Ask for missing choices and show a proposal for separate confirmation. Do not save it yet.")
+    if language == "de":
+        return (f"Bereite eine Strategie für mein bestehendes {pair}-Setup mit ID {setup_id} vor. "
+                "Frage nach fehlenden Angaben und zeige einen Vorschlag zur gesonderten Bestätigung. Speichere noch nichts.")
+    return (f"Bereid een strategie voor mijn bestaande {pair}-setup met ID {setup_id} voor. "
+            "Vraag naar ontbrekende keuzes en toon een voorstel voor afzonderlijke bevestiging. Sla nog niets op.")
 
 
 async def _verified_journey_affirmative_message(
@@ -2544,7 +2620,10 @@ class FinnV2RunService:
                 has_prior_run=(run.client_context_json or {}).get("_conversation_has_prior_run"),
             )
             if conversation_id:
-                message = (await _verified_journey_affirmative_message(
+                message = (await _verified_feed_strategy_affirmative_message(
+                    session, context=context, message=message, user_id=user_id,
+                    conversation_id=conversation_id,
+                ) or await _verified_journey_affirmative_message(
                     session, context=context, message=message, user_id=user_id,
                 )) or message
             # The sealed prior run can rehydrate a card through
