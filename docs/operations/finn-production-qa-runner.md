@@ -88,6 +88,19 @@ and the last allowlisted read scope/status when available. Inspect that
 artifact before exact-run cleanup, which removes the child's terminal rows.
 No raw error, tool result, answer, FINN run ID or child identity is exported.
 
+`aapl_closed_market_journey` is a separate, Security-reviewed profile requiring
+`manifest_id=none` and both fixture flags `true`. It creates one permanently
+inactive, uncredentialed child and uses one FINN conversation to read the
+latest dated AAPL/USD quote for planning, then propose/confirm/replay a setup,
+linked strategy and manual non-Live Paper-bot configuration. The child starts
+without any setup or strategy; all three objects must come from FINN. Each
+proposal is checked before its own confirmation, and owner/namespace/lineage
+are rechecked before and after writes. It never invokes a bot worker, order,
+broker, funding or Live activation. An expected 0/1 set of objects is deleted
+under exact owner guards; any unexpected state is quarantined inactive. A
+PASS covers this chat/storage journey only, not actual stale Paper-worker
+refusal, browser rendering or polling/SSE parity.
+
 The one failed AAPL coach run `45033782172-1` has exact-run follow-ups
 `aapl_paper_quote_fixture_audit` and `aapl_paper_quote_fixture_cleanup`, both
 bound to `audit-45033782172-1-775c4259` and the prior protected report.
