@@ -354,6 +354,63 @@ def _current_score_evidence(rows: list[dict]) -> dict | None:
     return None
 
 
+async def _selected_feed_facts(user_id: int, run_id: str, item_id: str) -> dict | None:
+    from backend.infrastructure.database import async_session_factory
+    from backend.services.finn_v2_gateway_service import FinnV2GatewayService
+    from backend.services.finn_v2_reasoning_context_service import FinnV2ReasoningContextService
+
+    async with async_session_factory() as session:
+        run = await FinnV2GatewayService(session).get_run(run_id=run_id, user_id=user_id)
+        if not run or (run.client_context_json or {}).get("feed_item_id") != item_id:
+            return None
+        evidence = await FinnV2ReasoningContextService(session)._current_feed_evidence(run)
+    current = [item for item in evidence
+               if item.tool_name == "read_feed_current_state"
+               and item.source == "owner_scoped_current_score"
+               and isinstance(item.facts, dict)
+               and item.facts.get("feed_item_id") == item_id]
+    return current[0].facts if len(current) == 1 else None
+
+
+def _feed_setup_and_absence_valid(facts: dict | None, setup_id: int,
+                                  setup_name: str) -> bool:
+    if not isinstance(facts, dict):
+        return False
+    setup = facts.get("current_setup") or {}
+    strategy = facts.get("current_linked_strategy") or {}
+    return (isinstance(setup, dict) and isinstance(strategy, dict)
+            and str(setup.get("id")) == str(setup_id)
+            and setup.get("name") == setup_name
+            and setup.get("trading_pair") == "BTC/USDT"
+            and strategy.get("status") == "missing")
+
+
+def _strategy_presence_in_reads(rows: list[dict], setup_id: int) -> bool:
+    for row in rows:
+        if not isinstance(row, dict) or row.get("status") != "completed":
+            continue
+        data = row.get("data") or {}
+        if not isinstance(data, dict):
+            continue
+        if row.get("scope") == "read_linked_strategy" and (
+                str(data.get("setup_id")) == str(setup_id) and data.get("strategy_id")):
+            return True
+        count = data.get("strategy_count")
+        if row.get("scope") == "read_linked_strategies" and (
+                str(data.get("setup_id")) == str(setup_id)
+                and ((type(count) is int and count > 0) or data.get("strategies"))):
+            return True
+        if row.get("scope") == "read_saved_setup_inventory":
+            setups = data.get("setups")
+            if isinstance(setups, list) and any(
+                isinstance(setup, dict) and str(setup.get("setup_id")) == str(setup_id)
+                and setup.get("linked_strategies")
+                for setup in setups
+            ):
+                return True
+    return False
+
+
 async def _discuss_strategy_card(user_id: int, card: dict, setup_id: int,
                                  setup_name: str) -> dict:
     if not _strategy_card_copy_valid(card, setup_name):
@@ -370,17 +427,27 @@ async def _discuss_strategy_card(user_id: int, card: dict, setup_id: int,
     if (turn.get("status") != "completed" or turn.get("proposal_id")
             or turn.get("confirmation_required") or "BTC/USDT" not in content):
         raise RuntimeError("journey_feed_discuss_failed")
+    feed_facts = await _selected_feed_facts(user_id, turn["run_id"], str(card["id"]))
     try:
         rows = await _read_tool_results(run_id=turn["run_id"],
                                         conversation_id=turn["conversation_id"],
                                         user_id=user_id)
-    except RuntimeError:
-        raise RuntimeError("journey_strategy_source_missing") from None
-    if not _strategy_source_valid(rows, setup_id, setup_name):
+    except RuntimeError as error:
+        if str(error) != "account_tool_evidence_unavailable":
+            raise RuntimeError("journey_owner_scope_failed") from None
+        rows = []
+    feed_verified = _feed_setup_and_absence_valid(feed_facts, setup_id, setup_name)
+    if _strategy_presence_in_reads(rows, setup_id):
+        raise RuntimeError("journey_strategy_absence_unverified")
+    if not (_strategy_source_valid(rows, setup_id, setup_name) or feed_verified):
         raise RuntimeError("journey_strategy_source_missing")
-    if not _strategy_absence_verified(rows, setup_id):
+    if not (_strategy_absence_verified(rows, setup_id) or feed_verified):
         raise RuntimeError("journey_strategy_absence_unverified")
     score = _current_score_evidence(rows)
+    if score is None and feed_verified:
+        score = {"source_status": feed_facts.get("current_source_status"),
+                 "benchmark_score": feed_facts.get("current_benchmark_score"),
+                 "as_of": feed_facts.get("current_score_as_of")}
     if score is None:
         raise RuntimeError("journey_strategy_score_source_missing")
     if ("strategie" not in content.casefold()

@@ -253,6 +253,9 @@ def test_strategy_feed_discussion_requires_current_owner_read_and_advice(monkeyp
                                                   "benchmark_score": None, "as_of": None}}]
     monkeypatch.setattr(probe, "_turn", turn)
     monkeypatch.setattr(probe, "_read_tool_results", reads)
+    async def no_feed(*_args, **_kwargs):
+        return None
+    monkeypatch.setattr(probe, "_selected_feed_facts", no_feed)
     assert asyncio.run(probe._discuss_strategy_card(42, card, 90, "BTC setup"))["conversation_id"] == "feed-conv"
 
     async def no_strategy_collection(**_kwargs):
@@ -305,6 +308,74 @@ def test_strategy_absence_requires_complete_owner_scoped_collection():
                                                   "reason": "strategy_not_resolved"}], 90)
 
 
+def test_strategy_feed_accepts_selected_current_db_evidence_without_extra_tool_call(monkeypatch):
+    card = {"id": "card", "status": "unread",
+            "title": "Strategie voor BTC setup ontbreekt",
+            "description": "Deze opgeslagen setup voor BTC/USDT heeft nog geen gekoppelde strategie."}
+    async def turn(*_args, **_kwargs):
+        return {"run_id": "run", "conversation_id": "feed-conv", "status": "completed",
+                "proposal_id": None, "confirmation_required": False,
+                "content": "Voor BTC/USDT ontbreekt een strategie. De score is onbekend. Welke entry heb je nodig?"}
+    async def feed(_user_id, run_id, item_id):
+        assert (run_id, item_id) == ("run", "card")
+        return {"current_setup": {"id": 90, "name": "BTC setup", "trading_pair": "BTC/USDT"},
+                "current_linked_strategy": {"status": "missing"},
+                "current_source_status": "missing_scores", "current_benchmark_score": None,
+                "current_score_as_of": ""}
+    async def no_tool_trace(**_kwargs):
+        raise RuntimeError("account_tool_evidence_unavailable")
+    monkeypatch.setattr(probe, "_turn", turn)
+    monkeypatch.setattr(probe, "_selected_feed_facts", feed)
+    monkeypatch.setattr(probe, "_read_tool_results", no_tool_trace)
+    assert asyncio.run(probe._discuss_strategy_card(42, card, 90, "BTC setup"))["status"] == "completed"
+
+    async def linked_tool_trace(**_kwargs):
+        return [{"scope": "read_linked_strategy", "status": "completed",
+                 "data": {"setup_id": 90, "strategy_id": 91}}]
+    monkeypatch.setattr(probe, "_read_tool_results", linked_tool_trace)
+    with pytest.raises(RuntimeError, match="^journey_strategy_absence_unverified$"):
+        asyncio.run(probe._discuss_strategy_card(42, card, 90, "BTC setup"))
+
+    async def wrong_owner(**_kwargs):
+        raise RuntimeError("account_runtime_owner_scope")
+    monkeypatch.setattr(probe, "_read_tool_results", wrong_owner)
+    with pytest.raises(RuntimeError, match="^journey_owner_scope_failed$"):
+        asyncio.run(probe._discuss_strategy_card(42, card, 90, "BTC setup"))
+
+    assert not probe._feed_setup_and_absence_valid(
+        {"current_setup": {"id": 91, "name": "BTC setup", "trading_pair": "BTC/USDT"},
+         "current_linked_strategy": {"status": "missing"}}, 90, "BTC setup")
+    assert not probe._feed_setup_and_absence_valid(
+        {"current_setup": {"id": 90, "name": "BTC setup", "trading_pair": "BTC/USDT"},
+         "current_linked_strategy": {"id": 91}}, 90, "BTC setup")
+
+
+def test_selected_feed_facts_binds_run_owner_and_card(monkeypatch):
+    from backend.infrastructure import database
+    from backend.services import finn_v2_gateway_service as gateway_service
+    from backend.services import finn_v2_reasoning_context_service as context_service
+
+    @asynccontextmanager
+    async def session_factory():
+        yield object()
+
+    run = SimpleNamespace(client_context_json={"feed_item_id": "selected"})
+    async def get_run(**kwargs):
+        assert kwargs == {"run_id": "run", "user_id": 42}
+        return run
+    async def evidence(_run):
+        return [SimpleNamespace(tool_name="read_feed_current_state",
+                                source="owner_scoped_current_score",
+                                facts={"feed_item_id": "selected", "current_linked_strategy": {"status": "missing"}})]
+    monkeypatch.setattr(database, "async_session_factory", session_factory)
+    monkeypatch.setattr(gateway_service, "FinnV2GatewayService", lambda _session:
+                        SimpleNamespace(get_run=get_run))
+    monkeypatch.setattr(context_service, "FinnV2ReasoningContextService", lambda _session:
+                        SimpleNamespace(_current_feed_evidence=evidence))
+    assert asyncio.run(probe._selected_feed_facts(42, "run", "selected"))["feed_item_id"] == "selected"
+    assert asyncio.run(probe._selected_feed_facts(42, "run", "different")) is None
+
+
 def test_current_score_source_requires_exact_pair_and_verified_status():
     row = {"scope": "read_asset_scores", "source": "daily_scores_and_source_indicators",
            "status": "completed", "data": {"symbol": "BTC", "pair": "BTC/USDT",
@@ -340,6 +411,9 @@ def test_strategy_feed_discussion_checks_available_score_and_date(monkeypatch, a
                                                   "as_of": "2026-11-23"}}]
     monkeypatch.setattr(probe, "_turn", turn)
     monkeypatch.setattr(probe, "_read_tool_results", reads)
+    async def no_feed(*_args, **_kwargs):
+        return None
+    monkeypatch.setattr(probe, "_selected_feed_facts", no_feed)
     if valid:
         assert asyncio.run(probe._discuss_strategy_card(42, card, 90, "BTC setup"))["status"] == "completed"
     else:
