@@ -13,6 +13,7 @@ from sqlalchemy import select, text
 
 from backend.infrastructure.database import async_session_factory
 from backend.infrastructure.models import TradingMarket
+from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
 from backend.domain.finn_v2_tools import FINN_V2_TOOL_ORDER, ToolExecutionResult
 from backend.infrastructure.repositories.finn_v2_evidence_repository import FinnV2EvidenceRepository
 from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2RunRepository
@@ -930,7 +931,10 @@ class FinnV2ToolExecutionService:
         hinted_quote = (hints.get("quote_currency") or context.get("quote_currency")) \
             if hinted_asset == asset and (not requested_asset or requested_asset.split("/", 1)[0] == asset) else None
         requested_quote = str(selector.get("quote_currency") or pair_quote or "").upper() or None
-        if requested_quote and requested_quote not in {"EUR", "USDT"}:
+        catalog_asset = DEFAULT_ASSET_CATALOG.get(asset) or {}
+        stock_source_quote = (str(catalog_asset.get("quote_currency") or "").upper()
+                              if catalog_asset.get("asset_class") in {"stock", "etf"} else None)
+        if requested_quote and requested_quote not in {"EUR", "USDT", stock_source_quote}:
             raise LookupError("market_quote_not_supported")
 
         selected_setup = shared_state.get("setup")
@@ -953,12 +957,24 @@ class FinnV2ToolExecutionService:
                 raise LookupError("market_asset_mismatch")
             market_id = selected_setup.get("market_id")
             quote = str(selected_setup.get("quote_currency") or "").upper() or None
+            if stock_source_quote and market_id is None:
+                if ((quote and quote != stock_source_quote)
+                        or (hinted_quote and str(hinted_quote).upper() != stock_source_quote)):
+                    raise LookupError("market_quote_mismatch")
+                quote = stock_source_quote
             if requested_quote and quote != requested_quote:
                 raise LookupError("market_quote_mismatch")
             return {"market_id": int(market_id) if market_id is not None else None,
                     "quote_currency": quote}
 
         explicit_quote = requested_quote or str(hinted_quote or "").upper() or None
+        if stock_source_quote and explicit_quote:
+            # A security's USD source unit is not a Binance trading pair.
+            # Keep the expected unit for the adapter to verify against the
+            # provider-dated base quote instead of looking up a market ID.
+            if explicit_quote != stock_source_quote:
+                raise LookupError("market_quote_not_supported")
+            return {"market_id": None, "quote_currency": explicit_quote}
         if explicit_quote and explicit_quote not in {"EUR", "USDT"}:
             raise LookupError("market_quote_not_supported")
         if explicit_quote:

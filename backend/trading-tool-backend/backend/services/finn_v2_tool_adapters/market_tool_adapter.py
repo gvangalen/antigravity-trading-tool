@@ -22,6 +22,11 @@ class MarketToolAdapter:
             str(snapshot.quote_currency or "").upper() != quote_currency
         ):
             raise LookupError("exact_market_source_mismatch")
+        if market_id is None and quote_currency and (
+            str(snapshot.symbol or "").upper() != asset or
+            str(snapshot.quote_currency or "").upper() != quote_currency
+        ):
+            raise LookupError("base_quote_source_mismatch")
         # Receipt/update time does not establish the age of the provider's
         # price. Missing source provenance must stay unknown to the coach.
         observed_at = display_source_moment(getattr(snapshot, "source_observed_at", None))

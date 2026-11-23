@@ -55,6 +55,97 @@ def test_bare_asset_with_two_owned_pair_scopes_requires_clarification():
             user_id=7, asset="BTC", selector={}, run=None, shared_state={}))
 
 
+def test_stock_usd_workspace_hint_reads_base_quote_without_pair_lookup():
+    service = _reader([])
+    scope = asyncio.run(service._resolve_read_market_scope(
+        user_id=7, asset="AAPL", selector={"asset": "AAPL"},
+        run=SimpleNamespace(workspace_hints_json={"symbol": "AAPL", "quote_currency": "USD"},
+                            client_context_json={}), shared_state={}))
+    assert scope == {"market_id": None, "quote_currency": "USD"}
+    service.session.execute.assert_not_awaited()
+
+
+def test_stock_quote_hint_cannot_select_a_different_currency():
+    service = _reader([])
+    with pytest.raises(LookupError, match="market_quote_not_supported"):
+        asyncio.run(service._resolve_read_market_scope(
+            user_id=7, asset="AAPL", selector={"asset": "AAPL"},
+            run=SimpleNamespace(workspace_hints_json={"symbol": "AAPL", "quote_currency": "EUR"},
+                                client_context_json={}), shared_state={}))
+    service.session.execute.assert_not_awaited()
+
+
+def test_explicit_stock_usd_quote_reads_the_base_source():
+    service = _reader([])
+    scope = asyncio.run(service._resolve_read_market_scope(
+        user_id=7, asset="AAPL", selector={"asset": "AAPL", "quote_currency": "USD"},
+        run=None, shared_state={}))
+    assert scope == {"market_id": None, "quote_currency": "USD"}
+    service.session.execute.assert_not_awaited()
+
+
+def test_legacy_stock_setup_still_verifies_its_usd_base_source():
+    service = _reader([])
+    scope = asyncio.run(service._resolve_read_market_scope(
+        user_id=7, asset="AAPL", selector={"asset": "AAPL"},
+        run=SimpleNamespace(workspace_hints_json={"symbol": "AAPL", "quote_currency": "USD"},
+                            client_context_json={}),
+        shared_state={"setup": {"symbol": "AAPL", "market_id": None,
+                                "quote_currency": None}}))
+    assert scope == {"market_id": None, "quote_currency": "USD"}
+    service.session.execute.assert_not_awaited()
+
+
+def test_stock_setup_cannot_borrow_a_mismatched_base_quote():
+    service = _reader([])
+    with pytest.raises(LookupError, match="market_quote_mismatch"):
+        asyncio.run(service._resolve_read_market_scope(
+            user_id=7, asset="AAPL", selector={"asset": "AAPL"},
+            run=None, shared_state={"setup": {"symbol": "AAPL", "market_id": None,
+                                               "quote_currency": "EUR"}}))
+
+
+def test_stock_setup_cannot_ignore_a_conflicting_workspace_quote():
+    service = _reader([])
+    with pytest.raises(LookupError, match="market_quote_mismatch"):
+        asyncio.run(service._resolve_read_market_scope(
+            user_id=7, asset="AAPL", selector={"asset": "AAPL"},
+            run=SimpleNamespace(workspace_hints_json={"symbol": "AAPL", "quote_currency": "EUR"},
+                                client_context_json={}),
+            shared_state={"setup": {"symbol": "AAPL", "market_id": None,
+                                    "quote_currency": None}}))
+
+
+def test_base_quote_source_must_match_the_selected_stock_currency():
+    adapter = MarketToolAdapter.__new__(MarketToolAdapter)
+    adapter.repository = SimpleNamespace(
+        get_latest_quoted_snapshot=AsyncMock(return_value=SimpleNamespace(
+            symbol="AAPL", quote_currency="EUR", price=340)),
+        get_latest_exact_market_snapshot=AsyncMock(side_effect=AssertionError("pair quote used")),
+    )
+    with pytest.raises(LookupError, match="base_quote_source_mismatch"):
+        asyncio.run(adapter.execute(asset="AAPL", user_id=7, market_id=None,
+                                    quote_currency="USD"))
+    adapter.repository.get_latest_exact_market_snapshot.assert_not_awaited()
+
+
+def test_dated_aapl_market_read_passes_usd_hint_to_base_adapter():
+    service = _reader([])
+    service.resolver.resolve_asset = AsyncMock(return_value={
+        "asset": "AAPL", "resolution_source": "explicit_selector"})
+    service.market_adapter = SimpleNamespace(execute=AsyncMock(return_value={
+        "data": {"symbol": "AAPL", "price": 341.92, "quote_currency": "USD",
+                 "source_observed_at": "2026-11-20T20:58:00+00:00"}}))
+    run = SimpleNamespace(workspace_hints_json={"symbol": "AAPL", "quote_currency": "USD"},
+                          client_context_json={})
+    result = asyncio.run(service._dispatch_tool(
+        tool_name="read_market_snapshot", user_id=7, selector={"asset": "AAPL"},
+        run=run, shared_state={}))
+    assert result["data"]["price"] == 341.92
+    service.market_adapter.execute.assert_awaited_once_with(
+        asset="AAPL", user_id=7, market_id=None, quote_currency="USD")
+
+
 def test_pair_market_snapshot_never_borrows_other_quote():
     adapter = MarketToolAdapter.__new__(MarketToolAdapter)
     adapter.repository = SimpleNamespace(
