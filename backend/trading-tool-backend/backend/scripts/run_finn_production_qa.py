@@ -59,6 +59,7 @@ ALLOWED_PROFILES = {
     "aapl_paper_quote_coach",
     "aapl_stale_quote_read",
     "aapl_paper_bot_crud",
+    "aapl_bot_proposal_diagnose",
     "aapl_paper_quote_fixture_audit",
     "aapl_paper_quote_fixture_cleanup",
     "trader_source_time_parity",
@@ -442,7 +443,7 @@ def profile_error_category(profile: str, error: Exception) -> str:
         from backend.scripts.probe_protected_aapl_stale_quote_read import FAILURES
         code = str(error)
         return code if code in FAILURES else "aapl_quote_read_runtime_failed"
-    if profile == "aapl_paper_bot_crud":
+    if profile in {"aapl_paper_bot_crud", "aapl_bot_proposal_diagnose"}:
         from backend.scripts.probe_protected_aapl_bot_crud import FAILURES
         code = str(error)
         return code if code in FAILURES else "aapl_bot_runtime_failed"
@@ -4233,11 +4234,14 @@ def main() -> int:
                 report["safety"]["read_only_profile"] = True
                 report["safety"]["execution_calls"] = 0
                 report["safety"]["live_trading_calls"] = 0
-            elif args.profile == "aapl_paper_bot_crud":
+            elif args.profile in {"aapl_paper_bot_crud", "aapl_bot_proposal_diagnose"}:
+                proposal_only = args.profile == "aapl_bot_proposal_diagnose"
+                profile_flag = ("FINN_QA_ALLOW_AAPL_BOT_PROPOSAL_ONLY" if proposal_only
+                                else "FINN_QA_ALLOW_AAPL_BOT_CRUD")
                 if (args.manifest_id != "none" or args.manifest_bundle_path
-                        or os.getenv("FINN_QA_ALLOW_AAPL_BOT_CRUD") != "1"
+                        or os.getenv(profile_flag) != "1"
                         or os.getenv("FINN_QA_ALLOW_FIXTURE_ACTIONS") != "1"
-                        or os.getenv("FINN_QA_ALLOW_FIXTURE_EXECUTION") != "1"):
+                        or os.getenv("FINN_QA_ALLOW_FIXTURE_EXECUTION") != ("0" if proposal_only else "1")):
                     raise ValueError("aapl_bot_not_authorized")
                 from backend.scripts.probe_protected_aapl_bot_crud import run as run_bot_crud
 
@@ -4247,7 +4251,8 @@ def main() -> int:
                 report["safety"]["read_only_profile"] = False
                 report["safety"]["execution_calls"] = None
                 report["safety"]["live_trading_calls"] = None
-                report[args.profile] = run_bot_crud(fixture_namespace or "")
+                report[args.profile] = run_bot_crud(
+                    fixture_namespace or "", proposal_only=proposal_only)
                 report["safety"]["execution_calls"] = (
                     1 if report[args.profile].get("first_status") == "succeeded" else 0)
                 report["safety"]["live_trading_calls"] = report[args.profile]["live_calls"]

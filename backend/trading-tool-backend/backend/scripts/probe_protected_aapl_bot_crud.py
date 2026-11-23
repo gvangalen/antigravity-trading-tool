@@ -104,11 +104,14 @@ def _strategy_read_status(rows: object) -> str:
     return "requested_not_completed"
 
 
-def _bound_owner(namespace: str) -> int:
+def _bound_owner(namespace: str, *, proposal_only: bool = False) -> int:
+    profile_flag = ("FINN_QA_ALLOW_AAPL_BOT_PROPOSAL_ONLY" if proposal_only
+                    else "FINN_QA_ALLOW_AAPL_BOT_CRUD")
+    expected_execution = "0" if proposal_only else "1"
     if (not fixture.NAMESPACE_PATTERN.fullmatch(namespace)
-            or os.getenv("FINN_QA_ALLOW_AAPL_BOT_CRUD") != "1"
+            or os.getenv(profile_flag) != "1"
             or os.getenv("FINN_QA_ALLOW_FIXTURE_ACTIONS") != "1"
-            or os.getenv("FINN_QA_ALLOW_FIXTURE_EXECUTION") != "1"):
+            or os.getenv("FINN_QA_ALLOW_FIXTURE_EXECUTION") != expected_execution):
         raise RuntimeError("aapl_bot_not_authorized")
     value = os.getenv("FINN_QA_USER_ID", "")
     if not value.isdecimal() or int(value) <= 0:
@@ -398,7 +401,8 @@ def _quarantine(connection, namespace: str, user_id: int) -> None:
         raise RuntimeError("aapl_bot_cleanup_failed") from None
 
 
-async def _case(namespace: str, owner: int, trace: dict) -> dict:
+async def _case(namespace: str, owner: int, trace: dict,
+                *, proposal_only: bool = False) -> dict:
     user_id = strategy_id = None
     try:
         trace["stage"] = "seed"
@@ -411,6 +415,14 @@ async def _case(namespace: str, owner: int, trace: dict) -> dict:
         trace["stage"] = "proposal"
         proposal = await _proposal(user_id, strategy_name, bot_name)
         trace["proposal_diagnostic"] = proposal["diagnostic"]
+        if proposal_only:
+            if _snapshot(user_id, namespace) != baseline:
+                raise RuntimeError("aapl_bot_postcondition_failed")
+            return {"result": "PASS", "diagnostic_captured": True,
+                    "proposal_confirmable": bool(
+                        proposal["status"] == "completed" and proposal["proposal_id"]
+                        and proposal["confirmation_required"]),
+                    "confirmation_attempted": False, "no_bot_or_order": True}
         if (proposal["status"] != "completed" or not proposal["proposal_id"]
                 or not proposal["confirmation_required"]):
             raise RuntimeError("aapl_bot_proposal_missing")
@@ -440,8 +452,8 @@ async def _case(namespace: str, owner: int, trace: dict) -> dict:
                 raise
 
 
-def run(namespace: str) -> dict:
-    owner = _bound_owner(namespace)
+def run(namespace: str, *, proposal_only: bool = False) -> dict:
+    owner = _bound_owner(namespace, proposal_only=proposal_only)
     from backend.infrastructure.database import engine
     from backend.scripts.probe_protected_paper_exit_reconciliation import _guard_live_exchange
 
@@ -451,7 +463,8 @@ def run(namespace: str) -> dict:
     try:
         with _guard_live_exchange() as live_attempts:
             try:
-                result = loop.run_until_complete(_case(namespace, owner, trace))
+                result = loop.run_until_complete(
+                    _case(namespace, owner, trace, proposal_only=proposal_only))
             except Exception as error:
                 code = str(error)
                 result = {"result": "FAIL",
