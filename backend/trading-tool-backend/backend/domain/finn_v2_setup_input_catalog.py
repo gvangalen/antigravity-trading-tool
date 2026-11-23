@@ -97,7 +97,16 @@ class FinnV2SetupInputCatalog:
         normalized = cls._comparison_text(text)
         matches = cls._compound_timeframes(normalized)
         if not re.search(r"\b(?:timeframe|chart|grafiek|grafik|zeitfenster)\b", normalized):
-            matches.difference_update({"1D", "1W"})
+            # A duration attached to a non-DCA setup is its chart interval:
+            # "swing-setup voor AAPL op 1 dag". An unqualified daily or weekly
+            # DCA phrase still describes contribution cadence instead.
+            setup_interval = bool(re.search(
+                r"\b(?:swing|trade|position)[-\s]*(?:setup|opzet)\b"
+                r"[^.!?\n]{0,100}\bop\s+(?:1|een|one)\s+(?:dag|day)\b",
+                normalized,
+            ))
+            if not setup_interval:
+                matches.difference_update({"1D", "1W"})
         return next(iter(matches)) if len(matches) == 1 else None
 
     @classmethod

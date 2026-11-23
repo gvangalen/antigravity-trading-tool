@@ -1171,6 +1171,15 @@ def test_timeframe_catalog_canonicalizes_compositional_dutch_english_and_german_
     assert FinnV2SetupInputCatalog.timeframe_from_text("vier uur en daggrafiek") is None
 
 
+def test_one_day_attached_to_swing_setup_is_chart_timeframe_not_dca_cadence():
+    assert FinnV2SetupInputCatalog.explicit_chart_timeframe_from_text(
+        "Ik wil een swing-setup voor AAPL op 1 dag, genaamd AAPL Swing."
+    ) == "1D"
+    assert FinnV2SetupInputCatalog.explicit_chart_timeframe_from_text(
+        "Ik wil een DCA-setup voor AAPL en koop iedere dag."
+    ) is None
+
+
 def test_complete_avax_compound_timeframe_setup_preserves_supplied_values():
     result = SERVICE.analyze(
         message="Bereid voor AVAX/EUR een swingopzet voor op de vieruursgrafiek en noem hem AVAX Rustige Instap."

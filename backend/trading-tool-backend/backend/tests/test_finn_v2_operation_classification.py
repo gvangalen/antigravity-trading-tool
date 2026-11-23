@@ -622,6 +622,18 @@ def test_long_typed_setup_request_remains_a_create_proposal():
     assert _explicit_create_operation_request("Maak een hypothetische BTC/EUR-setup.") is None
 
 
+def test_conversational_aapl_setup_draft_request_routes_to_proposal():
+    from backend.services.finn_v2_responses_front_door import _explicit_create_operation_request
+
+    message = (
+        "Ik wil los een swing-setup voor AAPL op 1 dag, genaamd QA AAPL Setup. "
+        "Bereid alleen de setup voor en toon eerst het voorstel; plaats geen order."
+    )
+    assert _explicit_create_operation_request(message) == "create_setup"
+    assert _explicit_create_operation_request(message.replace("toon eerst het voorstel", "toon geen voorstel")) is None
+    assert _explicit_create_operation_request("Ik wil weten hoe ik zo'n AAPL-setup voorbereid.") is None
+
+
 def test_declassified_action_contract_acceptance_handoff_is_complete_and_immutable():
     """Keep every Build-authorized regression record available to public tests."""
     fixture = Path(__file__).parent / "fixtures" / "finn_v2_declassified_34746230528_regression.json"
