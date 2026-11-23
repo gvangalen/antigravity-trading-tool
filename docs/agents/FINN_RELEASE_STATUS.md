@@ -4,9 +4,49 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN: AAPL-setupvoorstel en gesloten-marktreis (23 november 2026)
+
+Phase: `LOCAL_VALIDATED_RELEASE_CANDIDATE`. De onafhankelijke protected QA op
+live SHA `06acf1af732f37e680b02b68d3d3ae835a76bfb4` (workflow
+45115936290-1) bevestigde de gedateerde AAPL/USD-koers met bronmoment,
+maar stopte daarna bij `aapl_journey_setup_proposal_missing`; nul
+bevestigingen, uitvoeringen en Live-calls, fixture opgeruimd. Dit is geen
+acceptatie van de volledige keten.
+
+De exacte vervolgvraag is lokaal gereproduceerd. FINN vroeg ten onrechte
+nogmaals naar het analysetijdsframe: `op 1 dag` werd niet als 1D voor een
+swing-setup herkend. De reparatie kiest voor deze expliciete conceptvraag
+`create_setup` en bewaart 1D. Verwijzingen naar bestaande setups en
+negatieve/hypothetische verzoeken vallen buiten die smalle route. De lokale
+chat/workerproef in één AAPL-conversatie gaf een gedateerde koers, daarna
+een bevestigbaar setupvoorstel; na afzonderlijke bevestigingen werden setup,
+gekoppelde strategie en handmatige niet-Live Paper-botconfiguratie opgeslagen.
+De parent-ID's klopten en er ontstond geen botorder. Dit is synthetisch lokaal
+Build-bewijs, geen onafhankelijke live-acceptatie of bewijs van een door een
+actieve Paper-worker geweigerde order.
+
+De canonieke lokale FINN-matrix vond daarnaast dat een expliciete Smart
+DCA-conceptvraag met ingebedde staffelvraag soms als losse read eindigde.
+Deze voorstelroute is aangescherpt; de lokale bevestigde Smart DCA- en
+kalender-DCA-proeven slaagden. De gerichte setup-/classificatiesuites gaven
+**308/308**. De volledige worker-actiematrix gaf **17/17**, adapters
+**28/28**, Smart DCA-schema- en bevestigingsproef plus kalender-DCA-proef
+groen; matrixartifact SHA-256
+`8aba2cd1d7a8c3cfa95dc3579c08693f7f6952a1a12cc878a5c094d3ad24f4f6`.
+Echte providerselectie: development **20/20** (artifact SHA-256
+`187a19ec426deb64b4aed6a683d279e0f422a643744b869bcea762115e58c5c9`)
+en regression **109/109** (artifact SHA-256
+`5489c2d5cedaf1ed44e8d8c3fcf7f7262a2057b7a6987d744596c6570f03fc6c`).
+Frontend typecheck, i18n-lint/tests, commandotests, proposaltests, build en
+`audit:high` slaagden; één bestaande moderate Next.js-melding bleef.
+De volledige backend-suite gaf **5418 passed, 7 skipped**. Release-CI en
+deploy zijn nog niet gemeten.
+Onafhankelijke QA-codebeoordeling en Security-herbeoordeling van de
+voorstelgrens vonden geen blocker; dit zijn geen live-runtimeverdicts.
+
 ## FINN: AAPL/USD-bronread voor de gesloten-marktreis (23 november 2026)
 
-Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`. De onafhankelijke protected
+Phase: `NOT_ACCEPTED_FULL_JOURNEY`. De onafhankelijke protected
 `aapl_closed_market_journey` QA op live SHA
 `0818ee863fc08caa86b487fe15b0f5c2c0ccd537` (workflow 45109991734-1)
 stopte nog bij de eerste koersvraag. De globale AAPL/USD-bron was gelezen,

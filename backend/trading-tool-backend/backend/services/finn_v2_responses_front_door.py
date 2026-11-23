@@ -331,6 +331,26 @@ def _explicit_create_operation_request(message: str) -> str | None:
                               r"not|no|without|zonder|kein(?:e|en|em|er|es)?)\b", message, re.I)
             and not _proposal_explicitly_excluded(message)):
         return "create_manual_trade_plan" if manual_plan_request else "create_setup"
+    # A request to make Smart DCA and ask for its score bands is still a
+    # setup draft. The embedded question asks for guidance on the requested
+    # proposal, not for a read-only explanation of an existing plan.
+    if (not _proposal_explicitly_excluded(message)
+            and not _explicit_discussion_only(message)
+            and not re.match(r"^\s*ik\s+wil\s+(?:niet|weten\s+hoe)\b", message, re.I)
+            and re.match(r"^\s*ik\s+wil\b[^.!?\n]{0,100}\been\s+smart\s+dca\s+maken\b", message, re.I)
+            and re.search(r"\btoon\s+eerst\s+een\s+bewerkbaar\s+concept\b", message, re.I)):
+        return "create_setup"
+    # "Ik wil ... Bereid alleen de setup voor" asks for a draft even though
+    # it contains no literal create verb. Keep this narrow to a new setup
+    # and an explicit proposal request; saving still needs confirmation.
+    if ("?" not in message and not _proposal_explicitly_excluded(message)
+            and not _explicit_discussion_only(message)
+            and re.match(r"^\s*ik\s+wil\s+(?:los\s+)?een\b", message, re.I)
+            and not re.search(r"\b(?:bestaande|opgeslagen|existing|saved)\b", message, re.I)
+            and re.search(r"\b(?:[\w]+-)?setup\b", message, re.I)
+            and re.search(r"\bbereid\s+alleen\s+de\s+setup\s+voor\b", message, re.I)
+            and re.search(r"\btoon\s+eerst\s+het\s+voorstel\b", message, re.I)):
+        return "create_setup"
     # A trader may name the new object before the create verb. Keep that
     # unambiguous request on the same guided contract as the typed classifier;
     # "sla niets op" limits persistence, not proposal creation.
