@@ -4,6 +4,41 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN: profiel en portefeuille sturen advies en botvoorstellen (23 november 2026)
+
+Phase: `LOCAL_VALIDATED_PR_CI_PENDING`. Productcode op
+`db49e541b` is bovenop de laatste geverifieerde AAPL-release
+`f86fc68b5146bfcb8991718acf1b2b1f91285bfb` gevalideerd. Product-PR
+[#1302](https://github.com/gvangalen/antigravity-trading-tool/pull/1302)
+is nog niet gemerged of gedeployed. De onafhankelijke QA-agent accepteerde
+de beschermde AAPL-serverflow op `f86fc68b` in workflow `45122235462`;
+die proef omvatte geen zichtbare browserweergave, polling/SSE-pariteit of
+daadwerkelijke orderweigering door een actieve Paper-worker.
+
+FINN gebruikt het huidige eigenaargebonden traderprofiel en de
+rekeningbrede portefeuillesnapshot bij voorstellen en beoordeling van
+setup, strategie, bot en plan. Directe profieluitlezing eindigt met één
+vervolgvraag die van de opgeslagen keuzes afhangt. Modelgestuurde
+profielgesprekken vragen alleen naar een nog ontbrekende keuze. Een BTC-focus
+blijft zichtbaar in illustratieve verdelingsvoorbeelden; ongewijzigde
+Paper-saldi en botlimieten worden niet telkens herhaald of als doelverdeling
+gepresenteerd. Actieve bots wijzigen hun handelsregels niet automatisch.
+
+Gemeten lokale Build-controles op deze productcode: backend **5424 passed,
+7 skipped**; frontend typecheck, i18n-lint/tests, command-/voorsteltests,
+productiebuild en `audit:high` geslaagd. De audit meldde één bestaande
+moderate Next.js-advisory, geen high advisory. De volledige geïsoleerde
+FastAPI/Celery/PostgreSQL/Redis-actiematrix slaagde **17/17**, artifact SHA-256
+`09d11101251ab8664f1bcc9dd7a808889da8f1fff7e1c570ae983bfae113e6ba`,
+met **28/28** adaptertests, geslaagde Smart DCA-migratie en Smart DCA- en
+calendar DCA-confirmed-runtimeproeven. De matrix registreerde nul
+brokerorders, Live-bots, Live-calls en productieverbindingen. Echte
+Responses-providerselectie slaagde development **20/20**, artifact SHA-256
+`06347c658c78a8b572fe9442885a92a6f1d622d0480697d69c565bdd06032721`,
+en regression **109/109**, artifact SHA-256
+`84122d440f381a3869140a129ad02ffef1cd2e641dcd6a30ddee95152192ed54`,
+zonder provider-, schema-, timeout-, parse- of validatiefouten.
+
 ## FINN: AAPL-setupvoorstel en gesloten-marktreis (23 november 2026)
 
 Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`. De onafhankelijke protected QA op
