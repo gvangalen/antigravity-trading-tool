@@ -10878,6 +10878,7 @@ def test_model_led_read_uses_registry_tool_without_a_second_tool_selector():
      "get_portfolio_and_exposure"),
     ("Analyseer BTC met historische context.", "get_forward_returns"),
     ("Ik wil analyse van BTC met historische context, kan je dat doen?", "get_forward_returns"),
+    ("Toon mijn actieve plan met setup, strategie en bot.", "get_active_plan_and_strategy"),
 ])
 def test_new_read_subject_after_dca_discussion_uses_its_own_tool(message, tool_name):
     fake = FakeResponses(

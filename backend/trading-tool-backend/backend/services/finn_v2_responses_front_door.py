@@ -158,6 +158,14 @@ def _standalone_read_subject(message: str, facts: Any) -> str | None:
     A prior proposal or answer is useful for elliptical follow-ups, but it must
     not narrow the tools available for a new owner-scoped question.
     """
+    if (facts.action_polarity == "read" and facts.explicit_plan_subject
+            and {"setup", "strategy", "bot"}.issubset(set(facts.explicit_entities))
+            and re.match(r"^\s*(?:toon|show|zeige)\b", message, re.I)
+            and not facts.conversation_reference_markers):
+        # An explicit full-plan read needs the selected plan plus its linked
+        # strategy and bot in one owner-bound source. A separate inventory and
+        # bot read can omit the exact parent relationship.
+        return "get_active_plan_and_strategy"
     if facts.conversation_reference_markers or facts.linked_graph_relationship:
         return None
     if facts.action_polarity != "read" and "?" not in message:
