@@ -3054,7 +3054,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         changeTone: row
           ? Number.isFinite(changeValue) ? changeValue >= 0 ? "text-emerald-600" : "text-red-600" : "text-slate-400"
           : previous?.changeTone || "text-slate-400",
-        score: row ? formatScore(row.score) : previous?.score || "—",
+        score: row ? formatScore(row.score) : (previous?.score ?? "—"),
         rawScore: row ? row.score : previous?.rawScore ?? null,
       };
     }));
