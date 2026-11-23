@@ -14,6 +14,9 @@ import { coachFeedPresentation, coachFeedTime } from "@/lib/finnCoachFeedPresent
 import { coachFeedDiscussionQuestion } from "@/lib/finnCommandSearch";
 
 const FEED_PAGE_SIZE = 50;
+const DIRECT_DISCUSS_EVENTS = new Set([
+  "watchlist_added", "analysis_ready", "strategy_next_step", "paper_next_step",
+]);
 
 function FeedActionMenu({ item, copy, onDiscuss, onMarkRead, showDiscuss, showMarkRead }) {
   const menuRef = useRef(null);
@@ -201,6 +204,7 @@ export default function FinnCoachFeed({ onDiscuss }) {
         {visible.map((item) => {
           const isReport = item.event_type?.endsWith("_report_ready");
           const isProposal = item.event_type === "proposal_pending";
+          const directDiscuss = isProposal || DIRECT_DISCUSS_EVENTS.has(item.event_type);
           const presentation = coachFeedPresentation(item, copy);
           const moment = coachFeedTime(item, locale, copy);
           const title = item.event_type === "daily_report_ready" && moment.label.startsWith(`${copy.today} ·`)
@@ -208,7 +212,7 @@ export default function FinnCoachFeed({ onDiscuss }) {
           const canDiscuss = canDiscussFeedItem(item, history);
           const canMarkRead = canUpdateFeedStatus(item);
           const showMarkRead = item.status === "unread";
-          const showMenu = showMarkRead || (canDiscuss && !isProposal);
+          const showMenu = showMarkRead || (canDiscuss && !directDiscuss);
           const Icon = item.subject_type === "bot" || item.event_type === "bot_decision" ? Bot
             : isReport || item.subject_type === "report" ? FileText : Bell;
           return (
@@ -226,7 +230,7 @@ export default function FinnCoachFeed({ onDiscuss }) {
                 </time>
               </div>
               <div className="col-start-2 flex items-center gap-2 sm:col-start-3 sm:row-start-1 sm:justify-self-end">
-                {isProposal && canDiscuss ? (
+                {directDiscuss && canDiscuss ? (
                   <button type="button" onClick={() => discuss(item)} className="inline-flex items-center gap-1 whitespace-nowrap text-sm font-semibold text-blue-600 hover:underline">
                     {copy.discuss}<ArrowRight size={16} aria-hidden="true" />
                   </button>
@@ -246,7 +250,7 @@ export default function FinnCoachFeed({ onDiscuss }) {
                   </a>
                 )}
                 {showMenu ? <FeedActionMenu item={item} copy={copy}
-                  showDiscuss={canDiscuss && !isProposal} showMarkRead={showMarkRead}
+                  showDiscuss={canDiscuss && !directDiscuss} showMarkRead={showMarkRead}
                   onDiscuss={() => discuss(item)} onMarkRead={() => void setStatus(item.id, "read")} /> : null}
               </div>
             </article>

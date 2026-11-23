@@ -43,6 +43,36 @@ def test_journey_runner_diagnostic_exposes_only_allowlisted_labels():
     }
 
 
+def test_coach_feed_journey_dispatch_matches_workflow_fixture_boundary(tmp_path):
+    gh = tmp_path / "gh"
+    gh.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$QA_DISPATCH_CAPTURE"\n')
+    gh.chmod(0o700)
+    capture = tmp_path / "dispatch.args"
+    base_env = dict(os.environ, PATH=f"{tmp_path}:{os.environ['PATH']}",
+                    QA_DISPATCH_CAPTURE=str(capture))
+    arguments = ["bash", str(DISPATCH_SCRIPT_PATH), "a" * 40,
+                 "coach_feed_journey", "none", "qa-test-dispatch"]
+
+    valid = subprocess.run(arguments, env=dict(base_env,
+        FINN_QA_ALLOW_FIXTURE_ACTIONS="true", FINN_QA_ALLOW_FIXTURE_EXECUTION="false"),
+        capture_output=True, text=True, check=False)
+    assert valid.returncode == 0
+    assert "qa_profile=coach_feed_journey" in capture.read_text().splitlines()
+
+    for actions, execution, manifest in (
+        ("false", "false", "none"), ("true", "true", "none"),
+        ("true", "false", "other-manifest"),
+    ):
+        capture.unlink(missing_ok=True)
+        rejected = subprocess.run(
+            [*arguments[:-2], manifest, arguments[-1]],
+            env=dict(base_env, FINN_QA_ALLOW_FIXTURE_ACTIONS=actions,
+                     FINN_QA_ALLOW_FIXTURE_EXECUTION=execution),
+            capture_output=True, text=True, check=False)
+        assert rejected.returncode != 0
+        assert not capture.exists()
+
+
 def test_setup_strategy_journey_dispatch_requires_bound_fixture_flags(tmp_path):
     gh = tmp_path / "gh"
     gh.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$QA_DISPATCH_CAPTURE"\n')

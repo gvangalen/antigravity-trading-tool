@@ -4,6 +4,28 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: directe feedbespreking en QA-dispatch (23 november 2026)
+
+Phase: `LOCAL_VALIDATED_PENDING_PR_CI`. De actieve kandidaat maakt ‘Bespreek’
+direct zichtbaar op watchlist-, analyse-, ontbrekende-strategie- en
+Paper-vervolgkaarten. Voorheen stond die actie bij deze kaarten onder het
+menu met drie puntjes; de kaartopbouw, eigenaargebonden selectie en
+bevestigingsgrens zijn niet gewijzigd. De lokale QA-starthelper accepteert
+nu `coach_feed_journey` met exact dezelfde fixtureflags als de bestaande
+GitHub-workflow: manifest `none`, fixture-acties `true`, uitvoering `false`.
+Een dispatchregressie controleert zowel die geldige combinatie als de
+afgewezen combinaties.
+
+Gemeten lokaal: backendselectie voor QA-runner, feed en directe
+journey-reconciliatie **229/229**; frontend commandotests **112/112**,
+i18n-tests **45/45**, typecheck, i18n-lint en productiebuild geslaagd.
+`audit:high` slaagde met één bestaande moderate Next.js-melding. De lokale
+FINN-actiematrix is niet uitgevoerd: de voorgeschreven Redis-poort was al
+door een andere lokale harness bezet. Het mislukte startproject is zonder
+fixture- of productwrites gestopt. Deze kandidaat wijzigt geen FINN-acties
+of providerpad. Er is nog geen PR-CI, deploy, exacte live SHA of
+onafhankelijk QA-verdict voor deze wijziging.
+
 ## FINN: profiel en portefeuille sturen advies en botvoorstellen (23 november 2026)
 
 Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`.
