@@ -688,6 +688,16 @@ class FinnV2OperationClassificationService:
         )
         if strategy_after_setup or strategy_before_new_setup:
             return "create_setup"
+        # In "maak een bot voor een strategie" the strategy is the existing
+        # parent, not the object being created. Match the direct object before
+        # the broader parent-before-strategy heuristic below.
+        if re.search(
+            r"^\s*(?:maak|create|erstelle)\s+(?:(?:een|a|an|ein(?:e|en|er|es)?)\s+)?"
+            r"(?:(?:nieuwe?|new|neu(?:e|en|er|es)?|handmatig(?:e)?|manual|paper)[-\s]+){0,3}"
+            r"bot(?:configuratie)?\b",
+            text,
+        ):
+            return "create_bot"
         # A user can state the object before the create verb: "Ik wil een
         # nieuwe BTC-setup maken. Help me stap voor stap." That is still a
         # request to start guided collection, even when no slots are known.
@@ -711,7 +721,7 @@ class FinnV2OperationClassificationService:
         ):
             return "create_strategy"
         create_target_patterns = (
-            ("create_bot", r"\b(?:maak|aanmaken|cre(?:ate|eer)|erstelle|erstellen|lege\s+an)\b.{0,48}\b(?:bot|automation)\b"),
+            ("create_bot", r"\b(?:maak|aanmaken|cre(?:ate|eer)|erstelle|erstellen|lege\s+an)\b.{0,48}\b(?:bot(?:configuratie)?|automation)\b"),
             ("create_strategy", r"\b(?:maak|aanmaken|cre(?:ate|eer)|erstelle|erstellen|lege\s+an)\b.{0,48}\b(?:strategie|strategy)\b"),
             ("create_setup", r"\b(?:maak|aanmaken|cre(?:ate|eer)|erstelle|erstellen|lege\s+an)\b.{0,48}\bsetup\b"),
         )

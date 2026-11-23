@@ -336,10 +336,14 @@ def test_explicit_create_setup_uses_registry_contract_without_provider():
 
 @pytest.mark.parametrize(("message", "operation_id"), (
     ("Maak een nieuwe strategie voor mijn bestaande setup.", "create_strategy"),
+    ("Maak bij mijn bot een strategie.", "create_strategy"),
     ("Create a new strategy for my existing setup.", "create_strategy"),
     ("Erstelle eine neue Strategie für mein bestehendes Setup.", "create_strategy"),
     ("Maak een nieuwe bot voor mijn bestaande strategie.", "create_bot"),
+    ("Maak een bot voor een strategie.", "create_bot"),
+    ("Maak een handmatige Paper-botconfiguratie voor mijn bestaande AAPL-strategie. Toon eerst een voorstel; plaats geen order.", "create_bot"),
     ("Create a new bot for my existing strategy.", "create_bot"),
+    ("Create a bot for a strategy.", "create_bot"),
     ("Erstelle einen neuen Bot für meine bestehende Strategie.", "create_bot"),
 ))
 def test_explicit_guided_create_uses_the_existing_registry_contract(message, operation_id):
