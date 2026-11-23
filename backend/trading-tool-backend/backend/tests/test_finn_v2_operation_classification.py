@@ -635,6 +635,19 @@ def test_conversational_aapl_setup_draft_request_routes_to_proposal():
     assert _explicit_create_operation_request("Ik wil weten hoe ik zo'n AAPL-setup voorbereid.") is None
 
 
+def test_smart_dca_score_band_question_stays_in_setup_draft():
+    from backend.services.finn_v2_responses_front_door import _explicit_create_operation_request
+
+    message = (
+        "Ik wil voor BTC/USDT een Smart DCA maken: maximaal één aankoop per week, "
+        "€200 als basisbedrag. Laat het bedrag meebewegen met de gezamenlijke "
+        "Markt-, Macro- en Technisch-score. Welke drie staffels stel je voor? "
+        "Toon eerst een bewerkbaar concept; start geen bot en plaats geen order."
+    )
+    assert _explicit_create_operation_request(message) == "create_setup"
+    assert _explicit_create_operation_request(message.replace("Toon eerst een bewerkbaar concept", "Toon geen voorstel")) is None
+
+
 def test_declassified_action_contract_acceptance_handoff_is_complete_and_immutable():
     """Keep every Build-authorized regression record available to public tests."""
     fixture = Path(__file__).parent / "fixtures" / "finn_v2_declassified_34746230528_regression.json"
