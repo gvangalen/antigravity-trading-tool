@@ -4,6 +4,46 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: geselecteerde strategiekaart geeft stabiel vervolgadvies (23 november 2026)
+
+Phase: `LOCAL_VALIDATED_PENDING_RELEASE`; nieuwe productkandidaat is nog niet live
+of onafhankelijk geaccepteerd. De beschermde serverreis op SHA
+`fa7f8a7f740b8bc041e70d60c4bca5ea455ecc11` slaagde één keer voor
+setup → feedkaart → Bespreek → kort ‘ja’ → afzonderlijk bevestigde strategie.
+De daaropvolgende hertest op SHA `c84ce339d154c15de66c12db8b341bfc8836876e`
+stopte vóór de transportcontrole op `journey_strategy_advice_missing` in de
+Bespreek-beurt. Het afgeschermde QA-object van die hertest is exact opgeruimd;
+de extra inhoudsdiagnose was inconclusief. Polling/SSE-pariteit in die
+journey en een verse zichtbare browserkaart blijven ongetest.
+
+De lokale reparatie herkent de afsluitende instructie ‘Maak niets aan’ als
+geen aanmaakopdracht. Voor een geselecteerde strategiekaart herleest FINN
+de eigenaargebonden setup, de gekoppelde strategie en de exacte scorestatus,
+en geeft hij een bruikbare vervolgvraag zonder een voorstel of wijziging te
+maken. Het antwoord gebruikt uitsluitend de opgeslagen setup-ID en het
+handelspaar; een afwijkend feed-/setupsymbool wordt geweigerd. Een
+`daily_scores.report_date` heet expliciet scorerapportdatum, niet
+bronmoment. Bij een ontbrekende score wordt geen concrete bronoorzaak
+verzonnen. Security heeft commit `d14625782` read-only beoordeeld zonder
+blocker; dit is geen live verdict.
+
+Definitieve lokale backend-suite: **5463 passed, 7 skipped**, 47 waarschuwingen.
+De geïsoleerde prefork- en echte Responses-providerproef slaagde **38/38**,
+met 0 Live-bots en 0 niet-toegestane executies; artifact SHA-256
+`0bd4bb46e46e6a968b8b29c1ee7b0b642bfded94d740af41d2d3e50a0ec58d2e`.
+De afzonderlijke echte providerselector-development slaagde **20/20** met
+0 provider-, schema-, timeout-, parse- of validatiefouten; artifact SHA-256
+`052749e2f2699fc78c1c7004ef592c28bbc26a105a958aaadea1f59cfbc7d4e0`.
+De echte providerselector-regression slaagde **109/109** met 0 provider-,
+schema-, timeout-, parse- of validatiefouten; artifact SHA-256
+`6b2048d5352c29c42fafcd574fd0f044b16aac850955d42154613fb11463d3cd`.
+Frontend is voor deze backendwijziging niet aangepast. Typecheck, i18n-lint,
+productiebuild en **190/190** betrokken frontendtests slaagden; `audit:high`
+slaagde met één bestaande moderate Next.js-melding. De gegenereerde
+frontend-export is niet in deze backendkandidaat opgenomen. PR-CI, main-CI,
+Auto Deploy, publieke SHA-pariteit en onafhankelijke beschermde QA moeten
+nog worden uitgevoerd.
+
 ## FINN 3.0: feedbespreking naar strategieconcept (23 november 2026)
 
 Phase: `LOCAL_VALIDATED_PENDING_RELEASE`. Onafhankelijke QA op live SHA
