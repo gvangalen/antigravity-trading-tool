@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN: Paper-botconfiguratie bij gesloten markt (23 november 2026)
 
-Phase: `LOCAL_BUILD_VALIDATED_PENDING_CI_DEPLOY_QA`. De onafhankelijke
+Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`. De onafhankelijke
 proposal-only QA op live SHA `d1573e548736e8d6e373f471809f3a2f4aa296cd`
 (workflow 45089300742-1) eindigde `clarification_required` vóór enige
 strategielezing: de operatie was niet `create_bot`, er was geen bevestigbaar
@@ -40,8 +40,15 @@ Echte providerselectie op development **20/20** (artifact SHA-256
 `240753c4a2473dcad04b06eed7402de71ec8ea67dc7e046e958bb2c8487a4c8a`)
 en regression **109/109** (artifact SHA-256
 `6ba196de38f6d32eb8dc1eef2ae04e678db1a8657c8eade3c7ac2ec798768e24`),
-zonder provider-, schema-, timeout-, parse- of validatiefouten. CI,
-deploymentidentiteit en onafhankelijke live QA moeten nog worden voltooid.
+zonder provider-, schema-, timeout-, parse- of validatiefouten. Product-PR
+[#1310](https://github.com/gvangalen/antigravity-trading-tool/pull/1310)
+op head `b89e90a211eaf8a60497464adbc3de9708ba638e` doorliep PR-CI
+**45093952175** en main-CI **45094802339** met vijf geslaagde jobs per run.
+Auto Deploy **45095543208** slaagde op
+`284989f96a3663db451ffed78f00fadf02889d69`; GitHub `main`, publieke
+backend health en frontend build-info rapporteerden dezelfde SHA, beide met
+HTTP 200. Deze status-only wijziging vereist opnieuw laatste main-CI,
+Auto Deploy en publieke SHA-pariteit voor de officiële QA-run.
 De beoogde live QA blijft gescheiden: een beschermde
 AAPL-bot-CRUD/replay-proef zonder order, plus de al bewezen read-only
 quotegrens. Een daadwerkelijk geweigerde nieuwe Paper-order is daarmee nog
