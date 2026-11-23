@@ -6,8 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: geselecteerde strategiekaart geeft stabiel vervolgadvies (23 november 2026)
 
-Phase: `LOCAL_VALIDATED_PENDING_RELEASE`; nieuwe productkandidaat is nog niet live
-of onafhankelijk geaccepteerd. De beschermde serverreis op SHA
+Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`; productcode staat live,
+maar de nieuwe kandidaat is nog niet onafhankelijk geaccepteerd. De beschermde serverreis op SHA
 `fa7f8a7f740b8bc041e70d60c4bca5ea455ecc11` slaagde één keer voor
 setup → feedkaart → Bespreek → kort ‘ja’ → afzonderlijk bevestigde strategie.
 De daaropvolgende hertest op SHA `c84ce339d154c15de66c12db8b341bfc8836876e`
@@ -40,9 +40,17 @@ schema-, timeout-, parse- of validatiefouten; artifact SHA-256
 Frontend is voor deze backendwijziging niet aangepast. Typecheck, i18n-lint,
 productiebuild en **190/190** betrokken frontendtests slaagden; `audit:high`
 slaagde met één bestaande moderate Next.js-melding. De gegenereerde
-frontend-export is niet in deze backendkandidaat opgenomen. PR-CI, main-CI,
-Auto Deploy, publieke SHA-pariteit en onafhankelijke beschermde QA moeten
-nog worden uitgevoerd.
+frontend-export is niet in deze backendkandidaat opgenomen. Product-PR
+[#1332](https://github.com/gvangalen/antigravity-trading-tool/pull/1332)
+had vijf groene PR-CI-jobs in workflow `45202619515` en is gemerged als
+`f214c71ba3c7b7c9e660b78aad39e6c4bef96975`. Main-CI `45204368114`
+had vijf groene jobs; Auto Deploy `45205946779` slaagde. GitHub main,
+publieke backend-health en frontend-buildinfo meldden op 23 november 2026
+alle drie exact `f214c71ba3c7b7c9e660b78aad39e6c4bef96975`; beide
+publieke endpoints gaven HTTP 200. Deze statuswijziging creëert zelf een
+volgende main-SHA. De laatste main-CI, Auto Deploy en publieke SHA-pariteit
+moeten opnieuw bevestigd worden vóór de onafhankelijke beschermde QA-run.
+Er is nog geen live QA-verdict op de nieuwe productfix.
 
 ## FINN 3.0: feedbespreking naar strategieconcept (23 november 2026)
 
