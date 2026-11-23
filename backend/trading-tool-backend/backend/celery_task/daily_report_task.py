@@ -92,6 +92,7 @@ def generate_daily_report(user_id: int):
     logger.info(f"📄 Daily report | user_id={user_id} | {today}")
 
     db = SessionLocal()
+    report_saved = False
 
     try:
         # -------------------------------------------------
@@ -175,6 +176,7 @@ def generate_daily_report(user_id: int):
             setup_score=setup_score,
         )
         db.commit()
+        report_saved = True
         logger.info("💾 daily_reports opgeslagen")
 
         # -------------------------------------------------
@@ -200,12 +202,14 @@ def generate_daily_report(user_id: int):
     finally:
         db.close()
         logger.info("✅ Daily report task afgerond")
-
-    # Notify only after a report was stored and its snapshot was created.
-    try:
-        _publish_daily_report_ready_feed(user_id, today, report)
-    except Exception:
-        logger.exception("⚠️ Failed to publish report feed item for user_id=%s", user_id)
+        # The report is readable as soon as its row commits. PDF snapshot
+        # generation is a separate delivery path and must not suppress its
+        # feed card when that path fails.
+        if report_saved:
+            try:
+                _publish_daily_report_ready_feed(user_id, today, report)
+            except Exception:
+                logger.exception("⚠️ Failed to publish report feed item for user_id=%s", user_id)
 
     try:
         from backend.services.push_service import push_service

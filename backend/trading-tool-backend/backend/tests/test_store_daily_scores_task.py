@@ -309,6 +309,54 @@ def test_feed_recovery_republishes_recent_saved_report_without_duplicate(monkeyp
     assert published == [(7, date(2026, 11, 19), {"score_source_snapshot": snapshot})]
 
 
+def test_daily_report_backfill_is_independent_and_retries_other_owners(monkeypatch):
+    from datetime import date
+    from backend.celery_task import daily_report_task
+    import backend.celery_task.store_daily_scores_task as task_module
+
+    published = []
+    observed_sql = []
+    snapshot = {"assets": [{"pair": "BTC/EUR", "score_status": "available",
+                             "benchmark_score": 44.3}]}
+
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, sql):
+            observed_sql.append(sql)
+
+        def fetchall(self):
+            return [(7, date(2026, 11, 22), json.dumps(snapshot)),
+                    (8, date(2026, 11, 23), snapshot)]
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def close(self):
+            pass
+
+    def publish(user_id, report_date, report):
+        published.append((user_id, report_date, report))
+        if user_id == 7:
+            raise RuntimeError("one owner unavailable")
+
+    monkeypatch.setattr(task_module, "get_db_connection", Connection)
+    monkeypatch.setattr(daily_report_task, "_publish_daily_report_ready_feed", publish)
+
+    assert task_module.recover_daily_report_feed.run() == 1
+    assert [item[0] for item in published] == [7, 8]
+    assert published[1][2] == {"score_source_snapshot": snapshot}
+    assert "NOT EXISTS" in observed_sql[0]
+    assert "f.user_id=r.user_id" in observed_sql[0]
+    assert "FLOOR(EXTRACT(EPOCH FROM NOW()) / 600)" in observed_sql[0]
+    assert "setups" not in observed_sql[0]
+
+
 def test_feed_recovery_upgrades_recent_generic_report_but_skips_missing_attention(monkeypatch):
     from datetime import date
     import backend.celery_task.store_daily_scores_task as task_module

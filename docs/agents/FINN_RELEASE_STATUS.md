@@ -4,6 +4,35 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: ontbrekende dagrapportmeldingen in de feed (23 november 2026)
+
+Phase: `CANDIDATE_CI_PENDING`. In het ingelogde Gerrit-account stond het
+dagrapport van 23 november klaar om 05:33 CET, maar de volledige feedgeschiedenis
+bevatte geen dagrapportkaart voor 22 of 23 november; de kaart van 21 november
+bestond wel. Dit bewijst een breuk tussen opgeslagen rapport en feedpublicatie,
+maar zonder productie-workertrace niet de exacte exception. De code publiceerde
+pas na een afzonderlijke PDF-snapshotstap en de bestaande backfill deelde één
+transactie/uitvoering met Paper-, periodiek rapport- en setupherstel.
+
+Product-PR [#1337](https://github.com/gvangalen/antigravity-trading-tool/pull/1337)
+publiceert een rapportkaart na geslaagde rapportcommit, ook als de snapshot
+daarna faalt. Een eigen tienminutentaak herstelt uitsluitend ontbrekende
+dagrapportkaarten van de laatste zeven dagen, met eigenaar-/datumgebonden
+`NOT EXISTS`, een begrensde roterende selectie en dezelfde idempotente
+publisher. Er is geen wijziging aan FINN-actiecontracten, providerselector,
+frontend, mobiele client of handelsuitvoering.
+
+Lokale gerichte rapport/feed-regressies: **17/17**. Volledige backend-suite:
+**5472 passed, 7 skipped**, 47 waarschuwingen. `git diff --check` schoon.
+Onafhankelijke QA-codebeoordeling op producthead `6b0b70c7a` vond geen
+blocker en controleerde Celery-planning/wachtroute. PR-CI `45246722095`
+slaagde met vijf groene jobs op die head. De statusaanvulling zelf vereist
+een nieuwe definitieve PR-CI. Nog geen merge, Auto Deploy, publieke SHA-pariteit
+of onafhankelijke live acceptatie. Na deploy moet QA de eigenaargebonden
+kaarten van 22/23 november, afwezigheid van dubbelen en een volgend natuurlijk
+dagrapport controleren. Een gedeelde publisherfout blijft mogelijk totdat
+die live meting is gedaan.
+
 ## FINN 3.0: geselecteerde strategiekaart zonder providerafhankelijk antwoord (23 november 2026)
 
 Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`. Onafhankelijke QA op live SHA

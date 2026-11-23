@@ -1083,10 +1083,12 @@ def test_daily_report_task_persists_typed_report_facts(monkeypatch):
         {"indicator": "DXY", "symbol": "ETH"}]
 
 
-def test_daily_report_feed_is_not_published_when_snapshot_fails(monkeypatch):
+def test_daily_report_feed_is_published_after_commit_when_snapshot_fails(monkeypatch):
+    published = []
+    commits = []
     class DB:
         def commit(self):
-            pass
+            commits.append(True)
 
         def rollback(self):
             pass
@@ -1103,10 +1105,11 @@ def test_daily_report_feed_is_not_published_when_snapshot_fails(monkeypatch):
     monkeypatch.setattr(daily_report_task, "create_report_snapshot",
                         lambda **_: (_ for _ in ()).throw(RuntimeError("snapshot_failed")))
     monkeypatch.setattr(daily_report_task, "_publish_daily_report_ready_feed",
-                        lambda *_: pytest.fail("feed published before snapshot"))
+                        lambda *_: published.append(len(commits)))
 
     with pytest.raises(RuntimeError, match="snapshot_failed"):
         daily_report_task.generate_daily_report.run(7)
+    assert published == [1]
 
 
 def test_daily_report_feed_uses_owner_and_date_as_deduplication_key(monkeypatch):

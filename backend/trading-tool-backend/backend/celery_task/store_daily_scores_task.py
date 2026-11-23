@@ -494,6 +494,49 @@ def retry_coach_feed_copy():
         conn.close()
 
 
+@shared_task(name="backend.celery_task.store_daily_scores_task.recover_daily_report_feed")
+def recover_daily_report_feed():
+    """Backfill missing saved daily reports independently of other feed repairs."""
+    conn = get_db_connection()
+    if conn is None:
+        return 0
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT r.user_id, r.report_date,
+                       to_jsonb(r)->'score_source_snapshot' AS saved_snapshot
+                FROM daily_reports r
+                WHERE r.report_date >= CURRENT_DATE - 7
+                  AND to_jsonb(r)->'executive_summary' IS NOT NULL
+                  AND NOT EXISTS (
+                    SELECT 1 FROM finn_coach_feed_items f
+                    WHERE f.user_id=r.user_id
+                      AND f.event_key='daily-report:' || r.report_date::TEXT
+                  )
+                -- A failing owner must not indefinitely occupy the first page.
+                ORDER BY md5(r.user_id::TEXT || ':' || r.report_date::TEXT || ':' ||
+                             FLOOR(EXTRACT(EPOCH FROM NOW()) / 600)::TEXT)
+                LIMIT 24
+            """)
+            reports = cur.fetchall()
+    finally:
+        conn.close()
+
+    from backend.celery_task.daily_report_task import _publish_daily_report_ready_feed
+    published = 0
+    for user_id, report_date, raw_snapshot in reports:
+        try:
+            if isinstance(raw_snapshot, str):
+                raw_snapshot = json.loads(raw_snapshot)
+            report = ({"score_source_snapshot": raw_snapshot}
+                      if isinstance(raw_snapshot, dict) else None)
+            _publish_daily_report_ready_feed(user_id, report_date, report)
+            published += 1
+        except Exception:
+            logger.warning("FINN daily report feed backfill failed", exc_info=True)
+    return published
+
+
 @shared_task(name="backend.celery_task.store_daily_scores_task.recover_coach_feed_events")
 def recover_coach_feed_events():
     """Recover persisted Paper decisions, reports and recent journey steps."""

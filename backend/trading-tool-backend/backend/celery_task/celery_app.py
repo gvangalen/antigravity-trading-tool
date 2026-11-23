@@ -242,6 +242,10 @@ celery_app.conf.beat_schedule = {
         "backend.celery_task.store_daily_scores_task.recover_coach_feed_events",
         crontab(minute="*/10"),
     ),
+    "recover_daily_report_feed": build_task_schedule_entry(
+        "backend.celery_task.store_daily_scores_task.recover_daily_report_feed",
+        crontab(minute="*/10"),
+    ),
 
     # =====================================================
     # 4️⃣ PORTFOLIO + SETUP + BOT (STAGGERED)
