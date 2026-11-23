@@ -4263,6 +4263,61 @@ def test_selected_strategy_step_verifier_rejects_unverified_marker():
     assert answer.status == "unavailable"
 
 
+def test_selected_strategy_step_rejects_same_score_with_newer_report_date():
+    feed = [
+        {"facts": {"feed_item_id": "selected", "event_type": "strategy_next_step",
+                   "selection_origin": "current_run", "historical_notification": True,
+                   "symbol": "BTC",
+                   "historical_event_facts": {"setup_id": 11, "trading_pair": "BTC/USDT"}}},
+        {"facts": {"feed_item_id": "selected", "current_setup": {
+            "id": 11, "name": "BTC USDT", "trading_pair": "BTC/USDT"},
+            "current_linked_strategy": {"status": "missing"},
+            "current_source_status": "available", "current_benchmark_score": 42,
+            "current_score_as_of": "2026-11-22"}},
+    ]
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="score-race")
+    read_date = "2026-11-23"
+
+    async def read(call):
+        if call.name == "get_linked_strategies":
+            return {"status": "completed", "results": [
+                {"scope": "read_active_setup", "status": "completed", "data": {
+                    "setup_id": 11, "name": "BTC USDT", "symbol": "BTC", "pair": "BTC/USDT"}},
+                {"scope": "read_linked_strategies", "status": "completed", "data": {
+                    "setup_id": 11, "complete": True, "strategy_count": 0,
+                    "strategies": []}},
+            ]}
+        return {"status": "completed", "results": [
+            {"scope": "read_asset_scores", "status": "completed", "data": {
+                "symbol": "BTC", "pair": "BTC/USDT", "source_status": "available",
+                "benchmark_score": 42, "as_of": read_date}},
+        ]}
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message="Controleer de strategie voor BTC/USDT. Maak niets aan.",
+        instructions="", conversation_context={}, verified_asset="BTC", feed_evidence=feed,
+    ))
+    assert result.response.answer_kind == "selected_strategy_next_step_unavailable"
+    assert "42/100" not in result.response.text
+    checked = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message="Controleer de strategie", result=result.response, locale="nl",
+    ))
+    assert checked.status == "unavailable"
+
+    read_date = "2026-11-22"
+    matching = asyncio.run(front.run(
+        message="Controleer de strategie voor BTC/USDT. Maak niets aan.",
+        instructions="", conversation_context={}, verified_asset="BTC", feed_evidence=feed,
+    ))
+    assert matching.response.answer_kind == "selected_strategy_next_step"
+    assert "42/100" in matching.response.text and read_date in matching.response.text
+    checked_matching = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message="Controleer de strategie", result=matching.response, locale="nl",
+    ))
+    assert checked_matching.status == "completed"
+
+
 def test_selected_strategy_step_does_not_bypass_provider_for_mismatched_pair(monkeypatch):
     feed = [
         {"facts": {"feed_item_id": "selected", "event_type": "strategy_next_step",

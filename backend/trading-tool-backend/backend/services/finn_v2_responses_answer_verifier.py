@@ -3140,6 +3140,9 @@ class FinnResponsesAnswerVerifier:
                 and str(score_data.get("pair") or "").upper()
                 == str(setup_data.get("pair") or "").upper()
                 and str(score_data.get("pair") or "").upper() in result.text.upper()
+                and (score_data.get("source_status") != "available"
+                     or (bool(score_data.get("as_of"))
+                         and str(score_data["as_of"]) in result.text))
             )
             if verified and result.answer_kind == "selected_strategy_next_step":
                 return FinnResponsesVerifiedAnswer("completed", result.text, None, evidence)

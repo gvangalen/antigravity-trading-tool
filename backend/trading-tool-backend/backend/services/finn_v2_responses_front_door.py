@@ -2140,7 +2140,10 @@ class FinnResponsesFrontDoor:
                     and (
                         (current.get("current_source_status") == "available"
                          and score_data.get("source_status") == "available"
-                         and score_data.get("benchmark_score") == current.get("current_benchmark_score"))
+                         and score_data.get("benchmark_score") == current.get("current_benchmark_score")
+                         and bool(current.get("current_score_as_of"))
+                         and str(score_data.get("as_of") or "")
+                         == str(current.get("current_score_as_of")))
                         or (current.get("current_source_status") != "available"
                             and score_data.get("benchmark_score") is None)
                     )
@@ -2148,6 +2151,7 @@ class FinnResponsesFrontDoor:
                 verified = (
                     isinstance(active_data, dict)
                     and str(active_data.get("setup_id")) == str(setup_id)
+                    and str(active_data.get("name") or "") == str(setup.get("name") or "")
                     and str(active_data.get("pair") or "").upper() == setup["trading_pair"]
                     and isinstance(linked_data, dict)
                     and str(linked_data.get("setup_id")) == str(setup_id)
