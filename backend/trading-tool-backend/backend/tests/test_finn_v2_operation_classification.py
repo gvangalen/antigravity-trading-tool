@@ -631,6 +631,7 @@ def test_conversational_aapl_setup_draft_request_routes_to_proposal():
     )
     assert _explicit_create_operation_request(message) == "create_setup"
     assert _explicit_create_operation_request(message.replace("toon eerst het voorstel", "toon geen voorstel")) is None
+    assert _explicit_create_operation_request(message.replace("een swing-setup", "een bestaande swing-setup")) is None
     assert _explicit_create_operation_request("Ik wil weten hoe ik zo'n AAPL-setup voorbereid.") is None
 
 

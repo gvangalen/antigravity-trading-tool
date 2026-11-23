@@ -337,6 +337,7 @@ def _explicit_create_operation_request(message: str) -> str | None:
     if ("?" not in message and not _proposal_explicitly_excluded(message)
             and not _explicit_discussion_only(message)
             and re.match(r"^\s*ik\s+wil\s+(?:los\s+)?een\b", message, re.I)
+            and not re.search(r"\b(?:bestaande|opgeslagen|existing|saved)\b", message, re.I)
             and re.search(r"\b(?:[\w]+-)?setup\b", message, re.I)
             and re.search(r"\bbereid\s+alleen\s+de\s+setup\s+voor\b", message, re.I)
             and re.search(r"\btoon\s+eerst\s+het\s+voorstel\b", message, re.I)):
