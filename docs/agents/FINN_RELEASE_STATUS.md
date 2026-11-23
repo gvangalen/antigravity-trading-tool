@@ -6,11 +6,11 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN: profiel en portefeuille sturen advies en botvoorstellen (23 november 2026)
 
-Phase: `LOCAL_VALIDATED_PR_CI_PENDING`. Productcode op
+Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`. Productcode op
 `db49e541b` is bovenop de laatste geverifieerde AAPL-release
 `f86fc68b5146bfcb8991718acf1b2b1f91285bfb` gevalideerd. Product-PR
 [#1302](https://github.com/gvangalen/antigravity-trading-tool/pull/1302)
-is nog niet gemerged of gedeployed. De onafhankelijke QA-agent accepteerde
+is gemerged. De onafhankelijke QA-agent accepteerde
 de beschermde AAPL-serverflow op `f86fc68b` in workflow `45122235462`;
 die proef omvatte geen zichtbare browserweergave, polling/SSE-pariteit of
 daadwerkelijke orderweigering door een actieve Paper-worker.
@@ -38,6 +38,16 @@ Responses-providerselectie slaagde development **20/20**, artifact SHA-256
 en regression **109/109**, artifact SHA-256
 `84122d440f381a3869140a129ad02ffef1cd2e641dcd6a30ddee95152192ed54`,
 zonder provider-, schema-, timeout-, parse- of validatiefouten.
+
+Product-PR-CI **45124806388** en main-CI **45125849026** voltooiden elk
+alle vijf jobs met succes. Auto Deploy **45126772711** slaagde op
+`7f2867740b96ccca532a4c82b2e74051b50ce845`. Op 23 november 2026
+gaven publieke backend health en frontend build-info beide HTTP 200 met
+exact die SHA, gelijk aan GitHub `main`. Deze status-only wijziging maakt
+zelf een nieuwe main-SHA; de laatste main-CI, Auto Deploy en publieke
+SHA-pariteit moeten opnieuw bevestigd zijn vóór de onafhankelijke QA.
+De ingelogde profiel-/portfoliojourney en polling/SSE-pariteit zijn nog niet
+onafhankelijk geaccepteerd.
 
 ## FINN: AAPL-setupvoorstel en gesloten-marktreis (23 november 2026)
 
