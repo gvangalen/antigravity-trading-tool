@@ -6,14 +6,21 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN: profiel en portefeuille sturen advies en botvoorstellen (23 november 2026)
 
-Phase: `LIVE_DEPLOYED_QA_NOT_ACCEPTED_REPAIR_IN_PROGRESS`.
-De laatste geverifieerde live revisie is `f15cb46b804777cf9cd7dd5778dd053c2bd5874c`:
+Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`.
+De vorige, door QA afgekeurde live revisie was `f15cb46b804777cf9cd7dd5778dd053c2bd5874c`:
 GitHub main, backend health (HTTP 200) en frontend build-info (HTTP 200)
 rapporteerden diezelfde SHA na geslaagde main-CI `45128249097` en Auto
 Deploy `45129165521`. Onafhankelijke ingelogde browser-QA op die SHA gaf
-`NOT_ACCEPTED`; de nieuwe reparatiebranch is
-`codex/finn-profile-live-qa-repair-20261123`. Er is nog geen gerepareerde
-live kandidaat of QA-acceptatie.
+`NOT_ACCEPTED`. De reparatie is via product-PR
+[#1321](https://github.com/gvangalen/antigravity-trading-tool/pull/1321)
+gemerged als `3420fbc8c54593ddf49c10bedd393f5388a97884` na vijf groene
+PR-CI-jobs in workflow `45133635000`. Main-CI `45135062607` voltooide alle
+vijf jobs; Auto Deploy `45136130435` slaagde. Op 23 november 2026 gaven
+GitHub main, publieke backend health en frontend build-info exact
+`3420fbc8c54593ddf49c10bedd393f5388a97884`; beide endpoints HTTP 200.
+Deze statuswijziging maakt zelf een volgende SHA. De laatste main-CI,
+Auto Deploy en publieke SHA-pariteit daarvan moeten opnieuw bevestigd zijn
+vóór onafhankelijke QA. Er is nog geen QA-acceptatie.
 
 De QA-handoff bevat drie P1-fouten: een gemengde profiel-/BTC-verdelingsvraag
 herhaalde alleen het profielreadback; een vraag naar BTC-botbudget, werkelijk
@@ -32,9 +39,9 @@ De lokale reparatie richt een gecombineerde owner-scoped profiel-/volledige
 portefeuillelezing in voor gemengde adviesvragen, scheidt botlimiet,
 botkas, werkelijk belegd en totale Paper-kas in de brongebonden budgetread,
 en beperkt de profielafsluiter tot één vraag. De exacte QA-vragen hebben
-gerichte lokale regressies (**64/64** in de relevante selectie). De volledige
-backend-suite gaf op de eerste reparatiediff **5427 passed, 7 skipped, 47 warnings**;
-een definitieve herhaling na de bronmetadata- en verifierfix loopt nog.
+gerichte lokale regressies (**64/64** in de brede relevante selectie en
+**21/21** na de laatste coachplan-nuance). De volledige
+backend-suite op de definitieve code gaf **5432 passed, 7 skipped, 47 warnings**.
 Frontend typecheck,
 i18n-lint/tests, command-/voorsteltests, productiebuild en `audit:high`
 slaagden; de audit meldde één bestaande moderate Next.js-advisory. De echte
@@ -52,8 +59,14 @@ voltooid met polling/SSE-pariteit, zonder voorstel. De illustratieve
 verdeling bleef als voorbeeld begrensd; de budgetvraag scheidde limiet,
 belegd bedrag en totale kas; de botvergelijking noemde de ontbrekende
 eenduidige setupbron en één controlepunt. Dit is lokaal Build-bewijs, geen
-onafhankelijke live-acceptatie. De finale workeractiematrix, laatste CI,
-deploy en onafhankelijke hertest moeten nog worden gemeten.
+onafhankelijke live-acceptatie. De definitieve geïsoleerde
+FastAPI/Celery/PostgreSQL/Redis-actiematrix gaf **17/17**, artifact SHA-256
+`eec21b86b3d7c6e14ff3cf5817268c70532206e4b894409aa4a410ae21f9075c`,
+plus **28/28** adaptertests en geslaagde Smart DCA-migratie, Smart DCA- en
+calendar DCA-confirmed-runtimeproeven. Het artifact registreerde nul
+brokerorders, Live-bots, Live-calls en productieverbindingen. De laatste
+status-update-CI, finale deploy/SHA-pariteit en onafhankelijke hertest moeten
+nog worden gemeten.
 
 Productcode op
 `db49e541b` is bovenop de laatste geverifieerde AAPL-release
