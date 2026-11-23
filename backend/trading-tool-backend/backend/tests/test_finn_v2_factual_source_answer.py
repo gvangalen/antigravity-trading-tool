@@ -624,6 +624,22 @@ def test_latest_aapl_quote_reports_friday_source_on_weekend(monkeypatch):
     assert "gesloten" in response.text
 
 
+def test_last_available_aapl_quote_for_planning_uses_dated_market_read():
+    message = ("Wat is de laatst beschikbare AAPL-koers in USD met bronmoment? "
+               "Gebruik die alleen voor planning; dit is geen actuele uitvoeringskoers. "
+               "Plaats geen order.")
+    response, call = _run(message, [{
+        "scope": "read_market_snapshot", "status": "completed", "data": {
+            "symbol": "AAPL", "price": 341.92, "quote_currency": "USD",
+            "source_observed_at": "2026-11-20T20:58:00+00:00",
+        },
+    }], verified_asset="AAPL")
+    assert call.read_tools == ("read_market_snapshot",)
+    assert response.answer_kind == "factual_source"
+    assert "341.92 USD" in response.text
+    assert "2026-11-20 21:58:00 CET" in response.text
+
+
 def test_explicit_pair_quote_keeps_exact_market_currency():
     message = ("Wat is de nieuwste BTC/USDT-koers? Noem prijs, valuta en exact "
                "bronmoment in CET/CEST.")

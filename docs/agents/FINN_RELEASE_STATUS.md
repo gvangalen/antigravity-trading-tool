@@ -4,6 +4,38 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN: laatst beschikbare AAPL-koers voor planning (23 november 2026)
+
+Phase: `LOCAL_BUILD_VALIDATED_PENDING_CI_DEPLOY_QA`. Onafhankelijke protected
+`aapl_closed_market_journey` QA op live SHA
+`013086c98a51d97fbb56a4b4de36717bfaada760` (workflow 45103307207-1)
+stopte vóór de eerste setup: een gedateerde globale AAPL/USD-bron was
+beschikbaar, maar FINN's voltooide antwoord noemde noch de prijs noch het
+bronmoment. De testfixture werd opgeruimd; nul bevestigingen, executions en
+Live-calls. De volledige setup→strategie→botketen bleef onbewezen.
+
+Lokale reproductie met exact die vraag liet twee frontdoorgrenzen zien:
+`laatst beschikbare` viel buiten de directe feitelijke koersroute en het
+negatieve `plaats geen order` werd als wijzigingswerkwoord behandeld. De
+kandidaat herkent specifiek `laatst beschikbare` en negeert uitsluitend de
+negatieve orderzin bij het kiezen van een read-only feitelijke koersread.
+Een echte wijzigingsopdracht blijft buiten die route. De gerichte quote- en
+FINN-regressies zijn **51/51** groen; volledige backend **5407 passed, 7
+skipped**. Frontend typecheck, i18n-lint/tests **45/45**, commandotests
+**112/112**, productiebuild en `audit:high` slaagden (één bestaande moderate
+Next.js-advisory). Geïsoleerde FINN-actiematrix **17/17** (artifact SHA-256
+`59fab1ef468a33b53d80a1240fc091dbc1988574aff1879b3f0b5e0a5c401285`),
+adapters **28/28**, Smart DCA en calendar DCA groen. Echte providerselectie:
+development **20/20** (artifact SHA-256
+`b83e9e4d1c331d183548689f000d3946a240a2fe0d34ba23d5a80beb6d069e07`)
+en regression **109/109** (artifact SHA-256
+`4e6f9cc3e29e5f903e7e6f987dde38f3eaf40d3e454183e1162cca2f2258e703`),
+zonder provider-, schema-, timeout-, parse- of validatiefouten. Product-PR,
+CI, deploymentidentiteit en onafhankelijke hertest staan nog open. De
+afzonderlijke read-only stale-quote-validator was op een vorige SHA groen;
+een echte door de Paper-worker geweigerde order is niet bewezen en mag alleen
+in een geïsoleerde testdatabase worden onderzocht.
+
 ## FINN: Paper-botconfiguratie bij gesloten markt (23 november 2026)
 
 Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`. De onafhankelijke
