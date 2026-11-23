@@ -473,6 +473,7 @@ if printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_COM
   run_migration backend/scripts/migrations/2026_11_12_qa_owner_reading_foreign_keys.py
   run_migration backend/scripts/migrations/2026_11_17_smart_dca_score_trigger.py
   run_migration backend/scripts/migrations/2026_11_18_smart_dca_legacy_schedule_constraint.py
+  run_migration backend/scripts/migrations/2026_11_23_rsi_momentum_calibration.py
   advance_deploy_step 'schema_health'
   echo \"🩺 Checking FINN V2 schema contract before process startup...\"
   timeout --foreground "\${MIGRATION_COMMAND_TIMEOUT_SECONDS}s" \

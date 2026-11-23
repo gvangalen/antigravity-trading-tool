@@ -24,7 +24,7 @@ def _clamp_score(s) -> int:
         v = int(float(s))
     except Exception:
         v = 50
-    return max(10, min(100, v))
+    return max(0, min(100, v))
 
 def _bucket_key(a: float, b: float):
     return (round(float(a), 4), round(float(b), 4))

@@ -73,9 +73,8 @@ def _clamp(v: float, lo: float, hi: float) -> float:
 
 
 def _clamp_score(v: int) -> int:
-    # jij wil geen 0 — minimaal 10
-    if v < 10:
-        return 10
+    if v < 0:
+        return 0
     if v > 100:
         return 100
     return v
@@ -575,7 +574,7 @@ def persist_indicator_scores(
             interpretation = it.get("interpretation")
             action = it.get("action")
 
-            score = _clamp_score(int(score or 10))
+            score = _clamp_score(int(10 if score is None else score))
 
             if category == "macro":
                 cur.execute(

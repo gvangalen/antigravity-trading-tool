@@ -10,7 +10,7 @@ from backend.celery_task import store_daily_scores_task
 from backend.domain.finn_dca_plan_contract import split_confirmed_dca_plan
 from backend.domain.setup_market_match import match_setup_from_daily_scores
 from backend.engine import bot_brain
-from backend.utils import scoring_utils
+from backend.utils import scoring_utils, scoring_engine
 from backend.utils import macro_interpreter, market_interpreter, technical_interpreter
 
 
@@ -317,6 +317,10 @@ def test_source_to_score2_to_setup_match_to_paper_amount(monkeypatch, unavailabl
     monkeypatch.setattr(macro_interpreter, "normalize_macro_value_with_history",
                         lambda *args, **_kwargs: args[-1])
     monkeypatch.setattr(technical_interpreter, "normalize_technical_value", lambda _name, value: value)
+    # This fixture fakes score_indicator and does not provide an indicator
+    # configuration cursor; the RSI normalizer now reads that configuration
+    # to preserve owner custom curves.
+    monkeypatch.setattr(scoring_engine, "fetch_rules_for_indicator", lambda *_args, **_kwargs: [])
     scores_by_category = {"market": 80, "macro": 70, "technical": 60}
     monkeypatch.setattr(scoring_utils, "score_indicator", lambda **kwargs: {
         "score": scores_by_category[kwargs["category"]], "weight": 1,

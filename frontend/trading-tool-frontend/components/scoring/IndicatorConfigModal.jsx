@@ -78,9 +78,12 @@ function getIndicatorLabel(indicator, copy) {
 
 function normalizeDraft(category, indicator, config = {}) {
   const normalizedIndicator = normalizeIndicatorName(indicator);
+  const fallbackRules = normalizedIndicator === "rsi"
+    ? DEFAULT_RULES.map((rule, index) => ({ ...rule, score: index * 25 }))
+    : DEFAULT_RULES;
   const rules = Array.isArray(config?.rules) && config.rules.length > 0
     ? config.rules
-    : DEFAULT_RULES;
+    : fallbackRules;
 
   return {
     indicator: normalizedIndicator,
@@ -90,10 +93,10 @@ function normalizeDraft(category, indicator, config = {}) {
     rules: rules.map((rule, index) => ({
       indicator: normalizedIndicator,
       category,
-      range_min: Number(rule?.range_min ?? DEFAULT_RULES[index]?.range_min ?? 0),
-      range_max: Number(rule?.range_max ?? DEFAULT_RULES[index]?.range_max ?? 20),
-      score: Number(rule?.score ?? DEFAULT_RULES[index]?.score ?? 50),
-      trend: rule?.trend || DEFAULT_RULES[index]?.trend || "neutral",
+      range_min: Number(rule?.range_min ?? fallbackRules[index]?.range_min ?? 0),
+      range_max: Number(rule?.range_max ?? fallbackRules[index]?.range_max ?? 20),
+      score: Number(rule?.score ?? fallbackRules[index]?.score ?? 50),
+      trend: rule?.trend || fallbackRules[index]?.trend || "neutral",
     })),
   };
 }
@@ -226,7 +229,7 @@ function getRoleModel(category, indicator, profileContext, copy) {
         { id: "standard", ...copy.roles.rsi.standard },
         { id: "contrarian", ...copy.roles.rsi.contrarian },
       ],
-      recommendedInterpretation: fastProfile ? "standard" : "contrarian",
+      recommendedInterpretation: "standard",
       summaryLabel: "RSI",
       recommendationReason: (fastProfile ? copy.roles.rsi.fastRecommendation : copy.roles.rsi.swingRecommendation)
         .replace("{profile}", summarySuffix),

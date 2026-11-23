@@ -91,7 +91,7 @@ class PairIndicatorConfigService:
                     score = int(rule["score"])
                 except (KeyError, TypeError, ValueError) as exc:
                     raise ValueError("invalid_indicator_score") from exc
-                if not 10 <= score <= 100:
+                if not 0 <= score <= 100:
                     raise ValueError("invalid_indicator_score")
                 normalized.append({"range_min": low, "range_max": high, "score": score,
                                    "trend": rule.get("trend")})
