@@ -590,6 +590,98 @@ def test_feed_yes_cleanup_requires_exact_terminal_replay_and_fixture_shape(
         })]
 
 
+def test_advice_diagnostic_reports_only_fixed_failed_checks():
+    missing = {"source_status": "missing_scores", "benchmark_score": None, "as_of": None}
+    good = "Voor BTC/USDT ontbreekt de benchmarkscore; welke strategie past? De bron is onbekend."
+    assert audit._journey_advice_failed_checks(good, missing) == []
+    failed = audit._journey_advice_failed_checks("Privé antwoord zonder context", missing)
+    assert failed == ["exact_pair", "strategy_context", "next_step", "score_context",
+                      "missing_score_acknowledgement"]
+    assert "Privé" not in str(failed)
+
+
+def test_advice_audit_reads_only_exact_selected_run_and_emits_bools(monkeypatch):
+    from backend.scripts import probe_protected_setup_strategy_journey as journey
+
+    namespace = "qa-45191412655-1-c84ce339-1234abcd"
+    state = {"responses_exchange": {"run_id": "synthetic-run", "response_id": "synthetic-response",
+             "conversation_id": "synthetic-conversation", "tool_trace": [
+                 {"result": {"results": [{"scope": "read_asset_scores"}]}}
+             ]}}
+    cursor = Cursor([
+        [("synthetic-run", "synthetic-conversation", "completed",
+          {"content": "BTC/USDT strategie score"}, {"feed_item_id": "synthetic-card"}, state)],
+        [(1,)],
+    ])
+    monkeypatch.setattr(journey, "_current_score_evidence", lambda _rows: {
+        "source_status": "missing_scores", "benchmark_score": None, "as_of": None,
+    })
+    result = audit._journey_advice_diagnostic(cursor, 17, namespace)
+    assert result == {
+        "advice_diagnostic_state": "available", "turn_status": "completed",
+        "selected_card_bound": True, "tool_lineage_valid": True,
+        "score_source_kind": "missing_or_other",
+        "failed_checks": ["next_step", "missing_score_acknowledgement"],
+    }
+    assert "synthetic-run" not in str(result)
+    assert "synthetic-card" not in str(result)
+
+    state["responses_exchange"]["response_id"] = ""
+    invalid = Cursor([
+        [("synthetic-run", "synthetic-conversation", "completed",
+          {"content": "BTC/USDT strategie score"}, {"feed_item_id": "synthetic-card"}, state)],
+        [(1,)],
+    ])
+    result = audit._journey_advice_diagnostic(invalid, 17, namespace)
+    assert result["tool_lineage_valid"] is False
+    assert result["score_source_kind"] == "unavailable"
+    assert "score_evidence" in result["failed_checks"]
+
+
+@pytest.mark.parametrize("safe_prior", [True, False])
+def test_advice_cleanup_requires_exact_prior_and_btc_fixture(monkeypatch, safe_prior):
+    namespace = "qa-45191412655-1-c84ce339-1234abcd"
+    prior = {
+        "workflow_run_id": "45191412655-1", "profile": "setup_strategy_journey",
+        "target_sha": "c84ce339d154c15de66c12db8b341bfc8836876e",
+        "protected_profile_attempted": True, "outcome": "failed", "qa_status": "COMPLETED",
+        "safety": {"live_trading_calls": 0, "live_bot_activation_calls": 0},
+        "setup_strategy_journey": {
+            "fixture_state": "quarantined", "failure_stage": "setup_discuss",
+            "reason": "journey_strategy_advice_missing", "fixture_confirmations": 1,
+            "fixture_executions": 1,
+            "execution_diagnostic": {"first_status": "succeeded",
+                                     "replay_status": "already_executed"},
+        },
+    }
+    if not safe_prior:
+        prior["setup_strategy_journey"]["execution_diagnostic"]["replay_status"] = "missing"
+    before = Connection([
+        [(17, False, {"qa_namespace": namespace})], [(22, False, False)],
+        *([[(0,)]] * 6),
+        [(namespace, "ETH"), (f"QA BTC Setup {namespace}", "BTC")],
+        [(namespace, "ETH")], [(f"QA BTC Setup {namespace}", "BTC", "USDT")],
+        [(0,)], [(0,)],
+    ])
+    after = Connection([[(0,)] for _ in range(8)])
+    connections = iter((before, after))
+    calls = []
+    monkeypatch.setattr(audit.Path, "read_text", lambda *_a, **_k: json.dumps(prior))
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: next(connections))
+    monkeypatch.setattr(audit.fixture, "_cleanup", lambda *args, **kwargs: calls.append((args, kwargs)))
+    if not safe_prior:
+        with pytest.raises(RuntimeError, match="^journey_cleanup_prior_state_mismatch$"):
+            audit.cleanup_journey(audit.JOURNEY_ADVICE_LABEL)
+        assert not calls
+    else:
+        assert audit.cleanup_journey(audit.JOURNEY_ADVICE_LABEL) == {
+            "fixture_state": "CLEANED", "cleanup_verified": True,
+        }
+        assert calls == [((namespace, 17, 22), {
+            "require_safe_pair_cleanup": True, "required_role": "user",
+        })]
+
+
 @pytest.mark.parametrize("label,namespace", [
     (audit.JOURNEY_STRATEGY_DIAGNOSTIC_LABEL, "qa-45015412389-1-999bd355-1234abcd"),
     (audit.JOURNEY_STRATEGY_RETEST_LABEL, "qa-45020771853-1-ea64f391-1234abcd"),
