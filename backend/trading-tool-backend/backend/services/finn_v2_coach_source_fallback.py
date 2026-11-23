@@ -201,7 +201,13 @@ def render_coach_source_fallback(
                              + (f"{quantity} {asset} open." if quantity is not None else
                                 "geen verifieerbare hoeveelheid uitgelezen."))
                 verified = True
-            if cash is not None:
+            # A selected-asset portfolio projection can carry only that bot's
+            # cash. Never relabel it as the account-wide Paper cash total.
+            portfolio_sources = [item for item in evidence if item.get("scope") == "read_portfolio"
+                                 and item.get("status") == "completed"
+                                 and item.get("data") is portfolio]
+            account_wide = bool(portfolio_sources and not portfolio_sources[-1].get("asset"))
+            if cash is not None and account_wide:
                 lines.append(f"- Paper-portefeuille: kas €{cash}"
                              + (f", uitgelezen op {at}." if at else ", uitleesmoment onbekend."))
                 verified = True

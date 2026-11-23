@@ -101,7 +101,7 @@ def _personal_allocation_coaching(message: str, previous_response: Mapping[str, 
     """A personal portfolio example needs the current owner profile, including on a short follow-up."""
     personal = re.search(r"\b(?:mijn|mij|ik|me|my|mine|mein\w*|ich)\b", message, re.I)
     allocation = re.search(
-        r"\b(?:verdeling|allocatie|allocation|portfolio mix|"
+        r"\b(?:verdeling|verdelen|verdeel\w*|allocatie|allocation|portfolio mix|"
         r"hoeveel\s+(?:cash|belegd)|wie\s+viel\s+(?:cash|investiert))\b", message, re.I,
     ) or (
         re.search(r"\b(?:portefeuille|portfolio)\b", message, re.I)
@@ -140,6 +140,11 @@ def _standalone_read_subject(message: str, facts: Any) -> str | None:
     if entities & {"setup", "strategy", "plan", "bot"}:
         return None
     if entities == {"profile"}:
+        if _personal_allocation_coaching(message, None) or re.search(
+            r"\b(?:paper[-\s]*kas|botlimiet\w*|botbudget\w*|belegd|portefeuille|portfolio)\b",
+            message, re.I,
+        ):
+            return None
         return "get_my_profile_and_risk_style"
     if entities == {"portfolio"}:
         return "get_portfolio_and_exposure"
@@ -1274,6 +1279,11 @@ class FinnResponsesFrontDoor:
             (
                 re.search(r"\b(?:kas|kassaldo|cash|saldo|balance)\b", message, re.I)
                 and re.search(r"\b(?:positie|posities|position|positions|positionen)\b", message, re.I)
+            )
+            or (
+                re.search(r"\b(?:budgetlimiet|botbudget|budget)\b", message, re.I)
+                and re.search(r"\b(?:belegd|positie|posities)\b", message, re.I)
+                and re.search(r"\b(?:kas|kassaldo|cash)\b", message, re.I)
             )
             or (
                 re.search(
@@ -4824,6 +4834,10 @@ class FinnResponsesFrontDoor:
                     call.name == "get_portfolio_and_exposure"
                     and set(call.read_tools) == {"read_portfolio"}
                 )
+                if (call.name == "get_profile_portfolio_and_bots"
+                        and re.search(r"\bPaper\b", message, re.I)
+                        and not re.search(r"\bLive\b", message, re.I)):
+                    call = replace(call, inputs={**call.inputs, "environment": "paper"})
                 if full_portfolio_requested and portfolio_only_read:
                     portfolio_inputs = {key: value for key, value in call.inputs.items() if key != "asset"}
                     if re.search(r"\bPaper\b", message, re.I) and not re.search(r"\bLive\b", message, re.I):
@@ -6144,14 +6158,21 @@ class FinnResponsesFrontDoor:
                 else "get_saved_setup_inventory"
                 if normalized_inventory_read and pending_operation is None
                 and not resuming_clarification
+                else "get_profile_portfolio_and_bots"
+                if is_read_only_turn and re.search(r"\b(?:profiel|traderstijl|traderprofiel)\b", message, re.I)
+                and re.search(r"\b(?:bot|portefeuille|portfolio|kas|belegd|budget|allocatie|verdel\w*)\b", message, re.I)
+                and pending_operation is None and not resuming_clarification
                 else "get_portfolio_and_exposure"
                 if is_read_only_turn and (
                     self._asks_about_open_position(message)
                     or self._asks_about_aggregate_portfolio(message)
                 )
                 and pending_operation is None and not resuming_clarification
-                else "get_my_profile_and_risk_style"
+                else "get_profile_portfolio_and_bots"
                 if is_read_only_turn and _personal_allocation_coaching(message, previous_response)
+                and pending_operation is None and not resuming_clarification
+                else "get_my_profile_and_risk_style"
+                if is_read_only_turn and re.search(r"\b(?:profiel|traderstijl|traderprofiel)\b", message, re.I)
                 and pending_operation is None and not resuming_clarification
                 else "evaluate_bot"
                 if is_read_only_turn and request_facts.action_polarity == "evaluate"

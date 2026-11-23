@@ -16,6 +16,7 @@ from backend.services.finn_v2_tool_registry_service import FinnV2ToolRegistrySer
 # not a second definition of required inputs or execution policy.
 _READ_SCOPES: dict[str, tuple[str, ...]] = {
     "get_my_profile_and_risk_style": ("profile", "preferences"),
+    "get_profile_portfolio_and_bots": ("profile", "portfolio"),
     "get_active_asset_context": ("active_asset", "watchlist"),
     "get_active_plan_and_strategy": ("active_setup", "linked_strategy"),
     "get_market_snapshot": ("market_snapshot", "macro_snapshot"),
@@ -114,6 +115,7 @@ class FinnResponsesToolCatalog:
         # Collection reads have a distinct typed read adapter. They do not
         # add a new action/evaluation operation to the sealed registry matrix.
         self.read_tools["get_saved_setup_inventory"] = ("read_saved_setup_inventory",)
+        self.read_tools["get_profile_portfolio_and_bots"] = ("read_profile", "read_portfolio")
         self.read_tools["get_forward_returns"] = ("read_active_asset", "read_forward_returns")
         self.read_tools["get_saved_setup"] = ("read_active_setup", "read_asset_scores")
         self.read_tools["get_current_asset_scores"] = ("read_active_asset", "read_asset_scores")
@@ -190,6 +192,14 @@ class FinnResponsesToolCatalog:
                     "This returns preferences, not a judgment about whether a specific plan "
                     "or proposed amount fits them; use the registry-backed evaluate_plan "
                     "tool for that assessment."
+                )
+            if name == "get_profile_portfolio_and_bots":
+                description += (
+                    " Use for a question combining the owner's profile or BTC focus with "
+                    "portfolio cash, invested positions, bot limits, or an illustrative "
+                    "allocation. Read the full owner portfolio without an asset filter; "
+                    "distinguish total Paper cash from each bot's Paper cash and budget "
+                    "limit. A preference does not prove personal suitability."
                 )
             if name == "get_active_plan_and_strategy":
                 description += (
@@ -362,7 +372,7 @@ class FinnResponsesToolCatalog:
                 # message and checks ownership. A model-supplied asset filter
                 # could hide that exact dossier, so this tool has no inputs.
                 properties = {}
-            if name in {"get_portfolio_and_exposure", "get_saved_bots"}:
+            if name in {"get_portfolio_and_exposure", "get_saved_bots", "get_profile_portfolio_and_bots"}:
                 properties["environment"] = {
                     "type": ["string", "null"], "enum": ["paper", "live", None],
                     "description": "Use live for the user's real broker account and paper for virtual bots; null when the user did not specify either.",
@@ -631,7 +641,7 @@ class FinnResponsesToolCatalog:
                 allowed.add("quote_currency")
             if name == "get_closed_trade_review":
                 allowed = set()
-            if name in {"get_portfolio_and_exposure", "get_saved_bots"}:
+            if name in {"get_portfolio_and_exposure", "get_saved_bots", "get_profile_portfolio_and_bots"}:
                 allowed.add("environment")
             if name in self.evaluation_contracts:
                 allowed.update(self.evaluation_contracts[name].optional_inputs)

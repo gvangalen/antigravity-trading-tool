@@ -97,9 +97,9 @@ def _profile_follow_up(profile: dict[str, Any], language: str) -> str:
         }[language]
     if active:
         return {
-            "nl": f"Wil je voor {market} een concrete setup verkennen, en welke risicogrens wil je daarbij zelf aanhouden?",
-            "en": f"Would you like to explore a setup for {market}, and what risk limit would you want to set?",
-            "de": f"Möchtest du für {market} ein Setup besprechen, und welche Risikogrenze möchtest du dabei selbst setzen?",
+            "nl": f"Wil je voor {market} een concrete setup verkennen?",
+            "en": f"Would you like to explore a setup for {market}?",
+            "de": f"Möchtest du für {market} ein Setup besprechen?",
         }[language]
     return {
         "nl": "Wat wil je met dit profiel als eerste uitwerken: een plan, een setup of een botvoorstel?",

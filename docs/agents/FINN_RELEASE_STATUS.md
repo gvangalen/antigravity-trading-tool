@@ -6,7 +6,45 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN: profiel en portefeuille sturen advies en botvoorstellen (23 november 2026)
 
-Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`. Productcode op
+Phase: `LIVE_DEPLOYED_QA_NOT_ACCEPTED_REPAIR_IN_PROGRESS`.
+De laatste geverifieerde live revisie is `f15cb46b804777cf9cd7dd5778dd053c2bd5874c`:
+GitHub main, backend health (HTTP 200) en frontend build-info (HTTP 200)
+rapporteerden diezelfde SHA na geslaagde main-CI `45128249097` en Auto
+Deploy `45129165521`. Onafhankelijke ingelogde browser-QA op die SHA gaf
+`NOT_ACCEPTED`; de nieuwe reparatiebranch is
+`codex/finn-profile-live-qa-repair-20261123`. Er is nog geen gerepareerde
+live kandidaat of QA-acceptatie.
+
+De QA-handoff bevat drie P1-fouten: een gemengde profiel-/BTC-verdelingsvraag
+herhaalde alleen het profielreadback; een vraag naar BTC-botbudget, werkelijk
+belegd bedrag en kas liet de limiet weg en benoemde de BTC-botkas als totale
+Paper-kas; een profiel-/bot-/portefeuillevergelijking eindigde met een
+algemene onbeschikbaarheidszin. Een P2-fout is de dubbele afsluitvraag in
+het directe profielreadback. De zichtbare accountgegevens in QA waren
+totale Paper-kas €10.005,45, BTC-botkas €9.599,97, AAPL-botkas €405,48,
+BTC-botbudgetlimiet €100 en nul open BTC-positie. QA heeft geen run-ID of
+interne tooltrace uit de browser kunnen vaststellen; deze ontbreken dus als
+oorzaakbewijs. Er zijn geen profielwijzigingen, voorstellen, botacties of
+orders uitgevoerd. Polling/SSE-pariteit, owner-scheiding en nieuwe
+voorstelroutes zijn in deze browserproef niet onafhankelijk bewezen.
+
+De lokale reparatie richt een gecombineerde owner-scoped profiel-/volledige
+portefeuillelezing in voor gemengde adviesvragen, scheidt botlimiet,
+botkas, werkelijk belegd en totale Paper-kas in de brongebonden budgetread,
+en beperkt de profielafsluiter tot één vraag. De exacte QA-vragen hebben
+gerichte lokale regressies (**61/61** in de relevante selectie). De volledige
+backend-suite gaf **5427 passed, 7 skipped, 47 warnings**. Frontend typecheck,
+i18n-lint/tests, command-/voorsteltests, productiebuild en `audit:high`
+slaagden; de audit meldde één bestaande moderate Next.js-advisory. De echte
+provider-developmentselectie via de canonieke lokale FINN-omgeving gaf
+**20/20**, artifact SHA-256
+`2ac4db7ef79f8a2ed789fb05a80c3c83725a7f3ebfa8b931ee78a4d78ee78a79`,
+zonder provider-, schema-, timeout-, parse- of validatiefouten. Een eerdere
+ongeldige providerpoging zonder geladen lokale sleutel is verworpen en telt
+niet als releasebewijs. Provider-regression, workerpoorten, CI, deploy en
+onafhankelijke hertest moeten nog worden gemeten.
+
+Productcode op
 `db49e541b` is bovenop de laatste geverifieerde AAPL-release
 `f86fc68b5146bfcb8991718acf1b2b1f91285bfb` gevalideerd. Product-PR
 [#1302](https://github.com/gvangalen/antigravity-trading-tool/pull/1302)

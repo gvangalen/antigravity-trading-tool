@@ -44,3 +44,24 @@ def test_named_budget_selects_only_matching_paper_bot():
                                                asset="AAPL", locale="nl")
     assert "0 AAPL open" in answer
     assert "€405,48 Paper-kas" in answer
+
+
+def test_live_qa_budget_invested_and_total_cash_are_separate():
+    question = ("Wat is de ingestelde budgetlimiet van mijn BTC Paper-bot, hoeveel is "
+                "werkelijk belegd en hoeveel kas is er? Noem die drie afzonderlijk; "
+                "lees alleen en verander niets.")
+    trace = ({"result": {"results": [{"scope": "read_portfolio", "status": "completed",
+             "asset": None, "data": {"environment": "paper", "global": {
+                 "cash_balance": 10005.45, "invested_value": 0}, "bots": [
+                     {"symbol": "BTC", "is_live": False, "position_qty": 0,
+                      "invested_eur": 0, "paper_cash_eur": 9599.97, "budget_total_eur": 100},
+                     {"symbol": "AAPL", "is_live": False, "position_qty": 0,
+                      "invested_eur": 0, "paper_cash_eur": 405.48, "budget_total_eur": 400},
+                 ]}}]}},)
+    answer = render_paper_position_cash_answer(question, trace, asset="BTC", locale="nl")
+    assert "budgetlimiet van je BTC Paper-bot is €100" in answer
+    assert "In die bot is €0 werkelijk belegd" in answer
+    assert "totale Paper-portefeuille heeft €0 belegd en €10005,45 kas" in answer
+    assert "BTC-botkas is daarvan €9599,97" in answer
+    trace[0]["result"]["results"][0]["asset"] = "BTC"
+    assert render_paper_position_cash_answer(question, trace, asset="BTC", locale="nl") is None

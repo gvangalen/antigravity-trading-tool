@@ -130,6 +130,18 @@ def test_coach_answer_recovery_preserves_exact_bot_reason_and_bot_cash():
     ) is None
 
 
+def test_filtered_bot_cash_is_never_labelled_account_total():
+    evidence = ({"scope": "read_portfolio", "status": "completed", "asset": "BTC",
+                 "data": {"global": {"cash_balance": 9599.97},
+                          "bots": [{"name": "BTC Paper", "symbol": "BTC",
+                                    "is_live": False, "paper_cash_eur": 9599.97}]}},)
+    answer = render_coach_source_fallback(
+        asset="BTC", topics=("portfolio",), evidence=evidence,
+    )
+    assert "BTC Paper botkas (Paper): €9599,97" in answer
+    assert "Paper-portefeuille: kas" not in answer
+
+
 def test_coach_recovery_includes_requested_position_and_rounds_money():
     evidence = ({"scope": "read_portfolio", "status": "completed", "data": {
         "global": {"cash_balance": 10005.449999999999},
