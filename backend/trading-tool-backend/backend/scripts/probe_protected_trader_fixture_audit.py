@@ -34,6 +34,7 @@ JOURNEY_STRATEGY_RETEST_LABEL = "audit-45020771853-1-ea64f391"
 JOURNEY_STRATEGY_SLOT_LABEL = "audit-45027057156-1-1c7ac643"
 JOURNEY_FEED_YES_LABEL = "audit-45176449317-1-41a256b5"
 JOURNEY_ADVICE_LABEL = "audit-45191412655-1-c84ce339"
+JOURNEY_DISCUSS_LABEL = "audit-45210144088-1-13956779"
 JOURNEY_CLEANUP_LABELS = frozenset({
     JOURNEY_CLEANUP_LABEL,
     "audit-44972794086-1-da950aac",
@@ -45,6 +46,7 @@ JOURNEY_CLEANUP_LABELS = frozenset({
     JOURNEY_STRATEGY_SLOT_LABEL,
     JOURNEY_FEED_YES_LABEL,
     JOURNEY_ADVICE_LABEL,
+    JOURNEY_DISCUSS_LABEL,
 })
 JOURNEY_EXECUTION_CODES = frozenset({
     "proposal_not_confirmed", "proposal_expired", "proposal_payload_hash_mismatch",
@@ -380,6 +382,91 @@ def _journey_advice_diagnostic(cur, user_id: int, namespace: str) -> dict:
     }
 
 
+def _journey_discuss_diagnostic(cur, user_id: int, namespace: str) -> dict:
+    setup_name = f"QA BTC Setup {namespace}"
+    message = (
+        f"Controleer of setup {setup_name} voor BTC/USDT nog bestaat en of er inmiddels "
+        "een strategie aan is gekoppeld. Zo niet, adviseer welke strategie past en "
+        "welke gegevens je van mij nodig hebt. Lees ook de actuele scorestatus en "
+        "noem een ontbrekende bron eerlijk. Maak niets aan."
+    )
+    cur.execute(
+        """SELECT r.id,r.conversation_id,r.status,r.error_code,r.response_json,
+                  r.client_context_json,c.state_json,c.terminal_projection_json
+           FROM finn_v2_runs r LEFT JOIN finn_v2_runtime_contracts c
+             ON c.run_id=r.id AND c.user_id=r.user_id
+           WHERE r.user_id=%s AND r.client_context_json->>'surface'='qa_setup_strategy_journey'
+             AND r.message=%s""",
+        (user_id, message),
+    )
+    turns = cur.fetchall()
+    if len(turns) != 1:
+        return {"discuss_diagnostic_state": "turn_missing_or_ambiguous"}
+    (run_id, conversation_id, status, error_code, raw_response, raw_context,
+     raw_state, raw_projection) = turns[0]
+    response = raw_response if isinstance(raw_response, dict) else {}
+    context = raw_context if isinstance(raw_context, dict) else {}
+    state = raw_state if isinstance(raw_state, dict) else {}
+    projection = raw_projection if isinstance(raw_projection, dict) else {}
+    content = response.get("content")
+    content = content if isinstance(content, str) else ""
+    exchange = state.get("responses_exchange")
+    exchange = exchange if isinstance(exchange, dict) else {}
+    trace = exchange.get("tool_trace")
+    lineage_valid = (
+        str(exchange.get("run_id")) == str(run_id)
+        and str(exchange.get("conversation_id")) == str(conversation_id)
+        and isinstance(exchange.get("response_id"), str)
+        and bool(exchange["response_id"])
+        and isinstance(trace, list)
+    )
+    allowed_scopes = {"read_active_setup", "read_saved_setup_inventory",
+                      "read_linked_strategies", "read_asset_scores"}
+    read_scopes = set()
+    if lineage_valid:
+        for call in trace:
+            result = call.get("result") if isinstance(call, dict) else None
+            found = result.get("results") if isinstance(result, dict) else None
+            if not isinstance(found, list):
+                lineage_valid = False
+                break
+            for row in found:
+                if not isinstance(row, dict):
+                    continue
+                scope, read_status = row.get("scope"), row.get("status")
+                if (isinstance(scope, str) and scope in allowed_scopes
+                        and isinstance(read_status, str)
+                        and read_status in {"completed", "unavailable", "failed"}):
+                    read_scopes.add((scope, read_status))
+    cur.execute(
+        """SELECT COUNT(*) FROM finn_coach_feed_items f JOIN setups s
+             ON f.subject_id=s.id::text AND s.user_id=f.user_id
+           WHERE f.id::text=%s AND f.user_id=%s AND f.event_type='strategy_next_step'
+             AND f.subject_type='setup' AND s.name=%s AND s.symbol='BTC'""",
+        (context.get("feed_item_id"), user_id, setup_name),
+    )
+    raw_operation = projection.get("final_operation_id") or projection.get("initial_operation_id")
+    return {
+        "discuss_diagnostic_state": "available",
+        "turn_status": status if status in {"completed", "clarification_required", "unavailable", "failed"} else "other",
+        "error_code": error_code if isinstance(error_code, str) and error_code in {
+            "guided_proposal_tool_call_required", "responses_tool_round_limit",
+            "responses_provider_error", "finn_v2_internal_error",
+        } else "none" if error_code is None else "other",
+        "operation": (raw_operation if isinstance(raw_operation, str) and raw_operation in
+                      {"create_setup", "create_strategy", "create_bot"} else "none_or_other"),
+        "selected_card_bound": cur.fetchone()[0] == 1,
+        "proposal_present": bool(response.get("proposal_id")),
+        "confirmation_required": response.get("confirmation_required") is True,
+        "exact_pair_mentioned": "BTC/USDT" in content,
+        "tool_lineage_valid": lineage_valid,
+        "read_scope_statuses": [
+            {"scope": scope, "status": read_status}
+            for scope, read_status in sorted(read_scopes)
+        ] if lineage_valid else [],
+    }
+
+
 def _journey_strategy_diagnostic(cur, user_id: int, namespace: str) -> dict:
     """Inspect one failed proposal turn, returning only typed conditions."""
     cur.execute(
@@ -557,7 +644,8 @@ def run(label: str, *, expected_profile: str = "trader_paper_exit_reconciliation
             namespace = (preferences or {}).get("qa_namespace", "")
             if not fixture.NAMESPACE_PATTERN.fullmatch(namespace) or not namespace.startswith(namespace_prefix):
                 raise RuntimeError("trader_fixture_audit_scope_invalid")
-            if label in {JOURNEY_FEED_YES_LABEL, JOURNEY_ADVICE_LABEL}:
+            if label in {JOURNEY_FEED_YES_LABEL, JOURNEY_ADVICE_LABEL,
+                         JOURNEY_DISCUSS_LABEL}:
                 cur.execute("SELECT role FROM users WHERE id=%s", (user_id,))
                 if cur.fetchall() != [("user",)]:
                     return {"fixture_state": "AMBIGUOUS", "cleanup_verified": False}
@@ -597,6 +685,10 @@ def run(label: str, *, expected_profile: str = "trader_paper_exit_reconciliation
                 advice_diagnostic = (
                     _journey_advice_diagnostic(cur, user_id, namespace)
                     if label == JOURNEY_ADVICE_LABEL else {}
+                )
+                discuss_diagnostic = (
+                    _journey_discuss_diagnostic(cur, user_id, namespace)
+                    if label == JOURNEY_DISCUSS_LABEL else {}
                 )
                 if label == JOURNEY_CARD_LABEL:
                     cur.execute(
@@ -640,6 +732,7 @@ def run(label: str, *, expected_profile: str = "trader_paper_exit_reconciliation
                     **strategy_diagnostic,
                     **feed_yes_diagnostic,
                     **advice_diagnostic,
+                    **discuss_diagnostic,
                     **transport_diagnostic,
                 }
             if expected_profile == "trader_pair_score_continuity":
@@ -759,15 +852,26 @@ def cleanup_journey(label: str) -> dict:
         and (journey.get("execution_diagnostic") or {}).get("replay_status") == "already_executed"
         and (prior.get("safety") or {}).get("live_trading_calls") == 0
         and (prior.get("safety") or {}).get("live_bot_activation_calls") == 0)
+    discuss_failure = label == JOURNEY_DISCUSS_LABEL and (
+        journey.get("failure_stage"), journey.get("reason")) == (
+            "setup_discuss", "journey_feed_discuss_failed") and (
+        prior.get("qa_status") == "COMPLETED"
+        and journey.get("fixture_confirmations") == 1
+        and journey.get("fixture_executions") == 1
+        and (journey.get("execution_diagnostic") or {}).get("first_status") == "succeeded"
+        and (journey.get("execution_diagnostic") or {}).get("replay_status") == "already_executed"
+        and (prior.get("safety") or {}).get("live_trading_calls") == 0
+        and (prior.get("safety") or {}).get("live_bot_activation_calls") == 0)
     proposal_failure = label in {JOURNEY_STRATEGY_DIAGNOSTIC_LABEL,
                                  JOURNEY_STRATEGY_RETEST_LABEL,
                                  JOURNEY_STRATEGY_SLOT_LABEL} and (
         journey.get("failure_stage"), journey.get("reason")) == (
             "strategy_proposal", "journey_strategy_proposal_missing")
-    legacy_failure = label not in {JOURNEY_FEED_YES_LABEL, JOURNEY_ADVICE_LABEL} and (
+    legacy_failure = label not in {JOURNEY_FEED_YES_LABEL, JOURNEY_ADVICE_LABEL,
+                                   JOURNEY_DISCUSS_LABEL} and (
         journey.get("failure_stage"), journey.get("reason")) == expected_failure
     if (journey.get("fixture_state") != "quarantined"
-            or not (transport_failure or guided_failure or feed_yes_failure or advice_failure or proposal_failure or
+            or not (transport_failure or guided_failure or feed_yes_failure or advice_failure or discuss_failure or proposal_failure or
                     legacy_failure)):
         raise RuntimeError("journey_cleanup_prior_state_mismatch")
     if label == JOURNEY_TRANSPORT_LABEL:
@@ -815,6 +919,7 @@ def cleanup_journey(label: str) -> dict:
                          JOURNEY_YES_DIAGNOSTIC_LABEL,
                          JOURNEY_FEED_YES_LABEL,
                          JOURNEY_ADVICE_LABEL,
+                         JOURNEY_DISCUSS_LABEL,
                          JOURNEY_STRATEGY_DIAGNOSTIC_LABEL,
                          JOURNEY_STRATEGY_RETEST_LABEL,
                          JOURNEY_STRATEGY_SLOT_LABEL}:
@@ -848,7 +953,8 @@ def cleanup_journey(label: str) -> dict:
         fixture._cleanup(
             namespace, user_id, bot_id, require_safe_pair_cleanup=True,
             **({"required_role": "user"} if label in {
-                JOURNEY_FEED_YES_LABEL, JOURNEY_ADVICE_LABEL} else {}),
+                JOURNEY_FEED_YES_LABEL, JOURNEY_ADVICE_LABEL,
+                JOURNEY_DISCUSS_LABEL} else {}),
         )
     except Exception:
         raise RuntimeError("journey_cleanup_failed") from None

@@ -638,17 +638,76 @@ def test_advice_audit_reads_only_exact_selected_run_and_emits_bools(monkeypatch)
     assert "score_evidence" in result["failed_checks"]
 
 
-@pytest.mark.parametrize("safe_prior", [True, False])
-def test_advice_cleanup_requires_exact_prior_and_btc_fixture(monkeypatch, safe_prior):
-    namespace = "qa-45191412655-1-c84ce339-1234abcd"
+def test_feed_discuss_diagnostic_emits_only_allowlisted_conditions():
+    namespace = "qa-45210144088-1-13956779-1234abcd"
+    state = {"responses_exchange": {
+        "run_id": "synthetic-run", "conversation_id": "synthetic-conversation",
+        "response_id": "synthetic-response", "tool_trace": [{"result": {"results": [
+            {"scope": "read_active_setup", "status": "completed", "data": {"secret": "private"}},
+            {"scope": "read_asset_scores", "status": "unavailable"},
+        ]}}],
+    }}
+    cursor = Cursor([
+        [("synthetic-run", "synthetic-conversation", "completed", None,
+          {"content": "Er is een strategie nodig", "proposal_id": None,
+           "confirmation_required": False},
+          {"feed_item_id": "synthetic-card"}, state,
+          {"final_operation_id": None})],
+        [(1,)],
+    ])
+    result = audit._journey_discuss_diagnostic(cursor, 17, namespace)
+    assert result == {
+        "discuss_diagnostic_state": "available", "turn_status": "completed",
+        "error_code": "none", "operation": "none_or_other",
+        "selected_card_bound": True, "proposal_present": False,
+        "confirmation_required": False, "exact_pair_mentioned": False,
+        "tool_lineage_valid": True,
+        "read_scope_statuses": [
+            {"scope": "read_active_setup", "status": "completed"},
+            {"scope": "read_asset_scores", "status": "unavailable"},
+        ],
+    }
+    assert "private" not in str(result)
+    assert "synthetic-card" not in str(result)
+    assert namespace not in str(result)
+
+
+def test_feed_discuss_cleanup_rejects_other_failure_before_database(monkeypatch):
     prior = {
-        "workflow_run_id": "45191412655-1", "profile": "setup_strategy_journey",
-        "target_sha": "c84ce339d154c15de66c12db8b341bfc8836876e",
+        "workflow_run_id": "45210144088-1", "profile": "setup_strategy_journey",
+        "target_sha": "13956779351ea9d13ba0a4f9f65e2b6be397af76",
+        "protected_profile_attempted": True, "outcome": "failed", "qa_status": "COMPLETED",
+        "safety": {"live_trading_calls": 0, "live_bot_activation_calls": 0},
+        "setup_strategy_journey": {
+            "fixture_state": "quarantined", "failure_stage": "strategy_proposal",
+            "reason": "journey_feed_discuss_failed", "fixture_confirmations": 1,
+            "fixture_executions": 1,
+            "execution_diagnostic": {"first_status": "succeeded",
+                                     "replay_status": "already_executed"},
+        },
+    }
+    monkeypatch.setattr(audit.Path, "read_text", lambda *_a, **_k: json.dumps(prior))
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: pytest.fail("database touched"))
+    with pytest.raises(RuntimeError, match="^journey_cleanup_prior_state_mismatch$"):
+        audit.cleanup_journey(audit.JOURNEY_DISCUSS_LABEL)
+
+
+@pytest.mark.parametrize("label,reason", [
+    (audit.JOURNEY_ADVICE_LABEL, "journey_strategy_advice_missing"),
+    (audit.JOURNEY_DISCUSS_LABEL, "journey_feed_discuss_failed"),
+])
+@pytest.mark.parametrize("safe_prior", [True, False])
+def test_advice_cleanup_requires_exact_prior_and_btc_fixture(monkeypatch, safe_prior, label, reason):
+    workflow_id, attempt, sha_prefix = audit.LABEL.fullmatch(label).groups()
+    namespace = f"qa-{workflow_id}-{attempt}-{sha_prefix}-1234abcd"
+    prior = {
+        "workflow_run_id": f"{workflow_id}-{attempt}", "profile": "setup_strategy_journey",
+        "target_sha": sha_prefix + "0" * 32,
         "protected_profile_attempted": True, "outcome": "failed", "qa_status": "COMPLETED",
         "safety": {"live_trading_calls": 0, "live_bot_activation_calls": 0},
         "setup_strategy_journey": {
             "fixture_state": "quarantined", "failure_stage": "setup_discuss",
-            "reason": "journey_strategy_advice_missing", "fixture_confirmations": 1,
+            "reason": reason, "fixture_confirmations": 1,
             "fixture_executions": 1,
             "execution_diagnostic": {"first_status": "succeeded",
                                      "replay_status": "already_executed"},
@@ -671,10 +730,10 @@ def test_advice_cleanup_requires_exact_prior_and_btc_fixture(monkeypatch, safe_p
     monkeypatch.setattr(audit.fixture, "_cleanup", lambda *args, **kwargs: calls.append((args, kwargs)))
     if not safe_prior:
         with pytest.raises(RuntimeError, match="^journey_cleanup_prior_state_mismatch$"):
-            audit.cleanup_journey(audit.JOURNEY_ADVICE_LABEL)
+            audit.cleanup_journey(label)
         assert not calls
     else:
-        assert audit.cleanup_journey(audit.JOURNEY_ADVICE_LABEL) == {
+        assert audit.cleanup_journey(label) == {
             "fixture_state": "CLEANED", "cleanup_verified": True,
         }
         assert calls == [((namespace, 17, 22), {
