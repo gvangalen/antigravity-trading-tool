@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import inspect
 import subprocess
@@ -125,6 +126,49 @@ def test_profile_guards_require_exact_flags_and_bound_owner(monkeypatch):
     assert quote._contract_cases()
 
 
+def test_proposal_only_guard_forbids_execution_and_crud_flag(monkeypatch):
+    namespace = "qa-123456-1-aaaaaaaa-bbbbbbbb"
+    monkeypatch.setenv("FINN_QA_USER_ID", "42")
+    monkeypatch.setenv("FINN_QA_ALLOW_AAPL_BOT_PROPOSAL_ONLY", "1")
+    monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_ACTIONS", "1")
+    monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_EXECUTION", "0")
+    assert bot._bound_owner(namespace, proposal_only=True) == 42
+    monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_EXECUTION", "1")
+    with pytest.raises(RuntimeError, match="aapl_bot_not_authorized"):
+        bot._bound_owner(namespace, proposal_only=True)
+    monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_EXECUTION", "0")
+    monkeypatch.delenv("FINN_QA_ALLOW_AAPL_BOT_PROPOSAL_ONLY")
+    monkeypatch.setenv("FINN_QA_ALLOW_AAPL_BOT_CRUD", "1")
+    with pytest.raises(RuntimeError, match="aapl_bot_not_authorized"):
+        bot._bound_owner(namespace, proposal_only=True)
+
+
+def test_proposal_only_captures_diagnosis_and_never_confirms(monkeypatch):
+    namespace = "qa-123456-1-aaaaaaaa-bbbbbbbb"
+    monkeypatch.setattr(bot, "_seed", lambda *_: (42, 17))
+    monkeypatch.setattr(bot, "_snapshot", lambda *_: {"bot_configs": 0, "exchange_keys": 0,
+                                                     **{table: 0 for table in bot.TRADE_TABLES}})
+
+    async def proposal(*_):
+        return {"status": "completed", "proposal_id": "internal-id",
+                "confirmation_required": True, "diagnostic": {"status": "completed"}}
+
+    async def forbidden(*_):
+        raise AssertionError("confirmation must not run")
+
+    cleaned = []
+    monkeypatch.setattr(bot, "_proposal", proposal)
+    monkeypatch.setattr(bot, "_confirm_execute", forbidden)
+    monkeypatch.setattr(bot, "_cleanup", lambda *args, **kwargs: cleaned.append(args))
+    trace = {"stage": "seed", "fixture_state": "not_created"}
+    result = asyncio.run(bot._case(namespace, 1, trace, proposal_only=True))
+    assert result == {"result": "PASS", "diagnostic_captured": True,
+                      "proposal_confirmable": True, "confirmation_attempted": False,
+                      "no_bot_or_order": True}
+    assert trace["fixture_state"] == "cleaned"
+    assert len(cleaned) == 1
+
+
 class _FakeCursor:
     def __init__(self, *, owner_active=False, trade_rows=0, bots=(),
                  owner_namespace="qa-123456-1-aaaaaaaa-bbbbbbbb", role="user"):
@@ -243,6 +287,8 @@ def test_snapshot_rechecks_exact_child_under_lock_before_action(
     ("aapl_stale_quote_read", "true", "false", False),
     ("aapl_paper_bot_crud", "true", "true", True),
     ("aapl_paper_bot_crud", "true", "false", False),
+    ("aapl_bot_proposal_diagnose", "true", "false", True),
+    ("aapl_bot_proposal_diagnose", "true", "true", False),
 ])
 def test_dispatch_profiles_use_exact_permissions(tmp_path, profile, actions, execution, accepted):
     gh = tmp_path / "gh"
@@ -270,3 +316,6 @@ def test_workflow_scopes_bot_flag_and_does_not_expose_financial_actions():
     assert "FINN_V2_ACTIVATE_LIVE" not in script
     assert "FINN_QA_ALLOW_AAPL_BOT_CRUD" in source
     assert "FINN_QA_ALLOW_AAPL_STALE_QUOTE_READ" in source
+    assert "FINN_QA_ALLOW_AAPL_BOT_PROPOSAL_ONLY" in source
+    assert 'if [ $(printf \'%q\' "$qa_profile") = aapl_paper_bot_crud ]; then' in script
+    assert 'if [ $(printf \'%q\' "$qa_profile") = aapl_bot_proposal_diagnose ]; then\n            export FINN_V2_EXECUTE_BOT_CHANGES=false' in script
