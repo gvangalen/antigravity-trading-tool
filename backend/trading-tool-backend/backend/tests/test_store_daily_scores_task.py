@@ -354,6 +354,10 @@ def test_daily_report_backfill_is_independent_and_retries_other_owners(monkeypat
     assert "NOT EXISTS" in observed_sql[0]
     assert "f.user_id=r.user_id" in observed_sql[0]
     assert "FLOOR(EXTRACT(EPOCH FROM NOW()) / 600)" in observed_sql[0]
+    assert "r.report_date >= CURRENT_DATE - 2" in observed_sql[0]
+    assert "PARTITION BY r.report_date" in observed_sql[0]
+    assert "WHERE date_rank <= 12" in observed_sql[0]
+    assert "ORDER BY report_date DESC, date_rank" in observed_sql[0]
     assert "setups" not in observed_sql[0]
 
 
