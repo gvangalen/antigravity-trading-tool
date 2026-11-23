@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: ontbrekende dagrapportmeldingen in de feed (23 november 2026)
 
-Phase: `LIVE_DEPLOYED_AWAITING_INDEPENDENT_QA`. In het ingelogde Gerrit-account stond het
+Phase: `REPAIR_CANDIDATE_CI_PENDING`. In het ingelogde Gerrit-account stond het
 dagrapport van 23 november klaar om 05:33 CET, maar de volledige feedgeschiedenis
 bevatte geen dagrapportkaart voor 22 of 23 november; de kaart van 21 november
 bestond wel. Dit bewijst een breuk tussen opgeslagen rapport en feedpublicatie,
@@ -35,8 +35,24 @@ beide publieke endpoints gaven HTTP 200. Deze statusregistratie maakt een
 nieuwe main-SHA; de daaropvolgende CI, Auto Deploy en publieke pariteit
 moeten opnieuw worden geverifieerd vóór onafhankelijke QA. QA moet de eigenaargebonden
 kaarten van 22/23 november, afwezigheid van dubbelen en een volgend natuurlijk
-dagrapport controleren. Een gedeelde publisherfout blijft mogelijk totdat
-die live meting is gedaan.
+dagrapport controleren. De onafhankelijke ingelogde QA op definitieve live
+SHA `135b1aa2ca531990f1af4b2e2ffae7f8fa5d1db8` gaf **NOT_ACCEPTED**:
+na twee herstelbeurten ontbraken 22/23 november nog steeds, terwijl een kaart
+voor 16 november nieuw verscheen. De zichtbare rapportlinks 16–21 november
+kwamen elk eenmaal voor; het rapport van 23 november was klaar. Dit bewijst
+dat de herstelroute draait, maar de zeven dagen brede, volledig geroteerde
+batch geen recente datum voorrang gaf. Het bewijst niet dat selectie de enige
+mogelijke oorzaak voor 22/23 is.
+
+De gerichte reparatiekandidaat beperkt herstel tot de laatste twee dagen plus
+vandaag en reserveert met `ROW_NUMBER() PARTITION BY report_date` maximaal
+twaalf pogingen per rapportdag, nieuwste dag eerst, roterend binnen de dag.
+Een falende datum kan de andere dagen daardoor niet volledig verdringen.
+De SQL-selectie is in geïsoleerde PostgreSQL 16 met synthetische 16/22/23-
+rapporten uitgevoerd: 22/23 geselecteerd, 16 uitgesloten. Gerichte test
+voor het contract is groen; de volledige backend-suite slaagde met
+**5472 passed, 7 skipped**, 47 waarschuwingen. PR-CI, deploy en live QA
+staan open.
 
 ## FINN 3.0: geselecteerde strategiekaart zonder providerafhankelijk antwoord (23 november 2026)
 

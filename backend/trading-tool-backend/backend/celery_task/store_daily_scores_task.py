@@ -503,20 +503,28 @@ def recover_daily_report_feed():
     try:
         with conn.cursor() as cur:
             cur.execute("""
-                SELECT r.user_id, r.report_date,
-                       to_jsonb(r)->'score_source_snapshot' AS saved_snapshot
-                FROM daily_reports r
-                WHERE r.report_date >= CURRENT_DATE - 7
-                  AND to_jsonb(r)->'executive_summary' IS NOT NULL
-                  AND NOT EXISTS (
-                    SELECT 1 FROM finn_coach_feed_items f
-                    WHERE f.user_id=r.user_id
-                      AND f.event_key='daily-report:' || r.report_date::TEXT
-                  )
-                -- A failing owner must not indefinitely occupy the first page.
-                ORDER BY md5(r.user_id::TEXT || ':' || r.report_date::TEXT || ':' ||
-                             FLOOR(EXTRACT(EPOCH FROM NOW()) / 600)::TEXT)
-                LIMIT 24
+                WITH missing AS (
+                    SELECT r.user_id, r.report_date,
+                           to_jsonb(r)->'score_source_snapshot' AS saved_snapshot,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY r.report_date
+                               ORDER BY md5(r.user_id::TEXT || ':' ||
+                                   FLOOR(EXTRACT(EPOCH FROM NOW()) / 600)::TEXT)
+                           ) AS date_rank
+                    FROM daily_reports r
+                    WHERE r.report_date >= CURRENT_DATE - 2
+                      AND to_jsonb(r)->'executive_summary' IS NOT NULL
+                      AND NOT EXISTS (
+                        SELECT 1 FROM finn_coach_feed_items f
+                        WHERE f.user_id=r.user_id
+                          AND f.event_key='daily-report:' || r.report_date::TEXT
+                      )
+                )
+                SELECT user_id, report_date, saved_snapshot FROM missing
+                -- Reserve a slice for each recent day, even when one day has
+                -- persistently failing owners. Rotate within each day.
+                WHERE date_rank <= 12
+                ORDER BY report_date DESC, date_rank
             """)
             reports = cur.fetchall()
     finally:
