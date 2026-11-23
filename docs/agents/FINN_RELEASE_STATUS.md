@@ -4,6 +4,34 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: feedbespreking naar strategieconcept (23 november 2026)
+
+Phase: `LOCAL_VALIDATED_PENDING_RELEASE`. Onafhankelijke QA op live SHA
+`41a256b562e600d53fc7c35fdbfde245c201abf4` accepteerde de opgeslagen
+BTC/USDT-setup, de kaart ‘Strategie ontbreekt’ en de daaropvolgende
+‘Bespreek’-beurt, maar niet het korte ‘ja’ in dat nieuwe gesprek. Een
+beschermde read-only diagnose op de latere auditrelease bevestigde dat die
+beurt voltooide zonder `create_strategy`-operatie, guided state of
+setupbinding. De betrokken QA-child werd afzonderlijk op veiligheid
+gecontroleerd en wordt exact opgeruimd; dit is geen productacceptatie.
+
+De productreparatie bindt het onmiddellijke ‘ja’ alleen aan de eerder
+besproken, eigenaargebonden `strategy_next_step`-kaart, leest de exacte
+setup en afwezigheid van een gekoppelde strategie opnieuw en opent daarna
+uitsluitend een onbevestigd strategieconcept. Opslaan blijft een aparte
+bevestiging. Een tweede, alleen-lezen routeringsfix laat een expliciete vraag
+naar actief plan, setup, strategie en bot de gekoppelde planleesroute kiezen.
+
+De volledige lokale backend-suite op de kandidaat gaf **5444 passed, 7
+skipped**. De geïsoleerde runtime met echte Responses-provider en prefork
+workers slaagde **38/38** gevallen, inclusief **16/16** actiecontracten en
+**9/9** lineagecontroles; artifact SHA-256
+`9cb84bcd180ccb819201876aceac2e9a049c251122d72ff23220c44c00f51a76`.
+Nul Live-bots en niet-toegestane executies in die proef. Dit vervangt geen
+onafhankelijke ingelogde feed→chat→strategieacceptatie of polling/SSE-verdict.
+Product-PR #1328 is nog niet gemerged of live; PR-CI en de beschermde
+QA-hertest blijven releasevoorwaarden.
+
 ## FINN 3.0: directe feedbespreking en QA-dispatch (23 november 2026)
 
 Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`. De actieve kandidaat maakt ‘Bespreek’
