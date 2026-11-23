@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN: laatst beschikbare AAPL-koers voor planning (23 november 2026)
 
-Phase: `LOCAL_BUILD_VALIDATED_PENDING_CI_DEPLOY_QA`. Onafhankelijke protected
+Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`. Onafhankelijke protected
 `aapl_closed_market_journey` QA op live SHA
 `013086c98a51d97fbb56a4b4de36717bfaada760` (workflow 45103307207-1)
 stopte vóór de eerste setup: een gedateerde globale AAPL/USD-bron was
@@ -30,8 +30,16 @@ development **20/20** (artifact SHA-256
 `b83e9e4d1c331d183548689f000d3946a240a2fe0d34ba23d5a80beb6d069e07`)
 en regression **109/109** (artifact SHA-256
 `4e6f9cc3e29e5f903e7e6f987dde38f3eaf40d3e454183e1162cca2f2258e703`),
-zonder provider-, schema-, timeout-, parse- of validatiefouten. Product-PR,
-CI, deploymentidentiteit en onafhankelijke hertest staan nog open. De
+zonder provider-, schema-, timeout-, parse- of validatiefouten. Product-PR
+[#1314](https://github.com/gvangalen/antigravity-trading-tool/pull/1314)
+op head `fa62c6ca530a5d84a1c1d5eec84031accbed5e21` kreeg onafhankelijke
+QA- en Security-codebeoordeling zonder blocker. PR-CI **45106158490** en
+main-CI **45107056536** hadden ieder vijf geslaagde jobs. Auto Deploy
+**45107804215** slaagde op
+`e068cf66b5f77ac70eaffa8b35bc4f585698029b`; GitHub `main`, publieke
+backend health en frontend build-info meldden exact die SHA, beide HTTP 200.
+Deze status-only wijziging vereist opnieuw laatste main-CI, Auto Deploy en
+publieke SHA-pariteit vóór de officiële hertest. De
 afzonderlijke read-only stale-quote-validator was op een vorige SHA groen;
 een echte door de Paper-worker geweigerde order is niet bewezen en mag alleen
 in een geïsoleerde testdatabase worden onderzocht.
