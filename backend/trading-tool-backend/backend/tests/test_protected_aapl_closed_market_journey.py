@@ -4,6 +4,7 @@ import asyncio
 import inspect
 import os
 import subprocess
+from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -232,7 +233,7 @@ def test_incomplete_quote_never_reaches_confirmation_and_still_cleans(monkeypatc
         "bot_configs": 0, "bot_portfolios": 0, "exchange_keys": 0,
         **{table: 0 for table in probe.bot.TRADE_TABLES}})
     monkeypatch.setattr(probe.quote, "_source", lambda: {
-        "price": Decimal("250"), "at": object()})
+        "price": Decimal("250"), "at": datetime(2026, 11, 23, 9, 30, tzinfo=timezone.utc)})
 
     async def bad_quote(*_, **__):
         return {"status": "unavailable", "proposal_id": None}
@@ -242,5 +243,26 @@ def test_incomplete_quote_never_reaches_confirmation_and_still_cleans(monkeypatc
     trace = {"stage": "seed", "fixture_state": "not_created"}
     with pytest.raises(RuntimeError, match="aapl_journey_quote_missing"):
         asyncio.run(probe._case(NAMESPACE, 1, trace))
+    assert trace["quote_diagnostic"] == {
+        "source_read": True, "turn_returned": True, "turn_status": "unavailable",
+        "proposal_present": False, "price_mentioned": False,
+        "source_moment_mentioned": False,
+    }
     assert trace["fixture_state"] == "cleaned"
     assert len(cleaned) == 1
+
+
+def test_quote_diagnostic_does_not_expose_answer_or_source(monkeypatch):
+    source = {"price": Decimal("250"), "at": datetime(2026, 11, 23, 9, 30, tzinfo=timezone.utc)}
+    diagnostic = probe._quote_diagnostic({
+        "status": "completed", "proposal_id": None,
+        "answer": "AAPL: USD 250.00, bronmoment 23 november 2026 09:30 UTC; private text",
+    }, source)
+    assert diagnostic["price_mentioned"] and diagnostic["source_moment_mentioned"]
+    assert "private text" not in str(diagnostic)
+    assert "250" not in str(diagnostic)
+    no_moment = probe._quote_diagnostic({
+        "status": "completed", "proposal_id": None,
+        "answer": "AAPL: USD 250.00; private text",
+    }, source)
+    assert no_moment["price_mentioned"] and not no_moment["source_moment_mentioned"]
