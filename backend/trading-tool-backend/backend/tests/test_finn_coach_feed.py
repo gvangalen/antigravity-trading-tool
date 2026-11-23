@@ -1188,6 +1188,41 @@ def test_strategy_next_step_discussion_sees_strategy_added_after_card(monkeypatc
     assert current.facts["current_benchmark_score"] == 54
 
 
+def test_strategy_next_step_rejects_saved_setup_from_different_asset(monkeypatch):
+    item_id = "00000000-0000-0000-0000-000000000039"
+
+    async def detail(_self, *, user_id, item_id: str):
+        assert user_id == 7
+        return {"id": item_id, "event_type": "strategy_next_step", "subject_type": "setup",
+                "subject_id": "11", "symbol": "BTC", "status": "unread",
+                "source_observed_at": "2026-11-19T10:00:00Z",
+                "evidence": {"setup_id": 11, "trading_pair": "BTC/USDT", "market_id": 31}}
+
+    class MatchService:
+        last_source_row = {}
+
+        def __init__(self, _session):
+            pass
+
+        async def for_asset(self, user_id, symbol, *, setups=None, market_id=None):
+            assert (user_id, symbol) == (7, "BTC")
+            assert setups == [] and market_id is None
+            return {"source_status": "missing_scores", "matches": []}
+
+    monkeypatch.setattr(module.FinnCoachFeedService, "detail", detail)
+    monkeypatch.setattr("backend.services.setup_market_match_service.SetupMarketMatchService", MatchService)
+    monkeypatch.setattr(
+        "backend.infrastructure.repositories.setup_repository.SetupRepository.get_setup_by_id",
+        AsyncMock(return_value={"id": 11, "name": "Other asset", "symbol": "ETH",
+                                "market_id": 31, "quote_currency": "USDT"}),
+    )
+    historical, current = asyncio.run(FinnV2ReasoningContextService(SimpleNamespace())._current_feed_evidence(
+        SimpleNamespace(user_id=7, client_context_json={"feed_item_id": item_id})))
+    assert historical.facts["symbol"] == "BTC"
+    assert current.facts["current_setup"] is None
+    assert current.facts["current_linked_strategy"] == {"status": "setup_unavailable"}
+
+
 def test_paper_next_step_discussion_sees_bot_added_after_card(monkeypatch):
     item_id = "00000000-0000-0000-0000-000000000033"
 

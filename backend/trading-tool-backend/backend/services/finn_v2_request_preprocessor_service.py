@@ -651,6 +651,7 @@ class FinnV2RequestPreprocessorService:
             r"(?:maak\s+of\s+)?"
             r"(?:(?:wijzig|verander|update|change|ändere|aendere)\s+"
             r"(?:niets|niks|nothing|nichts)|"
+            r"maak\s+(?:niets|niks)\s+aan|"
             r"(?:niets|niks|nothing|nichts)\s+"
             r"(?:wijzig\w*|verander\w*|updat\w*|chang\w*|änder\w*|aender\w*))[.!?]*$",
             text,

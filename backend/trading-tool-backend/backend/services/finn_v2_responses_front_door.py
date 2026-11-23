@@ -367,6 +367,7 @@ def _explicit_discussion_only(message: str) -> bool:
             r"\b(?:wijzig niets|verander niets|pas niets aan|do not change anything|"
             r"don't change anything|make no changes|ändere nichts|"
             r"geen wijziging(?:en)?(?: of (?:een )?order)?|"
+            r"maak (?:niets|niks) aan|"
             r"geen order (?:of|en) (?:een )?wijziging(?:en)?)\b",
             message, re.I,
         )
@@ -735,6 +736,91 @@ def _complete_report_current_score_answer(
         return result
     return replace(result, text=f"{result.text.rstrip()}\n\n{statement}",
                    response_id_reusable=False, model_owned_repair=False)
+
+
+def _complete_selected_strategy_advice(
+    result: FinnResponsesResult, facts: list[dict[str, Any]] | None, locale: str,
+) -> FinnResponsesResult:
+    """Give the selected setup a stable next step from its fresh owner read.
+
+    The feed card is historical. Only the current, same-card setup and linked
+    strategy may determine whether a strategy is still needed. This repairs a
+    completed read-only answer without changing the proposal or action state.
+    """
+    if result.answer_kind != "free_text" or not result.text:
+        return result
+    rows = [item["facts"] for item in facts or []
+            if isinstance(item, dict) and isinstance(item.get("facts"), dict)]
+    selected = next((row for row in rows
+                     if row.get("event_type") == "strategy_next_step"
+                     and row.get("selection_origin") == "current_run"
+                     and row.get("historical_notification") is True), None)
+    if selected is None:
+        return result
+    current = next((row for row in rows
+                    if row.get("feed_item_id") == selected.get("feed_item_id")
+                    and "current_linked_strategy" in row), None)
+    if current is None or not isinstance(current.get("current_setup"), dict):
+        return result
+    setup = current["current_setup"]
+    historical = selected.get("historical_event_facts") or {}
+    if (not isinstance(historical, dict)
+            or str(setup.get("id") or "") != str(historical.get("setup_id") or "")):
+        return result
+    strategy = current.get("current_linked_strategy")
+    if not isinstance(strategy, dict):
+        return result
+    pair = str(setup.get("trading_pair") or "").upper()
+    if (not re.fullmatch(r"[A-Z0-9][A-Z0-9._-]{0,19}/[A-Z]{2,12}", pair)
+            or pair.partition("/")[0] != str(selected.get("symbol") or "").upper()
+            or pair != str(historical.get("trading_pair") or "").upper()):
+        return result
+    name = str(setup.get("name") or "").strip()[:100]
+    if not name:
+        return result
+    language = str(locale or "nl").split("-")[0].lower()
+    if strategy.get("status") == "missing":
+        score = current.get("current_benchmark_score")
+        as_of = str(current.get("current_score_as_of") or "").strip()
+        score_available = (current.get("current_source_status") == "available"
+                           and type(score) in {int, float} and 0 <= score <= 100
+                           and bool(as_of))
+        if language == "en":
+            score_text = (f"The verified benchmark score is {score:g}/100 (score report date: {as_of}). "
+                          if score_available else
+                          "I cannot verify a complete current benchmark score and score report date; the missing source or score rule is not identified here. ")
+            answer = (f"Setup {name} ({pair}) is saved, but has no linked strategy. "
+                      f"{score_text}A useful next step is to draft a strategy for this setup. "
+                      "I need your entry rule, risk per position, stop and exit rule. "
+                      "Shall I prepare an editable strategy proposal? I have not changed anything.")
+        elif language == "de":
+            score_text = (f"Der verifizierte Benchmark-Score beträgt {score:g}/100 (Score-Berichtsdatum: {as_of}). "
+                          if score_available else
+                          "Einen vollständigen aktuellen Benchmark-Score mit Score-Berichtsdatum kann ich nicht verifizieren; die fehlende Quelle oder Scoreregel ist hier nicht bestimmt. ")
+            answer = (f"Setup {name} ({pair}) ist gespeichert, aber keine Strategie ist verknüpft. "
+                      f"{score_text}Als nächsten Schritt können wir eine Strategie für dieses Setup entwerfen. "
+                      "Dafür brauche ich Einstiegsregel, Risiko pro Position, Stop und Ausstiegsregel. "
+                      "Soll ich einen bearbeitbaren Strategieentwurf vorbereiten? Ich habe nichts geändert.")
+        else:
+            score_text = (f"De gecontroleerde benchmarkscore is {score:g}/100 (scorerapportdatum: {as_of}). "
+                          if score_available else
+                          "Ik kan geen complete actuele benchmarkscore met scorerapportdatum verifiëren; welke bron of scoreregel ontbreekt is hier niet vastgesteld. ")
+            answer = (f"Setup {name} ({pair}) is opgeslagen, maar een gekoppelde strategie ontbreekt. "
+                      f"{score_text}Een logische volgende stap is een strategie voor deze setup uitwerken. "
+                      "Daarvoor heb ik je instapregel, risico per positie, stop en uitstapregel nodig. "
+                      "Zal ik een bewerkbaar strategievoorstel voorbereiden? Ik heb niets gewijzigd.")
+    elif strategy.get("id"):
+        strategy_name = str(strategy.get("name") or "").strip()[:100]
+        if not strategy_name:
+            return result
+        answer = {
+            "en": f"Setup {name} ({pair}) already has linked strategy {strategy_name}. A new strategy is not needed for this feed card. I have not changed anything.",
+            "de": f"Setup {name} ({pair}) hat bereits die verknüpfte Strategie {strategy_name}. Für diese Feed-Karte ist keine neue Strategie nötig. Ich habe nichts geändert.",
+        }.get(language, f"Setup {name} ({pair}) heeft al gekoppelde strategie {strategy_name}. Voor deze feedkaart is geen nieuwe strategie nodig. Ik heb niets gewijzigd.")
+    else:
+        return result
+    return replace(result, text=answer, response_id_reusable=False,
+                   model_owned_repair=False)
 
 
 def _selected_paper_next_step(facts: list[dict[str, Any]] | None, locale: str) -> tuple[str, bool] | None:
@@ -6410,6 +6496,8 @@ class FinnResponsesFrontDoor:
                     response_id_reusable=False,
                 )
         result = _complete_report_current_score_answer(result, feed_evidence, locale)
+        if is_read_only_turn and workspace_hints.get("feed_draft_edited") is not True:
+            result = _complete_selected_strategy_advice(result, feed_evidence, locale)
         recent_action_result = dict(conversation_context.get("previous_action_result") or {})
         if recent_action_result.get("owner_user_id") != self.user_id or recent_action_result.get("result_status") != "succeeded":
             recent_action_result = {}

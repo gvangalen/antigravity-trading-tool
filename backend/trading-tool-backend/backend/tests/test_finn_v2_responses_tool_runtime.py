@@ -22,6 +22,7 @@ from backend.services.finn_v2_responses_tool_catalog import (
     _PROPOSAL_OPERATIONS,
 )
 from backend.services.finn_v2_responses_read_executor import FinnResponsesReadExecutor
+from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
 from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
 from backend.services.finn_v2_responses_proposal_selection import FinnResponsesProposalSelection
 from backend.services.finn_v2_responses_front_door import (
@@ -33,6 +34,7 @@ from backend.services.finn_v2_responses_front_door import (
     _read_only_impulse_plan_asset,
     _explicit_watchlist_removal_symbol,
     _selected_paper_next_step,
+    _complete_selected_strategy_advice,
     _unspecified_setup_overview,
 )
 from backend.services.finn_v2_verified_setup_reference import (
@@ -357,6 +359,13 @@ def test_explicit_discussion_only_keeps_hypothetical_bot_changes_read_only():
         "Moet ik mijn indicatoren aanpassen of de bot wijzigen? Bespreek alleen; wijzig niets."
     )
     assert not _explicit_discussion_only("Wijzig niets behalve mijn bot.")
+    assert _explicit_discussion_only("Controleer de strategie. Maak niets aan.")
+    assert FinnV2RequestPreprocessorService().preprocess(
+        message="Controleer de strategie. Maak niets aan."
+    ).action_polarity == "read"
+    assert FinnV2RequestPreprocessorService().preprocess(
+        message="Maak een strategie voor mijn setup. Maak niets aan."
+    ).action_polarity == "create"
 
 
 def test_exact_coach_question_offers_reads_without_guided_mutation(monkeypatch):
@@ -4120,6 +4129,108 @@ def test_selected_paper_next_step_does_not_borrow_other_btc_bot():
     assert "botbesluit" not in answer
     missing, verified = _selected_paper_next_step(feed[:1], "nl")
     assert verified is False and "blijft open" in missing
+
+
+def test_selected_strategy_advice_uses_only_current_exact_setup_and_score():
+    feed = [
+        {"facts": {"feed_item_id": "selected", "event_type": "strategy_next_step",
+                   "selection_origin": "current_run", "historical_notification": True,
+                   "symbol": "BTC",
+                   "historical_event_facts": {"setup_id": 11, "trading_pair": "BTC/USDT"}}},
+        {"facts": {"feed_item_id": "other", "current_setup": {
+            "id": 12, "name": "BTC EUR", "trading_pair": "BTC/EUR"},
+            "current_linked_strategy": {"status": "missing"},
+            "current_benchmark_score": 88, "current_score_as_of": "2026-11-23"}},
+        {"facts": {"feed_item_id": "selected", "current_setup": {
+            "id": 11, "name": "BTC USDT", "trading_pair": "BTC/USDT"},
+            "current_linked_strategy": {"status": "missing"},
+            "current_source_status": "available", "current_benchmark_score": 42,
+            "current_score_as_of": "2026-11-23"}},
+    ]
+    original = FinnResponsesResult(
+        text="Ik heb de kaart bekeken.", response_id="feed-test",
+        tool_trace=({"name": "get_saved_setup_inventory", "status": "completed"},),
+    )
+    answer = _complete_selected_strategy_advice(original, feed, "nl")
+    assert "BTC USDT (BTC/USDT)" in answer.text
+    assert "42/100" in answer.text and "2026-11-23" in answer.text
+    assert "88/100" not in answer.text and "BTC/EUR" not in answer.text
+    assert "instapregel" in answer.text and "stop" in answer.text
+    assert "Zal ik een bewerkbaar strategievoorstel voorbereiden?" in answer.text
+    assert answer.tool_trace == original.tool_trace
+    assert answer.response_id_reusable is False
+
+    feed[-1]["facts"]["current_source_status"] = "missing_scores"
+    missing_score = _complete_selected_strategy_advice(original, feed, "nl")
+    assert "geen complete actuele benchmarkscore" in missing_score.text
+    assert "42/100" not in missing_score.text
+
+    feed[-1]["facts"]["current_linked_strategy"] = {"id": 90, "name": "Al opgeslagen"}
+    linked = _complete_selected_strategy_advice(original, feed, "nl")
+    assert "al gekoppelde strategie" in linked.text
+    assert "strategievoorstel voorbereiden" not in linked.text
+
+
+def test_selected_strategy_advice_fails_closed_without_matching_current_read():
+    original = FinnResponsesResult(text="Bestaand antwoord", response_id="feed-test", tool_trace=())
+    selected = {"facts": {"feed_item_id": "selected", "event_type": "strategy_next_step",
+                          "selection_origin": "current_run", "historical_notification": True,
+                          "symbol": "BTC",
+                          "historical_event_facts": {"setup_id": 11, "trading_pair": "BTC/USDT"}}}
+    current = {"facts": {"feed_item_id": "selected", "current_setup": {
+        "id": 11, "name": "BTC USDT", "trading_pair": "BTC/USDT"},
+        "current_linked_strategy": {"status": "missing"}}}
+    for broken in (
+        [selected],
+        [selected, {"facts": {**current["facts"], "feed_item_id": "other"}}],
+        [selected, {"facts": {**current["facts"], "current_setup": {
+            "id": 12, "name": "BTC USDT", "trading_pair": "BTC/USDT"}}}],
+        [selected, {"facts": {**current["facts"], "current_setup": {
+            "id": 11, "name": "BTC USDT", "trading_pair": "BTC/EUR"}}}],
+        [{"facts": {**selected["facts"], "symbol": "ETH"}}, current],
+    ):
+        assert _complete_selected_strategy_advice(original, broken, "nl") == original
+
+
+def test_feed_discussion_repairs_weak_model_answer_without_creating_proposal(monkeypatch):
+    feed = [
+        {"facts": {"feed_item_id": "selected", "event_type": "strategy_next_step",
+                   "selection_origin": "current_run", "historical_notification": True,
+                   "symbol": "BTC",
+                   "historical_event_facts": {"setup_id": 11, "trading_pair": "BTC/USDT"}}},
+        {"facts": {"feed_item_id": "selected", "current_setup": {
+            "id": 11, "name": "BTC USDT", "trading_pair": "BTC/USDT"},
+            "current_linked_strategy": {"status": "missing"},
+            "current_source_status": "missing_scores", "current_benchmark_score": None,
+            "current_score_as_of": ""}},
+    ]
+    seen = {}
+
+    async def weak_model_answer(_self, **kwargs):
+        seen.update(kwargs)
+        return FinnResponsesResult(
+            text="Ik heb de setup bekeken.", response_id="model-response",
+            tool_trace=({"name": "get_active_plan_and_strategy", "status": "completed"},),
+        )
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run", weak_model_answer,
+    )
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="feed-discuss")
+    front.model_led_coach = True
+    result = asyncio.run(front.run(
+        message=("Controleer of setup BTC USDT voor BTC/USDT nog bestaat en of er inmiddels "
+                 "een strategie aan is gekoppeld. Zo niet, adviseer welke strategie past en "
+                 "welke gegevens je van mij nodig hebt. Lees ook de actuele scorestatus en "
+                 "noem een ontbrekende bron eerlijk. Maak niets aan."),
+        instructions="", conversation_context={}, verified_asset="BTC", feed_evidence=feed,
+    ))
+    assert seen["read_only_turn"] is True
+    assert result.proposal_analysis is None
+    assert "gekoppelde strategie ontbreekt" in result.response.text
+    assert "geen complete actuele benchmarkscore" in result.response.text
+    assert "Zal ik een bewerkbaar strategievoorstel voorbereiden?" in result.response.text
+    assert result.response.tool_trace[0]["name"] == "get_active_plan_and_strategy"
 
 
 def test_selected_paper_next_step_verifier_keeps_unavailable_card_open():
