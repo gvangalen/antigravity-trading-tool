@@ -218,7 +218,8 @@ def test_exact_yes_diagnostic_rejects_ambiguous_turns_without_exposing_rows(monk
 def test_feed_yes_audit_reports_only_owner_bound_typed_lineage(monkeypatch):
     namespace = "qa-45176449317-1-41a256b5-1234abcd"
     conn = Connection([
-        [(17, False, {"qa_namespace": namespace})], [(False, False)], [(0,)],
+        [(17, False, {"qa_namespace": namespace})], [("user",)],
+        [(False, False)], [(0,)],
         [(2,)], [(1,)], [(1,)], [(0,)], [(0,)], [(1,)], [(0,)],
         [(42,)], [("setup-conversation-private",)],
         [("feed-conversation-private", "completed", {"feed_item_id": "private-card"})],
@@ -261,7 +262,8 @@ def test_feed_yes_audit_reports_only_owner_bound_typed_lineage(monkeypatch):
 def test_feed_yes_audit_fails_closed_for_duplicate_turns(monkeypatch):
     namespace = "qa-45176449317-1-41a256b5-1234abcd"
     conn = Connection([
-        [(17, False, {"qa_namespace": namespace})], [(False, False)], [(0,)],
+        [(17, False, {"qa_namespace": namespace})], [("user",)],
+        [(False, False)], [(0,)],
         [(2,)], [(1,)], [(1,)], [(0,)], [(0,)], [(1,)], [(0,)],
         [(42,)], [("private-one",)], [("private-feed", "completed", {})],
         [("private-one", "completed", None, {}, {}, {}),
@@ -274,6 +276,20 @@ def test_feed_yes_audit_fails_closed_for_duplicate_turns(monkeypatch):
     assert result["feed_yes_diagnostic_state"] == "turn_missing_or_ambiguous"
     assert result["yes_turn_unique"] is False
     assert "private" not in str(result)
+
+
+def test_feed_yes_audit_refuses_changed_role_before_reading_turns(monkeypatch):
+    namespace = "qa-45176449317-1-41a256b5-1234abcd"
+    conn = Connection([
+        [(17, False, {"qa_namespace": namespace})], [("admin",)],
+    ])
+    monkeypatch.setattr(audit, "_verify_prior_report", lambda *_args: None)
+    monkeypatch.setattr(audit.fixture, "_connection", lambda: conn)
+    assert audit.run(audit.JOURNEY_FEED_YES_LABEL,
+                     expected_profile="setup_strategy_journey") == {
+        "fixture_state": "AMBIGUOUS", "cleanup_verified": False,
+    }
+    assert conn.closed
 
 
 @pytest.mark.parametrize("label,namespace", [
@@ -520,11 +536,13 @@ def test_exact_short_yes_child_cleanup_requires_guided_failure_and_safe_rows(
         assert calls == [((namespace, 17, 22), {"require_safe_pair_cleanup": True})]
 
 
-@pytest.mark.parametrize("safe_prior,expected_error", [
-    (True, None), (False, "journey_cleanup_prior_state_mismatch"),
+@pytest.mark.parametrize("safe_prior,wrong_stage,expected_error", [
+    (True, False, None),
+    (False, False, "journey_cleanup_prior_state_mismatch"),
+    (True, True, "journey_cleanup_prior_state_mismatch"),
 ])
 def test_feed_yes_cleanup_requires_exact_terminal_replay_and_fixture_shape(
-    monkeypatch, safe_prior, expected_error,
+    monkeypatch, safe_prior, wrong_stage, expected_error,
 ):
     namespace = "qa-45176449317-1-41a256b5-1234abcd"
     saved_name = f"QA BTC Setup {namespace}"
@@ -544,6 +562,9 @@ def test_feed_yes_cleanup_requires_exact_terminal_replay_and_fixture_shape(
     }
     if not safe_prior:
         prior["setup_strategy_journey"]["execution_diagnostic"]["replay_status"] = "missing"
+    if wrong_stage:
+        prior["setup_strategy_journey"]["failure_stage"] = "setup_confirmation"
+        prior["setup_strategy_journey"]["reason"] = "journey_replay_failed"
     before = Connection([
         [(17, False, {"qa_namespace": namespace})], [(22, False, False)],
         *([[(0,)]] * 6),

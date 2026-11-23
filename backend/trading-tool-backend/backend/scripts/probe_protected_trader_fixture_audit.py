@@ -460,6 +460,10 @@ def run(label: str, *, expected_profile: str = "trader_paper_exit_reconciliation
             namespace = (preferences or {}).get("qa_namespace", "")
             if not fixture.NAMESPACE_PATTERN.fullmatch(namespace) or not namespace.startswith(namespace_prefix):
                 raise RuntimeError("trader_fixture_audit_scope_invalid")
+            if label == JOURNEY_FEED_YES_LABEL:
+                cur.execute("SELECT role FROM users WHERE id=%s", (user_id,))
+                if cur.fetchall() != [("user",)]:
+                    return {"fixture_state": "AMBIGUOUS", "cleanup_verified": False}
             cur.execute("SELECT is_active,is_live FROM bot_configs WHERE user_id=%s", (user_id,))
             bots = cur.fetchall()
             cur.execute("SELECT COUNT(*) FROM exchange_keys WHERE user_id=%s", (user_id,))
@@ -648,9 +652,11 @@ def cleanup_journey(label: str) -> dict:
                                  JOURNEY_STRATEGY_SLOT_LABEL} and (
         journey.get("failure_stage"), journey.get("reason")) == (
             "strategy_proposal", "journey_strategy_proposal_missing")
+    legacy_failure = label != JOURNEY_FEED_YES_LABEL and (
+        journey.get("failure_stage"), journey.get("reason")) == expected_failure
     if (journey.get("fixture_state") != "quarantined"
             or not (transport_failure or guided_failure or feed_yes_failure or proposal_failure or
-                    (journey.get("failure_stage"), journey.get("reason")) == expected_failure)):
+                    legacy_failure)):
         raise RuntimeError("journey_cleanup_prior_state_mismatch")
     if label == JOURNEY_TRANSPORT_LABEL:
         marker = Path("/tmp") / f"finn-production-qa-{workflow_id}-{attempt}" / "runner.exit"
