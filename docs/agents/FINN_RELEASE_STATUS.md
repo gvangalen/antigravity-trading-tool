@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: directe feedbespreking en QA-dispatch (23 november 2026)
 
-Phase: `LOCAL_VALIDATED_PENDING_PR_CI`. De actieve kandidaat maakt ‘Bespreek’
+Phase: `LIVE_DEPLOYED_PENDING_INDEPENDENT_QA`. De actieve kandidaat maakt ‘Bespreek’
 direct zichtbaar op watchlist-, analyse-, ontbrekende-strategie- en
 Paper-vervolgkaarten. Voorheen stond die actie bij deze kaarten onder het
 menu met drie puntjes; de kaartopbouw, eigenaargebonden selectie en
@@ -23,8 +23,27 @@ i18n-tests **45/45**, typecheck, i18n-lint en productiebuild geslaagd.
 FINN-actiematrix is niet uitgevoerd: de voorgeschreven Redis-poort was al
 door een andere lokale harness bezet. Het mislukte startproject is zonder
 fixture- of productwrites gestopt. Deze kandidaat wijzigt geen FINN-acties
-of providerpad. Er is nog geen PR-CI, deploy, exacte live SHA of
-onafhankelijk QA-verdict voor deze wijziging.
+of providerpad.
+
+Product-PR [#1323](https://github.com/gvangalen/antigravity-trading-tool/pull/1323)
+en de afzonderlijk door QA gemaakte beschermde test-PR
+[#1324](https://github.com/gvangalen/antigravity-trading-tool/pull/1324)
+kregen ieder vijf groene PR-CI-jobs. Onafhankelijke QA-codebeoordeling van
+de product-PR en Security-review van beide PR's vonden geen blocker.
+De QA-uitbreiding toetst de ontbrekende-strategiekaart, een volledige
+eigenaargebonden herlezing van setup, gekoppelde strategieën en exacte
+BTC/USDT-scorestatus tijdens ‘Bespreek’, advies, voortzetting in hetzelfde
+gesprek, afzonderlijke strategiebevestiging, replay en veilige cleanup.
+Gerichte QA-regressies waren **179/179** groen; dit is nog geen live
+uitkomst. Product-PR is gemerged als `4826ac62b1761857f1f028c9b2f3fad20c9b992c`;
+test-PR als `77e8a7e42b98062d0948d61cad96bbc42bdc8e3b`. De laatste
+main-CI **45171652052** had vijf groene jobs; Auto Deploy **45172893616**
+slaagde. GitHub main, publieke backend-health en frontend-buildinfo meldden
+alle drie exact `77e8a7e42b98062d0948d61cad96bbc42bdc8e3b`, met HTTP 200
+op beide publieke endpoints. Deze statuswijziging creëert zelf een nieuwe
+main-SHA; daarvan moeten de laatste main-CI, Auto Deploy en publieke
+SHA-pariteit opnieuw bevestigd worden vóór onafhankelijke QA. Er is nog
+geen beschermd live-verdict of ingelogde browseracceptatie voor deze flow.
 
 ## FINN: profiel en portefeuille sturen advies en botvoorstellen (23 november 2026)
 
