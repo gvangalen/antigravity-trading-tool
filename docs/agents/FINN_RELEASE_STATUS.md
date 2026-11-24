@@ -4,6 +4,46 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: Smart DCA gecombineerde lezing en scoregestuurd concept (24 november 2026)
+
+Phase: `BUILD_CANDIDATE_QA_PENDING`. De ingelogde, read-only browserreproductie
+op BTC/USDT liet zien dat FINN bij een vraag naar de opgeslagen Smart DCA,
+actuele scoreband, bedrag en gekoppelde Paper-bot eerst een algemene setupzone
+en een andere BTC-botbeslissing mengde. Een vervolgvraag met de exacte
+strategienaam gaf wel de juiste opgeslagen staffel: score 45,7 in de band
+45,5–60,5, 50% van €200 = €100, en geen bot voor die strategie.
+
+Deze kandidaat vraagt bij een niet eenduidig benoemde Smart DCA eerst welke
+opgeslagen setup de gebruiker bedoelt. Een kort antwoord met de setupnaam
+hervat dezelfde read-only opdracht en leest de eigenaargebonden setup opnieuw.
+Een getoond bedrag vereist een exact overeenkomende setup, strategie,
+handelspaar, staffel en gedateerde score; ontbreekt bronbewijs, dan meldt FINN
+dat in plaats van een bedrag of bot van een ander plan over te nemen. Een
+volledig ingevuld scoregestuurd Smart DCA-concept wordt uitsluitend als
+ondersteund herkend als alle genoemde velden en percentages exact met het
+concept overeenkomen; extra voorwaarden blijven onder de algemene controle.
+Geen bevestigings-, bot- of ordergrens is verruimd.
+
+PR [#1364](https://github.com/gvangalen/antigravity-trading-tool/pull/1364)
+bevat de productwijziging. Gerichte lokale regressies voor identiteit,
+vervolgantwoord, bronmoment, gelijke setupnamen in BTC/EUR en BTC/USDT en
+negatieve handelsvoorwaarden zijn groen. Onafhankelijke QA-, Security- en
+Architecture-codebeoordelingen vonden op de laatste wijzigingen geen blocker.
+De lokale FINN-worker bewees `clarification_required` → ongeldig naamantwoord
+→ opnieuw `clarification_required` → geldige setupnaam → nieuwe owner-planread,
+zonder voorstel of order. De synthetische fixture had geen actuele score en
+eindigde daarom veilig met `smart_dca_source_unavailable`. De definitieve
+lokale FastAPI/Celery/PostgreSQL/Redis-actiecontractmatrix gaf **17/17**
+(artifact SHA-256
+`10e9bdeb1c36fe605e9f6aa2b159292457502f8399d7d0490a51674d6e97359a`),
+de adaptertests **28/28**; bevestigde Smart DCA en kalender-DCA slaagden
+inclusief idempotente replay. De echte Responses-provider-
+developmentset gaf **20/20** en de regressieset **109/109** zonder provider-,
+schema-, timeout-, parse- of validatiefout. Frontend typecheck, i18n- en
+commandtests, build en `audit:high` zijn groen; frontendbron is niet gewijzigd.
+De definitieve backend-suite gaf **5518 passed, 7 skipped**. PR-CI loopt nog;
+er is voor deze kandidaat nog geen deploy of onafhankelijke live acceptatie.
+
 ## FINN 3.0: volledige, botgebonden Paper-Holdcoach (24 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_QA_PENDING`. De onafhankelijke ingelogde QA op publieke SHA

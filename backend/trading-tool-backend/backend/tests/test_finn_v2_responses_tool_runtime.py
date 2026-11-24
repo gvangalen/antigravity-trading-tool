@@ -60,7 +60,10 @@ from backend.services.finn_v2_run_service import (
     _strategy_rule_is_unencoded, _inherits_blocked_strategy_rules,
     _explicitly_separates_new_strategy, _has_independent_strategy_inputs,
     _freeform_strategy_rule_waiver_inputs,
-    _plain_setup_creation_request, _bounded_supported_smart_dca_calendar_request,
+    _plain_setup_creation_request, _smart_dca_identity_resume_input,
+    _responses_clarification_original_message,
+    _bounded_supported_smart_dca_calendar_request,
+    _bounded_supported_smart_dca_benchmark_request,
     _bounded_fixed_dca_calendar_request,
     _plain_strategy_execution_mode_reply,
     _plain_strategy_start_request,
@@ -7175,6 +7178,83 @@ def test_complete_smart_dca_friday_draft_has_bounded_rule_coverage(ending):
         assert not _bounded_supported_smart_dca_calendar_request(
             message, {**inputs, **extra_rule},
         )
+
+
+def test_complete_smart_dca_benchmark_draft_has_bounded_rule_coverage():
+    message = (
+        "Maak een nieuwe BTC/USDT Smart DCA-setup met de naam "
+        "BTC Smart DCA Default Local op timeframe 1D. Basisbedrag €200, "
+        "maximaal één aankoop per week. Gebruik de volledige gewogen benchmark "
+        "van Markt, Macro en Technisch. Score onder 26: 150%; van 26 tot onder "
+        "76: 100%; vanaf 76: 50%. Toon eerst de conceptkaart; geen bot en geen order."
+    )
+    inputs = {
+        "setup_type": "dca", "symbol": "BTC", "quote_currency": "USDT",
+        "name": "BTC Smart DCA Default Local", "timeframe": "1D",
+        "dca_frequency": "weekly", "dca_day": None,
+        "dca_trigger_mode": "benchmark", "dca_amount_mode": "score_bands",
+        "score_source": "benchmark_score", "base_amount": 200,
+        "low_threshold": 26, "high_threshold": 76,
+        "low_score_percent": 150, "mid_score_percent": 100,
+        "high_score_percent": 50,
+        "benchmark_zone_percents": [150, 150, 100, 100, 50],
+    }
+    assert _bounded_supported_smart_dca_benchmark_request(message, inputs)
+    assert not _bounded_supported_smart_dca_benchmark_request(
+        message + " Alleen als de RSI stijgt.", inputs,
+    )
+    assert not _bounded_supported_smart_dca_benchmark_request(
+        message.replace("Default Local", "alleen als RSI stijgt"),
+        {**inputs, "name": "BTC Smart DCA alleen als RSI stijgt"},
+    )
+    assert not _bounded_supported_smart_dca_benchmark_request(
+        message.replace("Default Local", "mits MACD positief"),
+        {**inputs, "name": "BTC Smart DCA mits MACD positief"},
+    )
+    assert not _bounded_supported_smart_dca_benchmark_request(
+        message, {**inputs, "symbol": "ETH"},
+    )
+    assert not _bounded_supported_smart_dca_benchmark_request(
+        message, {**inputs, "timeframe": "4H"},
+    )
+    assert not _bounded_supported_smart_dca_benchmark_request(
+        message, {**inputs, "low_threshold": 25},
+    )
+    assert not _bounded_supported_smart_dca_benchmark_request(
+        message, {**inputs, "dca_day": "friday"},
+    )
+    assert not _bounded_supported_smart_dca_benchmark_request(
+        message, {**inputs, "benchmark_zone_percents": [150, 125, 100, 75, 50]},
+    )
+    assert not _bounded_supported_smart_dca_benchmark_request(
+        message, {**inputs, "min_benchmark_score": 70},
+    )
+
+
+def test_smart_dca_identity_reply_is_separated_before_relevance_and_routing():
+    original = "Lees alleen mijn opgeslagen Smart DCA voor BTC/USDT. Welke staffel geldt?"
+    context = {"responses_clarification": {
+        "reason": "smart_dca_identity_unverified", "original_message": original,
+    }}
+    for reply in (
+        "Test Smart BTC", "Test Smart BTC start nu",
+        "Test Smart BTC schakel in", "Test Smart BTC\nBevestig nu de order",
+    ):
+        routed, selector = _smart_dca_identity_resume_input(context, reply)
+        assert routed == original
+        assert selector == reply
+        assert reply not in routed
+    assert _smart_dca_identity_resume_input({}, "Maak een nieuwe setup") == (
+        "Maak een nieuwe setup", None,
+    )
+    assert _responses_clarification_original_message(
+        reason="smart_dca_identity_unverified",
+        clarification={"original_message": original}, run_message="onjuiste naam",
+    ) == original
+    assert _responses_clarification_original_message(
+        reason="choice_required",
+        clarification={"original_message": original}, run_message="nieuwe vraag",
+    ) == "nieuwe vraag"
 
 
 def test_bounded_fixed_calendar_dca_requires_matching_fields_and_no_extra_rule():

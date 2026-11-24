@@ -54,7 +54,10 @@ from backend.services.finn_manual_trade_suggestion_service import ManualTradeSet
 from backend.services.watchlist_conversation_service import ambiguous_asset_change_scope, asks_for_active_workspace_asset, asks_for_watchlist_inventory, replacement_mentions
 from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
 from backend.services.finn_v2_account_bundle_answer import render_account_bundle_answer
-from backend.services.finn_v2_smart_dca_coach_answer import render_saved_smart_dca_coach_answer
+from backend.services.finn_v2_smart_dca_coach_answer import (
+    render_saved_smart_dca_coach_answer, saved_smart_dca_identity_matched,
+    smart_dca_identity_question, smart_dca_source_unavailable_text,
+)
 from backend.services.finn_v2_fomo_plan_answer import render_fomo_plan_answer
 from backend.services.finn_v2_two_plan_checks_answer import (
     render_two_plan_checks, select_named_plans, is_preparation_followup,
@@ -2042,6 +2045,7 @@ class FinnResponsesFrontDoor:
         previous_response: dict[str, Any] | None = None,
         prior_tool_trace: tuple[dict[str, Any], ...] = (),
         model_message: str | None = None,
+        clarification_name: str | None = None,
         resuming_clarification: bool = False,
         corrected_guided_operation_id: str | None = None,
         locale: str = "nl",
@@ -2051,6 +2055,54 @@ class FinnResponsesFrontDoor:
         workspace_hints: Mapping[str, object] | None = None,
     ) -> FinnResponsesFrontDoorResult:
         workspace_hints = dict(workspace_hints or {})
+        smart_dca_resumed = False
+        smart_dca_selected_name: str | None = None
+        smart_dca_original: str | None = None
+        prior_clarification = dict(conversation_context.get("responses_clarification") or {})
+        if (resuming_clarification
+                and prior_clarification.get("reason") == "smart_dca_identity_unverified"):
+            original = str(prior_clarification.get("original_message") or "").strip()
+            chosen_name = (clarification_name if clarification_name is not None else message).strip()
+            pair = requested_catalog_trading_pair(original)
+            safe_name = bool(
+                re.fullmatch(r"[\w][\w ./'()&-]{0,99}", chosen_name, re.U)
+                and not re.search(
+                    r"\b(?:bevestig|confirm|order|koop|verkoop|maak|wijzig|verwijder|"
+                    r"activeer|plaats|bewaar|sla|voeg|buy|sell|create|delete|execute)\b",
+                    chosen_name, re.I,
+                )
+            )
+            if not (pair and _saved_smart_dca_coach_question(original) and safe_name):
+                # A clarification answer is data, never a fresh action request.
+                # In particular, reject embedded newlines and imperatives before
+                # the normal intent classifier sees them.
+                if pair:
+                    pair_text = f"{pair[0]}/{pair[1]}"
+                    answer = smart_dca_identity_question(pair_text)
+                    return FinnResponsesFrontDoorResult(
+                        FinnResponsesResult(
+                            text=answer, response_id=f"smart-dca-identity-{self.run_id}",
+                            tool_trace=(), answer_kind="smart_dca_identity_unverified",
+                            verification_message=original, response_id_reusable=False,
+                        ), None, locale=locale,
+                    )
+                return FinnResponsesFrontDoorResult(
+                    FinnResponsesResult(
+                        text=smart_dca_source_unavailable_text(),
+                        response_id=f"smart-dca-source-{self.run_id}", tool_trace=(),
+                        answer_kind="smart_dca_source_unavailable", response_id_reusable=False,
+                    ), None, locale=locale,
+                )
+            if pair and safe_name:
+                # The selected name is data for the owner-read result check. Do
+                # not append it to a model/classifier prompt: even a single-line
+                # saved name could contain an action verb such as "start nu".
+                message = original
+                model_message = original
+                resuming_clarification = False
+                smart_dca_resumed = True
+                smart_dca_selected_name = chosen_name
+                smart_dca_original = original
         active_strategy_draft = dict(conversation_context.get("active_guided_operation") or {}).get(
             "operation_id"
         ) == "create_strategy"
@@ -4426,6 +4478,8 @@ class FinnResponsesFrontDoor:
 
         async def execute(call: FinnResponsesToolCall) -> dict[str, Any]:
             nonlocal selected, target_retry_used, relevance_retry_used, recommended_read_operation
+            if smart_dca_resumed and call.operation_id is not None:
+                return {"status": "unsupported", "reason": "smart_dca_read_only_continuation"}
             normalized_message = message.strip().casefold()
             if (
                 call.operation_id == "select_asset"
@@ -4856,11 +4910,24 @@ class FinnResponsesFrontDoor:
                     "read_active_setup" in call.read_tools
                     and not FinnV2EntityResolutionService.is_setup_collection_request(message)
                 ):
+                    if smart_dca_resumed and smart_dca_selected_name and call.name == "get_active_plan_and_strategy":
+                        # The user-supplied name is a typed selector for the
+                        # owner-bound resolver, never model prompt text.
+                        selected_pair = requested_catalog_trading_pair(message)
+                        call = replace(call, inputs={
+                            **call.inputs, "setup_name": smart_dca_selected_name,
+                            "reference": "current_request",
+                            **({"asset": selected_pair[0], "quote_currency": selected_pair[1]}
+                               if selected_pair else {}),
+                        })
+                        previous_setup_target = None
                     # A model-supplied name is not a user-selected target.
                     # Preserve it only when it is visible in this turn; a
                     # verified prior ID is the authority for a continuation.
                     model_setup_name = str(call.inputs.get("setup_name") or "")
-                    if model_setup_name and model_setup_name.casefold() not in message.casefold():
+                    if (model_setup_name and model_setup_name.casefold() not in message.casefold()
+                            and not (smart_dca_resumed and smart_dca_selected_name
+                                     and model_setup_name.casefold() == smart_dca_selected_name.casefold())):
                         call = replace(call, inputs={
                             key: value for key, value in call.inputs.items()
                             if key != "setup_name"
@@ -6622,10 +6689,32 @@ class FinnResponsesFrontDoor:
                 result.tool_trace, message=message,
                 pair=f"{pair_asset}/{pair_quote}", locale=locale,
                 user_time_zone=workspace_hints.get("time_zone"),
+                selected_setup_name=smart_dca_selected_name,
             )
             if dca_answer is not None:
-                result = replace(result, text=dca_answer, answer_kind="factual_source",
-                                 model_owned_repair=False, response_id_reusable=False)
+                result = replace(
+                    result, text=dca_answer,
+                    answer_kind=("smart_dca_resumed_factual_source" if smart_dca_resumed
+                                 else "factual_source"),
+                    verification_message=smart_dca_original if smart_dca_resumed else None,
+                    model_owned_repair=False, response_id_reusable=False,
+                )
+            elif saved_smart_dca_identity_matched(
+                result.tool_trace, message=message, pair=f"{pair_asset}/{pair_quote}",
+                selected_setup_name=smart_dca_selected_name,
+            ):
+                result = replace(
+                    result, text=smart_dca_source_unavailable_text(),
+                    answer_kind="smart_dca_source_unavailable",
+                    model_owned_repair=False, response_id_reusable=False,
+                )
+            else:
+                result = replace(
+                    result, text=smart_dca_identity_question(f"{pair_asset}/{pair_quote}"),
+                    answer_kind="smart_dca_identity_unverified",
+                    verification_message=smart_dca_original,
+                    model_owned_repair=False, response_id_reusable=False,
+                )
         if (is_read_only_turn and result.answer_kind == "free_text" and result.tool_trace
                 and len(mentioned_assets) == 1):
             position_answer = render_paper_position_cash_answer(

@@ -346,6 +346,7 @@ class FinnResponsesResult:
     turn_contract: dict[str, Any] | None = None
     model_owned_repair: bool = False
     account_source_projection: bool = False
+    verification_message: str | None = None
 
 
 class FinnResponsesLoop:

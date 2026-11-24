@@ -1644,6 +1644,24 @@ def _plain_setup_creation_request(message: str) -> bool:
     )
 
 
+def _smart_dca_identity_resume_input(
+    context: dict[str, object], message: str,
+) -> tuple[str, str | None]:
+    """Keep a setup-name reply out of pre-frontdoor intent and model checks."""
+    clarification = dict(context.get("responses_clarification") or {})
+    if clarification.get("reason") != "smart_dca_identity_unverified":
+        return message, None
+    return str(clarification.get("original_message") or "").strip(), message
+
+
+def _responses_clarification_original_message(
+    *, reason: str, clarification: dict[str, object], run_message: str,
+) -> str:
+    if reason == "smart_dca_identity_unverified":
+        return str(clarification.get("original_message") or run_message)
+    return run_message
+
+
 def _bounded_supported_smart_dca_calendar_request(
     message: str, collected_inputs: dict[str, object],
 ) -> bool:
@@ -1711,6 +1729,75 @@ def _bounded_supported_smart_dca_calendar_request(
             collected_inputs.get(key) is not None
             and float(collected_inputs[key]) == float(value.replace(",", "."))
             for key, value in numbers.items()
+        )
+    except (TypeError, ValueError):
+        return False
+
+
+def _bounded_supported_smart_dca_benchmark_request(
+    message: str, collected_inputs: dict[str, object],
+) -> bool:
+    """Recognize a fully specified score-triggered draft only when fields agree."""
+    text = " ".join(str(message or "").strip().split())
+    match = re.fullmatch(
+        r"Maak een nieuwe (?P<symbol>[A-Z]{2,10})/(?P<quote>EUR|USDT) Smart DCA-setup "
+        r"met de naam (?P<name>[\w -]{2,80}) op timeframe (?P<timeframe>\d+[HDW])\. "
+        r"Basisbedrag €\s*(?P<base>\d+(?:[,.]\d+)?), maximaal één aankoop per week\. "
+        r"Gebruik de volledige gewogen benchmark van Markt, Macro en Technisch\. "
+        r"Score onder (?P<low>\d{1,3}): (?P<low_pct>\d{1,3})%; "
+        r"van (?P<mid_low>\d{1,3}) tot onder (?P<mid_high>\d{1,3}): "
+        r"(?P<mid_pct>\d{1,3})%; vanaf (?P<high>\d{1,3}): "
+        r"(?P<high_pct>\d{1,3})%\. Toon eerst de conceptkaart; geen bot en geen order\.?",
+        text, re.IGNORECASE,
+    )
+    if match is None or match.group("mid_low") != match.group("low") or match.group("mid_high") != match.group("high"):
+        return False
+    if re.search(
+        r"\b(?:als|alleen|wanneer|zodra|tenzij|mits|indien|if|only|when|unless|"
+        r"onder|boven|bij|trend|rsi|macd|ema\d*|adx|sma\d*|ma\d+|score|"
+        r"voorwaarde|regel|koop|aankoop|filter|trigger)\b",
+        match.group("name"), re.IGNORECASE,
+    ):
+        return False
+    expected = {
+        "symbol": match.group("symbol").upper(),
+        "quote_currency": match.group("quote").upper(),
+        "name": match.group("name"),
+        "timeframe": match.group("timeframe").upper(),
+        "setup_type": "dca", "dca_frequency": "weekly",
+        "dca_trigger_mode": "benchmark", "dca_amount_mode": "score_bands",
+        "score_source": "benchmark_score",
+    }
+    if any(collected_inputs.get(key) != value for key, value in expected.items()):
+        return False
+    numbers = {
+        "base_amount": match.group("base"),
+        "low_threshold": match.group("low"),
+        "high_threshold": match.group("high"),
+        "low_score_percent": match.group("low_pct"),
+        "mid_score_percent": match.group("mid_pct"),
+        "high_score_percent": match.group("high_pct"),
+    }
+    allowed_fields = set(expected) | set(numbers) | {"benchmark_zone_percents", "dca_day"}
+    if any(value is not None for key, value in collected_inputs.items() if key not in allowed_fields):
+        return False
+    if collected_inputs.get("dca_day") is not None:
+        return False
+    try:
+        if not all(
+            collected_inputs.get(key) is not None
+            and float(collected_inputs[key]) == float(value.replace(",", "."))
+            for key, value in numbers.items()
+        ):
+            return False
+        zones = collected_inputs.get("benchmark_zone_percents")
+        return zones is None or (
+            isinstance(zones, (list, tuple)) and len(zones) == 5
+            and [float(value) for value in zones] == [
+                float(match.group("low_pct")), float(match.group("low_pct")),
+                float(match.group("mid_pct")), float(match.group("mid_pct")),
+                float(match.group("high_pct")),
+            ]
         )
     except (TypeError, ValueError):
         return False
@@ -2431,10 +2518,14 @@ class FinnV2RunService:
             ))
         if status == "clarification_required":
             clarification = answer.clarification or {}
+            reason = str(clarification.get("reason") or answer.reason or "choice_required")
+            original_message = _responses_clarification_original_message(
+                reason=reason, clarification=clarification, run_message=run.message,
+            )
             await self.runtime_contracts.record_responses_clarification(
-                run_id=run_id, user_id=user_id, original_message=run.message,
+                run_id=run_id, user_id=user_id, original_message=original_message,
                 question=str(clarification.get("question") or answer.text),
-                reason=str(clarification.get("reason") or answer.reason or "choice_required"),
+                reason=reason,
                 choices=list(clarification.get("choices") or []),
             )
         response_json = {
@@ -2634,6 +2725,11 @@ class FinnV2RunService:
                 message=message,
                 has_prior_run=(run.client_context_json or {}).get("_conversation_has_prior_run"),
             )
+            # The user's reply is an untrusted object selector, not a new
+            # intent. Keep it out of every pre-frontdoor classifier and
+            # provider check; the frontdoor validates it as one name and
+            # binds it only to an owner-scoped read.
+            message, smart_dca_clarification_name = _smart_dca_identity_resume_input(context, message)
             if conversation_id:
                 message = (await _verified_feed_strategy_affirmative_message(
                     session, context=context, message=message, user_id=user_id,
@@ -3396,7 +3492,8 @@ class FinnV2RunService:
             pending_guided == "create_strategy"
             and _complete_named_guided_strategy_proposal(message, guided_inputs)
         )
-        if pending_clarification and not complete_named_guided_strategy:
+        if (pending_clarification and not complete_named_guided_strategy
+                and smart_dca_clarification_name is None):
             relevance = FinnResponsesToolRelevanceGuard(client)
             if not await relevance.continues_clarification(
                 message=message,
@@ -3621,6 +3718,7 @@ class FinnV2RunService:
             user_id=user_id, run_id=run_id, model_led_coach=True,
         ).run(
             message=message,
+            clarification_name=smart_dca_clarification_name,
             workspace_hints=dict(getattr(run, "workspace_hints_json", None) or {}),
             corrected_guided_operation_id=corrected_guided_operation_id,
             model_message=(
@@ -5589,6 +5687,9 @@ class FinnV2RunService:
                                     not active_block and (
                                         _plain_setup_creation_request(run_message)
                                         or _bounded_supported_smart_dca_calendar_request(
+                                            run_message, setup_inputs,
+                                        )
+                                        or _bounded_supported_smart_dca_benchmark_request(
                                             run_message, setup_inputs,
                                         )
                                         or _bounded_fixed_dca_calendar_request(
