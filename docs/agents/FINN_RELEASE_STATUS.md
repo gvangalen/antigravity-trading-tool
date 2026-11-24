@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: Smart DCA brongebonden advies (24 november 2026)
 
-Phase: `LIVE_DEPLOYED_QA_PENDING`. Onafhankelijke ingelogde browser-QA op publieke
+Phase: `LIVE_QA_NOT_ACCEPTED_FIX_CANDIDATE`. Onafhankelijke ingelogde browser-QA op publieke
 SHA `600a614e45f921c193f40b4d21a6eec940634f15` accepteerde de smalle
 Paper-bedragenreparatie: drie herhaalde vragen gaven budget, werkelijk belegd,
 botkas en totale Paper-kas afzonderlijk en met de opgeslagen gebruikerstijdzone.
@@ -44,7 +44,20 @@ publieke backend `/api/health` en frontend `/build-info.json` meldden op 24
 november exact deze SHA; beide endpoints gaven HTTP 200. Deze status-only
 commit veroorzaakt een nieuwe main-SHA, zodat Build opnieuw op CI, Auto
 Deploy en definitieve publieke pariteit wacht voordat onafhankelijke QA de
-ingelogde Smart-DCA-vraag herhaalt. Die browseracceptatie is nog niet gedaan.
+ingelogde Smart-DCA-vraag herhaalt. Op dat moment stond browseracceptatie nog open.
+
+De daaropvolgende onafhankelijke hertest op definitieve publieke SHA
+`bc9d8988b78a5a572e25f0a4f3701b4aecf35c04` was **NOT_ACCEPTED**:
+twee beurten na een refresh eindigden completed maar noemden geen opgeslagen
+score, scoreband, EUR-bedrag of botkoppeling. Een eigenaargebonden, alleen-lezen
+runtimeaudit van de bestaande beurten toonde `plan_execution_capability` en
+nul Responses-leestools. De buitenste uitvoerbaarheidsroute onderschepte de
+vraag door het woord `Paper-uitvoering` vóór de eerder herstelde frontdoor.
+De nieuwe kandidaat laat expliciete vragen over opgeslagen Smart-DCA-score en
+bedragcurve door naar de eigenaargebonden readroute; directe vragen over
+automatisch instellen, activeren of wijzigen blijven bij de
+uitvoerbaarheidsroute. Lokale validatie, CI/deploy en nieuwe live QA voor die
+kandidaat moeten nog worden afgerond.
 
 ## FINN 3.0: Paper-bedragen en gebruikerstijdzone (24 november 2026)
 

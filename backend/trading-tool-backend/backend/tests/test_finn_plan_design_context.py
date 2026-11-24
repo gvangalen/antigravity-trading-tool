@@ -351,3 +351,39 @@ def test_capability_read_does_not_claim_an_answer_verifier_passed():
     response = service.runtime_contracts.materialize_terminal.call_args.kwargs["response"]
     assert response["verifier_status"] == "not_run"
     assert response["reasoning_provenance"]["reasoning_source"] == "responses_typed_capability_facts"
+
+
+def test_saved_smart_dca_coach_question_reaches_owner_reads_before_capability_copy():
+    question = (
+        "Beoordeel mijn opgeslagen Smart DCA-plan Test Smart BTC voor BTC/USDT. "
+        "Welke benchmarkscore en scoreband gelden nu, welk bedrag volgt uit de "
+        "opgeslagen bedragcurve, en hoe zou ik meer kopen bij oversold en minder "
+        "bij overbought kunnen overwegen? Leg uit wat dit wel of niet betekent "
+        "voor Paper-uitvoering en of er een bot aan dit plan gekoppeld is. "
+        "Noem bronmomenten, maak alleen een onderbouwd voorstel en wijzig niets."
+    )
+    assert is_explicit_saved_plan_read(question)
+    assert not requests_execution_capability_question(question, {})
+    assert not requests_execution_capability_question(
+        question, {"plan_design_focus": {"kind": "unsaved_capability_design"}},
+    )
+    assert requests_execution_capability_question(
+        "Kan mijn opgeslagen Smart DCA-plan Test Smart BTC de scoreband automatisch "
+        "instellen en uitvoeren?",
+        {},
+    )
+    assert requests_execution_capability_question(
+        "Beoordeel mijn opgeslagen Smart DCA-plan: welke scoreband geldt? "
+        "Is het mogelijk deze automatisch uit te voeren?",
+        {},
+    )
+    assert requests_execution_capability_question(
+        "Beoordeel mijn opgeslagen Smart DCA-plan: welke scoreband geldt? "
+        "Kan ik de bot activeren?",
+        {},
+    )
+    assert requests_execution_capability_question(
+        "Beoordeel mijn opgeslagen Smart DCA-plan: welke bedragcurve geldt? "
+        "Kan ik de bedragcurve wijzigen?",
+        {},
+    )

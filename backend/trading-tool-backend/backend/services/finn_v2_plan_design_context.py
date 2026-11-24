@@ -162,6 +162,25 @@ def requests_execution_capability_question(message: str, context: dict[str, Any]
     """Route explicit feasibility questions through the executable contracts."""
     text = str(message or "")
     if (
+        is_explicit_saved_plan_read(text)
+        and re.search(r"\bsmart[\s-]?dca\b", text, re.I)
+        and re.search(r"\b(?:benchmarkscore|scoreband\w*|bedrag\w*curve|staffel\w*)\b", text, re.I)
+        and _EVIDENCE_READ_VERB.search(text)
+        and not re.search(
+            r"\b(?:kan|kunnen|could|can|kann|können)\b.{0,100}"
+            r"\b(?:instellen|configureren|automatisch\s+(?:kopen|verkopen)|"
+            r"uitvoeren|uit\s+te\s+voeren|activeren|wijzigen|aanpassen|execute|activate|change|update|"
+            r"configure|einrichten)\b|"
+            r"\b(?:is\s+het\s+mogelijk|is\s+it\s+possible)\b.{0,100}"
+            r"\b(?:uitvoeren|uit\s+te\s+voeren|activeren|wijzigen|aanpassen|execute|activate|change|update)\b",
+            text, re.I,
+        )
+    ):
+        # A request for the saved score band and amount curve must read the
+        # owner's plan before discussing hypothetical Paper execution. The
+        # latter word alone does not make it a platform capability question.
+        return False
+    if (
         re.search(
             r"\b(?:mijn|my|mein(?:e|en|er|es)?)\b.{0,80}"
             r"\b(?:trader\s*profiel|trader\s*profile|trading\s*profile|"
