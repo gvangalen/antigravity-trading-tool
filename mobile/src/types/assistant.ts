@@ -24,6 +24,7 @@ export type AssistantHistoryMessage = {
 };
 
 export type AssistantRuntimeContext = {
+  time_zone?: string;
   page_type?: string;
   symbol?: string;
   quote_currency?: string | null;

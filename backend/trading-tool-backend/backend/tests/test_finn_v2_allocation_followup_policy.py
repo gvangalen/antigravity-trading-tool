@@ -160,7 +160,7 @@ def test_profile_portfolio_bundle_does_not_filter_total_paper_cash():
     assert next(row for row in output["results"] if row["scope"] == "read_portfolio")["asset"] is None
 
 
-def test_live_qa_budget_cash_question_requires_portfolio_read(monkeypatch):
+def test_live_qa_budget_cash_question_requires_portfolio_read():
     question = ("Wat is de ingestelde budgetlimiet van mijn BTC Paper-bot, hoeveel is "
                 "werkelijk belegd en hoeveel kas is er? Noem die drie afzonderlijk; "
                 "lees alleen en verander niets.")
@@ -168,15 +168,51 @@ def test_live_qa_budget_cash_question_requires_portfolio_read(monkeypatch):
         client=object(), session=object(), user_id=7, run_id="budget-cash",
         model_led_coach=True,
     )
-    loop_run = AsyncMock(return_value=FinnResponsesResult(
-        text="Ik lees de portefeuille.", response_id="portfolio-read", tool_trace=(),
-        answer_kind="free_text", model_led_coach=True,
-    ))
-    monkeypatch.setattr(
-        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run", loop_run,
-    )
-    asyncio.run(front.run(
+    front.reads = AsyncMock(return_value={"status": "completed", "results": [{
+        "scope": "read_portfolio", "status": "completed", "asset": None,
+        "data": {"environment": "paper", "global": {"cash_balance": 10000,
+                 "invested_value": 0}, "bots": [{"symbol": "BTC", "is_live": False,
+                 "position_qty": 0, "invested_eur": 0, "paper_cash_eur": 10000,
+                 "budget_total_eur": 1000}]},
+    }]})
+    result = asyncio.run(front.run(
         message=question, instructions="", conversation_context={},
         verified_asset="BTC", previous_response=None,
     ))
-    assert loop_run.await_args.kwargs["required_read_tool_name"] == "get_portfolio_and_exposure"
+    assert front.reads.await_count == 1
+    assert front.reads.await_args.args[0].name == "get_portfolio_and_exposure"
+    assert front.reads.await_args.args[0].inputs == {"environment": "paper"}
+    assert result.response.answer_kind == "factual_source"
+
+
+def test_four_amount_paper_question_uses_one_owner_portfolio_read_without_model():
+    question = (
+        "Wat is de ingestelde budgetlimiet van mijn BTC Paper-bot, hoeveel is "
+        "werkelijk belegd, hoeveel kas heeft die bot en hoeveel kas heeft mijn "
+        "totale Paper-portefeuille? Noem deze vier bedragen afzonderlijk met "
+        "bronmoment. Lees alleen en verander niets."
+    )
+    front = FinnResponsesFrontDoor(
+        client=object(), session=object(), user_id=7, run_id="four-amounts",
+        model_led_coach=True,
+    )
+    front.reads = AsyncMock(return_value={"status": "completed", "results": [{
+        "scope": "read_portfolio", "status": "completed", "asset": None,
+        "data": {"environment": "paper", "read_at_utc": "2026-11-24T05:25:00+00:00",
+                 "global": {"cash_balance": 10000, "invested_value": 0},
+                 "bots": [{"symbol": "BTC", "is_live": False, "position_qty": 0,
+                           "invested_eur": 0, "paper_cash_eur": 10000,
+                           "budget_total_eur": 1000}]},
+    }]})
+
+    result = asyncio.run(front.run(
+        message=question, instructions="", conversation_context={},
+        verified_asset="BTC", previous_response=None,
+        workspace_hints={"time_zone": "Europe/Amsterdam"},
+    ))
+
+    assert front.reads.await_count == 1
+    assert front.reads.await_args.args[0].inputs == {"environment": "paper"}
+    assert result.response.answer_kind == "factual_source"
+    assert "€1000" in result.response.text
+    assert "2026-11-24 06:25:00 CET" in result.response.text

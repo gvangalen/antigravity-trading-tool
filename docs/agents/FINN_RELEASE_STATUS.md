@@ -4,6 +4,40 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: rapportmelding en Paper-accountantwoord (24 november 2026)
+
+Phase: `BUILD_LOCAL_VALIDATION`. Candidate branch:
+`codex/finn3-browser-coaching-20261124`, based on public main
+`b973287daded94e4f449a96d4ad291634f3376a7`. Independent logged-in QA
+confirmed a fresh BTC/EUR analysis card and a Paper follow-up card both opened
+the correct FINN chat and were handled after refresh. The 24 November daily
+report was ready at 05:33 CET and its feed card appeared at 05:50 CET; database
+timestamps confirm a 17-minute delay, so this was recovery, not direct publish.
+The exact four-amount BTC Paper question twice returned unavailable even though
+the owner-scoped Portfolio displayed the bot limit, invested amount, bot cash,
+and total Paper cash separately. QA also counted 20 same-score analysis cards
+for BTC on 23 November. The broader FINN 3.0 browser matrix remains open.
+
+Read-only worker log diagnosis found direct daily-report feed publication failing
+after report commit: asyncpg attempted to reuse a pooled connection attached
+to an earlier event loop. Both daily and periodic direct publishers now use a
+short one-loop NullPool session. A disposable local PostgreSQL 16 test warmed
+the global pool on one loop and then successfully completed two isolated reads
+on later loops. The Paper four-amount question now selects one unfiltered,
+owner-scoped Paper read and separates budget, invested value, bot cash, and
+total cash. Web and mobile pass the device time zone; verified read moments are
+rendered in that zone, including DST. Analysis-card revisions include score
+date and value, preventing a resolved unchanged score from reopening while
+allowing a changed score on the same date.
+
+Targeted backend tests: **141 passed** after the timezone, selected-feed
+context boundary, and score revision;
+web typecheck/build and 113 command tests passed; mobile typecheck and lint
+passed (lint warnings only). Full backend suite, local worker-driven action
+matrix, real-provider selector development/regression, PR-CI, deployment, and
+independent live QA are still pending. No product or live-account writes have
+been performed by Build for this candidate.
+
 ## FINN 3.0: ontbrekende dagrapportmeldingen in de feed (23 november 2026)
 
 Phase: `LIVE_BACKFILL_ACCEPTED_NATURAL_TRIGGER_PENDING`. In het ingelogde Gerrit-account stond het

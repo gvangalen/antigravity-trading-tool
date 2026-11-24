@@ -57,33 +57,32 @@ def jsonb(v, fallback=None):
 
 def _publish_daily_report_ready_feed(user_id: int, report_date: date,
                                      report: dict | None = None) -> None:
-    """Publish only after the report and its snapshot have been saved."""
-    from backend.infrastructure.database import async_session_factory, run_celery_coroutine
+    """Publish after the report row is committed, independent of PDF delivery."""
+    from backend.infrastructure.database import run_celery_isolated_session
     from backend.services.finn_coach_feed_service import FinnCoachFeedService
     from backend.services.finn_report_attention import report_attention
 
     attention = report_attention(report)
 
-    async def publish():
-        async with async_session_factory() as session:
-            item_id = await FinnCoachFeedService(session).publish(
-                user_id=user_id,
-                event_key=f"daily-report:{report_date.isoformat()}",
-                event_type="daily_report_ready",
-                subject_type="report",
-                subject_id=report_date.isoformat(),
-                subject="Dagrapport",
-                symbol=None,
-                evidence={"report_type": "daily", "report_date": report_date.isoformat(),
-                          **attention},
-                source_observed_at=datetime.now(timezone.utc),
-                priority=2,
-                revision=f"{report_date.isoformat()}:{attention.get('attention_kind', '')}:{attention.get('attention_pair', '')}",
-            )
-            await session.commit()
-            return item_id
+    async def publish(session):
+        item_id = await FinnCoachFeedService(session).publish(
+            user_id=user_id,
+            event_key=f"daily-report:{report_date.isoformat()}",
+            event_type="daily_report_ready",
+            subject_type="report",
+            subject_id=report_date.isoformat(),
+            subject="Dagrapport",
+            symbol=None,
+            evidence={"report_type": "daily", "report_date": report_date.isoformat(),
+                      **attention},
+            source_observed_at=datetime.now(timezone.utc),
+            priority=2,
+            revision=f"{report_date.isoformat()}:{attention.get('attention_kind', '')}:{attention.get('attention_pair', '')}",
+        )
+        await session.commit()
+        return item_id
 
-    run_celery_coroutine(publish())
+    run_celery_isolated_session(publish)
 
 @shared_task(name="backend.celery_task.daily_report_task.generate_daily_report")
 def generate_daily_report(user_id: int):

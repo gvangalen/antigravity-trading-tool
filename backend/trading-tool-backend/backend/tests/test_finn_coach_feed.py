@@ -47,6 +47,31 @@ def test_analysis_ready_copy_names_only_a_verified_benchmark_score():
     )["nl"]["body"]
 
 
+def test_resolved_analysis_card_does_not_reopen_for_the_same_score_day():
+    digest = hashlib.sha256(b"available:2026-11-23:42.3").hexdigest()
+
+    class Rows:
+        def mappings(self):
+            return self
+
+        def first(self):
+            return {"id": "previous", "fingerprint": f"resolved:{digest}",
+                    "status": "resolved", "source_observed_at": None,
+                    "updated_at": None, "evidence": {}}
+
+    session = SimpleNamespace(execute=AsyncMock(side_effect=[None, Rows()]))
+    feed = module.FinnCoachFeedService(session)
+    result = asyncio.run(feed.publish(
+        user_id=7, event_key="analysis-ready:BTC:34",
+        event_type="analysis_ready", subject_type="asset", subject_id="71",
+        subject="BTC/USDT", symbol="BTC", evidence={"score_as_of": "2026-11-23",
+        "benchmark_score": 42.3}, revision="available:2026-11-23:42.3",
+    ))
+
+    assert result is None
+    assert session.execute.await_count == 2
+
+
 def test_manual_plan_review_does_not_refer_to_a_nonexistent_bot():
     copy = module._fallback("plan_review", "ETH-plan", {
         "trading_pair": "ETH/EUR", "direction": "down",
@@ -306,6 +331,8 @@ def test_analysis_ready_requires_verified_score_and_no_setup(monkeypatch):
 
     class Match:
         status = "available"
+        score = 52
+        as_of = "2026-11-19"
 
         def __init__(self, _session):
             pass
@@ -313,8 +340,8 @@ def test_analysis_ready_requires_verified_score_and_no_setup(monkeypatch):
         async def for_asset(self, user_id, symbol, *, setups, market_id):
             assert (user_id, symbol, setups, market_id) == (7, "BTC", [], 34)
             return {"source_status": self.status,
-                    "benchmark_score": 52 if self.status == "available" else None,
-                    "as_of": "2026-11-19"}
+                    "benchmark_score": self.score if self.status == "available" else None,
+                    "as_of": self.as_of}
 
     monkeypatch.setattr("backend.infrastructure.repositories.setup_repository.SetupRepository", Setups)
     monkeypatch.setattr("backend.services.setup_market_match_service.SetupMarketMatchService", Match)
@@ -323,8 +350,18 @@ def test_analysis_ready_requires_verified_score_and_no_setup(monkeypatch):
     service.resolve = AsyncMock()
     assert asyncio.run(service.reconcile_journey_next_steps(
         user_id=7, symbol="BTC", market_id=34)) == ["card"]
-    assert service.publish.await_args.kwargs["revision"] == "available"
+    assert service.publish.await_args.kwargs["revision"] == "available:2026-11-19:52"
     assert service.publish.await_args.kwargs["evidence"]["benchmark_score"] == "52"
+    Match.score = 49
+    service.publish.reset_mock()
+    assert asyncio.run(service.reconcile_journey_next_steps(
+        user_id=7, symbol="BTC", market_id=34)) == ["card"]
+    assert service.publish.await_args.kwargs["revision"] == "available:2026-11-19:49"
+    Match.as_of = "2026-11-20"
+    service.publish.reset_mock()
+    assert asyncio.run(service.reconcile_journey_next_steps(
+        user_id=7, symbol="BTC", market_id=34)) == ["card"]
+    assert service.publish.await_args.kwargs["revision"] == "available:2026-11-20:49"
     Match.status = "stale_sources"
     service.publish.reset_mock()
     assert asyncio.run(service.reconcile_journey_next_steps(
@@ -1351,13 +1388,15 @@ def test_proposal_feed_selection_carries_exact_plan_target_without_authorizing_a
 
 def test_feed_boundary_discards_stale_client_plan_and_draft_before_selection():
     incoming = {
-        "feed_item_id": "feed-b", "locale": "nl", "session_id": "conversation-1",
+        "feed_item_id": "feed-b", "locale": "nl", "time_zone": "America/Los_Angeles",
+        "session_id": "conversation-1",
         "symbol": "BTC", "setup_id": 111, "setup_name": "QA Plan A",
         "strategy_id": 8, "bot_id": 9, "current_flow": "update_setup",
         "finn_draft": {"name": "QA Plan A"}, "page": "/setup",
     }
     assert _feed_context_boundary(incoming) == {
-        "feed_item_id": "feed-b", "locale": "nl", "session_id": "conversation-1",
+        "feed_item_id": "feed-b", "locale": "nl", "time_zone": "America/Los_Angeles",
+        "session_id": "conversation-1",
     }
     assert _feed_context_boundary({"setup_id": 111}) == {"setup_id": 111}
     assert _feed_context_boundary({"feed_item_id": "feed-b", "feed_draft_edited": True,

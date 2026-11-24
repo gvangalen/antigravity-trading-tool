@@ -8,6 +8,7 @@ from typing import AsyncGenerator
 from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.pool import NullPool
 from sqlalchemy.orm import declarative_base
 from dotenv import load_dotenv
 
@@ -79,6 +80,31 @@ def run_celery_coroutine(coroutine):
             await engine.dispose()
 
     return asyncio.run(run_and_dispose())
+
+
+def run_celery_isolated_session(operation):
+    """Run a short Celery DB operation without reusing an asyncpg socket.
+
+    Some report tasks call other async code before publishing their feed card.
+    Those calls can leave the process-wide engine with a connection created on
+    a previous asyncio.run loop. A one-shot engine keeps the publication on its
+    own loop and closes its connection before that loop ends.
+    """
+    async def run():
+        isolated_engine = create_async_engine(
+            ASYNC_DATABASE_URL, echo=False, poolclass=NullPool,
+        )
+        try:
+            sessions = async_sessionmaker(
+                bind=isolated_engine, class_=AsyncSession,
+                expire_on_commit=False, autoflush=False,
+            )
+            async with sessions() as session:
+                return await operation(session)
+        finally:
+            await isolated_engine.dispose()
+
+    return asyncio.run(run())
 
 # Declarative base voor alle SQLAlchemy ORM modellen
 Base = declarative_base()

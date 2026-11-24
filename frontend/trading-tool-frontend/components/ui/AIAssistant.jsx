@@ -1595,6 +1595,7 @@ function AIAssistantContent({
         autoSubmitCommand: Boolean(commandRequest?.autoSubmit),
         originalCommandQuery: commandRequest?.query || "",
       });
+      requestContext.time_zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
       const analyticsSessionId = getAssistantSessionId(user?.id || "anonymous");
       const chatSessionId = forceNewFinnConversationRef.current
         ? "new"
