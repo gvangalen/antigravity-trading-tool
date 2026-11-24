@@ -51,10 +51,53 @@ function getCacheHeaders(filePath, statusCode = 200) {
   return { 'Cache-Control': 'public, max-age=3600' };
 }
 
-http.createServer((req, res) => {
+function rscDocumentRedirect(req, filePath) {
+  if (!['GET', 'HEAD'].includes(req.method) || path.extname(filePath) !== '.txt' ||
+      !fs.existsSync(`${filePath.slice(0, -4)}.html`)) return null;
+
+  const destination = req.headers['sec-fetch-dest'];
+  const acceptsHtml = String(req.headers.accept || '').includes('text/html');
+  if (destination !== 'document' && !(destination !== 'empty' && acceptsHtml)) return null;
+
+  try {
+    const url = new URL(req.url, 'http://localhost');
+    url.pathname = url.pathname.slice(0, -4);
+    url.searchParams.delete('_rsc');
+    return `${url.pathname}${url.search}`;
+  } catch {
+    return null;
+  }
+}
+
+const server = http.createServer((req, res) => {
   // Strip query string from URL to correctly find static files (e.g. macro.txt?_rsc=...)
-  const cleanUrl = req.url.split('?')[0];
-  let filePath = path.join(PUBLIC_DIR, cleanUrl === '/' ? 'index.html' : cleanUrl);
+  let cleanUrl;
+  try {
+    cleanUrl = decodeURIComponent(req.url.split('?')[0]);
+  } catch {
+    res.writeHead(400, getCacheHeaders(PUBLIC_DIR, 400));
+    res.end('Bad Request');
+    return;
+  }
+  const relativePath = cleanUrl === '/' ? 'index.html' : cleanUrl.replace(/^\/+/, '');
+  let filePath = path.resolve(PUBLIC_DIR, relativePath);
+  if (cleanUrl.includes('\0') || cleanUrl.includes('\\') ||
+      cleanUrl.split('/').includes('..') ||
+      !filePath.startsWith(`${PUBLIC_DIR}${path.sep}`)) {
+    res.writeHead(400, getCacheHeaders(PUBLIC_DIR, 400));
+    res.end('Bad Request');
+    return;
+  }
+
+  const documentRedirect = rscDocumentRedirect(req, filePath);
+  if (documentRedirect) {
+    res.writeHead(302, {
+      Location: documentRedirect,
+      ...getCacheHeaders(filePath, 302)
+    });
+    res.end();
+    return;
+  }
 
   if (fs.existsSync(filePath)) {
     const stat = fs.statSync(filePath);
@@ -97,6 +140,12 @@ http.createServer((req, res) => {
       res.end(content, 'utf-8');
     }
   });
-}).listen(PORT, () => {
-  console.log(`🚀 Production server running at http://localhost:${PORT}/`);
 });
+
+if (require.main === module) {
+  server.listen(PORT, () => {
+    console.log(`🚀 Production server running at http://localhost:${PORT}/`);
+  });
+}
+
+module.exports = { server };
