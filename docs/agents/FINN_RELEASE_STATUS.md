@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: volledige, botgebonden Paper-Holdcoach (24 november 2026)
 
-Phase: `LOCAL_VALIDATION`. De onafhankelijke ingelogde QA op publieke SHA
+Phase: `PRODUCT_DEPLOYED_QA_PENDING`. De onafhankelijke ingelogde QA op publieke SHA
 `bb642138b99c504692e5e92a5bf31bec10f6093d` gaf `NOT_ACCEPTED`:
 dezelfde read-only Paper-Holdvraag leverde drie keer een generiek bronoverzicht
 zonder de gevraagde botbudgetlimiet, afzonderlijk botstatusmoment en concrete
@@ -37,8 +37,20 @@ Frontend typecheck, i18n-, command-, voorstel- en setuptests, build en
 `audit:high` slaagden; frontendbron is niet gewijzigd. De definitieve
 volledige backend-suite gaf **5507 passed, 7 skipped**. Onafhankelijke
 QA- en Security-codebeoordeling vond op de laatste botnaam-, bron- en
-fail-closed-grens geen blocker. Dit is de lokale Build-kandidaat vóór PR/CI;
-er is voor deze reparatie nog geen live acceptatie.
+fail-closed-grens geen blocker. Product-PR
+[#1361](https://github.com/gvangalen/antigravity-trading-tool/pull/1361)
+had op head `d1f4a7934a577990c96e60dff172f460556d9a54` vijf groene
+CI-jobs (45474429090) en is gemerged als
+`63dc659c9a2890c91a1aa41dfd5b1af8ee216e05`. De daaropvolgende
+frontendfeed-merge `88e1921d3619e94893baf0a660f0a83cd92643ce`
+bevat de Paper-Holdfix als parent. Voor die uiteindelijke publieke SHA
+slaagden alle vijf main-CI-jobs (45476019425) en de laatste Auto Deploy
+(45477449285). GitHub main en beide publieke endpoints gaven exact
+`88e1921d3619e94893baf0a660f0a83cd92643ce`; backend `/api/health`
+en frontend `/build-info.json` antwoordden HTTP 200. Deze statusupdate
+maakt zelf opnieuw een main-SHA. QA start pas na de laatste main-CI,
+Auto Deploy en publieke SHA-pariteit van die revisie. Er is voor deze
+reparatie nog geen live acceptatie.
 
 ## FINN 3.0: eigenaargebonden botstatus bij gecombineerde Paper-vraag (24 november 2026)
 
