@@ -76,7 +76,7 @@ export default function FinnCoachFeed({ onDiscuss }) {
     const generation = ++requestGenerationRef.current;
     try {
       const response = await readCoachFeedWithRetry(
-        () => fetchAuth(`/api/assistant/feed?history=${history ? "true" : "false"}&limit=${history ? FEED_PAGE_SIZE + 1 : FEED_PAGE_SIZE}`, {
+        () => fetchAuth(`/api/assistant/feed?history=true&limit=${history ? FEED_PAGE_SIZE + 1 : FEED_PAGE_SIZE}`, {
           method: "GET", forceFresh: true,
         }),
         { isCurrent: () => generation === requestGenerationRef.current &&
