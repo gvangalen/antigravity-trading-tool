@@ -863,7 +863,9 @@ def test_multi_source_coach_recovers_from_wrong_model_time_with_current_reads():
                 "setup", "score", "bot", "report", "quote", "portfolio")}},
         ), previous_response=None,
     )
-    recovered = _minimal_read_answer(message=question, prepared=prepared)
+    recovered = _minimal_read_answer(
+        message=question, prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
     assert recovered.status == "completed"
     assert "Reguliere sessie gesloten" in recovered.text
     assert "21:29:00 CET" in recovered.text
