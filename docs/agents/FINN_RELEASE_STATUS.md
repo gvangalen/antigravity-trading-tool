@@ -4,6 +4,49 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: eigenaargebonden botstatus bij gecombineerde Paper-vraag (24 november 2026)
+
+Phase: `BUILD_GATES_COMPLETE_PR_CI_PENDING`. De onafhankelijke ingelogde QA op
+publieke SHA `7b5ab0e2c8c89cc9bb4cedd02d872161b5669476` gaf
+`NOT_ACCEPTED` voor de herhaalbaarheid van dezelfde read-only Paper-Holdvraag:
+één beurt in een bestaande conversatie viel terug op bronmomentverificatie;
+de eerste beurt in een verse conversatie en de herhaling na verversen waren
+correct. Geen voorstel, bevestiging, opslag of order werd uitgevoerd.
+
+Een eigenaar- en rungebonden read-only diagnose van de mislukte beurt wees
+`source_moment_conflicts_with_source` met `bot_decision_clock_mismatch` aan.
+De beurt las het opgeslagen botbesluit en de Paper-portefeuille, maar bevatte
+geen `read_bot_status`. Het model presenteerde de portefeuille-uitleestijd
+toch als botstatusmoment. De bronmomentverifier wees die ongefundeerde klok
+terecht af. De vraag bevatte `Paper-Holdbesluit` en de afsluiting
+`Lees alleen; wijzig geen strategie, bot of order`; de runtime herkende die
+combinatie niet consequent als een verplichte read-only botbesluitbundel.
+
+Deze kandidaat herkent beide formuleringen en bindt bij een expliciete
+botstatusvraag een nieuwe owner-scoped `read_bot_status` aan de besluit- en
+portefeuillelezing. De verifier, bevestigingsgrens en actiecontracten blijven
+ongewijzigd. Een gemengde instructie met een latere positieve aanmaakopdracht
+valt niet onder deze read-only slotzin. Exacte-vraagregressies dekken de
+eerste beurt en een eerdere voltooide conversatiebeurt. De gerichte
+frontdoor-suite gaf **1044 passed**; de volledige backend-suite **5504 passed,
+7 skipped**. De frontend-build, typecheck, i18n- en commandtests, voorstel-
+en setuptests en `audit:high` slaagden. De lokale FastAPI/Celery/PostgreSQL/
+Redis-actiecontractmatrix gaf **17/17** zonder brokerorder, Live-call of
+productieverbinding; artifact SHA-256
+`5ba30b8cc93fa7f4b40f674b64743501f3f160ba4f7e75f5cc5f0b60f8286a7d`.
+Adaptertests **28/28** en bevestigde Smart DCA en
+kalender-DCA inclusief replay slaagden. De echte Responses-provider-
+developmentset gaf **20/20** met nul provider-, schema-, timeout-, parse- of
+validatiefouten; artifact SHA-256
+`1113a8f912cebd5ea8741071b979f1d85264166392f97001bcf8ee24a8ffe1e7`.
+De echte provider-regressieset gaf **109/109** met dezelfde nul foutpercentages;
+artifact SHA-256
+`1010589cbc2417aa74a1fd2d8de480faa4adb7de4a5379727abe0ce230de9dbe`.
+Onafhankelijke QA- en Security-codebeoordeling vond geen blocker. PR-CI,
+deployidentiteit en ingelogde driebeurtenhertest zijn op dit moment nog open;
+er is geen live acceptatie
+voor deze kandidaat geclaimd.
+
 ## FINN 3.0: Paper-Holdbronmomenten na live hertest (24 november 2026)
 
 Phase: `LIVE_QA_NOT_ACCEPTED`. Op publieke SHA

@@ -373,15 +373,21 @@ def _is_read_only_coach_turn(
 
 def _explicit_discussion_only(message: str) -> bool:
     """A direct no-change instruction overrides mutation verbs quoted in a question."""
+    terminal_no_change = re.search(
+        r"\blees alleen\s*[;,.]?\s*wijzig geen "
+        r"(?:strategie|bot|order)(?:\s*,\s*(?:strategie|bot|order))*"
+        r"(?:\s+of\s+(?:strategie|bot|order))?[.!?]?\s*$",
+        message, re.I,
+    )
     return bool(
-        re.search(
+        (terminal_no_change or re.search(
             r"\b(?:wijzig niets|verander niets|pas niets aan|do not change anything|"
             r"don't change anything|make no changes|ändere nichts|"
             r"geen wijziging(?:en)?(?: of (?:een )?order)?|"
             r"maak (?:niets|niks) aan|"
             r"geen order (?:of|en) (?:een )?wijziging(?:en)?)\b",
             message, re.I,
-        )
+        ))
         and not re.search(r"\b(?:behalve|uitgezonderd|except|außer)\b", message, re.I)
     )
 
@@ -1439,7 +1445,9 @@ class FinnResponsesFrontDoor:
             re.search(r"\b(?:bots?|bot(?:besluit(?:en)?|beslissing(?:en)?|beoordeling(?:en)?|check(?:s)?)|automatisering|automation)\b", message, re.I)
             and re.search(
                 r"\b(?:botbeslissing(?:en)?|botbesluit(?:en)?|beslissing(?:en)?|besluit(?:en)?|decision(?:s)?|"
-                r"beoordeling(?:en)?|(?:bot)?check(?:s)?|(?:bot)?reden(?:en)?|blokkeer\w*|entscheidung(?:en)?)\b",
+                r"beoordeling(?:en)?|(?:bot)?check(?:s)?|(?:bot)?reden(?:en)?|"
+                r"(?:hold|koop|verkoop)[- ]?besluit(?:en)?|blokkade\w*reden(?:en)?|"
+                r"blokkeer\w*|entscheidung(?:en)?)\b",
                 message, re.I,
             )
         )
@@ -1514,6 +1522,9 @@ class FinnResponsesFrontDoor:
         needs_portfolio = account_bundle or bool(re.search(
             r"\b(?:positie|posities|portefeuille|portfolio|kas|cash|exposure|blootstelling)\b", message, re.I,
         ))
+        needs_bot_status = account_bundle or bool(re.search(
+            r"\b(?:bot[-\s]?status|bot\s+(?:actief|inactief|live|paper))\b", message, re.I,
+        ))
         base_tools = tuple(tool for tool in call.read_tools
                            if (report_requested or tool != "read_latest_report")
                            and (not report_requested or needs_portfolio or tool != "read_portfolio"))
@@ -1529,7 +1540,7 @@ class FinnResponsesFrontDoor:
             *base_tools, "read_review_history",
             *(("read_portfolio",) if needs_portfolio or
               (call.name != "get_decision_history" and not report_requested) else ()),
-            *(('read_bot_status',) if account_bundle or FinnResponsesFrontDoor._asks_about_account_state_bundle(message) else ()),
+            *(('read_bot_status',) if needs_bot_status else ()),
         ))))
 
     @staticmethod
