@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: Paper-bedragen en gebruikerstijdzone (24 november 2026)
 
-Phase: `LOCAL_VALIDATED_PR_CI_PASSED`. Onafhankelijke ingelogde QA op de
+Phase: `LIVE_DEPLOYED_QA_PENDING`. Onafhankelijke ingelogde QA op de
 vorige publieke SHA `39ce2a474cee236279e4a0c8ed666158f0c0f3e5` gaf
 `NOT_ACCEPTED` voor de volledige FINN 3.0-browsermatrix. De exacte vraag
 naar BTC Paper-botbudget, werkelijk belegd bedrag, botkas en totale Paper-kas
@@ -33,9 +33,16 @@ Echte providerselector development: **20/20** (artifact SHA-256
 regression: **109/109** (artifact SHA-256
 `4327e7803897b591d73c8d6da7b07fdf69105ccb3affa7a08563ede8090ddcaf`),
 beide met nul provider-, schema-, timeout-, parse- en validatiefouten.
-De PR-CI op de producthead slaagde met vijf groene jobs, waaronder frontend,
-mobile, security en backend. Merge, main-CI, Auto Deploy, publieke SHA-pariteit
-en onafhankelijke live hertest zijn nog niet uitgevoerd voor deze kandidaat.
+De PR-CI op de producthead én de definitieve dochead slaagde telkens met vijf
+groene jobs. PR #1344 is gemerged als
+`880a2a968e924e66b0f7fc29367f9320615bd54a`; main-CI `45345213777`
+slaagde met vijf groene jobs en Auto Deploy `45346203672` voltooide met
+`success`. GitHub main, publieke backend `/api/health` en frontend
+`/build-info.json` meldden op 24 november deze exacte SHA; beide endpoints
+gaven HTTP 200. Deze status-only commit creëert een nieuwe main-SHA. Build
+wacht daarom opnieuw op CI, Auto Deploy en definitieve publieke SHA-pariteit
+voordat de onafhankelijke ingelogde QA-hertest start. De browseracceptatie van
+de nieuwe Paper-verifier is nog niet uitgevoerd.
 
 De vorige live browserproef accepteerde wel de verse BTC/EUR-analysekaart →
 Bespreek → afhandeling na refresh, de 24-november-rapportkaart met juiste
