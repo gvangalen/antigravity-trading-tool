@@ -1662,6 +1662,16 @@ def _responses_clarification_original_message(
     return run_message
 
 
+def _responses_verifier_message(
+    *, run_message: str, prepared_message: str, answer_kind: str,
+) -> str:
+    # A Smart DCA name reply is replaced by the original question for the
+    # read/model. Its verifier must still inspect the actual user reply.
+    if answer_kind == "smart_dca_resumed_factual_source":
+        return run_message
+    return prepared_message
+
+
 def _bounded_supported_smart_dca_calendar_request(
     message: str, collected_inputs: dict[str, object],
 ) -> bool:
@@ -6060,7 +6070,10 @@ class FinnV2RunService:
                                         await session.commit()
                             else:
                                 answer = await FinnResponsesAnswerVerifier(client=openai_client.async_client).verify(
-                                    message=message, result=prepared.response,
+                                    message=_responses_verifier_message(
+                                        run_message=run.message, prepared_message=message,
+                                        answer_kind=prepared.response.answer_kind,
+                                    ), result=prepared.response,
                                     previous_response=prepared.previous_response,
                                     recent_action_result=prepared.recent_action_result,
                                     locale=prepared.locale,
@@ -6152,7 +6165,10 @@ class FinnV2RunService:
                                             await session.commit()
                                 else:
                                     answer = await FinnResponsesAnswerVerifier(client=openai_client.async_client).verify(
-                                        message=message, result=prepared.response,
+                                        message=_responses_verifier_message(
+                                            run_message=run.message, prepared_message=message,
+                                            answer_kind=prepared.response.answer_kind,
+                                        ), result=prepared.response,
                                         previous_response=prepared.previous_response,
                                         recent_action_result=prepared.recent_action_result,
                                         locale=prepared.locale,

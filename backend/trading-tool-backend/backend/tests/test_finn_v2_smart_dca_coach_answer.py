@@ -8,6 +8,7 @@ from backend.services.finn_v2_smart_dca_coach_answer import render_saved_smart_d
 from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor
 from backend.services.finn_v2_responses_loop import FinnResponsesResult
 from backend.services.finn_v2_responses_answer_verifier import FinnResponsesAnswerVerifier
+from backend.services.finn_v2_run_service import _responses_verifier_message
 
 
 def _trace():
@@ -239,10 +240,22 @@ def test_selected_setup_name_resumes_original_smart_dca_question(monkeypatch):
     assert "45,5–60,5" in result.response.text
     assert "€100" in result.response.text
     checked = asyncio.run(FinnResponsesAnswerVerifier().verify(
-        message="Test Smart BTC", result=result.response, locale="nl-NL",
+        message=_responses_verifier_message(
+            run_message="Test Smart BTC", prepared_message=original,
+            answer_kind=result.response.answer_kind,
+        ), result=result.response, locale="nl-NL",
         user_time_zone="Europe/Amsterdam",
     ))
     assert checked.status == "completed"
+    assert _responses_verifier_message(
+        run_message="Test Smart BTC", prepared_message=original,
+        answer_kind="factual_source",
+    ) == original
+    wrong_input = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=original, result=result.response, locale="nl-NL",
+        user_time_zone="Europe/Amsterdam",
+    ))
+    assert wrong_input.reason == "smart_dca_resumed_source_mismatch"
 
 
 def test_smart_dca_name_continuation_rejects_embedded_action(monkeypatch):
