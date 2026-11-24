@@ -4,6 +4,40 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: benchmarkbronmoment in Analyse (24 november 2026)
+
+Phase: `BUILD_GATES_GREEN_PR_CI_PENDING`. Onafhankelijke ingelogde QA op
+publieke SHA `88e2febaa725d76224e67bbb949427675ecce5a6` gaf
+`NOT_ACCEPTED` voor de volledige Smart-DCA-vraag, terwijl de eerdere
+capability-routeringsfout was hersteld: twee beurten na refresh noemden de
+juiste opgeslagen score 45,7, band 45,5–60,5, hypothetisch €100 uit €200 ×
+50%, geen gekoppelde bot en geen gegarandeerde Paper-order. FINN en de
+S&P 500-detailrij noemden het oudste bronmoment 23 november 01:00 CET, maar
+de Analyse-benchmarkkop toonde 00:00 CET. Er waren geen configuratie- of
+orderwrites in deze QA-proef.
+
+Product-PR [#1350](https://github.com/gvangalen/antigravity-trading-tool/pull/1350)
+laat de dagelijkse benchmarkkop het oudste gescoorde bronmoment uit de
+opgeslagen, geverifieerde score-evidence lezen, gebonden aan het geselecteerde
+asset en exacte handelspaar. Dit is dezelfde score-rij en evidence-selectie
+als FINN's scoretool. Niet-dagperioden behouden hun bestaande afleiding. Een
+gerichter regressiegeval controleert `2026-11-23T00:00:00Z` als `01:00 CET`
+en negeert een ongescoorde oudere meting. De eerste onafhankelijke QA-codecheck
+vond een vrije componentvariabele; die is via een expliciete prop hersteld.
+QA-herbeoordeling van de gecorrigeerde diff vond geen blocker.
+
+Frontend `test:commands`: **114/114**; `test:i18n`: **45/45**; typecheck,
+lint:i18n, build en audit:high slaagden. De volledige backend-suite vanaf de
+repositoryroot: **5497 passed, 7 skipped**. De lokale productiegerichte
+workerproef: **38/38**, artifact SHA-256
+`768446b2be8d989b6296e541de7be4ca49a75d129ba0dd59971cd0903a6746d6`.
+Echte providerselector development: **20/20**, artifact SHA-256
+`04a84e62c066b3be6077a28b7bf2c5a7f54ea64a741c0b55d5244f2ca2dda06f`;
+regression: **109/109**, artifact SHA-256
+`ca05027c0a2bfdbfadb70edfc2f4a61619edda9c68d0ef5d47ce857cc1b7a322`.
+Beide selectorruns hadden nul provider-, schema- en timeoutfouten. PR-CI,
+Auto Deploy en onafhankelijke live UI-hertest van het bronmoment staan open.
+
 ## FINN 3.0: Smart DCA brongebonden advies (24 november 2026)
 
 Phase: `LIVE_QA_NOT_ACCEPTED_FIX_CANDIDATE`. Onafhankelijke ingelogde browser-QA op publieke

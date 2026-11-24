@@ -50,7 +50,7 @@ import {
 import { matchesWorkspaceAsset } from "@/lib/workspace/workspaceAssetScope.mjs";
 import { marketDisplayLabel, marketDisplayQuote } from "@/lib/workspace/marketDisplay.mjs";
 import { FINN_INDICATOR_MODAL_COMPLETED_EVENT } from "@/lib/finnCommandSearch";
-import { formatBenchmarkScore, indicatorSourceFreshness, validatedDayEvidence } from "@/lib/workspace/canonicalScorePresentation.mjs";
+import { formatBenchmarkScore, indicatorSourceFreshness, oldestScoredEvidenceSource, validatedDayEvidence } from "@/lib/workspace/canonicalScorePresentation.mjs";
 import { quotePresentationStatus } from "@/lib/workspace/quotePresentationStatus.mjs";
 import { marketConditionForScore } from "@/lib/setup/scoreConditions.mjs";
 import { availableTradingQuotes, benchmarkScaleBands, benchmarkSetupSessionKey, benchmarkSetupView, resolveTradingQuote, selectedBenchmarkSetupMatch, tradingQuoteSessionKey, withSelectedBenchmarkSetup, withSelectedTradingQuote } from "@/lib/setup/benchmarkScale.mjs";
@@ -1624,7 +1624,7 @@ function buildSectionInsight(sectionId, sectionScore, ui, sourceStatus = null, r
   );
 }
 
-function ScoreOverview({ assetSymbol, market, macro, technical, combined, indicativeScore, missingIndicators, sections, weights, loading, onSaveWeights, onOpenPlan, onSelectSetup, selectedSetupId, setupMatches, setupMatchError, ui, locale, conditionOptions, isDailyBenchmark, quoteStatus }) {
+function ScoreOverview({ assetSymbol, market, macro, technical, combined, dailyEvidence, indicativeScore, missingIndicators, sections, weights, loading, onSaveWeights, onOpenPlan, onSelectSetup, selectedSetupId, setupMatches, setupMatchError, ui, locale, conditionOptions, isDailyBenchmark, quoteStatus }) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [localWeights, setLocalWeights] = useState(() => normalizeWeights(weights));
@@ -1660,9 +1660,14 @@ function ScoreOverview({ assetSymbol, market, macro, technical, combined, indica
   }[view.status]);
   const scoreSections = sections.filter((section) => section.score !== null);
   const sectionSource = (id) => oldestScoredSource(sections.find((section) => section.id === id)?.rows);
-  const combinedSource = scoreSections.length && scoreSections.every((section) => sectionSource(section.id))
-    ? new Date(Math.min(...scoreSections.map((section) => new Date(sectionSource(section.id)).getTime()))).toISOString()
-    : null;
+  // The daily benchmark is scored from one saved, verified evidence snapshot.
+  // Live indicator rows can refresh independently; their minimum is not the
+  // source moment of that saved score and must not relabel it.
+  const combinedSource = isDailyBenchmark
+    ? oldestScoredEvidenceSource(dailyEvidence)
+    : scoreSections.length && scoreSections.every((section) => sectionSource(section.id))
+      ? new Date(Math.min(...scoreSections.map((section) => new Date(sectionSource(section.id)).getTime()))).toISOString()
+      : null;
 
   const weightItems = [
     { id: "market", label: ui.market, score: normalizeScore(market?.score) },
@@ -3386,6 +3391,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
 
       <ScoreOverview
         assetSymbol={activeSymbol}
+        dailyEvidence={workspace?.daily?.indicator_evidence}
         market={{ score: sections.find((section) => section.id === "market")?.score ?? null }}
         macro={{ score: sections.find((section) => section.id === "macro")?.score ?? null }}
         technical={{ score: sections.find((section) => section.id === "technical")?.score ?? null }}
