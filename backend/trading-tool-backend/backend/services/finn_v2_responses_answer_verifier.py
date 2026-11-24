@@ -3068,6 +3068,7 @@ class FinnResponsesAnswerVerifier:
         previous_response: dict[str, Any] | None = None,
         recent_action_result: dict[str, Any] | None = None,
         locale: str | None = None,
+        user_time_zone: str | None = None,
     ) -> FinnResponsesVerifiedAnswer:
         if result.model_owned_repair and result.answer_kind == "free_text":
             checked = await self.verify(
@@ -3076,6 +3077,7 @@ class FinnResponsesAnswerVerifier:
                 previous_response=previous_response,
                 recent_action_result=recent_action_result,
                 locale=locale,
+                user_time_zone=user_time_zone,
             )
             if checked.status == "completed" and checked.text.strip() != result.text.strip():
                 # Existing source and safety checks may synthesize a safe
@@ -3220,12 +3222,13 @@ class FinnResponsesAnswerVerifier:
                     and len(named_paper_assets) == 1
                     and (re.search(r"\bbotbudget\b", message, re.I)
                          or re.search(r"\bbudgetlimiet\b", message, re.I))
-                    and re.search(r"\b(?:positie|posities|belegd)\b", message, re.I)
+                    and re.search(r"\b(?:positie|posities|belegd|geïnvesteerd|investeerd)\b", message, re.I)
                     and re.search(r"\b(?:kas|kassaldo|cash|saldo)\b", message, re.I)
                     and str(locale or "nl").lower().startswith("nl")):
                 expected = render_paper_position_cash_answer(
                     message, result.tool_trace,
                     asset=next(iter(named_paper_assets)), locale=locale or "nl",
+                    user_time_zone=user_time_zone,
                 ) or PAPER_POSITION_CASH_UNAVAILABLE
             elif (call.get("name") == "get_active_plan_and_strategy" and symbol
                   and scopes == {"read_active_setup", "read_linked_strategy",

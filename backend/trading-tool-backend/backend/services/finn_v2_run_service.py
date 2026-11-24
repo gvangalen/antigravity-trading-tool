@@ -5945,6 +5945,7 @@ class FinnV2RunService:
                                     previous_response=prepared.previous_response,
                                     recent_action_result=prepared.recent_action_result,
                                     locale=prepared.locale,
+                                    user_time_zone=(getattr(run, "workspace_hints_json", None) or {}).get("time_zone"),
                                 )
                             logger.info(
                                 "FINN Responses verification completed in %.2fs status=%s reason=%s",
@@ -6033,6 +6034,7 @@ class FinnV2RunService:
                                         previous_response=prepared.previous_response,
                                         recent_action_result=prepared.recent_action_result,
                                         locale=prepared.locale,
+                                        user_time_zone=(getattr(run, "workspace_hints_json", None) or {}).get("time_zone"),
                                     )
                         else:
                             answer = None

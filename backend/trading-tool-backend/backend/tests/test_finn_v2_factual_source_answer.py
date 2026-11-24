@@ -25,10 +25,48 @@ def _run(message, results, *, verified_asset=None, workspace_hints=None):
         verified_asset=verified_asset, locale="nl", workspace_hints=workspace_hints,
     ))
     assert len(calls) == 1
-    checked = asyncio.run(FinnResponsesAnswerVerifier().verify(message=message, result=prepared.response, locale="nl"))
+    checked = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=message, result=prepared.response, locale="nl",
+        user_time_zone=(workspace_hints or {}).get("time_zone"),
+    ))
     assert checked.status == "completed", (checked.reason, checked.rejection_details)
     assert checked.text == prepared.response.text
     return prepared.response, calls[0]
+
+
+def test_paper_four_amounts_verify_in_user_time_zone():
+    question = (
+        "Wat is de ingestelde budgetlimiet van mijn BTC Paper-bot, hoeveel is "
+        "werkelijk belegd, hoeveel kas heeft die bot en hoeveel kas heeft mijn "
+        "totale Paper-portefeuille? Noem deze vier bedragen afzonderlijk met "
+        "bronmoment. Lees alleen en verander niets."
+    )
+    rows = [{"scope": "read_portfolio", "status": "completed", "asset": None,
+             "data": {"environment": "paper", "read_at_utc": "2026-11-24T05:25:00+00:00",
+                      "global": {"cash_balance": 10000, "invested_value": 0},
+                      "bots": [{"symbol": "BTC", "is_live": False, "position_qty": 0,
+                                "invested_eur": 0, "paper_cash_eur": 10000,
+                                "budget_total_eur": 1000}]}}]
+    for zone, moment in (("Europe/Amsterdam", "2026-11-24 06:25:00 CET"),
+                         ("America/Los_Angeles", "2026-11-23 21:25:00 PST")):
+        answer, call = _run(question, rows, workspace_hints={"time_zone": zone})
+        assert call.name == "get_portfolio_and_exposure"
+        assert "budgetlimiet van je BTC Paper-bot is €1000" in answer.text
+        assert "In die bot is €0 werkelijk belegd" in answer.text
+        assert "totale Paper-portefeuille heeft €0 belegd en €10000 kas" in answer.text
+        assert "BTC-botkas is daarvan €10000" in answer.text
+        assert moment in answer.text
+        wrong_zone = "America/Los_Angeles" if zone == "Europe/Amsterdam" else "Europe/Amsterdam"
+        rejected = asyncio.run(FinnResponsesAnswerVerifier().verify(
+            message=question, result=answer, locale="nl", user_time_zone=wrong_zone,
+        ))
+        assert rejected.status == "unavailable"
+        assert rejected.reason == "factual_source_mismatch"
+    invested_question = question.replace("werkelijk belegd", "werkelijk geïnvesteerd")
+    invested_answer, _ = _run(
+        invested_question, rows, workspace_hints={"time_zone": "Europe/Amsterdam"},
+    )
+    assert "€0 werkelijk belegd" in invested_answer.text
 
 
 def _dated_aapl_account_rows():
