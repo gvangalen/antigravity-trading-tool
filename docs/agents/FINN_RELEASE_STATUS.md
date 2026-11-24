@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: volledigheid botstatusbronmoment (24 november 2026)
 
-Phase: `BUILD_VALIDATED_PR_PENDING`. De onafhankelijke ingelogde hertest op live SHA
+Phase: `PRODUCT_DEPLOYED_QA_PENDING`. De onafhankelijke ingelogde hertest op live SHA
 `9eda34bae4d0f63213a093c53eaf01bba3c7921d` gaf `NOT_ACCEPTED` voor de
 herhaalbaarheid van de Paper-Holdcoach. Alle drie identieke read-only vragen
 gaven de juiste Hold-reden, budgetlimiet, werkelijk belegd, botkas en totale
@@ -35,7 +35,14 @@ De echte provider-developmentset gaf **20/20** (artifact SHA-256
 de regressieset **109/109** (artifact SHA-256
 `c86189ae9e49a095959142270d726e8a7e0d9bbf3703c83f35e77cb852ac96af`).
 Beide hadden nul provider-, schema-, timeout-, parse- of validatiefouten.
-CI, deploy en onafhankelijke live QA zijn voor deze kandidaat nog niet gedaan.
+Product-PR [#1356](https://github.com/gvangalen/antigravity-trading-tool/pull/1356)
+is gemerged als `17b479b8c63ffd2779b118d439a9cc50423f7523`.
+PR-CI `45412141580` en main-CI `45413885157` hadden elk vijf groene jobs;
+Auto Deploy `45415354085` voltooide met `success`. GitHub main,
+publieke backend `/api/health` en frontend `/build-info.json` meldden op
+24 november exact deze product-SHA, beide publieke endpoints HTTP 200.
+Deze statusupdate maakt zelf opnieuw een main-SHA. Onafhankelijke QA start
+pas na de laatste main-CI, Auto Deploy en publieke pariteit van die revisie.
 
 ## FINN 3.0: Paper-botcoach botstatusmoment (24 november 2026)
 
