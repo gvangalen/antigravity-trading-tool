@@ -56,8 +56,20 @@ vraag door het woord `Paper-uitvoering` vóór de eerder herstelde frontdoor.
 De nieuwe kandidaat laat expliciete vragen over opgeslagen Smart-DCA-score en
 bedragcurve door naar de eigenaargebonden readroute; directe vragen over
 automatisch instellen, activeren of wijzigen blijven bij de
-uitvoerbaarheidsroute. Lokale validatie, CI/deploy en nieuwe live QA voor die
-kandidaat moeten nog worden afgerond.
+uitvoerbaarheidsroute. Product-PR
+[#1348](https://github.com/gvangalen/antigravity-trading-tool/pull/1348)
+bevat deze smalle wijziging. De finale onafhankelijke QA-codeherbeoordeling
+vond geen blocker; de 38 gerichte routeringstests slaagden. De volledige
+backend-suite vanaf de repositoryroot: **5497 passed, 7 skipped**. De lokale
+productiegerichte workerproef: **38/38**, artifact SHA-256
+`e99c91e0e02a33c32036c66687218e9af2ab021cc5bff013069a822625c70a8d`.
+Echte providerselector development: **20/20**, artifact SHA-256
+`f315d199d7e57b2d5190a98cc4e611f74d4478ba98a7031c8535a637d1e04c28`;
+regression: **109/109**, artifact SHA-256
+`cb10c3a9e15740d8508e38a40f83cdd7da61b1f7ccef3e10e8604b9cd43205c5`.
+Beide selectorruns hadden nul provider-, schema- of timeoutfouten.
+PR-CI, Auto Deploy en een nieuwe ingelogde live QA voor deze kandidaat staan
+nog open.
 
 ## FINN 3.0: Paper-bedragen en gebruikerstijdzone (24 november 2026)
 
