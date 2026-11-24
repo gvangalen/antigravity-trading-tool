@@ -4,6 +4,46 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: Paper-Holdbronmomenten na live hertest (24 november 2026)
+
+Phase: `LIVE_QA_NOT_ACCEPTED`. Op publieke SHA
+`1dfebee6ceae1ecd1e0fb77413467164cd879736` bleef in een ingelogde,
+read-only browserproef de Holdreden en scheiding tussen budgetlimiet,
+werkelijk belegd, botkas en totale Paper-kas correct. Beurt één miste het
+afzonderlijke botstatus-uitleesmoment. Beurt twee deelde één klok voor
+botstatus en Paper-portefeuille. Beurt drie eindigde met een veilige
+bronmomentverificatiefallback. Er waren geen voorstellen, orders of
+accountmutaties. De huidige gespreks-API geeft geen eigenaargebonden
+runlijst; de exacte derde-beurtregel is daarmee nog niet vastgesteld.
+
+De volgende kandidaat behandelt herhaalde statuslezingen van **dezelfde**
+bot als één brononderwerp, uitsluitend als hun statusinhoud niet veranderde.
+Hij gebruikt dan de nieuwste voltooide read en noemt het statusmoment apart
+wanneer het model botstatus en portefeuille in één bronmomentzin samenvoegt.
+Een gedeelde gedateerde of ongedateerde klok moet met de nieuwste status-
+én portefeuillelezing overeenkomen; verschillende botten, assets of
+statuswaarden blijven ambigu en worden veilig afgewezen. Gerichte
+regressies voor herlezing, gewijzigde status, gemengde bronzin, ongelijke
+seconden en verkeerde bot zijn lokaal groen. Deze kandidaat is nog niet
+onafhankelijk live beoordeeld.
+
+Build-gates op kandidaat `476a3df47b00a27db1e6fe3b1a06f1b01ed7a8e0`:
+volledige backend **5501 passed, 7 skipped** op de definitieve code;
+frontend typecheck, i18n-lint en -tests, commandtests, build en
+`audit:high` geslaagd. De geïsoleerde lokale FastAPI/Celery/PostgreSQL/
+Redis-actiecontractmatrix gaf **17/17**, adaptertests **28/28**, en
+bevestigde Smart DCA en kalender-DCA liepen inclusief replay; artifact
+SHA-256 `a7f380c1efe38428c4eaf0cf00e3230a2395498d99acc75cc391444d4b2d9813`.
+De echte Responses-providerontwikkelset gaf **20/20**, artifact SHA-256
+`9f45ebab416b4299b8ab560e30ff76f332c5f410070b5a551048b49b7e69c198`;
+de regressieset **109/109**, artifact SHA-256
+`a681b1f57576d4c2dbdfe21783fc360e98e27d3268d052b37e46a65e5ef3ec36`.
+Beide hadden nul provider-, schema-, timeout-, parse- en validatiefouten.
+PR [#1358](https://github.com/gvangalen/antigravity-trading-tool/pull/1358)
+had vijf groene CI-jobs op die kandidaat; onafhankelijke QA- en
+Security-codebeoordeling vond geen blocker. De eerdere live derde-beurtfallback
+blijft een afzonderlijke runtimeacceptatievraag na deploy.
+
 ## FINN 3.0: volledigheid botstatusbronmoment (24 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_QA_PENDING`. De onafhankelijke ingelogde hertest op live SHA
