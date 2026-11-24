@@ -366,29 +366,41 @@ def complete_requested_bot_status_read_time(
     status_clauses = [re.split(r"\b(?:bot)?besluit\b|\bbeslissing\b|\bHold\b", part,
                                maxsplit=1, flags=re.I)[0]
                       for part in status_clauses]
-    if not status_clauses or any(status_clock.search(part) for part in status_clauses):
+    # A shared "botstatus en Paper-portefeuille" clock does not show the two
+    # independently read source moments. State the bot read separately.
+    standalone_clock = any(
+        status_clock.search(part)
+        and not re.search(r"\b(?:portefeuille|portfolio|botkas|paper[- ]kas)\b", part, re.I)
+        for part in status_clauses
+    )
+    if not status_clauses or standalone_clock:
         return answer
     reads = [
-        (item["data"].get("bot_id"), str(item.get("asset") or "").upper(), observed)
+        (item["data"].get("bot_id"), str(item.get("asset") or "").upper(),
+         observed, {key: value for key, value in item["data"].items() if key != "read_at"})
         for item in evidence
         if item.get("scope") == "read_bot_status" and item.get("status") == "completed"
         and isinstance(item.get("data"), dict)
         if (observed := _utc(item["data"].get("read_at"))) is not None
     ]
-    if len(reads) != 1:
+    # A single response can reread the same bot while gathering decision and
+    # portfolio facts. Only a different bot/asset makes the source ambiguous.
+    if (not reads or len({(bot_id, asset) for bot_id, asset, _, _ in reads}) != 1
+            or any(row[3] != reads[0][3] for row in reads[1:])):
         return answer
+    bot_id, asset, read_at, _ = max(reads, key=lambda row: row[2])
     named_ids = {int(match.group(1)) for value in (question, answer)
                  for match in re.finditer(r"\bbot\s*#?\s*(\d+)\b", value, re.I)}
-    if len(named_ids) > 1 or (named_ids and reads[0][0] != next(iter(named_ids))):
+    if len(named_ids) > 1 or (named_ids and bot_id != next(iter(named_ids))):
         return answer
     named_assets = mentioned_catalog_symbols(f"{question}\n{answer}")
-    if len(named_assets) > 1 or (named_assets and reads[0][1] != next(iter(named_assets))):
+    if len(named_assets) > 1 or (named_assets and asset != next(iter(named_assets))):
         return answer
     try:
         zone = ZoneInfo(user_time_zone or "UTC")
     except (KeyError, ValueError):
         zone = timezone.utc
-    local = reads[0][2].astimezone(zone)
+    local = read_at.astimezone(zone)
     # Keep the user's IANA zone explicit when its abbreviation is ambiguous.
     zone_label = local.tzname() if isinstance(zone, ZoneInfo) and zone.key == "Europe/Amsterdam" else (
         zone.key if isinstance(zone, ZoneInfo) else "UTC"
@@ -411,6 +423,56 @@ def current_source_moments_supported(
 
     if not _bot_decision_clocks_supported(answer, evidence, question=question):
         return reject("bot_decision_clock_mismatch")
+
+    # A shared status/portfolio sentence asserts one clock for two independent
+    # reads. Both sources must really have that clock before it may be shown.
+    for shared in re.finditer(
+        r"\bbotstatus\s+en\s+(?:de\s+)?(?:Paper[- ])?portefeuille\b[^.!?\n]*", answer, re.I,
+    ):
+        dated_matches = list(_DATED_MOMENT.finditer(shared.group(0)))
+        bare_matches = [clock for clock in _ZONED_CLOCK.finditer(shared.group(0))
+                        if not any(dated.start() <= clock.start() and clock.end() <= dated.end()
+                                   for dated in dated_matches)]
+        if len(dated_matches) + len(bare_matches) > 1:
+            return reject("shared_status_portfolio_multiple_clocks")
+        stated = _claimed_moment(shared.group(0))
+        bare_clock = bare_matches[0] if stated is None and bare_matches else None
+        if stated is None and bare_clock is None:
+            continue
+        def matches_shared_clock(at: datetime) -> bool:
+            if stated is not None:
+                return _same_moment(stated, at)
+            clock = re.fullmatch(
+                r"(?P<hour>\d{1,2}):(?P<minute>\d{2})(?::(?P<second>\d{2}))?\s*"
+                r"(?P<zone>UTC|CET|CEST)", bare_clock.group(0), re.I,
+            )
+            if clock is None:
+                return False
+            zone = clock["zone"].upper()
+            local = at if zone == "UTC" else at.astimezone(_AMSTERDAM)
+            return (local.tzname() == zone and local.hour == int(clock["hour"])
+                    and local.minute == int(clock["minute"])
+                    and (clock["second"] is None or local.second == int(clock["second"])))
+        status_rows = [item for item in evidence
+                       if item.get("scope") == "read_bot_status"
+                       and item.get("status") == "completed"
+                       and isinstance(item.get("data"), dict)]
+        status_reads = [_utc(item["data"].get("read_at")) for item in status_rows]
+        portfolio_reads_for_claim = [_utc(item["data"].get("read_at")) for item in evidence
+                                     if item.get("scope") == "read_portfolio"
+                                     and item.get("status") == "completed"
+                                     and isinstance(item.get("data"), dict)]
+        status_reads = [at for at in status_reads if at is not None]
+        portfolio_reads_for_claim = [at for at in portfolio_reads_for_claim if at is not None]
+        if (not status_reads or not portfolio_reads_for_claim
+                or len({(item["data"].get("bot_id"), str(item.get("asset") or "").upper())
+                        for item in status_rows}) != 1
+                or any({key: value for key, value in item["data"].items() if key != "read_at"}
+                       != {key: value for key, value in status_rows[0]["data"].items()
+                           if key != "read_at"} for item in status_rows[1:])
+                or not matches_shared_clock(max(status_reads))
+                or not matches_shared_clock(max(portfolio_reads_for_claim))):
+            return reject("shared_status_portfolio_clock_mismatch")
 
     market_rows: dict[tuple[str, str], datetime] = {}
     portfolio_reads: list[datetime] = []

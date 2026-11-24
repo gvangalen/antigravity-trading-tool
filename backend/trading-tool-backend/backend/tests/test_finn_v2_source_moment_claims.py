@@ -19,6 +19,64 @@ def test_requested_bot_status_read_time_uses_its_own_owner_bound_read():
         first, evidence, question=question, user_time_zone="Europe/Amsterdam",
     )
     assert "Botstatus opnieuw gelezen: 24 november 2026 om 14:39:06 CET" in completed
+    reread = ({**evidence[0], "data": {**evidence[0]["data"],
+               "read_at": "2026-11-24T13:40:07+00:00"}},)
+    assert "Botstatus opnieuw gelezen: 24 november 2026 om 14:40:07 CET" in (
+        complete_requested_bot_status_read_time(
+            first, evidence + reread, question=question,
+            user_time_zone="Europe/Amsterdam",
+        )
+    )
+    assert complete_requested_bot_status_read_time(
+        first, evidence + ({**evidence[0], "data": {**evidence[0]["data"],
+                         "bot_id": 57}},), question=question,
+        user_time_zone="Europe/Amsterdam",
+    ) == first
+    changed_status = {**reread[0], "data": {**reread[0]["data"], "is_active": False}}
+    assert complete_requested_bot_status_read_time(
+        first, evidence + (changed_status,), question=question,
+        user_time_zone="Europe/Amsterdam",
+    ) == first
+    shared = (
+        "De beslissing is vastgelegd op 24 november 2026 om 14:33:29 CET. "
+        "De botstatus en Paper-portefeuille zijn opnieuw uitgelezen op "
+        "24 november 2026 om 14:39:06 CET."
+    )
+    assert "Botstatus opnieuw gelezen: 24 november 2026 om 14:39:06 CET" in (
+        complete_requested_bot_status_read_time(
+            shared, evidence, question=question,
+            user_time_zone="Europe/Amsterdam",
+        )
+    )
+    unequal = (evidence[0], {**evidence[1], "data": {
+        "read_at": "2026-11-24T13:39:07+00:00",
+    }})
+    wrong_shared = shared.replace("14:39:06 CET", "14:39:07 CET")
+    assert not current_source_moments_supported(wrong_shared, unequal, question=question)
+    assert not current_source_moments_supported(
+        wrong_shared.replace("botstatus en Paper-portefeuille",
+                             "botstatus en de Paper-portefeuille"),
+        unequal, question=question,
+    )
+    bare_shared = (
+        "De botstatus en de Paper-portefeuille zijn opnieuw uitgelezen om "
+        "14:39:07 CET."
+    )
+    assert not current_source_moments_supported(bare_shared, unequal, question=question)
+    assert current_source_moments_supported(
+        bare_shared.replace("14:39:07 CET", "14:39 CET"), unequal,
+        question=question,
+    )
+    assert not current_source_moments_supported(
+        "De botstatus en Paper-portefeuille zijn opnieuw uitgelezen om "
+        "14:39:06 CET en 14:38:06 CET.", evidence, question=question,
+    )
+    assert not current_source_moments_supported(
+        complete_requested_bot_status_read_time(
+            wrong_shared, unequal, question=question,
+            user_time_zone="Europe/Amsterdam",
+        ), unequal, question=question,
+    )
     assert current_source_moments_supported(completed, evidence, question=question)
     assert complete_requested_bot_status_read_time(
         completed, evidence, question=question, user_time_zone="Europe/Amsterdam",
