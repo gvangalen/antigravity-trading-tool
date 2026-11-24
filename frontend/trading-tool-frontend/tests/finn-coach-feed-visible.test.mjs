@@ -7,15 +7,17 @@ const item = (id, created_at, extra = {}) => ({
   id, created_at, status: "unread", event_type: "bot_decision", ...extra,
 });
 
-test("the dashboard shows the three newest notifications", () => {
+test("the dashboard shows the five newest notifications", () => {
   const rows = [
     item("old-report", "2026-11-19T14:00:00Z", { event_type: "daily_report_ready", priority: 1 }),
     item("bot", "2026-11-20T00:03:00Z", { activity_at: "2026-11-20T00:03:00Z" }),
     item("new-report", "2026-11-20T06:20:00Z", { event_type: "daily_report_ready" }),
     item("older", "2026-11-18T12:00:00Z", { priority: 1 }),
+    item("newest", "2026-11-20T07:00:00Z"),
+    item("oldest", "2026-11-17T12:00:00Z"),
   ];
   assert.deepEqual(visibleCoachFeedItems(rows).map((row) => row.id),
-    ["new-report", "bot", "old-report"]);
+    ["newest", "new-report", "bot", "old-report", "older"]);
 });
 
 test("a bot's displayed activity time determines its position", () => {
@@ -55,7 +57,7 @@ test("the compact feed follows the expanded timeline rather than old unread repo
     item("bot", "2026-11-24T17:33:00Z", { event_type: "bot_decision" }),
   ];
   assert.deepEqual(visibleCoachFeedItems(rows).map((row) => row.id),
-    ["bot", "analysis-latest", "analysis-early"]);
+    ["bot", "analysis-latest", "analysis-early", "today-report", "old-report-2"]);
   assert.deepEqual(visibleCoachFeedItems(rows.filter((row) => row.id !== "analysis-early"))
-    .map((row) => row.id), ["bot", "analysis-latest", "today-report"]);
+    .map((row) => row.id), ["bot", "analysis-latest", "today-report", "old-report-2", "old-report-1"]);
 });

@@ -215,27 +215,30 @@ export default function FinnCoachFeed({ onDiscuss }) {
           const showMenu = showMarkRead || (canDiscuss && !directDiscuss);
           const Icon = item.subject_type === "bot" || item.event_type === "bot_decision" ? Bot
             : isReport || item.subject_type === "report" ? FileText : Bell;
+          const detailsLabel = item.event_type === "data_blocked" && item.subject_type === "bot" && item.evidence?.missing_indicators
+            ? copy.reviewManualBuy : isReport ? copy.viewReport : item.event_type === "bot_decision" ? copy.viewBotDetails : copy.details;
           return (
-            <article key={item.id} className="grid grid-cols-[36px_minmax(0,1fr)] gap-x-3 gap-y-2 py-4 sm:grid-cols-[40px_minmax(0,1fr)_auto] sm:items-center sm:gap-x-4">
-              <Icon size={27} strokeWidth={1.8} className="mt-1 text-slate-900 dark:text-slate-100 sm:mt-0" aria-hidden="true" />
+            <article key={item.id} className={`grid gap-x-3 sm:grid-cols-[40px_minmax(0,1fr)_auto] sm:items-center sm:gap-x-4 ${history ? "grid-cols-[36px_minmax(0,1fr)] gap-y-2 py-4" : "grid-cols-[26px_minmax(0,1fr)_auto] gap-y-1 py-2"}`}>
+              <Icon size={history ? 27 : 23} strokeWidth={1.8} className="mt-1 text-slate-900 dark:text-slate-100 sm:mt-0" aria-hidden="true" />
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   {item.status === "unread" ? <span className="size-2.5 shrink-0 rounded-full bg-blue-600"><span className="sr-only">{copy.unread}</span></span> : null}
                   <h3 className="text-base font-bold text-slate-950 dark:text-slate-50">{title}</h3>
                   {presentation.badge ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{presentation.badge}</span> : null}
+                  {!history ? <time className="ml-auto hidden whitespace-nowrap text-xs text-slate-500 dark:text-slate-400 sm:block" dateTime={moment.value}>{moment.label}</time> : null}
                 </div>
-                {presentation.description ? <p className="mt-0.5 line-clamp-2 text-sm text-slate-600 dark:text-slate-300">{presentation.description}</p> : null}
-                <time className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400" dateTime={moment.value}>
+                {presentation.description ? <p className={`mt-0.5 text-sm text-slate-600 dark:text-slate-300 ${history ? "line-clamp-2" : "hidden sm:line-clamp-1"}`}>{presentation.description}</p> : null}
+                <time className={`mt-0.5 text-xs text-slate-500 dark:text-slate-400 ${history ? "block" : "block sm:hidden"}`} dateTime={moment.value}>
                   {moment.label}
                 </time>
               </div>
-              <div className="col-start-2 flex items-center gap-2 sm:col-start-3 sm:row-start-1 sm:justify-self-end">
+              <div className={`flex items-center sm:col-start-3 sm:row-start-1 sm:justify-self-end ${history ? "col-start-2 gap-2" : "col-start-3 row-start-1 gap-1"}`}>
                 {directDiscuss && canDiscuss ? (
-                  <button type="button" onClick={() => discuss(item)} className="inline-flex items-center gap-1 whitespace-nowrap text-sm font-semibold text-blue-600 hover:underline">
-                    {copy.discuss}<ArrowRight size={16} aria-hidden="true" />
+                  <button type="button" onClick={() => discuss(item)} aria-label={`${copy.discuss}: ${title} (${moment.label})`} className={`inline-flex items-center gap-1 whitespace-nowrap text-sm font-semibold text-blue-600 hover:underline ${history ? "" : "size-9 justify-center sm:size-auto"}`}>
+                    <span className={history ? "" : "hidden sm:inline"}>{copy.discuss}</span><ArrowRight size={16} aria-hidden="true" />
                   </button>
                 ) : (
-                  <a href={coachFeedDetailsHref(item)}
+                  <a href={coachFeedDetailsHref(item)} aria-label={`${detailsLabel}: ${title} (${moment.label})`}
                     onClick={(event) => {
                       if (!isReport || item.status !== "unread") return;
                       event.preventDefault();
@@ -243,10 +246,8 @@ export default function FinnCoachFeed({ onDiscuss }) {
                         window.location.assign(coachFeedDetailsHref(item));
                       });
                     }}
-                    className="inline-flex items-center gap-1 whitespace-nowrap text-sm font-semibold text-blue-600 hover:underline">
-                    {item.event_type === "data_blocked" && item.subject_type === "bot" && item.evidence?.missing_indicators
-                      ? copy.reviewManualBuy : isReport ? copy.viewReport : item.event_type === "bot_decision" ? copy.viewBotDetails : copy.details}
-                    <ArrowRight size={16} aria-hidden="true" />
+                    className={`inline-flex items-center gap-1 whitespace-nowrap text-sm font-semibold text-blue-600 hover:underline ${history ? "" : "size-9 justify-center sm:size-auto"}`}>
+                    <span className={history ? "" : "hidden sm:inline"}>{detailsLabel}</span><ArrowRight size={16} aria-hidden="true" />
                   </a>
                 )}
                 {showMenu ? <FeedActionMenu item={item} copy={copy}
