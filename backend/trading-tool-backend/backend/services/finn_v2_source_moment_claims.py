@@ -113,6 +113,13 @@ def _bot_decision_clocks_supported(
                     decision = (row.get("bot_id"), str(row.get("symbol") or "").upper(), instant)
                     decisions.append(decision)
                     current_decisions.append(decision)
+        elif item.get("scope") == "read_bot_status":
+            latest = data.get("latest_decision")
+            instant = _utc(latest.get("decision_at")) if isinstance(latest, dict) else None
+            if instant:
+                decision = (data.get("bot_id"), str(item.get("asset") or "").upper(), instant)
+                decisions.append(decision)
+                current_decisions.append(decision)
         elif item.get("scope") == "read_latest_report":
             snapshot = data.get("score_source_snapshot") or {}
             report = (snapshot.get("report_v2") or {}) if isinstance(snapshot, dict) else {}
@@ -124,24 +131,83 @@ def _bot_decision_clocks_supported(
                 instant = _utc(decision.get("at")) if isinstance(decision, dict) else None
                 if instant:
                     decisions.append((bot.get("bot_id"), str(bot.get("symbol") or "").upper(), instant))
-    if not decisions:
-        return True
-    marker = re.compile(r"\b(?:bot\w*|beoordeling\w*|besluit\w*|beslissing\w*)\b", re.I)
+    marker = re.compile(r"\b(?:bot\w*|beoordeling\w*|besluit\w*|beslissing\w*|hold)\b", re.I)
     invalid = re.compile(r"\b(?:fout|onjuist|incorrect|wrong|not\s+correct|falsch)\b", re.I)
     current_requested = bool(question and re.search(r"\b(?:bot\w*|besliss\w*)\b", question, re.I)
                              and re.search(r"\b(?:actuele|huidige|laatste|nieuwste|vandaag|nu|latest|current|"
                                            r"(?:bot)?check\w*)\b", question, re.I))
-    for clause in re.split(r"(?<=[.!?])\s+|\n+|;\s*|,\s*(?:maar|terwijl|but|however)\s+", answer, flags=re.I):
+    for clause in re.split(
+        r"(?<=[.!?])\s+|\n+|;\s*|,\s*(?:maar|terwijl|but|however)\s+|"
+        r"\s+en\s+(?=(?:de\s+)?(?:Paper[- ]portefeuille|bot\s*status\w*)\b)",
+        answer, flags=re.I,
+    ):
         subject = marker.search(clause)
         if subject is None:
             continue
         ids = {int(match.group(1)) for match in re.finditer(r"\bbot\s*#?\s*(\d+)\b", clause, re.I)}
+        # Locate the clock nearest the status read verb. A sentence may also
+        # contain a saved Hold decision in either order; only the read clock
+        # is removed before the decision clock is checked below.
+        if re.search(r"\bbot\s*status\w*\b", clause, re.I):
+            read_verbs = list(re.finditer(r"\b(?:gelezen|uitgelezen|opgehaald)\b", clause, re.I))
+            dated_moments = list(_DATED_MOMENT.finditer(clause))
+            bare_clocks = [clock for clock in _ZONED_CLOCK.finditer(clause)
+                           if not any(dated.start() <= clock.start() and clock.end() <= dated.end()
+                                      for dated in dated_moments)]
+            moments = sorted(dated_moments + bare_clocks, key=lambda match: match.start())
+            if read_verbs and moments:
+                read_verb = read_verbs[-1]
+                conjunctions = list(re.finditer(
+                    r"\ben\s+(?=(?:toont|meldt|vermeldt)\s+(?:de\s+)?"
+                    r"(?:(?:laatste|nieuwste)\s+)?Hold\b|is\s+(?:opnieuw\s+)?"
+                    r"(?:gelezen|uitgelezen|opgehaald)\b)", clause, re.I,
+                ))
+                segment_start = max((word.end() for word in conjunctions
+                                     if word.end() <= read_verb.start()), default=0)
+                segment_end = min((word.start() for word in conjunctions
+                                   if word.start() >= read_verb.end()), default=len(clause))
+                read_moments = [match for match in moments
+                                if segment_start <= match.start() and match.end() <= segment_end]
+                if not read_moments:
+                    read_verb = None
+            if read_verbs and moments and read_verb is not None:
+                status_rows = [item["data"] for item in evidence
+                               if item.get("scope") == "read_bot_status"
+                               and item.get("status") == "completed"
+                               and isinstance(item.get("data"), dict)
+                               and (not ids or item["data"].get("bot_id") in ids)]
+                if not ids and len({row.get("bot_id") for row in status_rows}) > 1:
+                    return False
+                status_reads = [at for row in status_rows if (at := _utc(row.get("read_at"))) is not None]
+                for moment in read_moments:
+                    claim = _claimed_moment(moment.group(0))
+                    if claim is not None:
+                        if not any(_same_moment(claim, at) for at in status_reads):
+                            return False
+                    else:
+                        clock = re.match(r"(?P<hour>\d{1,2}):(?P<minute>\d{2})"
+                                         r"(?::(?P<second>\d{2}))?\s*(?P<zone>UTC|CET|CEST)",
+                                         moment.group(0), re.I)
+                        if clock is None or not any(
+                            local.hour == int(clock["hour"]) and local.minute == int(clock["minute"])
+                            and (clock["second"] is None or local.second == int(clock["second"]))
+                            and local.tzname() == clock["zone"].upper()
+                            for at in status_reads
+                            for local in (at if clock["zone"].upper() == "UTC" else at.astimezone(_AMSTERDAM),)
+                        ):
+                            return False
+                for moment in reversed(read_moments):
+                    clause = clause[:moment.start()] + " " * (moment.end() - moment.start()) + clause[moment.end():]
         relevant = [(bot_id, symbol, at) for bot_id, symbol, at in decisions
                     if not ids or bot_id in ids]
         named = [(bot_id, symbol, at) for bot_id, symbol, at in relevant
                  if symbol and re.search(rf"\b{re.escape(symbol)}\b", clause, re.I)]
         relevant = named or relevant
         if not relevant:
+            if re.search(r"\b(?:besluit\w*|besliss\w*|beoordel\w*|hold)\b", clause, re.I) and (
+                _DATED_MOMENT.search(clause) or _ZONED_CLOCK.search(clause)
+            ):
+                return False
             continue
         # A report can correctly show its own earlier bot snapshot. An
         # unqualified claim about the latest/current decision must instead
@@ -231,6 +297,8 @@ def source_moment_repair_facts(evidence: tuple[dict[str, Any], ...]) -> list[dic
             kind = "quote_source"
         elif scope == "read_portfolio":
             label, value, kind = "portfolio", data.get("read_at"), "read_time"
+        elif scope == "read_bot_status":
+            label, value, kind = str(data.get("bot_id") or "bot"), data.get("read_at"), "bot_status_read_time"
         elif scope == "read_latest_report":
             label, value, kind = "report", data.get("generated_at"), "generation_time"
             snapshot = data.get("score_source_snapshot")
@@ -534,7 +602,7 @@ def current_source_moments_supported(
     # quote. Check its declared zone as well as its wall clock.
     for sentence in re.split(
         r"(?<=[.!?])\s+|\n+|;\s*|"
-        r"(?:,\s*|\s+en\s+)(?=de\s+(?:botcheck|botbesliss\w*|botbeoordeling\w*|"
+        r"(?:,\s*|\s+en\s+)(?=(?:de\s+)?(?:bot\s*status\w*|botcheck|botbesliss\w*|botbeoordeling\w*|"
         r"benchmarkscore|scorerapport|koersbron)\b)",
         answer, flags=re.I,
     ):

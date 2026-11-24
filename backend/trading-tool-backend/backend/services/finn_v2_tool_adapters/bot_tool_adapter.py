@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 
 from backend.infrastructure.repositories.bot_repository import BotRepository
@@ -92,6 +92,7 @@ class BotToolAdapter:
                 }
         payload = BotStatusData(
             bot_id=bot.get("id"),
+            read_at=datetime.now(timezone.utc),
             is_active=bool(bot.get("is_active")),
             operational_status="active" if bot.get("is_active") else "paused",
             is_live=bool(bot.get("is_live")),

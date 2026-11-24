@@ -292,6 +292,7 @@ class LinkedBotData(BaseModel):
 
 class BotStatusData(BaseModel):
     bot_id: int
+    read_at: Optional[datetime] = None
     is_active: bool = False
     operational_status: Optional[Literal["active", "paused"]] = None
     is_live: bool = False

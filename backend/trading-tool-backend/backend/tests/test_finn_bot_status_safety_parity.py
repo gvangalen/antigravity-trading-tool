@@ -56,6 +56,8 @@ def test_finn_bot_status_exposes_legacy_utc_decision_time_explicitly():
         2026, 11, 7, 9, 12, tzinfo=timezone.utc)
     assert result["data"].latest_decision["decision_at_amsterdam"] == "2026-11-07 10:12:00 CET"
     assert result["data"].last_run == datetime(2026, 11, 7, 9, 12, tzinfo=timezone.utc)
+    assert result["data"].read_at.tzinfo == timezone.utc
+    assert result["data"].read_at > result["data"].last_run
     assert result["as_of"] == datetime(2026, 11, 7, 9, 12, tzinfo=timezone.utc)
 
 
