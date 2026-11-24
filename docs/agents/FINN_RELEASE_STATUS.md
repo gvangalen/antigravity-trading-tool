@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: Smart DCA brongebonden advies (24 november 2026)
 
-Phase: `LIVE_DEPLOYED_QA_PENDING`. Onafhankelijke ingelogde browser-QA op publieke
+Phase: `LIVE_QA_NOT_ACCEPTED_FIX_CANDIDATE`. Onafhankelijke ingelogde browser-QA op publieke
 SHA `600a614e45f921c193f40b4d21a6eec940634f15` accepteerde de smalle
 Paper-bedragenreparatie: drie herhaalde vragen gaven budget, werkelijk belegd,
 botkas en totale Paper-kas afzonderlijk en met de opgeslagen gebruikerstijdzone.
@@ -44,7 +44,32 @@ publieke backend `/api/health` en frontend `/build-info.json` meldden op 24
 november exact deze SHA; beide endpoints gaven HTTP 200. Deze status-only
 commit veroorzaakt een nieuwe main-SHA, zodat Build opnieuw op CI, Auto
 Deploy en definitieve publieke pariteit wacht voordat onafhankelijke QA de
-ingelogde Smart-DCA-vraag herhaalt. Die browseracceptatie is nog niet gedaan.
+ingelogde Smart-DCA-vraag herhaalt. Op dat moment stond browseracceptatie nog open.
+
+De daaropvolgende onafhankelijke hertest op definitieve publieke SHA
+`bc9d8988b78a5a572e25f0a4f3701b4aecf35c04` was **NOT_ACCEPTED**:
+twee beurten na een refresh eindigden completed maar noemden geen opgeslagen
+score, scoreband, EUR-bedrag of botkoppeling. Een eigenaargebonden, alleen-lezen
+runtimeaudit van de bestaande beurten toonde `plan_execution_capability` en
+nul Responses-leestools. De buitenste uitvoerbaarheidsroute onderschepte de
+vraag door het woord `Paper-uitvoering` vóór de eerder herstelde frontdoor.
+De nieuwe kandidaat laat expliciete vragen over opgeslagen Smart-DCA-score en
+bedragcurve door naar de eigenaargebonden readroute; directe vragen over
+automatisch instellen, activeren of wijzigen blijven bij de
+uitvoerbaarheidsroute. Product-PR
+[#1348](https://github.com/gvangalen/antigravity-trading-tool/pull/1348)
+bevat deze smalle wijziging. De finale onafhankelijke QA-codeherbeoordeling
+vond geen blocker; de 38 gerichte routeringstests slaagden. De volledige
+backend-suite vanaf de repositoryroot: **5497 passed, 7 skipped**. De lokale
+productiegerichte workerproef: **38/38**, artifact SHA-256
+`e99c91e0e02a33c32036c66687218e9af2ab021cc5bff013069a822625c70a8d`.
+Echte providerselector development: **20/20**, artifact SHA-256
+`f315d199d7e57b2d5190a98cc4e611f74d4478ba98a7031c8535a637d1e04c28`;
+regression: **109/109**, artifact SHA-256
+`cb10c3a9e15740d8508e38a40f83cdd7da61b1f7ccef3e10e8604b9cd43205c5`.
+Beide selectorruns hadden nul provider-, schema- of timeoutfouten.
+PR-CI, Auto Deploy en een nieuwe ingelogde live QA voor deze kandidaat staan
+nog open.
 
 ## FINN 3.0: Paper-bedragen en gebruikerstijdzone (24 november 2026)
 
