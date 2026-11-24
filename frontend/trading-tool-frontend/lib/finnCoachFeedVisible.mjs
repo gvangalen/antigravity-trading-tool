@@ -6,5 +6,5 @@ function activityTime(item) {
 export function visibleCoachFeedItems(items) {
   return [...items].sort((a, b) => activityTime(b) - activityTime(a) ||
       String(b.id).localeCompare(String(a.id)))
-    .slice(0, 3);
+    .slice(0, 5);
 }
