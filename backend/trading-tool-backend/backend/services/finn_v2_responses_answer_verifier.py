@@ -37,9 +37,12 @@ from backend.services.finn_v2_responses_model import finn_responses_model_option
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.services.finn_v2_responses_read_executor import FinnResponsesReadExecutor
 from backend.services.finn_v2_source_moment_claims import (
-    current_source_moments_supported, source_moment_repair_facts,
+    complete_requested_bot_status_read_time, current_source_moments_supported,
+    source_moment_repair_facts,
 )
-from backend.services.finn_v2_bot_subject_claims import focused_bot_id, bot_subject_supported
+from backend.services.finn_v2_bot_subject_claims import (
+    focused_bot_id, bot_status_read_subject_supported, bot_subject_supported,
+)
 from backend.services.finn_v2_paper_position_answer import (
     PAPER_POSITION_CASH_UNAVAILABLE, render_paper_position_cash_answer,
 )
@@ -3080,6 +3083,11 @@ class FinnResponsesAnswerVerifier:
                 user_time_zone=user_time_zone,
             )
             if checked.status == "completed" and checked.text.strip() != result.text.strip():
+                if checked.text == complete_requested_bot_status_read_time(
+                    result.text, checked.evidence, question=message,
+                    user_time_zone=user_time_zone,
+                ):
+                    return checked
                 # Existing source and safety checks may synthesize a safe
                 # replacement. In the single-owner path that is feedback to
                 # the composer, never the user-facing coach answer.
@@ -3315,6 +3323,14 @@ class FinnResponsesAnswerVerifier:
                 "unavailable",
                 self._fallback_copy("responses_evidence_not_verified", message=message, locale=locale),
                 "bot_subject_conflicts_with_source", evidence,
+            )
+        if result.answer_kind == "free_text" and not bot_status_read_subject_supported(
+            result.text, evidence, question=message,
+        ):
+            return FinnResponsesVerifiedAnswer(
+                "unavailable",
+                self._fallback_copy("responses_evidence_not_verified", message=message, locale=locale),
+                "bot_status_subject_conflicts_with_source", evidence,
             )
         source_moment_diagnostics: list[str] = []
         if result.answer_kind == "free_text" and not current_source_moments_supported(
@@ -6092,4 +6108,12 @@ class FinnResponsesAnswerVerifier:
                 "de": "In deinem hypothetischen Beispiel:",
             }[locale if locale in {"nl", "en", "de"} else "nl"]
             final_text = f"{lead}\n\n{final_text}"
+        if result.answer_kind == "free_text" and str(locale or "nl").lower().startswith("nl"):
+            complete_text = complete_requested_bot_status_read_time(
+                final_text, evidence, question=message, user_time_zone=user_time_zone,
+            )
+            if complete_text != final_text and current_source_moments_supported(
+                complete_text, evidence, question=message,
+            ):
+                final_text = complete_text
         return FinnResponsesVerifiedAnswer("completed", final_text, None, evidence, bool(previous_answer))
