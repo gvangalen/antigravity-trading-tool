@@ -18,6 +18,53 @@ def test_future_paper_portfolio_measurement_is_not_verified_as_current():
     )
 
 
+def test_portfolio_read_clock_without_repeated_date_matches_only_this_turns_source():
+    evidence = ({"scope": "read_portfolio", "status": "completed",
+                 "data": {"read_at": "2026-11-24T11:08:16.948510+00:00"}},)
+    answer = "De Paper-portefeuille is opnieuw gelezen om **12:08:16 CET**."
+    assert current_source_moments_supported(answer, evidence)
+    for unsupported in (
+        "De Paper-portefeuille is opnieuw gelezen om 12:09:16 CET.",
+        "De Paper-portefeuille is opnieuw gelezen om 12:08:16 UTC.",
+        "De Paper-portefeuille is opnieuw gelezen om 24 november 2025 12:08:16 CET.",
+        "De Paper-portefeuille is opnieuw gelezen om 12:08:16 CET op 23 november 2025.",
+        "Op 23 november 2025 is de Paper-portefeuille om 12:08:16 CET opnieuw gelezen.",
+        "In 2025 is de Paper-portefeuille om 12:08:16 CET opnieuw gelezen.",
+        "De Paper-portefeuille is opnieuw gelezen om 12:08:16 CET en 12:09:16 CET.",
+    ):
+        diagnostics = []
+        assert not current_source_moments_supported(
+            unsupported, evidence, diagnostics=diagnostics,
+        )
+        assert diagnostics == ["portfolio_read_clock_mismatch"]
+    assert not current_source_moments_supported(answer, ())
+    assert current_source_moments_supported(
+        "Op 24 november 2026 is de Paper-portefeuille om 12:08:16 CET opnieuw gelezen.",
+        evidence,
+    )
+    assert current_source_moments_supported(
+        "De Paper-portefeuille is om 12:08:16 CET gelezen; de botcheck was om 12:03:29 CET.",
+        evidence,
+    )
+    assert current_source_moments_supported(
+        "De Paper-portefeuille is om 12:08:16 CET gelezen, de botcheck was om 12:03:29 CET.",
+        evidence,
+    )
+    assert current_source_moments_supported(
+        "De Paper-portefeuille is om 12:08:16 CET gelezen en de botcheck was om 12:03:29 CET.",
+        evidence,
+    )
+    assert current_source_moments_supported(
+        "De Paper-portefeuille is om 12:08:16 CET gelezen; de benchmarkscore is uit 2026.",
+        evidence,
+    )
+    assert not current_source_moments_supported(
+        "De Paper-portefeuille is om 12:08:16 CET gelezen; "
+        "de Paper-portefeuille is opnieuw gelezen om 12:09:16 CET.",
+        evidence,
+    )
+
+
 def test_bot_decision_clocks_match_saved_report_or_latest_owner_read():
     evidence = (
         {"scope": "read_latest_report", "status": "completed", "data": {
