@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: rapportmelding en Paper-accountantwoord (24 november 2026)
 
-Phase: `PR_CI_PENDING`. Candidate PR
+Phase: `LIVE_DEPLOYED_QA_PENDING`. Candidate PR
 [#1342](https://github.com/gvangalen/antigravity-trading-tool/pull/1342), branch
 `codex/finn3-browser-coaching-20261124`, based on public main
 `b973287daded94e4f449a96d4ad291634f3376a7`. Independent logged-in QA
@@ -45,10 +45,16 @@ and regression passed **109/109** (artifact SHA-256
 `9c14773f220b7e19c13ab5b2b88d269b485747f0e9aeda8d109d642f577cdc04`),
 both with zero provider/schema/timeout/parse/validation failures. Independent
 QA code review found no remaining blocker after the feed-selection time-zone
-boundary correction. PR-CI for the initial candidate commit
-`99e83d4842f3475842696de6d2ea0eb1441fd81d` passed all five jobs;
-the final status-only commit still needs CI. Deployment and independent live
-QA are pending. No product or live-account writes have
+boundary correction. PR-CI passed all five jobs on the final candidate head.
+PR #1342 merged as product SHA
+`a8a399c8a2f6b10f6d721d393a56ca7fa5687ae8`. Main CI run
+`45337725528` passed all five jobs; Auto Deploy run `45338760852`
+completed successfully. On 24 November 2026, GitHub main, public backend
+`/api/health`, and frontend `/build-info.json` all reported that exact SHA;
+both public endpoints returned HTTP 200. This status-only update creates a
+new main revision; Build must wait for its own CI, Auto Deploy and final public
+SHA parity before handing off to QA. Independent live QA is pending. No
+product or live-account writes have
 been performed by Build for this candidate.
 
 ## FINN 3.0: ontbrekende dagrapportmeldingen in de feed (23 november 2026)
