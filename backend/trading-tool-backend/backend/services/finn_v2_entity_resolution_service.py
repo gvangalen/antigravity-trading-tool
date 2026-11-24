@@ -107,6 +107,23 @@ class FinnV2EntityResolutionService:
         workspace_hints = dict(workspace_hints or {})
         client_context = dict(client_context or {})
         candidates = await self._entity_candidates(user_id=user_id, entity_type=entity_type)
+        # A user-selected setup name is scoped by an explicitly named market
+        # pair before name matching. Equal names may exist for BTC/EUR and
+        # BTC/USDT; the quote is part of the setup's identity here.
+        explicit_pairs = {
+            (symbol.upper(), quote.upper())
+            for symbol, quote in re.findall(r"\b([A-Z0-9]{2,10})/(EUR|USDT)\b", message, re.IGNORECASE)
+        }
+        explicit_pair = next(iter(explicit_pairs)) if len(explicit_pairs) == 1 else None
+        if (entity_type == "setup" and selector.get("setup_name")
+                and selector.get("asset_source") == "explicit_message"
+                and explicit_pair is not None):
+            candidates = [
+                row for row in candidates
+                if row.get("market_id") is not None
+                and self._candidate_asset(row) == explicit_pair[0]
+                and str(row.get("quote_currency") or "").upper() == explicit_pair[1]
+            ]
         # An unanswered, asset-scoped target question remains inside that
         # asset. A name typed as the answer cannot silently turn an ETH
         # proposal into an AAPL proposal, even when both belong to the owner.
@@ -516,7 +533,11 @@ class FinnV2EntityResolutionService:
         # are separate choices even if one name happens to be longer.
         selected: list[tuple[int, int, Dict[str, Any]]] = []
         for start, end, row in sorted(occurrences, key=lambda item: item[1] - item[0], reverse=True):
-            if any(other_start <= start and end <= other_end for other_start, other_end, _ in selected):
+            if any(
+                other_start <= start and end <= other_end
+                and (other_start, other_end) != (start, end)
+                for other_start, other_end, _ in selected
+            ):
                 continue
             selected.append((start, end, row))
         unique: list[Dict[str, Any]] = []

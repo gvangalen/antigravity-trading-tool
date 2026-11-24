@@ -4913,9 +4913,12 @@ class FinnResponsesFrontDoor:
                     if smart_dca_resumed and smart_dca_selected_name and call.name == "get_active_plan_and_strategy":
                         # The user-supplied name is a typed selector for the
                         # owner-bound resolver, never model prompt text.
+                        selected_pair = requested_catalog_trading_pair(message)
                         call = replace(call, inputs={
                             **call.inputs, "setup_name": smart_dca_selected_name,
                             "reference": "current_request",
+                            **({"asset": selected_pair[0], "quote_currency": selected_pair[1]}
+                               if selected_pair else {}),
                         })
                         previous_setup_target = None
                     # A model-supplied name is not a user-selected target.

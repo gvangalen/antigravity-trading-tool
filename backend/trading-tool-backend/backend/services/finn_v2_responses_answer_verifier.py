@@ -3184,7 +3184,11 @@ class FinnResponsesAnswerVerifier:
                 )
             return FinnResponsesVerifiedAnswer(
                 "clarification_required", expected, "smart_dca_identity_unverified", evidence,
-                clarification={"question": expected, "reason": "smart_dca_identity_unverified"},
+                clarification={
+                    "question": expected, "reason": "smart_dca_identity_unverified",
+                    **({"original_message": result.verification_message}
+                       if result.verification_message else {}),
+                },
             )
         if result.answer_kind == "smart_dca_source_unavailable":
             from backend.services.finn_v2_smart_dca_coach_answer import smart_dca_source_unavailable_text

@@ -1654,6 +1654,14 @@ def _smart_dca_identity_resume_input(
     return str(clarification.get("original_message") or "").strip(), message
 
 
+def _responses_clarification_original_message(
+    *, reason: str, clarification: dict[str, object], run_message: str,
+) -> str:
+    if reason == "smart_dca_identity_unverified":
+        return str(clarification.get("original_message") or run_message)
+    return run_message
+
+
 def _bounded_supported_smart_dca_calendar_request(
     message: str, collected_inputs: dict[str, object],
 ) -> bool:
@@ -2510,10 +2518,14 @@ class FinnV2RunService:
             ))
         if status == "clarification_required":
             clarification = answer.clarification or {}
+            reason = str(clarification.get("reason") or answer.reason or "choice_required")
+            original_message = _responses_clarification_original_message(
+                reason=reason, clarification=clarification, run_message=run.message,
+            )
             await self.runtime_contracts.record_responses_clarification(
-                run_id=run_id, user_id=user_id, original_message=run.message,
+                run_id=run_id, user_id=user_id, original_message=original_message,
                 question=str(clarification.get("question") or answer.text),
-                reason=str(clarification.get("reason") or answer.reason or "choice_required"),
+                reason=reason,
                 choices=list(clarification.get("choices") or []),
             )
         response_json = {

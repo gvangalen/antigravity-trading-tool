@@ -271,6 +271,7 @@ def test_smart_dca_name_continuation_rejects_embedded_action(monkeypatch):
         message=answer, result=result.response, locale="nl-NL",
     ))
     assert checked.status == "clarification_required"
+    assert checked.clarification["original_message"] == original
 
 
 def test_smart_dca_name_continuation_requires_exact_owner_name(monkeypatch):

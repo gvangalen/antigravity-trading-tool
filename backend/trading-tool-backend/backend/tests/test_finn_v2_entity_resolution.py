@@ -1039,6 +1039,66 @@ def test_canonical_target_active_runtime_wins_stale_selector_id():
     assert target.resolution_source == "active_runtime_context"
 
 
+def test_named_setup_selector_uses_explicit_pair_when_names_repeat():
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    service.setups.get_user_setups = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 400, "name": "Test Smart BTC", "symbol": "BTC", "quote_currency": None, "market_id": None},
+        {"id": 401, "name": "Test Smart BTC", "symbol": "BTC", "quote_currency": "EUR", "market_id": 41},
+        {"id": 402, "name": "Test Smart BTC", "symbol": "BTC", "quote_currency": "USDT", "market_id": 42},
+    ])
+    chosen = asyncio.run(service.resolve_canonical_target(
+        user_id=388, entity_type="setup",
+        selector={"setup_name": "Test Smart BTC", "asset": "BTC",
+                  "quote_currency": "USDT", "asset_source": "explicit_message"},
+        message="Lees mijn opgeslagen Smart DCA voor BTC/USDT.",
+    ))
+    assert chosen.entity_id == 402
+    assert chosen.resolution_source == "explicit_name"
+    ambiguous = asyncio.run(service.resolve_canonical_target(
+        user_id=388, entity_type="setup",
+        selector={"setup_name": "Test Smart BTC", "asset": "BTC"},
+        message="Lees mijn opgeslagen Smart DCA.",
+    ))
+    assert ambiguous.resolution_status == "ambiguous"
+    missing = asyncio.run(service.resolve_canonical_target(
+        user_id=388, entity_type="setup",
+        selector={"setup_name": "Test Smart BTC", "asset": "ETH",
+                  "quote_currency": "USDT", "asset_source": "explicit_message"},
+        message="Lees mijn opgeslagen Smart DCA voor ETH/USDT.",
+    ))
+    assert missing.resolution_status == "not_found"
+    mismatched_model_quote = asyncio.run(service.resolve_canonical_target(
+        user_id=388, entity_type="setup",
+        selector={"setup_name": "Test Smart BTC", "asset": "BTC",
+                  "quote_currency": "EUR", "asset_source": "explicit_message"},
+        message="Lees mijn opgeslagen Smart DCA Test Smart BTC voor BTC/USDT.",
+    ))
+    assert mismatched_model_quote.entity_id == 402
+    assert mismatched_model_quote.resolution_source == "explicit_name"
+    unscoped_name_in_message = asyncio.run(service.resolve_canonical_target(
+        user_id=388, entity_type="setup",
+        selector={"setup_name": "Test Smart BTC"},
+        message="Lees Test Smart BTC terug.",
+    ))
+    assert unscoped_name_in_message.resolution_status == "ambiguous"
+
+
+def test_named_stock_setup_keeps_legacy_usd_resolution_without_market_id():
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    service.setups.get_user_setups = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 403, "name": "Apple Swing", "symbol": "AAPL", "quote_currency": None, "market_id": None},
+    ])
+    selected = asyncio.run(service.resolve_canonical_target(
+        user_id=388, entity_type="setup",
+        selector={"setup_name": "Apple Swing", "asset": "AAPL",
+                  "quote_currency": "USD", "asset_source": "explicit_message"},
+        message="Lees mijn opgeslagen Apple Swing voor AAPL/USD.",
+    ))
+    assert selected.entity_id == 403
+
+
 def test_canonical_target_uses_most_specific_overlapping_visible_name():
     service = FinnV2EntityResolutionService(session=object())
     service.bots = _FakeBotRepo()

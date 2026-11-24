@@ -61,6 +61,7 @@ from backend.services.finn_v2_run_service import (
     _explicitly_separates_new_strategy, _has_independent_strategy_inputs,
     _freeform_strategy_rule_waiver_inputs,
     _plain_setup_creation_request, _smart_dca_identity_resume_input,
+    _responses_clarification_original_message,
     _bounded_supported_smart_dca_calendar_request,
     _bounded_supported_smart_dca_benchmark_request,
     _bounded_fixed_dca_calendar_request,
@@ -7246,6 +7247,14 @@ def test_smart_dca_identity_reply_is_separated_before_relevance_and_routing():
     assert _smart_dca_identity_resume_input({}, "Maak een nieuwe setup") == (
         "Maak een nieuwe setup", None,
     )
+    assert _responses_clarification_original_message(
+        reason="smart_dca_identity_unverified",
+        clarification={"original_message": original}, run_message="onjuiste naam",
+    ) == original
+    assert _responses_clarification_original_message(
+        reason="choice_required",
+        clarification={"original_message": original}, run_message="nieuwe vraag",
+    ) == "nieuwe vraag"
 
 
 def test_bounded_fixed_calendar_dca_requires_matching_fields_and_no_extra_rule():
