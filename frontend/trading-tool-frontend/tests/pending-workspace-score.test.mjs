@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { workspaceScoreNeedsRefresh } from "../lib/workspace/pendingWorkspaceScore.mjs";
 import { oldestScoredEvidenceSource } from "../lib/workspace/canonicalScorePresentation.mjs";
+import { formatAmsterdamTimestamp } from "../lib/time/formatUtcTimestamp.mjs";
 
 test("a newly copied asset bypasses the cache while one category score is missing", () => {
   const pending = { daily: {
@@ -49,7 +50,9 @@ test("daily benchmark source comes from its saved scored evidence", () => {
     },
     technical: { rsi: { score: 40, source_observed_at: "2026-11-23T23:59:00Z" } },
   };
-  assert.equal(oldestScoredEvidenceSource(evidence), "2026-11-23T00:00:00.000Z");
+  const oldest = oldestScoredEvidenceSource(evidence);
+  assert.equal(oldest, "2026-11-23T00:00:00.000Z");
+  assert.match(formatAmsterdamTimestamp(oldest, "nl-NL"), /01:00 CET/);
   assert.equal(oldestScoredEvidenceSource({ market: {
     unscored: { score: null, source_observed_at: "2026-11-22T23:00:00Z" },
     volume: { score: 0, source_observed_at: "2026-11-24T10:06:00" },
