@@ -1,3 +1,5 @@
+import { parseUtcMoment } from "../report/reportSourceSnapshot.mjs";
+
 const ALIASES = {
   s_and_p500: "sp500",
   s_and_p_500: "sp500",
@@ -17,6 +19,18 @@ export function validatedDayEvidence(categoryScore, evidence, name) {
   if ((categoryScore === null || categoryScore === undefined || categoryScore === ""
       || !Number.isFinite(Number(categoryScore))) && row?.verified_current !== true) return null;
   return row && ["custom", "system_template"].includes(row.rule_origin) ? row : null;
+}
+
+export function oldestScoredEvidenceSource(indicatorEvidence) {
+  const moments = ["market", "macro", "technical"].flatMap((category) =>
+    Object.values(indicatorEvidence?.[category] || {}).flatMap((entry) => {
+      if (entry?.score === null || entry?.score === undefined || entry?.score === ""
+          || !Number.isFinite(Number(entry.score))) return [];
+      const moment = parseUtcMoment(entry.source_observed_at);
+      return moment ? [moment.getTime()] : [];
+    })
+  );
+  return moments.length ? new Date(Math.min(...moments)).toISOString() : null;
 }
 
 export function indicatorSourceFreshness(freshness) {
