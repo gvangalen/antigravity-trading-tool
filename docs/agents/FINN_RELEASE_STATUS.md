@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: Smart DCA gecombineerde lezing en scoregestuurd concept (24 november 2026)
 
-Phase: `PRODUCT_DEPLOYED_QA_PENDING`. De ingelogde, read-only browserreproductie
+Phase: `BUILD_REPAIR_CANDIDATE_QA_PENDING`. De ingelogde, read-only browserreproductie
 op BTC/USDT liet zien dat FINN bij een vraag naar de opgeslagen Smart DCA,
 actuele scoreband, bedrag en gekoppelde Paper-bot eerst een algemene setupzone
 en een andere BTC-botbeslissing mengde. Een vervolgvraag met de exacte
@@ -49,7 +49,38 @@ Product-PR #1364 is gemerged als
 frontend `/build-info.json` meldden exact die SHA met HTTP 200. Deze
 statusupdate maakt zelf een nieuwe main-SHA; vóór de onafhankelijke QA-run
 moeten ook de laatste main-CI, Auto Deploy en publieke SHA-pariteit van die
-nieuwe revisie slagen. De ingelogde live acceptatie is nog niet uitgevoerd.
+nieuwe revisie slagen. Main-CI `45502120814` en Auto Deploy `45503425566`
+slaagden daarna; GitHub main en beide publieke endpoints meldden exact
+`fc7ef2ad01a0f907148ba4bc0b937a47bd4a2faf` met HTTP 200.
+
+De onafhankelijke ingelogde QA op die finale SHA gaf **NOT_ACCEPTED**:
+FINN vroeg terecht om de BTC/USDT-setupnaam, maar de korte reply
+`Test Smart BTC` eindigde tweemaal `unavailable` met getypeerde reden
+`smart_dca_resumed_source_mismatch`. Een volledige vraag met de setupnaam
+gaf wél score 45,7, scoreband 45,5–<60,5, €100 bij €200 basisbedrag,
+gedateerde bronmomenten en geen bot aan die strategie. Een naamreply met
+orderinstructie werd veilig geweigerd. QA deed geen accountmutatie; concept-
+aanmaak en Paper-aankoop bleven ongetest.
+
+De nieuwe Build-kandidaat corrigeert alleen de verifieroverdracht: de
+frontdoor leest bij hervatten met de oorspronkelijke vraag, terwijl de
+verifier de werkelijk opgeslagen korte naamreply controleert. De bestaande
+verifier rendert daarna opnieuw uit de eigenaargebonden tooltrace en faalt
+nog steeds bij een naam-, paar-, bron- of antwoordmismatch. Een regressie
+reproduceert de oude getypeerde fout en bewijst de nieuwe completed-route.
+Onafhankelijke QA- en Security-codebeoordeling vonden geen blocker. De
+gerichte regressie gaf **20/20**; de volledige backend-suite **5518 passed,
+7 skipped**. De lokale FastAPI/Celery/PostgreSQL/Redis-actiematrix gaf
+**17/17** (artifact SHA-256
+`c8a592d7eb729de386be50ce7c5cc43befc4b954f9d5c2e1694ca9b7f2b11fa0`),
+de adaptertests **28/28** en bevestigde Smart DCA/kalender-DCA met replay
+slaagden. De echte Responses-provider-developmentset gaf **20/20** (artifact
+SHA-256 `f0c165fde4cf74b4ea52a3473a776131456fac4d736a2a607ad567ea92674d5b`)
+en de regressieset **109/109** (artifact SHA-256
+`a9f47d1a5be4434c363fac6aaf67b35579947dcd735fe1671deee16f11f8013d`)
+zonder provider-, schema-, timeout-, parse- of validatiefout. Frontendbron
+is ongewijzigd; de eerdere frontendgates waren groen. Deze kandidaat is nog
+niet gedeployed of live geaccepteerd.
 
 ## FINN 3.0: volledige, botgebonden Paper-Holdcoach (24 november 2026)
 
