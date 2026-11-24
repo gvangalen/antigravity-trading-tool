@@ -34,6 +34,10 @@ _DATED_MOMENT = re.compile(
     re.I,
 )
 _ZONED_CLOCK = re.compile(r"\b\d{1,2}:\d{2}(?::\d{2})?\s*(?:UTC|CET|CEST)\b", re.I)
+_DATE_ONLY = re.compile(
+    r"\b\d{1,2}\s+(?:" + _MONTH_PATTERN + r")\s+20\d{2}\b|"
+    r"\b20\d{2}-\d{2}-\d{2}\b", re.I,
+)
 _REPORT_CLOCK = re.compile(
     r"\b(?P<hour>\d{1,2}):(?P<minute>\d{2})(?::(?P<second>\d{2}))?\s*"
     r"(?:(?:in\s+)?Europe/Amsterdam\s*,?\s*)?(?P<zone>UTC|CET|CEST)\b",
@@ -556,6 +560,9 @@ def current_source_moments_supported(
         claim = _claimed_moment(following)
         zoned_clocks = list(_ZONED_CLOCK.finditer(following))
         clocks = list(_REPORT_CLOCK.finditer(following))
+        prefix = sentence[:mentioned.start()]
+        prefix_dates = list(_DATE_ONLY.finditer(prefix))
+        prefix_years_supported = len(re.findall(r"\b20\d{2}\b", prefix)) == len(prefix_dates)
         # A portfolio read may be stated as a zoned time without repeating
         # today's date. Match that clock to a read from this turn, while a
         # stated date must still match the full source instant.
@@ -572,8 +579,17 @@ def current_source_moments_supported(
         clocks_supported = len(clocks) == len(zoned_clocks) and all(
             clock_matches_read(clock) for clock in clocks
         )
+        prefix_dates_supported = all(
+            any(
+                parsed is not None and _same_moment(parsed, observed)
+                for observed in portfolio_reads
+                for parsed in (_claimed_moment(f"{date_match.group(0)} {clock.group(0)}"),)
+            )
+            for date_match in prefix_dates for clock in clocks
+        )
         if zoned_clocks and (
             not portfolio_reads or not clocks_supported
+            or not prefix_years_supported or not prefix_dates_supported
             or (claim is not None and not any(
                 _same_moment(claim, observed) for observed in portfolio_reads
             ))

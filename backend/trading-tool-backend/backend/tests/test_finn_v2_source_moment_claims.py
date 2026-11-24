@@ -28,6 +28,8 @@ def test_portfolio_read_clock_without_repeated_date_matches_only_this_turns_sour
         "De Paper-portefeuille is opnieuw gelezen om 12:08:16 UTC.",
         "De Paper-portefeuille is opnieuw gelezen om 24 november 2025 12:08:16 CET.",
         "De Paper-portefeuille is opnieuw gelezen om 12:08:16 CET op 23 november 2025.",
+        "Op 23 november 2025 is de Paper-portefeuille om 12:08:16 CET opnieuw gelezen.",
+        "In 2025 is de Paper-portefeuille om 12:08:16 CET opnieuw gelezen.",
         "De Paper-portefeuille is opnieuw gelezen om 12:08:16 CET en 12:09:16 CET.",
     ):
         diagnostics = []
@@ -36,6 +38,10 @@ def test_portfolio_read_clock_without_repeated_date_matches_only_this_turns_sour
         )
         assert diagnostics == ["portfolio_read_clock_mismatch"]
     assert not current_source_moments_supported(answer, ())
+    assert current_source_moments_supported(
+        "Op 24 november 2026 is de Paper-portefeuille om 12:08:16 CET opnieuw gelezen.",
+        evidence,
+    )
     assert current_source_moments_supported(
         "De Paper-portefeuille is om 12:08:16 CET gelezen; de botcheck was om 12:03:29 CET.",
         evidence,
