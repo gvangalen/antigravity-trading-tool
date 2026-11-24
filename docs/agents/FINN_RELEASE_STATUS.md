@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: Smart DCA brongebonden advies (24 november 2026)
 
-Phase: `LOCAL_VALIDATED_PR_PENDING`. Onafhankelijke ingelogde browser-QA op publieke
+Phase: `LIVE_DEPLOYED_QA_PENDING`. Onafhankelijke ingelogde browser-QA op publieke
 SHA `600a614e45f921c193f40b4d21a6eec940634f15` accepteerde de smalle
 Paper-bedragenreparatie: drie herhaalde vragen gaven budget, werkelijk belegd,
 botkas en totale Paper-kas afzonderlijk en met de opgeslagen gebruikerstijdzone.
@@ -34,9 +34,17 @@ Echte providerselector development: **20/20**, artifact SHA-256
 regression: **109/109**, artifact SHA-256
 `bfd4d46076daad7f9f948f52f23a05abadf8ce6c1786e820fec9beeb8571cda7`.
 Beide selectorruns gebruikten de echte provider en hadden geen
-failure-category. De finale onafhankelijke QA-codeherbeoordeling, PR-CI,
-Auto Deploy, publieke SHA-pariteit en ingelogde Smart-DCA-hertest volgen nog;
-deze kandidaat is niet live.
+failure-category. De finale onafhankelijke QA-codeherbeoordeling vond geen
+blocker. Product-PR
+[#1346](https://github.com/gvangalen/antigravity-trading-tool/pull/1346)
+werd met vijf groene PR-CI-jobs gemerged als
+`ff87dbc9d607fe3c2f14f17fa005e2cd674d4881`. Main-CI `45356565134`
+was succesvol; Auto Deploy `45357836321` was succesvol. GitHub main en de
+publieke backend `/api/health` en frontend `/build-info.json` meldden op 24
+november exact deze SHA; beide endpoints gaven HTTP 200. Deze status-only
+commit veroorzaakt een nieuwe main-SHA, zodat Build opnieuw op CI, Auto
+Deploy en definitieve publieke pariteit wacht voordat onafhankelijke QA de
+ingelogde Smart-DCA-vraag herhaalt. Die browseracceptatie is nog niet gedaan.
 
 ## FINN 3.0: Paper-bedragen en gebruikerstijdzone (24 november 2026)
 
