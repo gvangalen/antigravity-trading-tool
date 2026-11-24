@@ -116,6 +116,143 @@ def test_bot_decision_clocks_match_saved_report_or_latest_owner_read():
     }
 
 
+def test_bot_status_read_clock_is_not_another_saved_decision_clock():
+    evidence = (
+        {"scope": "read_review_history", "status": "completed", "data": {
+            "latest_bot_decisions": [{"bot_id": 56, "symbol": "BTC",
+                                      "decision_at": "2026-11-24T12:03:29.343838+00:00"}],
+        }},
+        {"scope": "read_bot_status", "status": "completed", "data": {
+            "bot_id": 56, "read_at": "2026-11-24T12:17:09+00:00",
+        }},
+    )
+    answer = (
+        "De beslissing is vastgelegd op 24 november 2026 om 13:03:29 CET; "
+        "de botstatus en Paper-bedragen zijn opnieuw gelezen op "
+        "24 november 2026 om 13:17:09 CET."
+    )
+    assert current_source_moments_supported(answer, evidence)
+    assert current_source_moments_supported(
+        answer.replace("botstatus", "bot status"), evidence,
+    )
+    assert not current_source_moments_supported(
+        answer.replace("13:03:29 CET", "13:04:29 CET"), evidence,
+    )
+    assert not current_source_moments_supported(
+        answer.replace("13:17:09 CET", "13:59:59 CET"), evidence,
+    )
+    assert not current_source_moments_supported(answer, evidence[:1])
+    assert current_source_moments_supported(
+        "De botstatus is opnieuw gelezen op 24 november 2026 om 13:17:09 CET.",
+        evidence[1:],
+    )
+    assert not current_source_moments_supported(
+        "De botstatus is opnieuw gelezen op 24 november 2026 om 13:59:59 CET.",
+        evidence[1:],
+    )
+    assert not current_source_moments_supported(
+        "De botstatus is opnieuw gelezen op 24 november 2026 om 13:17:09 CET.",
+        ({**evidence[1], "data": {"bot_id": 56}},),
+    )
+    other_bot = {"scope": "read_bot_status", "status": "completed", "data": {
+        "bot_id": 57, "read_at": "2026-11-24T12:18:09+00:00",
+    }}
+    assert not current_source_moments_supported(
+        "De botstatus van bot #56 is opnieuw gelezen op "
+        "24 november 2026 om 13:18:09 CET.",
+        evidence + (other_bot,),
+    )
+    assert not current_source_moments_supported(
+        "Het BTC-botbesluit was op 24 november 2026 om 13:17:09 CET.", evidence,
+    )
+    assert not current_source_moments_supported(
+        "De botstatus toont de laatste Hold van 24 november 2026 om 13:17:09 CET.", evidence,
+    )
+    mixed = (
+        "De botstatus is om 13:17:09 CET opnieuw gelezen en toont de laatste Hold "
+        "van 13:03:29 CET."
+    )
+    assert current_source_moments_supported(mixed, evidence)
+    assert not current_source_moments_supported(
+        mixed.replace("om 13:17:09 CET", "om 13:03:29 CET"), evidence,
+    )
+    reverse = (
+        "De botstatus toont de laatste Hold van 13:03:29 CET "
+        "en is opnieuw gelezen op 13:17:09 CET."
+    )
+    assert current_source_moments_supported(reverse, evidence)
+    assert not current_source_moments_supported(
+        reverse.replace("op 13:17:09 CET", "op 13:03:29 CET"), evidence,
+    )
+    assert current_source_moments_supported(
+        mixed.replace("en toont", "en meldt"), evidence,
+    )
+    status_only = ({**evidence[1], "data": {
+        **evidence[1]["data"],
+        "latest_decision": {"decision_at": "2026-11-24T12:03:29+00:00"},
+    }},)
+    assert current_source_moments_supported(
+        "De botstatus is om 13:17:09 CET opnieuw gelezen; "
+        "het laatste Hold-besluit was om 13:03:29 CET.", status_only,
+    )
+    assert not current_source_moments_supported(
+        "De botstatus is om 13:17:09 CET opnieuw gelezen; "
+        "het laatste Hold-besluit was om 13:59:59 CET.", status_only,
+    )
+    mixed_dates = (
+        "De botstatus is om 13:17:09 CET gelezen en vermeldt de laatste Hold "
+        "van 24 november 2026 om 13:03:29 CET."
+    )
+    assert current_source_moments_supported(mixed_dates, status_only)
+    assert not current_source_moments_supported(
+        mixed_dates.replace("om 13:17:09 CET gelezen", "om 13:03:29 CET gelezen")
+        .replace("om 13:03:29 CET.", "om 13:17:09 CET."), status_only,
+    )
+    assert current_source_moments_supported(
+        "De botstatus is opnieuw gelezen en toont de laatste Hold van "
+        "24 november 2026 om 13:03:29 CET.", status_only,
+    )
+    assert current_source_moments_supported(
+        "De botstatus toont de laatste Hold van 13:03:29 CET "
+        "en is opnieuw gelezen.", status_only,
+    )
+    assert not current_source_moments_supported(
+        "De botstatus is om 13:03:29 CET en om 13:17:09 CET opnieuw gelezen "
+        "en toont de laatste Hold van 13:03:29 CET.", status_only,
+    )
+    assert not current_source_moments_supported(
+        "De botstatus is opnieuw gelezen om 13:17:09 CET en 13:03:29 CET; "
+        "de laatste Hold was om 13:03:29 CET.", status_only,
+    )
+    assert current_source_moments_supported(
+        "De botstatus is om 13:17:09 CET gelezen en toont Hold van 13:03:29 CET.",
+        status_only,
+    )
+    portfolio = {"scope": "read_portfolio", "status": "completed", "data": {
+        "read_at": "2026-11-24T12:18:07+00:00",
+    }}
+    assert current_source_moments_supported(
+        "De botstatus is om 13:17:09 CET gelezen en de Paper-portefeuille "
+        "om 13:18:07 CET uitgelezen.", status_only + (portfolio,),
+    )
+    assert not current_source_moments_supported(
+        "De botstatus is om 13:17:09 CET gelezen en de Paper-portefeuille "
+        "om 13:19:07 CET uitgelezen.", status_only + (portfolio,),
+    )
+    assert current_source_moments_supported(
+        "De Paper-portefeuille is om 13:18:07 CET uitgelezen en de botstatus "
+        "is om 13:17:09 CET gelezen.", status_only + (portfolio,),
+    )
+    assert not current_source_moments_supported(
+        "De Paper-portefeuille is om 13:19:07 CET uitgelezen en de botstatus "
+        "is om 13:17:09 CET gelezen.", status_only + (portfolio,),
+    )
+    assert current_source_moments_supported(
+        "De Paper-portefeuille is om 13:18:07 CET uitgelezen en de bot status "
+        "is om 13:17:09 CET gelezen.", status_only + (portfolio,),
+    )
+
+
 def test_report_decision_cannot_be_called_latest_when_later_bot_checks_were_read():
     evidence = (
         {"scope": "read_latest_report", "status": "completed", "data": {

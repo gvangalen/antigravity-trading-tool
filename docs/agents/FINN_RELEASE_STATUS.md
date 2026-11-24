@@ -4,6 +4,46 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: Paper-botcoach botstatusmoment (24 november 2026)
+
+Phase: `LOCAL_GATES_COMPLETE_PR_PENDING`. De vorige bronmomentcorrectie is live op
+`9dfc6df6296d2eeb7021782d68a6648ecfb60412`, met succesvolle main-CI,
+Auto Deploy en exacte backend/frontend-SHA-pariteit. De onafhankelijke
+ingelogde, read-only QA-herproef gaf `NOT_ACCEPTED`: van drie identieke
+Paper-Holdvragen kwam de eerste alleen met een bronmomentfout terug, de
+tweede met een juiste Hold-reden, budget/kas/positie en bronmomenten, en de
+derde zonder het expliciet gevraagde opgeslagen besluitmoment. Er waren geen
+wijzigingen aan bot, strategie of orders.
+
+Een eigenaargebonden read-only diagnose van de mislukte run
+`finn-v2-run-ab388bfea5af430690ef407e461f4b8b` toonde
+`source_moment_conflicts_with_source/bot_decision_clock_mismatch`.
+Het antwoord noemde het opgeslagen BTC-botbesluit om 13:03:29 CET correct,
+maar noemde daarna het uitleesmoment van botstatus en Paper-bedragen om
+13:17:09 CET. De bestaande verifier interpreteerde `botstatus` als een
+tweede botbesluit. De nieuwe kandidaat in branch
+`codex/finn3-bot-status-clock-20261124` maakt het status-uitleesmoment
+getypeerd, bindt het aan de bot en verifieert het afzonderlijk van
+`decision_at`. De exacte vraagvorm, gemengde bot-/portfoliozinnen,
+omgekeerde volgorde, extra tijden en ontbrekende of verkeerde bron worden
+gericht afgedekt: **29/29 tests**. Onafhankelijke QA- en Security-codebeoordeling
+vonden voor deze bronmomentgrens geen blocker; dit is geen live acceptatie.
+De volledige backend-suite gaf **5499 passed, 7 skipped**. Frontend typecheck,
+i18n-lint/tests, commandtests, build en audit:high slaagden; de frontendbron
+is niet gewijzigd. De lokale worker/action-matrix gaf **17/17** zonder
+brokerorder of Live-call, artifact SHA-256
+`c34741d9f8a58e7a4f61b0632ca6d2c20f83bc7e97a08005f16442e165e6603d`;
+de action-adaptertests gaven **28/28** en Smart DCA-/kalender-DCA-controles
+slaagden. De echte provider-developmentset gaf **20/20** met nul provider-,
+schema-, timeout-, parse- of validatiefouten, artifact SHA-256
+`e9da28d99fd09f2a1ff4fe3de6a0b3f8626ef3aaff79287735e29a7cacd3223e`.
+De echte provider-regressieset gaf **109/109** met dezelfde nul foutpercentages,
+artifact SHA-256
+`e3086a71dd322871aff8f86ffd8960ca6b7f1536e6d488603b04879656d3560a`.
+CI, deploy en live QA zijn voor deze
+kandidaat nog niet afgerond. De ontbrekende bronvermelding in de derde beurt en de
+weekreflectie zonder afgesloten trades blijven afzonderlijke acceptatiegaten.
+
 ## FINN 3.0: Paper-botcoach bronmoment (24 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_STATUS_UPDATE_PENDING`. De onafhankelijke ingelogde browserproef
