@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: eigenaargebonden botstatus bij gecombineerde Paper-vraag (24 november 2026)
 
-Phase: `BUILD_GATES_COMPLETE_PR_CI_PENDING`. De onafhankelijke ingelogde QA op
+Phase: `PRODUCT_DEPLOYED_QA_PENDING`. De onafhankelijke ingelogde QA op
 publieke SHA `7b5ab0e2c8c89cc9bb4cedd02d872161b5669476` gaf
 `NOT_ACCEPTED` voor de herhaalbaarheid van dezelfde read-only Paper-Holdvraag:
 één beurt in een bestaande conversatie viel terug op bronmomentverificatie;
@@ -42,8 +42,13 @@ validatiefouten; artifact SHA-256
 De echte provider-regressieset gaf **109/109** met dezelfde nul foutpercentages;
 artifact SHA-256
 `1010589cbc2417aa74a1fd2d8de480faa4adb7de4a5379727abe0ce230de9dbe`.
-Onafhankelijke QA- en Security-codebeoordeling vond geen blocker. PR-CI,
-deployidentiteit en ingelogde driebeurtenhertest zijn op dit moment nog open;
+Onafhankelijke QA- en Security-codebeoordeling vond geen blocker. PR #1360
+had op head `7f3778faf09538e6ab5ca3548eb913ba754d029d` vijf groene CI-jobs
+(workflow 45461952170). De merge naar main
+`a237700b3b661a6d92da60dddcb916148b5e0449` had vijf groene main-CI-jobs
+(45463530583) en geslaagde Auto Deploy (45464888614). Publieke backend
+`/api/health` en frontend `/build-info.json` gaven beide HTTP 200 en exact
+die main-SHA terug. De ingelogde driebeurtenhertest is nog open;
 er is geen live acceptatie
 voor deze kandidaat geclaimd.
 
