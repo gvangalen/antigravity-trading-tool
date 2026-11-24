@@ -528,7 +528,12 @@ def current_source_moments_supported(
 
     # "Fresh portfolio read" refers to read_at, not the oldest valuation
     # quote. Check its declared zone as well as its wall clock.
-    for sentence in re.split(r"(?<=[.!?])\s+|\n+", answer):
+    for sentence in re.split(
+        r"(?<=[.!?])\s+|\n+|;\s*|"
+        r"(?:,\s*|\s+en\s+)(?=de\s+(?:botcheck|botbesliss\w*|botbeoordeling\w*|"
+        r"benchmarkscore|scorerapport|koersbron)\b)",
+        answer, flags=re.I,
+    ):
         mentioned = re.search(
             r"\b(?:Paper[- ]?)?portefeuille(?:uitlezing|lezing|meting|waardering)?\b|"
             r"\bPaper[- ]?snapshot\b|"
@@ -549,10 +554,30 @@ def current_source_moments_supported(
             continue
         following = sentence[mentioned.end():]
         claim = _claimed_moment(following)
-        if _ZONED_CLOCK.search(following) and (
-            claim is None or not portfolio_reads or not any(
+        zoned_clocks = list(_ZONED_CLOCK.finditer(following))
+        clocks = list(_REPORT_CLOCK.finditer(following))
+        # A portfolio read may be stated as a zoned time without repeating
+        # today's date. Match that clock to a read from this turn, while a
+        # stated date must still match the full source instant.
+        def clock_matches_read(clock: re.Match[str]) -> bool:
+            for observed in portfolio_reads:
+                local = observed if clock["zone"].upper() == "UTC" else observed.astimezone(_AMSTERDAM)
+                if (local.hour == int(clock["hour"])
+                        and local.minute == int(clock["minute"])
+                        and (clock["second"] is None or local.second == int(clock["second"]))
+                        and local.tzname() == clock["zone"].upper()):
+                    return True
+            return False
+
+        clocks_supported = len(clocks) == len(zoned_clocks) and all(
+            clock_matches_read(clock) for clock in clocks
+        )
+        if zoned_clocks and (
+            not portfolio_reads or not clocks_supported
+            or (claim is not None and not any(
                 _same_moment(claim, observed) for observed in portfolio_reads
-            )
+            ))
+            or (claim is None and re.search(r"\b20\d{2}\b", following) is not None)
         ):
             return reject("portfolio_read_clock_mismatch")
     return True
