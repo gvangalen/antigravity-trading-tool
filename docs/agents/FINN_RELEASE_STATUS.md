@@ -4,9 +4,49 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: Paper-bedragen en gebruikerstijdzone (24 november 2026)
+
+Phase: `LOCAL_VALIDATED_PR_CI_PASSED`. Onafhankelijke ingelogde QA op de
+vorige publieke SHA `39ce2a474cee236279e4a0c8ed666158f0c0f3e5` gaf
+`NOT_ACCEPTED` voor de volledige FINN 3.0-browsermatrix. De exacte vraag
+naar BTC Paper-botbudget, werkelijk belegd bedrag, botkas en totale Paper-kas
+faalde tweemaal met `unavailable/factual_source_mismatch` (runs
+`finn-v2-run-68b0e6504a4a40049d7448a1e0d853a4` en
+`finn-v2-run-c15b7ce35c024ea9b07071a0465b456e`). De frontdoor vormde
+het bronmoment in de opgeslagen gebruikerstijdzone; de antwoordverifier
+berekende hetzelfde moment in UTC en wees het correcte antwoord af.
+
+Product-PR [#1344](https://github.com/gvangalen/antigravity-trading-tool/pull/1344),
+branch `codex/finn3-paper-verifier-20261124`, head `ae3a1fb84268fdb4c8206dd9ad772eec07a53563`,
+geeft de opgeslagen tijdzone door aan beide verifierpaden en de herstelronde.
+De Paper-verifier herkent nu ook de parafrase `geïnvesteerd`. Een end-to-end
+frontdoor/verifier-regressie controleert vier afzonderlijke bedragen met
+Amsterdam- en Los Angeles-bronmoment, verwerpt een onjuiste tijdzone en
+accepteert de parafrase. Onafhankelijke QA-codebeoordeling vond geen blocker.
+
+Gerichte tests: **42 passed**. Volledige backend-suite: **5490 passed,
+7 skipped**, 47 waarschuwingen. De lokale productiegerichte workerproef
+behaalde **38/38** zonder sealed QA-materiaal (artifact SHA-256
+`9e06eef73f6dbd87401cb2cfbac883f6ec694adb216a3b5077e38a969272d3e5`).
+Echte providerselector development: **20/20** (artifact SHA-256
+`e8699478d6b17ed00185472b8dbdb0a600862346b9eec1466d2ed8117b040180`);
+regression: **109/109** (artifact SHA-256
+`4327e7803897b591d73c8d6da7b07fdf69105ccb3affa7a08563ede8090ddcaf`),
+beide met nul provider-, schema-, timeout-, parse- en validatiefouten.
+De PR-CI op de producthead slaagde met vijf groene jobs, waaronder frontend,
+mobile, security en backend. Merge, main-CI, Auto Deploy, publieke SHA-pariteit
+en onafhankelijke live hertest zijn nog niet uitgevoerd voor deze kandidaat.
+
+De vorige live browserproef accepteerde wel de verse BTC/EUR-analysekaart →
+Bespreek → afhandeling na refresh, de 24-november-rapportkaart met juiste
+deeplink, en de read-only Paper-blokkadereden. De rapportkaart verscheen
+17 minuten na het rapport, zodat de directe natuurlijke trigger onbewezen
+blijft. Nieuwe Smart-DCA- en reflectiefeedtriggers en post-release
+analysis-dedupe waren in die browserproef niet verifieerbaar.
+
 ## FINN 3.0: rapportmelding en Paper-accountantwoord (24 november 2026)
 
-Phase: `LIVE_DEPLOYED_QA_PENDING`. Candidate PR
+Phase: `LIVE_QA_NOT_ACCEPTED`. Candidate PR
 [#1342](https://github.com/gvangalen/antigravity-trading-tool/pull/1342), branch
 `codex/finn3-browser-coaching-20261124`, based on public main
 `b973287daded94e4f449a96d4ad291634f3376a7`. Independent logged-in QA
@@ -53,9 +93,10 @@ completed successfully. On 24 November 2026, GitHub main, public backend
 `/api/health`, and frontend `/build-info.json` all reported that exact SHA;
 both public endpoints returned HTTP 200. This status-only update creates a
 new main revision; Build must wait for its own CI, Auto Deploy and final public
-SHA parity before handing off to QA. Independent live QA is pending. No
-product or live-account writes have
-been performed by Build for this candidate.
+SHA parity before handing off to QA. De definitieve live browser-QA op
+`39ce2a474cee236279e4a0c8ed666158f0c0f3e5` is daarna uitgevoerd;
+het verdict en de open dekkingsgrenzen staan in de nieuwe sectie hierboven.
+Build heeft voor deze kandidaat geen product- of live-accountwrites gedaan.
 
 ## FINN 3.0: ontbrekende dagrapportmeldingen in de feed (23 november 2026)
 
