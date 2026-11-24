@@ -1836,6 +1836,7 @@ def _minimal_read_answers_enabled() -> bool:
 
 def _minimal_read_answer(
     *, message: str, prepared: FinnResponsesFrontDoorResult,
+    user_time_zone: str | None = None,
 ) -> FinnResponsesVerifiedAnswer:
     """Keep the model's wording; check only a concrete saved-object type error."""
     current_evidence = tuple(
@@ -1893,15 +1894,22 @@ def _minimal_read_answer(
         )
     coach_plan = (getattr(prepared.response, "turn_contract", None) or {}).get("coach_evidence_plan") or {}
     def source_bound_coach_recovery() -> FinnResponsesVerifiedAnswer | None:
-        from backend.services.finn_v2_coach_source_fallback import render_coach_source_fallback
+        from backend.services.finn_v2_coach_source_fallback import (
+            coach_source_coverage_gap, render_coach_source_fallback,
+        )
         assets = mentioned_catalog_symbols(message)
         if len(assets) != 1 or not coach_plan:
             return None
+        asset = next(iter(assets))
+        topics = tuple(coach_plan.get("topics") or ())
         recovered = render_coach_source_fallback(
-            asset=next(iter(assets)), topics=tuple(coach_plan.get("topics") or ()),
-            evidence=current_evidence,
+            asset=asset, topics=topics,
+            evidence=current_evidence, question=message, user_time_zone=user_time_zone,
         )
-        if recovered:
+        if recovered and not coach_source_coverage_gap(
+            asset=asset, topics=topics, evidence=current_evidence,
+            answer=recovered, question=message, user_time_zone=user_time_zone,
+        ):
             return FinnResponsesVerifiedAnswer("completed", recovered, None, evidence)
         return None
 
@@ -1919,12 +1927,19 @@ def _minimal_read_answer(
         )
     if coach_plan and len(mentioned_assets) == 1:
         from backend.services.finn_v2_coach_source_fallback import coach_source_coverage_gap
-        if coach_source_coverage_gap(
+        gap = coach_source_coverage_gap(
             asset=next(iter(mentioned_assets)), topics=tuple(coach_plan.get("topics") or ()),
             evidence=current_evidence, answer=text, question=message,
-        ):
+            user_time_zone=user_time_zone,
+        )
+        if gap:
             if recovered := source_bound_coach_recovery():
                 return recovered
+            return FinnResponsesVerifiedAnswer(
+                "unavailable", "Ik kan de gevraagde bot- en Paper-bronnen niet eenduidig verifiëren.",
+                "coach_source_incomplete", current_evidence,
+                rejection_details={"gap": gap},
+            )
     from backend.services.finn_v2_source_moment_claims import (
         current_source_moments_supported, source_moment_repair_facts,
     )
@@ -5921,7 +5936,10 @@ class FinnV2RunService:
                                 and prepared.response.text.strip()
                             ):
                                 minimal_read_used = True
-                                answer = _minimal_read_answer(message=message, prepared=prepared)
+                                answer = _minimal_read_answer(
+                                    message=message, prepared=prepared,
+                                    user_time_zone=(getattr(run, "workspace_hints_json", None) or {}).get("time_zone"),
+                                )
                             elif _simple_coach_experiment_enabled() and prepared.response.text.strip():
                                 answer, final_response_id, revised_text = await _simple_coach_experiment_answer(
                                     message=message, prepared=prepared,
@@ -6010,7 +6028,10 @@ class FinnV2RunService:
                                     and prepared.response.text.strip()
                                 ):
                                     minimal_read_used = True
-                                    answer = _minimal_read_answer(message=message, prepared=prepared)
+                                    answer = _minimal_read_answer(
+                                        message=message, prepared=prepared,
+                                        user_time_zone=(getattr(run, "workspace_hints_json", None) or {}).get("time_zone"),
+                                    )
                                 elif _simple_coach_experiment_enabled():
                                     answer, final_response_id, revised_text = await _simple_coach_experiment_answer(
                                         message=message, prepared=prepared,

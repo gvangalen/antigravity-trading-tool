@@ -4,6 +4,42 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: volledige, botgebonden Paper-Holdcoach (24 november 2026)
+
+Phase: `LOCAL_VALIDATION`. De onafhankelijke ingelogde QA op publieke SHA
+`bb642138b99c504692e5e92a5bf31bec10f6093d` gaf `NOT_ACCEPTED`:
+dezelfde read-only Paper-Holdvraag leverde drie keer een generiek bronoverzicht
+zonder de gevraagde botbudgetlimiet, afzonderlijk botstatusmoment en concrete
+veilige vervolgstap. Geen accountinstellingen of orders werden gewijzigd.
+
+De brongebonden herstelroute toont nu alleen eigenaargebonden feiten voor één
+exact benoemde bot: het opgeslagen besluit en moment, de actuele botstatus en
+haar eigen uitleesmoment, budgetlimiet, werkelijk belegd, botkas en de
+rekeningbrede Paper-kas. Elk bedrag blijft aan zijn eigen bron gekoppeld.
+De route gebruikt de tijdzone uit de gebruikersworkspace, zonder vaste
+Amsterdamtijd. Een valutablokkade krijgt een concrete vervolgstap bij de
+opgeslagen strategieniveaus. De herstelde tekst wordt opnieuw tegen de
+getypeerde brongegevens gecontroleerd. Ontbreekt een verplichte read, de
+rekeningbrede kas of een exacte bot-ID/-naam/-paarbinding, dan stopt FINN met
+`unavailable` in plaats van feiten van verschillende bots te combineren.
+Gerichte regressies omvatten de exacte QA-vraag, verzonnen bedragen, twee
+BTC-bots, ontbrekende status, gefilterde kas en gelijkende botnamen.
+
+De lokale worker-/actiecontractmatrix slaagde **17/17** (artifact SHA-256
+`d3f30f4f01ac155d22e37edf9fd14cf39cfbc6baf8347c238f8f9151e965d321`),
+de adaptertests **28/28**, en bevestigde Smart DCA en kalender-DCA inclusief
+replay slaagden zonder productieverbinding of Live-order. De echte provider-
+developmentset gaf **20/20** met nul providerfouten (artifact SHA-256
+`74d8700c26c7113d60062860761e5bdcee47d217f41db6abdba76c3b5fec27ac`);
+de regressieset **109/109** met nul providerfouten (artifact SHA-256
+`46367d7d5ddef0af32200d3404bd84ccfe8d8393cd66406975115a32878c8325`).
+Frontend typecheck, i18n-, command-, voorstel- en setuptests, build en
+`audit:high` slaagden; frontendbron is niet gewijzigd. De definitieve
+volledige backend-suite gaf **5507 passed, 7 skipped**. Onafhankelijke
+QA- en Security-codebeoordeling vond op de laatste botnaam-, bron- en
+fail-closed-grens geen blocker. Dit is de lokale Build-kandidaat vóór PR/CI;
+er is voor deze reparatie nog geen live acceptatie.
+
 ## FINN 3.0: eigenaargebonden botstatus bij gecombineerde Paper-vraag (24 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_QA_PENDING`. De onafhankelijke ingelogde QA op

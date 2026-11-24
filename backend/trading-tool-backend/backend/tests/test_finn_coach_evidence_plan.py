@@ -3,6 +3,8 @@ from backend.services.finn_v2_turn_contract import turn_contract_gap
 from backend.services.finn_v2_coach_source_fallback import (
     coach_source_coverage_gap, render_coach_source_fallback,
 )
+from backend.services.finn_v2_run_service import _minimal_read_answer
+from types import SimpleNamespace
 
 
 def test_named_asset_coach_question_plans_each_requested_source():
@@ -70,7 +72,7 @@ def test_coach_source_recovery_separates_quote_bot_report_and_missing_score():
     )
     answer = render_coach_source_fallback(
         asset="AAPL", topics=("setup", "score", "bot", "report", "quote", "portfolio"),
-        evidence=evidence,
+        evidence=evidence, user_time_zone="Europe/Amsterdam",
     )
     assert answer is not None
     for fragment in ("61–75", "geen verifieerbare actuele score", "21:30:00 CET",
@@ -182,3 +184,216 @@ def test_coach_recovery_names_unverified_position_without_paper_cash():
         asset="AAPL", topics=("bot", "portfolio"), evidence=evidence,
     )
     assert "Paper-positie: geen verifieerbare hoeveelheid" in answer
+
+
+def test_paper_hold_recovery_separates_budget_invested_cash_status_and_source_times():
+    question = ("Beoordeel het laatste Paper-Holdbesluit van mijn bestaande Strategie long term dca btc Bot "
+                "voor BTC. Lees de actuele botstatus en exacte blokkadereden opnieuw. Scheid de ingestelde "
+                "botbudgetlimiet, werkelijk belegd, botkas en totale Paper-kas, en noem de bronmomenten. "
+                "Geef één concrete veilige vervolgstap. Lees alleen; wijzig geen strategie, bot of order.")
+    evidence = (
+        {"scope": "read_bot_status", "status": "completed", "asset": "BTC", "data": {
+            "bot_id": 56, "operational_status": "active", "read_at": "2026-11-24T19:09:30+00:00"}},
+        {"scope": "read_review_history", "status": "completed", "asset": "BTC", "data": {
+            "latest_bot_decisions": [{"bot_id": 56, "symbol": "BTC", "action": "hold",
+                "decision_at": "2026-11-24T19:03:29+00:00",
+                "safety_reason": "Bevestig eerst de valuta van de opgeslagen koersniveaus in de strategie."}]}},
+        {"scope": "read_portfolio", "status": "completed", "data": {
+            "global": {"cash_balance": 10000}, "read_at": "2026-11-24T19:09:28+00:00",
+            "bots": [{"bot_id": 56, "name": "Strategie long term dca btc Bot", "symbol": "BTC",
+                      "is_live": False, "budget_total_eur": 1000, "invested_eur": 0,
+                      "paper_cash_eur": 10000, "position_qty": 0}]}}
+    )
+    topics = ("bot", "portfolio")
+    incomplete = "De botbeslissing is hold. De botkas en totale Paper-kas zijn €10000,00."
+    assert coach_source_coverage_gap(
+        asset="BTC", topics=topics, evidence=evidence, question=question,
+        answer=incomplete, user_time_zone="Europe/Amsterdam",
+    ) is not None
+    answer = render_coach_source_fallback(
+        asset="BTC", topics=topics, evidence=evidence, question=question,
+        user_time_zone="Europe/Amsterdam",
+    )
+    assert answer is not None
+    for fragment in ("botbudgetlimiet: €1000,00", "werkelijk belegd (Paper): €0,00",
+                     "botkas (Paper): €10000,00", "Paper-portefeuille: kas €10000,00",
+                     "Botstatus: active, uitgelezen op 2026-11-24 20:09:30 CET",
+                     "hold op 2026-11-24 20:03:29 CET", "valuta van de instap-"):
+        assert fragment in answer
+    assert coach_source_coverage_gap(
+        asset="BTC", topics=topics, evidence=evidence, question=question,
+        answer=answer, user_time_zone="Europe/Amsterdam",
+    ) is None
+    assert "2026-11-24 20:09:28 CET" in answer
+    assert "1000,00; dit is geen extra kas" in answer
+    tampered = ("Botstatus: active, uitgelezen op 2026-11-24 20:09:30 CET. "
+                "Botbeslissing hold: Bevestig eerst de valuta van de opgeslagen koersniveaus in de strategie. "
+                "Botbudgetlimiet €9999,00; werkelijk belegd €123,00; botkas €10000,00. "
+                "Veilige vervolgstap: controleer een verse score.")
+    assert coach_source_coverage_gap(
+        asset="BTC", topics=topics, evidence=evidence, question=question,
+        answer=tampered, user_time_zone="Europe/Amsterdam",
+    ) == "bot_budget_mismatch"
+    other_zone = render_coach_source_fallback(
+        asset="BTC", topics=topics, evidence=evidence, question=question,
+        user_time_zone="America/New_York",
+    )
+    assert "2026-11-24 14:09:30 EST" in other_zone
+    assert "20:09:30 CET" not in other_zone
+
+
+def test_paper_hold_fallback_rejects_two_bots_with_conflicting_source_ids():
+    question = ("Beoordeel het laatste Paper-Holdbesluit van mijn BTC Bot Alpha voor BTC/USDT. "
+                "Lees de botstatus, budgetlimiet en Paper-kas. Lees alleen.")
+    evidence = (
+        {"scope": "read_review_history", "status": "completed", "asset": "BTC", "data": {
+            "latest_bot_decisions": [{"symbol": "BTC", "bot_id": 1, "pair": "BTC/USDT", "action": "hold",
+                "safety_reason": "Koersniveauvaluta onbevestigd"}]}},
+        {"scope": "read_bot_status", "status": "completed", "asset": "BTC", "data": {
+            "bot_id": 2, "operational_status": "active", "read_at": "2026-11-24T19:09:30+00:00"}},
+        {"scope": "read_portfolio", "status": "completed", "data": {
+            "global": {"cash_balance": 12000}, "read_at": "2026-11-24T19:09:28+00:00",
+            "bots": [
+                {"bot_id": 1, "name": "BTC Bot Alpha", "symbol": "BTC", "quote_currency": "USDT",
+                 "is_live": False, "budget_total_eur": 1000, "paper_cash_eur": 10000},
+                {"bot_id": 2, "name": "BTC Bot Beta", "symbol": "BTC", "quote_currency": "EUR",
+                 "is_live": False, "budget_total_eur": 2000, "paper_cash_eur": 2000},
+            ]}},
+    )
+    topics = ("bot", "portfolio")
+    assert render_coach_source_fallback(
+        asset="BTC", topics=topics, evidence=evidence, question=question,
+        user_time_zone="Europe/Amsterdam",
+    ) is None
+    assert coach_source_coverage_gap(
+        asset="BTC", topics=topics, evidence=evidence, question=question,
+        answer="BTC Bot Alpha wacht; budgetlimiet €1000,00 en kas €10000,00.",
+        user_time_zone="Europe/Amsterdam",
+    ) == "bot_evidence_ambiguous"
+    correct_status = {**evidence[1], "data": {**evidence[1]["data"], "bot_id": 1}}
+    other_decision = {"symbol": "BTC", "bot_id": 2, "pair": "BTC/EUR", "action": "hold",
+                      "safety_reason": "Andere botreden"}
+    mixed_history = {**evidence[0], "data": {
+        "latest_bot_decisions": [*evidence[0]["data"]["latest_bot_decisions"], other_decision]}}
+    selected = render_coach_source_fallback(
+        asset="BTC", topics=topics, evidence=(mixed_history, correct_status, evidence[2]),
+        question=question, user_time_zone="Europe/Amsterdam",
+    )
+    assert selected is not None
+    assert "BTC Bot Alpha" in selected
+    assert "BTC Bot Beta" not in selected
+    assert "Andere botreden" not in selected
+    wrong_named_question = question.replace("BTC Bot Alpha", "BTC Bot Gamma")
+    assert render_coach_source_fallback(
+        asset="BTC", topics=topics,
+        evidence=(evidence[0], correct_status, {**evidence[2], "data": {
+            **evidence[2]["data"], "bots": [evidence[2]["data"]["bots"][0]]}}),
+        question=wrong_named_question, user_time_zone="Europe/Amsterdam",
+    ) is None
+    longer_wrong_name = question.replace("BTC Bot Alpha", "BTC Bot Alpha Longterm")
+    assert render_coach_source_fallback(
+        asset="BTC", topics=topics,
+        evidence=(evidence[0], correct_status, {**evidence[2], "data": {
+            **evidence[2]["data"], "bots": [evidence[2]["data"]["bots"][1]]}}),
+        question=longer_wrong_name, user_time_zone="Europe/Amsterdam",
+    ) is None
+    dotted_wrong_name = question.replace("BTC Bot Alpha", "DCA 2.0 Bot Alpha")
+    assert render_coach_source_fallback(
+        asset="BTC", topics=topics,
+        evidence=(evidence[0], correct_status, {**evidence[2], "data": {
+            **evidence[2]["data"], "bots": [evidence[2]["data"]["bots"][1]]}}),
+        question=dotted_wrong_name, user_time_zone="Europe/Amsterdam",
+    ) is None
+    no_pronoun_name = ("Beoordeel DCA 2.0 Bot Alpha voor BTC in mijn account. "
+                       "Lees de botstatus, budgetlimiet, botkas en totale Paper-kas.")
+    assert render_coach_source_fallback(
+        asset="BTC", topics=topics,
+        evidence=(evidence[0], correct_status, {**evidence[2], "data": {
+            **evidence[2]["data"], "bots": [evidence[2]["data"]["bots"][1]]}}),
+        question=no_pronoun_name, user_time_zone="Europe/Amsterdam",
+    ) is None
+    account_phrase = ("Beoordeel DCA 2.0 Bot Alpha in mijn BTC-account. "
+                      "Lees het Paper-Holdbesluit, botstatus, budgetlimiet, botkas en totale Paper-kas.")
+    assert render_coach_source_fallback(
+        asset="BTC", topics=topics,
+        evidence=(evidence[0], correct_status, {**evidence[2], "data": {
+            **evidence[2]["data"], "bots": [evidence[2]["data"]["bots"][1]]}}),
+        question=account_phrase, user_time_zone="Europe/Amsterdam",
+    ) is None
+    negated_bot = ("Beoordeel niet BTC Bot Beta; beoordeel DCA 2.0 Bot Alpha in mijn BTC-account. "
+                   "Lees het Paper-Holdbesluit, botstatus, budgetlimiet, botkas en totale Paper-kas.")
+    assert render_coach_source_fallback(
+        asset="BTC", topics=topics,
+        evidence=(evidence[0], correct_status, {**evidence[2], "data": {
+            **evidence[2]["data"], "bots": [evidence[2]["data"]["bots"][1]]}}),
+        question=negated_bot, user_time_zone="Europe/Amsterdam",
+    ) is None
+    prefix_name = question.replace("BTC Bot Alpha", "BTC Bot Alpha Longterm")
+    assert render_coach_source_fallback(
+        asset="BTC", topics=topics,
+        evidence=(evidence[0], correct_status, {**evidence[2], "data": {
+            **evidence[2]["data"], "bots": [evidence[2]["data"]["bots"][0]]}}),
+        question=prefix_name, user_time_zone="Europe/Amsterdam",
+    ) is None
+
+
+def test_paper_hold_chat_recovery_replaces_tampered_values_and_fails_closed_on_wrong_bot():
+    question = ("Beoordeel het laatste Paper-Holdbesluit van mijn BTC Bot Alpha voor BTC. "
+                "Lees de actuele botstatus en blokkadereden. Scheid botbudgetlimiet, werkelijk belegd, "
+                "botkas en totale Paper-kas. Geef één concrete veilige vervolgstap. Lees alleen.")
+    decision = {"scope": "read_review_history", "status": "completed", "asset": "BTC", "data": {
+        "latest_bot_decisions": [{"bot_id": 1, "symbol": "BTC", "pair": "BTC/USDT", "action": "hold",
+            "decision_at": "2026-11-24T19:03:29+00:00",
+            "safety_reason": "Bevestig eerst de valuta van de opgeslagen koersniveaus in de strategie."}]}}
+    status = {"scope": "read_bot_status", "status": "completed", "asset": "BTC", "data": {
+        "bot_id": 1, "operational_status": "active", "read_at": "2026-11-24T19:09:30+00:00"}}
+    portfolio = {"scope": "read_portfolio", "status": "completed", "data": {
+        "global": {"cash_balance": 10000}, "read_at": "2026-11-24T19:09:28+00:00",
+        "bots": [{"bot_id": 1, "name": "BTC Bot Alpha", "symbol": "BTC", "is_live": False,
+                  "budget_total_eur": 1000, "invested_eur": 0, "paper_cash_eur": 10000,
+                  "position_qty": 0}]}}
+    plan = coach_evidence_plan(question, named_asset_count=1, read_only=True)
+    assert plan is not None
+    assert {"read_bot_status", "read_review_history", "read_portfolio"} <= set(plan.read_tools)
+    def prepared(status_read):
+        return SimpleNamespace(response=SimpleNamespace(
+            text=("Botstatus active, uitgelezen op 2026-11-24 20:09:30 CET. "
+                  "Holdreden: Bevestig eerst de valuta van de opgeslagen koersniveaus in de strategie. "
+                  "Botbudgetlimiet €9999,00; werkelijk belegd €123,00; botkas €10000,00; "
+                  "totale Paper-kas €10000,00. Veilige vervolgstap: controleer een verse score."),
+            tool_trace=({"result": {"results": [decision, status_read, portfolio]}},),
+            uses_previous_response=False,
+            turn_contract={"coach_evidence_plan": {"topics": plan.topics}},
+        ), previous_response=None, locale="nl")
+    repaired = _minimal_read_answer(
+        message=question, prepared=prepared(status), user_time_zone="Europe/Amsterdam",
+    )
+    assert repaired.status == "completed"
+    assert "botbudgetlimiet: €1000,00" in repaired.text
+    assert "werkelijk belegd (Paper): €0,00" in repaired.text
+    assert "valuta van de instap-" in repaired.text
+    assert "€9999,00" not in repaired.text
+    wrong_status = {**status, "data": {**status["data"], "bot_id": 2}}
+    blocked = _minimal_read_answer(
+        message=question, prepared=prepared(wrong_status), user_time_zone="Europe/Amsterdam",
+    )
+    assert blocked.status == "unavailable"
+    assert blocked.reason == "coach_source_incomplete"
+    missing_status = _minimal_read_answer(
+        message=question, prepared=prepared({"scope": "read_bot_status", "status": "unavailable", "asset": "BTC"}),
+        user_time_zone="Europe/Amsterdam",
+    )
+    assert missing_status.status == "unavailable"
+    assert missing_status.reason == "coach_source_incomplete"
+    filtered_portfolio = {**portfolio, "asset": "BTC"}
+    filtered = SimpleNamespace(response=SimpleNamespace(
+        text=prepared(status).response.text,
+        tool_trace=({"result": {"results": [decision, status, filtered_portfolio]}},),
+        uses_previous_response=False,
+        turn_contract={"coach_evidence_plan": {"topics": plan.topics}},
+    ), previous_response=None, locale="nl")
+    no_total = _minimal_read_answer(
+        message=question, prepared=filtered, user_time_zone="Europe/Amsterdam",
+    )
+    assert no_total.status == "unavailable"
+    assert no_total.reason == "coach_source_incomplete"
