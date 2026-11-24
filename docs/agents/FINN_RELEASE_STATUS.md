@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: Smart DCA gecombineerde lezing en scoregestuurd concept (24 november 2026)
 
-Phase: `BUILD_REPAIR_CANDIDATE_QA_PENDING`. De ingelogde, read-only browserreproductie
+Phase: `PRODUCT_DEPLOYED_QA_PENDING`. De ingelogde, read-only browserreproductie
 op BTC/USDT liet zien dat FINN bij een vraag naar de opgeslagen Smart DCA,
 actuele scoreband, bedrag en gekoppelde Paper-bot eerst een algemene setupzone
 en een andere BTC-botbeslissing mengde. Een vervolgvraag met de exacte
@@ -79,8 +79,16 @@ SHA-256 `f0c165fde4cf74b4ea52a3473a776131456fac4d736a2a607ad567ea92674d5b`)
 en de regressieset **109/109** (artifact SHA-256
 `a9f47d1a5be4434c363fac6aaf67b35579947dcd735fe1671deee16f11f8013d`)
 zonder provider-, schema-, timeout-, parse- of validatiefout. Frontendbron
-is ongewijzigd; de eerdere frontendgates waren groen. Deze kandidaat is nog
-niet gedeployed of live geaccepteerd.
+is ongewijzigd; de eerdere frontendgates waren groen. Reparatie-PR
+[#1366](https://github.com/gvangalen/antigravity-trading-tool/pull/1366)
+had vijf groene PR-CI-jobs (`45505909189`) en is gemerged als
+`8c65e955bafda9029e796ead38530568ea5d3fe8`. Main-CI `45507193459`
+had vijf groene jobs en Auto Deploy `45508382076` slaagde. GitHub main,
+publieke backend `/api/health` en frontend `/build-info.json` meldden op
+25 november exact deze SHA met HTTP 200. Deze statusupdate maakt zelf een
+nieuwe main-SHA; vóór QA moeten ook de laatste main-CI, Auto Deploy en
+publieke SHA-pariteit van die revisie slagen. De korte-naamroute is nog niet
+onafhankelijk op de reparatie getest; de vorige NOT_ACCEPTED blijft gelden.
 
 ## FINN 3.0: volledige, botgebonden Paper-Holdcoach (24 november 2026)
 
