@@ -4,6 +4,61 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: Paper-botcoach bronmoment (24 november 2026)
+
+Phase: `PRODUCT_DEPLOYED_STATUS_UPDATE_PENDING`. De onafhankelijke ingelogde browserproef
+op de vorige live SHA `9f5fe9791ef041293a66178ad2ec02ce8566fec5`
+accepteerde de Paper-Holdcoach niet voor herhaalbaarheid: dezelfde read-only
+vraag over het laatste BTC-botbesluit, botlimiet, werkelijk belegd, botkas,
+totale Paper-kas en bronmomenten gaf eerst alleen een bronmomentfout; na
+verversen was het antwoord volledig en juist. De eerste run was
+`unavailable/source_moment_conflicts_with_source` met
+`portfolio_read_clock_mismatch`. Een eigenaargebonden read-only diagnose van
+de bestaande run toonde een voltooide `read_portfolio.read_at` van
+24 november 11:08:16 UTC en het antwoord `12:08:16 CET` zonder herhaalde
+datum. De verifier wees daarmee een feitelijk passend uitleesmoment af.
+
+Product-PR [#1352](https://github.com/gvangalen/antigravity-trading-tool/pull/1352)
+is gemerged als `02f0c59ad2985bbc4b061afb44e261aa7204b623`. De wijziging
+verifieert een klok zonder herhaalde datum tegen een voltooide portfolio-read
+van dezelfde beurt. Expliciete datums vóór of na het onderwerp, een los jaar,
+verkeerde tijdzone en een tweede onjuiste portfolio-klok worden afgewezen.
+Afzonderlijke bot- of scorebronclausules worden niet aan het portfolio-moment
+toegeschreven. Onafhankelijke QA en Security hebben de definitieve diff
+read-only beoordeeld zonder blocker; dit is nog geen live verdict.
+
+Definitieve lokale backend-suite: **5498 passed, 7 skipped**. Gerichte
+bronmomenttests: **24/24**. Lokale worker/action-matrix: **17/17**, nul
+brokerorders en Live-calls, artifact SHA-256
+`2d1864d9b44a19774a34889d0bd14d19d620b90770a6c13f09ece88285be1c0f`.
+Echte providerselector-development: **20/20**, artifact SHA-256
+`88298a3da67efc9224577cadbc7d0455cb609265ce52678c53f9271fc48a1090`;
+regression: **109/109**, artifact SHA-256
+`66f22e44b819c382dbcfe5ee1386bb9430899611bf82ecd0ee8661e3acf83d4a`.
+Beide providerproeven hadden nul provider-, schema-, timeout-, parse- of
+validatiefouten. Frontend typecheck, i18n-lint/tests, commandtests, build en
+audit:high slaagden; de frontendbron is niet gewijzigd. Vijf PR-CI-jobs op
+head `1f2aa1c101735b26eb1772a3b3c5a35a27552588` slaagden in run
+`45385115878`.
+Main-CI `45386809440` had vijf geslaagde jobs; Auto Deploy `45388108787`
+voltooide met `success`. GitHub main, de publieke backend
+`https://tradamind.com/api/health` en de frontend
+`https://tradamind.com/build-info.json` meldden op 24 november alle drie
+exact `02f0c59ad2985bbc4b061afb44e261aa7204b623`; beide endpoints gaven
+HTTP 200. Deze statusupdate maakt na merge opnieuw een main-SHA. QA start pas
+na de laatste main-CI, Auto Deploy en publieke SHA-pariteit van die nieuwe
+revisie.
+
+Onafhankelijke QA test na de laatste publieke SHA-pariteit dezelfde Paper-vraag
+herhaald, read-only in het ingelogde account. De weekreflectie bleef in deze
+browserproef ontestbaar: voor de geselecteerde week waren nul afgesloten
+trades en geen opgeslagen weekreflectierapport of -kaart. De automatische
+`weekly_reflection`-kaart wordt momenteel alleen voor eigenaren met een
+afgesloten tradebeoordeling in die week gepubliceerd. Dit is geen groen
+verdict voor de bredere FINN 3.0-coaching. De bestaande bronmomentparser
+begrijpt in deze route alleen UTC/CET/CEST; andere gebruikerstijdzones vragen
+nog afzonderlijke implementatie en acceptatie.
+
 ## FINN 3.0: benchmarkbronmoment in Analyse (24 november 2026)
 
 Phase: `LIVE_DEPLOYED_QA_PENDING`. Onafhankelijke ingelogde QA op
