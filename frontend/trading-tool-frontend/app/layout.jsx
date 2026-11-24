@@ -121,6 +121,18 @@ function StaleAppRecoveryScript() {
     }
   }
 
+  function checkForNewDeploy() {
+    if (typeof document === "undefined" || document.visibilityState !== "visible" || !loadedDeploySha) return;
+    readDeploySha().then(function (currentSha) {
+      if (currentSha && currentSha !== loadedDeploySha) clearStaleApp("build-version-change");
+    });
+  }
+
+  if (typeof document !== "undefined" && document.addEventListener) {
+    document.addEventListener("visibilitychange", checkForNewDeploy);
+  }
+  window.addEventListener("focus", checkForNewDeploy);
+
   try {
     var previousVersion = window.localStorage && localStorage.getItem(VERSION_KEY);
     if (previousVersion && previousVersion !== VERSION) {
