@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 from backend.services.finn_v2_responses_front_door import (
     FinnResponsesFrontDoor, _coaching_plan_for_question, _personal_allocation_coaching,
+    _saved_smart_dca_coach_question,
     _standalone_read_subject,
 )
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
@@ -72,6 +73,37 @@ def test_live_qa_profile_allocation_question_is_not_reduced_to_readback():
     assert _coaching_plan_for_question(
         question, None, named_asset_count=1, read_only=True,
     ) is None
+
+
+def test_saved_smart_dca_curve_question_reads_plan_not_allocation_or_bot_evaluation(monkeypatch):
+    question = (
+        "Beoordeel mijn opgeslagen Smart DCA-plan Test Smart BTC voor BTC/USDT. "
+        "Welke benchmarkscore en scoreband gelden nu, welk bedrag volgt uit de "
+        "opgeslagen bedragcurve, en hoe zou ik meer kopen bij oversold en minder "
+        "bij overbought kunnen overwegen? Leg uit wat dit wel of niet betekent "
+        "voor Paper-uitvoering en of er een bot aan dit plan gekoppeld is. "
+        "Noem bronmomenten, maak alleen een onderbouwd voorstel en wijzig niets."
+    )
+    assert _saved_smart_dca_coach_question(question)
+    assert not _personal_allocation_coaching(question, None)
+    front = FinnResponsesFrontDoor(
+        client=object(), session=object(), user_id=7, run_id="smart-dca-coach",
+        model_led_coach=True,
+    )
+    loop_run = AsyncMock(return_value=FinnResponsesResult(
+        text="Ik lees de opgeslagen Smart DCA-bronnen.", response_id="smart-read",
+        tool_trace=(), answer_kind="free_text", model_led_coach=True,
+    ))
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run", loop_run,
+    )
+    asyncio.run(front.run(
+        message=question, instructions="", conversation_context={},
+        verified_asset="BTC", workspace_hints={"page": "/setup", "symbol": "BTC",
+                                               "quote_currency": "USDT"},
+    ))
+    assert loop_run.await_args.kwargs["required_read_tool_name"] == "get_active_plan_and_strategy"
+    assert loop_run.await_args.kwargs["read_only_turn"] is True
 
 
 def test_mixed_profile_question_keeps_decision_score_and_quote_coverage():
