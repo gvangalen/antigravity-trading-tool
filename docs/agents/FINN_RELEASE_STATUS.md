@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: rapportmelding en Paper-accountantwoord (24 november 2026)
 
-Phase: `BUILD_LOCAL_VALIDATION`. Candidate branch:
+Phase: `PR_CI_PENDING`. Candidate PR
+[#1342](https://github.com/gvangalen/antigravity-trading-tool/pull/1342), branch
 `codex/finn3-browser-coaching-20261124`, based on public main
 `b973287daded94e4f449a96d4ad291634f3376a7`. Independent logged-in QA
 confirmed a fresh BTC/EUR analysis card and a Paper follow-up card both opened
@@ -31,11 +32,23 @@ date and value, preventing a resolved unchanged score from reopening while
 allowing a changed score on the same date.
 
 Targeted backend tests: **141 passed** after the timezone, selected-feed
-context boundary, and score revision;
-web typecheck/build and 113 command tests passed; mobile typecheck and lint
-passed (lint warnings only). Full backend suite, local worker-driven action
-matrix, real-provider selector development/regression, PR-CI, deployment, and
-independent live QA are still pending. No product or live-account writes have
+context boundary, and score revision. Full backend suite: **5489 passed,
+7 skipped**, 47 warnings; the final context-boundary change was also covered
+by the targeted rerun. Web typecheck/build, 113 command tests, 45 i18n tests,
+and i18n lint passed. Mobile typecheck, lint (warnings only), and web/iOS/Android
+bundle smokes passed. The local production-shaped worker matrix passed
+**38/38**, with no sealed QA material (artifact SHA-256
+`a891ada2c5dab78d71fbf139fa0a43a6c5172025018475f68012cc05decd1c48`).
+Real-provider selector development passed **20/20** (artifact SHA-256
+`c6ebb63ec672198bdd02fcd23b209bf34c5d68fb0f423dfe0d1dabe987449464`)
+and regression passed **109/109** (artifact SHA-256
+`9c14773f220b7e19c13ab5b2b88d269b485747f0e9aeda8d109d642f577cdc04`),
+both with zero provider/schema/timeout/parse/validation failures. Independent
+QA code review found no remaining blocker after the feed-selection time-zone
+boundary correction. PR-CI for the initial candidate commit
+`99e83d4842f3475842696de6d2ea0eb1441fd81d` passed all five jobs;
+the final status-only commit still needs CI. Deployment and independent live
+QA are pending. No product or live-account writes have
 been performed by Build for this candidate.
 
 ## FINN 3.0: ontbrekende dagrapportmeldingen in de feed (23 november 2026)
