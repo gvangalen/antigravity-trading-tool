@@ -1,6 +1,119 @@
 from backend.services.finn_v2_source_moment_claims import (
-    current_source_moments_supported, source_moment_repair_facts,
+    complete_requested_bot_status_read_time, current_source_moments_supported,
+    source_moment_repair_facts,
 )
+
+
+def test_requested_bot_status_read_time_uses_its_own_owner_bound_read():
+    question = "Lees de actuele botstatus en noem de bronmomenten."
+    evidence = ({"scope": "read_bot_status", "status": "completed", "data": {
+        "bot_id": 130, "read_at": "2026-11-24T13:39:06+00:00",
+        "latest_decision": {"decision_at": "2026-11-24T13:33:29+00:00"},
+    }}, {"scope": "read_portfolio", "status": "completed", "data": {
+        "read_at": "2026-11-24T13:39:06+00:00",
+    }})
+    first = ("- Laatste botbesluit: 24 november 2026 om 14:33:29 CET.\n"
+             "- Actuele botstatus is opnieuw gelezen; de bot stond daarbij actief.\n"
+             "- Paper-portefeuille en waardering: 24 november 2026 om 14:39:06 CET.")
+    completed = complete_requested_bot_status_read_time(
+        first, evidence, question=question, user_time_zone="Europe/Amsterdam",
+    )
+    assert "Botstatus opnieuw gelezen: 24 november 2026 om 14:39:06 CET" in completed
+    assert current_source_moments_supported(completed, evidence, question=question)
+    assert complete_requested_bot_status_read_time(
+        completed, evidence, question=question, user_time_zone="Europe/Amsterdam",
+    ) == completed
+    assert complete_requested_bot_status_read_time(
+        first, (), question=question, user_time_zone="Europe/Amsterdam",
+    ) == first
+    assert "America/New_York" in complete_requested_bot_status_read_time(
+        first, evidence, question=question, user_time_zone="America/New_York",
+    )
+    mixed = "De botstatus is gelezen en het botbesluit was 24 november 2026 om 14:33:29 CET."
+    assert "Botstatus opnieuw gelezen: 24 november 2026 om 14:39:06 CET" in (
+        complete_requested_bot_status_read_time(
+            mixed, evidence, question=question, user_time_zone="Europe/Amsterdam",
+        )
+    )
+    hold_first = "Laatste Hold was 14:33:29 CET en de botstatus is opnieuw gelezen."
+    assert "Botstatus opnieuw gelezen: 24 november 2026 om 14:39:06 CET" in (
+        complete_requested_bot_status_read_time(
+            hold_first, evidence, question=question, user_time_zone="Europe/Amsterdam",
+        )
+    )
+    other_bot = ({"scope": "read_bot_status", "status": "completed", "data": {
+        "bot_id": 57, "read_at": "2026-11-24T13:39:06+00:00",
+    }},)
+    named_question = "Lees de actuele botstatus van bot #56 en noem de bronmomenten."
+    named_answer = "Bot #56: de actuele botstatus is opnieuw gelezen."
+    assert complete_requested_bot_status_read_time(
+        named_answer, other_bot, question=named_question, user_time_zone="Europe/Amsterdam",
+    ) == named_answer
+    assert "Botstatus opnieuw gelezen: 24 november 2026 om 14:39:06 CET" in (
+        complete_requested_bot_status_read_time(
+            named_answer, ({**other_bot[0], "data": {**other_bot[0]["data"], "bot_id": 56}},),
+            question=named_question, user_time_zone="Europe/Amsterdam",
+        )
+    )
+
+
+def test_model_owned_coach_accepts_only_typed_status_clock_completion():
+    import asyncio
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from backend.services.finn_v2_responses_answer_verifier import FinnResponsesAnswerVerifier
+    from backend.services.finn_v2_responses_loop import FinnResponsesResult
+
+    message = "Lees de actuele botstatus en noem de bronmomenten."
+    evidence = ({"scope": "read_bot_status", "status": "completed", "data": {
+        "bot_id": 130, "read_at": "2026-11-24T13:39:06+00:00",
+        "latest_decision": {"decision_at": "2026-11-24T13:33:29+00:00"},
+    }},)
+    result = FinnResponsesResult(
+        text="De actuele botstatus is opnieuw gelezen. Het laatste botbesluit was 24 november 2026 om 14:33:29 CET.",
+        response_id="test-status-clock", answer_kind="free_text", model_owned_repair=True,
+        tool_trace=({"name": "get_active_plan_and_strategy", "result": {"results": list(evidence)}},),
+    )
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=True, passes=True, reason_codes=[],
+    )))
+    verified = asyncio.run(FinnResponsesAnswerVerifier(semantic=semantic).verify(
+        message=message, result=result, locale="nl", user_time_zone="Europe/Amsterdam",
+    ))
+    assert verified.status == "completed", verified.reason
+    assert "Botstatus opnieuw gelezen: 24 november 2026 om 14:39:06 CET" in verified.text
+    wrong_bot = replace(result,
+        text="Bot #56: de actuele botstatus is opnieuw gelezen.",
+        tool_trace=({"name": "get_active_plan_and_strategy", "result": {"results": [
+            {**evidence[0], "data": {**evidence[0]["data"], "bot_id": 57}},
+        ]}},),
+    )
+    rejected_completion = asyncio.run(FinnResponsesAnswerVerifier(semantic=semantic).verify(
+        message="Lees de actuele botstatus van bot #56 en noem de bronmomenten.",
+        result=wrong_bot, locale="nl", user_time_zone="Europe/Amsterdam",
+    ))
+    assert "14:39:06 CET" not in rejected_completion.text
+    wrong_asset = replace(result,
+        text="De actuele AAPL-botstatus is opnieuw gelezen.",
+        tool_trace=({"name": "get_active_plan_and_strategy", "result": {"results": [
+            {**evidence[0], "asset": "BTC"},
+        ]}},),
+    )
+    asset_question = "Lees de actuele AAPL-botstatus en noem de bronmomenten."
+    wrong_asset_answer = asyncio.run(FinnResponsesAnswerVerifier(semantic=semantic).verify(
+        message=asset_question, result=wrong_asset, locale="nl", user_time_zone="Europe/Amsterdam",
+    ))
+    assert wrong_asset_answer.status == "unavailable"
+    assert wrong_asset_answer.reason == "bot_status_subject_conflicts_with_source"
+    assert "14:39:06 CET" not in wrong_asset_answer.text
+    matching_asset = replace(wrong_asset, tool_trace=({"name": "get_active_plan_and_strategy",
+        "result": {"results": [{**evidence[0], "asset": "AAPL"}]}},))
+    matching_asset_answer = asyncio.run(FinnResponsesAnswerVerifier(semantic=semantic).verify(
+        message=asset_question, result=matching_asset, locale="nl", user_time_zone="Europe/Amsterdam",
+    ))
+    assert matching_asset_answer.status == "completed", matching_asset_answer.reason
+    assert "Botstatus opnieuw gelezen: 24 november 2026 om 14:39:06 CET" in matching_asset_answer.text
 
 
 def test_future_paper_portfolio_measurement_is_not_verified_as_current():

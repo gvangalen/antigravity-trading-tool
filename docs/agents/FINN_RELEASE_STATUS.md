@@ -4,6 +4,39 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: volledigheid botstatusbronmoment (24 november 2026)
+
+Phase: `BUILD_VALIDATED_PR_PENDING`. De onafhankelijke ingelogde hertest op live SHA
+`9eda34bae4d0f63213a093c53eaf01bba3c7921d` gaf `NOT_ACCEPTED` voor de
+herhaalbaarheid van de Paper-Holdcoach. Alle drie identieke read-only vragen
+gaven de juiste Hold-reden, budgetlimiet, werkelijk belegd, botkas en totale
+Paper-kas zonder fallback. Het eerste antwoord noemde wel het opgeslagen
+besluitmoment en de portefeuille-uitleestijd, maar niet het afzonderlijk
+gevraagde botstatus-uitleesmoment. De twee herhalingen na verversen deden dat
+wel. Er waren geen accountmutaties of orders.
+
+De huidige kandidaat vult alleen bij een expliciete vraag naar botstatus en
+bronmomenten het ontbrekende status-uitleesmoment aan uit exact één voltooide,
+eigenaargebonden `read_bot_status.read_at`. Expliciete bot-ID en asset moeten
+met de read overeenkomen. Ook een onjuiste claim dat AAPL-botstatus is gelezen
+met alleen BTC-bewijs wordt nu afgewezen. De tijd wordt in de tijdzone van de
+gebruiker getoond. Het bestaande momentverificatiepad valideert de
+aangevulde tekst; zonder eenduidige bron blijft het antwoord ongewijzigd.
+De gerichte 29 tests en onafhankelijke QA- en Security-codebeoordeling zijn
+groen. De definitieve backend-suite gaf **5501 passed, 7 skipped**.
+Frontend typecheck, i18n-lint en -tests (45/45), commandtests (114/114),
+build en audit:high slaagden; de frontendbron is niet gewijzigd. De lokale
+worker/action-matrix gaf **17/17**, plus 28/28 adaptertests en geslaagde
+Smart DCA- en kalender-DCA-bevestigingsproeven, met nul brokerorders,
+Live-bots, Live-tradingcalls en productieverbindingen. Matrixartifact SHA-256:
+`5511fc309aa675a81cdd0c0101376d8f10e0ff056cc1013902727a06c8342ebc`.
+De echte provider-developmentset gaf **20/20** (artifact SHA-256
+`d272ddfc35526372db21580c2b624d4ac05fcfc1b2eff11c2ed13a86812eb52a`);
+de regressieset **109/109** (artifact SHA-256
+`c86189ae9e49a095959142270d726e8a7e0d9bbf3703c83f35e77cb852ac96af`).
+Beide hadden nul provider-, schema-, timeout-, parse- of validatiefouten.
+CI, deploy en onafhankelijke live QA zijn voor deze kandidaat nog niet gedaan.
+
 ## FINN 3.0: Paper-botcoach botstatusmoment (24 november 2026)
 
 Phase: `PRODUCT_DEPLOYED_STATUS_UPDATE_PENDING`. De vorige bronmomentcorrectie is live op

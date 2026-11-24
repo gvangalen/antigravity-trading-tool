@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from backend.services.asset_catalog_service import mentioned_catalog_symbols
+
 
 _BOT_ID = re.compile(r"\bbot\s*#?\s*(\d+)\b", re.I)
 _EXCLUDED_BOT = re.compile(
@@ -68,3 +70,26 @@ def bot_subject_supported(
     if not target_named:
         return False
     return target_named
+
+
+def bot_status_read_subject_supported(
+    answer: str, evidence: tuple[dict[str, Any], ...], *, question: str,
+) -> bool:
+    """A claimed current status read must belong to the named bot and asset."""
+    if not (re.search(r"\bbotstatus\b", question, re.I)
+            and re.search(r"\bbotstatus\b[^.!?\n]{0,100}\b(?:gelezen|uitgelezen|opgehaald|read)\b", answer, re.I)):
+        return True
+    rows = [item for item in evidence if item.get("scope") == "read_bot_status"
+            and item.get("status") == "completed" and isinstance(item.get("data"), dict)]
+    named_ids = {int(match.group(1)) for value in (question, answer)
+                 for match in _BOT_ID.finditer(value)}
+    named_assets = mentioned_catalog_symbols(f"{question}\n{answer}")
+    if not named_ids and not named_assets:
+        return True
+    if len(named_ids) > 1 or len(named_assets) > 1:
+        return False
+    return any(
+        (not named_ids or row["data"].get("bot_id") in named_ids)
+        and (not named_assets or str(row.get("asset") or "").upper() in named_assets)
+        for row in rows
+    )

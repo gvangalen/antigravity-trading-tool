@@ -7,6 +7,8 @@ import re
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from backend.services.asset_catalog_service import mentioned_catalog_symbols
+
 
 _AMSTERDAM = ZoneInfo("Europe/Amsterdam")
 _MONTHS = {name: number for number, name in enumerate((
@@ -345,6 +347,56 @@ def source_moment_repair_facts(evidence: tuple[dict[str, Any], ...]) -> list[dic
             "amsterdam": observed.astimezone(_AMSTERDAM).isoformat(timespec="seconds"),
         })
     return facts
+
+
+def complete_requested_bot_status_read_time(
+    answer: str, evidence: tuple[dict[str, Any], ...], *, question: str,
+    user_time_zone: str | None,
+) -> str:
+    """Include the separately requested status read clock, using its own typed read."""
+    if not (re.search(r"\bbotstatus\b", question, re.I)
+            and re.search(r"\bbronmomenten?\b", question, re.I)):
+        return answer
+    status_clauses = [part[match.start():]
+                      for part in re.split(r"(?<=[.!?])\s+|\n+|;\s*", answer)
+                      for match in [re.search(r"\bbotstatus\b", part, re.I)] if match]
+    status_clock = re.compile(
+        r"\b\d{1,2}:\d{2}(?::\d{2})?\s*(?:UTC|CET|CEST|[A-Za-z_]+/[A-Za-z_]+)\b", re.I,
+    )
+    status_clauses = [re.split(r"\b(?:bot)?besluit\b|\bbeslissing\b|\bHold\b", part,
+                               maxsplit=1, flags=re.I)[0]
+                      for part in status_clauses]
+    if not status_clauses or any(status_clock.search(part) for part in status_clauses):
+        return answer
+    reads = [
+        (item["data"].get("bot_id"), str(item.get("asset") or "").upper(), observed)
+        for item in evidence
+        if item.get("scope") == "read_bot_status" and item.get("status") == "completed"
+        and isinstance(item.get("data"), dict)
+        if (observed := _utc(item["data"].get("read_at"))) is not None
+    ]
+    if len(reads) != 1:
+        return answer
+    named_ids = {int(match.group(1)) for value in (question, answer)
+                 for match in re.finditer(r"\bbot\s*#?\s*(\d+)\b", value, re.I)}
+    if len(named_ids) > 1 or (named_ids and reads[0][0] != next(iter(named_ids))):
+        return answer
+    named_assets = mentioned_catalog_symbols(f"{question}\n{answer}")
+    if len(named_assets) > 1 or (named_assets and reads[0][1] != next(iter(named_assets))):
+        return answer
+    try:
+        zone = ZoneInfo(user_time_zone or "UTC")
+    except (KeyError, ValueError):
+        zone = timezone.utc
+    local = reads[0][2].astimezone(zone)
+    # Keep the user's IANA zone explicit when its abbreviation is ambiguous.
+    zone_label = local.tzname() if isinstance(zone, ZoneInfo) and zone.key == "Europe/Amsterdam" else (
+        zone.key if isinstance(zone, ZoneInfo) else "UTC"
+    )
+    month_names = ("januari", "februari", "maart", "april", "mei", "juni", "juli",
+                   "augustus", "september", "oktober", "november", "december")
+    moment = f"{local.day} {month_names[local.month - 1]} {local.year} om {local:%H:%M:%S} {zone_label}"
+    return f"{answer.rstrip()}\n- Botstatus opnieuw gelezen: {moment}."
 
 
 def current_source_moments_supported(
