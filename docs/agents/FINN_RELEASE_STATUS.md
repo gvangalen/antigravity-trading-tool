@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: Paper-botcoach botstatusmoment (24 november 2026)
 
-Phase: `LOCAL_GATES_COMPLETE_PR_PENDING`. De vorige bronmomentcorrectie is live op
+Phase: `PRODUCT_DEPLOYED_STATUS_UPDATE_PENDING`. De vorige bronmomentcorrectie is live op
 `9dfc6df6296d2eeb7021782d68a6648ecfb60412`, met succesvolle main-CI,
 Auto Deploy en exacte backend/frontend-SHA-pariteit. De onafhankelijke
 ingelogde, read-only QA-herproef gaf `NOT_ACCEPTED`: van drie identieke
@@ -40,8 +40,15 @@ schema-, timeout-, parse- of validatiefouten, artifact SHA-256
 De echte provider-regressieset gaf **109/109** met dezelfde nul foutpercentages,
 artifact SHA-256
 `e3086a71dd322871aff8f86ffd8960ca6b7f1536e6d488603b04879656d3560a`.
-CI, deploy en live QA zijn voor deze
-kandidaat nog niet afgerond. De ontbrekende bronvermelding in de derde beurt en de
+Product-PR [#1354](https://github.com/gvangalen/antigravity-trading-tool/pull/1354)
+is gemerged als `87b4305b708e20982a8817387e1453e1f33f91ab`. De vijf
+PR-CI-jobs (`45398745410`) en vijf main-CI-jobs (`45400098794`)
+slaagden; Auto Deploy `45401437602` voltooide met `success`.
+GitHub main, publieke backend `/api/health` en frontend `/build-info.json`
+meldden op 24 november alle drie exact die SHA, beide endpoints HTTP 200.
+Deze statusupdate maakt na merge zelf opnieuw een main-SHA. QA start pas na
+de laatste main-CI, Auto Deploy en publieke pariteit van die revisie.
+Live QA is voor deze kandidaat nog niet afgerond. De ontbrekende bronvermelding in de derde beurt en de
 weekreflectie zonder afgesloten trades blijven afzonderlijke acceptatiegaten.
 
 ## FINN 3.0: Paper-botcoach bronmoment (24 november 2026)
