@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: benchmarkbronmoment in Analyse (24 november 2026)
 
-Phase: `BUILD_GATES_GREEN_PR_CI_PENDING`. Onafhankelijke ingelogde QA op
+Phase: `LIVE_DEPLOYED_QA_PENDING`. Onafhankelijke ingelogde QA op
 publieke SHA `88e2febaa725d76224e67bbb949427675ecce5a6` gaf
 `NOT_ACCEPTED` voor de volledige Smart-DCA-vraag, terwijl de eerdere
 capability-routeringsfout was hersteld: twee beurten na refresh noemden de
@@ -35,8 +35,16 @@ Echte providerselector development: **20/20**, artifact SHA-256
 `04a84e62c066b3be6077a28b7bf2c5a7f54ea64a741c0b55d5244f2ca2dda06f`;
 regression: **109/109**, artifact SHA-256
 `ca05027c0a2bfdbfadb70edfc2f4a61619edda9c68d0ef5d47ce857cc1b7a322`.
-Beide selectorruns hadden nul provider-, schema- en timeoutfouten. PR-CI,
-Auto Deploy en onafhankelijke live UI-hertest van het bronmoment staan open.
+Beide selectorruns hadden nul provider-, schema- en timeoutfouten. De product-
+en documentatieheads van PR #1350 hadden elk vijf groene PR-CI-jobs. PR #1350
+is gemerged als `43e83ec5c9ddb9aecef65bc76d89fd65a7a369ab`. Main-CI
+`45376058517` slaagde met vijf groene jobs; Auto Deploy `45377374689`
+voltooide met `success`. GitHub main, publieke backend `/api/health` en frontend
+`/build-info.json` meldden op 24 november exact deze SHA; beide endpoints gaven
+HTTP 200. Deze status-only commit maakt opnieuw een main-SHA. Build wacht op
+diens laatste main-CI, Auto Deploy en publieke SHA-pariteit vóór onafhankelijke
+ingelogde UI-hertest. Het nieuwe zichtbare bronmoment is nog niet live
+geaccepteerd.
 
 ## FINN 3.0: Smart DCA brongebonden advies (24 november 2026)
 
