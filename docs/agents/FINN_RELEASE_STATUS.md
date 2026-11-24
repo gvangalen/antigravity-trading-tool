@@ -68,8 +68,15 @@ Echte providerselector development: **20/20**, artifact SHA-256
 regression: **109/109**, artifact SHA-256
 `cb10c3a9e15740d8508e38a40f83cdd7da61b1f7ccef3e10e8604b9cd43205c5`.
 Beide selectorruns hadden nul provider-, schema- of timeoutfouten.
-PR-CI, Auto Deploy en een nieuwe ingelogde live QA voor deze kandidaat staan
-nog open.
+De product- en status-heads van PR #1348 hadden elk vijf groene PR-CI-jobs.
+PR #1348 is gemerged als `495c51665973e46de4d5c236aae0a16c8d55cfd0`.
+Main-CI `45366402956` slaagde met vijf groene jobs; Auto Deploy
+`45367656284` voltooide met `success`. GitHub main, publieke backend
+`/api/health` en frontend `/build-info.json` meldden op 24 november deze
+exacte SHA; beide endpoints gaven HTTP 200. Deze status-only commit maakt
+opnieuw een main-SHA. Build wacht op de laatste main-CI, Auto Deploy en
+publieke SHA-pariteit van die nieuwe commit vóór de onafhankelijke ingelogde
+Smart-DCA-hertest. De browseracceptatie van de routeringsfix is nog open.
 
 ## FINN 3.0: Paper-bedragen en gebruikerstijdzone (24 november 2026)
 
