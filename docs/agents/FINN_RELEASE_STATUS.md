@@ -4,6 +4,40 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: Smart DCA brongebonden advies (24 november 2026)
+
+Phase: `LOCAL_VALIDATED_PR_PENDING`. Onafhankelijke ingelogde browser-QA op publieke
+SHA `600a614e45f921c193f40b4d21a6eec940634f15` accepteerde de smalle
+Paper-bedragenreparatie: drie herhaalde vragen gaven budget, werkelijk belegd,
+botkas en totale Paper-kas afzonderlijk en met de opgeslagen gebruikerstijdzone.
+De brede FINN 3.0-browsermatrix blijft open. Dezelfde QA vond een nieuwe
+Smart-DCA-fout: bij de opgeslagen `Test Smart BTC`-setup op BTC/USDT las FINN
+de actuele scoreband, EUR-bedragcurve en botkoppeling niet en gaf slechts
+generieke uitleg. De weekreflectie bleef binnen de zichtbare ontbrekende
+gegevens en verzon geen afgesloten trades.
+
+Deze kandidaat bindt de vraag aan één eigenaargebonden setup en strategie,
+verifieert de exacte pair en gedateerde score, kiest de halfopen scoreband
+uit de opgeslagen curve en noemt het berekende bedrag in EUR. De laatste
+antwoordverifier herberekent dezelfde feiten; een verkeerd bedrag of andere
+gebruikerszone wordt afgewezen. Een niet gekoppelde bot mag alleen uit de
+getypeerde afwezigheidsreads worden geconcludeerd. Stijgende en dalende
+scorecurves krijgen afzonderlijke uitleg; een gekoppelde Live-bot wordt niet
+als Paper-bot gepresenteerd.
+
+De volledige backend-suite vanaf de repositoryroot: **5496 passed,
+7 skipped**, 47 waarschuwingen. De lokale productiegerichte workerproef:
+**38/38**, artifact SHA-256
+`8ca11a9df064ba712ab824852b205c0220ba79b9a7f794156a76ddadeb70c1bc`.
+Echte providerselector development: **20/20**, artifact SHA-256
+`72f45d24b25782f7ac837cdfbff14663f4abfd8571a8a878c687bf38aff3d33f`;
+regression: **109/109**, artifact SHA-256
+`bfd4d46076daad7f9f948f52f23a05abadf8ce6c1786e820fec9beeb8571cda7`.
+Beide selectorruns gebruikten de echte provider en hadden geen
+failure-category. De finale onafhankelijke QA-codeherbeoordeling, PR-CI,
+Auto Deploy, publieke SHA-pariteit en ingelogde Smart-DCA-hertest volgen nog;
+deze kandidaat is niet live.
+
 ## FINN 3.0: Paper-bedragen en gebruikerstijdzone (24 november 2026)
 
 Phase: `LIVE_DEPLOYED_QA_PENDING`. Onafhankelijke ingelogde QA op de

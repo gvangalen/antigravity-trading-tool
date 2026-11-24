@@ -3166,6 +3166,22 @@ class FinnResponsesAnswerVerifier:
             )
         if result.answer_kind == "factual_source":
             calls = result.tool_trace
+            if (re.search(r"\bsmart[\s-]?dca\b", message, re.I)
+                    and re.search(r"\b(?:opgeslagen|bestaande|saved|existing)\b", message, re.I)
+                    and re.search(r"\b(?:scoreband\w*|bedrag\w*curve|staffel\w*)\b", message, re.I)):
+                from backend.services.finn_v2_smart_dca_coach_answer import render_saved_smart_dca_coach_answer
+                selected_pair = requested_catalog_trading_pair(message)
+                expected = render_saved_smart_dca_coach_answer(
+                    calls, message=message,
+                    pair=f"{selected_pair[0]}/{selected_pair[1]}" if selected_pair else "",
+                    locale=locale or "nl", user_time_zone=user_time_zone,
+                )
+                if expected is None or expected != result.text:
+                    return FinnResponsesVerifiedAnswer(
+                        "unavailable", self._fallback_copy("responses_evidence_not_verified", message=message, locale=locale),
+                        "factual_source_mismatch", evidence,
+                    )
+                return FinnResponsesVerifiedAnswer("completed", expected, "factual_source_verified", evidence)
             if result.response_id.startswith("multi-report-bot-"):
                 symbols = mentioned_catalog_symbols(message)
                 named_pairs = tuple(sorted(set(re.findall(

@@ -54,6 +54,7 @@ from backend.services.finn_manual_trade_suggestion_service import ManualTradeSet
 from backend.services.watchlist_conversation_service import ambiguous_asset_change_scope, asks_for_active_workspace_asset, asks_for_watchlist_inventory, replacement_mentions
 from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
 from backend.services.finn_v2_account_bundle_answer import render_account_bundle_answer
+from backend.services.finn_v2_smart_dca_coach_answer import render_saved_smart_dca_coach_answer
 from backend.services.finn_v2_fomo_plan_answer import render_fomo_plan_answer
 from backend.services.finn_v2_two_plan_checks_answer import (
     render_two_plan_checks, select_named_plans, is_preparation_followup,
@@ -116,7 +117,7 @@ def _personal_allocation_coaching(message: str, previous_response: Mapping[str, 
     ):
         return True
     if personal and re.search(r"\b(?:btc|bitcoin)\b", message, re.I) and re.search(
-        r"\b(?:etf|aandelenfonds|indexfonds|voorstel|proposal)\b", message, re.I,
+        r"\b(?:etf|aandelenfonds|indexfonds)\b", message, re.I,
     ):
         return True
     return bool(
@@ -132,6 +133,16 @@ def _mixed_profile_portfolio_question(message: str) -> bool:
         re.search(r"\b(?:profiel|traderstijl|traderprofiel)\b", message, re.I)
         and re.search(r"\b(?:bot\w*|portefeuille|portfolio|kas|belegd|budget|allocatie|verdel\w*)\b",
                       message, re.I)
+    )
+
+
+def _saved_smart_dca_coach_question(message: str) -> bool:
+    """A named saved Smart DCA curve is a plan read, even if the bot is mentioned."""
+    return bool(
+        re.search(r"\bsmart[\s-]?dca\b", message, re.I)
+        and re.search(r"\b(?:mijn|my|mein\w*)\b", message, re.I)
+        and re.search(r"\b(?:opgeslagen|bestaande|saved|existing)\b", message, re.I)
+        and re.search(r"\b(?:scoreband\w*|bedrag\w*curve|staffel\w*)\b", message, re.I)
     )
 
 
@@ -6427,6 +6438,10 @@ class FinnResponsesFrontDoor:
                 else "get_profile_portfolio_and_bots"
                 if is_read_only_turn and _mixed_profile_portfolio_question(message)
                 and pending_operation is None and not resuming_clarification
+                else "get_active_plan_and_strategy"
+                if is_read_only_turn and _saved_smart_dca_coach_question(message)
+                and len(mentioned_pairs) == 1
+                and pending_operation is None and not resuming_clarification
                 else "get_portfolio_and_exposure"
                 if is_read_only_turn and (
                     self._asks_about_open_position(message)
@@ -6588,6 +6603,18 @@ class FinnResponsesFrontDoor:
                     result, text=canonical_answer, model_owned_repair=False,
                     response_id_reusable=False, account_source_projection=True,
                 )
+        if (is_read_only_turn and _saved_smart_dca_coach_question(message)
+                and len(mentioned_pairs) == 1 and result.answer_kind == "free_text"
+                and result.tool_trace):
+            pair_asset, pair_quote = next(iter(mentioned_pairs))
+            dca_answer = render_saved_smart_dca_coach_answer(
+                result.tool_trace, message=message,
+                pair=f"{pair_asset}/{pair_quote}", locale=locale,
+                user_time_zone=workspace_hints.get("time_zone"),
+            )
+            if dca_answer is not None:
+                result = replace(result, text=dca_answer, answer_kind="factual_source",
+                                 model_owned_repair=False, response_id_reusable=False)
         if (is_read_only_turn and result.answer_kind == "free_text" and result.tool_trace
                 and len(mentioned_assets) == 1):
             position_answer = render_paper_position_cash_answer(
