@@ -368,9 +368,10 @@ export const assistantApi = {
   },
 
   async chat(query: string, context: AssistantRuntimeContext, history?: AssistantHistoryMessage[], sessionId?: string | null, signal?: AbortSignal) {
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
     const initial = await apiClient.request<AssistantEnvelope>('/api/assistant/chat', {
       method: 'POST', signal, timeoutMs: 90000,
-      body: { context, history, query, session_id: sessionId },
+      body: { context: { ...context, time_zone: timeZone }, history, query, session_id: sessionId },
     });
     const runId = initial.state?.current_flow === 'finn_v2_visible_pending'
       ? initial.state.run_id : null;

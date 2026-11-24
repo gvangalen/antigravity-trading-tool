@@ -2252,8 +2252,8 @@ class FinnResponsesFrontDoor:
                 and locale.lower().startswith("nl")
                 and len(named_paper_assets) == 1
                 and re.search(r"\b(?:hoeveel|wat is|betekent)\b", message, re.I)
-                and re.search(r"\bbotbudget\b", message, re.I)
-                and re.search(r"\b(?:positie|posities)\b", message, re.I)
+                and re.search(r"\b(?:botbudget|budgetlimiet)\b", message, re.I)
+                and re.search(r"\b(?:positie|posities|belegd|geïnvesteerd)\b", message, re.I)
                 and re.search(r"\b(?:kas|kassaldo|cash|saldo)\b", message, re.I)
                 and not re.search(r"\b(?:koop|plaats|voer|bestel)\s+(?:nu|meteen|direct|alvast|\d)", message, re.I)
                 and not _explicit_create_operation_request(message)):
@@ -2270,6 +2270,7 @@ class FinnResponsesFrontDoor:
                       "arguments": call.inputs, "result": paper_read},)
             answer = render_paper_position_cash_answer(
                 message, trace, asset=next(iter(named_paper_assets)), locale=locale,
+                user_time_zone=workspace_hints.get("time_zone"),
             ) or PAPER_POSITION_CASH_UNAVAILABLE
             return FinnResponsesFrontDoorResult(
                 FinnResponsesResult(
@@ -6591,6 +6592,7 @@ class FinnResponsesFrontDoor:
                 and len(mentioned_assets) == 1):
             position_answer = render_paper_position_cash_answer(
                 message, result.tool_trace, asset=next(iter(mentioned_assets)), locale=locale,
+                user_time_zone=workspace_hints.get("time_zone"),
             )
             if position_answer is not None:
                 result = replace(

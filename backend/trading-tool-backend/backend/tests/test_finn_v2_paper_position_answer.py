@@ -67,6 +67,41 @@ def test_live_qa_budget_invested_and_total_cash_are_separate():
     assert render_paper_position_cash_answer(question, trace, asset="BTC", locale="nl") is None
 
 
+def test_four_paper_amounts_include_verified_read_moment_when_requested():
+    question = (
+        "Wat is de ingestelde budgetlimiet van mijn BTC Paper-bot, hoeveel is "
+        "werkelijk belegd, hoeveel kas heeft die bot en hoeveel kas heeft mijn "
+        "totale Paper-portefeuille? Noem deze vier bedragen afzonderlijk met "
+        "bronmoment. Lees alleen en verander niets."
+    )
+    data = {"environment": "paper", "read_at_utc": "2026-11-24T05:25:00+00:00",
+            "global": {"cash_balance": 10000, "invested_value": 0},
+            "bots": [{"symbol": "BTC", "is_live": False, "position_qty": 0,
+                      "invested_eur": 0, "paper_cash_eur": 10000,
+                      "budget_total_eur": 1000}]}
+    trace = ({"result": {"results": [{"scope": "read_portfolio", "status": "completed",
+             "asset": None, "data": data}]}},)
+
+    answer = render_paper_position_cash_answer(question, trace, asset="BTC", locale="nl",
+                                               user_time_zone="Europe/Amsterdam")
+    assert "budgetlimiet van je BTC Paper-bot is €1000" in answer
+    assert "In die bot is €0 werkelijk belegd" in answer
+    assert "totale Paper-portefeuille heeft €0 belegd en €10000 kas" in answer
+    assert "BTC-botkas is daarvan €10000" in answer
+    assert "2026-11-24 06:25:00 CET" in answer
+    west_coast = render_paper_position_cash_answer(question, trace, asset="BTC", locale="nl",
+                                                   user_time_zone="America/Los_Angeles")
+    assert "2026-11-23 21:25:00 PST" in west_coast
+    summer = dict(data, read_at_utc="2026-07-24T05:25:00+00:00")
+    trace[0]["result"]["results"][0]["data"] = summer
+    summer_answer = render_paper_position_cash_answer(question, trace, asset="BTC", locale="nl",
+                                                       user_time_zone="Europe/Amsterdam")
+    assert "2026-07-24 07:25:00 CEST" in summer_answer
+    trace[0]["result"]["results"][0]["data"] = data
+    del data["read_at_utc"]
+    assert render_paper_position_cash_answer(question, trace, asset="BTC", locale="nl") is None
+
+
 def test_bot_profile_review_is_not_replaced_by_factual_cash_readback():
     question = ("Past mijn bestaande BTC Paper-bot bij mijn opgeslagen traderstijl? "
                 "Vergelijk het botbudget met de belegde positie en totale kas.")

@@ -1132,7 +1132,8 @@ def test_daily_report_feed_uses_owner_and_date_as_deduplication_key(monkeypatch)
         captured["event"] = kwargs
         return "feed-item"
 
-    monkeypatch.setattr(database, "async_session_factory", Session)
+    monkeypatch.setattr(database, "run_celery_isolated_session",
+                        lambda operation: asyncio.run(operation(Session())))
     monkeypatch.setattr(finn_coach_feed_service.FinnCoachFeedService, "publish", publish)
     daily_report_task._publish_daily_report_ready_feed(7, date(2026, 11, 4))
 
@@ -1162,7 +1163,8 @@ def test_daily_report_feed_carries_only_verified_snapshot_attention(monkeypatch)
     async def publish(_self, **kwargs):
         captured.update(kwargs)
 
-    monkeypatch.setattr(database, "async_session_factory", Session)
+    monkeypatch.setattr(database, "run_celery_isolated_session",
+                        lambda operation: asyncio.run(operation(Session())))
     monkeypatch.setattr(finn_coach_feed_service.FinnCoachFeedService, "publish", publish)
     daily_report_task._publish_daily_report_ready_feed(7, date(2026, 11, 4), {
         "score_source_snapshot": {"assets": [{"symbol": "ETH", "pair": "ETH/EUR",

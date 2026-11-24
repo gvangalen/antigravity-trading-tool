@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 PAPER_POSITION_CASH_UNAVAILABLE = (
@@ -32,8 +34,26 @@ def _money(value: Any) -> str | None:
     return _amount(number.quantize(Decimal("0.01"))) if number.is_finite() else None
 
 
+def _read_moment(data: dict[str, Any], user_time_zone: str | None) -> str | None:
+    value = data.get("read_at_utc") or data.get("read_at")
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    if not isinstance(value, datetime):
+        return None
+    observed = value.replace(tzinfo=value.tzinfo or timezone.utc)
+    try:
+        zone = ZoneInfo(user_time_zone) if user_time_zone else timezone.utc
+    except (ZoneInfoNotFoundError, TypeError, ValueError):
+        zone = timezone.utc
+    return observed.astimezone(zone).strftime("%Y-%m-%d %H:%M:%S %Z")
+
+
 def render_paper_position_cash_answer(
     message: str, tool_trace: tuple[dict[str, Any], ...], *, asset: str, locale: str,
+    user_time_zone: str | None = None,
 ) -> str | None:
     """Never equate a bot budget with additional spending power."""
     account_question = bool(
@@ -89,6 +109,9 @@ def render_paper_position_cash_answer(
                 bot_invested = _money(row.get("invested_eur"))
                 if total_cash is None or total_invested is None or bot_invested is None:
                     continue
+                source_moment = _read_moment(data, user_time_zone)
+                if re.search(r"\b(?:bronmoment|uitleesmoment|momentopname)\b", message, re.I) and not source_moment:
+                    continue
                 return (
                     f"De opgeslagen budgetlimiet van je {asset.upper()} Paper-bot is €{budget}; "
                     "dit is een grens, geen belegde positie of beschikbare kas. "
@@ -96,6 +119,7 @@ def render_paper_position_cash_answer(
                     f"{asset.upper()} open. De totale Paper-portefeuille heeft €{total_invested} "
                     f"belegd en €{total_cash} kas; de {asset.upper()}-botkas is daarvan "
                     f"€{cash}."
+                    + (f" Portefeuille uitgelezen op {source_moment}." if source_moment else "")
                 )
             return (
                 f"Volgens de uitgelezen Paper-portefeuille heeft je {asset.upper()}-bot "

@@ -762,6 +762,12 @@ class FinnCoachFeedService:
         if current:
             # A handled, archived or expired observation remains acknowledged.
             # Only changed facts, or a prior condition-cleared transition, reopens it.
+            if (event_type == "analysis_ready"
+                    and current["fingerprint"] == f"resolved:{digest}"):
+                # An intermittent unavailable assessment can resolve the
+                # current card immediately before another worker sees the
+                # same saved score. Keep one prompt for the same score revision.
+                return None
             if current["fingerprint"] == digest and not (
                 event_type in {"strategy_next_step", "paper_next_step"}
                 and current["status"] == "resolved"
@@ -904,7 +910,8 @@ class FinnCoachFeedService:
                     evidence={"symbol": asset, "trading_pair": pair, "market_id": market_id,
                               "source_status": "available", "score_as_of": str(assessment.get("as_of") or ""),
                               "benchmark_score": score},
-                    revision="available", expires_at=datetime.now(timezone.utc) + timedelta(days=14),
+                    revision=f"available:{str(assessment.get('as_of') or '')[:10]}:{score}",
+                    expires_at=datetime.now(timezone.utc) + timedelta(days=14),
                 )
                 if item:
                     created.append(item)
