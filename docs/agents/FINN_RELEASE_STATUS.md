@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: Smart DCA gecombineerde lezing en scoregestuurd concept (24 november 2026)
 
-Phase: `BUILD_CANDIDATE_QA_PENDING`. De ingelogde, read-only browserreproductie
+Phase: `PRODUCT_DEPLOYED_QA_PENDING`. De ingelogde, read-only browserreproductie
 op BTC/USDT liet zien dat FINN bij een vraag naar de opgeslagen Smart DCA,
 actuele scoreband, bedrag en gekoppelde Paper-bot eerst een algemene setupzone
 en een andere BTC-botbeslissing mengde. Een vervolgvraag met de exacte
@@ -41,8 +41,15 @@ inclusief idempotente replay. De echte Responses-provider-
 developmentset gaf **20/20** en de regressieset **109/109** zonder provider-,
 schema-, timeout-, parse- of validatiefout. Frontend typecheck, i18n- en
 commandtests, build en `audit:high` zijn groen; frontendbron is niet gewijzigd.
-De definitieve backend-suite gaf **5518 passed, 7 skipped**. PR-CI loopt nog;
-er is voor deze kandidaat nog geen deploy of onafhankelijke live acceptatie.
+De definitieve backend-suite gaf **5518 passed, 7 skipped**. PR-CI
+`45497409400` en main-CI `45498859104` hadden beide vijf geslaagde jobs.
+Product-PR #1364 is gemerged als
+`489fd23ac3f4c660e1577a7be0a34a559c3cadd1`; Auto Deploy
+`45500214692` slaagde. GitHub main, publieke backend `/api/health` en
+frontend `/build-info.json` meldden exact die SHA met HTTP 200. Deze
+statusupdate maakt zelf een nieuwe main-SHA; vóór de onafhankelijke QA-run
+moeten ook de laatste main-CI, Auto Deploy en publieke SHA-pariteit van die
+nieuwe revisie slagen. De ingelogde live acceptatie is nog niet uitgevoerd.
 
 ## FINN 3.0: volledige, botgebonden Paper-Holdcoach (24 november 2026)
 
