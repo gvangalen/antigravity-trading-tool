@@ -3172,6 +3172,44 @@ class FinnResponsesAnswerVerifier:
             return FinnResponsesVerifiedAnswer(
                 "unavailable", result.text, "selected_paper_next_step_unavailable", evidence,
             )
+        if result.answer_kind == "smart_dca_identity_unverified":
+            from backend.services.finn_v2_smart_dca_coach_answer import smart_dca_identity_question
+            selected_pair = requested_catalog_trading_pair(message)
+            expected = (smart_dca_identity_question(f"{selected_pair[0]}/{selected_pair[1]}")
+                        if selected_pair else None)
+            if expected is None or result.text != expected:
+                return FinnResponsesVerifiedAnswer(
+                    "unavailable", self._fallback_copy("responses_evidence_not_verified", message=message, locale=locale),
+                    "smart_dca_identity_mismatch", evidence,
+                )
+            return FinnResponsesVerifiedAnswer(
+                "clarification_required", expected, "smart_dca_identity_unverified", evidence,
+                clarification={"question": expected, "reason": "smart_dca_identity_unverified"},
+            )
+        if result.answer_kind == "smart_dca_source_unavailable":
+            from backend.services.finn_v2_smart_dca_coach_answer import smart_dca_source_unavailable_text
+            expected = smart_dca_source_unavailable_text()
+            return FinnResponsesVerifiedAnswer(
+                "unavailable", expected, "smart_dca_source_unavailable", evidence,
+            )
+        if result.answer_kind == "smart_dca_resumed_factual_source":
+            from backend.services.finn_v2_smart_dca_coach_answer import render_saved_smart_dca_coach_answer
+            source_question = result.verification_message or ""
+            selected_pair = requested_catalog_trading_pair(source_question)
+            continuation_bound = source_question.endswith(
+                f" De bedoelde opgeslagen setup heet {message.strip()}."
+            )
+            expected = (render_saved_smart_dca_coach_answer(
+                result.tool_trace, message=source_question,
+                pair=f"{selected_pair[0]}/{selected_pair[1]}" if selected_pair else "",
+                locale=locale or "nl", user_time_zone=user_time_zone,
+            ) if continuation_bound else None)
+            if expected is None or expected != result.text:
+                return FinnResponsesVerifiedAnswer(
+                    "unavailable", self._fallback_copy("responses_evidence_not_verified", message=message, locale=locale),
+                    "smart_dca_resumed_source_mismatch", evidence,
+                )
+            return FinnResponsesVerifiedAnswer("completed", expected, "factual_source_verified", evidence)
         if result.answer_kind == "factual_source":
             calls = result.tool_trace
             if (re.search(r"\bsmart[\s-]?dca\b", message, re.I)

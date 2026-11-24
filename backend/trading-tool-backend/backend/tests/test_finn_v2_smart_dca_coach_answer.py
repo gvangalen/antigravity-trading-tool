@@ -13,7 +13,8 @@ from backend.services.finn_v2_responses_answer_verifier import FinnResponsesAnsw
 def _trace():
     setup = {"setup_id": 13, "name": "Test Smart BTC", "pair": "BTC/USDT", "setup_type": "dca", "market_id": 4}
     strategy = {
-        "strategy_id": 19, "setup_id": 13, "pair": "BTC/USDT", "currency": "EUR",
+        "strategy_id": 19, "setup_id": 13, "name": "Test Smart BTC Strategy",
+        "pair": "BTC/USDT", "currency": "EUR",
         "dca_amount_mode": "score_bands", "score_source": "benchmark_score", "base_amount": 200,
         "dca_score_bands": [
             {"from_score_inclusive": 0, "to_score_exclusive": 25.5, "percent_of_base": 100,
@@ -57,6 +58,29 @@ def test_saved_curve_uses_exact_band_eur_and_user_zone():
         _trace(), message="Beoordeel mijn opgeslagen Smart DCA-plan Test Smart BTC voor BTC/USDT", pair="BTC/USDT", locale="nl-NL", user_time_zone="America/Los_Angeles",
     )
     assert "2026-11-23 14:00 PST" in la
+
+
+def test_unnamed_or_wrong_named_pair_cannot_select_an_arbitrary_curve():
+    message = (
+        "Lees alleen mijn opgeslagen Smart DCA voor BTC/USDT. Welke benchmarkscore "
+        "geldt nu, in welke opgeslagen scoreband valt die, welk bedrag volgt uit "
+        "het basisbedrag en de staffel, en is er al een Paper-bot gekoppeld? "
+        "Noem het bronmoment van de score en maak of wijzig niets."
+    )
+    for question in (
+        message,
+        message.replace("BTC/USDT", "BTC/EUR"),
+        "Lees mijn opgeslagen Smart DCA voor BTC/USDT, specifiek de setup genaamd Ander Plan. Welke scoreband en staffel gelden?",
+        "Lees mijn opgeslagen Smart DCA voor BTC/USDT met strategie Ander Plan. Welke scoreband en staffel gelden?",
+        "Beoordeel mijn opgeslagen Smart DCA-plan Test Smart BTC voor BTC/USDT met strategie Ander Plan. Welke scoreband en staffel gelden?",
+        "Beoordeel mijn opgeslagen Smart DCA-plan Test Smart BTC voor BTC/USDT; strategie Sigma. Welke scoreband en staffel gelden?",
+        "Beoordeel mijn opgeslagen Smart DCA-plan Test Smart BTC voor BTC/USDT met de strategie Sigma. Welke scoreband en staffel gelden?",
+        "Lees mijn opgeslagen Smart DCA voor BTC/USDT; ik bedoel niet Test Smart BTC maar mijn andere plan. Welke scoreband en staffel gelden?",
+    ):
+        assert render_saved_smart_dca_coach_answer(
+            _trace(), message=question, pair="BTC/USDT", locale="nl-NL",
+            user_time_zone="Europe/Amsterdam",
+        ) is None
 
 
 def test_saved_curve_rejects_other_pair_strategy_or_wrong_amount():
@@ -148,3 +172,102 @@ def test_frontdoor_replaces_ungrounded_model_answer_after_owner_read(monkeypatch
     ))
     assert rejected.status == "unavailable"
     assert rejected.reason == "factual_source_mismatch"
+
+
+def test_frontdoor_asks_for_identity_instead_of_guessing_combined_amount(monkeypatch):
+    question = (
+        "Lees alleen mijn opgeslagen Smart DCA voor BTC/USDT. Welke benchmarkscore "
+        "geldt nu, in welke opgeslagen scoreband valt die, welk bedrag volgt uit "
+        "het basisbedrag en de staffel, en is er al een Paper-bot gekoppeld? "
+        "Noem het bronmoment van de score en maak of wijzig niets."
+    )
+    loop_run = AsyncMock(return_value=FinnResponsesResult(
+        text="De setupscoreband is 0–100; de BTC-bot wacht.",
+        response_id="model", tool_trace=_trace(), answer_kind="free_text",
+        model_led_coach=True,
+    ))
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run", loop_run,
+    )
+    result = asyncio.run(FinnResponsesFrontDoor(
+        client=object(), session=object(), user_id=7,
+        run_id="smart-dca-combined", model_led_coach=True,
+    ).run(
+        message=question, instructions="", conversation_context={},
+        verified_asset="BTC", workspace_hints={"time_zone": "Europe/Amsterdam"},
+    ))
+    assert loop_run.await_args.kwargs["required_read_tool_name"] == "get_active_plan_and_strategy"
+    assert result.response.answer_kind == "smart_dca_identity_unverified"
+    assert "setupnaam" in result.response.text
+    assert "€100" not in result.response.text
+    assert "BTC-bot wacht" not in result.response.text
+    checked = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=question, result=result.response, locale="nl-NL",
+        user_time_zone="Europe/Amsterdam",
+    ))
+    assert checked.status == "clarification_required"
+
+
+def test_selected_setup_name_resumes_original_smart_dca_question(monkeypatch):
+    original = (
+        "Lees alleen mijn opgeslagen Smart DCA voor BTC/USDT. Welke benchmarkscore "
+        "en scoreband gelden, welk bedrag volgt uit de staffel en is er een Paper-bot gekoppeld?"
+    )
+    loop_run = AsyncMock(return_value=FinnResponsesResult(
+        text="De setupscoreband is 0–100.", response_id="model",
+        tool_trace=_trace(), answer_kind="free_text", model_led_coach=True,
+    ))
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run", loop_run,
+    )
+    result = asyncio.run(FinnResponsesFrontDoor(
+        client=object(), session=object(), user_id=7,
+        run_id="smart-dca-resume", model_led_coach=True,
+    ).run(
+        message="Test Smart BTC", instructions="",
+        conversation_context={"responses_clarification": {
+            "reason": "smart_dca_identity_unverified", "original_message": original,
+            "question": "Welke setupnaam bedoel je?",
+        }}, verified_asset="BTC", resuming_clarification=True,
+        workspace_hints={"time_zone": "Europe/Amsterdam"},
+    ))
+    assert loop_run.await_args.kwargs["required_read_tool_name"] == "get_active_plan_and_strategy"
+    assert result.response.answer_kind == "smart_dca_resumed_factual_source"
+    assert "45,5–60,5" in result.response.text
+    assert "€100" in result.response.text
+    checked = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message="Test Smart BTC", result=result.response, locale="nl-NL",
+        user_time_zone="Europe/Amsterdam",
+    ))
+    assert checked.status == "completed"
+
+
+def test_named_setup_with_stale_score_reports_source_gap_not_identity_question(monkeypatch):
+    question = (
+        "Beoordeel mijn opgeslagen Smart DCA-plan Test Smart BTC voor BTC/USDT. "
+        "Welke scoreband en staffel gelden nu?"
+    )
+    trace = deepcopy(_trace())
+    score = trace[0]["result"]["results"][2]["data"]
+    score.update(source_status="stale_source", benchmark_score=None)
+    loop_run = AsyncMock(return_value=FinnResponsesResult(
+        text="De score is actueel.", response_id="model", tool_trace=trace,
+        answer_kind="free_text", model_led_coach=True,
+    ))
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run", loop_run,
+    )
+    result = asyncio.run(FinnResponsesFrontDoor(
+        client=object(), session=object(), user_id=7,
+        run_id="smart-dca-stale", model_led_coach=True,
+    ).run(
+        message=question, instructions="", conversation_context={},
+        verified_asset="BTC", workspace_hints={"time_zone": "Europe/Amsterdam"},
+    ))
+    assert result.response.answer_kind == "smart_dca_source_unavailable"
+    assert "setupnaam" not in result.response.text
+    checked = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=question, result=result.response, locale="nl-NL",
+        user_time_zone="Europe/Amsterdam",
+    ))
+    assert checked.status == "unavailable"

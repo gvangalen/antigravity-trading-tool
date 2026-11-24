@@ -38,6 +38,50 @@ def _moment(value: Any, user_time_zone: str | None) -> str | None:
     return parsed.astimezone(zone).strftime("%Y-%m-%d %H:%M %Z")
 
 
+def smart_dca_identity_question(pair: str) -> str:
+    return (
+        f"Welke opgeslagen Smart DCA-setup voor {pair.upper()} bedoel je precies? "
+        "Noem de setupnaam; dan lees ik de gekoppelde strategie, score en staffel opnieuw."
+    )
+
+
+def smart_dca_source_unavailable_text() -> str:
+    return "Ik kan de actuele score, opgeslagen staffel of botkoppeling voor deze Smart DCA nu niet volledig verifiëren."
+
+
+def saved_smart_dca_identity_matched(
+    tool_trace: tuple[dict[str, Any], ...], *, message: str, pair: str,
+) -> bool:
+    """Check only the named, owner-read setup and linked strategy identity."""
+    setups = [item.get("data") for call in tool_trace if call.get("name") == "get_active_plan_and_strategy"
+              for item in (call.get("result") or {}).get("results") or []
+              if item.get("scope") == "read_active_setup" and item.get("status") == "completed"]
+    strategies = [item.get("data") for call in tool_trace if call.get("name") == "get_active_plan_and_strategy"
+                  for item in (call.get("result") or {}).get("results") or []
+                  if item.get("scope") == "read_linked_strategy" and item.get("status") == "completed"]
+    if len(setups) != 1 or len(strategies) != 1 or not all(isinstance(row, dict) for row in (*setups, *strategies)):
+        return False
+    setup, strategy = setups[0], strategies[0]
+    setup_name = str(setup.get("name") or "").strip()
+    strategy_name = str(strategy.get("name") or "").strip()
+    if (not setup_name or not isinstance(setup.get("setup_id"), int)
+            or setup.get("setup_id") != strategy.get("setup_id")
+            or str(setup.get("pair") or "").upper() != pair.upper()
+            or str(strategy.get("pair") or "").upper() != pair.upper()
+            or not re.search(rf"(?<!\w){re.escape(setup_name)}(?!\w)", message, re.I)):
+        return False
+    if (re.search(rf"\b(?:niet|not)\b.{{0,40}}(?<!\w){re.escape(setup_name)}(?!\w)", message, re.I)
+            or re.search(r"\b(?:ander|andere|other)\s+(?:plan|setup|strategie|strategy)\b", message, re.I)):
+        return False
+    explicit_strategy = re.search(
+        r"\bstrategie\s+(?:genaamd\s+|met\s+de\s+naam\s+)?"
+        r"(?!(?:is|heeft|kan|van|voor|met|die|en|zonder|bij)\b)([^.,;?]+)",
+        message, re.I,
+    )
+    return not (explicit_strategy and strategy_name
+                and not re.search(rf"(?<!\w){re.escape(strategy_name)}(?!\w)", explicit_strategy.group(1), re.I))
+
+
 def render_saved_smart_dca_coach_answer(
     tool_trace: tuple[dict[str, Any], ...], *, message: str, pair: str, locale: str,
     user_time_zone: str | None,
@@ -86,7 +130,7 @@ def render_saved_smart_dca_coach_answer(
             or str(strategy.get("currency") or "").upper() != "EUR"):
         return None
     setup_name = str(setup.get("name") or "").strip()
-    if not setup_name or not re.search(rf"(?<!\w){re.escape(setup_name)}(?!\w)", message, re.I):
+    if not saved_smart_dca_identity_matched(tool_trace, message=message, pair=pair):
         return None
     current = _decimal(score.get("benchmark_score"))
     base = _decimal(strategy.get("base_amount"))
