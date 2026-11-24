@@ -360,6 +360,10 @@ def test_explicit_discussion_only_keeps_hypothetical_bot_changes_read_only():
     )
     assert not _explicit_discussion_only("Wijzig niets behalve mijn bot.")
     assert _explicit_discussion_only("Controleer de strategie. Maak niets aan.")
+    assert _explicit_discussion_only("Lees alleen; wijzig geen strategie, bot of order.")
+    assert not _explicit_discussion_only(
+        "Lees alleen; wijzig geen strategie, bot of order. Maak wel een nieuwe setup."
+    )
     assert FinnV2RequestPreprocessorService().preprocess(
         message="Controleer de strategie. Maak niets aan."
     ).action_polarity == "read"
@@ -15885,6 +15889,72 @@ def test_bot_decision_question_binds_persisted_history_even_for_portfolio_tool()
         exact, message="Vergelijk mijn laatste botbesluit met mijn dagrapport.", read_only=True,
     )
     assert report_question.read_tools == ("read_review_history", "read_latest_report")
+
+
+def test_explicit_bot_status_and_decision_require_separate_owner_reads():
+    question = (
+        "Beoordeel het laatste Paper-Holdbesluit van mijn bestaande Strategie long term dca btc Bot voor BTC. "
+        "Lees de actuele botstatus en exacte blokkadereden opnieuw. Scheid de ingestelde botbudgetlimiet, "
+        "werkelijk belegd, botkas en totale Paper-kas, en noem de bronmomenten. "
+        "Geef één concrete veilige vervolgstap. Lees alleen; wijzig geen strategie, bot of order."
+    )
+    assert FinnResponsesFrontDoor._asks_about_bot_decision(question)
+    assert not FinnResponsesFrontDoor._asks_about_account_state_bundle(question)
+    catalog = FinnResponsesToolCatalog()
+    for tool_name in ("get_saved_bots", "get_decision_history", "get_portfolio_and_exposure"):
+        selected = catalog.validate(tool_name, {"asset": "BTC"})
+        bound = FinnResponsesFrontDoor._bind_bot_decision_evidence(
+            selected, message=question, read_only=True,
+        )
+        assert {"read_review_history", "read_portfolio", "read_bot_status"} <= set(bound.read_tools)
+        assert bound.inputs["asset"] == "BTC"
+
+    decision_only = FinnResponsesFrontDoor._bind_bot_decision_evidence(
+        catalog.validate("get_decision_history", {"asset": "BTC"}),
+        message="Wat was het laatste besluit van mijn BTC-bot?", read_only=True,
+    )
+    assert decision_only.read_tools == ("read_review_history",)
+
+
+@pytest.mark.parametrize("previous_response", [None, {"terminal_status": "completed", "tool_trace": []}])
+def test_bot_status_decision_portfolio_question_executes_all_three_reads(previous_response):
+    question = (
+        "Beoordeel het laatste Paper-Holdbesluit van mijn bestaande Strategie long term dca btc Bot voor BTC. "
+        "Lees de actuele botstatus en exacte blokkadereden opnieuw. Scheid de ingestelde botbudgetlimiet, "
+        "werkelijk belegd, botkas en totale Paper-kas, en noem de bronmomenten. "
+        "Geef één concrete veilige vervolgstap. Lees alleen; wijzig geen strategie, bot of order."
+    )
+    selected_calls = []
+
+    class FakeRead:
+        session_factory = None
+
+        async def __call__(self, call):
+            selected_calls.append(call)
+            return {"status": "completed", "results": [
+                {"scope": scope, "status": "completed", "data": {}}
+                for scope in call.read_tools
+            ]}
+
+    fake = FakeResponses(
+        response("bot-read", calls=[tool_call("call-bot", "get_decision_history", {"asset": "BTC"})]),
+        response("bot-answer", text="Ik heb de actuele botstatus, het besluit en de portefeuille gelezen."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session=object(), user_id=7,
+        run_id="bot-status-decision-portfolio", model_led_coach=True,
+    )
+    front.reads = FakeRead()
+    asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="BTC", previous_response=previous_response,
+        workspace_hints={"page": "/bot", "symbol": "BTC"},
+    ))
+    assert selected_calls
+    assert any({"read_bot_status", "read_review_history", "read_portfolio"} <= set(call.read_tools)
+               for call in selected_calls), [
+        (call.name, call.read_tools) for call in selected_calls
+    ]
 
 
 @pytest.mark.parametrize("message", [
