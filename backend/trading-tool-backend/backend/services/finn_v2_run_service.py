@@ -1644,6 +1644,16 @@ def _plain_setup_creation_request(message: str) -> bool:
     )
 
 
+def _smart_dca_identity_resume_input(
+    context: dict[str, object], message: str,
+) -> tuple[str, str | None]:
+    """Keep a setup-name reply out of pre-frontdoor intent and model checks."""
+    clarification = dict(context.get("responses_clarification") or {})
+    if clarification.get("reason") != "smart_dca_identity_unverified":
+        return message, None
+    return str(clarification.get("original_message") or "").strip(), message
+
+
 def _bounded_supported_smart_dca_calendar_request(
     message: str, collected_inputs: dict[str, object],
 ) -> bool:
@@ -1735,7 +1745,8 @@ def _bounded_supported_smart_dca_benchmark_request(
     if match is None or match.group("mid_low") != match.group("low") or match.group("mid_high") != match.group("high"):
         return False
     if re.search(
-        r"\b(?:als|alleen|wanneer|zodra|tenzij|onder|boven|bij|trend|rsi|score|"
+        r"\b(?:als|alleen|wanneer|zodra|tenzij|mits|indien|if|only|when|unless|"
+        r"onder|boven|bij|trend|rsi|macd|ema\d*|adx|sma\d*|ma\d+|score|"
         r"voorwaarde|regel|koop|aankoop|filter|trigger)\b",
         match.group("name"), re.IGNORECASE,
     ):
@@ -2702,6 +2713,11 @@ class FinnV2RunService:
                 message=message,
                 has_prior_run=(run.client_context_json or {}).get("_conversation_has_prior_run"),
             )
+            # The user's reply is an untrusted object selector, not a new
+            # intent. Keep it out of every pre-frontdoor classifier and
+            # provider check; the frontdoor validates it as one name and
+            # binds it only to an owner-scoped read.
+            message, smart_dca_clarification_name = _smart_dca_identity_resume_input(context, message)
             if conversation_id:
                 message = (await _verified_feed_strategy_affirmative_message(
                     session, context=context, message=message, user_id=user_id,
@@ -3464,7 +3480,8 @@ class FinnV2RunService:
             pending_guided == "create_strategy"
             and _complete_named_guided_strategy_proposal(message, guided_inputs)
         )
-        if pending_clarification and not complete_named_guided_strategy:
+        if (pending_clarification and not complete_named_guided_strategy
+                and smart_dca_clarification_name is None):
             relevance = FinnResponsesToolRelevanceGuard(client)
             if not await relevance.continues_clarification(
                 message=message,
@@ -3689,6 +3706,7 @@ class FinnV2RunService:
             user_id=user_id, run_id=run_id, model_led_coach=True,
         ).run(
             message=message,
+            clarification_name=smart_dca_clarification_name,
             workspace_hints=dict(getattr(run, "workspace_hints_json", None) or {}),
             corrected_guided_operation_id=corrected_guided_operation_id,
             model_message=(

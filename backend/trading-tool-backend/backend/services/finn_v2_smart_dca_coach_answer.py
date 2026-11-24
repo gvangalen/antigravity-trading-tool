@@ -51,6 +51,7 @@ def smart_dca_source_unavailable_text() -> str:
 
 def saved_smart_dca_identity_matched(
     tool_trace: tuple[dict[str, Any], ...], *, message: str, pair: str,
+    selected_setup_name: str | None = None,
 ) -> bool:
     """Check only the named, owner-read setup and linked strategy identity."""
     setups = [item.get("data") for call in tool_trace if call.get("name") == "get_active_plan_and_strategy"
@@ -68,7 +69,10 @@ def saved_smart_dca_identity_matched(
             or setup.get("setup_id") != strategy.get("setup_id")
             or str(setup.get("pair") or "").upper() != pair.upper()
             or str(strategy.get("pair") or "").upper() != pair.upper()
-            or not re.search(rf"(?<!\w){re.escape(setup_name)}(?!\w)", message, re.I)):
+            or (selected_setup_name is not None and setup_name.casefold() != selected_setup_name.strip().casefold())
+            or (selected_setup_name is None and not re.search(
+                rf"(?<!\w){re.escape(setup_name)}(?!\w)", message, re.I,
+            ))):
         return False
     if (re.search(rf"\b(?:niet|not)\b.{{0,40}}(?<!\w){re.escape(setup_name)}(?!\w)", message, re.I)
             or re.search(r"\b(?:ander|andere|other)\s+(?:plan|setup|strategie|strategy)\b", message, re.I)):
@@ -84,7 +88,7 @@ def saved_smart_dca_identity_matched(
 
 def render_saved_smart_dca_coach_answer(
     tool_trace: tuple[dict[str, Any], ...], *, message: str, pair: str, locale: str,
-    user_time_zone: str | None,
+    user_time_zone: str | None, selected_setup_name: str | None = None,
 ) -> str | None:
     """Return facts only when the selected setup, strategy, score and bot scope agree."""
     if not locale.lower().startswith("nl") or not pair:
@@ -130,7 +134,9 @@ def render_saved_smart_dca_coach_answer(
             or str(strategy.get("currency") or "").upper() != "EUR"):
         return None
     setup_name = str(setup.get("name") or "").strip()
-    if not saved_smart_dca_identity_matched(tool_trace, message=message, pair=pair):
+    if not saved_smart_dca_identity_matched(
+        tool_trace, message=message, pair=pair, selected_setup_name=selected_setup_name,
+    ):
         return None
     current = _decimal(score.get("benchmark_score"))
     base = _decimal(strategy.get("base_amount"))

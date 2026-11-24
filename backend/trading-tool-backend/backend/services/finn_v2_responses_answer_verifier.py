@@ -3174,7 +3174,7 @@ class FinnResponsesAnswerVerifier:
             )
         if result.answer_kind == "smart_dca_identity_unverified":
             from backend.services.finn_v2_smart_dca_coach_answer import smart_dca_identity_question
-            selected_pair = requested_catalog_trading_pair(message)
+            selected_pair = requested_catalog_trading_pair(result.verification_message or message)
             expected = (smart_dca_identity_question(f"{selected_pair[0]}/{selected_pair[1]}")
                         if selected_pair else None)
             if expected is None or result.text != expected:
@@ -3196,13 +3196,15 @@ class FinnResponsesAnswerVerifier:
             from backend.services.finn_v2_smart_dca_coach_answer import render_saved_smart_dca_coach_answer
             source_question = result.verification_message or ""
             selected_pair = requested_catalog_trading_pair(source_question)
-            continuation_bound = source_question.endswith(
-                f" De bedoelde opgeslagen setup heet {message.strip()}."
+            continuation_bound = bool(
+                selected_pair and re.fullmatch(r"[\w][\w ./'()&-]{0,99}", message.strip(), re.U)
+                and not re.search(r"[\r\n\t]", message)
             )
             expected = (render_saved_smart_dca_coach_answer(
                 result.tool_trace, message=source_question,
                 pair=f"{selected_pair[0]}/{selected_pair[1]}" if selected_pair else "",
                 locale=locale or "nl", user_time_zone=user_time_zone,
+                selected_setup_name=message.strip(),
             ) if continuation_bound else None)
             if expected is None or expected != result.text:
                 return FinnResponsesVerifiedAnswer(

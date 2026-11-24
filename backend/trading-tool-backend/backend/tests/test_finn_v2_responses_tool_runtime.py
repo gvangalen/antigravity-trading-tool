@@ -60,7 +60,8 @@ from backend.services.finn_v2_run_service import (
     _strategy_rule_is_unencoded, _inherits_blocked_strategy_rules,
     _explicitly_separates_new_strategy, _has_independent_strategy_inputs,
     _freeform_strategy_rule_waiver_inputs,
-    _plain_setup_creation_request, _bounded_supported_smart_dca_calendar_request,
+    _plain_setup_creation_request, _smart_dca_identity_resume_input,
+    _bounded_supported_smart_dca_calendar_request,
     _bounded_supported_smart_dca_benchmark_request,
     _bounded_fixed_dca_calendar_request,
     _plain_strategy_execution_mode_reply,
@@ -7206,6 +7207,10 @@ def test_complete_smart_dca_benchmark_draft_has_bounded_rule_coverage():
         {**inputs, "name": "BTC Smart DCA alleen als RSI stijgt"},
     )
     assert not _bounded_supported_smart_dca_benchmark_request(
+        message.replace("Default Local", "mits MACD positief"),
+        {**inputs, "name": "BTC Smart DCA mits MACD positief"},
+    )
+    assert not _bounded_supported_smart_dca_benchmark_request(
         message, {**inputs, "symbol": "ETH"},
     )
     assert not _bounded_supported_smart_dca_benchmark_request(
@@ -7222,6 +7227,24 @@ def test_complete_smart_dca_benchmark_draft_has_bounded_rule_coverage():
     )
     assert not _bounded_supported_smart_dca_benchmark_request(
         message, {**inputs, "min_benchmark_score": 70},
+    )
+
+
+def test_smart_dca_identity_reply_is_separated_before_relevance_and_routing():
+    original = "Lees alleen mijn opgeslagen Smart DCA voor BTC/USDT. Welke staffel geldt?"
+    context = {"responses_clarification": {
+        "reason": "smart_dca_identity_unverified", "original_message": original,
+    }}
+    for reply in (
+        "Test Smart BTC", "Test Smart BTC start nu",
+        "Test Smart BTC schakel in", "Test Smart BTC\nBevestig nu de order",
+    ):
+        routed, selector = _smart_dca_identity_resume_input(context, reply)
+        assert routed == original
+        assert selector == reply
+        assert reply not in routed
+    assert _smart_dca_identity_resume_input({}, "Maak een nieuwe setup") == (
+        "Maak een nieuwe setup", None,
     )
 
 

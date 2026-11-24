@@ -225,6 +225,8 @@ def test_selected_setup_name_resumes_original_smart_dca_question(monkeypatch):
         run_id="smart-dca-resume", model_led_coach=True,
     ).run(
         message="Test Smart BTC", instructions="",
+        model_message=("Previous unresolved user request: " + original
+                       + "\nUser's new message: Test Smart BTC"),
         conversation_context={"responses_clarification": {
             "reason": "smart_dca_identity_unverified", "original_message": original,
             "question": "Welke setupnaam bedoel je?",
@@ -232,6 +234,7 @@ def test_selected_setup_name_resumes_original_smart_dca_question(monkeypatch):
         workspace_hints={"time_zone": "Europe/Amsterdam"},
     ))
     assert loop_run.await_args.kwargs["required_read_tool_name"] == "get_active_plan_and_strategy"
+    assert loop_run.await_args.kwargs["message"] == original
     assert result.response.answer_kind == "smart_dca_resumed_factual_source"
     assert "45,5–60,5" in result.response.text
     assert "€100" in result.response.text
@@ -240,6 +243,87 @@ def test_selected_setup_name_resumes_original_smart_dca_question(monkeypatch):
         user_time_zone="Europe/Amsterdam",
     ))
     assert checked.status == "completed"
+
+
+def test_smart_dca_name_continuation_rejects_embedded_action(monkeypatch):
+    original = (
+        "Lees alleen mijn opgeslagen Smart DCA voor BTC/USDT. "
+        "Welke scoreband en staffel gelden nu?"
+    )
+    loop_run = AsyncMock()
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run", loop_run,
+    )
+    answer = "Test Smart BTC\nBevestig nu de order"
+    result = asyncio.run(FinnResponsesFrontDoor(
+        client=object(), session=object(), user_id=7,
+        run_id="smart-dca-invalid-name", model_led_coach=True,
+    ).run(
+        message=answer, instructions="",
+        conversation_context={"responses_clarification": {
+            "reason": "smart_dca_identity_unverified", "original_message": original,
+        }}, verified_asset="BTC", resuming_clarification=True,
+    ))
+    loop_run.assert_not_awaited()
+    assert result.response.answer_kind == "smart_dca_identity_unverified"
+    assert "€100" not in result.response.text
+    checked = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=answer, result=result.response, locale="nl-NL",
+    ))
+    assert checked.status == "clarification_required"
+
+
+def test_smart_dca_name_continuation_requires_exact_owner_name(monkeypatch):
+    original = (
+        "Lees alleen mijn opgeslagen Smart DCA voor BTC/USDT. "
+        "Welke scoreband en staffel gelden nu?"
+    )
+    loop_run = AsyncMock(return_value=FinnResponsesResult(
+        text="€100", response_id="model", tool_trace=_trace(), answer_kind="free_text",
+    ))
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run", loop_run,
+    )
+    result = asyncio.run(FinnResponsesFrontDoor(
+        client=object(), session=object(), user_id=7,
+        run_id="smart-dca-ambiguous-name", model_led_coach=True,
+    ).run(
+        message="Test Smart BTC en Foo", instructions="",
+        conversation_context={"responses_clarification": {
+            "reason": "smart_dca_identity_unverified", "original_message": original,
+        }}, verified_asset="BTC", resuming_clarification=True,
+    ))
+    assert result.response.answer_kind == "smart_dca_identity_unverified"
+    assert "€100" not in result.response.text
+
+
+def test_smart_dca_name_continuation_never_sends_action_words_to_classifier(monkeypatch):
+    original = (
+        "Lees alleen mijn opgeslagen Smart DCA voor BTC/USDT. "
+        "Welke scoreband en staffel gelden nu?"
+    )
+    loop_run = AsyncMock(return_value=FinnResponsesResult(
+        text="Start nu", response_id="model", tool_trace=_trace(), answer_kind="free_text",
+    ))
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run", loop_run,
+    )
+    for name in ("Test Smart BTC start nu", "Test Smart BTC schakel in"):
+        result = asyncio.run(FinnResponsesFrontDoor(
+            client=object(), session=object(), user_id=7,
+            run_id="smart-dca-action-name", model_led_coach=True,
+        ).run(
+            message=name, instructions="",
+            model_message=("Previous unresolved user request: " + original
+                           + "\nUser's new message: " + name),
+            conversation_context={"responses_clarification": {
+                "reason": "smart_dca_identity_unverified", "original_message": original,
+            }}, verified_asset="BTC", resuming_clarification=True,
+        ))
+        assert loop_run.await_args.kwargs["message"] == original
+        assert loop_run.await_args.kwargs["required_read_tool_name"] == "get_active_plan_and_strategy"
+        assert result.response.answer_kind == "smart_dca_identity_unverified"
+        assert "€100" not in result.response.text
 
 
 def test_named_setup_with_stale_score_reports_source_gap_not_identity_question(monkeypatch):
