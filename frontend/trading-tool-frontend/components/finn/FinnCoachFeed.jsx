@@ -218,17 +218,16 @@ export default function FinnCoachFeed({ onDiscuss }) {
           const detailsLabel = item.event_type === "data_blocked" && item.subject_type === "bot" && item.evidence?.missing_indicators
             ? copy.reviewManualBuy : isReport ? copy.viewReport : item.event_type === "bot_decision" ? copy.viewBotDetails : copy.details;
           return (
-            <article key={item.id} className={`grid gap-x-3 sm:grid-cols-[40px_minmax(0,1fr)_auto] sm:items-center sm:gap-x-4 ${history ? "grid-cols-[36px_minmax(0,1fr)] gap-y-2 py-4" : "grid-cols-[26px_minmax(0,1fr)_auto] gap-y-1 py-2"}`}>
+            <article key={item.id} className={`grid gap-x-3 sm:grid-cols-[40px_minmax(0,1fr)_auto] sm:items-center sm:gap-x-4 ${history ? "grid-cols-[36px_minmax(0,1fr)] gap-y-2 py-4" : "grid-cols-[26px_minmax(0,1fr)_auto] gap-y-1 py-3"}`}>
               <Icon size={history ? 27 : 23} strokeWidth={1.8} className="mt-1 text-slate-900 dark:text-slate-100 sm:mt-0" aria-hidden="true" />
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   {item.status === "unread" ? <span className="size-2.5 shrink-0 rounded-full bg-blue-600"><span className="sr-only">{copy.unread}</span></span> : null}
                   <h3 className="text-base font-bold text-slate-950 dark:text-slate-50">{title}</h3>
                   {presentation.badge ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{presentation.badge}</span> : null}
-                  {!history ? <time className="ml-auto hidden whitespace-nowrap text-xs text-slate-500 dark:text-slate-400 sm:block" dateTime={moment.value}>{moment.label}</time> : null}
                 </div>
-                {presentation.description ? <p className={`mt-0.5 text-sm text-slate-600 dark:text-slate-300 ${history ? "line-clamp-2" : "hidden sm:line-clamp-1"}`}>{presentation.description}</p> : null}
-                <time className={`mt-0.5 text-xs text-slate-500 dark:text-slate-400 ${history ? "block" : "block sm:hidden"}`} dateTime={moment.value}>
+                {presentation.description ? <p className={`mt-0.5 text-sm text-slate-600 dark:text-slate-300 ${history ? "line-clamp-2" : "line-clamp-1"}`}>{presentation.description}</p> : null}
+                <time className="mt-1 block text-xs text-slate-500 dark:text-slate-400" dateTime={moment.value}>
                   {moment.label}
                 </time>
               </div>
