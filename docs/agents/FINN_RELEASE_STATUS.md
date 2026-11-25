@@ -4,6 +4,51 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Smart DCA opgeslagen plan lezen na aanmaak (25 november 2026)
+
+Phase: `LIVE_CANDIDATE_QA_PENDING`; PR [#1370](https://github.com/gvangalen/antigravity-trading-tool/pull/1370).
+Onafhankelijke ingelogde browser-QA op product-SHA `5751a36d` accepteerde
+de aanmaak en correctie van één BTC/USDT Smart DCA-setup met gekoppelde
+strategie: de nieuwe kaart gebruikte grens 26, score 25 gaf €300 en score 26
+€200; de oude kaart was ingetrokken. Eén bevestiging sloeg één plan op.
+Er werd geen bot of order aangemaakt. De aansluitende read-only vraag met de
+exacte setupnaam faalde: FINN vroeg nogmaals om de naam en herhaalde die
+vraag na het exacte antwoord. De **volledige Smart DCA-coachflow is daarom
+nog niet geaccepteerd**.
+
+De nieuwe kandidaat corrigeert de naamherkenning: `strategie een bot is
+gekoppeld` en varianten met `al` of `Paper-bot` zijn generieke botvragen,
+terwijl een expliciete andere strategienaam, ook beginnend met `De` of `Een`,
+een mismatch blijft. Een antwoord over score 25 en 26 rekent alleen met de
+eigenaargebonden opgeslagen staffel en labelt de bedragen hypothetisch. Een
+afwijkend genoemd basisbedrag wordt apart verduidelijkt. Voor een gekoppelde
+bot moeten de gekoppelde strategie, positieve bot-ID en Live/Paper-modus in
+beide lezingen overeenkomen. Er is geen nieuwe actie- of bevestigingsroute.
+
+De exacte live vraag is lokaal met getypeerde eigenaargebonden tooltrace via
+FINN-frontdoor en antwoordverifier gereproduceerd; de gerichte suite gaf
+**13/13**. Onafhankelijke QA- en Security-codebeoordelingen vonden na
+negatieve tests voor namen, bot-ID en basisbedrag geen blocker. De volledige
+backend-suite gaf **5539 passed, 7 skipped**. De lokale worker-actiematrix
+gaf **17/17** (artifact SHA-256
+`c11d8e1c0c6f98f5fd5240943065c293821b102ae093c4732c31ce177a1cdf0a`),
+adaptertests **28/28**, en bevestigde Smart DCA en kalender-DCA inclusief
+replay. Frontendbron is niet gewijzigd; PR-CI op producthead `c3e81114c`
+had vijf geslaagde jobs. De echte Responses-provider-developmentset gaf
+**20/20** (artifact SHA-256
+`a696ca89be797faff5cd1f1fb4b7e16984cb3e13e894ba2809737503fec9e86f`)
+en de regressieset **109/109** (artifact SHA-256
+`55efef05f823931c494667a207f34bd91e69687221d4ca7f328a07a1b933508f`),
+zonder provider-, schema-, timeout-, parse- of validatiefout. Product-PR
+#1370 had vijf groene CI-jobs (`45561002418`) en is gemerged als
+`bbbdec228fc85b306a2d99f7c3f96f6dc8ec760f`. Main-CI `45562690984`
+had vijf geslaagde jobs en Auto Deploy `45563671490` slaagde. GitHub main,
+publieke backend `/api/health` en frontend `/build-info.json` meldden exact
+die SHA met HTTP 200. Deze statusupdate maakt zelf een nieuwe main-SHA;
+vóór het definitieve QA-verdict moeten ook de daaropvolgende main-CI,
+Auto Deploy en publieke SHA-pariteit groen zijn. De onafhankelijke hertest
+van het opgeslagen live plan staat nog open.
+
 ## Smart DCA inclusieve scorebanden en voorstelcorrectie (25 november 2026)
 
 Phase: `LIVE_CANDIDATE_QA_PENDING`; PR [#1369](https://github.com/gvangalen/antigravity-trading-tool/pull/1369).
