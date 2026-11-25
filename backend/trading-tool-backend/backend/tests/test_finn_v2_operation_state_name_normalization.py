@@ -895,6 +895,23 @@ def test_smart_dca_name_score_does_not_hide_real_score_ladder():
     )] == [150, 100, 50]
 
 
+def test_negated_score_bands_do_not_borrow_unrelated_allocations():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    parsed = FinnV2OperationStateService().explicit_inputs(
+        contract=contract,
+        message=("Maak een DCA voor BTC. Geen scorebanden, mijn allocatie is "
+                 "150%, 100%, 50%; de benchmark volgt apart."),
+        explicit_asset="BTC", known_setup_type="dca",
+    )
+    assert parsed.get("dca_amount_mode") != "score_bands"
+    assert "score_source" not in parsed
+    assert "low_threshold" not in parsed
+    assert "high_threshold" not in parsed
+    assert "low_score_percent" not in parsed
+    assert "mid_score_percent" not in parsed
+    assert "high_score_percent" not in parsed
+
+
 def test_inverse_smart_dca_proposes_score_trigger_without_a_weekday():
     contract = FinnV2OperationRegistry().require_supported("create_setup")
     state = FinnV2OperationStateService().resolve(

@@ -1580,11 +1580,10 @@ class FinnV2OperationStateService:
                         rf"(?<!\w){re.escape(explicit_name.casefold())}(?!\w)",
                         " ", amount_text, count=1,
                     )
-                smart_amount = bool(re.search(r"\b(?:smart(?:\s*dca)?|score(?:s|gestuurd|afhankelijk)?|staffel|score\s*bands?|scorebanden|scoregrenzen|variab\w*)\b", amount_text))
-                smart_amount = smart_amount or bool(self._dca_inclusive_score_ranges(amount_text))
-                if self._rejects_smart_dca_ladder(amount_text):
-                    smart_amount = False
-                if self._dca_score_percentages(amount_text) and re.search(r"\bbenchmark(?:t)?\b", amount_text):
+                ladder_rejected = self._rejects_smart_dca_ladder(amount_text)
+                smart_amount = not ladder_rejected and bool(re.search(r"\b(?:smart(?:\s*dca)?|score(?:s|gestuurd|afhankelijk)?|staffel|score\s*bands?|scorebanden|scoregrenzen|variab\w*)\b", amount_text))
+                smart_amount = smart_amount or (not ladder_rejected and bool(self._dca_inclusive_score_ranges(amount_text)))
+                if not ladder_rejected and self._dca_score_percentages(amount_text) and re.search(r"\bbenchmark(?:t)?\b", amount_text):
                     # A follow-up can state the complete score ladder
                     # without repeating the word Smart or score.
                     smart_amount = True
@@ -1621,7 +1620,7 @@ class FinnV2OperationStateService:
                     and re.search(r"\b(?:minder|less|weniger)(?:\s+(?:kopen|koop|buy|investeren|invest))?\b", amount_text)
                     and re.search(r"\b(?:oversold|overbought|druk|zwak|sterk|scores?|benchmark|lage|hoge)\b", amount_text)
                 )
-                if inverse_ladder and not self._dca_score_percentages(amount_text):
+                if not ladder_rejected and inverse_ladder and not self._dca_score_percentages(amount_text):
                     # Product suggestion only: the visible proposal still
                     # needs explicit user confirmation before any save.
                     values.update({
