@@ -46,6 +46,7 @@ from backend.services.finn_v2_turn_contract import (
     requests_comparison,
 )
 from backend.services.finn_v2_coach_evidence_plan import CoachEvidencePlan, coach_evidence_plan
+from backend.services.finn_v2_coach_source_fallback import asks_about_bot_plan_lineage
 from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
 from backend.services import finn_v2_entity_resolution_service as entity_resolution_module
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
@@ -6502,6 +6503,13 @@ class FinnResponsesFrontDoor:
                 and not {"plan", "setup", "strategy", "portfolio", "scores"}.intersection(
                     request_facts.explicit_entities
                 )
+                and pending_operation is None and not resuming_clarification
+                else "get_portfolio_and_exposure"
+                if is_read_only_turn and coach_plan
+                and set(coach_plan.topics) == {"setup", "bot"}
+                and asks_about_bot_plan_lineage(message)
+                and not _mixed_profile_portfolio_question(message)
+                and not self._asks_about_bot_decision(message)
                 and pending_operation is None and not resuming_clarification
                 else "get_saved_setup_inventory"
                 if normalized_inventory_read and pending_operation is None

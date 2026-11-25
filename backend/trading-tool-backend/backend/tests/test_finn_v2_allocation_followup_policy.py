@@ -144,6 +144,30 @@ def test_live_qa_bot_profile_portfolio_comparison_reads_both_sources(monkeypatch
     assert loop_run.await_args.kwargs["required_read_tool_name"] == "get_profile_portfolio_and_bots"
 
 
+def test_bot_setup_lineage_question_reads_selected_portfolio_bot(monkeypatch):
+    question = (
+        "Welke opgeslagen setup en strategie zijn daadwerkelijk aan mijn actieve "
+        "BTC Paper-bot gekoppeld? Controleer de relatie opnieuw. Lees alleen."
+    )
+    front = FinnResponsesFrontDoor(
+        client=object(), session=object(), user_id=7, run_id="bot-parent-read",
+        model_led_coach=True,
+    )
+    loop_run = AsyncMock(return_value=FinnResponsesResult(
+        text="Ik controleer de botkoppeling.", response_id="parent-read",
+        tool_trace=(), answer_kind="free_text", model_led_coach=True,
+    ))
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run", loop_run,
+    )
+    result = asyncio.run(front.run(
+        message=question, instructions="", conversation_context={},
+        verified_asset="BTC", previous_response=None,
+    ))
+    assert loop_run.await_args.kwargs["required_read_tool_name"] == "get_portfolio_and_exposure"
+    assert result.response.turn_contract["coach_evidence_plan"]["read_tools"] == ("read_portfolio",)
+
+
 def test_plan_review_reads_account_wide_portfolio_beside_selected_asset():
     selectors = {}
 

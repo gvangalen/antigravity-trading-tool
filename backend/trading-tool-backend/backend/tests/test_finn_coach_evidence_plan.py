@@ -109,6 +109,15 @@ def test_bot_setup_question_uses_bot_parent_not_newer_same_asset_setup():
     assert verified.status == "completed"
     assert "Long term DCA BTC" in verified.text
     assert "Fantasie Plan" not in verified.text
+    portfolio_only = SimpleNamespace(response=SimpleNamespace(
+        text="De bot gebruikt Nieuwere Smart DCA.",
+        tool_trace=({"result": {"results": [evidence[2]]}},),
+        uses_previous_response=False,
+        turn_contract={"coach_evidence_plan": {"topics": plan.topics}},
+    ), previous_response=None, locale="nl")
+    assert "Long term DCA BTC" in _minimal_read_answer(
+        message=other_wording, prepared=portfolio_only,
+    ).text
     inactive = (evidence[0], evidence[1], {**evidence[2], "data": {
         "bots": [{**evidence[2]["data"]["bots"][0], "is_active": False}],
     }})

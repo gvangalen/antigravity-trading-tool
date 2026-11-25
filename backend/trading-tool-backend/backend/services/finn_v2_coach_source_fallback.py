@@ -195,7 +195,7 @@ def _bot_evidence_consistent(
 def _requires_bound_bot(question: str, topics: tuple[str, ...]) -> bool:
     return "bot" in topics and (
         asks_about_bot_decision(question)
-        or ("setup" in topics and asks_about_bot_plan_lineage(question))
+        or (set(topics) == {"setup", "bot"} and asks_about_bot_plan_lineage(question))
         or ("portfolio" in topics and bool(re.search(
             r"\b(?:bot[-\s]?status|botbudget|budgetlimiet|botbudgetlimiet|paper[-\s]?holdbesluit)\b",
             question, re.I,

@@ -2010,7 +2010,7 @@ def _minimal_read_answer(
             return FinnResponsesVerifiedAnswer("completed", recovered, None, evidence)
         return None
 
-    if coach_plan and {"setup", "bot"}.issubset(set(coach_plan.get("topics") or ())):
+    if coach_plan and set(coach_plan.get("topics") or ()) == {"setup", "bot"}:
         from backend.services.finn_v2_coach_source_fallback import asks_about_bot_plan_lineage
         if asks_about_bot_plan_lineage(message):
             if recovered := source_bound_coach_recovery():
