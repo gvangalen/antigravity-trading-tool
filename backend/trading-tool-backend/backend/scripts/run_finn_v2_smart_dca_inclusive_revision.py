@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 
 from backend.scripts.run_finn_v2_full_action_matrix import _create_local_user
 from backend.scripts.run_finn_v2_persisted_runtime_gate import _request_json, _terminal_sse
@@ -40,6 +41,15 @@ def _fields(terminal: dict) -> dict:
 
 def run(base_url: str) -> dict:
     base_url = base_url.rstrip("/")
+    if not (
+        base_url == "http://127.0.0.1:18000"
+        and os.getenv("APP_ENV") == "local_finn"
+        and os.getenv("DB_HOST") == "127.0.0.1"
+        and os.getenv("DB_PORT") == "55432"
+        and os.getenv("DB_NAME") == "finn_local"
+        and os.getenv("FINN_LOCAL_SAFE_ADAPTERS") == "1"
+    ):
+        raise RuntimeError("smart_dca_local_only")
     owner = _create_local_user()
     token = create_access_token({"sub": str(owner["id"]), "role": "user"})
     session, initial = _turn(
@@ -71,7 +81,7 @@ def run(base_url: str) -> dict:
     if old_status != 200 or old.get("status") != "cancelled":
         raise AssertionError("old_smart_dca_proposal_still_confirmable")
     return {"initial_proposal": True, "revised_proposal": True,
-            "old_card_revoked": True, "confirmations": 0, "orders": 0}
+            "old_card_revoked": True, "confirmation_endpoint_called": False}
 
 
 def main() -> None:

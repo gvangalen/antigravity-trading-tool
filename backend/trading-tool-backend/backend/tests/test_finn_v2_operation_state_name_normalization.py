@@ -861,6 +861,9 @@ def test_smart_dca_ranges_do_not_reinterpret_regular_euro_or_price_ranges():
         "Maak een Smart DCA voor SOL/USDT. Mijn risicobudget per prijszone is "
         "€0–25: 150%, €26–75: 100%, €76–100: 50%. "
         "De benchmark volgt apart. Toon een voorstel.",
+        "Maak een Smart DCA voor SOL/USDT met naam Score, verdeel het budget "
+        "over drie kasniveaus 0–25: 150%, 26–75: 100%, 76–100: 50%. "
+        "De benchmark volgt apart.",
     ):
         parsed = service.explicit_inputs(
             contract=contract, message=message, explicit_asset="BTC",

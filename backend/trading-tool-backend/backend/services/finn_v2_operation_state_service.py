@@ -1578,8 +1578,8 @@ class FinnV2OperationStateService:
                 if explicit_name:
                     amount_text = amount_text.replace(explicit_name.casefold(), " ")
                 smart_amount = bool(re.search(r"\b(?:smart(?:\s*dca)?|score(?:s|gestuurd|afhankelijk)?|staffel|score\s*bands?|scorebanden|scoregrenzen|variab\w*)\b", amount_text))
-                smart_amount = smart_amount or bool(self._dca_inclusive_score_ranges(text))
-                if self._dca_score_percentages(text) and re.search(r"\bbenchmark(?:t)?\b", amount_text):
+                smart_amount = smart_amount or bool(self._dca_inclusive_score_ranges(amount_text))
+                if self._dca_score_percentages(amount_text) and re.search(r"\bbenchmark(?:t)?\b", amount_text):
                     # A follow-up can state the complete score ladder
                     # without repeating the word Smart or score.
                     smart_amount = True
@@ -1616,7 +1616,7 @@ class FinnV2OperationStateService:
                     and re.search(r"\b(?:minder|less|weniger)(?:\s+(?:kopen|koop|buy|investeren|invest))?\b", amount_text)
                     and re.search(r"\b(?:oversold|overbought|druk|zwak|sterk|scores?|benchmark|lage|hoge)\b", amount_text)
                 )
-                if inverse_ladder and not self._dca_score_percentages(message):
+                if inverse_ladder and not self._dca_score_percentages(amount_text):
                     # Product suggestion only: the visible proposal still
                     # needs explicit user confirmation before any save.
                     values.update({
@@ -1649,11 +1649,11 @@ class FinnV2OperationStateService:
                 if not smart_amount and one_amount and not re.search(r"\bminim(?:um|ale)\b", amount_text):
                     values["dca_amount_mode"] = "fixed"
                 if smart_amount:
-                    values.update(self._dca_score_percentages(text))
+                    values.update(self._dca_score_percentages(amount_text))
                     # The contract stores the first score of the middle band,
                     # whereas users often give three inclusive integer ranges.
                     # Keep score 25 in 0–25 by storing 26 as the boundary.
-                    inclusive_ranges = self._dca_inclusive_score_ranges(text)
+                    inclusive_ranges = self._dca_inclusive_score_ranges(amount_text)
                     values.update(inclusive_ranges)
                     low_boundary = re.search(r"(?<!tot )\b(?:onder|below|unter)\s+(?:score\s+)?(\d{1,3})\b", amount_text)
                     high_boundary = re.search(r"\b(?:vanaf|from|ab)\s+(\d{1,3})\b", amount_text)
@@ -1867,7 +1867,7 @@ class FinnV2OperationStateService:
         lead_in = re.split(r"[.;\n]", value[:matches[0].start()])[-1]
         if not re.search(r"\b(?:benchmarkscore|score|scorebanden|scoregrenzen)\b", lead_in, re.I):
             return {}
-        if re.search(r"\b(?:prijs|koers|prijszone|koerszone|risicobudget)\b", lead_in, re.I):
+        if re.search(r"\b(?:prijs\w*|koers\w*|risicobudget|budget\w*|kas\w*)\b", lead_in, re.I):
             return {}
         if any(re.search(r"(?:€|\$|\b(?:eur|euro|usd|usdt))\s*$", value[:match.start()], re.I)
                for match in matches):
