@@ -19,7 +19,7 @@ PAPER_POSITION_CASH_UNAVAILABLE = (
 def asks_about_bot_decision(message: str) -> bool:
     """Identify requests that need persisted bot-decision evidence."""
     return bool(
-        re.search(r"\b(?:bots?|bot(?:besluit(?:en)?|beslissing(?:en)?|beoordeling(?:en)?|check(?:s)?)|automatisering|automation)\b", message, re.I)
+        re.search(r"\b(?:bots?|bot(?:besluit(?:en)?|beslissing(?:en)?|beoordeling(?:en)?|check(?:s)?|reden(?:en)?)|automatisering|automation)\b", message, re.I)
         and re.search(
             r"\b(?:botbeslissing(?:en)?|botbesluit(?:en)?|beslissing(?:en)?|besluit(?:en)?|decision(?:s)?|"
             r"beoordeling(?:en)?|(?:bot)?check(?:s)?|(?:bot)?reden(?:en)?|"

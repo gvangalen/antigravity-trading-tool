@@ -15,12 +15,20 @@ def test_named_asset_coach_question_plans_each_requested_source():
     assert set(plan.read_tools) == {
         "read_active_setup", "read_linked_strategy", "read_asset_scores",
         "read_bot_status", "read_review_history", "read_latest_report",
-        "read_market_snapshot",
+        "read_market_snapshot", "read_portfolio",
     }
     assert plan.decision_required
     assert plan.next_step_required
     assert coach_evidence_plan(question, named_asset_count=2, read_only=True) is None
     assert coach_evidence_plan(question, named_asset_count=1, read_only=False) is None
+
+
+def test_bot_decision_plus_score_reads_bot_identity_even_without_cash_question():
+    question = "Waarom is mijn BTC Paper-bot geblokkeerd en wat zegt de actuele benchmarkscore? Lees alleen."
+    plan = coach_evidence_plan(question, named_asset_count=1, read_only=True)
+    assert plan is not None
+    assert plan.topics == ("score", "bot")
+    assert "read_portfolio" in plan.read_tools
 
 
 def test_coach_coverage_rejects_omitted_sources_and_answer_parts():

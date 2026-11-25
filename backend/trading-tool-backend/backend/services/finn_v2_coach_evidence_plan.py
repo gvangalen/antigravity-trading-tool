@@ -9,6 +9,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from backend.services.finn_v2_paper_position_answer import asks_about_bot_decision
+
 
 @dataclass(frozen=True)
 class CoachEvidencePlan:
@@ -57,6 +59,10 @@ def coach_evidence_plan(message: str, *, named_asset_count: int, read_only: bool
         return None
     topics = tuple(name for name, _ in chosen)
     reads = tuple(dict.fromkeys(tool for _, tools in chosen for tool in tools))
+    if "bot" in topics and asks_about_bot_decision(message):
+        # The portfolio bot list supplies the owner-bound bot ID needed to
+        # attribute a persisted decision, even when cash was not requested.
+        reads = tuple(dict.fromkeys((*reads, "read_portfolio")))
     return CoachEvidencePlan(
         topics=topics, read_tools=reads,
         decision_required="bot" in topics and bool(re.search(
