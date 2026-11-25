@@ -4,7 +4,9 @@ from copy import deepcopy
 import asyncio
 from unittest.mock import AsyncMock
 
-from backend.services.finn_v2_smart_dca_coach_answer import render_saved_smart_dca_coach_answer
+from backend.services.finn_v2_smart_dca_coach_answer import (
+    render_saved_smart_dca_coach_answer, saved_smart_dca_identity_matched,
+)
 from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor
 from backend.services.finn_v2_responses_loop import FinnResponsesResult
 from backend.services.finn_v2_responses_answer_verifier import FinnResponsesAnswerVerifier
@@ -59,6 +61,95 @@ def test_saved_curve_uses_exact_band_eur_and_user_zone():
         _trace(), message="Beoordeel mijn opgeslagen Smart DCA-plan Test Smart BTC voor BTC/USDT", pair="BTC/USDT", locale="nl-NL", user_time_zone="America/Los_Angeles",
     )
     assert "2026-11-23 14:00 PST" in la
+
+
+def test_named_curve_read_distinguishes_generic_bot_question_from_strategy_name(monkeypatch):
+    trace = deepcopy(_trace())
+    rows = trace[0]["result"]["results"]
+    rows[0]["data"]["name"] = "QA Smart DCA Grens 25 nov"
+    rows[1]["data"]["name"] = "QA Smart DCA Grens 25 nov Strategy"
+    rows[1]["data"]["dca_score_bands"] = [
+        {"from_score_inclusive": low, "to_score_exclusive": high,
+         "percent_of_base": percent, "planned_amount": amount,
+         "amount_status": "hypothetical_before_exposure_not_purchase"}
+        for low, high, percent, amount in (
+            (0, 26, 150, 300), (26, 76, 100, 200), (76, None, 50, 100),
+        )
+    ]
+    question = (
+        "Lees alleen mijn opgeslagen BTC/USDT-setup QA Smart DCA Grens 25 nov "
+        "en de daaraan gekoppelde strategie. Noem de scorebandgrenzen, het "
+        "geplande bedrag bij benchmarkscore 25 en 26 op basis van €200, en "
+        "of aan juist deze strategie een bot is gekoppeld. Maak geen voorstel "
+        "en wijzig niets."
+    )
+    assert saved_smart_dca_identity_matched(trace, message=question, pair="BTC/USDT")
+    answer = render_saved_smart_dca_coach_answer(
+        trace, message=question, pair="BTC/USDT", locale="nl-NL",
+        user_time_zone="Europe/Amsterdam",
+    )
+    assert answer is not None
+    assert "score 25: 150% van €200 = hypothetisch €300" in answer
+    assert "score 26: 100% van €200 = hypothetisch €200" in answer
+    assert "geen bot gekoppeld" in answer
+    assert render_saved_smart_dca_coach_answer(
+        trace, message=question.replace("QA Smart DCA Grens 25 nov", "Ander Plan"),
+        pair="BTC/USDT", locale="nl-NL", user_time_zone="Europe/Amsterdam",
+    ) is None
+    for other_strategy in ("De Sigma Strategie", "Een Sigma Strategie", "Mijn Sigma Strategie"):
+        assert not saved_smart_dca_identity_matched(
+            trace, message=(f"Beoordeel setup QA Smart DCA Grens 25 nov voor BTC/USDT "
+                            f"met strategie {other_strategy}; welke staffel geldt?"),
+            pair="BTC/USDT",
+        )
+    for bot_phrase in ("een bot", "al een bot", "een Paper-bot"):
+        assert saved_smart_dca_identity_matched(
+            trace, message=(f"Lees setup QA Smart DCA Grens 25 nov voor BTC/USDT "
+                            f"en vertel of aan deze strategie {bot_phrase} is gekoppeld?"),
+            pair="BTC/USDT",
+        )
+    wrong_base = render_saved_smart_dca_coach_answer(
+        trace, message=question.replace("basis van €200", "basis van €100"),
+        pair="BTC/USDT", locale="nl-NL", user_time_zone="Europe/Amsterdam",
+    )
+    assert wrong_base is not None
+    assert "opgeslagen strategie" in wrong_base
+    assert "€100" in wrong_base and "€200" in wrong_base
+    assert "hypothetisch €300" not in wrong_base
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run",
+        AsyncMock(return_value=FinnResponsesResult(
+            text="Welke setup bedoel je?", response_id="model",
+            tool_trace=trace, answer_kind="free_text",
+        )),
+    )
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7,
+                                   run_id="smart-dca-named-read", model_led_coach=True)
+    rendered = asyncio.run(front.run(
+        message=question, instructions="", conversation_context={}, verified_asset="BTC",
+        workspace_hints={"time_zone": "Europe/Amsterdam"},
+    ))
+    assert rendered.response.answer_kind == "factual_source"
+    assert "score 25: 150%" in rendered.response.text
+    assert "score 26: 100%" in rendered.response.text
+    checked = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=question, result=rendered.response, locale="nl-NL",
+        user_time_zone="Europe/Amsterdam",
+    ))
+    assert checked.status == "completed"
+    wrong_base_question = question.replace("basis van €200", "basis van €100")
+    wrong_base_result = asyncio.run(front.run(
+        message=wrong_base_question, instructions="", conversation_context={}, verified_asset="BTC",
+        workspace_hints={"time_zone": "Europe/Amsterdam"},
+    ))
+    assert wrong_base_result.response.answer_kind == "factual_source"
+    assert "opgeslagen strategie" in wrong_base_result.response.text
+    assert "hypothetisch €300" not in wrong_base_result.response.text
+    wrong_base_checked = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=wrong_base_question, result=wrong_base_result.response,
+        locale="nl-NL", user_time_zone="Europe/Amsterdam",
+    ))
+    assert wrong_base_checked.status == "completed"
 
 
 def test_unnamed_or_wrong_named_pair_cannot_select_an_arbitrary_curve():
@@ -123,9 +214,9 @@ def test_saved_rising_curve_and_live_bot_are_described_without_paper_claim():
         band["percent_of_base"] = percent
         band["planned_amount"] = percent * 2
     rows[3] = {"scope": "read_linked_bot", "status": "completed",
-               "data": {"strategy_id": 19, "is_live": True}}
+               "data": {"bot_id": 10, "strategy_id": 19, "is_live": True}}
     rows[4] = {"scope": "read_bot_status", "status": "completed",
-               "data": {"strategy_id": 19, "is_live": True}}
+               "data": {"bot_id": 10, "is_live": True}}
     answer = render_saved_smart_dca_coach_answer(
         trace, message="Beoordeel mijn opgeslagen Smart DCA-plan Test Smart BTC voor BTC/USDT",
         pair="BTC/USDT", locale="nl-NL", user_time_zone="Europe/Amsterdam",
@@ -133,6 +224,11 @@ def test_saved_rising_curve_and_live_bot_are_described_without_paper_claim():
     assert "lager percentage dan de hoge" in answer
     assert "gekoppeld (Live)" in answer
     assert "Paper-besluit" not in answer
+    rows[4]["data"]["bot_id"] = 11
+    assert render_saved_smart_dca_coach_answer(
+        trace, message="Beoordeel mijn opgeslagen Smart DCA-plan Test Smart BTC voor BTC/USDT",
+        pair="BTC/USDT", locale="nl-NL", user_time_zone="Europe/Amsterdam",
+    ) is None
 
 
 def test_frontdoor_replaces_ungrounded_model_answer_after_owner_read(monkeypatch):

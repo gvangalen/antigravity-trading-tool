@@ -79,7 +79,8 @@ def saved_smart_dca_identity_matched(
         return False
     explicit_strategy = re.search(
         r"\bstrategie\s+(?:genaamd\s+|met\s+de\s+naam\s+)?"
-        r"(?!(?:is|heeft|kan|van|voor|met|die|en|zonder|bij)\b)([^.,;?]+)",
+        r"(?!(?:is|heeft|kan|van|voor|met|die|en|zonder|bij|aan|wordt|welke)\b"
+        r"|(?:al\s+)?(?:een\s+)?(?:(?:paper|live)[ -])?bot\b)([^.,;?]+)",
         message, re.I,
     )
     return not (explicit_strategy and strategy_name
@@ -141,6 +142,20 @@ def render_saved_smart_dca_coach_answer(
     current = _decimal(score.get("benchmark_score"))
     base = _decimal(strategy.get("base_amount"))
     score_day = str(score.get("as_of") or "")
+    requested_base = re.search(
+        r"\b(?:op\s+basis\s+van|basisbedrag(?:\s+van)?)\s*€\s*(\d+(?:[.,]\d+)?)",
+        message, re.I,
+    )
+    if requested_base and base is not None:
+        user_base = _decimal(requested_base.group(1).replace(",", "."))
+        if user_base is not None and user_base != base:
+            return (
+                f"Je noemt €{_display(user_base, money=True)} als basisbedrag, maar de "
+                f"opgeslagen strategie bij {setup_name} voor {pair.upper()} gebruikt "
+                f"€{_display(base, money=True)}. Ik reken de gevraagde scorevoorbeelden "
+                "niet met een ander bedrag door. Bedoel je het opgeslagen basisbedrag "
+                "of wil je een afzonderlijk wijzigingsvoorstel?"
+            )
     if (score.get("source_status") != "available" or current is None or base is None
             or not 0 <= current <= 100 or base <= 0
             or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", score_day)):
@@ -149,6 +164,7 @@ def render_saved_smart_dca_coach_answer(
     if not isinstance(bands, list) or not bands:
         return None
     matching: list[tuple[Decimal, Decimal | None, Decimal, Decimal]] = []
+    verified_bands: list[tuple[Decimal, Decimal | None, Decimal, Decimal]] = []
     previous_upper: Decimal | None = None
     percentages: list[Decimal] = []
     for index, band in enumerate(bands):
@@ -168,6 +184,7 @@ def render_saved_smart_dca_coach_answer(
             return None
         previous_upper = upper
         percentages.append(percent)
+        verified_bands.append((lower, upper, percent, amount))
         if (upper is None or current < upper) and current >= lower:
             matching.append((lower, upper, percent, amount))
     if len(matching) != 1:
@@ -185,13 +202,17 @@ def render_saved_smart_dca_coach_answer(
     if all(row.get("status") == "unavailable" and row.get("reason") == "bot_not_resolved" for row in bot_rows):
         bot_text = "Aan deze strategie is geen bot gekoppeld."
     elif all(row.get("status") == "completed" and isinstance(row.get("data"), dict) for row in bot_rows):
-        if any(row["data"].get("strategy_id") != strategy_id for row in bot_rows):
+        linked_bot = rows["read_linked_bot"]["data"]
+        bot_status = rows["read_bot_status"]["data"]
+        linked_id = linked_bot.get("bot_id")
+        if (linked_bot.get("strategy_id") != strategy_id
+                or not isinstance(linked_id, int) or isinstance(linked_id, bool)
+                or linked_id <= 0 or bot_status.get("bot_id") != linked_id):
             return None
-        bot_modes = {row["data"].get("is_live") for row in bot_rows
-                     if isinstance(row["data"].get("is_live"), bool)}
-        if len(bot_modes) > 1:
+        if (not isinstance(linked_bot.get("is_live"), bool)
+                or bot_status.get("is_live") is not linked_bot["is_live"]):
             return None
-        mode = "Live" if bot_modes == {True} else "Paper" if bot_modes == {False} else "onbevestigde modus"
+        mode = "Live" if linked_bot["is_live"] else "Paper"
         bot_text = (f"Aan deze strategie is een bot gekoppeld ({mode}); controleer diens "
                     "afzonderlijke beslissing en uitvoeringsvoorwaarden.")
     else:
@@ -203,6 +224,31 @@ def render_saved_smart_dca_coach_answer(
         curve_direction = "De lage scorebanden hebben in deze curve een lager percentage dan de hoge. "
     else:
         curve_direction = "De opgeslagen percentages lopen niet overal in dezelfde richting. "
+    hypothetical_text = ""
+    score_question = re.search(
+        r"\b(?:bij|voor)\s+(?:een\s+)?(?:benchmark(?:t)?score|score)\s+"
+        r"(\d{1,3})(?:\s*(?:en|/|,)\s*(\d{1,3}))?\b",
+        message, re.I,
+    )
+    if score_question:
+        requested_scores = [Decimal(value) for value in score_question.groups() if value is not None]
+        if all(Decimal("0") <= requested <= Decimal("100") for requested in requested_scores):
+            examples: list[str] = []
+            for requested in dict.fromkeys(requested_scores):
+                matching_bands = [band for band in verified_bands
+                                  if requested >= band[0]
+                                  and (band[1] is None or requested < band[1])]
+                if len(matching_bands) != 1:
+                    return None
+                _, _, requested_percent, requested_amount = matching_bands[0]
+                if abs(requested_amount - base * requested_percent / 100) > Decimal("0.01"):
+                    return None
+                examples.append(
+                    f"score {_display(requested)}: {_display(requested_percent)}% van "
+                    f"€{_display(base, money=True)} = hypothetisch "
+                    f"€{_display(requested_amount, money=True)}"
+                )
+            hypothetical_text = "Bij de gevraagde benchmarkscores geldt " + "; ".join(examples) + ". "
     return (
         f"Je opgeslagen Smart DCA-plan {setup_name} voor {pair.upper()} gebruikt een "
         f"basisbedrag van €{_display(base, money=True)}. De laatst geverifieerde "
@@ -211,6 +257,7 @@ def render_saved_smart_dca_coach_answer(
         f"(ondergrens inbegrepen, bovengrens uitgesloten). De opgeslagen curve zet "
         f"daar {_display(percent)}% van het basisbedrag tegenover: hypothetisch "
         f"€{_display(amount, money=True)} per toegestane aankoop. "
+        f"{hypothetical_text}"
         f"{curve_direction}Een lage benchmarkscore bewijst op zichzelf geen oversold RSI. Als je bij "
         "oversold meer dan het basisbedrag wilt inzetten, bepaal dan zelf eerst de "
         "scoregrens, het maximum en je risicobudget; ik kan daarna een wijzigingsvoorstel "
