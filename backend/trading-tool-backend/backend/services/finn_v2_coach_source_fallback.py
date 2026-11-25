@@ -19,6 +19,8 @@ from backend.services.finn_v2_paper_position_answer import asks_about_bot_decisi
 
 
 def asks_about_bot_plan_lineage(question: str) -> bool:
+    if re.search(r"\b(?:alle|drie|meerdere)\b[^.!?]{0,80}\bsetups\b|\bper\s+setup\b", question, re.I):
+        return False
     return bool(re.search(
         r"\b(?:gekoppeld|koppeling|relatie|(?:hoort|horen)\s+bij|verbonden\s+met|"
         r"gebruikt|draait(?:\s+op)?)\b",
