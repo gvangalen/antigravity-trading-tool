@@ -4,6 +4,42 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## Smart DCA inclusieve scorebanden en voorstelcorrectie (25 november 2026)
+
+Phase: `BUILD_CANDIDATE_READY_LIVE_QA_PENDING`; PR [#1369](https://github.com/gvangalen/antigravity-trading-tool/pull/1369).
+De ingelogde browserreproductie op BTC/USDT liet zien dat de gebruikersband
+0–25 in het oude voorstel als `onder 25` werd opgeslagen; score 25 kreeg
+daardoor het middelste bedrag. Na `Aanpassen` gaf FINN alleen een losse uitleg
+en geen nieuw bevestigbaar voorstel. Er is in die diagnose geen setup,
+strategie, bot of order bevestigd.
+
+De kandidaat vertaalt drie expliciete, aaneengesloten inclusieve scorebanden
+naar de exclusieve interne grenswaarden, zodat 0–25 / 26–75 / 76–100 als
+26 / 76 wordt opgeslagen. Een correctie van de open kaart gebruikt dezelfde
+getypeerde parser en trekt de oude kaart in voordat het nieuwe voorstel wordt
+getoond. Prijs-, euro-, budget- en kasranges of expliciet ontkende scorebanden
+worden niet als benchmarkstaffel overgenomen. De bevestigings- en financiële
+uitvoeringsgrenzen zijn niet verruimd.
+
+De lokale FastAPI/Celery/PostgreSQL/Redis-chatproef gaf een eerste voorstel,
+een gecorrigeerd nieuw voorstel en een ingetrokken oude kaart, zonder
+bevestigingsaanroep. De volledige lokale actiematrix is **17/17** (artifact
+SHA-256 `29e078cbc30756db09ee55c11922b11b59c2d9dc3747b935e893f79444433ffb`),
+adaptertests **28/28**, en zowel de bevestigde Smart DCA- als kalender-DCA-
+runtime met idempotente replay zijn groen. De volledige backend-suite op de
+definitieve parser geeft **5538 passed, 7 skipped**. Frontend typecheck,
+i18n, commandtests, build en audit:high zijn groen; de frontendbron is niet
+gewijzigd. De echte Responses-provider-developmentset gaf **20/20** (artifact
+SHA-256 `41b89096fbdfab3dda7d894ec62e4158e77b142d2bb7e7dccc08c31a47e27ceb`)
+en de regressieset **109/109** (artifact SHA-256
+`9886bd030cddc740cee5ee16d9447328c1484c882f4f27228c1c12f9fb88e7f1`),
+zonder provider-, schema-, timeout-, parse- of validatiefout. Onafhankelijke
+QA- en Security-codebeoordelingen vonden op de definitieve parser geen
+blocker. De vijf PR-CI-jobs op producthead `8b2dd2f25` zijn groen; na deze
+statuswijziging moet CI voor de nieuwe head opnieuw slagen. Auto Deploy,
+publieke SHA-pariteit en onafhankelijke ingelogde QA-browseracceptatie staan
+nog open. Dit is nog geen live verdict.
+
 ## FINN 3.0: Smart DCA gecombineerde lezing en scoregestuurd concept (24 november 2026)
 
 Phase: `READ_ONLY_ACCEPTED_FULL_JOURNEY_QA_PENDING`. De ingelogde, read-only browserreproductie
