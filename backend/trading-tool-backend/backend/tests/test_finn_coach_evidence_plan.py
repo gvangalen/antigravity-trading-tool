@@ -46,6 +46,7 @@ def test_bot_setup_question_uses_bot_parent_not_newer_same_asset_setup():
             "id": 30, "symbol": "BTC", "name": "Nieuwere Smart DCA Strategy"}},
         {"scope": "read_portfolio", "status": "completed", "data": {
             "bots": [{"bot_id": 56, "name": "Long term DCA Bot", "symbol": "BTC",
+                      "is_active": True,
                       "is_live": False, "setup_id": 10, "setup_name": "Long term DCA BTC",
                       "strategy_id": 15, "strategy_name": "Long term DCA Strategy"}]}}
     )
@@ -59,10 +60,42 @@ def test_bot_setup_question_uses_bot_parent_not_newer_same_asset_setup():
     assert coach_source_coverage_gap(
         asset="BTC", topics=plan.topics, evidence=evidence, question=question,
         answer="De bot is gekoppeld aan Nieuwere Smart DCA en Nieuwere Smart DCA Strategy.",
-    ) == "bot_plan_lineage_mismatch"
+    ) == "bot_plan_lineage_missing"
+    for unsupported in (
+        "De bot is gekoppeld aan Fantasie Plan en Fantasie Strategy.",
+        "De bot is gekoppeld aan setup 20 en strategie 30.",
+    ):
+        assert coach_source_coverage_gap(
+            asset="BTC", topics=plan.topics, evidence=evidence, question=question,
+            answer=unsupported,
+        ) in {"bot_plan_lineage_missing", "bot_plan_lineage_mismatch"}
+    other_wording = question.replace("zijn daadwerkelijk aan", "horen bij").replace(" gekoppeld?", "?")
+    assert "read_portfolio" in coach_evidence_plan(
+        other_wording, named_asset_count=1, read_only=True,
+    ).read_tools
+    assert "Long term DCA BTC" in render_coach_source_fallback(
+        asset="BTC", topics=plan.topics, evidence=evidence, question=other_wording,
+    )
+    prepared = SimpleNamespace(response=SimpleNamespace(
+        text="De bot is gekoppeld aan Fantasie Plan en Fantasie Strategy.",
+        tool_trace=({"result": {"results": list(evidence)}},),
+        uses_previous_response=False,
+        turn_contract={"coach_evidence_plan": {"topics": plan.topics}},
+    ), previous_response=None, locale="nl")
+    verified = _minimal_read_answer(message=other_wording, prepared=prepared)
+    assert verified.status == "completed"
+    assert "Long term DCA BTC" in verified.text
+    assert "Fantasie Plan" not in verified.text
+    inactive = (evidence[0], evidence[1], {**evidence[2], "data": {
+        "bots": [{**evidence[2]["data"]["bots"][0], "is_active": False}],
+    }})
+    assert render_coach_source_fallback(
+        asset="BTC", topics=plan.topics, evidence=inactive, question=question,
+    ) is None
     ambiguous = (evidence[0], evidence[1], {**evidence[2], "data": {
         "bots": [*evidence[2]["data"]["bots"], {
             "bot_id": 57, "name": "Andere BTC-bot", "symbol": "BTC", "is_live": False,
+            "is_active": True,
             "setup_id": 20, "setup_name": "Nieuwere Smart DCA",
             "strategy_id": 30, "strategy_name": "Nieuwere Smart DCA Strategy",
         }],

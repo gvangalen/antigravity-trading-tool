@@ -18,6 +18,14 @@ from backend.services.finn_v2_tool_adapters.display_source_moment import display
 from backend.services.finn_v2_paper_position_answer import asks_about_bot_decision
 
 
+def asks_about_bot_plan_lineage(question: str) -> bool:
+    return bool(re.search(
+        r"\b(?:gekoppeld|koppeling|relatie|(?:hoort|horen)\s+bij|verbonden\s+met)\b",
+        question, re.I,
+    ) and re.search(r"\b(?:bot\w*|paper[-\s]?bot)\b", question, re.I)
+        and re.search(r"\b(?:setup|strategie|strategy|plan)\b", question, re.I))
+
+
 def _source_moment(value: Any, user_time_zone: str | None) -> str | None:
     instant = display_source_moment(value)
     if isinstance(instant, str):
@@ -90,7 +98,9 @@ def _rows(evidence: tuple[dict[str, Any], ...], scope: str, asset: str) -> list[
 def _bot_row(question: str, evidence: tuple[dict[str, Any], ...], asset: str) -> dict[str, Any] | None:
     portfolios = _rows(evidence, "read_portfolio", asset)
     bots = portfolios[0].get("bots") or [] if portfolios else []
+    active_requested = bool(re.search(r"\bactieve\s+" + re.escape(asset) + r"\s+Paper[-\s]?bot\b", question, re.I))
     matching = [bot for bot in bots if isinstance(bot, dict) and bot.get("is_live") is False
+                and (not active_requested or bot.get("is_active") is True)
                 and str(bot.get("symbol") or "").upper().split("/", 1)[0] == asset]
     # A bot-focused answer must bind the name the user actually named. A
     # singleton BTC portfolio is not proof that it is the bot in the question.
@@ -171,7 +181,7 @@ def _bot_evidence_consistent(
 def _requires_bound_bot(question: str, topics: tuple[str, ...]) -> bool:
     return "bot" in topics and (
         asks_about_bot_decision(question)
-        or ("setup" in topics and bool(re.search(r"\b(?:gekoppeld|relatie)\b", question, re.I)))
+        or ("setup" in topics and asks_about_bot_plan_lineage(question))
         or ("portfolio" in topics and bool(re.search(
             r"\b(?:bot[-\s]?status|botbudget|budgetlimiet|botbudgetlimiet|paper[-\s]?holdbesluit)\b",
             question, re.I,
@@ -188,7 +198,16 @@ def coach_source_coverage_gap(
     if bound_bot and not _bot_evidence_consistent(question, evidence, asset):
         return "bot_evidence_ambiguous"
     selected_bot = _bot_row(question, evidence, asset) if bound_bot else None
-    if "setup" in topics and selected_bot is not None:
+    if "setup" in topics and selected_bot is not None and asks_about_bot_plan_lineage(question):
+        for key in ("setup", "strategy"):
+            expected_id = selected_bot.get("setup_id" if key == "setup" else "strategy_id")
+            expected_name = str(selected_bot.get("setup_name" if key == "setup" else "strategy_name") or "").strip()
+            if expected_id is None or not expected_name or expected_name.casefold() not in answer.casefold():
+                return "bot_plan_lineage_missing"
+            label = r"setup|plan" if key == "setup" else r"strategie|strategy"
+            for mentioned_id in re.findall(rf"\b(?:{label})\s*(?:#|id\s*)?(\d+)\b", answer, re.I):
+                if mentioned_id != str(expected_id):
+                    return "bot_plan_lineage_mismatch"
         setup = _rows(evidence, "read_active_setup", asset)
         strategy = _rows(evidence, "read_linked_strategy", asset)
         if (setup and selected_bot.get("setup_id") is not None

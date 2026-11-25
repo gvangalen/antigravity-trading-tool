@@ -10,6 +10,7 @@ import re
 from dataclasses import dataclass
 
 from backend.services.finn_v2_paper_position_answer import asks_about_bot_decision
+from backend.services.finn_v2_coach_source_fallback import asks_about_bot_plan_lineage
 
 
 @dataclass(frozen=True)
@@ -59,7 +60,7 @@ def coach_evidence_plan(message: str, *, named_asset_count: int, read_only: bool
         return None
     topics = tuple(name for name, _ in chosen)
     reads = tuple(dict.fromkeys(tool for _, tools in chosen for tool in tools))
-    if "bot" in topics and (asks_about_bot_decision(message) or "setup" in topics):
+    if "bot" in topics and (asks_about_bot_decision(message) or asks_about_bot_plan_lineage(message)):
         # The portfolio bot list supplies the owner-bound bot ID and its
         # strategy/setup parents. An asset's most recent setup may belong to
         # a different bot, even when both use the same symbol.
