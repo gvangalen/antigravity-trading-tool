@@ -174,7 +174,7 @@ def test_bot_setup_lineage_question_reads_selected_portfolio_bot(monkeypatch):
     ))
     assert loop_run.await_args.kwargs["required_read_tool_name"] == "get_portfolio_and_exposure"
     assert mixed_result.response.turn_contract["coach_evidence_plan"]["read_tools"] == (
-        "read_portfolio", "read_bot_status",
+        "read_portfolio",
     )
     mixed_botstatus = mixed.replace("zijn status", "zijn botstatus")
     botstatus_result = asyncio.run(front.run(
@@ -183,7 +183,7 @@ def test_bot_setup_lineage_question_reads_selected_portfolio_bot(monkeypatch):
     ))
     assert loop_run.await_args.kwargs["required_read_tool_name"] == "get_portfolio_and_exposure"
     assert botstatus_result.response.turn_contract["coach_evidence_plan"]["read_tools"] == (
-        "read_portfolio", "read_bot_status",
+        "read_portfolio",
     )
 
 

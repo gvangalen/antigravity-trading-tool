@@ -159,15 +159,38 @@ def _bot_row(question: str, evidence: tuple[dict[str, Any], ...], asset: str) ->
     return None
 
 
+def _bot_status_fact(
+    question: str, evidence: tuple[dict[str, Any], ...], asset: str,
+    selected_bot: dict[str, Any] | None, user_time_zone: str | None,
+) -> tuple[str | None, str | None]:
+    if selected_bot is not None and asks_about_bot_plan_lineage(question) and not asks_about_bot_decision(question):
+        portfolios = _rows(evidence, "read_portfolio", asset)
+        status = selected_bot.get("operational_status")
+        at = portfolios[0].get("read_at") if portfolios else None
+    else:
+        statuses = _rows(evidence, "read_bot_status", asset)
+        row = (statuses[0] if len(statuses) == 1
+               and (selected_bot is None or str(statuses[0].get("bot_id")) == str(selected_bot.get("bot_id")))
+               else {})
+        status, at = row.get("operational_status"), row.get("read_at")
+    if status not in {"active", "paused"}:
+        return None, None
+    return str(status), _source_moment(at, user_time_zone)
+
+
 def _bot_evidence_consistent(
     question: str, evidence: tuple[dict[str, Any], ...], asset: str,
 ) -> bool:
     bot = _bot_row(question, evidence, asset)
     if bot is None or bot.get("bot_id") is None:
         return False
-    if asks_about_bot_plan_lineage(question) and not asks_about_bot_decision(question) and not asks_about_bot_status(question):
-        # A linkage read is proved by this owner-bound portfolio bot row.
-        # Unrequested status/decision reads may describe another recent plan.
+    if asks_about_bot_plan_lineage(question) and not asks_about_bot_decision(question):
+        # The same owner-bound portfolio row proves both parent IDs and bot
+        # status. A separate status read has no resolved bot selector here.
+        if asks_about_bot_status(question):
+            portfolios = _rows(evidence, "read_portfolio", asset)
+            return bool(portfolios and bot.get("operational_status") in {"active", "paused"}
+                        and _source_moment(portfolios[0].get("read_at"), None))
         return True
     bot_id = str(bot["bot_id"])
     statuses = _rows(evidence, "read_bot_status", asset)
@@ -240,9 +263,10 @@ def coach_source_coverage_gap(
             return "bot_plan_lineage_mismatch"
     if "bot" in topics:
         if asks_about_bot_status(question):
-            statuses = _rows(evidence, "read_bot_status", asset)
-            status_at = _source_moment(statuses[0].get("read_at"), user_time_zone) if len(statuses) == 1 else None
-            if not re.search(r"\bbotstatus\b", answer, re.I):
+            status, status_at = _bot_status_fact(
+                question, evidence, asset, selected_bot, user_time_zone,
+            )
+            if not status or not re.search(rf"\bbotstatus\b[^.!\n]{{0,70}}\b{re.escape(status)}\b", answer, re.I):
                 return "bot_status_missing"
             if status_at and status_at not in answer:
                 return "bot_status_read_moment_missing"
@@ -389,13 +413,11 @@ def render_coach_source_fallback(
             else:
                 lines.append("- Botbeslissing: geen eenduidig opgeslagen besluit uitgelezen.")
             if asks_about_bot_status(question):
-                statuses = _rows(evidence, "read_bot_status", asset)
-                status = (statuses[0] if len(statuses) == 1
-                          and (not selected_bot or str(statuses[0].get("bot_id")) == str(selected_bot.get("bot_id")))
-                          else {})
-                status_at = _source_moment(status.get("read_at"), user_time_zone)
-                if status_at and status.get("operational_status") in {"active", "paused"}:
-                    lines.append(f"- Botstatus: {status['operational_status']}, uitgelezen op {status_at}.")
+                status, status_at = _bot_status_fact(
+                    question, evidence, asset, selected_bot, user_time_zone,
+                )
+                if status and status_at:
+                    lines.append(f"- Botstatus: {status}, uitgelezen op {status_at}.")
                     verified = True
                 else:
                     lines.append("- Botstatus: huidige status of apart uitleesmoment niet verifieerbaar.")

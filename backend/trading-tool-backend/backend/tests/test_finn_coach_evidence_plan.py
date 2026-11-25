@@ -162,10 +162,11 @@ def test_bot_setup_and_status_require_same_owner_bound_bot():
     question = "Welke setup gebruikt mijn BTC Paper-bot en wat is zijn status? Lees alleen."
     plan = coach_evidence_plan(question, named_asset_count=1, read_only=True)
     assert plan is not None
-    assert plan.read_tools == ("read_portfolio", "read_bot_status")
+    assert plan.read_tools == ("read_portfolio",)
     portfolio = {"scope": "read_portfolio", "status": "completed", "data": {
+        "read_at": "2026-11-25T19:00:00+00:00",
         "bots": [{"bot_id": 56, "name": "Long term DCA Bot", "symbol": "BTC",
-                  "is_active": True, "is_live": False,
+                  "is_active": True, "is_live": False, "operational_status": "active",
                   "setup_id": 10, "setup_name": "Long term DCA BTC",
                   "strategy_id": 15, "strategy_name": "Long term DCA Strategy"}]}}
     status = {"scope": "read_bot_status", "status": "completed", "data": {
@@ -188,7 +189,7 @@ def test_bot_setup_and_status_require_same_owner_bound_bot():
     for variant in (question.replace("zijn status", "zijn botstatus"),):
         variant_plan = coach_evidence_plan(variant, named_asset_count=1, read_only=True)
         assert variant_plan is not None
-        assert variant_plan.read_tools == ("read_portfolio", "read_bot_status")
+        assert variant_plan.read_tools == ("read_portfolio",)
         variant_prepared = SimpleNamespace(
             response=SimpleNamespace(**{**vars(prepared.response),
                                          "turn_contract": {"coach_evidence_plan": {"topics": variant_plan.topics}}}),
@@ -198,9 +199,20 @@ def test_bot_setup_and_status_require_same_owner_bound_bot():
             message=variant, prepared=variant_prepared,
         ).text
     wrong_status = {**status, "data": {**status["data"], "bot_id": 57}}
-    wrong_prepared = SimpleNamespace(
+    unrelated_prepared = SimpleNamespace(
         response=SimpleNamespace(**{**vars(prepared.response),
                                      "tool_trace": ({"result": {"results": [portfolio, wrong_status]}},)}),
+        previous_response=None, locale="nl",
+    )
+    assert "Botstatus: active" in _minimal_read_answer(
+        message=question, prepared=unrelated_prepared,
+    ).text
+    bad_portfolio = {**portfolio, "data": {**portfolio["data"], "bots": [
+        {**portfolio["data"]["bots"][0], "operational_status": "unknown"},
+    ]}}
+    wrong_prepared = SimpleNamespace(
+        response=SimpleNamespace(**{**vars(prepared.response),
+                                     "tool_trace": ({"result": {"results": [bad_portfolio]}},)}),
         previous_response=None, locale="nl",
     )
     assert _minimal_read_answer(message=question, prepared=wrong_prepared).status == "unavailable"

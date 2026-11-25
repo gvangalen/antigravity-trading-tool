@@ -71,8 +71,9 @@ def coach_evidence_plan(message: str, *, named_asset_count: int, read_only: bool
         # plan for the same asset.
         reads = ("read_portfolio",)
     elif set(topics) == {"setup", "bot"} and asks_about_bot_plan_lineage(message) and asks_about_bot_status(message):
-        # Verify both facts against the same selected owner-bound bot ID.
-        reads = ("read_portfolio", "read_bot_status")
+        # The owner-bound portfolio bot row carries both parents and its
+        # operational status, with a common retrieval moment.
+        reads = ("read_portfolio",)
     elif "bot" in topics and asks_about_bot_decision(message):
         # The portfolio bot list supplies the owner-bound bot ID and its
         # strategy/setup parents. An asset's most recent setup may belong to
