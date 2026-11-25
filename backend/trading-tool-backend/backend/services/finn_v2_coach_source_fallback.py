@@ -132,8 +132,6 @@ def _bot_row(question: str, evidence: tuple[dict[str, Any], ...], asset: str) ->
         return named[0]
     if named or len(matching) != 1:
         return None
-    # An unnamed singular Paper-bot is unambiguous only when the owner has
-    # exactly one eligible bot for this asset. Never infer an explicit name.
     return None
 
 

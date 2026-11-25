@@ -307,6 +307,24 @@ def test_why_no_order_coach_uses_decision_reason_and_cash_evidence_together():
         answer="Bot 56 hield aan en botkas van beide bots is €10500.",
         user_time_zone="Europe/Amsterdam",
     ) == "bot_evidence_ambiguous"
+    compound_variant = "Waarom staat mijn BTC-botbeslissing op Hold? Hoeveel Paper-kas is er? Lees alleen."
+    assert render_coach_source_fallback(
+        asset="BTC", topics=("bot", "portfolio"), evidence=ambiguous,
+        question=compound_variant, user_time_zone="Europe/Amsterdam",
+    ) is None
+    assert coach_source_coverage_gap(
+        asset="BTC", topics=("bot", "portfolio"), evidence=ambiguous,
+        question=compound_variant, answer="De BTC-botbeslissing was Hold; de kas is €10500,00.",
+        user_time_zone="Europe/Amsterdam",
+    ) == "bot_evidence_ambiguous"
+    named_compound = "Waarom is de BTC-botbeslissing van Alpha een Hold? Hoeveel Paper-kas is er?"
+    beta_only = (evidence[0], {**evidence[1], "data": {
+        **evidence[1]["data"], "bots": [extra_bot],
+    }})
+    assert render_coach_source_fallback(
+        asset="BTC", topics=("bot", "portfolio"), evidence=beta_only,
+        question=named_compound, user_time_zone="Europe/Amsterdam",
+    ) is None
     named_bot = {**evidence[1]["data"]["bots"][0], "name": "BTC Paper-bot Alpha"}
     explicit = (evidence[0], {**evidence[1], "data": {
         **evidence[1]["data"], "bots": [named_bot, extra_bot],
