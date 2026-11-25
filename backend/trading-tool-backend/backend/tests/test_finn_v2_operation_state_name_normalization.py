@@ -802,6 +802,52 @@ def test_smart_dca_ignores_model_guessed_five_zones_for_explicit_three_bands():
             state.collected_inputs["high_score_percent"]) == (150, 100, 50)
 
 
+def test_smart_dca_inclusive_ranges_preserve_score_25_and_correction():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    service = FinnV2OperationStateService()
+    request = (
+        "Maak voor BTC/USDT een nieuwe Smart DCA-setup met naam QA Smart DCA 25 nov. "
+        "Ik wil wekelijks maximaal één aankoop, zonder vaste koopdag, alleen als de "
+        "benchmarkscore beschikbaar is. Gebruik €200 als basisbedrag en laat het "
+        "bedrag afhangen van de score: 0–25: 150%, 26–75: 100%, 76–100: 50%. "
+        "Toon eerst een voorstel; plaats geen order."
+    )
+    first = service.explicit_inputs(
+        contract=contract, message=request, explicit_asset="BTC",
+    )
+    assert first["low_threshold"] == 26
+    assert first["high_threshold"] == 76
+    assert [first[key] for key in (
+        "low_score_percent", "mid_score_percent", "high_score_percent",
+    )] == [150, 100, 50]
+    state = service.resolve(
+        contract=contract, message=request, explicit_asset="BTC",
+        conversation_context={}, supplied_inputs={}, model_tool_inputs=True,
+    )
+    assert state.missing_required_inputs == ["timeframe"]
+    assert state.collected_inputs["low_threshold"] == 26
+    assert state.collected_inputs["high_threshold"] == 76
+
+    correction = service.explicit_inputs(
+        contract=contract,
+        message=("Corrigeer de scorebanden exact: 0 tot en met 25 krijgt 150%, "
+                 "26 tot en met 75 krijgt 100%, 76 tot en met 100 krijgt 50%."),
+        explicit_asset=None, known_setup_type="dca",
+    )
+    assert correction["low_threshold"] == 26
+    assert correction["high_threshold"] == 76
+    assert correction.get("dca_amount_mode") != "fixed"
+
+
+def test_smart_dca_inclusive_ranges_require_contiguous_full_ladder():
+    parse = FinnV2OperationStateService._dca_inclusive_score_ranges
+    assert parse("0–25: 150%, 26–75: 100%, 76–100: 50%") == {
+        "low_threshold": 26, "high_threshold": 76,
+    }
+    assert parse("0–25: 150%, 27–75: 100%, 76–100: 50%") == {}
+    assert parse("0–25: 150%, 26–75: 100%, 76–99: 50%") == {}
+
+
 def test_inverse_smart_dca_proposes_score_trigger_without_a_weekday():
     contract = FinnV2OperationRegistry().require_supported("create_setup")
     state = FinnV2OperationStateService().resolve(

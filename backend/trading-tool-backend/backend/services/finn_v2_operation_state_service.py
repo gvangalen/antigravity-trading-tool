@@ -1200,7 +1200,7 @@ class FinnV2OperationStateService:
             "dca_amount_mode": "Wil je bij elke geplande aankoop hetzelfde bedrag, of Smart DCA waarbij je totale benchmarkscore het bedrag aanpast?",
             "min_investment": "Welk minimumbedrag wil je voor deze setup vastleggen?",
             "score_source": "Wil je je totale benchmarkscore van markt, macro en technisch als bron voor deze Smart DCA gebruiken?",
-            "low_threshold": "Tot welke totaalscore geldt de lage Smart-DCA-band?",
+            "low_threshold": "Vanaf welke totaalscore begint de middelste Smart-DCA-band? Bijvoorbeeld 26 als de lage band 0–25 is.",
             "high_threshold": "Vanaf welke totaalscore geldt de hoge Smart-DCA-band?",
             "low_score_percent": "Welk percentage van het basisbedrag wil je bij een lage score gebruiken?",
             "mid_score_percent": "Welk percentage van het basisbedrag wil je bij een middenscore gebruiken?",
@@ -1577,7 +1577,8 @@ class FinnV2OperationStateService:
                 explicit_name = self._name_input_from_text(text)
                 if explicit_name:
                     amount_text = amount_text.replace(explicit_name.casefold(), " ")
-                smart_amount = bool(re.search(r"\b(?:smart(?:\s*dca)?|score(?:s|gestuurd|afhankelijk)?|staffel|score\s*bands?|variab\w*)\b", amount_text))
+                smart_amount = bool(re.search(r"\b(?:smart(?:\s*dca)?|score(?:s|gestuurd|afhankelijk)?|staffel|score\s*bands?|scorebanden|scoregrenzen|variab\w*)\b", amount_text))
+                smart_amount = smart_amount or bool(self._dca_inclusive_score_ranges(text))
                 if self._dca_score_percentages(text) and re.search(r"\bbenchmark(?:t)?\b", amount_text):
                     # A follow-up can state the complete score ladder
                     # without repeating the word Smart or score.
@@ -1649,6 +1650,10 @@ class FinnV2OperationStateService:
                     values["dca_amount_mode"] = "fixed"
                 if smart_amount:
                     values.update(self._dca_score_percentages(text))
+                    # The contract stores the first score of the middle band,
+                    # whereas users often give three inclusive integer ranges.
+                    # Keep score 25 in 0–25 by storing 26 as the boundary.
+                    values.update(self._dca_inclusive_score_ranges(text))
                     low_boundary = re.search(r"(?<!tot )\b(?:onder|below|unter)\s+(?:score\s+)?(\d{1,3})\b", amount_text)
                     high_boundary = re.search(r"\b(?:vanaf|from|ab)\s+(\d{1,3})\b", amount_text)
                     if low_boundary:
@@ -1836,6 +1841,25 @@ class FinnV2OperationStateService:
         if len(labeled) == 3:
             return labeled
         return dict(zip(fields, (cls._numeric_value(match.group(1)) for match in matches)))
+
+    @staticmethod
+    def _dca_inclusive_score_ranges(text: str) -> dict[str, int]:
+        """Convert an explicit contiguous 0–100 ladder to exclusive boundaries."""
+        ranges = [
+            (int(match.group(1)), int(match.group(2)))
+            for match in re.finditer(
+                r"(?<!\d)(\d{1,3})\s*(?:[-–—]|\btot(?:\s+en\s+met)?\b)\s*(\d{1,3})(?!\d)",
+                str(text or ""), re.I,
+            )
+        ]
+        if len(ranges) != 3:
+            return {}
+        (low_start, low_end), (mid_start, mid_end), (high_start, high_end) = ranges
+        if not (low_start == 0 and high_end == 100
+                and 0 <= low_end < mid_start <= mid_end < high_start <= 100
+                and mid_start == low_end + 1 and high_start == mid_end + 1):
+            return {}
+        return {"low_threshold": mid_start, "high_threshold": high_start}
 
     @staticmethod
     def _is_short_slot_answer(text: str, *, requested_slot: str) -> bool:
