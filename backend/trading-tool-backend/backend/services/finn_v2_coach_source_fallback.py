@@ -20,7 +20,8 @@ from backend.services.finn_v2_paper_position_answer import asks_about_bot_decisi
 
 def asks_about_bot_plan_lineage(question: str) -> bool:
     return bool(re.search(
-        r"\b(?:gekoppeld|koppeling|relatie|(?:hoort|horen)\s+bij|verbonden\s+met)\b",
+        r"\b(?:gekoppeld|koppeling|relatie|(?:hoort|horen)\s+bij|verbonden\s+met|"
+        r"gebruikt|draait(?:\s+op)?)\b",
         question, re.I,
     ) and re.search(r"\b(?:bot\w*|paper[-\s]?bot)\b", question, re.I)
         and re.search(r"\b(?:setup|strategie|strategy|plan)\b", question, re.I))
@@ -102,6 +103,13 @@ def _bot_row(question: str, evidence: tuple[dict[str, Any], ...], asset: str) ->
     matching = [bot for bot in bots if isinstance(bot, dict) and bot.get("is_live") is False
                 and (not active_requested or bot.get("is_active") is True)
                 and str(bot.get("symbol") or "").upper().split("/", 1)[0] == asset]
+    requested_pair = re.search(rf"\b{re.escape(asset)}/(?:EUR|USDT|USD)\b", question, re.I)
+    if requested_pair and asks_about_bot_plan_lineage(question) and not asks_about_bot_decision(question):
+        # The compact portfolio projection currently carries only the base
+        # symbol. Never infer an exact trading pair from BTC alone.
+        matching = [bot for bot in matching if str(
+            bot.get("pair") or bot.get("trading_pair") or ""
+        ).upper() == requested_pair.group().upper()]
     # A bot-focused answer must bind the name the user actually named. A
     # singleton BTC portfolio is not proof that it is the bot in the question.
     normalized_question = " ".join(question.split())
@@ -151,6 +159,12 @@ def _bot_evidence_consistent(
     bot = _bot_row(question, evidence, asset)
     if bot is None or bot.get("bot_id") is None:
         return False
+    if asks_about_bot_plan_lineage(question) and not asks_about_bot_decision(question) and not re.search(
+        r"\b(?:bot[-\s]?status|status\s+van\s+(?:de\s+)?bot)\b", question, re.I,
+    ):
+        # A linkage read is proved by this owner-bound portfolio bot row.
+        # Unrequested status/decision reads may describe another recent plan.
+        return True
     bot_id = str(bot["bot_id"])
     statuses = _rows(evidence, "read_bot_status", asset)
     status_requested = bool(re.search(r"\b(?:bot[-\s]?status|status\s+van\s+(?:de\s+)?bot)\b", question, re.I))
