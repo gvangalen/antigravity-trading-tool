@@ -1200,7 +1200,7 @@ class FinnV2OperationStateService:
             "dca_amount_mode": "Wil je bij elke geplande aankoop hetzelfde bedrag, of Smart DCA waarbij je totale benchmarkscore het bedrag aanpast?",
             "min_investment": "Welk minimumbedrag wil je voor deze setup vastleggen?",
             "score_source": "Wil je je totale benchmarkscore van markt, macro en technisch als bron voor deze Smart DCA gebruiken?",
-            "low_threshold": "Tot welke totaalscore geldt de lage Smart-DCA-band?",
+            "low_threshold": "Vanaf welke totaalscore begint de middelste Smart-DCA-band? Bijvoorbeeld 26 als de lage band 0–25 is.",
             "high_threshold": "Vanaf welke totaalscore geldt de hoge Smart-DCA-band?",
             "low_score_percent": "Welk percentage van het basisbedrag wil je bij een lage score gebruiken?",
             "mid_score_percent": "Welk percentage van het basisbedrag wil je bij een middenscore gebruiken?",
@@ -1576,9 +1576,14 @@ class FinnV2OperationStateService:
                 amount_text = lowered
                 explicit_name = self._name_input_from_text(text)
                 if explicit_name:
-                    amount_text = amount_text.replace(explicit_name.casefold(), " ")
-                smart_amount = bool(re.search(r"\b(?:smart(?:\s*dca)?|score(?:s|gestuurd|afhankelijk)?|staffel|score\s*bands?|variab\w*)\b", amount_text))
-                if self._dca_score_percentages(text) and re.search(r"\bbenchmark(?:t)?\b", amount_text):
+                    amount_text = re.sub(
+                        rf"(?<!\w){re.escape(explicit_name.casefold())}(?!\w)",
+                        " ", amount_text, count=1,
+                    )
+                ladder_rejected = self._rejects_smart_dca_ladder(amount_text)
+                smart_amount = not ladder_rejected and bool(re.search(r"\b(?:smart(?:\s*dca)?|score(?:s|gestuurd|afhankelijk)?|staffel|score\s*bands?|scorebanden|scoregrenzen|variab\w*)\b", amount_text))
+                smart_amount = smart_amount or (not ladder_rejected and bool(self._dca_inclusive_score_ranges(amount_text)))
+                if not ladder_rejected and self._dca_score_percentages(amount_text) and re.search(r"\bbenchmark(?:t)?\b", amount_text):
                     # A follow-up can state the complete score ladder
                     # without repeating the word Smart or score.
                     smart_amount = True
@@ -1615,7 +1620,7 @@ class FinnV2OperationStateService:
                     and re.search(r"\b(?:minder|less|weniger)(?:\s+(?:kopen|koop|buy|investeren|invest))?\b", amount_text)
                     and re.search(r"\b(?:oversold|overbought|druk|zwak|sterk|scores?|benchmark|lage|hoge)\b", amount_text)
                 )
-                if inverse_ladder and not self._dca_score_percentages(message):
+                if not ladder_rejected and inverse_ladder and not self._dca_score_percentages(amount_text):
                     # Product suggestion only: the visible proposal still
                     # needs explicit user confirmation before any save.
                     values.update({
@@ -1648,12 +1653,17 @@ class FinnV2OperationStateService:
                 if not smart_amount and one_amount and not re.search(r"\bminim(?:um|ale)\b", amount_text):
                     values["dca_amount_mode"] = "fixed"
                 if smart_amount:
-                    values.update(self._dca_score_percentages(text))
+                    values.update(self._dca_score_percentages(amount_text))
+                    # The contract stores the first score of the middle band,
+                    # whereas users often give three inclusive integer ranges.
+                    # Keep score 25 in 0–25 by storing 26 as the boundary.
+                    inclusive_ranges = self._dca_inclusive_score_ranges(amount_text)
+                    values.update(inclusive_ranges)
                     low_boundary = re.search(r"(?<!tot )\b(?:onder|below|unter)\s+(?:score\s+)?(\d{1,3})\b", amount_text)
                     high_boundary = re.search(r"\b(?:vanaf|from|ab)\s+(\d{1,3})\b", amount_text)
-                    if low_boundary:
+                    if low_boundary and not inclusive_ranges:
                         values["low_threshold"] = int(low_boundary.group(1))
-                    if high_boundary:
+                    if high_boundary and not inclusive_ranges:
                         values["high_threshold"] = int(high_boundary.group(1))
             if "min_investment" in accepted_inputs:
                 investment = re.search(
@@ -1798,6 +1808,15 @@ class FinnV2OperationStateService:
             text.casefold(),
         ))
 
+    @staticmethod
+    def _rejects_smart_dca_ladder(text: str) -> bool:
+        """A negated score ladder is not positive amount-rule evidence."""
+        return bool(re.search(
+            r"\b(?:geen|zonder|niet|no|without|keine?)\s+(?:een\s+)?"
+            r"(?:scorebanden|scoregrenzen|scoregestuurde?\s+bedragen?|benchmarkgestuurde?)\b",
+            str(text or ""), re.I,
+        ))
+
     @classmethod
     def _dca_score_percentages(cls, text: str) -> dict[str, object]:
         """Extract an explicit five-zone ladder or a legacy three-band ladder.
@@ -1818,6 +1837,13 @@ class FinnV2OperationStateService:
                                                  for match in matches]}
         if len(matches) != 3:
             return {}
+        if re.search(
+            r"(?<!\d)\d{1,3}\s*(?:[-–—]|\btot(?:\s+en\s+met)?\b)\s*\d{1,3}"
+            r"\s*(?::\s*|\s+krijgt\s+)\d{1,3}\s*%",
+            band_text,
+        ) and not cls._dca_inclusive_score_ranges(text):
+            # Three priced or ambiguous ranges cannot donate score amounts.
+            return {}
         fields = ("low_score_percent", "mid_score_percent", "high_score_percent")
         labels = re.compile(
             r"\b(lage|zwakke|low|weak|normale|neutrale|middelste|mid|"
@@ -1836,6 +1862,38 @@ class FinnV2OperationStateService:
         if len(labeled) == 3:
             return labeled
         return dict(zip(fields, (cls._numeric_value(match.group(1)) for match in matches)))
+
+    @staticmethod
+    def _dca_inclusive_score_ranges(text: str) -> dict[str, int]:
+        """Convert three user-labeled score/percent ranges to exclusive bounds."""
+        value = str(text or "")
+        matches = list(re.finditer(
+            r"(?<!\d)(\d{1,3})\s*(?:[-–—]|\btot(?:\s+en\s+met)?\b)\s*"
+            r"(\d{1,3})\s*(?::\s*|\s+krijgt\s+)(\d{1,3})\s*%",
+            value, re.I,
+        ))
+        if len(matches) != 3:
+            return {}
+        # "Smart DCA" elsewhere in a message does not make price or budget
+        # ranges into score bands. The clause introducing the actual ladder
+        # must name its score source, and no range may carry a currency.
+        lead_in = re.split(r"[.;\n]", value[:matches[0].start()])[-1]
+        if not re.search(r"\b(?:benchmarkscore|score|scorebanden|scoregrenzen)\b", lead_in, re.I):
+            return {}
+        if FinnV2OperationStateService._rejects_smart_dca_ladder(lead_in):
+            return {}
+        if re.search(r"\b(?:prijs\w*|koers\w*|risicobudget|budget\w*|kas\w*)\b", lead_in, re.I):
+            return {}
+        if any(re.search(r"(?:€|\$|\b(?:eur|euro|usd|usdt))\s*$", value[:match.start()], re.I)
+               for match in matches):
+            return {}
+        ranges = [(int(match.group(1)), int(match.group(2))) for match in matches]
+        (low_start, low_end), (mid_start, mid_end), (high_start, high_end) = ranges
+        if not (low_start == 0 and high_end == 100
+                and 0 <= low_end < mid_start <= mid_end < high_start <= 100
+                and mid_start == low_end + 1 and high_start == mid_end + 1):
+            return {}
+        return {"low_threshold": mid_start, "high_threshold": high_start}
 
     @staticmethod
     def _is_short_slot_answer(text: str, *, requested_slot: str) -> bool:
