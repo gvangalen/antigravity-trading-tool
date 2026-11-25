@@ -1,4 +1,8 @@
-from backend.services.finn_v2_paper_position_answer import render_paper_position_cash_answer
+import pytest
+
+from backend.services.finn_v2_paper_position_answer import (
+    asks_about_bot_decision, render_paper_position_cash_answer,
+)
 
 
 QUESTION = (
@@ -105,5 +109,23 @@ def test_four_paper_amounts_include_verified_read_moment_when_requested():
 def test_bot_profile_review_is_not_replaced_by_factual_cash_readback():
     question = ("Past mijn bestaande BTC Paper-bot bij mijn opgeslagen traderstijl? "
                 "Vergelijk het botbudget met de belegde positie en totale kas.")
+    assert render_paper_position_cash_answer(question, _trace(rows=[]),
+                                             asset="BTC", locale="nl") is None
+
+
+@pytest.mark.parametrize("question", [
+    "Waarom is mijn BTC Paper-bot bij de laatste beslissing geblokkeerd? "
+    "Controleer de opgeslagen reden en het moment opnieuw. Leg ook kort uit "
+    "hoeveel van de budgetlimiet echt belegd is en hoeveel Paper-kas er is. "
+    "Wat is één veilige volgende stap? Lees alleen.",
+    "Wat is de reden van de laatste Hold van mijn BTC Paper-bot? Leg ook uit "
+    "hoeveel van de budgetlimiet echt belegd is en hoeveel Paper-kas er is. Lees alleen.",
+    "Waarom heeft mijn BTC Paper-bot geen order geplaatst? Leg ook uit hoeveel "
+    "van de budgetlimiet belegd is en hoeveel Paper-kas er is. Lees alleen.",
+    "Waarom kocht mijn BTC Paper-bot niet? Leg ook uit hoeveel van de "
+    "budgetlimiet belegd is en hoeveel Paper-kas er is. Lees alleen.",
+])
+def test_bot_decision_review_is_not_replaced_by_cash_only_readback(question):
+    assert asks_about_bot_decision(question)
     assert render_paper_position_cash_answer(question, _trace(rows=[]),
                                              asset="BTC", locale="nl") is None

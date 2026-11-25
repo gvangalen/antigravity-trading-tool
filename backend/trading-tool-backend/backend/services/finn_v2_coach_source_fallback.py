@@ -15,6 +15,7 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from backend.services.finn_v2_tool_adapters.display_source_moment import display_source_moment
+from backend.services.finn_v2_paper_position_answer import asks_about_bot_decision
 
 
 def _source_moment(value: Any, user_time_zone: str | None) -> str | None:
@@ -98,19 +99,42 @@ def _bot_row(question: str, evidence: tuple[dict[str, Any], ...], asset: str) ->
         r"\blees\s+alleen\b|\bwijzig\s+geen\b", normalized_question,
         maxsplit=1, flags=re.I,
     )[0]
-    if re.search(r"\b(?:niet|geen|behalve)\b", requested_clause, re.I) or len(re.findall(r"\bbot\b", requested_clause, re.I)) != 1:
+    # A negated order is still a request about this bot. Keep negated bot
+    # identity exclusions fail closed, but do not discard the trade reason.
+    identity_clause = re.sub(
+        r"\bgeen\s+(?:paper[-\s]?)?order(?:\s+geplaatst)?\b|"
+        r"\bniet\s+gekocht\b|\bkocht\b[^.!?]{0,80}\bniet\b",
+        "", requested_clause, flags=re.I,
+    )
+    if (re.search(r"\b(?:niet|geen|behalve)\b", identity_clause, re.I)
+            or len(re.findall(r"\bbot\b", requested_clause, re.I)) != 1):
         return None
     named = [bot for bot in matching if str(bot.get("name") or "").strip()
              and re.search(
                  rf"(?<!\w){re.escape(' '.join(str(bot['name']).split()))}"
-                 r"(?=\s+(?:voor|in|met|en|van|bij|op|uit)\b|[.,!?;:]|$)",
+                 r"(?=\s+(?:voor|in|met|en|van|bij|op|uit)\b|"
+                 r"\s+(?:geen\s+(?:paper[-\s]?)?order|"
+                 r"heeft\s+geen\s+(?:paper[-\s]?)?order|"
+                 r"niet\s+gekocht|kocht\s+niet)\b|[.,!?;:]|$)",
                  normalized_question, re.I,
              )]
-    matching = named
-    if len(matching) != 1:
+    generic_reference = re.search(
+        rf"\b(?:mijn|de)\s+{re.escape(asset)}\s+Paper[-\s]?bot\b"
+        r"(?=\s+(?:voor|in|met|en|van|bij|op|uit|volgens|geen|niet|"
+        r"heeft|had|is|was|wacht|kocht|koop)\b|[.,!?;:]|$)",
+        requested_clause, re.I,
+    )
+    if generic_reference:
+        # A generic label can equal a literal saved bot name. It still does
+        # not select that bot when another Paper-bot shares the asset.
+        return matching[0] if len(matching) == 1 else None
+    if len(named) == 1:
+        return named[0]
+    if named or len(matching) != 1:
         return None
-    bot = matching[0]
-    return bot
+    # An unnamed singular Paper-bot is unambiguous only when the owner has
+    # exactly one eligible bot for this asset. Never infer an explicit name.
+    return None
 
 
 def _bot_evidence_consistent(
@@ -135,7 +159,7 @@ def _bot_evidence_consistent(
                  if isinstance(row, dict)
                  and str(row.get("symbol") or "").upper().split("/", 1)[0] == asset
                  and str(row.get("bot_id")) == bot_id]
-    if re.search(r"\b(?:paper[-\s]?holdbesluit|blokkadereden)\b", question, re.I) and len(decisions) != 1:
+    if asks_about_bot_decision(question) and len(decisions) != 1:
         return False
     if len(decisions) > 1 or any(row.get("is_live") is True for row in decisions):
         return False
@@ -147,10 +171,13 @@ def _bot_evidence_consistent(
 
 
 def _requires_bound_bot(question: str, topics: tuple[str, ...]) -> bool:
-    return "bot" in topics and "portfolio" in topics and bool(re.search(
-        r"\b(?:bot[-\s]?status|botbudget|budgetlimiet|botbudgetlimiet|paper[-\s]?holdbesluit)\b",
-        question, re.I,
-    ))
+    return "bot" in topics and (
+        asks_about_bot_decision(question)
+        or ("portfolio" in topics and bool(re.search(
+            r"\b(?:bot[-\s]?status|botbudget|budgetlimiet|botbudgetlimiet|paper[-\s]?holdbesluit)\b",
+            question, re.I,
+        )))
+    )
 
 
 def coach_source_coverage_gap(

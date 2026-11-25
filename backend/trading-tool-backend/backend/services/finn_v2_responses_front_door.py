@@ -64,7 +64,8 @@ from backend.services.finn_v2_two_plan_checks_answer import (
 )
 from backend.services.finn_v2_plan_design_context import asks_read_only_impulse_plan_coaching
 from backend.services.finn_v2_paper_position_answer import (
-    PAPER_POSITION_CASH_UNAVAILABLE, render_paper_position_cash_answer,
+    PAPER_POSITION_CASH_UNAVAILABLE, asks_about_bot_decision,
+    render_paper_position_cash_answer,
 )
 from backend.services.finn_v2_factual_source_answer import (
     is_report_technical_comparison_request, render_bot_decision, render_closed_paper_exit_facts,
@@ -1444,16 +1445,7 @@ class FinnResponsesFrontDoor:
     @staticmethod
     def _asks_about_bot_decision(message: str) -> bool:
         """Bind explicit bot-decision questions to persisted owner evidence."""
-        return bool(
-            re.search(r"\b(?:bots?|bot(?:besluit(?:en)?|beslissing(?:en)?|beoordeling(?:en)?|check(?:s)?)|automatisering|automation)\b", message, re.I)
-            and re.search(
-                r"\b(?:botbeslissing(?:en)?|botbesluit(?:en)?|beslissing(?:en)?|besluit(?:en)?|decision(?:s)?|"
-                r"beoordeling(?:en)?|(?:bot)?check(?:s)?|(?:bot)?reden(?:en)?|"
-                r"(?:hold|koop|verkoop)[- ]?besluit(?:en)?|blokkade\w*reden(?:en)?|"
-                r"blokkeer\w*|entscheidung(?:en)?)\b",
-                message, re.I,
-            )
-        )
+        return asks_about_bot_decision(message)
 
     @staticmethod
     def _chart_coaching_pair(
@@ -2329,6 +2321,7 @@ class FinnResponsesFrontDoor:
                 and re.search(r"\b(?:botbudget|budgetlimiet)\b", message, re.I)
                 and re.search(r"\b(?:positie|posities|belegd|geïnvesteerd)\b", message, re.I)
                 and re.search(r"\b(?:kas|kassaldo|cash|saldo)\b", message, re.I)
+                and not self._asks_about_bot_decision(message)
                 and not re.search(r"\b(?:koop|plaats|voer|bestel)\s+(?:nu|meteen|direct|alvast|\d)", message, re.I)
                 and not _explicit_create_operation_request(message)):
             call = replace(

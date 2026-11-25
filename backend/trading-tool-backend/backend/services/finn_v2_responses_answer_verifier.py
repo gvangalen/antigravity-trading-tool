@@ -44,7 +44,8 @@ from backend.services.finn_v2_bot_subject_claims import (
     focused_bot_id, bot_status_read_subject_supported, bot_subject_supported,
 )
 from backend.services.finn_v2_paper_position_answer import (
-    PAPER_POSITION_CASH_UNAVAILABLE, render_paper_position_cash_answer,
+    PAPER_POSITION_CASH_UNAVAILABLE, asks_about_bot_decision,
+    render_paper_position_cash_answer,
 )
 from backend.services.finn_v2_fomo_plan_answer import render_fomo_plan_answer
 from backend.services.finn_v2_two_plan_checks_answer import verified_two_plan_checks
@@ -3292,6 +3293,7 @@ class FinnResponsesAnswerVerifier:
                          or re.search(r"\bbudgetlimiet\b", message, re.I))
                     and re.search(r"\b(?:positie|posities|belegd|geïnvesteerd|investeerd)\b", message, re.I)
                     and re.search(r"\b(?:kas|kassaldo|cash|saldo)\b", message, re.I)
+                    and not asks_about_bot_decision(message)
                     and str(locale or "nl").lower().startswith("nl")):
                 expected = render_paper_position_cash_answer(
                     message, result.tool_trace,

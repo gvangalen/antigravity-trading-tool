@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor
 from backend.services.finn_v2_responses_answer_verifier import FinnResponsesAnswerVerifier
+from backend.services.finn_v2_responses_loop import FinnResponsesResult
 from backend.services.finn_v2_factual_source_answer import (
     mentions_technical_indicator, render_bot_decision, render_closed_paper_exit_facts,
     render_account_market_report_facts,
@@ -67,6 +68,31 @@ def test_paper_four_amounts_verify_in_user_time_zone():
         invested_question, rows, workspace_hints={"time_zone": "Europe/Amsterdam"},
     )
     assert "€0 werkelijk belegd" in invested_answer.text
+
+
+def test_paper_cash_verifier_rejects_cash_only_answer_to_hold_review():
+    question = (
+        "Wat is de reden van de laatste Hold van mijn BTC Paper-bot? Leg ook uit "
+        "hoeveel van de budgetlimiet echt belegd is en hoeveel Paper-kas er is. Lees alleen."
+    )
+    read = {"status": "completed", "results": [{
+        "scope": "read_portfolio", "status": "completed", "asset": None,
+        "data": {"environment": "paper", "global": {"cash_balance": 10000,
+                 "invested_value": 0}, "bots": [{"symbol": "BTC", "is_live": False,
+                 "position_qty": 0, "invested_eur": 0, "paper_cash_eur": 10000,
+                 "budget_total_eur": 1000}]},
+    }]}
+    result = FinnResponsesResult(
+        text="De budgetlimiet is €1000, belegd €0 en Paper-kas €10000.",
+        response_id="paper-position-hold-review", answer_kind="factual_source",
+        tool_trace=({"name": "get_portfolio_and_exposure", "status": "completed",
+                     "arguments": {"environment": "paper"}, "result": read},),
+    )
+    checked = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=question, result=result, locale="nl",
+    ))
+    assert checked.status == "unavailable"
+    assert checked.reason == "factual_source_mismatch"
 
 
 def _dated_aapl_account_rows():

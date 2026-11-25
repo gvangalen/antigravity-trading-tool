@@ -15997,13 +15997,33 @@ def test_explicit_bot_status_and_decision_require_separate_owner_reads():
 
 
 @pytest.mark.parametrize("previous_response", [None, {"terminal_status": "completed", "tool_trace": []}])
-def test_bot_status_decision_portfolio_question_executes_all_three_reads(previous_response):
-    question = (
+@pytest.mark.parametrize("question,required_scopes", [
+    (
         "Beoordeel het laatste Paper-Holdbesluit van mijn bestaande Strategie long term dca btc Bot voor BTC. "
         "Lees de actuele botstatus en exacte blokkadereden opnieuw. Scheid de ingestelde botbudgetlimiet, "
         "werkelijk belegd, botkas en totale Paper-kas, en noem de bronmomenten. "
-        "Geef één concrete veilige vervolgstap. Lees alleen; wijzig geen strategie, bot of order."
-    )
+        "Geef één concrete veilige vervolgstap. Lees alleen; wijzig geen strategie, bot of order.",
+        {"read_bot_status", "read_review_history", "read_portfolio"},
+    ),
+    (
+        "Waarom is mijn BTC Paper-bot bij de laatste beslissing geblokkeerd? "
+        "Controleer de opgeslagen reden en het moment opnieuw. Leg ook kort uit "
+        "hoeveel van de budgetlimiet echt belegd is en hoeveel Paper-kas er is. "
+        "Wat is één veilige volgende stap? Lees alleen.",
+        {"read_review_history", "read_portfolio"},
+    ),
+    (
+        "Wat is de reden van de laatste Hold van mijn BTC Paper-bot? Leg ook uit "
+        "hoeveel van de budgetlimiet echt belegd is en hoeveel Paper-kas er is. Lees alleen.",
+        {"read_review_history", "read_portfolio"},
+    ),
+    (
+        "Waarom heeft mijn BTC Paper-bot geen order geplaatst? Leg ook uit hoeveel "
+        "van de budgetlimiet belegd is en hoeveel Paper-kas er is. Lees alleen.",
+        {"read_review_history", "read_portfolio"},
+    ),
+])
+def test_bot_status_decision_portfolio_question_executes_all_three_reads(previous_response, question, required_scopes):
     selected_calls = []
 
     class FakeRead:
@@ -16031,7 +16051,7 @@ def test_bot_status_decision_portfolio_question_executes_all_three_reads(previou
         workspace_hints={"page": "/bot", "symbol": "BTC"},
     ))
     assert selected_calls
-    assert any({"read_bot_status", "read_review_history", "read_portfolio"} <= set(call.read_tools)
+    assert any(required_scopes <= set(call.read_tools)
                for call in selected_calls), [
         (call.name, call.read_tools) for call in selected_calls
     ]

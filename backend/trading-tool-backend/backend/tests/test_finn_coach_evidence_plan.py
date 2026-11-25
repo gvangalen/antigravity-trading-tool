@@ -242,6 +242,94 @@ def test_paper_hold_recovery_separates_budget_invested_cash_status_and_source_ti
     assert "20:09:30 CET" not in other_zone
 
 
+def test_why_no_order_coach_uses_decision_reason_and_cash_evidence_together():
+    question = (
+        "Waarom heeft mijn BTC Paper-bot geen order geplaatst? Leg ook uit hoeveel "
+        "van de budgetlimiet echt belegd is en hoeveel Paper-kas er is. "
+        "Wat is één veilige volgende stap? Lees alleen."
+    )
+    evidence = (
+        {"scope": "read_review_history", "status": "completed", "asset": "BTC",
+         "data": {"latest_bot_decisions": [{"bot_id": 56, "symbol": "BTC",
+             "action": "hold", "decision_at": "2026-11-25T14:18:42+00:00",
+             "safety_reason": "Bevestig eerst de valuta van de opgeslagen koersniveaus in de strategie."}]}},
+        {"scope": "read_portfolio", "status": "completed", "data": {
+            "global": {"cash_balance": 10000}, "read_at": "2026-11-25T14:31:29+00:00",
+            "bots": [{"bot_id": 56, "name": "BTC Paper-bot", "symbol": "BTC",
+                      "is_live": False, "budget_total_eur": 1000,
+                      "invested_eur": 0, "paper_cash_eur": 10000,
+                      "position_qty": 0}]}}
+    )
+    answer = render_coach_source_fallback(
+        asset="BTC", topics=("bot", "portfolio"), evidence=evidence,
+        question=question, user_time_zone="Europe/Amsterdam",
+    )
+    assert answer is not None
+    for fragment in ("hold op 2026-11-25 15:18:42 CET",
+                     "Bevestig eerst de valuta van de opgeslagen koersniveaus",
+                     "botbudgetlimiet: €1000,00", "werkelijk belegd (Paper): €0,00",
+                     "botkas (Paper): €10000,00", "Paper-portefeuille: kas €10000,00"):
+        assert fragment in answer
+    assert coach_source_coverage_gap(
+        asset="BTC", topics=("bot", "portfolio"), evidence=evidence,
+        question=question, answer=answer, user_time_zone="Europe/Amsterdam",
+    ) is None
+    extra_bot = {"bot_id": 57, "name": "Andere BTC Paper-bot", "symbol": "BTC",
+                 "is_live": False, "budget_total_eur": 500, "invested_eur": 0,
+                 "paper_cash_eur": 500, "position_qty": 0}
+    ambiguous = (evidence[0], {**evidence[1], "data": {
+        **evidence[1]["data"], "bots": [*evidence[1]["data"]["bots"], extra_bot],
+    }})
+    assert render_coach_source_fallback(
+        asset="BTC", topics=("bot", "portfolio"), evidence=ambiguous,
+        question=question, user_time_zone="Europe/Amsterdam",
+    ) is None
+    punctuation_variant = (
+        "Waarom heeft mijn BTC Paper-bot, volgens mijn laatste botbeslissing, "
+        "geen order geplaatst? Hoeveel van de budgetlimiet is belegd en "
+        "hoeveel Paper-kas is er? Lees alleen."
+    )
+    assert render_coach_source_fallback(
+        asset="BTC", topics=("bot", "portfolio"), evidence=ambiguous,
+        question=punctuation_variant, user_time_zone="Europe/Amsterdam",
+    ) is None
+    cash_only_variant = (
+        "Waarom heeft mijn BTC Paper-bot geen order geplaatst? "
+        "Hoeveel Paper-kas is er? Lees alleen."
+    )
+    assert render_coach_source_fallback(
+        asset="BTC", topics=("bot", "portfolio"), evidence=ambiguous,
+        question=cash_only_variant, user_time_zone="Europe/Amsterdam",
+    ) is None
+    assert coach_source_coverage_gap(
+        asset="BTC", topics=("bot", "portfolio"), evidence=ambiguous,
+        question=cash_only_variant,
+        answer="Bot 56 hield aan en botkas van beide bots is €10500.",
+        user_time_zone="Europe/Amsterdam",
+    ) == "bot_evidence_ambiguous"
+    named_bot = {**evidence[1]["data"]["bots"][0], "name": "BTC Paper-bot Alpha"}
+    explicit = (evidence[0], {**evidence[1], "data": {
+        **evidence[1]["data"], "bots": [named_bot, extra_bot],
+    }})
+    explicit_question = (
+        "Waarom heeft mijn BTC Paper-bot Alpha geen order geplaatst? "
+        "Hoeveel van de budgetlimiet is belegd en hoeveel Paper-kas is er? "
+        "Wat is één veilige vervolgstap? Lees alleen."
+    )
+    explicit_answer = render_coach_source_fallback(
+        asset="BTC", topics=("bot", "portfolio"), evidence=explicit,
+        question=explicit_question, user_time_zone="Europe/Amsterdam",
+    )
+    assert explicit_answer is not None
+    assert "BTC Paper-bot Alpha botkas (Paper): €10000,00" in explicit_answer
+    assert "Andere BTC Paper-bot" not in explicit_answer
+    no_decision = ({**evidence[0], "data": {"latest_bot_decisions": []}}, evidence[1])
+    assert render_coach_source_fallback(
+        asset="BTC", topics=("bot", "portfolio"), evidence=no_decision,
+        question=question, user_time_zone="Europe/Amsterdam",
+    ) is None
+
+
 def test_paper_hold_fallback_rejects_two_bots_with_conflicting_source_ids():
     question = ("Beoordeel het laatste Paper-Holdbesluit van mijn BTC Bot Alpha voor BTC/USDT. "
                 "Lees de botstatus, budgetlimiet en Paper-kas. Lees alleen.")
