@@ -6508,6 +6508,7 @@ class FinnResponsesFrontDoor:
                 if is_read_only_turn and coach_plan
                 and set(coach_plan.topics) == {"setup", "bot"}
                 and asks_about_bot_plan_lineage(message)
+                and not re.search(r"\bstatus\b", message, re.I)
                 and not _mixed_profile_portfolio_question(message)
                 and not self._asks_about_bot_decision(message)
                 and pending_operation is None and not resuming_clarification

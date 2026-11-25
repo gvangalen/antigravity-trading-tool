@@ -167,6 +167,13 @@ def test_bot_setup_lineage_question_reads_selected_portfolio_bot(monkeypatch):
     assert loop_run.await_args.kwargs["required_read_tool_name"] == "get_portfolio_and_exposure"
     assert result.response.turn_contract["coach_evidence_plan"]["read_tools"] == ("read_portfolio",)
 
+    mixed = "Welke setup gebruikt mijn BTC Paper-bot en wat is zijn status? Lees alleen."
+    asyncio.run(front.run(
+        message=mixed, instructions="", conversation_context={},
+        verified_asset="BTC", previous_response=None,
+    ))
+    assert loop_run.await_args.kwargs["required_read_tool_name"] != "get_portfolio_and_exposure"
+
 
 def test_plan_review_reads_account_wide_portfolio_beside_selected_asset():
     selectors = {}

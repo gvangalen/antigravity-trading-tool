@@ -63,7 +63,7 @@ def coach_evidence_plan(message: str, *, named_asset_count: int, read_only: bool
     pure_bot_lineage = (set(topics) == {"setup", "bot"}
                         and asks_about_bot_plan_lineage(message)
                         and not asks_about_bot_decision(message)
-                        and not re.search(r"\b(?:profiel|traderstijl|bot[-\s]?status)\b", message, re.I))
+                        and not re.search(r"\b(?:profiel|traderstijl|bot[-\s]?status|status)\b", message, re.I))
     if pure_bot_lineage:
         # This owner's portfolio bot row already contains its exact setup and
         # strategy parents. A separate latest-setup read can refer to another
