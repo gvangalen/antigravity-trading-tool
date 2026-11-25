@@ -2010,6 +2010,17 @@ def _minimal_read_answer(
             return FinnResponsesVerifiedAnswer("completed", recovered, None, evidence)
         return None
 
+    if coach_plan and set(coach_plan.get("topics") or ()) == {"setup", "bot"}:
+        from backend.services.finn_v2_coach_source_fallback import asks_about_bot_plan_lineage
+        if asks_about_bot_plan_lineage(message):
+            if recovered := source_bound_coach_recovery():
+                return recovered
+            return FinnResponsesVerifiedAnswer(
+                "unavailable",
+                "Ik kan deze Paper-bot niet eenduidig aan een opgeslagen setup en strategie koppelen.",
+                "bot_plan_lineage_unverified", current_evidence,
+            )
+
     if not FinnResponsesAnswerVerifier._latest_quote_claim_supported(text, tuple(
         item for call in prepared.response.tool_trace
         for item in (call.get("result") or {}).get("results") or []

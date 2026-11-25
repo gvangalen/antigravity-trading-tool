@@ -4,6 +4,14 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0 profiel en totale Paper-portefeuille (25 november 2026)
+
+Phase: `BUILD_GATES_GREEN_RELEASE_PENDING`; product-PR [#1374](https://github.com/gvangalen/antigravity-trading-tool/pull/1374), producthead `8cd4b1ad9` vóór deze statusupdate. De ingelogde read-only browserproef op eerdere live SHA `c7430492` onderscheidde de opgeslagen traderstijl, €1.000 botbudgetlimiet, €0 werkelijk belegd, €10.000 botkas en €10.000 totale Paper-kas en gaf één controlepunt. Een vervolgvraag koppelde dezelfde BTC-bot ten onrechte aan een nieuwere, niet gekoppelde BTC-setup. Dat is de gerepareerde fout; de browserproef op de kandidaat staat nog open.
+
+Voor een vraag naar één Paper-bot gebruikt FINN nu de eigenaargebonden botrij voor de exacte setup- en strategieouders. Een gecombineerde statusvraag leest de getypeerde operationele status en het uitleesmoment uit **diezelfde** botrij. Een onduidelijke bot, onbewezen handelspaar of ontbrekende status eindigt als niet verifieerbaar. Brede vragen over alle setups blijven op de inventarisroute. Er is geen wijziging aan voorstellen, bevestigingen of financiële uitvoering. De lokale publieke API/worker-chatproef met een nieuwere niet gekoppelde BTC-setup gaf 3/3 completed voor koppeling, status en botstatus; steeds de juiste ouders, geen voorstel of order.
+
+Lokale Build-gates: backend `5555 passed, 7 skipped` (log SHA-256 `df935f505af2db97f96998c8a6015d2920560dd3768fb8749632e652f9ea78a8`); geïsoleerde worker-actiematrix `17/17`, nul brokerorders/Live-calls/productieverbindingen (artifact SHA-256 `0983f239b738ee7a107098b422c2c62b1bd2aca8eedfc71a7845a3b2aea48228`); adaptertests `28/28`; Smart DCA- en kalender-DCA-bevestiging en replay geslaagd. Echte Responses-providerselector: development `20/20` (SHA-256 `796196cc375af87bf7d4aa4c9889a18022a3b563569acd74bebefbb5ab43e6d5`) en regressie `109/109` (SHA-256 `de9680fd526e7750550288ac2709e0661d2ee09640a1ac0d0f293228b7d7bdad`), elk zonder provider-, schema-, timeout-, parse- of validatiefout. De aanvullende synthetische portefeuillebronproef gaf 2/2 completed en alle budget-/kaschecks groen (SHA-256 `18df55fc8bfee419ab9008e119641536fea91e57fcafc59fbf6649ce860f9b19`). Frontendbron is niet gewijzigd. Onafhankelijke QA-/Security-codeherbeoordeling van de finale producthead en nieuwe PR-CI zijn nog in uitvoering. Geen merge, deploy of live acceptatie is uit deze lokale resultaten afgeleid.
+
 ## Smart DCA opgeslagen plan lezen na aanmaak (25 november 2026)
 
 Phase: `LIVE_CANDIDATE_QA_PENDING`; PR [#1370](https://github.com/gvangalen/antigravity-trading-tool/pull/1370).

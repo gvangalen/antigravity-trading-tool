@@ -10,6 +10,7 @@ import re
 from dataclasses import dataclass
 
 from backend.services.finn_v2_paper_position_answer import asks_about_bot_decision
+from backend.services.finn_v2_coach_source_fallback import asks_about_bot_plan_lineage, asks_about_bot_status
 
 
 @dataclass(frozen=True)
@@ -59,9 +60,24 @@ def coach_evidence_plan(message: str, *, named_asset_count: int, read_only: bool
         return None
     topics = tuple(name for name, _ in chosen)
     reads = tuple(dict.fromkeys(tool for _, tools in chosen for tool in tools))
-    if "bot" in topics and asks_about_bot_decision(message):
-        # The portfolio bot list supplies the owner-bound bot ID needed to
-        # attribute a persisted decision, even when cash was not requested.
+    pure_bot_lineage = (set(topics) == {"setup", "bot"}
+                        and asks_about_bot_plan_lineage(message)
+                        and not asks_about_bot_decision(message)
+                        and not re.search(r"\b(?:profiel|traderstijl)\b", message, re.I)
+                        and not asks_about_bot_status(message))
+    if pure_bot_lineage:
+        # This owner's portfolio bot row already contains its exact setup and
+        # strategy parents. A separate latest-setup read can refer to another
+        # plan for the same asset.
+        reads = ("read_portfolio",)
+    elif set(topics) == {"setup", "bot"} and asks_about_bot_plan_lineage(message) and asks_about_bot_status(message):
+        # The owner-bound portfolio bot row carries both parents and its
+        # operational status, with a common retrieval moment.
+        reads = ("read_portfolio",)
+    elif "bot" in topics and asks_about_bot_decision(message):
+        # The portfolio bot list supplies the owner-bound bot ID and its
+        # strategy/setup parents. An asset's most recent setup may belong to
+        # a different bot, even when both use the same symbol.
         reads = tuple(dict.fromkeys((*reads, "read_portfolio")))
     return CoachEvidencePlan(
         topics=topics, read_tools=reads,

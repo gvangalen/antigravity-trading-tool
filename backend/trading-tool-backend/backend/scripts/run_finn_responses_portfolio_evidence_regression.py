@@ -94,7 +94,7 @@ def main() -> None:
             "paper_bot_budget": bool(re.search(r"paper[- ]?bot", lower)),
             "budget_amount": bool(re.search(r"1[., ]?000", answer)),
             "budget_not_cash": (
-                "budget" in lower
+                bool(re.search(r"\b(?:budget\w*|botlimiet)\b", lower))
                 and bool(re.search(r"\b(?:cash|saldo|kas)\b", lower))
                 and bool(re.search(r"\b(?:niet|geen|ontbreekt|ontbreken)\b", lower))
             ),

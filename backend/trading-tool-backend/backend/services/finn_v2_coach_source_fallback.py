@@ -18,6 +18,21 @@ from backend.services.finn_v2_tool_adapters.display_source_moment import display
 from backend.services.finn_v2_paper_position_answer import asks_about_bot_decision
 
 
+def asks_about_bot_plan_lineage(question: str) -> bool:
+    if re.search(r"\b(?:alle|drie|meerdere)\b[^.!?]{0,80}\bsetups\b|\bper\s+setup\b", question, re.I):
+        return False
+    return bool(re.search(
+        r"\b(?:gekoppeld|koppeling|relatie|(?:hoort|horen)\s+bij|verbonden\s+met|"
+        r"gebruikt|draait(?:\s+op)?)\b",
+        question, re.I,
+    ) and re.search(r"\b(?:bot\w*|paper[-\s]?bot)\b", question, re.I)
+        and re.search(r"\b(?:setup|strategie|strategy|plan)\b", question, re.I))
+
+
+def asks_about_bot_status(question: str) -> bool:
+    return bool(re.search(r"\b(?:bot[-\s]?status|status)\b", question, re.I))
+
+
 def _source_moment(value: Any, user_time_zone: str | None) -> str | None:
     instant = display_source_moment(value)
     if isinstance(instant, str):
@@ -90,8 +105,17 @@ def _rows(evidence: tuple[dict[str, Any], ...], scope: str, asset: str) -> list[
 def _bot_row(question: str, evidence: tuple[dict[str, Any], ...], asset: str) -> dict[str, Any] | None:
     portfolios = _rows(evidence, "read_portfolio", asset)
     bots = portfolios[0].get("bots") or [] if portfolios else []
+    active_requested = bool(re.search(r"\bactieve\s+" + re.escape(asset) + r"\s+Paper[-\s]?bot\b", question, re.I))
     matching = [bot for bot in bots if isinstance(bot, dict) and bot.get("is_live") is False
+                and (not active_requested or bot.get("is_active") is True)
                 and str(bot.get("symbol") or "").upper().split("/", 1)[0] == asset]
+    requested_pair = re.search(rf"\b{re.escape(asset)}/(?:EUR|USDT|USD)\b", question, re.I)
+    if requested_pair and asks_about_bot_plan_lineage(question) and not asks_about_bot_decision(question):
+        # The compact portfolio projection currently carries only the base
+        # symbol. Never infer an exact trading pair from BTC alone.
+        matching = [bot for bot in matching if str(
+            bot.get("pair") or bot.get("trading_pair") or ""
+        ).upper() == requested_pair.group().upper()]
     # A bot-focused answer must bind the name the user actually named. A
     # singleton BTC portfolio is not proof that it is the bot in the question.
     normalized_question = " ".join(question.split())
@@ -119,9 +143,9 @@ def _bot_row(question: str, evidence: tuple[dict[str, Any], ...], asset: str) ->
                  normalized_question, re.I,
              )]
     generic_reference = re.search(
-        rf"\b(?:mijn|de)\s+{re.escape(asset)}\s+Paper[-\s]?bot\b"
+        rf"\b(?:mijn|de)\s+(?:(?:actieve|bestaande|huidige)\s+)?{re.escape(asset)}\s+Paper[-\s]?bot\b"
         r"(?=\s+(?:voor|in|met|en|van|bij|op|uit|volgens|geen|niet|"
-        r"heeft|had|is|was|wacht|kocht|koop)\b|[.,!?;:]|$)",
+        r"heeft|had|is|was|wacht|kocht|koop|gekoppeld)\b|[.,!?;:]|$)",
         requested_clause, re.I,
     )
     if generic_reference:
@@ -135,15 +159,42 @@ def _bot_row(question: str, evidence: tuple[dict[str, Any], ...], asset: str) ->
     return None
 
 
+def _bot_status_fact(
+    question: str, evidence: tuple[dict[str, Any], ...], asset: str,
+    selected_bot: dict[str, Any] | None, user_time_zone: str | None,
+) -> tuple[str | None, str | None]:
+    if selected_bot is not None and asks_about_bot_plan_lineage(question) and not asks_about_bot_decision(question):
+        portfolios = _rows(evidence, "read_portfolio", asset)
+        status = selected_bot.get("operational_status")
+        at = portfolios[0].get("read_at") if portfolios else None
+    else:
+        statuses = _rows(evidence, "read_bot_status", asset)
+        row = (statuses[0] if len(statuses) == 1
+               and (selected_bot is None or str(statuses[0].get("bot_id")) == str(selected_bot.get("bot_id")))
+               else {})
+        status, at = row.get("operational_status"), row.get("read_at")
+    if status not in {"active", "paused"}:
+        return None, None
+    return str(status), _source_moment(at, user_time_zone)
+
+
 def _bot_evidence_consistent(
     question: str, evidence: tuple[dict[str, Any], ...], asset: str,
 ) -> bool:
     bot = _bot_row(question, evidence, asset)
     if bot is None or bot.get("bot_id") is None:
         return False
+    if asks_about_bot_plan_lineage(question) and not asks_about_bot_decision(question):
+        # The same owner-bound portfolio row proves both parent IDs and bot
+        # status. A separate status read has no resolved bot selector here.
+        if asks_about_bot_status(question):
+            portfolios = _rows(evidence, "read_portfolio", asset)
+            return bool(portfolios and bot.get("operational_status") in {"active", "paused"}
+                        and _source_moment(portfolios[0].get("read_at"), None))
+        return True
     bot_id = str(bot["bot_id"])
     statuses = _rows(evidence, "read_bot_status", asset)
-    status_requested = bool(re.search(r"\b(?:bot[-\s]?status|status\s+van\s+(?:de\s+)?bot)\b", question, re.I))
+    status_requested = asks_about_bot_status(question)
     if status_requested and (len(statuses) != 1
                              or not _source_moment(statuses[0].get("read_at"), None)
                              or statuses[0].get("operational_status") not in {"active", "paused"}):
@@ -171,6 +222,7 @@ def _bot_evidence_consistent(
 def _requires_bound_bot(question: str, topics: tuple[str, ...]) -> bool:
     return "bot" in topics and (
         asks_about_bot_decision(question)
+        or (set(topics) == {"setup", "bot"} and asks_about_bot_plan_lineage(question))
         or ("portfolio" in topics and bool(re.search(
             r"\b(?:bot[-\s]?status|botbudget|budgetlimiet|botbudgetlimiet|paper[-\s]?holdbesluit)\b",
             question, re.I,
@@ -187,11 +239,34 @@ def coach_source_coverage_gap(
     if bound_bot and not _bot_evidence_consistent(question, evidence, asset):
         return "bot_evidence_ambiguous"
     selected_bot = _bot_row(question, evidence, asset) if bound_bot else None
+    if "setup" in topics and selected_bot is not None and asks_about_bot_plan_lineage(question):
+        for key in ("setup", "strategy"):
+            expected_id = selected_bot.get("setup_id" if key == "setup" else "strategy_id")
+            expected_name = str(selected_bot.get("setup_name" if key == "setup" else "strategy_name") or "").strip()
+            if expected_id is None or not expected_name or expected_name.casefold() not in answer.casefold():
+                return "bot_plan_lineage_missing"
+            label = r"setup|plan" if key == "setup" else r"strategie|strategy"
+            for mentioned_id in re.findall(rf"\b(?:{label})\s*(?:#|id\s*)?(\d+)\b", answer, re.I):
+                if mentioned_id != str(expected_id):
+                    return "bot_plan_lineage_mismatch"
+        setup = _rows(evidence, "read_active_setup", asset)
+        strategy = _rows(evidence, "read_linked_strategy", asset)
+        if (setup and selected_bot.get("setup_id") is not None
+                and str(setup[0].get("setup_id") or setup[0].get("id")) != str(selected_bot["setup_id"])
+                and str(setup[0].get("name") or "").strip()
+                and str(setup[0]["name"]).casefold() in answer.casefold()):
+            return "bot_plan_lineage_mismatch"
+        if (strategy and selected_bot.get("strategy_id") is not None
+                and str(strategy[0].get("strategy_id") or strategy[0].get("id")) != str(selected_bot["strategy_id"])
+                and str(strategy[0].get("name") or "").strip()
+                and str(strategy[0]["name"]).casefold() in answer.casefold()):
+            return "bot_plan_lineage_mismatch"
     if "bot" in topics:
-        if re.search(r"\b(?:bot[-\s]?status|status\s+van\s+(?:de\s+)?bot)\b", question, re.I):
-            statuses = _rows(evidence, "read_bot_status", asset)
-            status_at = _source_moment(statuses[0].get("read_at"), user_time_zone) if len(statuses) == 1 else None
-            if not re.search(r"\bbotstatus\b", answer, re.I):
+        if asks_about_bot_status(question):
+            status, status_at = _bot_status_fact(
+                question, evidence, asset, selected_bot, user_time_zone,
+            )
+            if not status or not re.search(rf"\bbotstatus\b[^.!\n]{{0,70}}\b{re.escape(status)}\b", answer, re.I):
                 return "bot_status_missing"
             if status_at and status_at not in answer:
                 return "bot_status_read_moment_missing"
@@ -283,7 +358,15 @@ def render_coach_source_fallback(
         if topic == "setup":
             setups = _rows(evidence, "read_active_setup", asset)
             strategies = _rows(evidence, "read_linked_strategy", asset)
-            if len(setups) == 1:
+            if selected_bot is not None and selected_bot.get("setup_id") is not None:
+                setup_name = str(selected_bot.get("setup_name") or "").strip()
+                strategy_name = str(selected_bot.get("strategy_name") or "").strip()
+                if (setup_name and strategy_name and selected_bot.get("strategy_id") is not None):
+                    lines.append(f"- Plan: deze bot is gekoppeld aan setup ‘{setup_name}’ en strategie ‘{strategy_name}’.")
+                    verified = True
+                else:
+                    lines.append("- Plan: de koppeling van deze bot met een setup en strategie is niet volledig verifieerbaar.")
+            elif len(setups) == 1 and not bound_bot:
                 setup = setups[0]
                 name = str(setup.get("name") or "naam onbekend")
                 band = ""
@@ -296,7 +379,7 @@ def render_coach_source_fallback(
                 lines.append(f"- Plan: opgeslagen setup ‘{name}’{band}{strategy}.")
                 verified = True
             else:
-                lines.append("- Plan: geen eenduidige opgeslagen setup uitgelezen.")
+                lines.append("- Plan: geen eenduidige koppeling tussen deze bot, setup en strategie uitgelezen.")
         elif topic == "score":
             scores = _rows(evidence, "read_asset_scores", asset)
             score = _number(scores[0].get("benchmark_score")) if len(scores) == 1 else None
@@ -329,14 +412,12 @@ def render_coach_source_fallback(
                 verified = True
             else:
                 lines.append("- Botbeslissing: geen eenduidig opgeslagen besluit uitgelezen.")
-            if re.search(r"\b(?:bot[-\s]?status|status\s+van\s+(?:de\s+)?bot)\b", question, re.I):
-                statuses = _rows(evidence, "read_bot_status", asset)
-                status = (statuses[0] if len(statuses) == 1
-                          and (not selected_bot or str(statuses[0].get("bot_id")) == str(selected_bot.get("bot_id")))
-                          else {})
-                status_at = _source_moment(status.get("read_at"), user_time_zone)
-                if status_at and status.get("operational_status") in {"active", "paused"}:
-                    lines.append(f"- Botstatus: {status['operational_status']}, uitgelezen op {status_at}.")
+            if asks_about_bot_status(question):
+                status, status_at = _bot_status_fact(
+                    question, evidence, asset, selected_bot, user_time_zone,
+                )
+                if status and status_at:
+                    lines.append(f"- Botstatus: {status}, uitgelezen op {status_at}.")
                     verified = True
                 else:
                     lines.append("- Botstatus: huidige status of apart uitleesmoment niet verifieerbaar.")

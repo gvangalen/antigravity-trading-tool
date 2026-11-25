@@ -31,6 +31,193 @@ def test_bot_decision_plus_score_reads_bot_identity_even_without_cash_question()
     assert "read_portfolio" in plan.read_tools
 
 
+def test_bot_setup_question_uses_bot_parent_not_newer_same_asset_setup():
+    question = (
+        "Welke opgeslagen setup en strategie zijn daadwerkelijk aan mijn actieve "
+        "BTC Paper-bot gekoppeld? Controleer de relatie opnieuw. Lees alleen."
+    )
+    plan = coach_evidence_plan(question, named_asset_count=1, read_only=True)
+    assert plan is not None
+    assert "read_portfolio" in plan.read_tools
+    evidence = (
+        {"scope": "read_active_setup", "status": "completed", "data": {
+            "id": 20, "symbol": "BTC", "name": "Nieuwere Smart DCA"}},
+        {"scope": "read_linked_strategy", "status": "completed", "data": {
+            "id": 30, "symbol": "BTC", "name": "Nieuwere Smart DCA Strategy"}},
+        {"scope": "read_portfolio", "status": "completed", "data": {
+            "bots": [{"bot_id": 56, "name": "Long term DCA Bot", "symbol": "BTC",
+                      "is_active": True,
+                      "is_live": False, "setup_id": 10, "setup_name": "Long term DCA BTC",
+                      "strategy_id": 15, "strategy_name": "Long term DCA Strategy"}]}}
+    )
+    answer = render_coach_source_fallback(
+        asset="BTC", topics=plan.topics, evidence=evidence, question=question,
+    )
+    assert answer is not None
+    assert "Long term DCA BTC" in answer
+    assert "Long term DCA Strategy" in answer
+    assert "Nieuwere Smart DCA" not in answer
+    assert coach_source_coverage_gap(
+        asset="BTC", topics=plan.topics, evidence=evidence, question=question,
+        answer="De bot is gekoppeld aan Nieuwere Smart DCA en Nieuwere Smart DCA Strategy.",
+    ) == "bot_plan_lineage_missing"
+    for unsupported in (
+        "De bot is gekoppeld aan Fantasie Plan en Fantasie Strategy.",
+        "De bot is gekoppeld aan setup 20 en strategie 30.",
+    ):
+        assert coach_source_coverage_gap(
+            asset="BTC", topics=plan.topics, evidence=evidence, question=question,
+            answer=unsupported,
+        ) in {"bot_plan_lineage_missing", "bot_plan_lineage_mismatch"}
+    other_wording = question.replace("zijn daadwerkelijk aan", "horen bij").replace(" gekoppeld?", "?")
+    assert "read_portfolio" in coach_evidence_plan(
+        other_wording, named_asset_count=1, read_only=True,
+    ).read_tools
+    assert "Long term DCA BTC" in render_coach_source_fallback(
+        asset="BTC", topics=plan.topics, evidence=evidence, question=other_wording,
+    )
+    for variant in (
+        "Welke setup en strategie gebruikt mijn actieve BTC Paper-bot? Lees alleen.",
+        "Op welke setup en strategie draait mijn actieve BTC Paper-bot? Lees alleen.",
+    ):
+        variant_plan = coach_evidence_plan(variant, named_asset_count=1, read_only=True)
+        assert variant_plan is not None and "read_portfolio" in variant_plan.read_tools
+        variant_prepared = SimpleNamespace(response=SimpleNamespace(
+            text="De bot gebruikt Nieuwere Smart DCA en Nieuwere Smart DCA Strategy.",
+            tool_trace=({"result": {"results": list(evidence)}},),
+            uses_previous_response=False,
+            turn_contract={"coach_evidence_plan": {"topics": variant_plan.topics}},
+        ), previous_response=None, locale="nl")
+        variant_answer = _minimal_read_answer(message=variant, prepared=variant_prepared)
+        assert variant_answer.status == "completed"
+        assert "Long term DCA BTC" in variant_answer.text
+        assert "Nieuwere Smart DCA" not in variant_answer.text
+    unrelated_status = {"scope": "read_bot_status", "status": "completed", "data": {
+        "bot_id": 57, "operational_status": "active", "read_at": "2026-11-25T19:00:00+00:00",
+    }}
+    assert "Long term DCA BTC" in render_coach_source_fallback(
+        asset="BTC", topics=plan.topics, evidence=(*evidence, unrelated_status),
+        question=other_wording,
+    )
+    prepared = SimpleNamespace(response=SimpleNamespace(
+        text="De bot is gekoppeld aan Fantasie Plan en Fantasie Strategy.",
+        tool_trace=({"result": {"results": list(evidence)}},),
+        uses_previous_response=False,
+        turn_contract={"coach_evidence_plan": {"topics": plan.topics}},
+    ), previous_response=None, locale="nl")
+    verified = _minimal_read_answer(message=other_wording, prepared=prepared)
+    assert verified.status == "completed"
+    assert "Long term DCA BTC" in verified.text
+    assert "Fantasie Plan" not in verified.text
+    portfolio_only = SimpleNamespace(response=SimpleNamespace(
+        text="De bot gebruikt Nieuwere Smart DCA.",
+        tool_trace=({"result": {"results": [evidence[2]]}},),
+        uses_previous_response=False,
+        turn_contract={"coach_evidence_plan": {"topics": plan.topics}},
+    ), previous_response=None, locale="nl")
+    assert "Long term DCA BTC" in _minimal_read_answer(
+        message=other_wording, prepared=portfolio_only,
+    ).text
+
+    inactive = (evidence[0], evidence[1], {**evidence[2], "data": {
+        "bots": [{**evidence[2]["data"]["bots"][0], "is_active": False}],
+    }})
+    assert render_coach_source_fallback(
+        asset="BTC", topics=plan.topics, evidence=inactive, question=question,
+    ) is None
+    pair_question = (
+        "Welke setup en strategie zijn aan mijn BTC Paper-bot voor BTC/USDT gekoppeld? "
+        "Lees alleen."
+    )
+    assert render_coach_source_fallback(
+        asset="BTC", topics=plan.topics, evidence=evidence, question=pair_question,
+    ) is None
+    wrong_pair = (evidence[0], evidence[1], {**evidence[2], "data": {
+        "bots": [{**evidence[2]["data"]["bots"][0], "pair": "BTC/EUR"}],
+    }})
+    assert render_coach_source_fallback(
+        asset="BTC", topics=plan.topics, evidence=wrong_pair, question=pair_question,
+    ) is None
+    pair_prepared = SimpleNamespace(response=SimpleNamespace(
+        text="De bot hoort bij BTC EUR DCA.",
+        tool_trace=({"result": {"results": list(wrong_pair)}},),
+        uses_previous_response=False,
+        turn_contract={"coach_evidence_plan": {"topics": plan.topics}},
+    ), previous_response=None, locale="nl")
+    assert _minimal_read_answer(message=pair_question, prepared=pair_prepared).status == "unavailable"
+    ambiguous = (evidence[0], evidence[1], {**evidence[2], "data": {
+        "bots": [*evidence[2]["data"]["bots"], {
+            "bot_id": 57, "name": "Andere BTC-bot", "symbol": "BTC", "is_live": False,
+            "is_active": True,
+            "setup_id": 20, "setup_name": "Nieuwere Smart DCA",
+            "strategy_id": 30, "strategy_name": "Nieuwere Smart DCA Strategy",
+        }],
+    }})
+    assert render_coach_source_fallback(
+        asset="BTC", topics=plan.topics, evidence=ambiguous, question=question,
+    ) is None
+
+
+def test_bot_setup_and_status_require_same_owner_bound_bot():
+    question = "Welke setup gebruikt mijn BTC Paper-bot en wat is zijn status? Lees alleen."
+    plan = coach_evidence_plan(question, named_asset_count=1, read_only=True)
+    assert plan is not None
+    assert plan.read_tools == ("read_portfolio",)
+    portfolio = {"scope": "read_portfolio", "status": "completed", "data": {
+        "read_at": "2026-11-25T19:00:00+00:00",
+        "bots": [{"bot_id": 56, "name": "Long term DCA Bot", "symbol": "BTC",
+                  "is_active": True, "is_live": False, "operational_status": "active",
+                  "setup_id": 10, "setup_name": "Long term DCA BTC",
+                  "strategy_id": 15, "strategy_name": "Long term DCA Strategy"}]}}
+    status = {"scope": "read_bot_status", "status": "completed", "data": {
+        "bot_id": 56, "operational_status": "active",
+        "read_at": "2026-11-25T19:00:00+00:00"}}
+    unrelated_setup = {"scope": "read_active_setup", "status": "completed", "data": {
+        "id": 20, "symbol": "BTC", "name": "Nieuwere Smart DCA"}}
+    prepared = SimpleNamespace(response=SimpleNamespace(
+        text="De bot gebruikt Nieuwere Smart DCA en is actief.",
+        tool_trace=({"result": {"results": [portfolio, status, unrelated_setup]}},),
+        uses_previous_response=False,
+        turn_contract={"coach_evidence_plan": {"topics": plan.topics}},
+    ), previous_response=None, locale="nl")
+    answer = _minimal_read_answer(message=question, prepared=prepared)
+    assert answer.status == "completed"
+    assert "Long term DCA BTC" in answer.text
+    assert "Long term DCA Strategy" in answer.text
+    assert "Botstatus: active" in answer.text
+    assert "Nieuwere Smart DCA" not in answer.text
+    for variant in (question.replace("zijn status", "zijn botstatus"),):
+        variant_plan = coach_evidence_plan(variant, named_asset_count=1, read_only=True)
+        assert variant_plan is not None
+        assert variant_plan.read_tools == ("read_portfolio",)
+        variant_prepared = SimpleNamespace(
+            response=SimpleNamespace(**{**vars(prepared.response),
+                                         "turn_contract": {"coach_evidence_plan": {"topics": variant_plan.topics}}}),
+            previous_response=None, locale="nl",
+        )
+        assert "Botstatus: active" in _minimal_read_answer(
+            message=variant, prepared=variant_prepared,
+        ).text
+    wrong_status = {**status, "data": {**status["data"], "bot_id": 57}}
+    unrelated_prepared = SimpleNamespace(
+        response=SimpleNamespace(**{**vars(prepared.response),
+                                     "tool_trace": ({"result": {"results": [portfolio, wrong_status]}},)}),
+        previous_response=None, locale="nl",
+    )
+    assert "Botstatus: active" in _minimal_read_answer(
+        message=question, prepared=unrelated_prepared,
+    ).text
+    bad_portfolio = {**portfolio, "data": {**portfolio["data"], "bots": [
+        {**portfolio["data"]["bots"][0], "operational_status": "unknown"},
+    ]}}
+    wrong_prepared = SimpleNamespace(
+        response=SimpleNamespace(**{**vars(prepared.response),
+                                     "tool_trace": ({"result": {"results": [bad_portfolio]}},)}),
+        previous_response=None, locale="nl",
+    )
+    assert _minimal_read_answer(message=question, prepared=wrong_prepared).status == "unavailable"
+
+
 def test_coach_coverage_rejects_omitted_sources_and_answer_parts():
     plan = coach_evidence_plan(
         "Waarom blokkeerde mijn AAPL-bot bij mijn score en rapport? Wat doe ik nu?",
