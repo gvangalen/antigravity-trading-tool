@@ -15726,7 +15726,7 @@ def test_paper_cash_and_position_answer_must_include_read_account_balance():
     assert contradicted.rejection_details["gap"] == "paper_cash_total_conflict"
 
 
-def test_broad_coach_answer_recovers_exact_saved_reason_and_paper_bot_cash():
+def test_broad_coach_answer_does_not_attribute_an_unnamed_bot_decision():
     question = ("Wat zeggen mijn AAPL-setup, score, botbeslissing en Paper-portefeuille "
                 "samen? Wat is een veilige stap?")
     prepared = SimpleNamespace(response=SimpleNamespace(
@@ -15738,21 +15738,19 @@ def test_broad_coach_answer_recovers_exact_saved_reason_and_paper_bot_cash():
         }},
         tool_trace=({"result": {"results": [
             {"scope": "read_review_history", "status": "completed", "data": {
-                "latest_bot_decisions": [{"symbol": "AAPL", "action": "hold",
+                "latest_bot_decisions": [{"bot_id": 56, "symbol": "AAPL", "action": "hold",
                     "decision_at": "2026-11-20T17:45:31+00:00",
                     "safety_reason": "Opgeslagen setupvoorwaarden passen niet bij de actuele benchmark."}]}},
             {"scope": "read_portfolio", "status": "completed", "data": {
                 "global": {"cash_balance": 10005.45},
-                "bots": [{"name": "AAPL Paper", "symbol": "AAPL", "is_live": False,
+                    "bots": [{"bot_id": 56, "name": "AAPL Paper", "symbol": "AAPL", "is_live": False,
                           "paper_cash_eur": 405.48}],
                 "read_at": "2026-11-20T17:50:00+00:00"}},
         ]}},),
     ))
     answer = _minimal_read_answer(message=question, prepared=prepared)
-    assert answer.status == "completed"
-    assert "Opgeslagen setupvoorwaarden passen niet" in answer.text
-    assert "€405,48" in answer.text
-    assert "geen koopvoorstel" not in answer.text
+    assert answer.status == "unavailable"
+    assert answer.rejection_details["gap"] == "bot_evidence_ambiguous"
 
 
 def test_open_position_question_reads_owner_portfolio_without_bot_page(monkeypatch):
@@ -15997,13 +15995,33 @@ def test_explicit_bot_status_and_decision_require_separate_owner_reads():
 
 
 @pytest.mark.parametrize("previous_response", [None, {"terminal_status": "completed", "tool_trace": []}])
-def test_bot_status_decision_portfolio_question_executes_all_three_reads(previous_response):
-    question = (
+@pytest.mark.parametrize("question,required_scopes", [
+    (
         "Beoordeel het laatste Paper-Holdbesluit van mijn bestaande Strategie long term dca btc Bot voor BTC. "
         "Lees de actuele botstatus en exacte blokkadereden opnieuw. Scheid de ingestelde botbudgetlimiet, "
         "werkelijk belegd, botkas en totale Paper-kas, en noem de bronmomenten. "
-        "Geef één concrete veilige vervolgstap. Lees alleen; wijzig geen strategie, bot of order."
-    )
+        "Geef één concrete veilige vervolgstap. Lees alleen; wijzig geen strategie, bot of order.",
+        {"read_bot_status", "read_review_history", "read_portfolio"},
+    ),
+    (
+        "Waarom is mijn BTC Paper-bot bij de laatste beslissing geblokkeerd? "
+        "Controleer de opgeslagen reden en het moment opnieuw. Leg ook kort uit "
+        "hoeveel van de budgetlimiet echt belegd is en hoeveel Paper-kas er is. "
+        "Wat is één veilige volgende stap? Lees alleen.",
+        {"read_review_history", "read_portfolio"},
+    ),
+    (
+        "Wat is de reden van de laatste Hold van mijn BTC Paper-bot? Leg ook uit "
+        "hoeveel van de budgetlimiet echt belegd is en hoeveel Paper-kas er is. Lees alleen.",
+        {"read_review_history", "read_portfolio"},
+    ),
+    (
+        "Waarom heeft mijn BTC Paper-bot geen order geplaatst? Leg ook uit hoeveel "
+        "van de budgetlimiet belegd is en hoeveel Paper-kas er is. Lees alleen.",
+        {"read_review_history", "read_portfolio"},
+    ),
+])
+def test_bot_status_decision_portfolio_question_executes_all_three_reads(previous_response, question, required_scopes):
     selected_calls = []
 
     class FakeRead:
@@ -16031,7 +16049,7 @@ def test_bot_status_decision_portfolio_question_executes_all_three_reads(previou
         workspace_hints={"page": "/bot", "symbol": "BTC"},
     ))
     assert selected_calls
-    assert any({"read_bot_status", "read_review_history", "read_portfolio"} <= set(call.read_tools)
+    assert any(required_scopes <= set(call.read_tools)
                for call in selected_calls), [
         (call.name, call.read_tools) for call in selected_calls
     ]

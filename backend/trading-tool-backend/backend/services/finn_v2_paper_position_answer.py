@@ -16,6 +16,23 @@ PAPER_POSITION_CASH_UNAVAILABLE = (
 )
 
 
+def asks_about_bot_decision(message: str) -> bool:
+    """Identify requests that need persisted bot-decision evidence."""
+    return bool(
+        re.search(r"\b(?:bots?|bot(?:besluit(?:en)?|beslissing(?:en)?|beoordeling(?:en)?|check(?:s)?|reden(?:en)?)|automatisering|automation)\b", message, re.I)
+        and re.search(
+            r"\b(?:botbeslissing(?:en)?|botbesluit(?:en)?|beslissing(?:en)?|besluit(?:en)?|decision(?:s)?|"
+            r"beoordeling(?:en)?|(?:bot)?check(?:s)?|(?:bot)?reden(?:en)?|"
+            r"(?:hold|koop|verkoop)[- ]?besluit(?:en)?|blokkade\w*reden(?:en)?|"
+            r"blokkeer\w*|geblokkeerd|(?:laatste|nieuwste)\s+hold|"
+            r"geen\s+(?:paper[-\s]?)?order\s+geplaatst|"
+            r"(?:kocht|gekocht)\b[^.!?]{0,80}\bniet|niet\s+gekocht|"
+            r"trade\s+geblokkeerd|entscheidung(?:en)?)\b",
+            message, re.I,
+        )
+    )
+
+
 def _amount(value: Any) -> str | None:
     try:
         number = Decimal(str(value))
@@ -61,7 +78,11 @@ def render_paper_position_cash_answer(
         and re.search(r"\b(?:belegd|geïnvesteerd|investeerd)\b", message, re.I)
         and re.search(r"\b(?:kas|kassaldo|cash)\b", message, re.I)
     )
+    # A decision review needs the persisted decision and its reason as well as
+    # portfolio amounts. A cash-only readback would silently omit that request.
+    decision_question = asks_about_bot_decision(message)
     if (not locale.lower().startswith("nl") or not asset
+            or decision_question
             or re.search(r"\b(?:past\b.{0,90}\bbij|beoordeel\w*|vergelijk\w*)", message, re.I)
             or not (account_question or (
                 re.search(r"\b(?:positie|posities)\b", message, re.I)
