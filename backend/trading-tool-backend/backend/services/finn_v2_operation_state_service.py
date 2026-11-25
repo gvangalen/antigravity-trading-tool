@@ -1824,6 +1824,13 @@ class FinnV2OperationStateService:
                                                  for match in matches]}
         if len(matches) != 3:
             return {}
+        if re.search(
+            r"(?<!\d)\d{1,3}\s*(?:[-–—]|\btot(?:\s+en\s+met)?\b)\s*\d{1,3}"
+            r"\s*(?::\s*|\s+krijgt\s+)\d{1,3}\s*%",
+            band_text,
+        ) and not cls._dca_inclusive_score_ranges(text):
+            # Three priced or ambiguous ranges cannot donate score amounts.
+            return {}
         fields = ("low_score_percent", "mid_score_percent", "high_score_percent")
         labels = re.compile(
             r"\b(lage|zwakke|low|weak|normale|neutrale|middelste|mid|"
@@ -1846,18 +1853,26 @@ class FinnV2OperationStateService:
     @staticmethod
     def _dca_inclusive_score_ranges(text: str) -> dict[str, int]:
         """Convert three user-labeled score/percent ranges to exclusive bounds."""
-        if not re.search(r"\b(?:benchmark(?:score)?|score(?:banden|grenzen)?|smart\s*dca)\b", str(text or ""), re.I):
+        value = str(text or "")
+        matches = list(re.finditer(
+            r"(?<!\d)(\d{1,3})\s*(?:[-–—]|\btot(?:\s+en\s+met)?\b)\s*"
+            r"(\d{1,3})\s*(?::\s*|\s+krijgt\s+)(\d{1,3})\s*%",
+            value, re.I,
+        ))
+        if len(matches) != 3:
             return {}
-        ranges = [
-            (int(match.group(1)), int(match.group(2)))
-            for match in re.finditer(
-                r"(?<!\d)(\d{1,3})\s*(?:[-–—]|\btot(?:\s+en\s+met)?\b)\s*"
-                r"(\d{1,3})\s*(?::\s*|\s+krijgt\s+)(\d{1,3})\s*%",
-                str(text or ""), re.I,
-            )
-        ]
-        if len(ranges) != 3:
+        # "Smart DCA" elsewhere in a message does not make price or budget
+        # ranges into score bands. The clause introducing the actual ladder
+        # must name its score source, and no range may carry a currency.
+        lead_in = re.split(r"[.;\n]", value[:matches[0].start()])[-1]
+        if not re.search(r"\b(?:benchmarkscore|score|scorebanden|scoregrenzen)\b", lead_in, re.I):
             return {}
+        if re.search(r"\b(?:prijs|koers|prijszone|koerszone|risicobudget)\b", lead_in, re.I):
+            return {}
+        if any(re.search(r"(?:€|\$|\b(?:eur|euro|usd|usdt))\s*$", value[:match.start()], re.I)
+               for match in matches):
+            return {}
+        ranges = [(int(match.group(1)), int(match.group(2))) for match in matches]
         (low_start, low_end), (mid_start, mid_end), (high_start, high_end) = ranges
         if not (low_start == 0 and high_end == 100
                 and 0 <= low_end < mid_start <= mid_end < high_start <= 100

@@ -858,14 +858,21 @@ def test_smart_dca_ranges_do_not_reinterpret_regular_euro_or_price_ranges():
         "26–75 euro als het lukt en 76–100 euro na mijn salaris. Toon eerst een voorstel.",
         "Corrigeer mijn gewone DCA-setup. De marktprijs was 0–25 euro, "
         "mijn doel 26–75 euro en mijn stop 76–100 euro.",
+        "Maak een Smart DCA voor SOL/USDT. Mijn risicobudget per prijszone is "
+        "€0–25: 150%, €26–75: 100%, €76–100: 50%. "
+        "De benchmark volgt apart. Toon een voorstel.",
     ):
         parsed = service.explicit_inputs(
             contract=contract, message=message, explicit_asset="BTC",
             known_setup_type="dca",
         )
-        assert parsed.get("dca_amount_mode") != "score_bands"
+        if "gewone DCA" in message:
+            assert parsed.get("dca_amount_mode") != "score_bands"
         assert "low_threshold" not in parsed
         assert "high_threshold" not in parsed
+        assert "low_score_percent" not in parsed
+        assert "mid_score_percent" not in parsed
+        assert "high_score_percent" not in parsed
 
 
 def test_inverse_smart_dca_proposes_score_trigger_without_a_weekday():
