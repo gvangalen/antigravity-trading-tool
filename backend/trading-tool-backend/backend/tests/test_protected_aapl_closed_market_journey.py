@@ -64,9 +64,9 @@ def test_workflow_scopes_only_nonfinancial_flags():
     script = source.split('cat > "$state_dir/run.sh" <<RUNNER', 1)[1].split("RUNNER", 1)[0]
     assert 'if [ $(printf \'%q\' "$qa_profile") = aapl_closed_market_journey ]; then' in script
     assert source.count("export FINN_QA_ALLOW_AAPL_CLOSED_JOURNEY=1") == 1
-    assert script.count("export FINN_V2_EXECUTE_BOT_CHANGES=true") == 2
-    assert script.count("export FINN_V2_EXECUTE_SETUP_CHANGES=true") == 2
-    assert script.count("export FINN_V2_EXECUTE_STRATEGY_CHANGES=true") == 2
+    assert script.count("export FINN_V2_EXECUTE_BOT_CHANGES=true") == 3
+    assert script.count("export FINN_V2_EXECUTE_SETUP_CHANGES=true") == 3
+    assert script.count("export FINN_V2_EXECUTE_STRATEGY_CHANGES=true") == 3
     assert "FINN_V2_LIVE_TRADING_ENABLED" not in script
     assert "FINN_V2_ACTIVATE_LIVE" not in script
     assert "aapl_closed_market_journey" in source

@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: Smart DCA gecombineerde lezing en scoregestuurd concept (24 november 2026)
 
-Phase: `PRODUCT_DEPLOYED_QA_PENDING`. De ingelogde, read-only browserreproductie
+Phase: `READ_ONLY_ACCEPTED_FULL_JOURNEY_QA_PENDING`. De ingelogde, read-only browserreproductie
 op BTC/USDT liet zien dat FINN bij een vraag naar de opgeslagen Smart DCA,
 actuele scoreband, bedrag en gekoppelde Paper-bot eerst een algemene setupzone
 en een andere BTC-botbeslissing mengde. Een vervolgvraag met de exacte
@@ -89,6 +89,30 @@ publieke backend `/api/health` en frontend `/build-info.json` meldden op
 nieuwe main-SHA; vóór QA moeten ook de laatste main-CI, Auto Deploy en
 publieke SHA-pariteit van die revisie slagen. De korte-naamroute is nog niet
 onafhankelijk op de reparatie getest; de vorige NOT_ACCEPTED blijft gelden.
+
+Daarna werd status-PR #1367 gemerged en de definitieve live SHA
+`3b7e01fad980a963f9a8cff0f729ef2f8aa59c61` onafhankelijk gecontroleerd:
+main-CI `45510165832` had vijf groene jobs, Auto Deploy `45511389413`
+slaagde, en GitHub main, backend health en frontend build-info meldden exact
+dezelfde SHA met HTTP 200. Onafhankelijke ingelogde QA gaf **ACCEPTED voor de
+smalle read-only Smart DCA-naamvervolgroute**. De gecombineerde BTC/USDT-vraag
+gevolgd door `Test Smart BTC` in hetzelfde gesprek gaf de eigenaargebonden
+score 45,7/100, rapportdatum 24 november 2026, oudste bron 23 november
+01:00 CET, band 45,5–<60,5, hypothetisch €100 bij €200 basisbedrag en
+correct géén bot aan die strategie. Het antwoord bleef na verversen behouden
+en werkte ook in een nieuw gesprek. Er was geen accountmutatie.
+
+De volledige **aanmaakroute** is afzonderlijk nog **niet live geaccepteerd**:
+een compleet scoregestuurd Smart DCA-concept, bevestigde setup met gekoppelde
+strategie, daarna een via FINN bevestigde handmatige Paper-botconfiguratie
+in hetzelfde gesprek. De bestaande protected weekketen zaait een bot direct
+in de database en kan een Paper-aankoop uitvoeren; zij bewijst deze route
+niet. Een eigen `smart_dca_journey`-profiel wordt daarom als QA-only kandidaat
+voorbereid. Het houdt de child permanent inactief, eist volledige
+benchmarkscorestaffel en exact BTC/USDT-parentlineage, controleert twee
+afzonderlijke bevestigingen met replay en roept geen botworker of order aan.
+Security-, QA- en Architecture-codebeoordelingen van de kandidaat vonden na
+de gerichte reparaties geen blokkerende codefout. Dit is nog geen live verdict.
 
 ## FINN 3.0: volledige, botgebonden Paper-Holdcoach (24 november 2026)
 

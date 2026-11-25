@@ -61,6 +61,7 @@ ALLOWED_PROFILES = {
     "aapl_paper_bot_crud",
     "aapl_bot_proposal_diagnose",
     "aapl_closed_market_journey",
+    "smart_dca_journey",
     "aapl_paper_quote_fixture_audit",
     "aapl_paper_quote_fixture_cleanup",
     "trader_source_time_parity",
@@ -452,6 +453,10 @@ def profile_error_category(profile: str, error: Exception) -> str:
         from backend.scripts.probe_protected_aapl_closed_market_journey import FAILURES
         code = str(error)
         return code if code in FAILURES else "aapl_journey_runtime_failed"
+    if profile == "smart_dca_journey":
+        from backend.scripts.probe_protected_smart_dca_journey import FAILURES
+        code = str(error)
+        return code if code in FAILURES else "smart_dca_journey_runtime_failed"
     if profile in {"aapl_paper_quote_fixture_audit", "aapl_paper_quote_fixture_cleanup"}:
         code = str(error)
         return code if code in {
@@ -4278,6 +4283,26 @@ def main() -> int:
                 report["safety"]["execution_calls"] = None
                 report["safety"]["live_trading_calls"] = None
                 report[args.profile] = run_aapl_journey(fixture_namespace or "")
+                report["safety"]["confirmation_calls"] = report[args.profile]["confirmations"]
+                report["safety"]["execution_calls"] = report[args.profile]["nonfinancial_executions"]
+                report["safety"]["live_trading_calls"] = report[args.profile]["live_calls"]
+                report["outcome"] = "passed" if report[args.profile]["result"] == "PASS" else "failed"
+                report["qa_status"] = "COMPLETED"
+            elif args.profile == "smart_dca_journey":
+                if (args.manifest_id != "none" or args.manifest_bundle_path
+                        or os.getenv("FINN_QA_ALLOW_SMART_DCA_JOURNEY") != "1"
+                        or os.getenv("FINN_QA_ALLOW_FIXTURE_ACTIONS") != "1"
+                        or os.getenv("FINN_QA_ALLOW_FIXTURE_EXECUTION") != "1"):
+                    raise ValueError("smart_dca_journey_not_authorized")
+                from backend.scripts.probe_protected_smart_dca_journey import run as run_smart_dca
+
+                report["protected_profile_attempted"] = True
+                report["qa_status"] = "INCOMPLETE"
+                report["outcome"] = "incomplete"
+                report["safety"]["read_only_profile"] = False
+                report["safety"]["execution_calls"] = None
+                report["safety"]["live_trading_calls"] = None
+                report[args.profile] = run_smart_dca(fixture_namespace or "")
                 report["safety"]["confirmation_calls"] = report[args.profile]["confirmations"]
                 report["safety"]["execution_calls"] = report[args.profile]["nonfinancial_executions"]
                 report["safety"]["live_trading_calls"] = report[args.profile]["live_calls"]
