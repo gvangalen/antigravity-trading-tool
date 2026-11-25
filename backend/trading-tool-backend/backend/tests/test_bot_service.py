@@ -1908,6 +1908,78 @@ def test_bot_payload_validation_normalizes_transactional_fields():
     assert payload["base_currency"] == "EUR"
 
 
+def test_new_automatic_dca_bot_requires_limits_and_paper_cash_that_cover_plan():
+    class DcaSession(_FakeSession):
+        async def execute(self, query, params=None):
+            if "from strategies s" in str(query).lower():
+                return _FakeResult((42, "ETH", 73, 73, "dca", 10, "fixed", None,
+                                    {"dca_amount_semantics": "planned_exact"}, "weekly"))
+            return await super().execute(query, params)
+
+    service = BotService(DcaSession())
+    payload = {
+        "name": "ETH Monday Paper", "strategy_id": 42, "mode": "auto",
+        "is_live": False, "is_active": True, "base_currency": "EUR",
+        "budget_total_eur": 200, "budget_daily_limit_eur": 10,
+        "budget_min_order_eur": 10, "budget_max_order_eur": 10,
+        "paper_initial_cash_eur": 10,
+    }
+    asyncio.run(service.validate_bot_payload(payload, user_id=1))
+    assert payload["cadence"] == "weekly"
+    for field, invalid in (("budget_total_eur", 5), ("budget_daily_limit_eur", 5),
+                           ("budget_max_order_eur", 5), ("paper_initial_cash_eur", 0)):
+        with pytest.raises(HTTPException) as error:
+            asyncio.run(service.validate_bot_payload(payload | {field: invalid}, user_id=1))
+        assert error.value.status_code == 400
+
+
+def test_new_manual_dca_bot_needs_user_budget_without_auto_funding():
+    class DcaSession(_FakeSession):
+        async def execute(self, query, params=None):
+            if "from strategies s" in str(query).lower():
+                return _FakeResult((42, "ETH", 73, 73, "dca", 10, "fixed", None,
+                                    {"dca_amount_semantics": "planned_exact"}, "weekly"))
+            return await super().execute(query, params)
+
+    service = BotService(DcaSession())
+    payload = {"name": "ETH Monday manual", "strategy_id": 42, "mode": "manual",
+               "budget_total_eur": 10, "paper_initial_cash_eur": 0}
+    asyncio.run(service.validate_bot_payload(payload, user_id=1))
+    with pytest.raises(HTTPException, match="totale botlimiet"):
+        asyncio.run(service.validate_bot_payload(payload | {"budget_total_eur": 0}, user_id=1))
+
+
+def test_switching_existing_dca_bot_to_auto_checks_full_score_band_range():
+    _, smart = split_confirmed_dca_plan({
+        "setup_type": "dca", "name": "ETH Smart", "base_amount": 20,
+        "dca_amount_mode": "score_bands", "score_source": "benchmark_score",
+        "low_threshold": 30, "high_threshold": 70,
+        "low_score_percent": 50, "mid_score_percent": 100, "high_score_percent": 200,
+    })
+
+    class DcaSession(_FakeSession):
+        async def execute(self, query, params=None):
+            if "from strategies s" in str(query).lower():
+                return _FakeResult((42, "ETH", 73, 73, "dca", 20, "custom",
+                                    smart["decision_curve"], {"dca_amount_semantics": "planned_exact"}, "weekly"))
+            return await super().execute(query, params)
+
+    service = BotService(DcaSession())
+    payload = {"name": "ETH Smart", "strategy_id": 42, "mode": "auto",
+               "budget_total_eur": 200, "budget_daily_limit_eur": 20,
+               "budget_min_order_eur": 10, "budget_max_order_eur": 40}
+    with pytest.raises(HTTPException, match="Daglimiet"):
+        asyncio.run(service.validate_bot_payload(payload, user_id=1, is_update=True,
+                                                 bot_id=9, changed_fields={"mode"}))
+    # An unrelated rename keeps the existing bot untouched; execution still
+    # applies the saved runtime guardrails until limits are corrected.
+    asyncio.run(service.validate_bot_payload(payload, user_id=1, is_update=True,
+                                             bot_id=9, changed_fields={"name"}))
+    asyncio.run(service.validate_bot_payload(payload | {"budget_daily_limit_eur": 40},
+                                             user_id=1, is_update=True, bot_id=9,
+                                             changed_fields={"mode", "budget_daily_limit_eur"}))
+
+
 def test_bot_payload_uses_owner_scoped_strategy_asset_over_stale_workspace_asset():
     service = BotService(_FakeSession())
     payload = {

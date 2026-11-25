@@ -25,7 +25,9 @@ from backend.engine.guardrails_engine import apply_guardrails
 from backend.services.exchange_service import ExchangeService
 from backend.services.bot_live_reconciliation import reconcile_live_orders
 from backend.services.finn_coach_feed_service import FinnCoachFeedService
-from backend.domain.finn_dca_plan_contract import dca_due_on_date, is_confirmed_dca_amount_rule
+from backend.domain.finn_dca_plan_contract import (
+    confirmed_dca_amount_bounds, dca_due_on_date, is_confirmed_dca_amount_rule,
+)
 
 logger = logging.getLogger(__name__)
 LIVE_EXECUTION_STALE_AFTER_MINUTES = 60
@@ -642,7 +644,8 @@ class BotService:
             })
         return out
 
-    async def validate_bot_payload(self, raw_payload: dict, user_id: int, is_update: bool = False, bot_id: Optional[int] = None):
+    async def validate_bot_payload(self, raw_payload: dict, user_id: int, is_update: bool = False,
+                                   bot_id: Optional[int] = None, changed_fields: Optional[set[str]] = None):
         """
         Meticulously validates bot configuration inputs. Prevent bad data
         from entering the database and prevent name conflicts (idempotency/flaky protection).
@@ -673,7 +676,9 @@ class BotService:
         if strategy_id is not None:
             strategy_query = text("""
                 SELECT s.id, COALESCE(s.symbol, raw.data->>'symbol', st.symbol) AS symbol,
-                       s.market_id, st.market_id AS setup_market_id
+                       s.market_id, st.market_id AS setup_market_id,
+                       st.setup_type, s.base_amount, s.execution_mode,
+                       s.decision_curve, s.data, st.dca_frequency
                 FROM strategies s
                 LEFT JOIN setups st ON st.id = s.setup_id
                 LEFT JOIN LATERAL (SELECT s.data::jsonb AS data) raw ON TRUE
@@ -785,6 +790,52 @@ class BotService:
                     400,
                     f"Live of automatische bots vereisen expliciete budgetlimieten: {', '.join(missing)}."
                 )
+
+        # A confirmed DCA strategy is the single source of the purchase
+        # amount. Bot limits may be chosen freely, but an active bot must be
+        # able to fund the complete saved amount range. Existing manual bots
+        # retain their old configuration until their limits are edited.
+        if strategy_id is not None and len(strategy_row) >= 9 and str(strategy_row[4] or "").lower() == "dca":
+            if len(strategy_row) >= 10 and strategy_row[9] in {"daily", "weekly", "monthly"}:
+                raw_payload["cadence"] = strategy_row[9]
+            strategy_data = strategy_row[8]
+            if isinstance(strategy_data, str):
+                try:
+                    strategy_data = json.loads(strategy_data)
+                except ValueError:
+                    strategy_data = {}
+            strategy_data = strategy_data if isinstance(strategy_data, dict) else {}
+            curve = strategy_row[7]
+            if isinstance(curve, str):
+                try:
+                    curve = json.loads(curve)
+                except ValueError:
+                    curve = None
+            semantics = strategy_data.get("dca_amount_semantics")
+            if strategy_row[6] == "fixed" and not curve:
+                semantics = "planned_exact"
+            bounds = confirmed_dca_amount_bounds({
+                "setup_type": "dca", "execution_mode": strategy_row[6],
+                "base_amount": strategy_row[5], "decision_curve": curve,
+                "dca_amount_semantics": semantics,
+            })
+            dca_execution_changed = bool(changed_fields and changed_fields.intersection({
+                "mode", "is_active", "strategy_id", "budget_total_eur", "budget_daily_limit_eur",
+                "budget_min_order_eur", "budget_max_order_eur", "paper_initial_cash_eur",
+            }))
+            if not bounds and (not is_update or dca_execution_changed):
+                raise HTTPException(400, "Koppel eerst een DCA-strategie met een bevestigd aankoopbedrag.")
+            if bounds and (not is_update or dca_execution_changed):
+                minimum_plan, maximum_plan = bounds
+                if budget_total_num + 0.005 < maximum_plan:
+                    raise HTTPException(400, f"De totale botlimiet moet minstens €{maximum_plan:.2f} zijn voor dit DCA-plan.")
+                if mode_value != "manual":
+                    if budget_daily_num + 0.005 < maximum_plan or budget_max_num + 0.005 < maximum_plan:
+                        raise HTTPException(400, f"Daglimiet en maximale order moeten minstens €{maximum_plan:.2f} zijn voor dit DCA-plan.")
+                    if budget_min_num - 0.005 > minimum_plan:
+                        raise HTTPException(400, f"Minimale order mag hoogstens €{minimum_plan:.2f} zijn voor dit DCA-plan.")
+                    if mode_value == "auto" and not is_update and not is_live and is_active and float(paper_initial_cash or 0) + 0.005 < maximum_plan:
+                        raise HTTPException(400, f"Een automatische Paper-bot heeft minstens €{maximum_plan:.2f} startkapitaal nodig voor de eerste DCA-koop.")
 
         if is_live and is_active:
             keys = await self.exchange_repo.get_active_keys(user_id)
@@ -947,7 +998,8 @@ class BotService:
                 "message": "Deze bot heeft al order- of portefeuillehistorie. Maak een nieuwe bot voor een andere handelsomgeving.",
             })
 
-        await self.validate_bot_payload(merged, user_id, is_update=True, bot_id=bot_id)
+        await self.validate_bot_payload(merged, user_id, is_update=True, bot_id=bot_id,
+                                        changed_fields=set(updates))
         pressure_event = self._bot_update_pressure_event(existing, merged, updates)
         if pressure_event and not risk_acknowledged:
             raise HTTPException(

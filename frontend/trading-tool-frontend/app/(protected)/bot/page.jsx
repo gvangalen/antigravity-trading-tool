@@ -575,7 +575,7 @@ function BotPageInner() {
         strategy_id: matchingStrategy?.id ?? null,
         is_live: mode === "live",
         risk_profile: risk,
-        budget_total_eur: budget ? Number(budget) : 1000,
+        budget_total_eur: budget ? Number(budget) : "",
       };
 
       handleAddBot(initialValues);
@@ -722,7 +722,7 @@ function BotPageInner() {
       is_live: false,
       mode: "manual",
       risk_profile: "balanced",
-      budget_total_eur: 1000,
+      budget_total_eur: "",
     });
   };
 

@@ -32,6 +32,7 @@ import {
   getBotSaveErrorMessage,
 } from "@/lib/bot/riskAcknowledgement.mjs";
 import { formatDcaSchedule } from "@/lib/bot/dcaSchedule.mjs";
+import { dcaBotPlan, dcaBotBudgetCheck, dcaPurchaseCapacity } from "@/lib/bot/dcaBotPlan.mjs";
 import SystemConnectivity from "@/components/dashboard/SystemConnectivity";
 import { marketPairLabel } from "@/lib/marketPairLabel.mjs";
 
@@ -39,13 +40,6 @@ const RISK_PROFILE_ICONS = {
   conservative: Shield,
   balanced: Scale,
   aggressive: Rocket,
-};
-
-const GUIDED_BUDGET_DEFAULTS = {
-  budget_total_eur: 1000,
-  budget_daily_limit_eur: 100,
-  budget_min_order_eur: 25,
-  budget_max_order_eur: 100,
 };
 
 /**
@@ -69,7 +63,7 @@ const AddBotForm = forwardRef(function AddBotForm({
   guidedMode = false,
   guidedSymbol = "",
 }, ref) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const copy = t?.botPage?.form || {};
   const pageCopy = t?.botPage || {};
   const riskCopy = pageCopy.budgetForm || {};
@@ -88,7 +82,7 @@ const AddBotForm = forwardRef(function AddBotForm({
     is_live: false,
     risk_profile: "balanced",
     base_currency: "EUR",
-    budget_total_eur: 0,
+    budget_total_eur: "",
     paper_initial_cash_eur: 0,
     budget_daily_limit_eur: 0,
     budget_min_order_eur: 0,
@@ -124,7 +118,7 @@ const AddBotForm = forwardRef(function AddBotForm({
       is_live: sourceData.is_live ?? false,
       risk_profile: sourceData.risk_profile ?? "balanced",
       base_currency: sourceData.base_currency ?? "EUR",
-      budget_total_eur: sourceData.budget_total_eur ?? sourceData.budget?.total_eur ?? 0,
+      budget_total_eur: sourceData.budget_total_eur ?? sourceData.budget?.total_eur ?? "",
       paper_initial_cash_eur: sourceData.paper_initial_cash_eur ?? 0,
       budget_daily_limit_eur: sourceData.budget_daily_limit_eur ?? sourceData.budget?.daily_limit_eur ?? 0,
       budget_min_order_eur: sourceData.budget_min_order_eur ?? sourceData.budget?.min_order_eur ?? 0,
@@ -132,67 +126,6 @@ const AddBotForm = forwardRef(function AddBotForm({
       max_asset_exposure_pct: sourceData.max_asset_exposure_pct ?? sourceData.budget?.max_asset_exposure_pct ?? 100,
     });
   }, [sourceData]);
-
-  useEffect(() => {
-    if (!guidedMode || !form.strategy_id) return;
-    const linkedStrategy = strategies.find((strategy) => Number(strategy.id) === Number(form.strategy_id)) || sourceData?.strategy;
-    if (!linkedStrategy) return;
-
-    const hasAnyBudgetValue = [
-      form.budget_total_eur,
-      form.budget_daily_limit_eur,
-      form.budget_min_order_eur,
-      form.budget_max_order_eur,
-    ].some((value) => Number(value || 0) > 0);
-
-    if (hasAnyBudgetValue) return;
-
-    const plannedAmount = Number(linkedStrategy?.base_amount || 0);
-    const suggestedDailyLimit = Number.isFinite(plannedAmount) && plannedAmount > 0
-      ? Math.max(GUIDED_BUDGET_DEFAULTS.budget_daily_limit_eur, plannedAmount)
-      : GUIDED_BUDGET_DEFAULTS.budget_daily_limit_eur;
-
-    setForm((current) => ({
-      ...current,
-      ...GUIDED_BUDGET_DEFAULTS,
-      budget_total_eur: Math.max(GUIDED_BUDGET_DEFAULTS.budget_total_eur, suggestedDailyLimit),
-      budget_daily_limit_eur: suggestedDailyLimit,
-      budget_max_order_eur: suggestedDailyLimit,
-    }));
-  }, [
-    form.budget_daily_limit_eur,
-    form.budget_max_order_eur,
-    form.budget_min_order_eur,
-    form.budget_total_eur,
-    form.strategy_id,
-    guidedMode,
-    sourceData,
-    strategies,
-  ]);
-
-  useEffect(() => {
-    if (!guidedMode || showAdvancedBudget) return;
-
-    const spendPerCycle = Number(form.budget_daily_limit_eur || 0);
-    if (!Number.isFinite(spendPerCycle) || spendPerCycle <= 0) return;
-
-    const nextMinOrder = Number(form.budget_min_order_eur || 0);
-    const nextMaxOrder = Number(form.budget_max_order_eur || 0);
-
-    if (nextMinOrder === spendPerCycle && nextMaxOrder === spendPerCycle) return;
-
-    setForm((current) => ({
-      ...current,
-      budget_min_order_eur: spendPerCycle,
-      budget_max_order_eur: spendPerCycle,
-    }));
-  }, [
-    form.budget_daily_limit_eur,
-    form.budget_max_order_eur,
-    form.budget_min_order_eur,
-    guidedMode,
-    showAdvancedBudget,
-  ]);
 
   /* =====================================================
      LIVE SYNC NAAR PARENT
@@ -216,6 +149,36 @@ const AddBotForm = forwardRef(function AddBotForm({
     || selectedStrategy?.setup
     || null
   ), [selectedStrategy, setups]);
+  const dcaPlan = useMemo(() => dcaBotPlan(selectedStrategy, selectedSetup), [selectedStrategy, selectedSetup]);
+  const isDcaSetup = String(selectedSetup?.setup_type || selectedSetup?.type || "").toLowerCase() === "dca";
+  const selectedStrategyId = selectedStrategy?.id;
+  const lastPrefilledStrategy = useRef(null);
+
+  useEffect(() => {
+    if (isEdit || !dcaPlan || !selectedStrategyId || lastPrefilledStrategy.current === selectedStrategyId) return;
+    lastPrefilledStrategy.current = selectedStrategyId;
+    setForm((current) => ({
+      ...current,
+      mode: "",
+      budget_daily_limit_eur: dcaPlan.maximum,
+      budget_min_order_eur: dcaPlan.minimum,
+      budget_max_order_eur: dcaPlan.maximum,
+    }));
+  }, [dcaPlan, isEdit, selectedStrategyId]);
+
+  useEffect(() => {
+    if (!guidedMode || showAdvancedBudget || dcaPlan) return;
+    const spendPerCycle = Number(form.budget_daily_limit_eur || 0);
+    if (!Number.isFinite(spendPerCycle) || spendPerCycle <= 0) return;
+    if (Number(form.budget_min_order_eur || 0) === spendPerCycle
+        && Number(form.budget_max_order_eur || 0) === spendPerCycle) return;
+    setForm((current) => ({
+      ...current,
+      budget_min_order_eur: spendPerCycle,
+      budget_max_order_eur: spendPerCycle,
+    }));
+  }, [dcaPlan, form.budget_daily_limit_eur, form.budget_max_order_eur,
+    form.budget_min_order_eur, guidedMode, showAdvancedBudget]);
 
   const riskProfiles = [
     {
@@ -246,6 +209,8 @@ const AddBotForm = forwardRef(function AddBotForm({
   const onboardingCopy = pageCopy.onboardingGuide || {};
   const strategyTimeframe = String(selectedStrategy?.timeframe || "").toUpperCase();
   const dcaSchedule = formatDcaSchedule(selectedSetup, copy);
+  const dcaCapacity = dcaPurchaseCapacity(dcaPlan, form.budget_total_eur);
+  const formatEuro = (value) => new Intl.NumberFormat(locale, { style: "currency", currency: "EUR" }).format(value);
   const cadenceSpendLabel = copy.dailyLimitLabel || "Daily spending limit";
   const cadenceSpendHelp = copy.dailyLimitHelp || "The most this bot may spend in one calendar day.";
 
@@ -267,6 +232,13 @@ const AddBotForm = forwardRef(function AddBotForm({
         ok: false,
         message: pageCopy.createValidation || "Vul naam en strategie in voordat je opslaat.",
       };
+    }
+
+    if (dcaPlan && !form.mode) {
+      return { ok: false, message: copy.dcaChooseMode || "Kies of deze DCA-bot handmatig of automatisch uitvoert." };
+    }
+    if (isDcaSetup && !dcaPlan) {
+      return { ok: false, message: copy.dcaMissingAmount || "Deze DCA-strategie heeft geen bevestigd aankoopbedrag." };
     }
 
     const numericFields = [
@@ -309,6 +281,14 @@ const AddBotForm = forwardRef(function AddBotForm({
       }
     }
 
+    const dcaBudgetError = dcaBotBudgetCheck(dcaPlan, form, {
+      automatic: Boolean(form.mode && form.mode !== "manual"),
+      paper: !form.is_live && form.mode === "auto", create: !isEdit,
+    });
+    if (dcaBudgetError) {
+      return { ok: false, message: copy.dcaBudgetErrors?.[dcaBudgetError] || "De botlimieten moeten het geplande DCA-bedrag toelaten." };
+    }
+
     if (dailyLimit > totalBudget) {
       return {
         ok: false,
@@ -338,7 +318,12 @@ const AddBotForm = forwardRef(function AddBotForm({
     copy.maxOrderValidation,
     copy.minOrderValidation,
     copy.numericValidation,
+    copy.dcaChooseMode,
+    copy.dcaBudgetErrors,
+    dcaPlan,
     form,
+    isEdit,
+    isDcaSetup,
     pageCopy.createValidation,
     requiresExplicitBudget,
   ]);
@@ -360,7 +345,7 @@ const AddBotForm = forwardRef(function AddBotForm({
 
     const payload = {
       ...form,
-      ...(guidedMode && dcaSchedule ? { cadence: selectedSetup.dca_frequency } : {}),
+      ...(dcaSchedule ? { cadence: selectedSetup.dca_frequency } : {}),
       name: String(form.name || "").trim(),
       strategy_id: Number(form.strategy_id),
       budget_total_eur: Number(form.budget_total_eur || 0),
@@ -577,6 +562,17 @@ const AddBotForm = forwardRef(function AddBotForm({
                 .replace("{timeframe}", strategyTimeframe || selectedSetup?.timeframe || "—")}
             </p>
           ) : null}
+          {dcaPlan ? (
+            <p className="text-xs font-semibold text-slate-700">
+              {(copy.dcaPlanAmount || "Planned purchase: {amount} per scheduled moment.")
+                .replace("{amount}", dcaPlan.variable
+                  ? `${formatEuro(dcaPlan.minimum)}–${formatEuro(dcaPlan.maximum)}`
+                  : formatEuro(dcaPlan.base))}
+            </p>
+          ) : null}
+          {isDcaSetup && !dcaPlan ? (
+            <p className="text-xs font-semibold text-amber-700">{copy.dcaMissingAmount || "Deze DCA-strategie heeft geen bevestigd aankoopbedrag."}</p>
+          ) : null}
         </div>
       )}
 
@@ -677,6 +673,7 @@ const AddBotForm = forwardRef(function AddBotForm({
                 setForm((s) => ({ ...s, mode: e.target.value }))
               }
             >
+              {dcaPlan && !isEdit ? <option value="">{copy.dcaModePlaceholder || "Kies uitvoering"}</option> : null}
               <option value="manual">{copy.modeManual}</option>
               <option value="semi-auto">{copy.modeSemiAuto}</option>
               <option value="auto">{copy.modeAuto}</option>
@@ -685,6 +682,11 @@ const AddBotForm = forwardRef(function AddBotForm({
                ▼
             </div>
           </div>
+          {dcaPlan && !isEdit ? (
+            <p className="px-1 text-xs font-semibold text-slate-600">
+              {copy.dcaModeHelp || "Handmatig maakt een voorstel; automatisch plaatst na de geplande veiligheidscheck zelf een order."}
+            </p>
+          ) : null}
         </div>
       </div>
 
@@ -777,7 +779,7 @@ const AddBotForm = forwardRef(function AddBotForm({
         </div>
       </div>
 
-      {(guidedMode || requiresExplicitBudget) && (
+      {(guidedMode || requiresExplicitBudget || dcaPlan) && (
         guidedMode ? (
           <div className="space-y-4 rounded-[28px] border border-slate-200 bg-white p-5">
             <div className="grid gap-4 md:grid-cols-2">
@@ -799,7 +801,7 @@ const AddBotForm = forwardRef(function AddBotForm({
                     onChange={(e) => {
                       const value = Number(e.target.value);
                       setForm((s) => {
-                        if (key !== "budget_daily_limit_eur" || showAdvancedBudget) {
+                        if (key !== "budget_daily_limit_eur" || showAdvancedBudget || dcaPlan) {
                           return { ...s, [key]: value };
                         }
 
@@ -917,6 +919,35 @@ const AddBotForm = forwardRef(function AddBotForm({
           </p>
         </div>
       )}
+
+      {dcaPlan ? (
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950" aria-live="polite">
+          <p className="font-black">{copy.dcaReviewTitle || "DCA-plan en botgrenzen"}</p>
+          <p className="mt-2">
+            {dcaSchedule}: {dcaPlan.variable
+              ? `${formatEuro(dcaPlan.minimum)}–${formatEuro(dcaPlan.maximum)}`
+              : formatEuro(dcaPlan.base)} · {form.mode === "auto" ? copy.modeAuto : form.mode === "semi-auto" ? copy.modeSemiAuto : form.mode === "manual" ? copy.modeManual : (copy.dcaModeUnchosen || "uitvoering nog niet gekozen")}
+          </p>
+          <p className="mt-1">
+            {(form.is_live
+              ? copy.dcaReviewLiveBudget || "Totale botlimiet {total}. Beschikbaar exchangesaldo wordt pas bij uitvoering gecontroleerd."
+              : copy.dcaReviewBudget || "Paper-startkas {cash}; totale botlimiet {total}. De limiet is geen kassaldo.")
+              .replace("{cash}", formatEuro(Number(form.paper_initial_cash_eur || 0)))
+              .replace("{total}", form.budget_total_eur === "" ? (copy.dcaBudgetUnchosen || "nog niet gekozen") : formatEuro(Number(form.budget_total_eur)))}
+          </p>
+          {dcaCapacity !== null ? (
+            <p className="mt-1 font-semibold">
+              {(copy.dcaReviewCapacity || "Bij het hoogste planbedrag dekt de limiet {count} aankoopmomenten.")
+                .replace("{count}", String(dcaCapacity))}
+            </p>
+          ) : null}
+          {form.mode === "auto" && !form.is_live ? (
+            <p className="mt-2 text-xs font-semibold">
+              {copy.dcaPaperAutoNote || "Automatische Paper-uitvoering vereist voldoende Paper-kas en een actuele koers; bij een blokkade wordt geen order geplaatst."}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* PROFILE DESCRIPTION */}
       <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 border-2 border-slate-100 dark:border-slate-800 flex items-center gap-4 transition-all hover:bg-slate-100">

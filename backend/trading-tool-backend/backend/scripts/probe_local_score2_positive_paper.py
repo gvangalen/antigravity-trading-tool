@@ -59,8 +59,8 @@ def _seed_fixture(*, frequency: str = "daily", trigger_mode: str = "calendar") -
                      observed_at=EXCLUDED.observed_at"""
             )
             cur.execute(
-                "INSERT INTO users (email,password_hash,ai_preferences) "
-                "VALUES (%s,%s,%s::jsonb) RETURNING id",
+                "INSERT INTO users (email,password_hash,ai_preferences,is_active) "
+                "VALUES (%s,%s,%s::jsonb,TRUE) RETURNING id",
                 (email, "local-fixture-no-login", "{}"),
             )
             user_id = int(cur.fetchone()[0])

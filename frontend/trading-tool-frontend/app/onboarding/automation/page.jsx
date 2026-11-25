@@ -59,10 +59,10 @@ function AutomationStep() {
     symbol: symbol || strategy.symbol || "",
     strategy_id: strategy.id,
     is_live: searchParams.get("mode") === "live",
-    mode: "manual",
+    mode: String(setup?.setup_type || "").toLowerCase() === "dca" ? "" : "manual",
     risk_profile: searchParams.get("risk") || "balanced",
-    budget_total_eur: Number(searchParams.get("budget")) || 1000,
-  }) : null, [strategy, symbol, searchParams]);
+    budget_total_eur: searchParams.get("budget") ? Number(searchParams.get("budget")) : "",
+  }) : null, [strategy, symbol, searchParams, setup]);
   const existingBot = useMemo(() => bots.find((item) =>
     Number(item.strategy_id || item.strategy?.id) === Number(strategy?.id)
   ) || null, [bots, strategy]);
