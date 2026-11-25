@@ -1653,12 +1653,13 @@ class FinnV2OperationStateService:
                     # The contract stores the first score of the middle band,
                     # whereas users often give three inclusive integer ranges.
                     # Keep score 25 in 0–25 by storing 26 as the boundary.
-                    values.update(self._dca_inclusive_score_ranges(text))
+                    inclusive_ranges = self._dca_inclusive_score_ranges(text)
+                    values.update(inclusive_ranges)
                     low_boundary = re.search(r"(?<!tot )\b(?:onder|below|unter)\s+(?:score\s+)?(\d{1,3})\b", amount_text)
                     high_boundary = re.search(r"\b(?:vanaf|from|ab)\s+(\d{1,3})\b", amount_text)
-                    if low_boundary:
+                    if low_boundary and not inclusive_ranges:
                         values["low_threshold"] = int(low_boundary.group(1))
-                    if high_boundary:
+                    if high_boundary and not inclusive_ranges:
                         values["high_threshold"] = int(high_boundary.group(1))
             if "min_investment" in accepted_inputs:
                 investment = re.search(
@@ -1844,11 +1845,14 @@ class FinnV2OperationStateService:
 
     @staticmethod
     def _dca_inclusive_score_ranges(text: str) -> dict[str, int]:
-        """Convert an explicit contiguous 0–100 ladder to exclusive boundaries."""
+        """Convert three user-labeled score/percent ranges to exclusive bounds."""
+        if not re.search(r"\b(?:benchmark(?:score)?|score(?:banden|grenzen)?|smart\s*dca)\b", str(text or ""), re.I):
+            return {}
         ranges = [
             (int(match.group(1)), int(match.group(2)))
             for match in re.finditer(
-                r"(?<!\d)(\d{1,3})\s*(?:[-–—]|\btot(?:\s+en\s+met)?\b)\s*(\d{1,3})(?!\d)",
+                r"(?<!\d)(\d{1,3})\s*(?:[-–—]|\btot(?:\s+en\s+met)?\b)\s*"
+                r"(\d{1,3})\s*(?::\s*|\s+krijgt\s+)(\d{1,3})\s*%",
                 str(text or ""), re.I,
             )
         ]

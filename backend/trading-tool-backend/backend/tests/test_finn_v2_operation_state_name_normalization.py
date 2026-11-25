@@ -841,11 +841,31 @@ def test_smart_dca_inclusive_ranges_preserve_score_25_and_correction():
 
 def test_smart_dca_inclusive_ranges_require_contiguous_full_ladder():
     parse = FinnV2OperationStateService._dca_inclusive_score_ranges
-    assert parse("0–25: 150%, 26–75: 100%, 76–100: 50%") == {
+    assert parse("scorebanden: 0–25: 150%, 26–75: 100%, 76–100: 50%") == {
         "low_threshold": 26, "high_threshold": 76,
     }
-    assert parse("0–25: 150%, 27–75: 100%, 76–100: 50%") == {}
-    assert parse("0–25: 150%, 26–75: 100%, 76–99: 50%") == {}
+    assert parse("scorebanden: 0–25: 150%, 27–75: 100%, 76–100: 50%") == {}
+    assert parse("scorebanden: 0–25: 150%, 26–75: 100%, 76–99: 50%") == {}
+    assert parse("0–25: 150%, 26–75: 100%, 76–100: 50%") == {}
+    assert parse("scorebanden: 0–25 euro, 26–75 euro, 76–100 euro") == {}
+
+
+def test_smart_dca_ranges_do_not_reinterpret_regular_euro_or_price_ranges():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    service = FinnV2OperationStateService()
+    for message in (
+        "Maak een gewone DCA-setup voor BTC. Ik kan 0–25 euro per week inleggen, "
+        "26–75 euro als het lukt en 76–100 euro na mijn salaris. Toon eerst een voorstel.",
+        "Corrigeer mijn gewone DCA-setup. De marktprijs was 0–25 euro, "
+        "mijn doel 26–75 euro en mijn stop 76–100 euro.",
+    ):
+        parsed = service.explicit_inputs(
+            contract=contract, message=message, explicit_asset="BTC",
+            known_setup_type="dca",
+        )
+        assert parsed.get("dca_amount_mode") != "score_bands"
+        assert "low_threshold" not in parsed
+        assert "high_threshold" not in parsed
 
 
 def test_inverse_smart_dca_proposes_score_trigger_without_a_weekday():
