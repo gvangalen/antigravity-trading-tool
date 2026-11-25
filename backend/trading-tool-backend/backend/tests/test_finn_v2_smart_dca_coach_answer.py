@@ -137,6 +137,28 @@ def test_named_curve_read_distinguishes_generic_bot_question_from_strategy_name(
         user_time_zone="Europe/Amsterdam",
     ))
     assert checked.status == "completed"
+    live_question = (
+        "Lees alleen mijn opgeslagen Smart DCA-setup QA Smart DCA Grens 25 nov "
+        "voor BTC/USDT en de gekoppelde strategie. Wat is de huidige benchmarkscore "
+        "met bronmoment? Welke opgeslagen scoreband geldt nu, en hoeveel zou de "
+        "staffel bij een hypothetische score van 25 en van 26 uitkeren vanaf het "
+        "basisbedrag? Is er aan precies deze strategie een Paper-bot gekoppeld? "
+        "Maak niets aan en plaats geen order."
+    )
+    live_result = asyncio.run(front.run(
+        message=live_question, instructions="", conversation_context={}, verified_asset="BTC",
+        workspace_hints={"time_zone": "Europe/Amsterdam"},
+    ))
+    assert live_result.response.answer_kind == "factual_source"
+    assert "score 25: 150% van €200 = hypothetisch €300" in live_result.response.text
+    assert "score 26: 100% van €200 = hypothetisch €200" in live_result.response.text
+    assert "45,7/100" in live_result.response.text
+    assert "geen bot gekoppeld" in live_result.response.text
+    live_checked = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=live_question, result=live_result.response, locale="nl-NL",
+        user_time_zone="Europe/Amsterdam",
+    ))
+    assert live_checked.status == "completed"
     wrong_base_question = question.replace("basis van €200", "basis van €100")
     wrong_base_result = asyncio.run(front.run(
         message=wrong_base_question, instructions="", conversation_context={}, verified_asset="BTC",
