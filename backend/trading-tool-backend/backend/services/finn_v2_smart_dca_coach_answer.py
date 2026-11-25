@@ -226,8 +226,9 @@ def render_saved_smart_dca_coach_answer(
         curve_direction = "De opgeslagen percentages lopen niet overal in dezelfde richting. "
     hypothetical_text = ""
     score_question = re.search(
-        r"\b(?:bij|voor)\s+(?:een\s+)?(?:benchmark(?:t)?score|score)\s+"
-        r"(\d{1,3})(?:\s*(?:en|/|,)\s*(\d{1,3}))?\b",
+        r"\b(?:bij|voor)\s+(?:een\s+)?(?:hypothetische\s+)?"
+        r"(?:benchmark(?:t)?scores?|scores?)\s+(?:van\s+)?"
+        r"(\d{1,3})(?:\s*(?:en|/|,)\s*(?:van\s+)?(\d{1,3}))?\b",
         message, re.I,
     )
     if score_question:
