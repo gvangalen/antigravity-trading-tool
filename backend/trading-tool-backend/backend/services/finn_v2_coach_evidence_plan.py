@@ -59,9 +59,10 @@ def coach_evidence_plan(message: str, *, named_asset_count: int, read_only: bool
         return None
     topics = tuple(name for name, _ in chosen)
     reads = tuple(dict.fromkeys(tool for _, tools in chosen for tool in tools))
-    if "bot" in topics and asks_about_bot_decision(message):
-        # The portfolio bot list supplies the owner-bound bot ID needed to
-        # attribute a persisted decision, even when cash was not requested.
+    if "bot" in topics and (asks_about_bot_decision(message) or "setup" in topics):
+        # The portfolio bot list supplies the owner-bound bot ID and its
+        # strategy/setup parents. An asset's most recent setup may belong to
+        # a different bot, even when both use the same symbol.
         reads = tuple(dict.fromkeys((*reads, "read_portfolio")))
     return CoachEvidencePlan(
         topics=topics, read_tools=reads,

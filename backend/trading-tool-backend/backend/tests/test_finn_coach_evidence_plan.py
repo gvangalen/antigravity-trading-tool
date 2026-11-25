@@ -31,6 +31,47 @@ def test_bot_decision_plus_score_reads_bot_identity_even_without_cash_question()
     assert "read_portfolio" in plan.read_tools
 
 
+def test_bot_setup_question_uses_bot_parent_not_newer_same_asset_setup():
+    question = (
+        "Welke opgeslagen setup en strategie zijn daadwerkelijk aan mijn actieve "
+        "BTC Paper-bot gekoppeld? Controleer de relatie opnieuw. Lees alleen."
+    )
+    plan = coach_evidence_plan(question, named_asset_count=1, read_only=True)
+    assert plan is not None
+    assert "read_portfolio" in plan.read_tools
+    evidence = (
+        {"scope": "read_active_setup", "status": "completed", "data": {
+            "id": 20, "symbol": "BTC", "name": "Nieuwere Smart DCA"}},
+        {"scope": "read_linked_strategy", "status": "completed", "data": {
+            "id": 30, "symbol": "BTC", "name": "Nieuwere Smart DCA Strategy"}},
+        {"scope": "read_portfolio", "status": "completed", "data": {
+            "bots": [{"bot_id": 56, "name": "Long term DCA Bot", "symbol": "BTC",
+                      "is_live": False, "setup_id": 10, "setup_name": "Long term DCA BTC",
+                      "strategy_id": 15, "strategy_name": "Long term DCA Strategy"}]}}
+    )
+    answer = render_coach_source_fallback(
+        asset="BTC", topics=plan.topics, evidence=evidence, question=question,
+    )
+    assert answer is not None
+    assert "Long term DCA BTC" in answer
+    assert "Long term DCA Strategy" in answer
+    assert "Nieuwere Smart DCA" not in answer
+    assert coach_source_coverage_gap(
+        asset="BTC", topics=plan.topics, evidence=evidence, question=question,
+        answer="De bot is gekoppeld aan Nieuwere Smart DCA en Nieuwere Smart DCA Strategy.",
+    ) == "bot_plan_lineage_mismatch"
+    ambiguous = (evidence[0], evidence[1], {**evidence[2], "data": {
+        "bots": [*evidence[2]["data"]["bots"], {
+            "bot_id": 57, "name": "Andere BTC-bot", "symbol": "BTC", "is_live": False,
+            "setup_id": 20, "setup_name": "Nieuwere Smart DCA",
+            "strategy_id": 30, "strategy_name": "Nieuwere Smart DCA Strategy",
+        }],
+    }})
+    assert render_coach_source_fallback(
+        asset="BTC", topics=plan.topics, evidence=ambiguous, question=question,
+    ) is None
+
+
 def test_coach_coverage_rejects_omitted_sources_and_answer_parts():
     plan = coach_evidence_plan(
         "Waarom blokkeerde mijn AAPL-bot bij mijn score en rapport? Wat doe ik nu?",

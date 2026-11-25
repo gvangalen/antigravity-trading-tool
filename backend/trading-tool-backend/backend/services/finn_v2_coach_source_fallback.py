@@ -119,9 +119,9 @@ def _bot_row(question: str, evidence: tuple[dict[str, Any], ...], asset: str) ->
                  normalized_question, re.I,
              )]
     generic_reference = re.search(
-        rf"\b(?:mijn|de)\s+{re.escape(asset)}\s+Paper[-\s]?bot\b"
+        rf"\b(?:mijn|de)\s+(?:(?:actieve|bestaande|huidige)\s+)?{re.escape(asset)}\s+Paper[-\s]?bot\b"
         r"(?=\s+(?:voor|in|met|en|van|bij|op|uit|volgens|geen|niet|"
-        r"heeft|had|is|was|wacht|kocht|koop)\b|[.,!?;:]|$)",
+        r"heeft|had|is|was|wacht|kocht|koop|gekoppeld)\b|[.,!?;:]|$)",
         requested_clause, re.I,
     )
     if generic_reference:
@@ -171,6 +171,7 @@ def _bot_evidence_consistent(
 def _requires_bound_bot(question: str, topics: tuple[str, ...]) -> bool:
     return "bot" in topics and (
         asks_about_bot_decision(question)
+        or ("setup" in topics and bool(re.search(r"\b(?:gekoppeld|relatie)\b", question, re.I)))
         or ("portfolio" in topics and bool(re.search(
             r"\b(?:bot[-\s]?status|botbudget|budgetlimiet|botbudgetlimiet|paper[-\s]?holdbesluit)\b",
             question, re.I,
@@ -187,6 +188,19 @@ def coach_source_coverage_gap(
     if bound_bot and not _bot_evidence_consistent(question, evidence, asset):
         return "bot_evidence_ambiguous"
     selected_bot = _bot_row(question, evidence, asset) if bound_bot else None
+    if "setup" in topics and selected_bot is not None:
+        setup = _rows(evidence, "read_active_setup", asset)
+        strategy = _rows(evidence, "read_linked_strategy", asset)
+        if (setup and selected_bot.get("setup_id") is not None
+                and str(setup[0].get("setup_id") or setup[0].get("id")) != str(selected_bot["setup_id"])
+                and str(setup[0].get("name") or "").strip()
+                and str(setup[0]["name"]).casefold() in answer.casefold()):
+            return "bot_plan_lineage_mismatch"
+        if (strategy and selected_bot.get("strategy_id") is not None
+                and str(strategy[0].get("strategy_id") or strategy[0].get("id")) != str(selected_bot["strategy_id"])
+                and str(strategy[0].get("name") or "").strip()
+                and str(strategy[0]["name"]).casefold() in answer.casefold()):
+            return "bot_plan_lineage_mismatch"
     if "bot" in topics:
         if re.search(r"\b(?:bot[-\s]?status|status\s+van\s+(?:de\s+)?bot)\b", question, re.I):
             statuses = _rows(evidence, "read_bot_status", asset)
@@ -283,7 +297,15 @@ def render_coach_source_fallback(
         if topic == "setup":
             setups = _rows(evidence, "read_active_setup", asset)
             strategies = _rows(evidence, "read_linked_strategy", asset)
-            if len(setups) == 1:
+            if selected_bot is not None and selected_bot.get("setup_id") is not None:
+                setup_name = str(selected_bot.get("setup_name") or "").strip()
+                strategy_name = str(selected_bot.get("strategy_name") or "").strip()
+                if (setup_name and strategy_name and selected_bot.get("strategy_id") is not None):
+                    lines.append(f"- Plan: deze bot is gekoppeld aan setup ‘{setup_name}’ en strategie ‘{strategy_name}’.")
+                    verified = True
+                else:
+                    lines.append("- Plan: de koppeling van deze bot met een setup en strategie is niet volledig verifieerbaar.")
+            elif len(setups) == 1 and not bound_bot:
                 setup = setups[0]
                 name = str(setup.get("name") or "naam onbekend")
                 band = ""
@@ -296,7 +318,7 @@ def render_coach_source_fallback(
                 lines.append(f"- Plan: opgeslagen setup ‘{name}’{band}{strategy}.")
                 verified = True
             else:
-                lines.append("- Plan: geen eenduidige opgeslagen setup uitgelezen.")
+                lines.append("- Plan: geen eenduidige koppeling tussen deze bot, setup en strategie uitgelezen.")
         elif topic == "score":
             scores = _rows(evidence, "read_asset_scores", asset)
             score = _number(scores[0].get("benchmark_score")) if len(scores) == 1 else None
