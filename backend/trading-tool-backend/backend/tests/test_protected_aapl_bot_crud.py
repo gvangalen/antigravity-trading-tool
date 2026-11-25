@@ -310,7 +310,7 @@ def test_dispatch_profiles_use_exact_permissions(tmp_path, profile, actions, exe
 def test_workflow_scopes_bot_flag_and_does_not_expose_financial_actions():
     source = WORKFLOW.read_text()
     script = source.split('cat > "$state_dir/run.sh" <<RUNNER', 1)[1].split("RUNNER", 1)[0]
-    assert script.count("export FINN_V2_EXECUTE_BOT_CHANGES=true") == 2
+    assert script.count("export FINN_V2_EXECUTE_BOT_CHANGES=true") == 3
     assert "if [ $(printf '%q' \"$qa_profile\") = aapl_paper_bot_crud ]; then" in script
     assert "FINN_V2_LIVE_TRADING_ENABLED" not in script
     assert "FINN_V2_ACTIVATE_LIVE" not in script
