@@ -118,6 +118,7 @@ def test_bot_setup_question_uses_bot_parent_not_newer_same_asset_setup():
     assert "Long term DCA BTC" in _minimal_read_answer(
         message=other_wording, prepared=portfolio_only,
     ).text
+
     inactive = (evidence[0], evidence[1], {**evidence[2], "data": {
         "bots": [{**evidence[2]["data"]["bots"][0], "is_active": False}],
     }})
@@ -155,6 +156,54 @@ def test_bot_setup_question_uses_bot_parent_not_newer_same_asset_setup():
     assert render_coach_source_fallback(
         asset="BTC", topics=plan.topics, evidence=ambiguous, question=question,
     ) is None
+
+
+def test_bot_setup_and_status_require_same_owner_bound_bot():
+    question = "Welke setup gebruikt mijn BTC Paper-bot en wat is zijn status? Lees alleen."
+    plan = coach_evidence_plan(question, named_asset_count=1, read_only=True)
+    assert plan is not None
+    assert plan.read_tools == ("read_portfolio", "read_bot_status")
+    portfolio = {"scope": "read_portfolio", "status": "completed", "data": {
+        "bots": [{"bot_id": 56, "name": "Long term DCA Bot", "symbol": "BTC",
+                  "is_active": True, "is_live": False,
+                  "setup_id": 10, "setup_name": "Long term DCA BTC",
+                  "strategy_id": 15, "strategy_name": "Long term DCA Strategy"}]}}
+    status = {"scope": "read_bot_status", "status": "completed", "data": {
+        "bot_id": 56, "operational_status": "active",
+        "read_at": "2026-11-25T19:00:00+00:00"}}
+    unrelated_setup = {"scope": "read_active_setup", "status": "completed", "data": {
+        "id": 20, "symbol": "BTC", "name": "Nieuwere Smart DCA"}}
+    prepared = SimpleNamespace(response=SimpleNamespace(
+        text="De bot gebruikt Nieuwere Smart DCA en is actief.",
+        tool_trace=({"result": {"results": [portfolio, status, unrelated_setup]}},),
+        uses_previous_response=False,
+        turn_contract={"coach_evidence_plan": {"topics": plan.topics}},
+    ), previous_response=None, locale="nl")
+    answer = _minimal_read_answer(message=question, prepared=prepared)
+    assert answer.status == "completed"
+    assert "Long term DCA BTC" in answer.text
+    assert "Long term DCA Strategy" in answer.text
+    assert "Botstatus: active" in answer.text
+    assert "Nieuwere Smart DCA" not in answer.text
+    for variant in (question.replace("zijn status", "zijn botstatus"),):
+        variant_plan = coach_evidence_plan(variant, named_asset_count=1, read_only=True)
+        assert variant_plan is not None
+        assert variant_plan.read_tools == ("read_portfolio", "read_bot_status")
+        variant_prepared = SimpleNamespace(
+            response=SimpleNamespace(**{**vars(prepared.response),
+                                         "turn_contract": {"coach_evidence_plan": {"topics": variant_plan.topics}}}),
+            previous_response=None, locale="nl",
+        )
+        assert "Botstatus: active" in _minimal_read_answer(
+            message=variant, prepared=variant_prepared,
+        ).text
+    wrong_status = {**status, "data": {**status["data"], "bot_id": 57}}
+    wrong_prepared = SimpleNamespace(
+        response=SimpleNamespace(**{**vars(prepared.response),
+                                     "tool_trace": ({"result": {"results": [portfolio, wrong_status]}},)}),
+        previous_response=None, locale="nl",
+    )
+    assert _minimal_read_answer(message=question, prepared=wrong_prepared).status == "unavailable"
 
 
 def test_coach_coverage_rejects_omitted_sources_and_answer_parts():

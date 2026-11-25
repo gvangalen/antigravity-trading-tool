@@ -27,6 +27,10 @@ def asks_about_bot_plan_lineage(question: str) -> bool:
         and re.search(r"\b(?:setup|strategie|strategy|plan)\b", question, re.I))
 
 
+def asks_about_bot_status(question: str) -> bool:
+    return bool(re.search(r"\b(?:bot[-\s]?status|status)\b", question, re.I))
+
+
 def _source_moment(value: Any, user_time_zone: str | None) -> str | None:
     instant = display_source_moment(value)
     if isinstance(instant, str):
@@ -159,15 +163,13 @@ def _bot_evidence_consistent(
     bot = _bot_row(question, evidence, asset)
     if bot is None or bot.get("bot_id") is None:
         return False
-    if asks_about_bot_plan_lineage(question) and not asks_about_bot_decision(question) and not re.search(
-        r"\b(?:bot[-\s]?status|status\s+van\s+(?:de\s+)?bot)\b", question, re.I,
-    ):
+    if asks_about_bot_plan_lineage(question) and not asks_about_bot_decision(question) and not asks_about_bot_status(question):
         # A linkage read is proved by this owner-bound portfolio bot row.
         # Unrequested status/decision reads may describe another recent plan.
         return True
     bot_id = str(bot["bot_id"])
     statuses = _rows(evidence, "read_bot_status", asset)
-    status_requested = bool(re.search(r"\b(?:bot[-\s]?status|status\s+van\s+(?:de\s+)?bot)\b", question, re.I))
+    status_requested = asks_about_bot_status(question)
     if status_requested and (len(statuses) != 1
                              or not _source_moment(statuses[0].get("read_at"), None)
                              or statuses[0].get("operational_status") not in {"active", "paused"}):
@@ -235,7 +237,7 @@ def coach_source_coverage_gap(
                 and str(strategy[0]["name"]).casefold() in answer.casefold()):
             return "bot_plan_lineage_mismatch"
     if "bot" in topics:
-        if re.search(r"\b(?:bot[-\s]?status|status\s+van\s+(?:de\s+)?bot)\b", question, re.I):
+        if asks_about_bot_status(question):
             statuses = _rows(evidence, "read_bot_status", asset)
             status_at = _source_moment(statuses[0].get("read_at"), user_time_zone) if len(statuses) == 1 else None
             if not re.search(r"\bbotstatus\b", answer, re.I):
@@ -384,7 +386,7 @@ def render_coach_source_fallback(
                 verified = True
             else:
                 lines.append("- Botbeslissing: geen eenduidig opgeslagen besluit uitgelezen.")
-            if re.search(r"\b(?:bot[-\s]?status|status\s+van\s+(?:de\s+)?bot)\b", question, re.I):
+            if asks_about_bot_status(question):
                 statuses = _rows(evidence, "read_bot_status", asset)
                 status = (statuses[0] if len(statuses) == 1
                           and (not selected_bot or str(statuses[0].get("bot_id")) == str(selected_bot.get("bot_id")))

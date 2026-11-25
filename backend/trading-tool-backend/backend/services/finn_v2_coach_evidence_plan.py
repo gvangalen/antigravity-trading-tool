@@ -10,7 +10,7 @@ import re
 from dataclasses import dataclass
 
 from backend.services.finn_v2_paper_position_answer import asks_about_bot_decision
-from backend.services.finn_v2_coach_source_fallback import asks_about_bot_plan_lineage
+from backend.services.finn_v2_coach_source_fallback import asks_about_bot_plan_lineage, asks_about_bot_status
 
 
 @dataclass(frozen=True)
@@ -63,12 +63,16 @@ def coach_evidence_plan(message: str, *, named_asset_count: int, read_only: bool
     pure_bot_lineage = (set(topics) == {"setup", "bot"}
                         and asks_about_bot_plan_lineage(message)
                         and not asks_about_bot_decision(message)
-                        and not re.search(r"\b(?:profiel|traderstijl|bot[-\s]?status|status)\b", message, re.I))
+                        and not re.search(r"\b(?:profiel|traderstijl)\b", message, re.I)
+                        and not asks_about_bot_status(message))
     if pure_bot_lineage:
         # This owner's portfolio bot row already contains its exact setup and
         # strategy parents. A separate latest-setup read can refer to another
         # plan for the same asset.
         reads = ("read_portfolio",)
+    elif set(topics) == {"setup", "bot"} and asks_about_bot_plan_lineage(message) and asks_about_bot_status(message):
+        # Verify both facts against the same selected owner-bound bot ID.
+        reads = ("read_portfolio", "read_bot_status")
     elif "bot" in topics and asks_about_bot_decision(message):
         # The portfolio bot list supplies the owner-bound bot ID and its
         # strategy/setup parents. An asset's most recent setup may belong to

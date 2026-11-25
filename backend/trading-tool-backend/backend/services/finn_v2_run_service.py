@@ -2012,7 +2012,7 @@ def _minimal_read_answer(
 
     if coach_plan and set(coach_plan.get("topics") or ()) == {"setup", "bot"}:
         from backend.services.finn_v2_coach_source_fallback import asks_about_bot_plan_lineage
-        if asks_about_bot_plan_lineage(message) and not re.search(r"\bstatus\b", message, re.I):
+        if asks_about_bot_plan_lineage(message):
             if recovered := source_bound_coach_recovery():
                 return recovered
             return FinnResponsesVerifiedAnswer(
