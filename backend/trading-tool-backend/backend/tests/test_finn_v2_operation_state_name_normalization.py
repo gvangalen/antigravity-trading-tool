@@ -864,18 +864,35 @@ def test_smart_dca_ranges_do_not_reinterpret_regular_euro_or_price_ranges():
         "Maak een Smart DCA voor SOL/USDT met naam Score, verdeel het budget "
         "over drie kasniveaus 0–25: 150%, 26–75: 100%, 76–100: 50%. "
         "De benchmark volgt apart.",
+        "Maak een DCA-setup voor BTC. Geen scorebanden: mijn allocatieklassen "
+        "zijn 0–25: 150%, 26–75: 100%, 76–100: 50%.",
     ):
         parsed = service.explicit_inputs(
             contract=contract, message=message, explicit_asset="BTC",
             known_setup_type="dca",
         )
-        if "gewone DCA" in message:
+        if "gewone DCA" in message or "Geen scorebanden" in message:
             assert parsed.get("dca_amount_mode") != "score_bands"
         assert "low_threshold" not in parsed
         assert "high_threshold" not in parsed
         assert "low_score_percent" not in parsed
         assert "mid_score_percent" not in parsed
         assert "high_score_percent" not in parsed
+
+
+def test_smart_dca_name_score_does_not_hide_real_score_ladder():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    parsed = FinnV2OperationStateService().explicit_inputs(
+        contract=contract,
+        message=("Maak een Smart DCA voor SOL/USDT met naam Score. "
+                 "Scorebanden: 0–25: 150%, 26–75: 100%, 76–100: 50%."),
+        explicit_asset="SOL",
+    )
+    assert parsed["name"] == "Score"
+    assert (parsed["low_threshold"], parsed["high_threshold"]) == (26, 76)
+    assert [parsed[key] for key in (
+        "low_score_percent", "mid_score_percent", "high_score_percent",
+    )] == [150, 100, 50]
 
 
 def test_inverse_smart_dca_proposes_score_trigger_without_a_weekday():

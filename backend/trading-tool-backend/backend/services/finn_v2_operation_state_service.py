@@ -1576,9 +1576,14 @@ class FinnV2OperationStateService:
                 amount_text = lowered
                 explicit_name = self._name_input_from_text(text)
                 if explicit_name:
-                    amount_text = amount_text.replace(explicit_name.casefold(), " ")
+                    amount_text = re.sub(
+                        rf"(?<!\w){re.escape(explicit_name.casefold())}(?!\w)",
+                        " ", amount_text, count=1,
+                    )
                 smart_amount = bool(re.search(r"\b(?:smart(?:\s*dca)?|score(?:s|gestuurd|afhankelijk)?|staffel|score\s*bands?|scorebanden|scoregrenzen|variab\w*)\b", amount_text))
                 smart_amount = smart_amount or bool(self._dca_inclusive_score_ranges(amount_text))
+                if self._rejects_smart_dca_ladder(amount_text):
+                    smart_amount = False
                 if self._dca_score_percentages(amount_text) and re.search(r"\bbenchmark(?:t)?\b", amount_text):
                     # A follow-up can state the complete score ladder
                     # without repeating the word Smart or score.
@@ -1804,6 +1809,15 @@ class FinnV2OperationStateService:
             text.casefold(),
         ))
 
+    @staticmethod
+    def _rejects_smart_dca_ladder(text: str) -> bool:
+        """A negated score ladder is not positive amount-rule evidence."""
+        return bool(re.search(
+            r"\b(?:geen|zonder|niet|no|without|keine?)\s+(?:een\s+)?"
+            r"(?:scorebanden|scoregrenzen|scoregestuurde?\s+bedragen?|benchmarkgestuurde?)\b",
+            str(text or ""), re.I,
+        ))
+
     @classmethod
     def _dca_score_percentages(cls, text: str) -> dict[str, object]:
         """Extract an explicit five-zone ladder or a legacy three-band ladder.
@@ -1866,6 +1880,8 @@ class FinnV2OperationStateService:
         # must name its score source, and no range may carry a currency.
         lead_in = re.split(r"[.;\n]", value[:matches[0].start()])[-1]
         if not re.search(r"\b(?:benchmarkscore|score|scorebanden|scoregrenzen)\b", lead_in, re.I):
+            return {}
+        if FinnV2OperationStateService._rejects_smart_dca_ladder(lead_in):
             return {}
         if re.search(r"\b(?:prijs\w*|koers\w*|risicobudget|budget\w*|kas\w*)\b", lead_in, re.I):
             return {}
