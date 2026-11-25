@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## Smart DCA inclusieve scorebanden en voorstelcorrectie (25 november 2026)
 
-Phase: `BUILD_CANDIDATE_READY_LIVE_QA_PENDING`; PR [#1369](https://github.com/gvangalen/antigravity-trading-tool/pull/1369).
+Phase: `LIVE_CANDIDATE_QA_PENDING`; PR [#1369](https://github.com/gvangalen/antigravity-trading-tool/pull/1369).
 De ingelogde browserreproductie op BTC/USDT liet zien dat de gebruikersband
 0–25 in het oude voorstel als `onder 25` werd opgeslagen; score 25 kreeg
 daardoor het middelste bedrag. Na `Aanpassen` gaf FINN alleen een losse uitleg
@@ -35,10 +35,15 @@ en de regressieset **109/109** (artifact SHA-256
 `9886bd030cddc740cee5ee16d9447328c1484c882f4f27228c1c12f9fb88e7f1`),
 zonder provider-, schema-, timeout-, parse- of validatiefout. Onafhankelijke
 QA- en Security-codebeoordelingen vonden op de definitieve parser geen
-blocker. De vijf PR-CI-jobs op producthead `8b2dd2f25` zijn groen; na deze
-statuswijziging moet CI voor de nieuwe head opnieuw slagen. Auto Deploy,
-publieke SHA-pariteit en onafhankelijke ingelogde QA-browseracceptatie staan
-nog open. Dit is nog geen live verdict.
+blocker. PR-CI `45557175304` en main-CI `45558092295` hadden elk vijf
+geslaagde jobs. Product-PR #1369 is gemerged als
+`5751a36d1abf56379a90f3a6ffd9f34035ed7645`; Auto Deploy
+`45559063385` slaagde. GitHub main, publieke backend `/api/health` en
+frontend `/build-info.json` meldden exact die SHA met HTTP 200. Deze
+statusupdate maakt zelf een nieuwe main-SHA; vóór onafhankelijke QA moeten
+ook de daaropvolgende main-CI, Auto Deploy en publieke SHA-pariteit groen
+zijn. De ingelogde QA-browseracceptatie staat nog open; dit is geen
+functioneel live verdict.
 
 ## FINN 3.0: Smart DCA gecombineerde lezing en scoregestuurd concept (24 november 2026)
 
