@@ -266,6 +266,25 @@ def test_mixed_bot_position_does_not_infer_zero_from_missing_quantity():
     assert "de ETH-positie" in answer
 
 
+def test_one_zero_eth_bot_does_not_confirm_all_eth_positions():
+    question = "Vergelijk BTC/EUR met mijn open ETH-positie en BTC-bot 129. Lees alleen."
+    evidence = ({"scope": "read_portfolio", "status": "completed", "data": {
+        "bots": [
+            {"bot_id": 129, "symbol": "BTC", "is_live": False,
+             "operational_status": "active"},
+            {"bot_id": 301, "symbol": "ETH", "is_live": False,
+             "position_qty": 0},
+            {"bot_id": 302, "symbol": "ETH", "is_live": False,
+             "position_qty": None},
+        ],
+    }},)
+    answer = render_source_moment_partial(question=question, evidence=evidence)
+    assert answer is not None
+    assert "bot #301 geen open ETH-positie (0 ETH)" in answer
+    assert "bot #302 geen open ETH-positie" not in answer
+    assert "de ETH-positie" in answer.split("Ik kon", 1)[-1]
+
+
 def test_score_only_question_does_not_claim_open_zero_position():
     question = "Vergelijk de actuele scores van BTC/EUR en ETH/EUR. Lees alleen."
     evidence = (

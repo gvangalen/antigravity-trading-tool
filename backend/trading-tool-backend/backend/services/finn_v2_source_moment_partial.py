@@ -209,7 +209,7 @@ def render_source_moment_partial(
         lines.append("Een botplan beoordeelt daarnaast zijn eigen instapvoorwaarden; een rapportscore is geen koopopdracht.")
 
     positions: dict[tuple[int, str], set[str]] = {}
-    confirmed_position_assets: set[str] = set()
+    known_position_bots: set[tuple[int, str]] = set()
     for item in portfolio_reads:
         for bot in item["data"].get("bots") or []:
             if not isinstance(bot, dict) or bot.get("is_live") is not False:
@@ -234,11 +234,17 @@ def render_source_moment_partial(
         ) for item in eligible_reads)
         if present_in_all and quantities == {"0"} and asks_position:
             lines.append(f"In de gelezen Paper-portefeuille heeft bot #{bot_id} geen open {symbol}-positie (0 {symbol}).")
-            confirmed_position_assets.add(symbol)
+            known_position_bots.add((bot_id, symbol))
         elif present_in_all and len(quantities) == 1 and "unknown" not in quantities and "0" not in quantities:
             quantity = next(iter(quantities))
             lines.append(f"In de gelezen Paper-portefeuille staat bij bot #{bot_id} een open positie van {quantity} {symbol}.")
-            confirmed_position_assets.add(symbol)
+            known_position_bots.add((bot_id, symbol))
+
+    confirmed_position_assets = {
+        symbol for symbol in named_position_assets
+        if any(key[1] == symbol for key in positions)
+        and all(key in known_position_bots for key in positions if key[1] == symbol)
+    }
 
     if lines and len(pairs) == 1 and asks_bot and asks_position and not (asks_report or asks_scores):
         pair = next(iter(pairs))
