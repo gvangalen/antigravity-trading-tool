@@ -25,6 +25,7 @@ def requests_comparison(message: str) -> bool:
 def referenced_setup_rows(
     *, message: str, rows: list[dict[str, Any]],
     previous_contract: Mapping[str, Any] | None = None,
+    selection_origin: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     """Select positive names, or re-read the previously verified pair."""
     positive = []
@@ -36,6 +37,8 @@ def referenced_setup_rows(
         if match and not re.search(r"\b(?:niet|not|kein|zonder)\s*$", message[max(0, match.start() - 12):match.start()], re.I):
             positive.append(row)
     if len(positive) >= 2:
+        if selection_origin is not None:
+            selection_origin["kind"] = "named"
         return positive
     prior_ids = {
         target.get("setup_id") for target in (previous_contract or {}).get("targets") or []
@@ -49,6 +52,8 @@ def referenced_setup_rows(
     ):
         pair = [row for row in rows if row.get("setup_id") in prior_ids]
         if len(pair) == 2:
+            if selection_origin is not None:
+                selection_origin["kind"] = "prior_pair"
             return pair
     return positive if positive else rows
 
@@ -154,8 +159,10 @@ def build_turn_contract(
                     strategies[data["setup_id"]] = linked[0]
 
     all_rows = list(setups.values())
+    selection_origin: dict[str, str] = {}
     selected_rows = referenced_setup_rows(
         message=message, rows=all_rows, previous_contract=previous_contract,
+        selection_origin=selection_origin,
     )
     named_ids = [row["setup_id"] for row in selected_rows] if selected_rows is not all_rows else []
     prior_id = (previous_subject or {}).get("setup_id")
@@ -173,8 +180,8 @@ def build_turn_contract(
         if isinstance(target, dict) and isinstance(target.get("setup_id"), int)
     }
     comparison_targets_inherited = bool(
-        len(prior_pair_ids) == 2 and set(target_ids) == prior_pair_ids
-        and re.search(r"\b(?:die twee|deze twee|beide|allebei|those two|both)\b", message, re.I)
+        selection_origin.get("kind") == "prior_pair"
+        and len(prior_pair_ids) == 2 and set(target_ids) == prior_pair_ids
     )
     targets = []
     symbol_counts: dict[str, int] = {}
@@ -320,7 +327,10 @@ def turn_contract_gap(
         or re.search(r"\b(?:setups|plannen|strategieën|strategies|plans)\b", question, re.I)
         or contract.get("comparison_targets_inherited") is True
         or re.search(r"\b(?:die twee|deze twee|beide|allebei|those two|both)\b", question, re.I)
-        or not re.search(r"\b(?:rapport\w*|paaranalyse|positie\w*|portefeuille)\b", question, re.I)
+        or not re.search(
+            r"\b(?:rapport\w*|paaranalyse|positie\w*|portefeuille|score\w*|benchmark\w*)\b",
+            question, re.I,
+        )
     )
     # A typed answer can compare a report, pair scores and one linked bot plan
     # while the read bundle happens to contain several other saved setups.

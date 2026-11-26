@@ -165,6 +165,33 @@ def test_typed_recovery_still_requires_targets_for_saved_setup_comparison():
     assert turn_contract_gap(
         named_by_asset, "Het BTC-plan is gelezen.", typed_recovery=True,
     ) == "comparison_targets_missing"
+    reread_pair = build_turn_contract(
+        message="Vergelijk de vorige configuraties voor BTC/EUR en ETH/EUR op basis van het rapport",
+        tool_trace=({"result": {"results": [
+            {"scope": "read_active_setup", "status": "completed", "data": {
+                "setup_id": 12, "name": "BTC herstelplan", "symbol": "BTC",
+            }},
+            {"scope": "read_active_setup", "status": "completed", "data": {
+                "setup_id": 13, "name": "ETH weekplan", "symbol": "ETH",
+            }},
+        ]}},),
+        previous_contract=_cross_source_contract(),
+    )
+    assert reread_pair["comparison_targets_inherited"] is True
+    assert turn_contract_gap(
+        reread_pair, "Het BTC-plan is gelezen.", typed_recovery=True,
+    ) == "comparison_targets_missing"
+
+
+def test_typed_recovery_score_comparison_ignores_incidental_saved_setups():
+    contract = {
+        **_cross_source_contract(),
+        "question": "Vergelijk de scores van BTC/EUR en ETH/EUR.",
+    }
+    answer = "BTC/EUR heeft score 33,3/100; ETH/EUR heeft score 33,3/100."
+
+    assert turn_contract_gap(contract, answer) == "comparison_targets_missing"
+    assert turn_contract_gap(contract, answer, typed_recovery=True) is None
 
 
 def test_partial_answer_does_not_repeat_unread_eth_position_or_bot_status():
