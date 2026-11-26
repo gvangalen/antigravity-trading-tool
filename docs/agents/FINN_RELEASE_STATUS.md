@@ -6,7 +6,9 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: live vervolg op bronmomentantwoord (26 november 2026)
 
-Phase: `LOCAL_VALIDATED_REVIEW_PENDING`. Onafhankelijke ingelogde QA op
+Phase: `LOCAL_VALIDATED_CI_PASSED_DEPLOY_PENDING`. Reparatie-PR
+[#1388](https://github.com/gvangalen/antigravity-trading-tool/pull/1388).
+Onafhankelijke ingelogde QA op
 publieke SHA `6495d15c8d5184901bd3f09741ab7d857fa93295` gaf
 `NOT_ACCEPTED` voor de samengestelde BTC/EUR-, BTC/USDT- en ETH-vraag:
 run `finn-v2-run-a693e0be88fe4c2382cb10052f149c50` eindigde nog steeds
@@ -31,17 +33,20 @@ wordt nooit hergebruikt.
 
 Gemeten lokale gates: gerichte bronmomenttests **41/41**; volledige backend
 **5594 passed, 7 skipped** (log SHA-256
-`8ed902bf87252567f810dea2b3c1c421026643c6f5fdab9d08927905e7607976`).
+`42b301f6074e77f16c2e8947cb6e5b0e21c5285af984ee54dac6e9cadd3f1a11`).
 Geïsoleerde API/worker-actiecontractmatrix **17/17**, nul brokerorders,
 Live-calls en productieverbindingen (artifact SHA-256
-`db53e31d653856049cf5ff80e6967aa80cb52813c07dbb4bd7d3b262191cc46d`).
+`4bc3e1380c5897e6ba24e8a8b1b62924b31c4dced54a0e8570a07d04d289692e`).
 Echte providerselector development **20/20** (artifact SHA-256
-`616fc65490e8a56f293b4ae03e7a65dccccdd0eee64847e7bcbdcfcc8315ec18`)
+`be54043fec924dbb431fc127804ce2e5b0eeb60f44475d24b51ed7aab80b9300`)
 en regressie **109/109** (artifact SHA-256
-`0d62a8008a17bae3400c0ea1c98561d25a60d816e79e24e3313e04df63d969fa`),
+`9e4dd286cca108c371682b4e93446122e8d7ee65a4c8755f0c42f49200a55960`),
 allebei zonder provider-, schema-, timeout-, parse- of validatiefouten. De
 lokale stack en haar volume zijn opgeruimd. Frontendbron is niet gewijzigd.
-Onafhankelijke codebeoordeling, CI, deploypariteit en live hertest staan open.
+Onafhankelijke QA-codebeoordeling en Security vonden geen blocker op
+implementatiehead `919560277bb6fd83963017de93510dc7f6edbca8`.
+PR-CI `45881207857` slaagde. Main-CI, Auto Deploy, SHA-pariteit en
+ingelogde live hertest staan open.
 
 ## FINN 3.0: antwoord bij conflicterend bronmoment (26 november 2026)
 
