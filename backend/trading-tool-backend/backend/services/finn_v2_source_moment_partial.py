@@ -43,12 +43,13 @@ def _single(rows: list[Any]) -> Any | None:
 
 
 def _safe_reason(value: Any) -> str | None:
-    # Reasons can originate in saved user text. Keep only known machine codes.
+    # Match only fixed phrases emitted by our bot engine. Never echo source text.
     return {
-        "setup_mismatch": "de opgeslagen setupvoorwaarden sluiten niet aan",
-        "score_outside_band": "de score valt buiten de ingestelde band",
-        "benchmark_score_outside_band": "de score valt buiten de ingestelde band",
-    }.get(str(value or "").lower())
+        "Opgeslagen setupvoorwaarden passen niet bij de actuele benchmark.":
+            "de opgeslagen setupvoorwaarden niet bij de actuele benchmark passen",
+        "Opgeslagen setupvoorwaarden passen niet bij de actuele scores.":
+            "de opgeslagen setupvoorwaarden niet bij de actuele scores passen",
+    }.get(value) if isinstance(value, str) else None
 
 
 def render_source_moment_partial(
@@ -83,7 +84,7 @@ def render_source_moment_partial(
               and str(item["data"].get("symbol") or "").upper() == bot_asset]
     selected_bot = _single(linked)
     bot_pair = str((selected_bot or {}).get("trading_pair") or (selected_bot or {}).get("pair") or "").upper()
-    pair_bound = len(pairs) < 2 or bot_pair in pairs
+    pair_bound = not pairs or bot_pair in pairs
     if len(requested_bot_ids) == 1:
         bot_id = next(iter(requested_bot_ids))
         status_rows = [item["data"] for item in completed
@@ -103,7 +104,7 @@ def render_source_moment_partial(
                      if isinstance(row, dict) and row.get("bot_id") == bot_id
                      and str(row.get("symbol") or "").upper() == bot_asset
                      and pair_bound
-                     and (len(pairs) < 2 or str(row.get("pair") or "").upper() == bot_pair)
+                     and (not pairs or str(row.get("pair") or "").upper() == bot_pair)
                      and (not paper_requested or row.get("is_live") is False)]
         actions = {str(row.get("action") or "").lower() for row in decisions}
         if len(actions) == 1:
@@ -111,11 +112,13 @@ def render_source_moment_partial(
             if action in {"hold", "wait", "blocked"}:
                 lines.append(f"De laatst gelezen beslissing voor bot #{bot_id} is wachten; dat is geen uitgevoerde koop.")
 
-        reasons = [_safe_reason(row.get("safety_reason_code") or row.get("reason_code"))
+        reasons = [_safe_reason(row.get("safety_reason"))
                    for row in decisions]
         reason = _single(reasons)
         if reason:
-            lines.append(f"De opgeslagen blokkeringscode zegt dat {reason}.")
+            lines.append(f"De opgeslagen botreden is dat {reason}.")
+        elif actions == {"hold"}:
+            lines.append("De concrete reden voor dit wachtbesluit kan ik uit de gecontroleerde velden hier niet bevestigen.")
 
     reports = [item["data"] for item in completed if item.get("scope") == "read_latest_report"
                and item["data"].get("report_type") == "daily_reports"]

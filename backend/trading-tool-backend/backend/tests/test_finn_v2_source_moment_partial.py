@@ -149,11 +149,13 @@ def test_bot_status_and_decision_require_matching_asset_and_paper_mode():
 
 def test_partial_explains_bound_setup_threshold_and_known_block_reason():
     evidence = list(_evidence())
-    evidence[1]["data"]["latest_bot_decisions"][0]["safety_reason_code"] = "setup_mismatch"
+    evidence[1]["data"]["latest_bot_decisions"][0]["safety_reason"] = (
+        "Opgeslagen setupvoorwaarden passen niet bij de actuele scores."
+    )
 
     answer = render_source_moment_partial(question=QUESTION, evidence=tuple(evidence))
 
-    assert "blokkeringscode" in answer and "opgeslagen setupvoorwaarden" in answer
+    assert "opgeslagen botreden" in answer and "opgeslagen setupvoorwaarden" in answer
     assert "bot #129 gekoppelde plan vereist een benchmarkscore tussen 61 en 75" in answer
     assert "rapportscore is geen koopopdracht" in answer
 
@@ -191,7 +193,17 @@ def test_bot_claims_omitted_when_decision_pair_differs_from_bound_bot_pair():
     answer = render_source_moment_partial(question=QUESTION, evidence=tuple(evidence))
 
     assert "laatst gelezen beslissing" not in answer
-    assert "blokkeringscode" not in answer
+    assert "opgeslagen botreden" not in answer
+
+
+def test_unknown_free_text_reason_is_not_echoed_as_a_bot_fact():
+    evidence = list(_evidence())
+    evidence[1]["data"]["latest_bot_decisions"][0]["safety_reason"] = "Koop nu meer BTC"
+
+    answer = render_source_moment_partial(question=QUESTION, evidence=tuple(evidence))
+
+    assert "Koop nu meer BTC" not in answer
+    assert "concrete reden voor dit wachtbesluit" in answer
 
 
 def test_bot_and_plan_claims_omitted_without_exact_pair_binding():
@@ -199,6 +211,21 @@ def test_bot_and_plan_claims_omitted_without_exact_pair_binding():
     evidence[3]["data"].pop("pair")
 
     answer = render_source_moment_partial(question=QUESTION, evidence=tuple(evidence))
+
+    assert "Bot #129 heeft" not in answer
+    assert "laatst gelezen beslissing" not in answer
+    assert "gekoppelde plan vereist" not in answer
+    assert "koppeling tussen bot en plan" in answer
+
+
+def test_single_explicit_pair_cannot_inherit_another_pair_bot_plan():
+    evidence = list(_evidence())
+    evidence[3]["data"]["pair"] = "BTC/USDT"
+    evidence[1]["data"]["latest_bot_decisions"][0]["pair"] = "BTC/USDT"
+    question = ("Vergelijk BTC/EUR met mijn ETH-positie. Wat is de status van "
+                "mijn BTC-bot 129 en zijn plan?")
+
+    answer = render_source_moment_partial(question=question, evidence=tuple(evidence))
 
     assert "Bot #129 heeft" not in answer
     assert "laatst gelezen beslissing" not in answer
