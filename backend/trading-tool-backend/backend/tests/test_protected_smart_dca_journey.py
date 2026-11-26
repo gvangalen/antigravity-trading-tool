@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import inspect
 import os
 import subprocess
@@ -52,20 +53,54 @@ def test_setup_must_be_complete_score_trigger_without_buy_day():
 
 
 def test_bot_proposal_rejects_wrong_parent_live_or_cash():
-    name = probe._names(NAMESPACE)[1]
+    setup_name, name = probe._names(NAMESPACE)
+    assert probe._expected_amount_bounds(setup_name) == (100, 300)
     correct = {"strategy_id": 11, "name": name, "symbol": "BTC",
                "mode": "manual", "is_live": False, "is_active": True,
-               "budget_total_eur": 200, "paper_initial_cash_eur": 0}
-    assert probe._safe_bot(correct, 11, name)
+               "budget_total_eur": 300, "paper_initial_cash_eur": 0}
+    assert probe._safe_bot(correct, 11, name, setup_name)
     for key, value in (("strategy_id", 12), ("symbol", "AAPL"),
                        ("mode", "automatic"), ("is_live", True),
                        ("is_active", False), ("paper_initial_cash_eur", 200),
-                       ("budget_total_eur", 100), ("name", "other")):
-        assert not probe._safe_bot({**correct, key: value}, 11, name)
+                       ("budget_total_eur", 200), ("budget_daily_limit_eur", 200),
+                       ("budget_max_order_eur", 200), ("budget_min_order_eur", 101),
+                       ("name", "other")):
+        assert not probe._safe_bot({**correct, key: value}, 11, name, setup_name)
+    assert probe._safe_bot({**correct, "budget_daily_limit_eur": 300,
+                            "budget_max_order_eur": 300,
+                            "budget_min_order_eur": 100}, 11, name, setup_name)
 
 
-@pytest.mark.parametrize("bad", ["score_source", "fourth_point", "strategy_pair",
-                                  "bot_pair", "market_asset", "bot_inactive"])
+def test_bot_execution_diagnostic_only_emits_allowlisted_values(monkeypatch):
+    async def failed(_user_id, _proposal_id, _namespace, _operation, _field_key,
+                     _is_safe, _trace, diagnostic):
+        diagnostic["stage"] = "first_execute"
+        diagnostic["first_status"] = probe._safe_status("failed")
+        diagnostic["first_codes"] = probe._safe_codes([
+            "De totale botlimiet moet minstens €300 zijn voor dit DCA-plan.",
+            "private fixture value", "bot_action_disabled",
+        ])
+        raise RuntimeError("private fixture value")
+
+    monkeypatch.setattr(probe, "_confirm_configuration_impl", failed)
+    trace = {}
+    with pytest.raises(RuntimeError, match="private fixture value"):
+        asyncio.run(probe._confirm_configuration(
+            42, "private-proposal", NAMESPACE, "create_bot", "bot_fields",
+            lambda _: True, trace,
+        ))
+    assert trace["bot_execution_diagnostic"] == {
+        "stage": "first_execute", "first_status": "failed",
+        "first_codes": ["bot_action_disabled", "bot_budget_below_plan", "other"],
+        "replay_status": "not_called", "replay_codes": [],
+        "exception_class": "RuntimeError", "exception_stage": "first_execute",
+    }
+    assert "private" not in str(trace)
+
+
+@pytest.mark.parametrize("bad", [None, "score_source", "fourth_point", "strategy_pair",
+                                  "bot_pair", "market_asset", "bot_inactive",
+                                  "bot_budget_low", "bot_daily_low", "bot_order_low"])
 def test_saved_contract_rejects_wrong_curve_or_pair(monkeypatch, bad):
     name, bot_name = probe._names(NAMESPACE)
     curve = probe._expected_curve(name)
@@ -79,7 +114,10 @@ def test_saved_contract_rejects_wrong_curve_or_pair(monkeypatch, bad):
                 78 if bad == "strategy_pair" else 77,
                 {"dca_amount_semantics": "planned_exact"})
     bot = (13, 12, bot_name, "BTC", "manual", False,
-           bad != "bot_inactive", 0, 200, 78 if bad == "bot_pair" else 77)
+           bad != "bot_inactive", 0, 200 if bad == "bot_budget_low" else 300,
+           78 if bad == "bot_pair" else 77,
+           200 if bad == "bot_daily_low" else 0, 0,
+           200 if bad == "bot_order_low" else 0)
 
     class Cursor:
         last = ""
@@ -114,8 +152,13 @@ def test_saved_contract_rejects_wrong_curve_or_pair(monkeypatch, bad):
         **{table: 0 for table in (*probe.TRADE_TABLES, "bot_portfolios", "exchange_keys")},
         "setups": 1, "strategies": 1, "bot_configs": 1,
     })
-    with pytest.raises(RuntimeError, match="smart_dca_journey_fixture_unsafe"):
-        probe._saved(42, NAMESPACE)
+    if bad is None:
+        assert probe._saved(42, NAMESPACE) == {
+            "setup_id": 11, "strategy_id": 12, "bot_id": 13,
+        }
+    else:
+        with pytest.raises(RuntimeError, match="smart_dca_journey_fixture_unsafe"):
+            probe._saved(42, NAMESPACE)
 
 
 def test_cleanup_stops_before_delete_and_quarantines_on_unexpected_child(monkeypatch):

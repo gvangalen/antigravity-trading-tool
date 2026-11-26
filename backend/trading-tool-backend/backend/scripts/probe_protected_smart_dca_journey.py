@@ -17,6 +17,18 @@ from backend.scripts import probe_protected_aapl_bot_crud as bot_reference
 
 MARKER = "finn_smart_dca_journey_qa_v1"
 FLAG = "FINN_QA_ALLOW_SMART_DCA_JOURNEY"
+EXECUTION_STATUSES = frozenset({"started", "blocked", "succeeded", "failed", "already_executed"})
+EXECUTION_CODES = frozenset({
+    "proposal_not_confirmed", "proposal_expired", "proposal_payload_hash_mismatch",
+    "proposal_evidence_hash_mismatch", "step_up_required", "kill_switch_enabled",
+    "feature_disabled", "bot_action_disabled", "live_action_disabled",
+    "shadow_mode_execution_blocked",
+})
+EXCEPTION_CLASSES = frozenset({
+    "AttributeError", "DataError", "IntegrityError", "KeyError", "LookupError",
+    "OperationalError", "ProgrammingError", "RuntimeError", "TimeoutError",
+    "TypeError", "ValueError",
+})
 FAILURES = frozenset({
     "smart_dca_journey_not_authorized", "smart_dca_journey_fixture_unsafe",
     "smart_dca_journey_setup_proposal_missing", "smart_dca_journey_setup_proposal_unsafe",
@@ -49,6 +61,40 @@ def _expected_curve(name: str) -> dict:
     from backend.domain.finn_dca_plan_contract import split_confirmed_dca_plan
 
     return split_confirmed_dca_plan(_expected_setup_fields(name))[1]["decision_curve"]
+
+
+def _expected_amount_bounds(name: str) -> tuple[float, float]:
+    from backend.domain.finn_dca_plan_contract import (
+        confirmed_dca_amount_bounds, split_confirmed_dca_plan,
+    )
+
+    _, strategy = split_confirmed_dca_plan(_expected_setup_fields(name))
+    bounds = confirmed_dca_amount_bounds({"setup_type": "dca", **strategy})
+    if bounds is None:
+        raise RuntimeError("smart_dca_journey_fixture_unsafe")
+    return bounds
+
+
+def _safe_status(value: object) -> str:
+    return value if isinstance(value, str) and value in EXECUTION_STATUSES else "other"
+
+
+def _safe_codes(value: object) -> list[str]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    safe = set()
+    for value_item in value[:8]:
+        if isinstance(value_item, str) and value_item in EXECUTION_CODES:
+            safe.add(value_item)
+        elif isinstance(value_item, str) and "totale botlimiet" in value_item.lower():
+            safe.add("bot_budget_below_plan")
+        elif isinstance(value_item, str) and "daglimiet en maximale order" in value_item.lower():
+            safe.add("bot_order_limits_below_plan")
+        elif isinstance(value_item, str) and "paper-bot heeft minstens" in value_item.lower():
+            safe.add("paper_cash_below_plan")
+        else:
+            safe.add("other")
+    return sorted(safe)
 
 
 def _bound_owner(namespace: str) -> int:
@@ -146,7 +192,8 @@ def _saved(user_id: int, namespace: str, *, connection=None, locked: bool = Fals
                               FROM strategies WHERE user_id=%s{suffix}""", (user_id,))
             strategies = cursor.fetchall()
             cursor.execute(f"""SELECT id,strategy_id,name,symbol,mode,is_live,is_active,
-                                     paper_initial_cash_eur,budget_total_eur,market_id
+                                     paper_initial_cash_eur,budget_total_eur,market_id,
+                                     budget_daily_limit_eur,budget_min_order_eur,budget_max_order_eur
                               FROM bot_configs WHERE user_id=%s{suffix}""", (user_id,))
             bots = cursor.fetchall()
         if (setups and (len(setups) != 1
@@ -184,7 +231,7 @@ def _saved(user_id: int, namespace: str, *, connection=None, locked: bool = Fals
             if (row[1] != strategies[0][0] or row[2:6] !=
                     (bot_name, "BTC", "manual", False)
                     or row[6] is not True
-                    or float(row[7] or 0) != 0 or float(row[8] or 0) != 200
+                    or not _safe_bot_limits(row[7], row[8], row[10], row[11], row[12], setup_name)
                     or row[9] != setups[0][10]):
                 raise RuntimeError("smart_dca_journey_fixture_unsafe")
         return {"setup_id": setups[0][0] if setups else None,
@@ -259,7 +306,7 @@ def _safe_setup(fields: object, name: str) -> bool:
             and fields.get("max_benchmark_score") in (None, 100))
 
 
-def _safe_bot(fields: object, strategy_id: int, name: str) -> bool:
+def _safe_bot(fields: object, strategy_id: int, name: str, setup_name: str) -> bool:
     if not isinstance(fields, dict):
         return False
     from backend.schemas.bot_schema import BotConfigCreateSchema
@@ -270,7 +317,24 @@ def _safe_bot(fields: object, strategy_id: int, name: str) -> bool:
     return (bot.strategy_id == strategy_id and bot.name == name
             and bot.symbol in (None, "BTC") and bot.mode == "manual"
             and bot.is_live is False and bot.is_active is True
-            and bot.paper_initial_cash_eur == 0 and bot.budget_total_eur == 200)
+            and _safe_bot_limits(
+                bot.paper_initial_cash_eur, bot.budget_total_eur,
+                bot.budget_daily_limit_eur, bot.budget_min_order_eur,
+                bot.budget_max_order_eur, setup_name,
+            ))
+
+
+def _safe_bot_limits(cash: object, total: object, daily: object,
+                     minimum: object, maximum: object, setup_name: str) -> bool:
+    try:
+        minimum_plan, maximum_plan = _expected_amount_bounds(setup_name)
+        return (float(cash or 0) == 0
+                and float(total or 0) == maximum_plan
+                and (float(daily or 0) == 0 or float(daily) >= maximum_plan)
+                and 0 <= float(minimum or 0) <= minimum_plan
+                and (float(maximum or 0) == 0 or float(maximum) >= maximum_plan))
+    except (TypeError, ValueError):
+        return False
 
 
 async def _proposal_fields(user_id: int, proposal_id: str, operation: str, key: str) -> object:
@@ -365,7 +429,8 @@ async def _case(namespace: str, owner: int, trace: dict) -> dict:
             user_id,
             f"Maak een handmatige Paper-botconfiguratie met naam {bot_name} voor mijn "
             f"bestaande BTC/USDT-strategie {setup_name} Strategy bij setup {setup_name}. "
-            "Totaalbudget 200 euro en Paper-startkapitaal 0 euro. Toon eerst een voorstel; "
+            f"Totaalbudget {_expected_amount_bounds(setup_name)[1]:g} euro en "
+            "Paper-startkapitaal 0 euro. Toon eerst een voorstel; "
             "plaats geen order en activeer geen live trading.",
             conversation_id=conversation,
         )
@@ -375,7 +440,7 @@ async def _case(namespace: str, owner: int, trace: dict) -> dict:
                 or proposed_bot["operation"] != "create_bot"):
             raise RuntimeError("smart_dca_journey_bot_proposal_missing")
         fields = await _proposal_fields(user_id, proposed_bot["proposal_id"], "create_bot", "bot_fields")
-        if not _safe_bot(fields, saved["strategy_id"], bot_name):
+        if not _safe_bot(fields, saved["strategy_id"], bot_name, setup_name):
             raise RuntimeError("smart_dca_journey_bot_proposal_unsafe")
         if _saved(user_id, namespace)["bot_id"] is not None:
             raise RuntimeError("smart_dca_journey_postcondition_failed")
@@ -384,7 +449,7 @@ async def _case(namespace: str, owner: int, trace: dict) -> dict:
         first, replay, result_conversation = await _confirm_configuration(
             user_id, proposed_bot["proposal_id"], namespace, "create_bot",
             "bot_fields",
-            lambda fields: _safe_bot(fields, saved["strategy_id"], bot_name), trace)
+            lambda fields: _safe_bot(fields, saved["strategy_id"], bot_name, setup_name), trace)
         trace["bot_confirmed"] = True
         trace["bot_execution_succeeded"] = first == "succeeded"
         if (first != "succeeded" or replay != "already_executed"
@@ -414,20 +479,45 @@ async def _case(namespace: str, owner: int, trace: dict) -> dict:
 async def _confirm_configuration(user_id: int, proposal_id: str, namespace: str,
                                  operation: str, field_key: str, is_safe,
                                  trace: dict) -> tuple[str, str, str | None]:
+    diagnostic = {
+        "stage": "proposal_lookup", "first_status": "not_called", "first_codes": [],
+        "replay_status": "not_called", "replay_codes": [],
+        "exception_class": None, "exception_stage": None,
+    }
+    if operation == "create_bot":
+        trace["bot_execution_diagnostic"] = diagnostic
+    try:
+        return await _confirm_configuration_impl(
+            user_id, proposal_id, namespace, operation, field_key, is_safe,
+            trace, diagnostic,
+        )
+    except Exception as error:
+        name = type(error).__name__
+        diagnostic["exception_class"] = name if name in EXCEPTION_CLASSES else "other"
+        diagnostic["exception_stage"] = diagnostic["stage"]
+        raise
+
+
+async def _confirm_configuration_impl(user_id: int, proposal_id: str, namespace: str,
+                                      operation: str, field_key: str, is_safe,
+                                      trace: dict, diagnostic: dict) -> tuple[str, str, str | None]:
     from backend.infrastructure.database import async_session_factory
     from backend.infrastructure.repositories.finn_v2_proposal_repository import FinnV2ProposalRepository
     from backend.schemas.finn_v2_confirmation_schema import FinnV2ConfirmationRequest
     from backend.services.finn_v2_confirmation_service import FinnV2ConfirmationService
     from backend.services.finn_v2_execution_service import FinnV2ExecutionService
 
+    diagnostic["stage"] = "preflight"
     _snapshot(user_id, namespace)
     async with async_session_factory() as session:
+        diagnostic["stage"] = "proposal_lookup"
         proposal = await FinnV2ProposalRepository(session).get_by_id_for_user(
             proposal_id=proposal_id, user_id=user_id)
         fields = ((proposal.payload_json or {}).get("change") or {}).get(field_key) if proposal else None
         if proposal is None or proposal.operation_type != operation or not is_safe(fields):
             raise RuntimeError("smart_dca_journey_fixture_unsafe")
         payload_hash = proposal.payload_hash
+        diagnostic["stage"] = "confirmation"
         token, _ = await FinnV2ConfirmationService(session).issue_confirmation_token(
             proposal_id=proposal_id, user_id=user_id)
         confirmed = await FinnV2ConfirmationService(session).confirm(
@@ -440,6 +530,7 @@ async def _confirm_configuration(user_id: int, proposal_id: str, namespace: str,
     trace["confirmed_count"] = trace.get("confirmed_count", 0) + 1
     _snapshot(user_id, namespace)
     key = f"qa-smart-dca-bot-{uuid.uuid4().hex}"
+    diagnostic["stage"] = "first_execute"
     async with async_session_factory() as session:
         proposal = await FinnV2ProposalRepository(session).get_by_id_for_user(
             proposal_id=proposal_id, user_id=user_id)
@@ -450,13 +541,19 @@ async def _confirm_configuration(user_id: int, proposal_id: str, namespace: str,
         first = await FinnV2ExecutionService(session).execute(
             proposal_id=proposal_id, user_id=user_id,
             idempotency_key=key, expected_payload_hash=payload_hash)
+        diagnostic["first_status"] = _safe_status(first.status)
+        diagnostic["first_codes"] = _safe_codes(getattr(first, "error_codes", None))
     if first.status == "succeeded":
         trace["executed_count"] = trace.get("executed_count", 0) + 1
     _snapshot(user_id, namespace)
+    diagnostic["stage"] = "replay_execute"
     async with async_session_factory() as session:
         replay = await FinnV2ExecutionService(session).execute(
             proposal_id=proposal_id, user_id=user_id,
             idempotency_key=key, expected_payload_hash=payload_hash)
+        diagnostic["replay_status"] = _safe_status(replay.status)
+        diagnostic["replay_codes"] = _safe_codes(getattr(replay, "error_codes", None))
+    diagnostic["stage"] = "replay_check"
     return first.status, replay.status, first.conversation_id
 
 
@@ -485,6 +582,8 @@ def run(namespace: str) -> dict:
             result["nonfinancial_executions"] = (
                 None if trace.get("bot_confirmation_started") and bot_known is None
                 else trace.get("executed_count", 0))
+            if "bot_execution_diagnostic" in trace:
+                result["bot_execution_diagnostic"] = trace["bot_execution_diagnostic"]
             result["live_calls"] = len(live_attempts)
             if live_attempts:
                 result["result"] = "FAIL"
