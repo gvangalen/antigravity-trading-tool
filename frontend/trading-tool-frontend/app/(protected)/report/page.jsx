@@ -460,6 +460,7 @@ function getTradingReportPanelCopy(locale = 'nl', description = '') {
       expandedCta: 'Hide full market report',
       summaryFallback: 'Open the full market report for the latest market context and setup guidance.',
       statusReady: 'Ready',
+      statusUnavailable: 'Not saved yet',
     };
   }
   if (normalized.startsWith('de')) {
@@ -471,6 +472,7 @@ function getTradingReportPanelCopy(locale = 'nl', description = '') {
       expandedCta: 'Vollständigen Marktbericht ausblenden',
       summaryFallback: 'Öffne den vollständigen Marktbericht für den aktuellen Marktkontext und Setup-Hinweise.',
       statusReady: 'Bereit',
+      statusUnavailable: 'Noch nicht gespeichert',
     };
   }
   return {
@@ -481,6 +483,7 @@ function getTradingReportPanelCopy(locale = 'nl', description = '') {
     expandedCta: 'Verberg volledig marktrapport',
     summaryFallback: 'Open het volledige marktrapport voor de laatste marktcontext en setup-richting.',
     statusReady: 'Klaar',
+    statusUnavailable: 'Nog niet opgeslagen',
   };
 }
 
@@ -2143,7 +2146,9 @@ RENDER
                       <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">
                         <span>{reportT.hudPeriod}: {reportV2PeriodLabel(report, locale)}</span>
                         <span className="h-1 w-1 rounded-full bg-slate-300" />
-                        <span>{reportV2PeriodState(report, locale) || tradingPanelCopy.statusReady}</span>
+                        <span>{report?.report_date
+                          ? reportV2PeriodState(report, locale) || tradingPanelCopy.statusReady
+                          : tradingPanelCopy.statusUnavailable}</span>
                       </div>
                   </div>
                 </div>
