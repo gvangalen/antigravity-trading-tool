@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: live vervolg op bronmomentantwoord (26 november 2026)
 
-Phase: `LOCAL_VALIDATED_CI_PASSED_DEPLOY_PENDING`. Reparatie-PR
+Phase: `LIVE_CANDIDATE_QA_PENDING`. Reparatie-PR
 [#1388](https://github.com/gvangalen/antigravity-trading-tool/pull/1388).
 Onafhankelijke ingelogde QA op
 publieke SHA `6495d15c8d5184901bd3f09741ab7d857fa93295` gaf
@@ -45,8 +45,13 @@ allebei zonder provider-, schema-, timeout-, parse- of validatiefouten. De
 lokale stack en haar volume zijn opgeruimd. Frontendbron is niet gewijzigd.
 Onafhankelijke QA-codebeoordeling en Security vonden geen blocker op
 implementatiehead `919560277bb6fd83963017de93510dc7f6edbca8`.
-PR-CI `45881207857` slaagde. Main-CI, Auto Deploy, SHA-pariteit en
-ingelogde live hertest staan open.
+PR-CI `45881207857` en de definitieve documentatiehead-CI `45883961600`
+slaagden. Main-CI `45884974376` en Auto Deploy `45885937329` slaagden.
+GitHub main, publieke backend `/api/health` en frontend `/build-info.json`
+toonden daarna alle drie exact `e88346682867b37453f8aadea1487b5a107733c2`;
+beide endpoints gaven HTTP 200. De ingelogde live hertest staat nog open.
+Deze statuscommit creëert zelf een nieuwe publieke SHA; haar main-CI,
+Auto Deploy en SHA-pariteit moeten vóór QA opnieuw slagen.
 
 ## FINN 3.0: antwoord bij conflicterend bronmoment (26 november 2026)
 
