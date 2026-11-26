@@ -2062,8 +2062,12 @@ def _minimal_read_answer(
             question=message, evidence=current_evidence,
             locale=getattr(prepared, "locale", "nl"),
         )
+        if partial and not current_source_moments_supported(
+            partial, current_evidence, question=message, typed_recovery=True,
+        ):
+            partial = "Welk handelspaar wil je eerst laten controleren?"
         if partial and current_source_moments_supported(
-            partial, current_evidence, question=message,
+            partial, current_evidence, question=message, typed_recovery=True,
         ):
             text = partial
         else:

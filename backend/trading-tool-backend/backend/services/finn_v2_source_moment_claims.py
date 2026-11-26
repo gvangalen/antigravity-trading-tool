@@ -97,6 +97,7 @@ def _same_moment(claim: tuple[datetime, bool], observed: datetime) -> bool:
 
 def _bot_decision_clocks_supported(
     answer: str, evidence: tuple[dict[str, Any], ...], *, question: str | None = None,
+    typed_recovery: bool = False,
 ) -> bool:
     """Check bot clocks in prose against saved report or current decision rows."""
     decisions: list[tuple[int | None, str, datetime]] = []
@@ -216,7 +217,16 @@ def _bot_decision_clocks_supported(
         # match the owner-scoped decision read for that bot.
         latest_claim = bool(re.search(r"\b(?:laatste|nieuwste|actuele|huidige|latest|current)\b", clause, re.I))
         report_claim = bool(re.search(r"\b(?:dagrapport|ochtendrapport|rapportmomentopname|rapport)\b", clause, re.I))
-        if (latest_claim or current_requested) and not report_claim:
+        decision_claim = bool(re.search(
+            r"\b(?:besluit\w*|besliss\w*|beoordel\w*|hold)\b", clause, re.I,
+        ))
+        has_clock_claim = bool(_DATED_MOMENT.search(clause) or _ZONED_CLOCK.search(clause))
+        # Only the deterministic, typed-read recovery may distinguish its
+        # clockless status/plan sentences from a current decision claim.
+        # Free model text keeps the stricter original boundary.
+        needs_current = ((latest_claim or current_requested) and not report_claim
+                         and (not typed_recovery or decision_claim or has_clock_claim))
+        if needs_current:
             current = [(bot_id, symbol, at) for bot_id, symbol, at in current_decisions
                        if not ids or bot_id in ids]
             named_current = [(bot_id, symbol, at) for bot_id, symbol, at in current
@@ -414,6 +424,7 @@ def complete_requested_bot_status_read_time(
 def current_source_moments_supported(
     answer: str, evidence: tuple[dict[str, Any], ...], *, question: str | None = None,
     diagnostics: list[str] | None = None,
+    typed_recovery: bool = False,
 ) -> bool:
     """Check stated quote, portfolio and report times against their own reads."""
     def reject(rule: str) -> bool:
@@ -421,7 +432,9 @@ def current_source_moments_supported(
             diagnostics.append(rule)
         return False
 
-    if not _bot_decision_clocks_supported(answer, evidence, question=question):
+    if not _bot_decision_clocks_supported(
+        answer, evidence, question=question, typed_recovery=typed_recovery,
+    ):
         return reject("bot_decision_clock_mismatch")
 
     # A shared status/portfolio sentence asserts one clock for two independent

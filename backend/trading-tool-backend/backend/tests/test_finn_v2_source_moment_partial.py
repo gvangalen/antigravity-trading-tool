@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 from backend.services.finn_v2_run_service import _minimal_read_answer
+from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
 from backend.services.finn_v2_source_moment_partial import render_source_moment_partial
 
 
@@ -86,6 +87,48 @@ def test_multi_asset_wrong_clock_recovers_only_owner_read_facts():
     assert "0,00644603 ETH" in answer.text
     assert "geen nieuwe koop onderbouwen" in answer.text
     assert answer.text.endswith("Wil je dat ik de handmatige preview en de bijbehorende setup apart controleer?")
+
+
+def test_saved_report_bot_decision_preserves_clockless_status_and_plan_facts():
+    evidence = [item for item in _evidence() if item["scope"] != "read_review_history"]
+    report = next(item for item in evidence if item["scope"] == "read_latest_report")
+    report["data"]["score_source_snapshot"]["report_v2"] = {"automation": {"bots": [{
+        "bot_id": 129, "symbol": "BTC", "latest_decision": {
+            "at": "2026-11-26T05:00:00+00:00",
+        },
+    }]}}
+    prepared = SimpleNamespace(
+        locale="nl", previous_response=None,
+        response=SimpleNamespace(
+            text="Bot #129 is voor het laatst beoordeeld op 26 november 2026 om 10:00 CET.",
+            tool_trace=({"name": "get_decision_history", "result": {
+                "results": evidence,
+            }},),
+            uses_previous_response=False,
+            turn_contract=None,
+        ),
+    )
+
+    answer = _minimal_read_answer(message=QUESTION, prepared=prepared)
+
+    assert answer.status == "completed", (answer.reason, answer.rejection_details)
+    assert "rapportmomentopname staat voor BTC/EUR benchmarkscore 36,7/100" in answer.text
+    assert "BTC/EUR heeft benchmarkscore 35/100" in answer.text
+    assert "0,00644603 ETH" in answer.text
+    assert "Bot #129 heeft volgens de gelezen botstatus de status gepauzeerd" in answer.text
+    assert "Het gelezen dagrapport is een opgeslagen momentopname" in answer.text
+    assert "gekoppelde plan vereist een benchmarkscore tussen 61 en 75" in answer.text
+    assert "geen nieuwe koop onderbouwen" in answer.text
+    assert "handmatige preview en de bijbehorende setup apart controleer" in answer.text
+    assert "10:00 CET" not in answer.text
+    assert not current_source_moments_supported(
+        "De laatste beslissing voor bot #129 is wachten.", tuple(evidence),
+        question=QUESTION,
+    )
+    assert not current_source_moments_supported(
+        "Het laatste botsignaal voor bot #129 is positief.", tuple(evidence),
+        question=QUESTION,
+    )
 
 
 def test_partial_answer_does_not_repeat_unread_eth_position_or_bot_status():
