@@ -141,6 +141,11 @@ def test_contract_recovery_does_not_bind_btc_eur_to_btc_usdt_bot():
     evidence = list(_evidence())
     linked = next(item for item in evidence if item["scope"] == "read_linked_bot")
     linked["data"] = {**linked["data"], "pair": "BTC/USDT"}
+    portfolio = next(item for item in evidence if item["scope"] == "read_portfolio")
+    portfolio["data"]["bots"].append({
+        "bot_id": 129, "symbol": "BTC", "is_live": False,
+        "operational_status": "active",
+    })
     prepared = SimpleNamespace(
         locale="nl", previous_response=None,
         response=SimpleNamespace(
@@ -160,6 +165,7 @@ def test_contract_recovery_does_not_bind_btc_eur_to_btc_usdt_bot():
     assert "0,00644603 ETH" in answer.text
     assert "gekoppelde plan vereist" not in answer.text
     assert "Bot #129 heeft volgens de gelezen botstatus" not in answer.text
+    assert "bot #129 op actief" not in answer.text
     assert answer.text.endswith(
         "Bot #129 is gelezen voor BTC/USDT; wil je de voorwaarden voor dat handelspaar apart laten controleren?"
     )

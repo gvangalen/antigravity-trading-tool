@@ -104,7 +104,7 @@ def render_source_moment_partial(
             if status in {"active", "paused"}:
                 translated = "actief" if status == "active" else "gepauzeerd"
                 lines.append(f"Bot #{bot_id} heeft volgens de gelezen botstatus de status {translated}.")
-        elif not status_rows:
+        elif not status_rows and (selected_bot is None or pair_bound):
             portfolio_bot_rows = [bot for item in portfolio_reads
                                   for bot in item["data"].get("bots") or []
                                   if isinstance(bot, dict) and bot.get("bot_id") == bot_id
