@@ -132,6 +132,37 @@ def test_cross_source_contract_gap_recovers_owner_read_partial_answer():
     assert "Ik heb je vraag nog niet volledig beantwoord" not in answer.text
 
 
+def test_contract_recovery_does_not_bind_btc_eur_to_btc_usdt_bot():
+    question = (
+        "Vergelijk BTC/EUR met mijn open ETH-positie. Wat is de status van mijn "
+        "BTC-bot 129 en welke planvoorwaarden horen bij die bot? Vermeng geen "
+        "verschillende handelspaarbronnen. Lees alleen."
+    )
+    evidence = list(_evidence())
+    linked = next(item for item in evidence if item["scope"] == "read_linked_bot")
+    linked["data"] = {**linked["data"], "pair": "BTC/USDT"}
+    prepared = SimpleNamespace(
+        locale="nl", previous_response=None,
+        response=SimpleNamespace(
+            text="Ik kan hiermee geen nieuwe koop onderbouwen.",
+            tool_trace=({"name": "get_decision_history", "result": {
+                "results": evidence,
+            }},),
+            uses_previous_response=False,
+            turn_contract={**_cross_source_contract(), "question": question},
+        ),
+    )
+
+    answer = _minimal_read_answer(message=question, prepared=prepared)
+
+    assert answer.status == "completed", (answer.reason, answer.rejection_details)
+    assert "BTC/EUR heeft benchmarkscore 35/100" in answer.text
+    assert "0,00644603 ETH" in answer.text
+    assert "gekoppelde plan vereist" not in answer.text
+    assert "Bot #129 heeft volgens de gelezen botstatus" not in answer.text
+    assert answer.text.endswith("Welk handelspaar bedoel je voor bot #129?")
+
+
 def test_saved_setup_comparison_does_not_use_cross_source_contract_recovery():
     question = "Vergelijk mijn BTC-setup en ETH-setup."
     prepared = SimpleNamespace(
