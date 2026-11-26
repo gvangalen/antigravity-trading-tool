@@ -20,8 +20,8 @@ function formatQuote(value, currency, locale) {
   return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 8 }).format(number(value))} ${currency || ''}`.trim();
 }
 
-function formatDate(value, locale) {
-  return formatTradeReviewDate(value, locale);
+function formatDate(value, locale, timeZone) {
+  return formatTradeReviewDate(value, locale, timeZone);
 }
 
 function sourceLabel(sources, copy) {
@@ -43,7 +43,7 @@ function PlanFacts({ plan, copy }) {
   return <details open={Boolean(plan.source_levels)} className="mt-3"><summary className="cursor-pointer text-sm font-semibold text-blue-700 dark:text-blue-300">{copy.planDetails}</summary><dl className="mt-4 space-y-3 text-sm leading-relaxed text-slate-700 dark:text-slate-300">{visible(Object.entries(plan)).map(([key, item]) => <div key={key}><dt className="font-bold text-slate-900 dark:text-white">{label(key)}</dt><dd>{value(item)}</dd></div>)}</dl></details>;
 }
 
-function evidenceLabels(ids, review, copy, locale) {
+function evidenceLabels(ids, review, copy, locale, timeZone) {
   const fills = Array.isArray(review.fills) ? review.fills : [];
   return (Array.isArray(ids) ? ids : []).map((id) => {
     if (id === 'plan:snapshot') return copy.plan;
@@ -57,11 +57,11 @@ function evidenceLabels(ids, review, copy, locale) {
       row.exchange_fill_id == null ? null : `exchange_fill:${row.exchange_fill_id}`,
       row.derivative_execution_id == null ? null : `derivative_exec:${row.derivative_execution_id}:${row.role}`,
     ].includes(id));
-    return fill ? `${fill.side === 'buy' ? copy.buy : copy.sell} · ${formatDate(fill.at, locale)}` : copy.aiEvidence;
+    return fill ? `${fill.side === 'buy' ? copy.buy : copy.sell} · ${formatDate(fill.at, locale, timeZone)}` : copy.aiEvidence;
   }).join(' · ');
 }
 
-function TradeChart({ chart, copy, locale }) {
+function TradeChart({ chart, copy, locale, timeZone }) {
   const candles = chart?.candles || [];
   if (candles.length < 2) return null;
   const markerTimes = chart.markers || [];
@@ -77,8 +77,8 @@ function TradeChart({ chart, copy, locale }) {
     <svg role="img" aria-label={copy.chartTitle} viewBox="0 0 700 245" className="min-w-[600px] w-full">
       {ticks.map((price) => <g key={price}><line x1="70" x2="670" y1={y(price)} y2={y(price)} stroke="#cbd5e1" strokeDasharray="3 4" /><text x="4" y={y(price) + 4} fill="#64748b" fontSize="10">{formatMoney(price, locale, 2)}</text></g>)}
       <line x1="70" x2="670" y1="205" y2="205" stroke="#94a3b8" />
-      <text x="70" y="229" fill="#64748b" fontSize="10">{formatDate(candles[0].at, locale)}</text>
-      <text x="670" y="229" textAnchor="end" fill="#64748b" fontSize="10">{formatDate(candles[candles.length - 1].end, locale)}</text>
+      <text x="70" y="229" fill="#64748b" fontSize="10">{formatDate(candles[0].at, locale, timeZone)}</text>
+      <text x="670" y="229" textAnchor="end" fill="#64748b" fontSize="10">{formatDate(candles[candles.length - 1].end, locale, timeZone)}</text>
       {candles.map((c, i) => <g key={`${c.at}-${i}`}><line x1={x(c.at)} x2={x(c.at)} y1={y(c.high)} y2={y(c.low)} stroke="#64748b" strokeWidth="1" /><line x1={x(c.at)} x2={x(c.at)} y1={y(c.open)} y2={y(c.close)} stroke={number(c.close) >= number(c.open) ? '#059669' : '#e11d48'} strokeWidth="3" /></g>)}
       {markerTimes.map((m) => <g key={m.ledger_id}><circle cx={x(m.at)} cy={y(m.price_eur)} r="6" fill={m.side === 'buy' ? '#2563eb' : '#f59e0b'} stroke="white" strokeWidth="2" /><title>{`${m.side} · ${m.at} · €${m.price_eur}`}</title></g>)}
     </svg>
@@ -86,12 +86,12 @@ function TradeChart({ chart, copy, locale }) {
   </div>;
 }
 
-function ExecutionTimeline({ fills, copy, locale }) {
+function ExecutionTimeline({ fills, copy, locale, timeZone }) {
   const events = fills.map((fill, index) => ({
     id: fill.exchange_fill_id ?? fill.derivative_execution_id ?? index,
     at: new Date(fill.at).getTime(),
     side: fill.side,
-    label: `${fill.side === 'buy' ? copy.buy : copy.sell} ${fill.qty} · ${formatDate(fill.at, locale)}`,
+    label: `${fill.side === 'buy' ? copy.buy : copy.sell} ${fill.qty} · ${formatDate(fill.at, locale, timeZone)}`,
   })).filter((fill) => Number.isFinite(fill.at));
   if (events.length < 2) return null;
   const first = Math.min(...events.map((event) => event.at));
@@ -104,8 +104,8 @@ function ExecutionTimeline({ fills, copy, locale }) {
     <svg role="img" aria-label={copy.executionTimeline} viewBox="0 0 700 100" className="min-w-[460px] w-full">
       <line x1="35" x2="665" y1="45" y2="45" stroke="#94a3b8" strokeWidth="2" />
       {sampled.map((event, index) => <g key={`${event.id}-${index}`}><line x1={x(event.at, index)} x2={x(event.at, index)} y1="35" y2="55" stroke={event.side === 'buy' ? '#2563eb' : '#f59e0b'} strokeWidth="2" /><circle cx={x(event.at, index)} cy="45" r="5" fill={event.side === 'buy' ? '#2563eb' : '#f59e0b'} stroke="white" strokeWidth="1.5" /><title>{event.label}</title></g>)}
-      <text x="35" y="82" fill="#64748b" fontSize="10">{formatDate(first, locale)}</text>
-      <text x="665" y="82" textAnchor="end" fill="#64748b" fontSize="10">{formatDate(last, locale)}</text>
+      <text x="35" y="82" fill="#64748b" fontSize="10">{formatDate(first, locale, timeZone)}</text>
+      <text x="665" y="82" textAnchor="end" fill="#64748b" fontSize="10">{formatDate(last, locale, timeZone)}</text>
     </svg>
     <p className="text-xs text-slate-500">{copy.executionTimelineNote}{events.length > sampled.length ? ` ${copy.executionTimelineSampled.replace('{shown}', String(sampled.length)).replace('{total}', String(events.length))}` : ''}</p>
   </div>;
@@ -113,7 +113,7 @@ function ExecutionTimeline({ fills, copy, locale }) {
 
 const currentAnalysis = (value) => value?.format_version === 5 ? value : null;
 
-function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
+function ReviewDetail({ review, onClose, onSaved, copy, locale, timeZone }) {
   const [note, setNote] = useState(review.note || '');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -333,7 +333,7 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
         <div>
           <p className="text-[11px] font-black uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">{review.execution_environment === 'live' ? copy.live : copy.paper} · {isExchange ? review.exchange_name : sourceLabel(review.execution_sources, copy)} · #{review.id}</p>
           <h3 className="mt-1 text-2xl font-black text-slate-950 dark:text-white">{review.symbol}</h3>
-          <p className="mt-1 text-sm text-slate-500">{formatDate(review.entry_at, locale)} → {formatDate(review.exit_at, locale)}</p>
+          <p className="mt-1 text-sm text-slate-500">{formatDate(review.entry_at, locale, timeZone)} → {formatDate(review.exit_at, locale, timeZone)}</p>
           {isExchange && <p className="mt-2 inline-flex rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800 dark:bg-amber-950/50 dark:text-amber-200">{copy.userConfirmedClosure}</p>}
         </div>
         <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 dark:border-slate-700 dark:text-slate-300">{copy.close}</button>
@@ -349,10 +349,10 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
       <div className="mt-5 rounded-2xl bg-[#111f3c] p-5 text-white">
         <h4 className="flex items-center gap-2 text-lg font-black"><Brain size={19} /> {copy.aiTitle}</h4>
         {!analysis && <p className="mt-2 max-w-2xl text-sm leading-relaxed text-blue-100">{analysisStatus === 'running' ? copy.aiRunning : analysisStatus === 'unavailable' ? copy.aiUnavailable : analysisStatus === 'failed' ? copy.aiFailed : copy.aiPending}</p>}
-        {analysis ? <div className="mt-4 space-y-3 text-sm"><p className="text-base leading-relaxed">{analysis.summary}</p>{analysis.prior_lesson && <div className="rounded-xl border border-blue-300/30 bg-blue-300/10 p-3"><p className="text-xs font-bold uppercase tracking-wide text-blue-200">{copy.priorLessonLabel.replace('{id}', String(analysis.prior_lesson.review_id))}</p><p className="mt-1">{analysis.prior_lesson.lesson_text}</p><p className="mt-2 text-xs text-blue-200">{copy.priorLessonConfirmed.replace('{date}', formatDate(analysis.prior_lesson.confirmed_at, locale))}</p>{analysis.prior_lesson.comparison && <p className="mt-2 text-xs text-blue-100">{analysis.prior_lesson.comparison}</p>}</div>}<ul className="space-y-2">{analysis.observations?.map((item, index) => <li key={index} className="rounded-xl border border-white/20 p-3">{item.text}<details className="mt-2 text-xs text-blue-200"><summary className="cursor-pointer">{copy.aiEvidence}</summary><span className="mt-1 block">{evidenceLabels(item.evidence_ids, review, copy, locale)}</span></details></li>)}</ul><p>{analysis.question}</p>{analysis.uncertainty && <details className="text-xs text-blue-200"><summary className="cursor-pointer">{copy.aiUncertainty}</summary><p className="mt-2 leading-relaxed">{analysis.uncertainty}</p></details>}</div> : !['unavailable', 'failed'].includes(analysisStatus) && <p className="mt-4 text-sm text-blue-200">{copy.aiQueueHint}</p>}
+        {analysis ? <div className="mt-4 space-y-3 text-sm"><p className="text-base leading-relaxed">{analysis.summary}</p>{analysis.prior_lesson && <div className="rounded-xl border border-blue-300/30 bg-blue-300/10 p-3"><p className="text-xs font-bold uppercase tracking-wide text-blue-200">{copy.priorLessonLabel.replace('{id}', String(analysis.prior_lesson.review_id))}</p><p className="mt-1">{analysis.prior_lesson.lesson_text}</p><p className="mt-2 text-xs text-blue-200">{copy.priorLessonConfirmed.replace('{date}', formatDate(analysis.prior_lesson.confirmed_at, locale, timeZone))}</p>{analysis.prior_lesson.comparison && <p className="mt-2 text-xs text-blue-100">{analysis.prior_lesson.comparison}</p>}</div>}<ul className="space-y-2">{analysis.observations?.map((item, index) => <li key={index} className="rounded-xl border border-white/20 p-3">{item.text}<details className="mt-2 text-xs text-blue-200"><summary className="cursor-pointer">{copy.aiEvidence}</summary><span className="mt-1 block">{evidenceLabels(item.evidence_ids, review, copy, locale, timeZone)}</span></details></li>)}</ul><p>{analysis.question}</p>{analysis.uncertainty && <details className="text-xs text-blue-200"><summary className="cursor-pointer">{copy.aiUncertainty}</summary><p className="mt-2 leading-relaxed">{analysis.uncertainty}</p></details>}</div> : !['unavailable', 'failed'].includes(analysisStatus) && <p className="mt-4 text-sm text-blue-200">{copy.aiQueueHint}</p>}
         {!analysis && <button type="button" onClick={analyze} disabled={aiBusy || analysisStatus === 'running'} className="mt-4 rounded-xl bg-white px-4 py-2 text-xs font-bold text-blue-950 disabled:opacity-50">{aiBusy ? copy.loading : copy.aiRefresh}</button>}
         {aiError && <p role="alert" className="mt-2 text-xs text-rose-200">{aiError}</p>}
-        <details className="mt-5 border-t border-white/20 pt-4"><summary className="cursor-pointer text-sm font-bold">{copy.aiDialogue}</summary><p className="mt-1 text-xs text-blue-200">{copy.aiDialogueHint}</p>{hasOlderMessages && <button type="button" onClick={loadOlderMessages} disabled={loadingOlderMessages} className="mt-3 rounded-lg border border-white/30 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50">{loadingOlderMessages ? copy.loading : copy.aiLoadOlder}</button>}<div className="mt-3 max-h-60 space-y-2 overflow-auto">{messages.map((message) => { let structured; try { structured = message.role === 'finn' ? JSON.parse(message.content) : null; } catch { structured = null; } return <div key={message.id} className="rounded-xl border border-white/20 p-3 text-sm"><div className="flex flex-wrap items-center gap-2"><strong>{message.role === 'finn' ? 'FINN' : copy.aiUserQuestion}:</strong>{message.is_current_evidence === false && <span className="rounded-full bg-amber-400/20 px-2 py-0.5 text-xs font-bold text-amber-100">{message.evidence_status === 'source_removed' ? copy.aiSourceRemoved : copy.aiOlderEvidence}</span>}</div>{structured ? <div className="mt-1 space-y-2"><span className="block">{structured.summary}</span>{structured.prior_lesson && <span className="block rounded-lg border border-blue-200/30 bg-blue-300/10 p-2"><strong>{copy.priorLessonLabel.replace('{id}', String(structured.prior_lesson.review_id))}</strong><span className="mt-1 block">{structured.prior_lesson.lesson_text}</span><small className="mt-1 block text-blue-200">{copy.priorLessonConfirmed.replace('{date}', formatDate(structured.prior_lesson.confirmed_at, locale))}</small>{structured.prior_lesson.comparison && <small className="mt-1 block text-blue-100">{structured.prior_lesson.comparison}</small>}</span>}{Array.isArray(structured.observations) && structured.observations.map((item, index) => <span key={index} className="block rounded-lg border border-white/15 p-2">{item.text}<details className="mt-2 text-xs text-blue-200"><summary className="cursor-pointer">{copy.aiEvidence}</summary><span className="mt-1 block">{evidenceLabels(item.evidence_ids, review, copy, locale)}</span></details></span>)}<span className="block text-blue-200">{copy.aiUncertainty}: {structured.uncertainty}</span>{structured.question && <span className="block">{structured.question}</span>}</div> : message.content}</div>; })}</div><div className="mt-3 flex gap-2"><input value={question} onChange={(event) => setQuestion(event.target.value)} maxLength={1000} placeholder={copy.aiQuestion} className="min-w-0 flex-1 rounded-xl border border-white/30 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-blue-200" /><button type="button" onClick={ask} disabled={aiBusy || !question.trim()} className="rounded-xl bg-blue-500 px-4 py-2 text-xs font-bold disabled:opacity-50">{copy.aiAsk}</button></div></details>
+        <details className="mt-5 border-t border-white/20 pt-4"><summary className="cursor-pointer text-sm font-bold">{copy.aiDialogue}</summary><p className="mt-1 text-xs text-blue-200">{copy.aiDialogueHint}</p>{hasOlderMessages && <button type="button" onClick={loadOlderMessages} disabled={loadingOlderMessages} className="mt-3 rounded-lg border border-white/30 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50">{loadingOlderMessages ? copy.loading : copy.aiLoadOlder}</button>}<div className="mt-3 max-h-60 space-y-2 overflow-auto">{messages.map((message) => { let structured; try { structured = message.role === 'finn' ? JSON.parse(message.content) : null; } catch { structured = null; } return <div key={message.id} className="rounded-xl border border-white/20 p-3 text-sm"><div className="flex flex-wrap items-center gap-2"><strong>{message.role === 'finn' ? 'FINN' : copy.aiUserQuestion}:</strong>{message.is_current_evidence === false && <span className="rounded-full bg-amber-400/20 px-2 py-0.5 text-xs font-bold text-amber-100">{message.evidence_status === 'source_removed' ? copy.aiSourceRemoved : copy.aiOlderEvidence}</span>}</div>{structured ? <div className="mt-1 space-y-2"><span className="block">{structured.summary}</span>{structured.prior_lesson && <span className="block rounded-lg border border-blue-200/30 bg-blue-300/10 p-2"><strong>{copy.priorLessonLabel.replace('{id}', String(structured.prior_lesson.review_id))}</strong><span className="mt-1 block">{structured.prior_lesson.lesson_text}</span><small className="mt-1 block text-blue-200">{copy.priorLessonConfirmed.replace('{date}', formatDate(structured.prior_lesson.confirmed_at, locale, timeZone))}</small>{structured.prior_lesson.comparison && <small className="mt-1 block text-blue-100">{structured.prior_lesson.comparison}</small>}</span>}{Array.isArray(structured.observations) && structured.observations.map((item, index) => <span key={index} className="block rounded-lg border border-white/15 p-2">{item.text}<details className="mt-2 text-xs text-blue-200"><summary className="cursor-pointer">{copy.aiEvidence}</summary><span className="mt-1 block">{evidenceLabels(item.evidence_ids, review, copy, locale, timeZone)}</span></details></span>)}<span className="block text-blue-200">{copy.aiUncertainty}: {structured.uncertainty}</span>{structured.question && <span className="block">{structured.question}</span>}</div> : message.content}</div>; })}</div><div className="mt-3 flex gap-2"><input value={question} onChange={(event) => setQuestion(event.target.value)} maxLength={1000} placeholder={copy.aiQuestion} className="min-w-0 flex-1 rounded-xl border border-white/30 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-blue-200" /><button type="button" onClick={ask} disabled={aiBusy || !question.trim()} className="rounded-xl bg-blue-500 px-4 py-2 text-xs font-bold disabled:opacity-50">{copy.aiAsk}</button></div></details>
       </div>
 
       <h4 className="mt-7 text-sm font-black text-slate-900 dark:text-white">{copy.recordedFacts}</h4>
@@ -364,11 +364,11 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
         </div>
         <div className="min-w-0 rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
           <h4 className="text-sm font-black text-slate-900 dark:text-white">{copy.executionEvidence}</h4>
-          {isExchange ? <ExecutionTimeline fills={fills} copy={copy} locale={locale} /> : chartState === 'ready' && chart ? <TradeChart chart={chart} copy={copy} locale={locale} /> : <p className="mt-2 text-xs leading-relaxed text-slate-500">{chartState === 'loading' ? copy.loading : copy.chartFallback}</p>}
+          {isExchange ? <ExecutionTimeline fills={fills} copy={copy} locale={locale} timeZone={timeZone} /> : chartState === 'ready' && chart ? <TradeChart chart={chart} copy={copy} locale={locale} timeZone={timeZone} /> : <p className="mt-2 text-xs leading-relaxed text-slate-500">{chartState === 'loading' ? copy.loading : copy.chartFallback}</p>}
           <ol className="mt-4 space-y-2">
             {fills.map((fill, index) => <li key={isDerivative ? `${fill.derivative_execution_id}-${fill.role}-${index}` : isExchange ? fill.exchange_fill_id : fill.ledger_id} className="flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-2 text-xs dark:bg-slate-900">
               <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${fill.side === 'buy' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>{fill.side === 'buy' ? <ArrowDownRight size={16} /> : <ArrowUpRight size={16} />}</span>
-              <span className="min-w-0 flex-1"><strong>{fill.side === 'buy' ? copy.buy : copy.sell} {fill.qty} {isDerivative ? copy.derivativeContracts : review.symbol}</strong><br /><span className="text-slate-500">{formatDate(fill.at, locale)}{isDerivative && fill.role ? ` · ${copy.derivativeRole?.[fill.role] || fill.role}` : ''}</span></span>
+              <span className="min-w-0 flex-1"><strong>{fill.side === 'buy' ? copy.buy : copy.sell} {fill.qty} {isDerivative ? copy.derivativeContracts : review.symbol}</strong><br /><span className="text-slate-500">{formatDate(fill.at, locale, timeZone)}{isDerivative && fill.role ? ` · ${copy.derivativeRole?.[fill.role] || fill.role}` : ''}</span></span>
               <span className="font-bold">{isExchange ? formatQuote(fill.price_quote, fill.quote_currency, locale) : fill.price_eur ? formatMoney(fill.price_eur, locale, 4) : formatMoney(number(fill.cash_eur) / number(fill.qty), locale, 4)}</span>
             </li>)}
           </ol>
@@ -398,7 +398,7 @@ function ReviewDetail({ review, onClose, onSaved, copy, locale }) {
         <p className="mt-2 text-xs text-slate-500">{copy.lessonHint}</p>
         <textarea id={`trade-lesson-${review.id}`} value={lessonText} onChange={(event) => { setLessonText(event.target.value); setLessonSaved(false); }} maxLength={500} rows={2} placeholder={copy.lessonPlaceholder} className="mt-3 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-900 outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
         {analysis?.suggested_lesson && <div className="mt-3 rounded-xl bg-blue-50 p-3 text-xs text-blue-950 dark:bg-blue-950/40 dark:text-blue-100"><strong>{copy.lessonSuggestion}</strong><p className="mt-1">{analysis.suggested_lesson}</p><button type="button" onClick={() => { setLessonText(analysis.suggested_lesson); setLessonSaved(false); }} className="mt-2 font-bold underline">{copy.lessonUseSuggestion}</button></div>}
-        {review.lesson?.status === 'active' && <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-300">{copy.lessonConfirmed.replace('{date}', formatDate(review.lesson.confirmed_at, locale))}</p>}
+        {review.lesson?.status === 'active' && <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-300">{copy.lessonConfirmed.replace('{date}', formatDate(review.lesson.confirmed_at, locale, timeZone))}</p>}
         {review.lesson?.status === 'active' && review.lesson.evidence_revision !== review.input_revision && <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">{copy.lessonOlderEvidence}</p>}
         <div className="mt-3 flex flex-wrap items-center gap-3"><button type="button" onClick={() => saveLesson(lessonText)} disabled={lessonBusy || !lessonText.trim() || (lessonText.trim() === (review.lesson?.status === 'active' ? review.lesson.lesson_text : '') && review.lesson?.evidence_revision === review.input_revision)} className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{lessonBusy ? copy.loading : copy.lessonSave}</button>{review.lesson?.status === 'active' && <button type="button" onClick={() => saveLesson('')} disabled={lessonBusy} className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300">{copy.lessonWithdraw}</button>}{lessonSaved && <span className="text-xs text-emerald-600">{copy.saved}</span>}{lessonError && <span role="alert" className="text-xs text-red-600">{copy.lessonError}</span>}</div>
       </div>
@@ -432,7 +432,7 @@ function ReflectionOverview({ weekly, weeks, selectedWeek, onWeekChange, locale,
       </div>
       {!loading && !error && !rolloutDisabled && <p className="mt-5 rounded-xl bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 dark:bg-slate-900 dark:text-slate-200">{copy.overviewCount.replace('{trades}', String(trades)).replace('{analyzed}', String(analyzed)).replace('{plans}', String(number(weekly.plans)))}</p>}
       <div className="mt-6 border-t border-slate-100 pt-5 dark:border-slate-800">
-        {weekly.generated_at && <p className="mb-3 text-xs text-slate-500">{copy.weekSaved.replace('{date}', formatDate(weekly.generated_at, locale))}</p>}
+        {weekly.generated_at && <p className="mb-3 text-xs text-slate-500">{copy.weekSaved.replace('{date}', formatDate(weekly.generated_at, locale, weekly.time_zone))} · {weekly.time_zone || 'Europe/Amsterdam'}</p>}
         <h4 className="text-sm font-black text-slate-900 dark:text-white">{copy.overviewFindings}</h4>
         <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
           {loading ? copy.loading : error ? copy.error : rolloutDisabled ? copy.rolloutDisabled : trades === 0 ? copy.weekNoTrades : trades === 1 ? copy.overviewSingleTrade : !hasFindings ? copy.overviewNoRepeat : copy.overviewEvidence}
@@ -464,6 +464,8 @@ export default function FinnTradeReviews() {
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [weekly, setWeekly] = useState({ trades: 0, plans: 0, notes: 0 });
+  const [ownerTimeZone, setOwnerTimeZone] = useState(null);
+  const reviewTimeZone = ownerTimeZone || 'Europe/Amsterdam';
   const [weeks, setWeeks] = useState([]);
   const reflectionWeekParam = useSearchParams().get('reflection_week');
   const [selectedWeek, setSelectedWeek] = useState(
@@ -508,6 +510,7 @@ export default function FinnTradeReviews() {
       setItems(Array.isArray(result?.items) ? result.items : []);
       setTotal(number(result?.total));
       setWeekly(result?.weekly || { trades: 0, plans: 0, notes: 0 });
+      setOwnerTimeZone(result?.time_zone || null);
       setWeeks(Array.isArray(result?.weeks) ? result.weeks : []);
       setExcluded(result?.excluded || {});
       setProjectionPending(Boolean(result?.projection_pending));
@@ -644,6 +647,7 @@ export default function FinnTradeReviews() {
       setItems((current) => [...current, ...(Array.isArray(result?.items) ? result.items : [])]);
       setTotal(number(result?.total));
       setWeekly(result?.weekly || weekly);
+      setOwnerTimeZone(result?.time_zone || null);
     } catch (loadError) {
       console.error('FINN trade review page could not load:', loadError);
       setError(true);
@@ -692,16 +696,16 @@ export default function FinnTradeReviews() {
               <p className="mt-1 text-slate-600 dark:text-slate-300">{copy.exchangeImportStates?.[source.status] || source.status} · {source.imported_fills || 0} {copy.exchangeImportFills}</p>
               {source.imported_movements > 0 && <p className="mt-1 text-slate-500">{source.imported_movements} {copy.exchangeImportMovements}{source.unsupported_movements > 0 ? ` · ${source.unsupported_movements} ${copy.exchangeImportUnsupported}` : ''}</p>}
               <p className="mt-1 text-slate-500">{copy.exchangeImportLimits?.[source.history_limit]}</p>
-              {source.coverage_through_at && <p className="text-slate-500">{copy.exchangeImportThrough}: {formatDate(source.coverage_through_at, locale)}</p>}
+              {source.coverage_through_at && <p className="text-slate-500">{copy.exchangeImportThrough}: {formatDate(source.coverage_through_at, locale, reviewTimeZone)}</p>}
               {source.last_error_code && <p className="text-amber-700 dark:text-amber-300">{copy.exchangeImportError}: {source.last_error_code}</p>}
               {source.id && <button type="button" onClick={() => openImportFills(source.id)} className="mt-2 font-bold text-blue-600 underline dark:text-blue-300">{importFillPage?.source_id === source.id ? copy.exchangeImportHideFills : copy.exchangeImportShowFills}</button>}
-              {importFillPage?.source_id === source.id && <div className="mt-2 max-h-64 space-y-1 overflow-auto"><p className="text-slate-500">{copy.exchangeImportEvidenceOnly}</p>{importFillPage.items?.map((fill) => <label key={fill.id} className={`flex items-start gap-2 rounded border border-slate-200 p-2 dark:border-slate-700 ${fill.review_id ? 'opacity-60' : 'cursor-pointer'}`}><input type="checkbox" className="mt-0.5" checked={selectedImportFills.some((item) => item.id === fill.id)} onChange={() => toggleImportFill(fill, source)} disabled={Boolean(fill.review_id)} /><span><strong>{fill.side === 'buy' ? copy.buy : copy.sell} {fill.qty} {fill.symbol}</strong> · {formatQuote(fill.cost_quote, fill.quote_currency, locale)}<br />{formatDate(fill.traded_at, locale)}{fill.review_id && <span className="block text-slate-500">{copy.exchangeAlreadyReviewed} #{fill.review_id}</span>}</span></label>)}{importFillPage.next_cursor && <button type="button" onClick={loadMoreImportFills} disabled={importFillsLoadingMore} className="font-bold text-blue-600 underline disabled:opacity-50">{importFillsLoadingMore ? copy.loading : copy.exchangeImportLoadMore}</button>}</div>}
+              {importFillPage?.source_id === source.id && <div className="mt-2 max-h-64 space-y-1 overflow-auto"><p className="text-slate-500">{copy.exchangeImportEvidenceOnly}</p>{importFillPage.items?.map((fill) => <label key={fill.id} className={`flex items-start gap-2 rounded border border-slate-200 p-2 dark:border-slate-700 ${fill.review_id ? 'opacity-60' : 'cursor-pointer'}`}><input type="checkbox" className="mt-0.5" checked={selectedImportFills.some((item) => item.id === fill.id)} onChange={() => toggleImportFill(fill, source)} disabled={Boolean(fill.review_id)} /><span><strong>{fill.side === 'buy' ? copy.buy : copy.sell} {fill.qty} {fill.symbol}</strong> · {formatQuote(fill.cost_quote, fill.quote_currency, locale)}<br />{formatDate(fill.traded_at, locale, reviewTimeZone)}{fill.review_id && <span className="block text-slate-500">{copy.exchangeAlreadyReviewed} #{fill.review_id}</span>}</span></label>)}{importFillPage.next_cursor && <button type="button" onClick={loadMoreImportFills} disabled={importFillsLoadingMore} className="font-bold text-blue-600 underline disabled:opacity-50">{importFillsLoadingMore ? copy.loading : copy.exchangeImportLoadMore}</button>}</div>}
             </div>)}
             {selectedImportFills.length > 0 && <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-slate-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-slate-100">
               <h4 className="font-black">{copy.exchangePairTitle}</h4>
               <p className="mt-1">{copy.exchangePairSelected.replace('{count}', String(selectedImportFills.length))}</p>
               <p className="mt-1 text-slate-600 dark:text-slate-300">{copy.exchangePairHint}</p>
-              <div className="mt-2 flex flex-wrap gap-1">{selectedImportFills.map((fill) => <button key={fill.id} type="button" onClick={() => toggleImportFill(fill, { id: fill.source_id, exchange_name: fill.exchange_name })} className="rounded-full border border-blue-300 px-2 py-1 text-[11px] dark:border-blue-700">{fill.side === 'buy' ? copy.buy : copy.sell} {fill.qty} {fill.symbol} · {formatDate(fill.traded_at, locale)} ×</button>)}</div>
+              <div className="mt-2 flex flex-wrap gap-1">{selectedImportFills.map((fill) => <button key={fill.id} type="button" onClick={() => toggleImportFill(fill, { id: fill.source_id, exchange_name: fill.exchange_name })} className="rounded-full border border-blue-300 px-2 py-1 text-[11px] dark:border-blue-700">{fill.side === 'buy' ? copy.buy : copy.sell} {fill.qty} {fill.symbol} · {formatDate(fill.traded_at, locale, reviewTimeZone)} ×</button>)}</div>
               {needsSameAccount && <label className="mt-3 flex items-start gap-2"><input type="checkbox" className="mt-0.5" checked={sameAccountConfirmed} onChange={(event) => setSameAccountConfirmed(event.target.checked)} /><span>{copy.exchangeSameAccountConfirm}</span></label>}
               <label className="mt-3 flex items-start gap-2"><input type="checkbox" className="mt-0.5" checked={closureConfirmed} onChange={(event) => setClosureConfirmed(event.target.checked)} /><span>{copy.exchangeClosureConfirm}</span></label>
               {(!hasBuy || !hasSell) && <p className="mt-2 text-amber-700 dark:text-amber-300">{copy.exchangeNeedBuySell}</p>}
@@ -709,7 +713,7 @@ export default function FinnTradeReviews() {
               {exchangeReviewError && <p role="alert" className="mt-2 text-red-700 dark:text-red-300">{copy.exchangeCreateError}</p>}
               <button type="button" disabled={!canConfirmExchange || creatingExchangeReview} onClick={createExchangeReview} className="mt-3 rounded-lg bg-blue-600 px-4 py-2 font-bold text-white disabled:opacity-50">{creatingExchangeReview ? copy.loading : copy.exchangeCreateReview}</button>
             </div>}
-            {exchangeImports.some((source) => source.exchange_name === 'bybit') && <BybitDerivativeReviews copy={copy} locale={locale} onCreated={async (reviewId) => {
+            {exchangeImports.some((source) => source.exchange_name === 'bybit') && <BybitDerivativeReviews copy={copy} locale={locale} timeZone={reviewTimeZone} onCreated={async (reviewId) => {
               await load();
               router.replace(`/report?trade_review_id=${reviewId}`, { scroll: false });
             }} />}
@@ -722,7 +726,7 @@ export default function FinnTradeReviews() {
               <div className="mb-4 flex items-center justify-between gap-3"><h3 className="text-sm font-black text-slate-900 dark:text-white">{copy.all} <span className="ml-1 text-slate-400">{total}</span></h3><button type="button" onClick={load} className="flex items-center gap-1.5 text-xs font-bold text-blue-600"><RefreshCw size={14} /> {copy.refresh}</button></div>
               {items.length === 0 ? <p className="rounded-xl bg-slate-50 p-5 text-sm text-slate-600 dark:bg-slate-900 dark:text-slate-300">{rolloutDisabled ? copy.rolloutDisabled : copy.empty}</p> : <div className="grid gap-2">{items.map((item) => <button key={item.id} type="button" onClick={() => openReview(item.id)} className={`flex items-center gap-3 rounded-2xl border p-4 text-left transition hover:border-blue-400 ${selected?.id === item.id ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20' : 'border-slate-200 dark:border-slate-800'}`}>
                 <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${item.pnl_eur_before_fees == null ? 'bg-blue-50 text-blue-600' : number(item.pnl_eur_before_fees) >= 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>{item.pnl_eur_before_fees == null ? <FileText size={19} /> : number(item.pnl_eur_before_fees) >= 0 ? <ArrowUpRight size={19} /> : <ArrowDownRight size={19} />}</span>
-                <span className="min-w-0 flex-1"><strong className="block text-sm text-slate-900 dark:text-white">{item.symbol} · {item.execution_environment === 'live' ? copy.live : copy.paper}</strong><span className="block text-xs text-slate-500">{isExchangeReview(item.origin) ? item.exchange_name : sourceLabel(item.execution_sources, copy)} · #{item.id}<br />{formatDate(item.exit_at, locale)}{isExchangeReview(item.origin) && <><br />{copy.userConfirmedClosure}</>}</span></span>
+                <span className="min-w-0 flex-1"><strong className="block text-sm text-slate-900 dark:text-white">{item.symbol} · {item.execution_environment === 'live' ? copy.live : copy.paper}</strong><span className="block text-xs text-slate-500">{isExchangeReview(item.origin) ? item.exchange_name : sourceLabel(item.execution_sources, copy)} · #{item.id}<br />{formatDate(item.exit_at, locale, reviewTimeZone)}{isExchangeReview(item.origin) && <><br />{copy.userConfirmedClosure}</>}</span></span>
                 <span className="text-right"><strong className="block text-sm text-slate-900 dark:text-white">{item.pnl_eur_before_fees == null ? copy.exchangeResultUnavailable : formatMoney(item.pnl_eur_before_fees, locale)}</strong><span className="text-xs text-blue-600">{copy.open}</span></span><ChevronRight size={15} className="text-slate-400" />
               </button>)}</div>}
               {items.length < total && <button type="button" onClick={loadMore} disabled={loadingMore} className="mt-4 rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-blue-600 disabled:opacity-50 dark:border-slate-700">{loadingMore ? copy.loading : copy.more}</button>}
@@ -733,7 +737,7 @@ export default function FinnTradeReviews() {
         </div>
       </div>
       <div ref={detailRef} tabIndex={-1} className="min-w-0 outline-none">
-        {selected ? <ReviewDetail key={selected.id} review={selected} onClose={() => { openRequest.current += 1; setSelected(null); router.replace('/report', { scroll: false }); }} onSaved={async (updated) => { setSelected((current) => current?.id === updated.id ? updated : current); await load(); }} copy={copy} locale={locale} /> : <div className="rounded-[26px] border border-dashed border-slate-300 bg-white p-8 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-950">{deepLinkLoading ? copy.loading : deepLinkError ? copy.error : copy.selectHint || copy.open}</div>}
+        {selected ? <ReviewDetail key={selected.id} review={selected} onClose={() => { openRequest.current += 1; setSelected(null); router.replace('/report', { scroll: false }); }} onSaved={async (updated) => { setSelected((current) => current?.id === updated.id ? updated : current); await load(); }} copy={copy} locale={locale} timeZone={reviewTimeZone} /> : <div className="rounded-[26px] border border-dashed border-slate-300 bg-white p-8 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-950">{deepLinkLoading ? copy.loading : deepLinkError ? copy.error : copy.selectHint || copy.open}</div>}
       </div>
       </div>
     </section>

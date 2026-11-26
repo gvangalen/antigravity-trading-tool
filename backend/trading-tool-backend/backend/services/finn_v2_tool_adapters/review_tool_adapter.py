@@ -13,6 +13,7 @@ from backend.services.bot_service import BotService
 from backend.infrastructure.repositories.bot_repository import BotRepository
 from backend.schemas.finn_v2_evidence_schema import ReviewHistoryData
 from backend.services.finn_closed_trade_reflection_service import FinnClosedTradeReflectionService
+from backend.services.finn_trade_review_service import reflection_zone
 from backend.services.finn_v2_tool_adapters.display_source_moment import amsterdam_source_moment
 
 
@@ -443,6 +444,9 @@ class ReviewToolAdapter:
                         "week_end": (row["week_end"] - timedelta(days=1)).isoformat(),
                         "week_end_exclusive": row["week_end"].isoformat(),
                         "generated_at": self._utc_instant(row["generated_at"]).isoformat(),
+                        "time_zone": reflection_zone(summary.get("time_zone")).key,
+                        "period_start_utc": summary.get("period_start_utc"),
+                        "period_end_utc": summary.get("period_end_utc"),
                         **{key: summary[key] for key in
                            ("trades", "plans", "notes", "analyzed", "pending", "unavailable")
                            if type(summary.get(key)) is int and 0 <= summary[key] <= 100000},

@@ -1,4 +1,5 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
@@ -73,6 +74,8 @@ class AssistantActionExecuteResponse(BaseModel):
 
 class AssistantPreferenceUpdate(BaseModel):
     locale: Optional[str] = None
+    time_zone: Optional[str] = None
+    detected_time_zone: Optional[str] = None
     onboarding_asset: Optional[str] = None
     selected_asset: Optional[str] = None
     report_style: Optional[str] = None
@@ -93,6 +96,18 @@ class AssistantPreferenceUpdate(BaseModel):
     investment_goals_list: Optional[List[str]] = None
     analysis_hidden_indicators: Optional[List[str]] = None
     active_finn_session_id: Optional[str] = None
+
+    @validator("time_zone", "detected_time_zone")
+    def validate_time_zone(cls, value):
+        if value is None:
+            return value
+        if not isinstance(value, str) or len(value) > 64 or not value.strip() or value != value.strip():
+            raise ValueError("Ongeldige tijdzone")
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise ValueError("Ongeldige tijdzone") from None
+        return value
 
 class AssistantPreferences(BaseModel):
     preferences: Dict[str, Any]

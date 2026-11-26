@@ -12,7 +12,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import HTTPException
 from sqlalchemy import text
@@ -24,6 +24,7 @@ from backend.services.finn_trade_chart_service import historical_eur_chart
 
 EPSILON = Decimal("0.00000001")
 REFLECTION_ZONE = ZoneInfo("Europe/Amsterdam")
+DEFAULT_REFLECTION_TIME_ZONE = "Europe/Amsterdam"
 TERMINAL_ORDER_STATUSES = {"filled", "partial", "cancelled", "rejected", "error", "failed"}
 
 
@@ -118,16 +119,28 @@ def unrecorded_plan_theme(origin: str | None) -> str:
             else "missing_plan")
 
 
-def completed_reflection_week(now: datetime | None = None, selected: date | None = None) -> tuple[date, date, datetime, datetime]:
+def reflection_zone(value: str | None) -> ZoneInfo:
+    """Resolve a saved IANA zone, preserving Amsterdam for legacy accounts."""
+    if not value:
+        return REFLECTION_ZONE
+    try:
+        return ZoneInfo(value)
+    except (ZoneInfoNotFoundError, ValueError, TypeError):
+        return REFLECTION_ZONE
+
+
+def completed_reflection_week(now: datetime | None = None, selected: date | None = None,
+                              *, time_zone: str | None = None) -> tuple[date, date, datetime, datetime]:
     """Return one closed Monday–Sunday week, with DST-safe UTC query bounds."""
-    local_today = (now or datetime.now(timezone.utc)).astimezone(REFLECTION_ZONE).date()
+    zone = reflection_zone(time_zone)
+    local_today = (now or datetime.now(timezone.utc)).astimezone(zone).date()
     current_monday = local_today - timedelta(days=local_today.weekday())
     monday = selected or current_monday - timedelta(days=7)
     if monday.weekday() != 0 or monday >= current_monday:
         raise ValueError("Week must be a completed Monday–Sunday period")
     next_monday = monday + timedelta(days=7)
-    start = datetime.combine(monday, datetime.min.time(), REFLECTION_ZONE).astimezone(timezone.utc)
-    end = datetime.combine(next_monday, datetime.min.time(), REFLECTION_ZONE).astimezone(timezone.utc)
+    start = datetime.combine(monday, datetime.min.time(), zone).astimezone(timezone.utc)
+    end = datetime.combine(next_monday, datetime.min.time(), zone).astimezone(timezone.utc)
     return monday, next_monday, start, end
 
 
@@ -330,6 +343,15 @@ class FinnTradeReviewService:
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    async def owner_time_zone(self, user_id: int) -> str:
+        result = await self.session.execute(text("""
+            SELECT ai_preferences->>'time_zone' AS time_zone
+            FROM users WHERE id=:user_id
+        """), {"user_id": user_id})
+        value = result.scalar_one_or_none()
+        zone = reflection_zone(value)
+        return zone.key
+
     async def _project(self, user_id: int) -> dict[str, int]:
         # Authentication and earlier reads may already have started the API
         # session's transaction. PostgreSQL only accepts SET TRANSACTION before
@@ -439,7 +461,8 @@ class FinnTradeReviewService:
         return excluded
 
     async def list_reviews(self, user_id: int, limit: int = 50, offset: int = 0,
-                           week_start: date | None = None) -> dict:
+                           week_start: date | None = None, *, time_zone: str | None = None) -> dict:
+        owner_zone = time_zone or await self.owner_time_zone(user_id)
         projection = await self.session.execute(text("""
             SELECT s.legacy_or_ambiguous, s.inconsistent,
                    EXISTS (SELECT 1 FROM finn_trade_review_dirty_users d
@@ -475,34 +498,72 @@ class FinnTradeReviewService:
         """), params)
         total = count.scalar_one()
         if total == 0:
-            monday, next_monday, _, _ = completed_reflection_week(selected=week_start)
+            monday, next_monday, start, end = completed_reflection_week(
+                selected=week_start, time_zone=owner_zone)
             return {
                 "items": items, "total": 0, "excluded": excluded,
+                "time_zone": owner_zone,
                 "projection_pending": projection_pending,
                 "weekly": {
                     "trades": 0, "plans": 0, "notes": 0, "analyzed": 0,
                     "pending": 0, "unavailable": 0, "patterns": [],
                     "confirmed_lesson_repetitions": [], "patterns_truncated": False,
                     "week_start": monday.isoformat(), "week_end": next_monday.isoformat(),
+                    "time_zone": owner_zone,
+                    "period_start_utc": start.isoformat(),
+                    "period_end_utc": end.isoformat(),
                     "generated_at": None, "status": "complete",
                 },
                 "weeks": [monday.isoformat()],
             }
-        weekly = await self.weekly_report(user_id, week_start, persist=False)
+        weekly = await self.weekly_report(user_id, week_start, persist=False, time_zone=owner_zone)
         week_options = await self.session.execute(text("""
-            SELECT DISTINCT date_trunc('week', exit_at AT TIME ZONE 'Europe/Amsterdam')::date AS week_start
+            SELECT DISTINCT date_trunc('week', exit_at AT TIME ZONE :time_zone)::date AS week_start
             FROM finn_trade_reviews
             WHERE user_id=:user_id AND exit_at < :closed_before
             ORDER BY week_start DESC LIMIT 52
-        """), {"user_id": user_id, "closed_before": completed_reflection_week()[3]})
-        weeks = sorted({weekly["week_start"], *(row.week_start.isoformat() for row in week_options.fetchall())}, reverse=True)
-        return {"items": items, "total": total, "excluded": excluded,
+        """), {"user_id": user_id, "time_zone": owner_zone,
+               "closed_before": completed_reflection_week(time_zone=owner_zone)[3]})
+        saved_weeks = await self.session.execute(text("""
+            SELECT week_start FROM finn_weekly_trade_reflections
+            WHERE user_id=:user_id ORDER BY week_start DESC LIMIT 52
+        """), {"user_id": user_id})
+        weeks = sorted({weekly["week_start"], *(row.week_start.isoformat() for row in week_options.fetchall()),
+                        *(row.week_start.isoformat() for row in saved_weeks.fetchall())}, reverse=True)
+        return {"items": items, "total": total, "time_zone": owner_zone, "excluded": excluded,
                 "projection_pending": projection_pending,
                 "weekly": weekly, "weeks": weeks}
 
     async def weekly_report(self, user_id: int, selected: date | None = None,
-                            *, persist: bool = True) -> dict:
-        monday, next_monday, start, end = completed_reflection_week(selected=selected)
+                            *, persist: bool = True, time_zone: str | None = None,
+                            as_of_utc: datetime | None = None) -> dict:
+        owner_zone = time_zone or await self.owner_time_zone(user_id)
+        if selected is not None and selected.weekday() != 0:
+            raise ValueError("Week must start on Monday")
+        monday = selected or completed_reflection_week(
+            as_of_utc, time_zone=owner_zone)[0]
+        stored = await self.session.execute(text("""
+            SELECT summary, generated_at FROM finn_weekly_trade_reflections
+            WHERE user_id=:user_id AND week_start=:week_start
+        """), {"user_id": user_id, "week_start": monday})
+        saved = stored.one_or_none()
+        saved_summary = saved.summary if saved is not None and isinstance(saved.summary, dict) else {}
+        if saved is not None:
+            # A changed preference must never move an already saved historical
+            # week. Older rows were calculated in Amsterdam.
+            owner_zone = reflection_zone(saved_summary.get("time_zone") or DEFAULT_REFLECTION_TIME_ZONE).key
+        monday, next_monday, start, end = completed_reflection_week(
+            as_of_utc, selected=monday, time_zone=owner_zone)
+        if saved is not None:
+            if saved_summary.get("period_start_utc") or saved_summary.get("period_end_utc"):
+                try:
+                    recorded_start = _utc_instant(saved_summary["period_start_utc"])
+                    recorded_end = _utc_instant(saved_summary["period_end_utc"])
+                    if recorded_start != start or recorded_end != end:
+                        raise ValueError("Invalid saved reflection bounds")
+                    start, end = recorded_start, recorded_end
+                except (KeyError, TypeError, ValueError):
+                    raise ValueError("Invalid saved reflection bounds") from None
         params = {"user_id": user_id, "start": start, "end": end}
         week = await self.session.execute(text("""
             SELECT COUNT(*) AS trades,
@@ -548,7 +609,10 @@ class FinnTradeReviewService:
         weekly_counts = dict(week.fetchone()._mapping)
         summary = {**weekly_counts, "patterns": patterns,
                    "confirmed_lesson_repetitions": repeated_lessons,
-                   "patterns_truncated": weekly_counts["trades"] > 500}
+                   "patterns_truncated": weekly_counts["trades"] > 500,
+                   "time_zone": owner_zone,
+                   "period_start_utc": start.isoformat(),
+                   "period_end_utc": end.isoformat()}
         generated_at = None
         if persist:
             await self.session.execute(text("""
@@ -567,12 +631,11 @@ class FinnTradeReviewService:
             """), {"user_id": user_id, "week_start": monday})
             generated_at = stored.scalar_one().isoformat()
         else:
-            stored = await self.session.execute(text("""
-                SELECT summary, generated_at FROM finn_weekly_trade_reflections
-                WHERE user_id=:user_id AND week_start=:week_start
-            """), {"user_id": user_id, "week_start": monday})
-            saved = stored.one_or_none()
-            if saved is not None and saved.summary == json.loads(json.dumps(summary, default=str)):
+            comparable_saved = {**saved_summary}
+            if saved is not None and "time_zone" not in saved_summary:
+                comparable_saved.update({key: summary[key] for key in (
+                    "time_zone", "period_start_utc", "period_end_utc")})
+            if saved is not None and comparable_saved == json.loads(json.dumps(summary, default=str)):
                 generated_at = saved.generated_at.isoformat()
         return {**summary, "week_start": monday.isoformat(), "week_end": next_monday.isoformat(),
                 "generated_at": generated_at, "status": "complete"}

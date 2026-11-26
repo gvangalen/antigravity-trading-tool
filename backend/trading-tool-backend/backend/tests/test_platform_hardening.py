@@ -123,6 +123,18 @@ def test_ai_preferences_update_reassigns_jsonb_payload_for_persistence():
         async def refresh(self, user):
             self.refreshes += 1
 
+        async def execute(self, statement):
+            assert statement._for_update_arg is not None
+
+            class _Result:
+                def scalars(self):
+                    return self
+
+                def first(self):
+                    return user
+
+            return _Result()
+
     session = _FakeAsyncSessionWithRefresh()
     repo = UserRepository(session)
     original_prefs = {
@@ -130,11 +142,6 @@ def test_ai_preferences_update_reassigns_jsonb_payload_for_persistence():
         "trader_types": ["investor"],
     }
     user = SimpleNamespace(ai_preferences=original_prefs)
-
-    async def _get_by_id(_user_id):
-        return user
-
-    repo.get_by_id = _get_by_id
 
     updated = asyncio.run(repo.update_ai_preferences(7, {
         "trader_types": ["swing_trader"],

@@ -42,6 +42,14 @@ export function useTranslation() {
   return ctx;
 }
 
+function browserTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
 export function I18nProvider({ children }: { children: ReactNode }) {
   const { user, sessionChecked } = useAuth();
   const [locale, setLocaleState] = useState<Locale>(() => {
@@ -66,6 +74,9 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     if (!sessionChecked || !user) return;
 
     const accountLocale = normalizeLocale(user?.ai_preferences?.locale);
+    const savedTimeZone = user?.ai_preferences?.time_zone;
+    const missingTimeZone = !savedTimeZone;
+    const timeZonePatch = missingTimeZone ? { detected_time_zone: browserTimeZone() } : {};
     const storedLocale =
       typeof window !== "undefined" ? readStoredLocale(window) : null;
     const pendingLocale = pendingAccountLocaleRef.current;
@@ -80,18 +91,18 @@ export function I18nProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      if (accountLocale === storedLocale) {
+      if (accountLocale === storedLocale && !missingTimeZone) {
         return;
       }
 
-      if (seededAccountLocaleRef.current === `${user.id}:${storedLocale}`) {
+      if (seededAccountLocaleRef.current === `${user.id}:${storedLocale}:${missingTimeZone}`) {
         return;
       }
 
-      seededAccountLocaleRef.current = `${user.id}:${storedLocale}`;
+      seededAccountLocaleRef.current = `${user.id}:${storedLocale}:${missingTimeZone}`;
       pendingAccountLocaleRef.current = storedLocale;
 
-      void updateAssistantPreferences({ locale: storedLocale }).catch(() => {
+      void updateAssistantPreferences({ locale: storedLocale, ...timeZonePatch }).catch(() => {
         if (pendingAccountLocaleRef.current === storedLocale) {
           pendingAccountLocaleRef.current = null;
         }
@@ -103,6 +114,13 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     if (accountLocale) {
       if (locale !== accountLocale) {
         setLocaleState(accountLocale);
+        return;
+      }
+      if (missingTimeZone && seededAccountLocaleRef.current !== `${user.id}:${accountLocale}:true`) {
+        seededAccountLocaleRef.current = `${user.id}:${accountLocale}:true`;
+        void updateAssistantPreferences(timeZonePatch).catch(() => {
+          seededAccountLocaleRef.current = null;
+        });
       }
       return;
     }
@@ -114,7 +132,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     seededAccountLocaleRef.current = `${user.id}:${locale}`;
     pendingAccountLocaleRef.current = locale;
 
-    void updateAssistantPreferences({ locale })
+    void updateAssistantPreferences({ locale, ...timeZonePatch })
       .catch(() => {
         if (pendingAccountLocaleRef.current === locale) {
           pendingAccountLocaleRef.current = null;

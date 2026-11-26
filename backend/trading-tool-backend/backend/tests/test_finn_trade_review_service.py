@@ -2,11 +2,23 @@ import asyncio
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
+import pytest
+from pydantic import ValidationError
 
 from backend.services.finn_trade_review_service import FinnTradeReviewService, attach_entry_decision_plan_evidence, build_closed_positions, build_weekly_review_patterns, completed_reflection_week, unrecorded_plan_theme
+from backend.schemas.assistant_schema import AssistantPreferenceUpdate
 
 
 START = datetime(2026, 10, 16, tzinfo=timezone.utc)
+
+
+def test_reflection_preference_accepts_iana_zone_and_rejects_invalid_names():
+    assert AssistantPreferenceUpdate(time_zone="Pacific/Kiritimati").time_zone == "Pacific/Kiritimati"
+    assert AssistantPreferenceUpdate(detected_time_zone="America/New_York").detected_time_zone == "America/New_York"
+    with pytest.raises(ValidationError):
+        AssistantPreferenceUpdate(time_zone="Not/A_Time_Zone")
+    with pytest.raises(ValidationError):
+        AssistantPreferenceUpdate(detected_time_zone="Not/A_Time_Zone")
 
 
 def test_entry_decision_restores_only_proven_original_quote_and_fx():
@@ -117,14 +129,17 @@ def test_weekly_reflection_is_owner_scoped_and_persisted():
         def scalar_one(self):
             return datetime(2026, 10, 19, 6, tzinfo=timezone.utc)
 
+        def one_or_none(self):
+            return None
+
     class Session:
         async def execute(self, statement, params):
             calls.append((str(statement), params))
             index = len(calls)
-            if index == 1:
+            if index == 2:
                 return Result({"trades": 1, "plans": 1, "notes": 0,
                                "analyzed": 1, "pending": 0, "unavailable": 0})
-            if index == 2:
+            if index == 3:
                 return Result(rows=[SimpleNamespace(id=9, origin="bot_position", has_plan=True,
                                                     analysis_status="ready", analysis_json={"observations": [
                                                         {"theme": "plan_followed", "text": "Volgens plan uitgevoerd."}]})])
@@ -133,16 +148,108 @@ def test_weekly_reflection_is_owner_scoped_and_persisted():
         async def commit(self):
             pass
 
-    result = asyncio.run(FinnTradeReviewService(Session()).weekly_report(7, date(2026, 10, 12)))
+    result = asyncio.run(FinnTradeReviewService(Session()).weekly_report(
+        7, date(2026, 10, 12), time_zone="Europe/Amsterdam"))
     assert result["week_start"] == "2026-10-12" and result["week_end"] == "2026-10-19"
     assert result["trades"] == 1 and result["patterns"][0]["review_ids"] == [9]
-    assert len(calls) == 5
-    for sql, params in calls[:3]:
+    assert len(calls) == 6
+    for sql, params in calls[1:4]:
         assert "user_id=:user_id" in sql or "l.user_id=:user_id" in sql
         assert "exit_at >= :start" in sql and "exit_at < :end" in sql
         assert params["user_id"] == 7
-    assert "ON CONFLICT (user_id, week_start) DO UPDATE" in calls[3][0]
-    assert calls[3][1]["week_start"] == date(2026, 10, 12)
+    assert "ON CONFLICT (user_id, week_start) DO UPDATE" in calls[4][0]
+    assert calls[4][1]["week_start"] == date(2026, 10, 12)
+
+
+def test_reflection_week_uses_owner_zone_and_dst_safe_utc_bounds():
+    spring = completed_reflection_week(
+        datetime(2026, 3, 10, tzinfo=timezone.utc), date(2026, 3, 2),
+        time_zone="America/New_York")
+    fall = completed_reflection_week(
+        datetime(2026, 11, 3, tzinfo=timezone.utc), date(2026, 10, 26),
+        time_zone="America/New_York")
+    assert spring[3] - spring[2] == timedelta(hours=167)
+    assert fall[3] - fall[2] == timedelta(hours=169)
+    assert spring[2] == datetime(2026, 3, 2, 5, tzinfo=timezone.utc)
+    assert fall[3] == datetime(2026, 11, 2, 5, tzinfo=timezone.utc)
+    instant = datetime(2026, 11, 1, 11, 30, tzinfo=timezone.utc)
+    assert completed_reflection_week(instant, time_zone="Pacific/Kiritimati")[0] == date(2026, 10, 26)
+    assert completed_reflection_week(instant, time_zone="America/New_York")[0] == date(2026, 10, 19)
+
+
+def test_saved_reflection_keeps_original_zone_bounds_after_preference_changes():
+    saved_summary = {
+        "trades": 1, "plans": 0, "notes": 0, "analyzed": 0,
+        "pending": 1, "unavailable": 0, "patterns": [],
+        "confirmed_lesson_repetitions": [], "patterns_truncated": False,
+        "time_zone": "America/New_York",
+        "period_start_utc": "2026-03-02T05:00:00+00:00",
+        "period_end_utc": "2026-03-09T04:00:00+00:00",
+    }
+    range_params = []
+
+    class Result:
+        def __init__(self, row=None):
+            self.row = row
+
+        def one_or_none(self):
+            return SimpleNamespace(summary=saved_summary,
+                                   generated_at=datetime(2026, 3, 9, 6, tzinfo=timezone.utc))
+
+        def fetchone(self):
+            return SimpleNamespace(_mapping={"trades": 1, "plans": 0, "notes": 0,
+                                             "analyzed": 0, "pending": 1, "unavailable": 0})
+
+        def fetchall(self):
+            return []
+
+    class Session:
+        async def execute(self, statement, params):
+            if "exit_at >= :start" in str(statement):
+                range_params.append(params)
+            return Result()
+
+    result = asyncio.run(FinnTradeReviewService(Session()).weekly_report(
+        7, date(2026, 3, 2), persist=False, time_zone="Asia/Tokyo",
+        as_of_utc=datetime(2026, 3, 10, tzinfo=timezone.utc)))
+    assert result["time_zone"] == "America/New_York"
+    assert result["generated_at"] == "2026-03-09T06:00:00+00:00"
+    assert len(range_params) == 3
+    assert all(row["start"] == datetime(2026, 3, 2, 5, tzinfo=timezone.utc)
+               and row["end"] == datetime(2026, 3, 9, 4, tzinfo=timezone.utc)
+               for row in range_params)
+
+
+def test_saved_old_zone_week_remains_readable_while_new_zone_week_is_open():
+    summary = {"time_zone": "Pacific/Kiritimati",
+               "period_start_utc": "2026-10-25T10:00:00+00:00",
+               "period_end_utc": "2026-11-01T10:00:00+00:00"}
+
+    class Result:
+        def one_or_none(self):
+            return SimpleNamespace(summary=summary,
+                                   generated_at=datetime(2026, 11, 1, 11, tzinfo=timezone.utc))
+
+        def fetchone(self):
+            return SimpleNamespace(_mapping={"trades": 1, "plans": 0, "notes": 0,
+                                             "analyzed": 0, "pending": 1, "unavailable": 0})
+
+        def fetchall(self):
+            return []
+
+    class Session:
+        async def execute(self, _statement, _params):
+            return Result()
+
+    instant = datetime(2026, 11, 1, 11, 30, tzinfo=timezone.utc)
+    with pytest.raises(ValueError):
+        completed_reflection_week(instant, selected=date(2026, 10, 26),
+                                  time_zone="America/New_York")
+    report = asyncio.run(FinnTradeReviewService(Session()).weekly_report(
+        7, date(2026, 10, 26), persist=False,
+        time_zone="America/New_York", as_of_utc=instant))
+    assert report["time_zone"] == "Pacific/Kiritimati"
+    assert report["period_start_utc"] == "2026-10-25T10:00:00+00:00"
 
 
 def test_weekly_report_selection_does_not_hide_current_week_trade_dossiers():
@@ -168,13 +275,16 @@ def test_weekly_report_selection_does_not_hide_current_week_trade_dossiers():
     async def no_projection(_user_id):
         raise AssertionError("GET must not project or write")
 
-    async def prior_week(_user_id, _week_start, *, persist):
+    async def prior_week(_user_id, _week_start, *, persist, time_zone):
         assert persist is False
-        return {"week_start": "2026-10-12"}
+        return {"week_start": "2026-10-12", "time_zone": "Pacific/Kiritimati"}
 
     service._project = no_projection
     service.weekly_report = prior_week
-    asyncio.run(service.list_reviews(7, week_start=date(2026, 10, 12)))
+    response = asyncio.run(service.list_reviews(7, week_start=date(2026, 10, 12),
+                                                time_zone="Europe/Amsterdam"))
+    assert response["time_zone"] == "Europe/Amsterdam"
+    assert response["weekly"]["time_zone"] == "Pacific/Kiritimati"
     dossier_queries = [(sql, params) for sql, params in calls if "FROM finn_trade_reviews" in sql and "ORDER BY exit_at DESC" in sql]
     assert dossier_queries
     for sql, params in dossier_queries:
@@ -204,7 +314,8 @@ def test_empty_trade_review_list_avoids_weekly_queries_and_writes():
         async def commit(self):
             raise AssertionError("GET must not commit")
 
-    result = asyncio.run(FinnTradeReviewService(Session()).list_reviews(7, week_start=date(2026, 10, 12)))
+    result = asyncio.run(FinnTradeReviewService(Session()).list_reviews(
+        7, week_start=date(2026, 10, 12), time_zone="Europe/Amsterdam"))
     assert result["total"] == 0
     assert result["weekly"]["week_start"] == "2026-10-12"
     assert result["weeks"] == ["2026-10-12"]
@@ -241,14 +352,14 @@ def test_weekly_reflection_read_does_not_upsert_or_commit():
             raise AssertionError("GET must not commit")
 
     result = asyncio.run(FinnTradeReviewService(Session()).weekly_report(
-        7, date(2026, 10, 12), persist=False))
+        7, date(2026, 10, 12), persist=False, time_zone="Europe/Amsterdam"))
     assert result["trades"] == 1
     assert result["generated_at"] == "2026-10-19T06:00:00+00:00"
     assert len(calls) == 4
     assert all(sql.lstrip().startswith("SELECT") for sql in calls)
     saved_summary["trades"] = 0
     changed = asyncio.run(FinnTradeReviewService(Session()).weekly_report(
-        7, date(2026, 10, 12), persist=False))
+        7, date(2026, 10, 12), persist=False, time_zone="Europe/Amsterdam"))
     assert changed["trades"] == 1
     assert changed["generated_at"] is None
 

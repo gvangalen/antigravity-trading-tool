@@ -28,15 +28,22 @@ def finalize_weekly_trade_reflections() -> int:
     return asyncio.run(_run_with_task_database(_finalize_weekly_trade_reflections))
 
 
-async def _finalize_weekly_trade_reflections(session_factory=None) -> int:
-    """Save the last closed Amsterdam week for every owner with a review."""
+async def _finalize_weekly_trade_reflections(session_factory=None,
+                                             *, as_of_utc: datetime | None = None) -> int:
+    """Save each owner's last closed local week using their persisted zone."""
     session_factory = session_factory or async_session_factory
     allowed = allowed_trade_review_users()
     if allowed == set():
         return 0
-    monday, _, start, end = completed_reflection_week(datetime.now(timezone.utc))
-    user_filter = "AND user_id = ANY(CAST(:allowed AS INTEGER[]))" if allowed is not None else ""
-    params = {"start": start, "end": end}
+    now = as_of_utc or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        raise ValueError("as_of_utc must be timezone-aware")
+    now = now.astimezone(timezone.utc)
+    # Across IANA zones the just-closed local week can straddle two UTC
+    # calendar weeks. This bounded candidate window covers both sides.
+    candidate_start = now - timedelta(days=15)
+    user_filter = "AND r.user_id = ANY(CAST(:allowed AS INTEGER[]))" if allowed is not None else ""
+    params = {"start": candidate_start, "end": now}
     if allowed is not None:
         params["allowed"] = sorted(allowed)
     completed = 0
@@ -44,10 +51,11 @@ async def _finalize_weekly_trade_reflections(session_factory=None) -> int:
     while True:
         async with session_factory() as session:
             result = await session.execute(text(f"""
-                SELECT DISTINCT user_id FROM finn_trade_reviews
-                WHERE exit_at >= :start AND exit_at < :end
-                  AND user_id > :last_user_id {user_filter}
-                ORDER BY user_id LIMIT 500
+                SELECT DISTINCT r.user_id FROM finn_trade_reviews r
+                JOIN users u ON u.id=r.user_id AND u.is_active=TRUE
+                WHERE r.exit_at >= :start AND r.exit_at < :end
+                  AND r.user_id > :last_user_id {user_filter}
+                ORDER BY r.user_id LIMIT 500
             """), {**params, "last_user_id": last_user_id})
             user_ids = [int(row.user_id) for row in result.fetchall()]
         if not user_ids:
@@ -55,11 +63,29 @@ async def _finalize_weekly_trade_reflections(session_factory=None) -> int:
         for user_id in user_ids:
             try:
                 async with session_factory() as session:
-                    weekly = await FinnTradeReviewService(session).weekly_report(user_id, monday)
+                    owner = await session.execute(text("""
+                        SELECT is_active FROM users WHERE id=:user_id FOR SHARE
+                    """), {"user_id": user_id})
+                    if owner.scalar_one_or_none() is not True:
+                        continue
+                    service = FinnTradeReviewService(session)
+                    owner_zone = await service.owner_time_zone(user_id)
+                    monday, _, _, _ = completed_reflection_week(now, time_zone=owner_zone)
+                    weekly = await service.weekly_report(
+                        user_id, monday, time_zone=owner_zone, as_of_utc=now)
                     if weekly["trades"] > 0:
+                        # weekly_report commits its summary and releases the
+                        # earlier lock. Re-lock through feed commit so an
+                        # account deactivated meanwhile gets no new card.
+                        publish_owner = await session.execute(text("""
+                            SELECT is_active FROM users WHERE id=:user_id FOR SHARE
+                        """), {"user_id": user_id})
+                        if publish_owner.scalar_one_or_none() is not True:
+                            continue
                         facts = {key: weekly[key] for key in (
                             "week_start", "week_end", "trades", "plans", "notes",
-                            "analyzed", "pending", "unavailable")}
+                            "analyzed", "pending", "unavailable", "time_zone",
+                            "period_start_utc", "period_end_utc")}
                         facts["confirmed_repeated_lessons"] = len(
                             weekly.get("confirmed_lesson_repetitions") or [])
                         revision = hashlib.sha256(json.dumps(

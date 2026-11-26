@@ -302,7 +302,8 @@ class FinnV2ReasoningContextService:
                         "quote_source_observed_at",
                         "setup_ids", "action", "decision_id", "bot_id",
                         "exposure_pct", "limit_pct", "valuation_as_of",
-                        "week_start", "week_end", "trades", "plans", "notes",
+                        "week_start", "week_end", "time_zone", "period_start_utc",
+                        "period_end_utc", "trades", "plans", "notes",
                         "report_type", "report_date", "attention_pair", "attention_kind",
                         "analyzed", "pending", "unavailable",
                         "confirmed_repeated_lessons", "suggestion_kind",
@@ -587,7 +588,8 @@ class FinnV2ReasoningContextService:
                                  "current_weekly_reflection": ({
                                      key: summary.get(key) for key in (
                                          "trades", "plans", "notes", "analyzed",
-                                         "pending", "unavailable")
+                                         "pending", "unavailable", "time_zone",
+                                         "period_start_utc", "period_end_utc")
                                  } if isinstance(summary, dict) else {"status": "unavailable"})}
                 if isinstance(summary, dict):
                     allowed_themes = {"plan_followed", "risk", "timing", "exit_process",
