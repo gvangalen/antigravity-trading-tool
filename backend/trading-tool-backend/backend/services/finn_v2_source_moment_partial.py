@@ -24,6 +24,8 @@ def _quantity(value: Any) -> str | None:
         return None
     if not number.is_finite() or number < 0:
         return None
+    if number == 0:
+        return "0"
     return format(number.normalize(), "f").replace(".", ",")
 
 
@@ -77,8 +79,14 @@ def render_source_moment_partial(
         r"\b([A-Z]{2,10})[-\s]+bot\s*#?\s*\d+\b", question, re.I,
     )}
     asks_report = bool(re.search(r"\brapport\w*\b|\bdagrapport\b", question, re.I))
+    asks_scores = bool(re.search(r"\b(?:score\w*|benchmark\w*)\b", question, re.I))
     asks_bot = bool(re.search(r"\bbot\b|\bbot\s*#?\s*\d+\b|\bbotplan\b", question, re.I))
     asks_position = bool(re.search(r"\bpositie\w*\b|\bportefeuille\b", question, re.I))
+    named_position_assets = {
+        match.group(1).upper() for match in re.finditer(
+            r"\b([A-Z]{2,10})[-\s]+(?:Paper[-\s]+)?(?:positie|position)\b", question, re.I,
+        ) if match.group(1).upper() in assets
+    }
     asks_preview = bool(re.search(r"\bpreview\b", question, re.I))
     bot_asset = next(iter(named_bot_assets)) if len(named_bot_assets) == 1 else None
     paper_requested = bool(re.search(r"\bPaper\b", question, re.I))
@@ -151,7 +159,7 @@ def render_source_moment_partial(
 
     reports = [item["data"] for item in completed if item.get("scope") == "read_latest_report"
                and item["data"].get("report_type") == "daily_reports"]
-    if _single(reports) is not None:
+    if asks_report and _single(reports) is not None:
         lines.append("Het gelezen dagrapport is een opgeslagen momentopname. De scores daarin zijn geen actuele botbeslissing.")
         report = reports[0]
         snapshot = report.get("score_source_snapshot") or {}
@@ -165,7 +173,9 @@ def render_source_moment_partial(
                 value = _single(values)
                 if value is not None:
                     lines.append(f"In die rapportmomentopname staat voor {pair} benchmarkscore {value}/100.")
-    if len(pairs) > 1 and (reports or any(item.get("scope") == "read_asset_scores" for item in completed)):
+    if (asks_report or asks_scores) and len(pairs) > 1 and (
+        reports or any(item.get("scope") == "read_asset_scores" for item in completed)
+    ):
         lines.append(f"{' en '.join(sorted(pairs))} zijn afzonderlijke handelsparen; hun scores en bronmomenten kunnen verschillen.")
     pair_score_rows: dict[str, set[tuple[int, str] | None]] = {}
     for item in completed:
@@ -179,7 +189,7 @@ def render_source_moment_partial(
             valid = (data.get("source_status") == "available" and score is not None
                      and type(market_id) is int and market_id > 0)
             pair_score_rows.setdefault(pair, set()).add((market_id, score) if valid else None)
-    for pair, values in sorted(pair_score_rows.items()):
+    for pair, values in (sorted(pair_score_rows.items()) if asks_report or asks_scores else ()):
         if len(values) == 1 and None not in values:
             _, score = next(iter(values))
             lines.append(f"De gelezen paaranalyse voor {pair} heeft benchmarkscore {score}/100.")
@@ -199,12 +209,15 @@ def render_source_moment_partial(
         lines.append("Een botplan beoordeelt daarnaast zijn eigen instapvoorwaarden; een rapportscore is geen koopopdracht.")
 
     positions: dict[tuple[int, str], set[str]] = {}
+    confirmed_position_assets: set[str] = set()
     for item in portfolio_reads:
         for bot in item["data"].get("bots") or []:
             if not isinstance(bot, dict) or bot.get("is_live") is not False:
                 continue
             symbol = str(bot.get("symbol") or "").upper().split("/", 1)[0]
-            if symbol not in assets or (item.get("asset") and str(item["asset"]).upper() != symbol):
+            if symbol not in (named_position_assets or assets) or (
+                item.get("asset") and str(item["asset"]).upper() != symbol
+            ):
                 continue
             quantity = _quantity(bot.get("position_qty"))
             if type(bot.get("bot_id")) is not int:
@@ -219,9 +232,17 @@ def render_source_moment_partial(
             and bot.get("is_live") is False
             for bot in item["data"].get("bots") or []
         ) for item in eligible_reads)
-        if present_in_all and len(quantities) == 1 and "unknown" not in quantities and "0" not in quantities:
+        if present_in_all and quantities == {"0"} and asks_position:
+            lines.append(f"In de gelezen Paper-portefeuille heeft bot #{bot_id} geen open {symbol}-positie (0 {symbol}).")
+            confirmed_position_assets.add(symbol)
+        elif present_in_all and len(quantities) == 1 and "unknown" not in quantities:
             quantity = next(iter(quantities))
             lines.append(f"In de gelezen Paper-portefeuille staat bij bot #{bot_id} een open positie van {quantity} {symbol}.")
+            confirmed_position_assets.add(symbol)
+
+    if lines and len(pairs) == 1 and asks_bot and asks_position and not (asks_report or asks_scores):
+        pair = next(iter(pairs))
+        lines.append(f"{pair} is het genoemde analysepaar; de botvoorwaarden horen bij het eigen botpaar.")
 
     if not lines:
         requested = []
@@ -244,11 +265,8 @@ def render_source_moment_partial(
         missing.append("het dagrapport")
     if asks_bot and (selected_bot is None or not pair_bound):
         missing.append("de koppeling tussen bot en plan")
-    if asks_position and "ETH" in assets and not any(
-        line.startswith("In de gelezen Paper-portefeuille staat bij bot #") and line.endswith(" ETH.")
-        for line in lines
-    ):
-        missing.append("de ETH-positie")
+    for symbol in sorted(named_position_assets - confirmed_position_assets):
+        missing.append(f"de {symbol}-positie")
     if missing:
         lines.append("Ik kon " + ", ".join(missing) + " niet eenduidig bevestigen uit de gelezen gegevens.")
         if asks_bot and not pair_bound and requested_bot_ids:
