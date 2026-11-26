@@ -2052,6 +2052,7 @@ def _minimal_read_answer(
         current_source_moments_supported, source_moment_repair_facts,
     )
     source_moment_diagnostics: list[str] = []
+    typed_source_moment_recovery = False
     if not current_source_moments_supported(
         text, current_evidence, question=message, diagnostics=source_moment_diagnostics,
     ):
@@ -2070,6 +2071,7 @@ def _minimal_read_answer(
             partial, current_evidence, question=message, typed_recovery=True,
         ):
             text = partial
+            typed_source_moment_recovery = True
         else:
             return FinnResponsesVerifiedAnswer(
                 "unavailable", "Ik kan de bronmomenten in dit antwoord niet verifiëren.",
@@ -2105,7 +2107,9 @@ def _minimal_read_answer(
         )
     if turn_contract := getattr(prepared.response, "turn_contract", None):
         from backend.services.finn_v2_turn_contract import turn_contract_gap
-        gap = turn_contract_gap(turn_contract, text)
+        gap = turn_contract_gap(
+            turn_contract, text, typed_recovery=typed_source_moment_recovery,
+        )
         if gap == "paper_cash_total_missing":
             cash = turn_contract.get("paper_cash_total")
             if isinstance(cash, (int, float)) and any(
@@ -2125,7 +2129,9 @@ def _minimal_read_answer(
                     "de": f"Der gesamte Paper-Kassenbestand beträgt laut geprüftem Portfolio €{amount}.",
                 }.get(language, f"De gezamenlijke Paper-kas is €{amount} volgens de uitgelezen portefeuille.")
                 text = f"{text}\n\n{sentence}"
-                gap = turn_contract_gap(turn_contract, text)
+                gap = turn_contract_gap(
+                    turn_contract, text, typed_recovery=typed_source_moment_recovery,
+                )
         if gap:
             return FinnResponsesVerifiedAnswer(
                 "unavailable", "Ik heb je vraag nog niet volledig beantwoord.",
@@ -2583,6 +2589,11 @@ class FinnV2RunService:
                 **({"source_moment_rule": answer.rejection_details.get("source_moment_rule")}
                    if status == "unavailable" and answer.reason == "source_moment_conflicts_with_source"
                    and answer.rejection_details and answer.rejection_details.get("source_moment_rule") else {}),
+                **({"turn_contract_gap": answer.rejection_details["gap"]}
+                   if status == "unavailable" and answer.reason == "turn_contract_mismatch"
+                   and answer.rejection_details
+                   and isinstance(answer.rejection_details.get("gap"), str)
+                   and re.fullmatch(r"[a-z_]+(?::[a-z_]+)?", answer.rejection_details["gap"]) else {}),
                 **({"provider_response_id": response_id}
                    if reasoning_source != "owner_scoped_account_projection" else
                    {"answer_boundary": "owner_scoped_account_bundle"}),

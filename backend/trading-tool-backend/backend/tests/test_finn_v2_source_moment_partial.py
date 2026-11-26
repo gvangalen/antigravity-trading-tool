@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from backend.services.finn_v2_run_service import _minimal_read_answer
 from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
 from backend.services.finn_v2_source_moment_partial import render_source_moment_partial
+from backend.services.finn_v2_turn_contract import build_turn_contract, turn_contract_gap
 
 
 QUESTION = (
@@ -12,6 +13,18 @@ QUESTION = (
     "paaranalyse en botplan uit, en benoem mijn open ETH-positie uit de "
     "scorevrije QA-test. Geef een veilige volgende stap."
 )
+
+
+def _cross_source_contract():
+    return {
+        "question": QUESTION, "answer_type": "compare", "requested_fields": ["position_size"],
+        "targets": [
+            {"setup_id": 12, "name": "BTC herstelplan", "asset_alias_unique": True,
+             "evidence": {"symbol": "BTC"}, "strategy": {}},
+            {"setup_id": 13, "name": "ETH weekplan", "asset_alias_unique": True,
+             "evidence": {"symbol": "ETH"}, "strategy": {}},
+        ],
+    }
 
 
 def _evidence():
@@ -67,7 +80,7 @@ def test_multi_asset_wrong_clock_recovers_only_owner_read_facts():
                 "results": list(evidence),
             }},),
             uses_previous_response=False,
-            turn_contract=None,
+            turn_contract=_cross_source_contract(),
         ),
     )
 
@@ -87,6 +100,7 @@ def test_multi_asset_wrong_clock_recovers_only_owner_read_facts():
     assert "0,00644603 ETH" in answer.text
     assert "geen nieuwe koop onderbouwen" in answer.text
     assert answer.text.endswith("Wil je dat ik de handmatige preview en de bijbehorende setup apart controleer?")
+    assert turn_contract_gap(_cross_source_contract(), answer.text) == "comparison_targets_missing"
 
 
 def test_saved_report_bot_decision_preserves_clockless_status_and_plan_facts():
@@ -129,6 +143,28 @@ def test_saved_report_bot_decision_preserves_clockless_status_and_plan_facts():
         "Het laatste botsignaal voor bot #129 is positief.", tuple(evidence),
         question=QUESTION,
     )
+
+
+def test_typed_recovery_still_requires_targets_for_saved_setup_comparison():
+    contract = {**_cross_source_contract(), "question": "Vergelijk beide setups."}
+
+    assert turn_contract_gap(
+        contract, "Het BTC-plan verschilt van de ETH-positie.", typed_recovery=True,
+    ) == "comparison_targets_missing"
+    inherited = build_turn_contract(
+        message="Vergelijk die twee", tool_trace=(),
+        previous_contract=_cross_source_contract(),
+    )
+    assert inherited["comparison_targets_inherited"] is True
+    assert turn_contract_gap(
+        inherited, "Het BTC-plan verschilt van de ETH-positie.", typed_recovery=True,
+    ) == "comparison_targets_missing"
+    named_by_asset = {
+        **_cross_source_contract(), "question": "Vergelijk mijn BTC-setup en ETH-setup.",
+    }
+    assert turn_contract_gap(
+        named_by_asset, "Het BTC-plan is gelezen.", typed_recovery=True,
+    ) == "comparison_targets_missing"
 
 
 def test_partial_answer_does_not_repeat_unread_eth_position_or_bot_status():

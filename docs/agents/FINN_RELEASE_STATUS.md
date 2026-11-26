@@ -4,6 +4,31 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: antwoordcontract na bronmomentherstel (26 november 2026)
+
+Phase: `LOCAL_REPAIR_CANDIDATE_REVIEW_PENDING`. Onafhankelijke ingelogde QA
+op publieke SHA `f9c4445772eb97f5eaff8151fbceada4b5ef5641` gaf
+`NOT_ACCEPTED`: de exacte samengestelde BTC/EUR-, BTC/USDT- en ETH-vraag
+eindigde in run `finn-v2-run-a9bcccb923bd4f08afb0d779d3d3851d` met
+`turn_contract_mismatch` en alleen "Ik heb je vraag nog niet volledig
+beantwoord." Een paar-/bottegenproef eindigde in run
+`finn-v2-run-fae76b93b8544a38b5931e0517e1ada4` met dezelfde code;
+een score-only tegenproef gaf afzonderlijke parenscores. De eigenaargebonden
+runrespons toonde geen specifieke contract-gap. Geen voorstellen,
+accountmutaties, botacties of orders.
+
+Build reproduceerde lokaal `comparison_targets_missing`: de vraag vergelijkt
+een rapport, paaranalyse en botplan, maar het antwoordcontract kan door
+meerdere gelezen opgeslagen setups een vergelijking van al die setupnamen
+eisen. De reparatie laat alleen bij deterministisch getypeerd
+bronmomentherstel die extra eis weg wanneer de gebruiker geen twee opgeslagen
+setups of plannen vergelijkt. Gewone modeltekst en echte vergelijking van
+meerdere opgeslagen setups houden de strenge doelcheck. Bij afwijzing toont
+de eigenaargebonden runrespons voortaan alleen de vaste contract-gap-code
+voor diagnose, zonder broninhoud. Gerichte regressies **50/50**. Brede Build-
+gates, onafhankelijke codebeoordeling, CI, deploy en ingelogde live hertest
+staan nog open.
+
 ## FINN 3.0: live vervolg op bronmomentantwoord (26 november 2026)
 
 Phase: `LIVE_CANDIDATE_QA_PENDING`. Reparatie-PR

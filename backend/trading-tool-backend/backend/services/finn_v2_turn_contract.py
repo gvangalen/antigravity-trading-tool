@@ -168,6 +168,14 @@ def build_turn_contract(
 
     bound_ids = [setup_id for setup_id in resolved_target_ids if setup_id in setups]
     target_ids = bound_ids or named_ids or ([next(iter(setups))] if len(setups) == 1 else [])
+    prior_pair_ids = {
+        target.get("setup_id") for target in (previous_contract or {}).get("targets") or []
+        if isinstance(target, dict) and isinstance(target.get("setup_id"), int)
+    }
+    comparison_targets_inherited = bool(
+        len(prior_pair_ids) == 2 and set(target_ids) == prior_pair_ids
+        and re.search(r"\b(?:die twee|deze twee|beide|allebei|those two|both)\b", message, re.I)
+    )
     targets = []
     symbol_counts: dict[str, int] = {}
     for row in all_rows:
@@ -209,6 +217,7 @@ def build_turn_contract(
         # read. Preserve its identities even when this turn has no tool call.
         targets = [dict(target) for target in previous_contract["targets"]]
         evidence_fields = list(previous_contract.get("evidence_fields") or [])
+        comparison_targets_inherited = True
     requested_fields = _requested_fields(message)
     if (
         selected_answer_type == "weigh"
@@ -226,6 +235,7 @@ def build_turn_contract(
         "answer_type": selected_answer_type,
         "requested_fields": requested_fields,
         "targets": targets,
+        "comparison_targets_inherited": comparison_targets_inherited,
         "focused_setup_id": focused_setup_id,
         "focused_strategy_id": focused_strategy_id,
         "evidence_fields": evidence_fields,
@@ -243,7 +253,9 @@ def build_turn_contract(
     }
 
 
-def turn_contract_gap(contract: Mapping[str, Any], answer: str) -> str | None:
+def turn_contract_gap(
+    contract: Mapping[str, Any], answer: str, *, typed_recovery: bool = False,
+) -> str | None:
     """Only reject objectively missing selected objects or strategy fields."""
     coach = contract.get("coach_evidence_plan")
     if isinstance(coach, dict):
@@ -296,7 +308,25 @@ def turn_contract_gap(contract: Mapping[str, Any], answer: str) -> str | None:
             if not any(abs(value - expected) < Decimal("0.005") for value in values):
                 return "paper_cash_total_missing"
     targets = contract.get("targets") or []
-    if contract.get("answer_type") == "compare" and len(targets) >= 2:
+    question = str(contract.get("question") or "")
+    named_targets_in_question = sum(
+        bool(name and name.casefold() in question.casefold())
+        for target in targets
+        for name in (str(target.get("name") or ""),)
+    )
+    asks_to_compare_saved_setups = bool(
+        named_targets_in_question >= 2
+        or len(re.findall(r"\b(?:setup|plan|strategie)\b", question, re.I)) >= 2
+        or re.search(r"\b(?:setups|plannen|strategieën|strategies|plans)\b", question, re.I)
+        or contract.get("comparison_targets_inherited") is True
+        or re.search(r"\b(?:die twee|deze twee|beide|allebei|those two|both)\b", question, re.I)
+        or not re.search(r"\b(?:rapport\w*|paaranalyse|positie\w*|portefeuille)\b", question, re.I)
+    )
+    # A typed answer can compare a report, pair scores and one linked bot plan
+    # while the read bundle happens to contain several other saved setups.
+    # Free model prose retains the original strict target-coverage check.
+    if (contract.get("answer_type") == "compare" and len(targets) >= 2
+            and (not typed_recovery or asks_to_compare_saved_setups)):
         strategy_name_counts: dict[str, int] = {}
         for target in targets:
             strategy_name = str((target.get("strategy") or {}).get("name") or "").casefold()
