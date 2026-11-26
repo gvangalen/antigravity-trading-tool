@@ -4,9 +4,45 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: nulpositie en gevraagde broninhoud (26 november 2026)
+
+Phase: `LOCAL_GATES_COMPLETE_CI_PENDING`. Onafhankelijke ingelogde QA op exact publieke
+SHA `f10b13f6a660dba7ba5725bae57139c655971958` gaf `NOT_ACCEPTED` voor
+de gemengde bot-/positievraag. FINN noemde bot 129 actief en hield de
+planbinding terecht onzeker, maar liet de zichtbare ETH/EUR-Paper-bot met
+`position_qty=0` onbeantwoord en voegde een niet-gevraagde historische
+BTC/EUR-rapportscore toe. De score-only tegenproef en de oorspronkelijke
+lange rapportvraag gaven veilige deelantwoorden. De Portfolio-UI toonde
+€0 in posities en bij de ETH-bot “Geen open positie”. QA deed geen
+accountmutatie of order.
+
+De brongebonden hersteltekst benoemt nu een exact gelezen nulhoeveelheid als
+“geen open positie” voor die Paper-bot; ontbrekende of tegenstrijdige aantallen
+blijven onbekend. Als een tweede bot voor hetzelfde asset geen verifieerbaar
+aantal heeft, blijft de assetpositie als geheel onzeker. Positietekst
+verschijnt alleen bij een positievraag. Rapportmomentopnamen en actuele
+paarscores worden alleen genoemd wanneer de vraag om rapport of score vraagt.
+De lange rapportvraag behoudt haar brongebonden rapportcijfers. Deze
+read-only reparatie bevat geen bot-, order- of accountmutatie.
+
+Onafhankelijke code-QA en Security vonden op implementatiehead
+`365d2f9c851ec427ae1750e154e0d2f8d379d066` geen blocker. Gerichte
+FINN-tests **1081/1081** groen. Volledige backend **5609 passed, 7 skipped**
+(log SHA-256 `a2d1bf08797c816e83bd6ea6dca299be535afe55d9dfea1591e97c0aa46b0866`).
+Geïsoleerde API/worker-actiecontractmatrix **17/17**, nul brokerorders,
+Live-calls en productieverbindingen (artifact SHA-256
+`00ee240b94b43e10e17a335f3cc75e31a4fc9e1290b7ba9a65b85765b3d027fc`).
+Echte providerselector development **20/20** (artifact SHA-256
+`d8fa73dceef9909c3be0c7f130e6741b06ba56f87c244160da8afd35efd2aa30`),
+zonder provider-, parse-, schema-, timeout- of validatiefout. Echte
+providerselector regressie **109/109** (artifact SHA-256
+`5708ec7fc51b05cec3f427e875c19ea0c6772ab3bafba900df6badc84dde3374`),
+eveneens zonder provider-, parse-, schema-, timeout- of validatiefout. CI,
+Auto Deploy, publieke SHA-pariteit en ingelogde live QA zijn nog open.
+
 ## FINN 3.0: eigenaargebonden bot- en positieantwoord (26 november 2026)
 
-Phase: `DEPLOY_IDENTITY_VERIFIED_QA_PENDING`. Onafhankelijke ingelogde QA op publieke
+Phase: `LIVE_QA_NOT_ACCEPTED`. Onafhankelijke ingelogde QA op publieke
 SHA `66bc7ccffa5e72f18329b7a020a81788fa89756e` gaf `NOT_ACCEPTED`:
 de oorspronkelijke rapport-/paar-/botvraag kreeg een veilig deelantwoord en
 de scorevraag werkte, maar de vraag naar BTC/EUR, open ETH-positie en bot 129
@@ -33,7 +69,8 @@ Echte providerselector regressie **109/109** (artifact SHA-256
 `10a18d96e068feb8214241a32e0dc850c404e81e30f6ed46a5a6d7d3a3a4328b`),
 eveneens zonder provider-, parse-, schema-, timeout- of validatiefout.
 Onafhankelijke code-QA en Security vonden op de finale implementatiehead geen
-blocker. Ingelogde live QA staat nog open. Frontendbron is niet gewijzigd.
+blocker. De latere ingelogde live QA gaf het hierboven beschreven
+`NOT_ACCEPTED`-verdict. Frontendbron is niet gewijzigd.
 
 Reparatie-PR [#1393](https://github.com/gvangalen/antigravity-trading-tool/pull/1393)
 is als `3d385e05462e192fe7a35093221e2466af6e51ae` samengevoegd. PR-CI
