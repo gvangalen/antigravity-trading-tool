@@ -4,6 +4,45 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: live vervolg op bronmomentantwoord (26 november 2026)
+
+Phase: `LOCAL_VALIDATED_REVIEW_PENDING`. Onafhankelijke ingelogde QA op
+publieke SHA `6495d15c8d5184901bd3f09741ab7d857fa93295` gaf
+`NOT_ACCEPTED` voor de samengestelde BTC/EUR-, BTC/USDT- en ETH-vraag:
+run `finn-v2-run-a693e0be88fe4c2382cb10052f149c50` eindigde nog steeds
+met alleen de generieke bronmomentfout. De eigenaargebonden runrespons meldde
+`source_moment_rule=bot_decision_clock_mismatch`; de voltooide read-scopes
+waren daarin niet zichtbaar. De score-only tegenproef gaf wel twee scores,
+en een mismatch-vraag eindigde apart met `turn_contract_mismatch` zonder
+verkeerde botpaarkoppeling. Er zijn geen accountmutaties, voorstellen, bots
+of orders uitgevoerd.
+
+Build reproduceerde de exacte afwijzingsregel lokaal met een opgeslagen
+rapportbesluit zonder afzonderlijk actuele botbeslissing. De bronmomentguard
+wees daardoor ook veilige botstatus- en planzinnen zonder klokclaim af zodra
+de gebruiker naar `nu` vroeg. De uitzondering geldt alleen voor de
+deterministische hersteltekst uit getypeerde lezingen; vrije modeltekst houdt
+de strengere controle. Een claim over het laatste botbesluit zonder actuele
+beslissingsbron blijft afgewezen. Zo blijven de geverifieerde
+rapport-, score-, botplan- en positiefeiten en de veilige vervolgstap in het
+antwoord. Als de hersteltekst nog steeds niet door de guard komt, vraagt FINN
+welk handelspaar eerst gecontroleerd moet worden. De afgekeurde modeltekst
+wordt nooit hergebruikt.
+
+Gemeten lokale gates: gerichte bronmomenttests **41/41**; volledige backend
+**5594 passed, 7 skipped** (log SHA-256
+`8ed902bf87252567f810dea2b3c1c421026643c6f5fdab9d08927905e7607976`).
+Geïsoleerde API/worker-actiecontractmatrix **17/17**, nul brokerorders,
+Live-calls en productieverbindingen (artifact SHA-256
+`db53e31d653856049cf5ff80e6967aa80cb52813c07dbb4bd7d3b262191cc46d`).
+Echte providerselector development **20/20** (artifact SHA-256
+`616fc65490e8a56f293b4ae03e7a65dccccdd0eee64847e7bcbdcfcc8315ec18`)
+en regressie **109/109** (artifact SHA-256
+`0d62a8008a17bae3400c0ea1c98561d25a60d816e79e24e3313e04df63d969fa`),
+allebei zonder provider-, schema-, timeout-, parse- of validatiefouten. De
+lokale stack en haar volume zijn opgeruimd. Frontendbron is niet gewijzigd.
+Onafhankelijke codebeoordeling, CI, deploypariteit en live hertest staan open.
+
 ## FINN 3.0: antwoord bij conflicterend bronmoment (26 november 2026)
 
 Phase: `LIVE_CANDIDATE_QA_PENDING`. Product-PR
