@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: antwoord bij conflicterend bronmoment (26 november 2026)
 
-Phase: `LOCAL_GATES_GREEN_PR_CI_GREEN_DEPLOY_PENDING`. Product-PR
+Phase: `LIVE_CANDIDATE_QA_PENDING`. Product-PR
 [#1386](https://github.com/gvangalen/antigravity-trading-tool/pull/1386),
 implementatiecommit `2f0ab43f1dbb901075fb93c752182d6a1570556b`.
 Bij een gecombineerd BTC/EUR-, BTC/USDT- en ETH-verzoek kon een afgekeurde
@@ -37,7 +37,15 @@ met nul provider-, schema-, timeout-, parse- of validatiefouten. De lokale
 teststack en haar volume zijn opgeruimd. Onafhankelijke QA- en Security-
 codebeoordeling op de implementatiecommit vond geen blocker; ingelogde live
 runtimeacceptatie is nog niet uitgevoerd. PR-CI `45868751782` slaagde op die
-implementatiecommit. Frontendbron is niet gewijzigd.
+implementatiecommit; de finale PR-CI `45871242260` had vijf geslaagde jobs.
+Main-CI `45872482291` had eveneens vijf geslaagde jobs. Auto Deploy
+`45873626031` slaagde. GitHub main, publieke backend `/api/health` en frontend
+`/build-info.json` wezen daarna alle drie naar exact
+`b0c0876541d47574c89b9ce8ef7b2739539eb17f`; beide endpoints gaven
+HTTP 200. Frontendbron is niet gewijzigd. De ingelogde onafhankelijke
+live-QA op de definitieve publieke SHA staat nog open. Deze statuscommit
+maakt opnieuw een publieke SHA; vóór QA moeten ook haar eigen main-CI,
+Auto Deploy en SHA-pariteit worden gecontroleerd.
 
 ## FINN 3.0: weekreflectie in accounttijdzone (26 november 2026)
 
