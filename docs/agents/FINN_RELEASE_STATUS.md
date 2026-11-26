@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: brede profiel- en Paper-botvergelijking (26 november 2026)
 
-Phase: `LIVE_CANDIDATE_QA_PENDING`. Product-PR [#1380](https://github.com/gvangalen/antigravity-trading-tool/pull/1380),
+Phase: `LIVE_QA_ACCEPTED_SCOPE_LIMITED`. Product-PR [#1380](https://github.com/gvangalen/antigravity-trading-tool/pull/1380),
 productcommit `b682746cb`, merge-SHA `f093f665e56a01ef88301ccbc5bfa718c2ac4e5c`.
 De wijziging corrigeert het eerste brede antwoord:
 de setup en strategie komen uit de exacte eigenaargebonden Paper-botrij,
@@ -38,8 +38,25 @@ Auto Deploy `45829240136` slaagde; GitHub main, publieke backend-health en
 frontend-buildinfo toonden daarna exact de merge-SHA met HTTP 200. Deze
 statusupdate verandert zelf de publieke SHA zodra zij wordt gemerged; wacht
 haar eigen main-CI, Auto Deploy en exacte SHA-pariteit af vóór onafhankelijke
-ingelogde QA op de definitieve release. De live acceptatie van het eerste
-brede antwoord is dus nog open.
+ingelogde QA op de definitieve release.
+
+Onafhankelijke ingelogde browser-QA accepteerde op exacte publieke SHA
+`8fea06e6229dca985dec3b0ab8123825ffabd53c` de afgesproken eerste brede
+read-only vraag in een nieuw FINN-gesprek van het Gerrit Paper-account. Het
+antwoord noemde profiel Bitcoin-focus, DCA-stijl en normaal risico; bot 56
+werd gekoppeld aan setup ‘Long term DCA BTC’ en strategie ‘Strategie long
+term dca btc’, niet aan de nieuwere losse Smart DCA-setup. FINN scheidde
+€1.000 botbudgetlimiet, €0 werkelijk belegd, €10.000 botkas, €0 totaal belegd
+en €10.000 totale Paper-kas; het uitleesmoment was 2026-11-26 14:50:52 CET.
+Het controlepunt koppelde instapregels en budgetlimiet aan de eigen
+risicogrens/FOMO/overtraden. De zichtbare profiel-, bot- en portefeuille-UI
+bevestigde deze gegevens, en het antwoord bleef na refresh beschikbaar.
+Geen voorstel, bevestiging, order, Live-actie of gewone accountmutatie.
+Dit verdict dekt de ingelogde browserflow op genoemde SHA; geen beschermde
+fixture, polling/SSE-pariteit of expliciete paar-negatiefcase is in deze
+live proef gemeten. Deze latere verdictregistratie bevat geen runtimecode;
+haar eigen definitieve publieke SHA wordt via CI, Auto Deploy en beide
+publieke endpoints afzonderlijk gecontroleerd.
 
 ## DCA-setup naar Paper-bot: bedrag, limieten en weekritme (26 november 2026)
 
