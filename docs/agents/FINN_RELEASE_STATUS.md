@@ -4,6 +4,41 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: antwoord bij conflicterend bronmoment (26 november 2026)
+
+Phase: `LOCAL_GATES_GREEN_PR_CI_GREEN_DEPLOY_PENDING`. Product-PR
+[#1386](https://github.com/gvangalen/antigravity-trading-tool/pull/1386),
+implementatiecommit `2f0ab43f1dbb901075fb93c752182d6a1570556b`.
+Bij een gecombineerd BTC/EUR-, BTC/USDT- en ETH-verzoek kon een afgekeurde
+bronmomentclaim eindigen in alleen een generieke verificatiefout. De nieuwe
+read-only herstelroute gebruikt uitsluitend geslaagde lezingen uit dezelfde
+beurt. Zij scheidt dagrapport, huidige paaranalyse, gekoppelde Paper-bot en
+werkelijke positie; tegenstrijdige feiten worden weggelaten. Bot- en
+planclaims vereisen een exacte handelspaarbinding. Een handmatige preview
+wordt niet met de botdrempel gelijkgesteld. Alleen twee vaste, in de botengine
+aanwezige blokkaderedenen worden naar vaste tekst vertaald; andere vrije
+redenen worden niet herhaald. De vervolgvraag betreft alleen nog ontbrekende,
+gevraagde informatie. Er is geen actie-, bevestigings- of orderroute gewijzigd.
+
+Gemeten Build-evidence op de definitieve implementatie: volledige backend-suite
+**5593 passed, 7 skipped** (log SHA-256
+`f60d80e921ffd4a4a66bc579aa15ac972fdbf4a5e691cfba500e8f1617b7ee61`);
+laatste gerichte bronmomenttests **40/40**. De geïsoleerde lokale API/worker-
+actiecontractmatrix slaagde **17/17**, met nul brokerorders, Live-calls en
+productieverbindingen (artifact SHA-256
+`f38c2dad5bc61feb3def8d3358c3c229e19cbaf4b63ad95a9b6aa14532b07ccb`).
+Adaptertests **28/28**, Smart DCA-schema en bevestigde Smart DCA- en
+kalender-DCA-runtime slaagden. Echte providerselector: development **20/20**
+(artifact SHA-256
+`25e0b20b520610d0893b9abdb6aeb364666c208624225c1ff013b7761c30acff`)
+en regressie **109/109** (artifact SHA-256
+`2d50fbc2e90127a4576f8ca99912450349a17071dd0481f655cddc5b880aab01`),
+met nul provider-, schema-, timeout-, parse- of validatiefouten. De lokale
+teststack en haar volume zijn opgeruimd. Onafhankelijke QA- en Security-
+codebeoordeling op de implementatiecommit vond geen blocker; ingelogde live
+runtimeacceptatie is nog niet uitgevoerd. PR-CI `45868751782` slaagde op die
+implementatiecommit. Frontendbron is niet gewijzigd.
+
 ## FINN 3.0: weekreflectie in accounttijdzone (26 november 2026)
 
 Phase: `LIVE_QA_ACCEPTED_READ_SCOPE_TRIGGER_UNTESTED`. Product-PR [#1384](https://github.com/gvangalen/antigravity-trading-tool/pull/1384),
