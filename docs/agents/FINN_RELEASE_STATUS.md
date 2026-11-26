@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: nulpositie en gevraagde broninhoud (26 november 2026)
 
-Phase: `LOCAL_GATES_COMPLETE_CI_PENDING`. Onafhankelijke ingelogde QA op exact publieke
+Phase: `DEPLOY_IDENTITY_VERIFIED_QA_PENDING`. Onafhankelijke ingelogde QA op exact publieke
 SHA `f10b13f6a660dba7ba5725bae57139c655971958` gaf `NOT_ACCEPTED` voor
 de gemengde bot-/positievraag. FINN noemde bot 129 actief en hield de
 planbinding terecht onzeker, maar liet de zichtbare ETH/EUR-Paper-bot met
@@ -37,8 +37,17 @@ Echte providerselector development **20/20** (artifact SHA-256
 zonder provider-, parse-, schema-, timeout- of validatiefout. Echte
 providerselector regressie **109/109** (artifact SHA-256
 `5708ec7fc51b05cec3f427e875c19ea0c6772ab3bafba900df6badc84dde3374`),
-eveneens zonder provider-, parse-, schema-, timeout- of validatiefout. CI,
-Auto Deploy, publieke SHA-pariteit en ingelogde live QA zijn nog open.
+eveneens zonder provider-, parse-, schema-, timeout- of validatiefout.
+
+Reparatie-PR [#1395](https://github.com/gvangalen/antigravity-trading-tool/pull/1395)
+is als `c06298f4d31df87aec637ce31e07599ec75b99a4` samengevoegd.
+PR-CI `45909172900`, main-CI `45910094948` en Auto Deploy `45910912903`
+slaagden voor die productcommit. Main wees naar dezelfde SHA; publieke
+backend-health en frontend-build-info gaven beide HTTP 200 en die exacte
+SHA terug. Deze gemeten statusupdate creëert zelf een nieuwe commit en
+vereist daarom opnieuw succesvolle main-CI, Auto Deploy en publieke
+SHA-pariteit voordat onafhankelijke ingelogde QA de definitieve live
+revisie test. Er is nog geen QA-verdict voor deze reparatie.
 
 ## FINN 3.0: eigenaargebonden bot- en positieantwoord (26 november 2026)
 
