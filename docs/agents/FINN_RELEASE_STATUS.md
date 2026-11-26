@@ -6,9 +6,9 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: brede profiel- en Paper-botvergelijking (26 november 2026)
 
-Phase: `LOCAL_VALIDATED_PR_PENDING`. Productcommit `b682746cb` op branch
-`codex/finn-profile-fit-20261126`; publieke release en onafhankelijke live-QA
-zijn nog niet uitgevoerd. De wijziging corrigeert het eerste brede antwoord:
+Phase: `LIVE_CANDIDATE_QA_PENDING`. Product-PR [#1380](https://github.com/gvangalen/antigravity-trading-tool/pull/1380),
+productcommit `b682746cb`, merge-SHA `f093f665e56a01ef88301ccbc5bfa718c2ac4e5c`.
+De wijziging corrigeert het eerste brede antwoord:
 de setup en strategie komen uit de exacte eigenaargebonden Paper-botrij,
 niet uit de nieuwste losse setup voor hetzelfde asset. Botbudgetlimiet,
 werkelijk belegd bedrag, botkas en totale Paper-kas blijven gescheiden. Een
@@ -33,6 +33,13 @@ en geen voorstel. Een aparte `BTC / USDT`-vraag gaf alleen een bronbeperking,
 zonder setup-/strategie-/kasclaim. De geïsoleerde lokale infrastructuur is
 na afloop opgeruimd. Onafhankelijke QA- en Security-codeherbeoordelingen
 vonden op de definitieve diff geen blocker; dit is geen live-verdict.
+PR-CI `45826508866` en main-CI `45827927483` hadden elk vijf geslaagde jobs.
+Auto Deploy `45829240136` slaagde; GitHub main, publieke backend-health en
+frontend-buildinfo toonden daarna exact de merge-SHA met HTTP 200. Deze
+statusupdate verandert zelf de publieke SHA zodra zij wordt gemerged; wacht
+haar eigen main-CI, Auto Deploy en exacte SHA-pariteit af vóór onafhankelijke
+ingelogde QA op de definitieve release. De live acceptatie van het eerste
+brede antwoord is dus nog open.
 
 ## DCA-setup naar Paper-bot: bedrag, limieten en weekritme (26 november 2026)
 
