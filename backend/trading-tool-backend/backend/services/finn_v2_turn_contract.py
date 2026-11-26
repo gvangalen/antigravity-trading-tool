@@ -323,6 +323,9 @@ def turn_contract_gap(
     )
     score_only_pair_comparison = bool(
         re.search(r"\b(?:score\w*|benchmark\w*)\b", question, re.I)
+        and len(set(re.findall(
+            r"\b[A-Z0-9]{2,12}/[A-Z0-9]{2,12}\b", question, re.I,
+        ))) >= 2
         and not re.search(
             r"\b(?:setup\w*|plan\w*|strateg\w*|configuratie\w*|rapport\w*|paaranalyse|positie\w*|portefeuille)\b",
             question, re.I,
@@ -333,9 +336,7 @@ def turn_contract_gap(
         or len(re.findall(r"\b(?:setup|plan|strategie)\b", question, re.I)) >= 2
         or re.search(r"\b(?:setups|plannen|strategieën|strategies|plans)\b", question, re.I)
         or (contract.get("comparison_targets_inherited") is True and not score_only_pair_comparison)
-        or (not score_only_pair_comparison and re.search(
-            r"\b(?:die twee|deze twee|beide|allebei|those two|both)\b", question, re.I,
-        ))
+        or re.search(r"\b(?:die twee|deze twee|beide|allebei|those two|both)\b", question, re.I)
         or not re.search(
             r"\b(?:rapport\w*|paaranalyse|positie\w*|portefeuille|score\w*|benchmark\w*)\b",
             question, re.I,

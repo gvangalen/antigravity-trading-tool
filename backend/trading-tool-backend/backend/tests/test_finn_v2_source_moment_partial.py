@@ -192,6 +192,13 @@ def test_typed_recovery_score_comparison_ignores_incidental_saved_setups():
 
     assert turn_contract_gap(contract, answer) == "comparison_targets_missing"
     assert turn_contract_gap(contract, answer, typed_recovery=True) is None
+    setup_referent = {
+        **contract,
+        "question": "Vergelijk voor BTC en ETH de scores van die twee",
+    }
+    assert turn_contract_gap(
+        setup_referent, answer, typed_recovery=True,
+    ) == "comparison_targets_missing"
 
 
 def test_typed_recovery_score_comparison_after_saved_setup_pair():
@@ -213,6 +220,13 @@ def test_typed_recovery_score_comparison_after_saved_setup_pair():
     assert contract["comparison_targets_inherited"] is True
     assert turn_contract_gap(contract, answer) == "comparison_targets_missing"
     assert turn_contract_gap(contract, answer, typed_recovery=True) is None
+    setup_referent = {
+        **contract,
+        "question": "Vergelijk voor BTC en ETH de scores van die twee",
+    }
+    assert turn_contract_gap(
+        setup_referent, answer, typed_recovery=True,
+    ) == "comparison_targets_missing"
 
 
 def test_partial_answer_does_not_repeat_unread_eth_position_or_bot_status():
