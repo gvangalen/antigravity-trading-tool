@@ -54,13 +54,16 @@ function MultiChoiceGroup({ title, subtitle, options, values, onToggle }) {
 
 export default function ProfilePage() {
   const { t, locale, setLocale, supportedLocales } = useTranslation();
-  const { user, logout } = useAuth();
+  const { user, logout, reload } = useAuth();
   const { showSnackbar } = useModal();
   const [loadingLogout, setLoadingLogout] = useState(false);
   const [loadingPreferences, setLoadingPreferences] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileError, setProfileError] = useState(null);
+  const [timeZone, setTimeZone] = useState("");
+  const [savingTimeZone, setSavingTimeZone] = useState(false);
+  const [timeZoneError, setTimeZoneError] = useState(null);
   const [profileForm, setProfileForm] = useState({
     trader_types: [],
     primary_timeframes: [],
@@ -122,6 +125,7 @@ export default function ProfilePage() {
         if (cancelled) return;
 
         setProfileForm(normalizeTraderProfilePreferences(preferences));
+        setTimeZone(preferences.time_zone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
       } catch (err) {
         console.error("Trader profile load failed", err);
         if (!cancelled) {
@@ -184,6 +188,28 @@ export default function ProfilePage() {
       setProfileError(t?.traderProfile?.profilePage?.saveError);
     } finally {
       setSavingProfile(false);
+    }
+  };
+
+  const handleSaveTimeZone = async () => {
+    const normalized = timeZone.trim();
+    try {
+      Intl.DateTimeFormat("en", { timeZone: normalized });
+    } catch {
+      setTimeZoneError(t?.traderProfile?.profilePage?.timeZoneInvalid);
+      return;
+    }
+    try {
+      setSavingTimeZone(true);
+      setTimeZoneError(null);
+      await updateAssistantPreferences({ time_zone: normalized });
+      await reload();
+      setTimeZone(normalized);
+      showSnackbar(t?.traderProfile?.profilePage?.timeZoneSaved, "success");
+    } catch {
+      setTimeZoneError(t?.traderProfile?.profilePage?.timeZoneSaveError);
+    } finally {
+      setSavingTimeZone(false);
     }
   };
 
@@ -312,6 +338,28 @@ export default function ProfilePage() {
                   })}
                 </div>
               </div>
+            </div>
+
+            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <label htmlFor="account-time-zone" className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
+                {t?.traderProfile?.profilePage?.timeZoneLabel}
+              </label>
+              <p className="mt-2 text-sm font-medium text-slate-500">
+                {t?.traderProfile?.profilePage?.timeZoneDescription}
+              </p>
+              <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                <input id="account-time-zone" list="account-time-zones" value={timeZone}
+                  onChange={(event) => setTimeZone(event.target.value)} disabled={loadingPreferences || savingTimeZone}
+                  className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900" />
+                <datalist id="account-time-zones">
+                  {['UTC', 'Europe/Amsterdam', 'Europe/London', 'America/New_York', 'America/Los_Angeles', 'Asia/Tokyo', 'Pacific/Kiritimati'].map((zone) => <option key={zone} value={zone} />)}
+                </datalist>
+                <button type="button" onClick={handleSaveTimeZone} disabled={loadingPreferences || savingTimeZone || !timeZone.trim()}
+                  className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
+                  {t?.traderProfile?.profilePage?.timeZoneSave}
+                </button>
+              </div>
+              {timeZoneError && <p className="mt-2 text-xs font-medium text-red-600">{timeZoneError}</p>}
             </div>
           </div>
         </div>

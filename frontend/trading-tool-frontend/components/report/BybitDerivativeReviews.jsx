@@ -3,13 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createFinnBybitDerivativeReview, fetchFinnBybitDerivativeEpisodes, fetchFinnBybitDerivativeStreams, fetchFinnBybitDerivatives, syncFinnBybitDerivatives } from '@/lib/api/botApi';
 
-const formatDate = (value, locale) => {
+const formatDate = (value, locale, timeZone) => {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+  return Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short', timeZone }).format(date);
 };
 const formatNumber = (value, locale) => new Intl.NumberFormat(locale, { maximumFractionDigits: 8 }).format(Number(value) || 0);
 
-export default function BybitDerivativeReviews({ copy, locale, onCreated }) {
+export default function BybitDerivativeReviews({ copy, locale, timeZone, onCreated }) {
   const [sources, setSources] = useState([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -156,7 +156,7 @@ export default function BybitDerivativeReviews({ copy, locale, onCreated }) {
     {sources.map((source) => <div key={`${source.source_id}:${source.category}`} className="mt-3 rounded-lg bg-slate-50 p-3 dark:bg-slate-900">
       <p><strong>{copy.derivativeCategory?.[source.category] || source.category}</strong> · {copy.exchangeImportStates?.[source.status] || source.status}</p>
       <p className="mt-1 text-slate-500">{source.trade_executions || 0} {copy.exchangeImportFills} · {source.unresolved_orders || 0} {copy.derivativeUnresolvedOrders} · {source.material_events || 0} {copy.derivativeMaterialEvents}</p>
-      {source.coverage_through_at && <p className="mt-1 text-slate-500">{copy.exchangeImportThrough}: {formatDate(source.coverage_through_at, locale)}</p>}
+      {source.coverage_through_at && <p className="mt-1 text-slate-500">{copy.exchangeImportThrough}: {formatDate(source.coverage_through_at, locale, timeZone)}</p>}
       {source.source_id && <button type="button" onClick={() => openEpisodes(source)} className="mt-2 font-bold text-blue-600 underline dark:text-blue-300">{opened?.source_id === source.source_id && opened?.category === source.category ? copy.derivativeHideEpisodes : copy.derivativeShowEpisodes}</button>}
       {opened?.source_id === source.source_id && opened?.category === source.category && <div className="mt-3 space-y-2">
         {streams.length > 0 && <div className="flex flex-wrap gap-1" aria-label={copy.derivativeStreams}>
@@ -169,7 +169,7 @@ export default function BybitDerivativeReviews({ copy, locale, onCreated }) {
         {!episodesLoading && !episodesError && episodes.length === 0 && <p className="text-slate-500">{nextEvidenceCursor ? copy.derivativeNoClosedHere : copy.derivativeNoClosed}</p>}
         {episodes.map((episode) => <button key={episode.episode_key} type="button" onClick={() => selectEpisode(episode, source)} className={`block w-full rounded-lg border p-3 text-left ${selected?.episode_key === episode.episode_key ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30' : 'border-slate-200 dark:border-slate-700'}`}>
           <strong>{episode.symbol} · {copy.derivativeDirection?.[episode.direction] || episode.direction}</strong>
-          <span className="mt-1 block text-slate-500">{formatDate(episode.entry_at, locale)} → {formatDate(episode.exit_at, locale)} · {episode.slices?.length || 0} {copy.derivativeSlices}</span>
+          <span className="mt-1 block text-slate-500">{formatDate(episode.entry_at, locale, timeZone)} → {formatDate(episode.exit_at, locale, timeZone)} · {episode.slices?.length || 0} {copy.derivativeSlices}</span>
           {episode.review_id && <span className="mt-1 block text-slate-500">{copy.exchangeAlreadyReviewed} #{episode.review_id}</span>}
         </button>)}
         {!episodesError && episodes.length < episodeTotal && <button type="button" onClick={loadMore} disabled={episodesMore} className="font-bold text-blue-600 underline disabled:opacity-50">{episodesMore ? copy.loading : copy.exchangeImportLoadMore}</button>}
@@ -183,7 +183,7 @@ export default function BybitDerivativeReviews({ copy, locale, onCreated }) {
       <ol className="mt-3 max-h-64 space-y-2 overflow-auto" aria-label={copy.derivativeSelectedExecutions}>
         {(selected.execution_preview || []).map((part, index) => <li key={`${part.execution_id}-${part.role}-${index}`} className="rounded-lg border border-blue-200 bg-white p-2 dark:border-blue-800 dark:bg-slate-900">
           <strong>{copy.derivativeRole?.[part.role] || part.role} · {formatNumber(part.allocated_qty, locale)} {copy.derivativeContracts}</strong>
-          <span className="block text-slate-500">{formatDate(part.at, locale)} · {part.side === 'buy' ? copy.buy : copy.sell} · {formatNumber(part.price_quote, locale)} {part.quote_currency || ''}</span>
+          <span className="block text-slate-500">{formatDate(part.at, locale, timeZone)} · {part.side === 'buy' ? copy.buy : copy.sell} · {formatNumber(part.price_quote, locale)} {part.quote_currency || ''}</span>
           <span className="block break-all text-slate-500">{copy.derivativeExecution}: {part.exec_id} · {copy.derivativeOrder}: {part.order_id}</span>
           <span className="block text-slate-500">{copy.derivativeRawExecution}: {formatNumber(part.raw_exec_qty, locale)} {copy.derivativeContracts} · {copy.derivativeSettlement}: {part.settle_currency}</span>
           {part.fee_amount_raw_execution != null && <span className="block text-slate-500">{copy.derivativeFeeRaw}: {formatNumber(part.fee_amount_raw_execution, locale)} {part.fee_currency || ''}</span>}

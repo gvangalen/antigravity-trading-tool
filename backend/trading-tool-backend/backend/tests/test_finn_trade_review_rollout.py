@@ -1,5 +1,6 @@
 import asyncio
 import time
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -52,7 +53,10 @@ def test_review_read_rate_limit_does_not_block_other_async_requests(monkeypatch)
         def __init__(self, _db):
             pass
 
-        async def list_reviews(self, *_args):
+        async def owner_time_zone(self, _user_id):
+            return "Europe/Amsterdam"
+
+        async def list_reviews(self, *_args, **_kwargs):
             return {"items": [], "total": 0}
 
     monkeypatch.setattr(bot_api, "FinnTradeReviewService", Reviews)
@@ -154,6 +158,9 @@ def test_weekly_reflection_worker_paginates_past_first_500_owners(monkeypatch):
         def fetchall(self):
             return [type("Row", (), {"user_id": user_id})() for user_id in self.ids]
 
+        def scalar_one_or_none(self):
+            return True
+
     class Session:
         async def __aenter__(self):
             return self
@@ -162,18 +169,25 @@ def test_weekly_reflection_worker_paginates_past_first_500_owners(monkeypatch):
             pass
 
         async def execute(self, sql, params):
+            if "FOR SHARE" in str(sql):
+                return Result([])
             assert "user_id > :last_user_id" in str(sql)
+            assert "JOIN users u ON u.id=r.user_id AND u.is_active=TRUE" in str(sql)
             start = params["last_user_id"] + 1
             return Result(list(range(start, min(start + 500, 502))))
 
         async def commit(self):
             pass
 
-    async def save_week(_self, user_id, _monday):
+    async def owner_zone(_self, _user_id):
+        return "Europe/Amsterdam"
+
+    async def save_week(_self, user_id, _monday, **_kwargs):
         completed.append(user_id)
         return {"trades": 0}
 
     monkeypatch.setattr(task, "async_session_factory", lambda: Session())
+    monkeypatch.setattr(task.FinnTradeReviewService, "owner_time_zone", owner_zone)
     monkeypatch.setattr(task.FinnTradeReviewService, "weekly_report", save_week)
     assert asyncio.run(task._finalize_weekly_trade_reflections()) == 501
     assert completed == list(range(1, 502))
@@ -191,6 +205,9 @@ def test_completed_week_publishes_owner_scoped_coaching_card(monkeypatch):
         def fetchall(self):
             return [type("Row", (), {"user_id": value})() for value in self.ids]
 
+        def scalar_one_or_none(self):
+            return True
+
     class Session:
         async def __aenter__(self):
             return self
@@ -199,15 +216,23 @@ def test_completed_week_publishes_owner_scoped_coaching_card(monkeypatch):
             pass
 
         async def execute(self, _sql, params):
+            if "FOR SHARE" in str(_sql):
+                return Result([])
             return Result([7] if params["last_user_id"] == 0 else [])
 
         async def commit(self):
             pass
 
-    async def save_week(_self, _user_id, monday):
+    async def owner_zone(_self, _user_id):
+        return "Europe/Amsterdam"
+
+    async def save_week(_self, _user_id, monday, **_kwargs):
         return {"week_start": monday.isoformat(), "week_end": "2026-11-16",
                 "trades": 3, "plans": 2, "notes": 1, "analyzed": 2,
                 "pending": 1, "unavailable": 0, "patterns": [],
+                "time_zone": "Europe/Amsterdam",
+                "period_start_utc": "2026-11-08T23:00:00+00:00",
+                "period_end_utc": "2026-11-15T23:00:00+00:00",
                 "confirmed_lesson_repetitions": [],
                 "generated_at": "2026-11-16T05:15:00+00:00"}
 
@@ -215,6 +240,7 @@ def test_completed_week_publishes_owner_scoped_coaching_card(monkeypatch):
         published.append(kwargs)
 
     monkeypatch.setattr(task, "async_session_factory", lambda: Session())
+    monkeypatch.setattr(task.FinnTradeReviewService, "owner_time_zone", owner_zone)
     monkeypatch.setattr(task.FinnTradeReviewService, "weekly_report", save_week)
     monkeypatch.setattr(task.FinnCoachFeedService, "publish", publish)
     assert asyncio.run(task._finalize_weekly_trade_reflections()) == 1
@@ -222,6 +248,143 @@ def test_completed_week_publishes_owner_scoped_coaching_card(monkeypatch):
     assert published[0]["user_id"] == 7
     assert published[0]["event_type"] == "weekly_reflection"
     assert published[0]["evidence"]["plans"] == 2
+
+
+def test_weekly_worker_uses_each_owner_zone_at_utc_week_boundary(monkeypatch):
+    monkeypatch.setenv("FINN_TRADE_REVIEW_ROLLOUT", "allowlist")
+    monkeypatch.setenv("FINN_TRADE_REVIEW_USER_IDS", "7,8")
+    observed = []
+
+    class Result:
+        def __init__(self, ids):
+            self.ids = ids
+
+        def fetchall(self):
+            return [type("Row", (), {"user_id": value})() for value in self.ids]
+
+        def scalar_one_or_none(self):
+            return True
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            pass
+
+        async def execute(self, _sql, params):
+            if "FOR SHARE" in str(_sql):
+                return Result([])
+            return Result([7, 8] if params["last_user_id"] == 0 else [])
+
+        async def commit(self):
+            pass
+
+    async def owner_zone(_self, user_id):
+        return {7: "Pacific/Kiritimati", 8: "America/New_York"}[user_id]
+
+    async def save_week(_self, user_id, monday, *, time_zone, as_of_utc):
+        observed.append((user_id, monday.isoformat(), time_zone, as_of_utc))
+        return {"trades": 0}
+
+    monkeypatch.setattr(task, "async_session_factory", lambda: Session())
+    monkeypatch.setattr(task.FinnTradeReviewService, "owner_time_zone", owner_zone)
+    monkeypatch.setattr(task.FinnTradeReviewService, "weekly_report", save_week)
+    instant = datetime(2026, 11, 1, 11, 30, tzinfo=timezone.utc)
+    assert asyncio.run(task._finalize_weekly_trade_reflections(as_of_utc=instant)) == 2
+    assert observed == [
+        (7, "2026-10-26", "Pacific/Kiritimati", instant),
+        (8, "2026-10-19", "America/New_York", instant),
+    ]
+
+
+def test_weekly_worker_skips_owner_deactivated_after_candidate_selection(monkeypatch):
+    monkeypatch.setenv("FINN_TRADE_REVIEW_ROLLOUT", "allowlist")
+    monkeypatch.setenv("FINN_TRADE_REVIEW_USER_IDS", "7")
+
+    class Result:
+        def __init__(self, ids=None, active=None):
+            self.ids, self.active = ids or [], active
+
+        def fetchall(self):
+            return [SimpleNamespace(user_id=value) for value in self.ids]
+
+        def scalar_one_or_none(self):
+            return self.active
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            pass
+
+        async def execute(self, sql, params):
+            if "FOR SHARE" in str(sql):
+                return Result(active=False)
+            assert "u.is_active=TRUE" in str(sql)
+            return Result(ids=[7] if params["last_user_id"] == 0 else [])
+
+    async def forbidden(*_args, **_kwargs):
+        raise AssertionError("inactive owner must not be processed")
+
+    monkeypatch.setattr(task, "async_session_factory", lambda: Session())
+    monkeypatch.setattr(task.FinnTradeReviewService, "owner_time_zone", forbidden)
+    monkeypatch.setattr(task.FinnCoachFeedService, "publish", forbidden)
+    assert asyncio.run(task._finalize_weekly_trade_reflections()) == 0
+
+
+def test_weekly_worker_rechecks_owner_after_summary_commit_before_feed(monkeypatch):
+    monkeypatch.setenv("FINN_TRADE_REVIEW_ROLLOUT", "allowlist")
+    monkeypatch.setenv("FINN_TRADE_REVIEW_USER_IDS", "7")
+    checks = []
+
+    class Result:
+        def __init__(self, *, ids=(), active=None):
+            self.ids, self.active = ids, active
+
+        def fetchall(self):
+            return [SimpleNamespace(user_id=value) for value in self.ids]
+
+        def scalar_one_or_none(self):
+            return self.active
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            pass
+
+        async def execute(self, sql, params):
+            if "FOR SHARE" in str(sql):
+                checks.append(params["user_id"])
+                return Result(active=len(checks) == 1)
+            return Result(ids=[7] if params["last_user_id"] == 0 else [])
+
+        async def commit(self):
+            pass
+
+    async def owner_zone(_self, _user_id):
+        return "Europe/Amsterdam"
+
+    async def save_week(_self, _user_id, monday, **_kwargs):
+        return {"week_start": monday.isoformat(), "week_end": "2026-11-16",
+                "trades": 1, "plans": 0, "notes": 0, "analyzed": 0,
+                "pending": 1, "unavailable": 0, "time_zone": "Europe/Amsterdam",
+                "period_start_utc": "2026-11-08T23:00:00+00:00",
+                "period_end_utc": "2026-11-15T23:00:00+00:00",
+                "generated_at": "2026-11-16T05:15:00+00:00"}
+
+    async def forbidden(*_args, **_kwargs):
+        raise AssertionError("deactivated owner must not get a feed card")
+
+    monkeypatch.setattr(task, "async_session_factory", lambda: Session())
+    monkeypatch.setattr(task.FinnTradeReviewService, "owner_time_zone", owner_zone)
+    monkeypatch.setattr(task.FinnTradeReviewService, "weekly_report", save_week)
+    monkeypatch.setattr(task.FinnCoachFeedService, "publish", forbidden)
+    assert asyncio.run(task._finalize_weekly_trade_reflections()) == 0
+    assert checks == [7, 7]
 
 
 def test_scheduled_derivative_sync_uses_owner_scoped_bounded_candidates(monkeypatch):

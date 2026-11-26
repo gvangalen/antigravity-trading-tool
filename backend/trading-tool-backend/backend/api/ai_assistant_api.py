@@ -698,6 +698,7 @@ async def update_preferences(
 ):
     user_repo = UserRepository(db)
     updates = {k: v for k, v in request.dict().items() if v is not None}
+    detected_time_zone = updates.pop("detected_time_zone", None)
     for attempt in range(2):
         try:
             existing_user = await user_repo.get_by_id(current_user["id"])
@@ -706,7 +707,11 @@ async def update_preferences(
             existing_preferences = getattr(existing_user, "ai_preferences", {}) or {}
             old_profile = normalize_trader_profile_preferences(existing_preferences)
             old_has_profile = has_trader_profile(old_profile)
-            user = await user_repo.update_ai_preferences(current_user["id"], updates)
+            if detected_time_zone is None:
+                user = await user_repo.update_ai_preferences(current_user["id"], updates)
+            else:
+                user = await user_repo.update_ai_preferences(
+                    current_user["id"], updates, detected_time_zone=detected_time_zone)
             if user is None:
                 raise HTTPException(status_code=404, detail="Gebruiker niet gevonden")
             break

@@ -52,13 +52,23 @@ class UserRepository:
             user.last_login_at = login_time
             await self.db.commit()
 
-    async def update_ai_preferences(self, user_id: int, preferences: dict) -> Optional[User]:
-        user = await self.get_by_id(user_id)
+    async def update_ai_preferences(self, user_id: int, preferences: dict,
+                                    *, detected_time_zone: str | None = None) -> Optional[User]:
+        # Preference patches can arrive together (locale and browser zone).
+        # Lock and refresh the row before merging JSON so neither patch drops
+        # fields written by the other request.
+        result = await self.db.execute(
+            select(User).where(User.id == user_id).with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        user = result.scalars().first()
         if user:
             # Reassign a fresh JSON object so SQLAlchemy/Postgres JSONB persistence
             # reliably detects trader-profile preference updates.
             current_prefs = deepcopy(user.ai_preferences or {})
             current_prefs.update(preferences)
+            if detected_time_zone and not current_prefs.get("time_zone"):
+                current_prefs["time_zone"] = detected_time_zone
             user.ai_preferences = current_prefs
             await self.db.commit()
             await self.db.refresh(user)
