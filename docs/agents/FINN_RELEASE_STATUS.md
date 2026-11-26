@@ -4,6 +4,27 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: weekreflectie in accounttijdzone (26 november 2026)
+
+Phase: `PR_CANDIDATE_QA_PENDING`. Product-PR [#1384](https://github.com/gvangalen/antigravity-trading-tool/pull/1384),
+branch `codex/finn-week-reflection-zone-20261126`. Een ontbrekende accounttijdzone
+wordt eenmalig uit de browser herkend; de gebruiker kan een gevalideerde IANA-
+tijdzone in Profiel aanpassen. De weekgrenzen, opgeslagen samenvatting,
+FINN-context en zichtbare Paper-exitmomenten gebruiken de passende zone.
+Een reeds opgeslagen week houdt zijn oorspronkelijke zone en UTC-grenzen.
+De finalizer behandelt alleen actieve eigenaren en controleert dat opnieuw
+vlak voor de feedkaart. De eigenaarsscan krijgt een concurrent opgebouwde index.
+
+Build heeft 61 gerichte backendtests, 117 frontend commandtests, drie
+datumtests, frontend typecheck, i18n-lint, build, audit:high, shellsyntax,
+Python-compilatie en diff-check groen gemeten. De volledige backend-suite en
+PR-CI lopen nog; hun uitkomst is nog geen releasebewijs. Onafhankelijke
+QA-, Security- en Architecture-codebeoordelingen vonden op de huidige
+implementatie geen blocker. Er is nog geen productie-uitrol of nieuwe
+ingelogde Paper-exit/weekreflectie-acceptatie voor deze kandidaat. De
+beschermde QA-child blijft inactief; de productguard wordt niet omzeild om
+een natuurlijke workertrigger te simuleren.
+
 ## FINN 3.0: brede profiel- en Paper-botvergelijking (26 november 2026)
 
 Phase: `LIVE_QA_ACCEPTED_SCOPE_LIMITED`. Product-PR [#1380](https://github.com/gvangalen/antigravity-trading-tool/pull/1380),
