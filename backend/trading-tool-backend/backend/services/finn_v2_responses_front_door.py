@@ -55,6 +55,7 @@ from backend.services.finn_manual_trade_suggestion_service import ManualTradeSet
 from backend.services.watchlist_conversation_service import ambiguous_asset_change_scope, asks_for_active_workspace_asset, asks_for_watchlist_inventory, replacement_mentions
 from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
 from backend.services.finn_v2_account_bundle_answer import render_account_bundle_answer
+from backend.services.finn_v2_profile_paper_fit_answer import render_profile_paper_fit_answer
 from backend.services.finn_v2_smart_dca_coach_answer import (
     render_saved_smart_dca_coach_answer, saved_smart_dca_identity_matched,
     smart_dca_identity_question, smart_dca_source_unavailable_text,
@@ -6714,6 +6715,17 @@ class FinnResponsesFrontDoor:
                     result, text=smart_dca_identity_question(f"{pair_asset}/{pair_quote}"),
                     answer_kind="smart_dca_identity_unverified",
                     verification_message=smart_dca_original,
+                    model_owned_repair=False, response_id_reusable=False,
+                )
+        if (is_read_only_turn and result.answer_kind == "free_text" and result.tool_trace
+                and len(mentioned_assets) == 1):
+            profile_fit_answer = render_profile_paper_fit_answer(
+                message, result.tool_trace, asset=next(iter(mentioned_assets)), locale=locale,
+                user_time_zone=workspace_hints.get("time_zone"),
+            )
+            if profile_fit_answer is not None:
+                result = replace(
+                    result, text=profile_fit_answer, answer_kind="factual_source",
                     model_owned_repair=False, response_id_reusable=False,
                 )
         if (is_read_only_turn and result.answer_kind == "free_text" and result.tool_trace

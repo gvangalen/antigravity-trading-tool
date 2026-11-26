@@ -47,6 +47,7 @@ from backend.services.finn_v2_paper_position_answer import (
     PAPER_POSITION_CASH_UNAVAILABLE, asks_about_bot_decision,
     render_paper_position_cash_answer,
 )
+from backend.services.finn_v2_profile_paper_fit_answer import render_profile_paper_fit_answer
 from backend.services.finn_v2_fomo_plan_answer import render_fomo_plan_answer
 from backend.services.finn_v2_two_plan_checks_answer import verified_two_plan_checks
 from backend.services.finn_v2_factual_source_answer import (
@@ -3219,6 +3220,25 @@ class FinnResponsesAnswerVerifier:
             return FinnResponsesVerifiedAnswer("completed", expected, "factual_source_verified", evidence)
         if result.answer_kind == "factual_source":
             calls = result.tool_trace
+            named_fit_assets = mentioned_catalog_symbols(message)
+            if len(named_fit_assets) == 1 and any(
+                isinstance(call, dict) and call.get("name") == "get_profile_portfolio_and_bots"
+                for call in calls
+            ):
+                expected_fit = render_profile_paper_fit_answer(
+                    message, calls, asset=next(iter(named_fit_assets)),
+                    locale=locale or "nl", user_time_zone=user_time_zone,
+                )
+                if expected_fit is not None:
+                    if expected_fit != result.text:
+                        return FinnResponsesVerifiedAnswer(
+                            "unavailable", self._fallback_copy(
+                                "responses_evidence_not_verified", message=message, locale=locale,
+                            ), "factual_source_mismatch", evidence,
+                        )
+                    return FinnResponsesVerifiedAnswer(
+                        "completed", expected_fit, "factual_source_verified", evidence,
+                    )
             if (re.search(r"\bsmart[\s-]?dca\b", message, re.I)
                     and re.search(r"\b(?:opgeslagen|bestaande|saved|existing)\b", message, re.I)
                     and re.search(r"\b(?:scoreband\w*|bedrag\w*curve|staffel\w*)\b", message, re.I)):
