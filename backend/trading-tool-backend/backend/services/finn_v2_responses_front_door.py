@@ -77,6 +77,7 @@ from backend.services.finn_v2_factual_source_answer import (
     render_portfolio_read_time, render_report_and_quote_times,
     render_report_and_technical_read, render_report_bot_check_comparison,
     render_multi_asset_report_bot_comparison, render_account_market_report_facts,
+    latest_paper_bot_pair, render_bot_hold_quote_coach,
 )
 
 logger = logging.getLogger(__name__)
@@ -2445,6 +2446,13 @@ class FinnResponsesFrontDoor:
             pair = requested_catalog_trading_pair(message)
             pair_mentions = re.findall(r"\b[A-Z][A-Z0-9]*/(?:EUR|USDT)\b", message, re.I)
             symbols = mentioned_catalog_symbols(message)
+            slash_pairs = {normalized for item in re.findall(
+                r"\b[A-Z][A-Z0-9]*\s*/\s*[A-Z][A-Z0-9]*\b", message, re.I)
+                if (normalized := re.sub(r"\s+", "", item.upper())).split("/", 1)[0] in symbols}
+            coached_pair_ok = not slash_pairs or (
+                len(slash_pairs) == 1 and pair is not None
+                and f"{pair[0]}/{pair[1]}" in slash_pairs
+            )
             bot_reason_followup = False
             if not symbols and re.search(r"\b(?:exacte|concrete|precieze)\s+(?:bot)?reden\b", message, re.I):
                 prior = previous_response or {}
@@ -2497,7 +2505,19 @@ class FinnResponsesFrontDoor:
                     and self._referenced_bot_check_minute(message):
                 fact_kind = "report_bot_check_comparison"
                 symbol = next(iter(symbols))
+            elif len(symbols) == 1 and self._asks_about_bot_decision(message) \
+                    and re.search(r"\bPaper\b", message, re.I) \
+                    and re.search(r"\b(?:laatste|nieuwste)\b", message, re.I) \
+                    and re.search(r"\b(?:koersbron|bronmoment|koers|marktprijs)\b", message, re.I) \
+                    and len({item.upper() for item in pair_mentions}) <= 1 \
+                    and coached_pair_ok and not unsupported_catalog_pair_mention(message) \
+                    and not re.search(r"\b(?:dagrapport|rapport|positie|portefeuille|kas|"
+                                      r"score\w*|benchmark\w*|plan|setup|strategie|strategy)\b", message, re.I):
+                fact_kind = "bot_decision_quote_coach"
+                symbol = next(iter(symbols))
             elif len(symbols) == 1 and (self._asks_about_bot_decision(message) or bot_reason_followup) \
+                    and len({item.upper() for item in pair_mentions}) <= 1 \
+                    and coached_pair_ok \
                     and (re.search(r"\b(?:laatste|nieuwste)\b", message, re.I)
                          or self._referenced_bot_check_minute(message) or bot_reason_followup) \
                     and not re.search(r"\b(?:dagrapport|rapport|positie|portefeuille|kas|"
@@ -2548,6 +2568,48 @@ class FinnResponsesFrontDoor:
                         text=fact_text, response_id=f"multi-report-bot-{self.run_id}",
                         tool_trace=tuple(trace), answer_kind="factual_source",
                         model_led_coach=True, response_id_reusable=False,
+                    ), None, previous_response, locale=locale,
+                )
+            if fact_kind == "bot_decision_quote_coach":
+                requested = f"{pair[0]}/{pair[1]}" if pair and pair[0] == symbol else None
+                bot_id = focused_bot_id(message, previous_response)
+                decision_call = replace(catalog.validate("get_decision_history", {"asset": symbol}),
+                                        read_tools=("read_review_history", "read_profile"),
+                                        inputs={"asset": symbol, "_latest_bot_decisions_only": True})
+                decision_call = self._bind_bot_decision_evidence(
+                    decision_call, message=message, read_only=True)
+                try:
+                    decision_read = await self.reads(decision_call)
+                except Exception:
+                    logger.exception("FINN Paper hold coach decision read failed")
+                    decision_read = {"status": "unavailable", "results": []}
+                trace = [{"name": decision_call.name, "status": decision_read.get("status", "unavailable"),
+                          "arguments": decision_call.inputs, "result": decision_read}]
+                decision_pair = latest_paper_bot_pair(
+                    decision_read, symbol=symbol, bot_id=bot_id, requested_pair=requested)
+                quote_read = None
+                if decision_pair:
+                    quote_currency = decision_pair.split("/", 1)[1]
+                    quote_call = replace(catalog.validate("get_market_snapshot", {"asset": symbol}),
+                                         read_tools=("read_market_snapshot",),
+                                         inputs={"asset": symbol, "quote_currency": quote_currency})
+                    try:
+                        quote_read = await self.reads(quote_call)
+                    except Exception:
+                        logger.exception("FINN Paper hold coach quote read failed")
+                        quote_read = {"status": "unavailable", "results": []}
+                    trace.append({"name": quote_call.name,
+                                  "status": quote_read.get("status", "unavailable"),
+                                  "arguments": quote_call.inputs, "result": quote_read})
+                answer = render_bot_hold_quote_coach(
+                    decision_read, quote_read, symbol=symbol, bot_id=bot_id,
+                    requested_pair=requested, user_time_zone=workspace_hints.get("time_zone"),
+                )
+                return FinnResponsesFrontDoorResult(
+                    FinnResponsesResult(
+                        text=answer, response_id=f"bot-hold-quote-coach-{self.run_id}",
+                        tool_trace=tuple(trace), answer_kind="factual_source",
+                        model_led_coach=False, response_id_reusable=False,
                     ), None, previous_response, locale=locale,
                 )
             if fact_kind:

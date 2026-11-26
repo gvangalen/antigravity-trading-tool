@@ -54,7 +54,8 @@ from backend.services.finn_v2_factual_source_answer import (
     render_bot_decision, render_closed_paper_exit_facts, render_selected_paper_feed_decision, render_latest_quote, render_portfolio_read_time,
     render_report_and_quote_times, render_report_and_technical_read,
     render_report_bot_check_comparison, render_multi_asset_report_bot_comparison,
-    render_account_market_report_facts,
+    render_account_market_report_facts, latest_paper_bot_pair,
+    render_bot_hold_quote_coach,
 )
 
 
@@ -3220,6 +3221,60 @@ class FinnResponsesAnswerVerifier:
             return FinnResponsesVerifiedAnswer("completed", expected, "factual_source_verified", evidence)
         if result.answer_kind == "factual_source":
             calls = result.tool_trace
+            if result.response_id.startswith("bot-hold-quote-coach-"):
+                symbols = mentioned_catalog_symbols(message)
+                decision_call = calls[0] if len(calls) in {1, 2} else None
+                args = (decision_call.get("arguments") or {}) if isinstance(decision_call, dict) else {}
+                symbol = str(args.get("asset") or "").upper()
+                requested = requested_catalog_trading_pair(message)
+                requested_pair = (f"{requested[0]}/{requested[1]}"
+                                  if requested and requested[0] == symbol else None)
+                slash_pairs = {normalized for item in re.findall(
+                    r"\b[A-Z][A-Z0-9]*\s*/\s*[A-Z][A-Z0-9]*\b", message, re.I)
+                    if (normalized := re.sub(r"\s+", "", item.upper())).split("/", 1)[0] in symbols}
+                decision_read = decision_call.get("result") if isinstance(decision_call, dict) else None
+                scopes = {item.get("scope") for item in (decision_read or {}).get("results") or []
+                          if isinstance(item, dict)}
+                bot_id = focused_bot_id(message, previous_response)
+                pair = (latest_paper_bot_pair(
+                    decision_read, symbol=symbol, bot_id=bot_id,
+                    requested_pair=requested_pair,
+                ) if isinstance(decision_read, dict) else None)
+                quote_read = calls[1].get("result") if len(calls) == 2 and isinstance(calls[1], dict) else None
+                quote_args = ((calls[1].get("arguments") or {})
+                              if len(calls) == 2 and isinstance(calls[1], dict) else {})
+                valid = (
+                    len(symbols) == 1 and symbol in symbols
+                    and len({item.upper() for item in re.findall(
+                        r"\b[A-Z][A-Z0-9]*/(?:EUR|USDT)\b", message, re.I)}) <= 1
+                    and (not slash_pairs or (len(slash_pairs) == 1 and requested_pair in slash_pairs))
+                    and re.search(r"\bPaper\b", message, re.I)
+                    and isinstance(decision_call, dict)
+                    and decision_call.get("name") == "get_decision_history"
+                    and args.get("_latest_bot_decisions_only") is True
+                    and scopes == {"read_review_history", "read_profile"}
+                    and isinstance(decision_read, dict)
+                    and ((pair is None and len(calls) == 1)
+                         or (pair is not None and len(calls) == 2
+                             and isinstance(calls[1], dict)
+                             and calls[1].get("name") == "get_market_snapshot"
+                             and quote_args.get("asset") == symbol
+                             and quote_args.get("quote_currency") == pair.split("/", 1)[1]
+                             and isinstance(quote_read, dict)
+                             and {item.get("scope") for item in quote_read.get("results") or []
+                                  if isinstance(item, dict)} == {"read_market_snapshot"}))
+                )
+                expected = (render_bot_hold_quote_coach(
+                    decision_read, quote_read, symbol=symbol, bot_id=bot_id,
+                    requested_pair=requested_pair, user_time_zone=user_time_zone,
+                ) if valid else None)
+                if expected is None or expected != result.text:
+                    return FinnResponsesVerifiedAnswer(
+                        "unavailable", self._fallback_copy(
+                            "responses_evidence_not_verified", message=message, locale=locale,
+                        ), "factual_source_mismatch", evidence,
+                    )
+                return FinnResponsesVerifiedAnswer("completed", expected, "factual_source_verified", evidence)
             named_fit_assets = mentioned_catalog_symbols(message)
             if len(named_fit_assets) == 1 and any(
                 isinstance(call, dict) and call.get("name") == "get_profile_portfolio_and_bots"

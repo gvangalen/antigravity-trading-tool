@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 import re
 from typing import Any
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from backend.domain.indicator_display import indicator_display_name
 from backend.domain.technical_indicator_catalog import get_active_technical_indicator_definitions
@@ -32,6 +32,24 @@ def _read(results: dict[str, Any], scope: str) -> tuple[dict[str, Any] | None, s
 
 def _moment(value: Any) -> str | None:
     return amsterdam_source_moment(value)
+
+
+def _moment_in_zone(value: Any, user_time_zone: str | None) -> tuple[str | None, str]:
+    zone_name = user_time_zone or "Europe/Amsterdam"
+    try:
+        zone = ZoneInfo(zone_name)
+    except (ZoneInfoNotFoundError, TypeError, ValueError):
+        zone_name = "Europe/Amsterdam"
+        zone = ZoneInfo(zone_name)
+    try:
+        instant = value if isinstance(value, datetime) else datetime.fromisoformat(
+            str(value).replace("Z", "+00:00")
+        )
+        if instant.tzinfo is None:
+            return None, zone_name
+        return instant.astimezone(zone).strftime("%Y-%m-%d %H:%M:%S %Z"), zone_name
+    except (TypeError, ValueError):
+        return None, zone_name
 
 
 def _number(value: Any) -> str | None:
@@ -111,7 +129,7 @@ def render_closed_paper_exit_facts(message: str, tool_trace: Any) -> str | None:
 def render_bot_decision(
     result: dict[str, Any], *, symbol: str, paper: bool | None,
     pair: str | None = None, bot_id: int | None = None,
-    referenced_minute: bool = False,
+    referenced_minute: bool = False, user_time_zone: str | None = None,
 ) -> str:
     data, reason = _read(result, "read_review_history")
     if data is None:
@@ -130,7 +148,7 @@ def render_bot_decision(
         names = ", ".join(str(row.get("bot_name") or "onbekend") for row in decisions[:5])
         return f"Ik vind meerdere {symbol}-bots ({names}). Welke bot bedoel je?"
     row = decisions[0]
-    at = _moment(row.get("decision_at"))
+    at, zone_name = _moment_in_zone(row.get("decision_at"), user_time_zone)
     action = str(row.get("action") or "").lower()
     if not at or action not in {"hold", "buy", "sell"}:
         return f"Het opgeslagen {symbol}-botbesluit mist een controleerbare actie of tijd."
@@ -159,8 +177,113 @@ def render_bot_decision(
     label = f"bot {bot_id} ({pair or symbol})" if bot_id is not None else pair or symbol
     prefix = "Het opgeslagen besluit" if referenced_minute else "Het laatst opgeslagen besluit"
     return (f"{prefix} van je {label} {mode}-bot is {action_text}, "
-            f"op {at} (Europe/Amsterdam). Dit is een {kind}, geen actuele "
+            f"op {at} ({zone_name}). Dit is een {kind}, geen actuele "
             f"marktbeoordeling. Opslagstatus: {status}.{safety_text}")
+
+
+def latest_paper_hold_decision(
+    result: dict[str, Any], *, symbol: str, bot_id: int | None = None,
+    requested_pair: str | None = None,
+) -> dict[str, Any] | None:
+    data, _ = _read(result, "read_review_history")
+    if data is None:
+        return None
+    rows = [row for row in data.get("latest_bot_decisions") or []
+            if isinstance(row, dict) and row.get("is_live") is False
+            and str(row.get("symbol") or "").upper().split("/", 1)[0] == symbol
+            and (bot_id is None or row.get("bot_id") == bot_id)
+            and (requested_pair is None
+                 or str(row.get("pair") or row.get("symbol") or "").upper() == requested_pair)]
+    if len(rows) != 1:
+        return None
+    if (str(rows[0].get("action") or "").lower() != "hold"
+            or str(rows[0].get("persistence_status") or "").lower()
+            not in {"planned", "skipped", "completed"}):
+        return None
+    return rows[0]
+
+
+def latest_paper_bot_pair(
+    result: dict[str, Any], *, symbol: str, bot_id: int | None = None,
+    requested_pair: str | None = None,
+) -> str | None:
+    row = latest_paper_hold_decision(
+        result, symbol=symbol, bot_id=bot_id, requested_pair=requested_pair,
+    )
+    pair = str((row or {}).get("pair") or "").upper()
+    return pair if re.fullmatch(rf"{re.escape(symbol)}/(?:EUR|USDT)", pair) else None
+
+
+def render_bot_hold_quote_coach(
+    decision_result: dict[str, Any], quote_result: dict[str, Any] | None,
+    *, symbol: str, bot_id: int | None = None, requested_pair: str | None = None,
+    user_time_zone: str | None = None,
+) -> str:
+    """Keep the saved Paper hold, latest pair quote and saved risk separate."""
+    try:
+        ZoneInfo(user_time_zone or "UTC")
+    except (ZoneInfoNotFoundError, TypeError, ValueError):
+        user_time_zone = "UTC"
+    else:
+        user_time_zone = user_time_zone or "UTC"
+    decision = latest_paper_hold_decision(
+        decision_result, symbol=symbol, bot_id=bot_id, requested_pair=requested_pair,
+    )
+    pair = latest_paper_bot_pair(
+        decision_result, symbol=symbol, bot_id=bot_id, requested_pair=requested_pair,
+    )
+    decision_text = render_bot_decision(
+        decision_result, symbol=symbol, paper=False, bot_id=bot_id,
+        pair=requested_pair, user_time_zone=user_time_zone,
+    )
+    if decision is None:
+        return (f"{decision_text} Ik kan uit deze lezing geen eenduidig opgeslagen "
+                "Paper-Hold zonder order en met exact handelspaar vaststellen. "
+                "Daarom vergelijk ik geen koersbron en geef ik geen blokkadeadvies. "
+                "Controleer eerst het laatste botbesluit in de botdetails; ik wijzig niets.")
+    if pair is None and (str(decision.get("pair") or "").strip()
+                         or str(decision.get("symbol") or "").upper() != symbol):
+        return (f"{decision_text} Het opgeslagen handelspaar kan ik niet als ondersteund "
+                "paar verifiëren. Daarom vergelijk ik geen koersbron en geef ik geen "
+                "blokkadeadvies. Controleer het handelspaar in de botdetails; ik wijzig niets.")
+    quote = pair.split("/", 1)[1] if pair else None
+    quote_text = (render_latest_quote(
+        quote_result or {"results": []}, symbol=symbol, quote_currency=quote,
+        user_time_zone=user_time_zone,
+    ) if quote else (f"Deze Paper-bot is voor {symbol} zonder vast handelspaar opgeslagen. "
+                     "Ik kan daarom geen exacte koersbron aan dit botbesluit koppelen."))
+    profile, _ = _read(decision_result, "read_profile")
+    stored = profile.get("trader_profile") if isinstance(profile, dict) else None
+    risks = stored.get("risk_profiles") if isinstance(stored, dict) else None
+    if profile and profile.get("has_profile") is True and isinstance(risks, list):
+        risk_text = ("Je opgeslagen risicoprofiel is normaal. " if risks == ["balanced"] else
+                     "Je opgeslagen profiel bevestigt geen eenduidig normaal risicoprofiel. ")
+    else:
+        risk_text = "Ik kan je opgeslagen risicoprofiel nu niet verifiëren. "
+    reason_code = str(decision.get("safety_reason_code") or "")
+    if reason_code == "strategy_price_currency_unconfirmed":
+        step = "Controleer de valuta van de opgeslagen koersniveaus in de gekoppelde strategie vóór een nieuwe Paper-beoordeling."
+    elif reason_code == "strategy_price_conversion_unavailable":
+        step = "Controleer de omrekening van de opgeslagen koersniveaus vóór een nieuwe Paper-beoordeling."
+    else:
+        step = "Controleer de opgeslagen blokkade in de botdetails vóór een nieuwe Paper-beoordeling."
+    market, _ = _read(quote_result or {"results": []}, "read_market_snapshot")
+    verified_quote = bool(
+        quote and isinstance(market, dict)
+        and str(market.get("symbol") or "").upper() == symbol
+        and str(market.get("quote_currency") or "").upper() == quote
+        and _number(market.get("price"))
+        and _moment_in_zone(
+            market.get("source_observed_at_utc") or market.get("source_observed_at"),
+            user_time_zone,
+        )[0]
+    )
+    separation = (f" Het beslismoment en het koersbronmoment zijn verschillende bronnen; "
+                  f"de laatst beschikbare {pair}-koers is geen geverifieerde uitvoeringskoers."
+                  if verified_quote else "")
+    return (f"{decision_text} {quote_text}{separation} "
+            f"{risk_text}Veilige vervolgstap: {step} "
+            "Ik wijzig geen bot of order.")
 
 
 def render_report_bot_check_comparison(
@@ -742,6 +865,7 @@ def render_report_and_technical_read(
 
 def render_latest_quote(
     result: dict[str, Any], *, symbol: str, quote_currency: str | None = None,
+    user_time_zone: str | None = None,
 ) -> str:
     market, reason = _read(result, "read_market_snapshot")
     if market is None:
@@ -751,7 +875,9 @@ def render_latest_quote(
     ):
         return f"De gelezen koersbron hoort niet bij {symbol}."
     price = _number(market.get("price"))
-    at = _moment(market.get("source_observed_at_utc") or market.get("source_observed_at"))
+    at, zone_name = _moment_in_zone(
+        market.get("source_observed_at_utc") or market.get("source_observed_at"), user_time_zone,
+    )
     unit = str(market.get("quote_currency") or "")
     provider = str(market.get("price_provider") or "onbekend")
     if not price or not at or not unit:
@@ -772,7 +898,7 @@ def render_latest_quote(
         session = " De beursstatus is niet in deze koersmeting vastgelegd."
     label = f"{symbol}/{quote_currency}" if quote_currency else symbol
     return (f"De laatst beschikbare {label}-koers is {price} {unit} van {provider}, "
-            f"met bronmoment {at} (Europe/Amsterdam).{session}")
+            f"met bronmoment {at} ({zone_name}).{session}")
 
 
 def render_portfolio_read_time(result: dict[str, Any]) -> str:
