@@ -4,6 +4,46 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: deelantwoord bij gemengde paar- en botvraag (26 november 2026)
+
+Phase: `LOCAL_GATES_COMPLETE_CI_PENDING`. Onafhankelijke ingelogde QA op
+publieke SHA `181583fb976bab6ace5529d83812fe25a09eeba0` gaf
+`NOT_ACCEPTED`: de oorspronkelijke BTC/EUR-, BTC/USDT- en ETH-vraag kreeg
+wel een veilig brongebonden deelantwoord, maar een verwante vraag over
+BTC/EUR, de open ETH-positie en bot 129 eindigde in run
+`finn-v2-run-56c0f9bbb67b465d868427c3a36d85e8` met
+`turn_contract_mismatch`, gap `comparison_targets_missing` en alleen
+"Ik heb je vraag nog niet volledig beantwoord." Er kwamen geen voorstellen,
+botacties of orders.
+
+Reparatie-PR [#1392](https://github.com/gvangalen/antigravity-trading-tool/pull/1392).
+Bij uitsluitend deze contract-gap probeert FINN nu hetzelfde deterministische
+deelantwoord uit voltooide eigenaargebonden lezingen van de huidige beurt.
+Het antwoord wordt opnieuw gecontroleerd op bronmomenten, opgeslagen object,
+profiel, prijsrelaties en het getypeerde antwoordcontract. Vrije modeltekst
+krijgt geen uitzondering. Een regressie met de zichtbare BTC/USDT-koppeling
+van bot 129 bevestigt dat geen BTC/EUR-planvoorwaarden aan die bot worden
+toegeschreven; FINN vraagt dan gericht welk botpaar bedoeld is. Een echte
+vergelijking van twee opgeslagen setups houdt de strenge doelcontrole.
+
+Gemeten Build-gates op implementatiehead
+`8676e651b7dccf5fec8c9a9671779ae369e6672f`: gerichte bronmoment- en
+contracttests **55/55**, inclusief de paarmismatch-regressie; volledige
+backend **5600 passed, 7 skipped** (log SHA-256
+`eca495c71a46373b80be60ae36778ba124db579e73a9db15ad73a708b031d1ea`).
+Geïsoleerde API/worker-actiecontractmatrix **17/17**, nul brokerorders,
+Live-calls en productieverbindingen (artifact SHA-256
+`1fdb88d8cb1996e987c921b17baf40ecd736bf6c61a9456f05103b7d70f049d4`).
+Echte providerselector development **20/20** (artifact SHA-256
+`227c95deb800b8427f210dfeb19891f7b293466394dfad64e22ee4a63d50fdd9`)
+en regressie **109/109** (artifact SHA-256
+`3921bd062abe87e8afdfd35d05f1131f3712fd2d25afae88200076259e3a9f47`),
+zonder provider-, parse-, schema- of validatiefouten. Frontendbron is niet
+gewijzigd. Onafhankelijke code-QA en Security vonden geen blocker op de
+productcode; QA accepteerde ook de paarmismatch-testdelta. PR-CI op de
+definitieve documentatiehead, main-CI, Auto Deploy, publieke SHA-pariteit en
+ingelogde live hertest staan nog open.
+
 ## FINN 3.0: antwoordcontract na bronmomentherstel (26 november 2026)
 
 Phase: `DEPLOY_IDENTITY_PENDING`. Product-PR
