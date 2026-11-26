@@ -4,6 +4,36 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: brede profiel- en Paper-botvergelijking (26 november 2026)
+
+Phase: `LOCAL_VALIDATED_PR_PENDING`. Productcommit `b682746cb` op branch
+`codex/finn-profile-fit-20261126`; publieke release en onafhankelijke live-QA
+zijn nog niet uitgevoerd. De wijziging corrigeert het eerste brede antwoord:
+de setup en strategie komen uit de exacte eigenaargebonden Paper-botrij,
+niet uit de nieuwste losse setup voor hetzelfde asset. Botbudgetlimiet,
+werkelijk belegd bedrag, botkas en totale Paper-kas blijven gescheiden. Een
+expliciet handelspaar zonder getypeerde paarbron, een afwijkende botnaam of
+meerdere kandidaatbots eindigen zonder stellige koppeling. Een uitgeschakelde
+budgetlimiet is geen actieve cap; uit een DCA-naam wordt geen passendheid
+afgeleid. Er is geen actie-, bevestigings- of orderroute gewijzigd.
+
+Build mat lokaal: backend **5571 passed, 7 skipped** (log SHA-256
+`2b60a585dd534e9a58a702237ec820377fe1fbc3509f8676aba7aca2e830cbea`);
+geïsoleerde API/Celery-actiecontractmatrix **17/17**, nul brokerorders,
+Live-calls en productieverbindingen (artifact SHA-256
+`3bee92897ff0cf43083d359483f77aa4d01aeaeb122a4b5374281afd8eed145d`).
+De echte Responses-providerselector gaf development **20/20** (SHA-256
+`897ea183068ce95ca37a3cc389ceff43976c2b0f3c208d93fda8efc48a2ea4b3`)
+en regressie **109/109** (SHA-256
+`0741a3177357d7d85f866b4a46a14d765524330cc3c266f3572f316b4c57aa2d`),
+zonder provider-, schema-, timeout-, parse- of validatiefout. De lokale
+publieke API/worker-chatproef met een nieuwere niet gekoppelde BTC-setup
+eindigde completed met de juiste botouders, vier bedragen, één controlepunt
+en geen voorstel. Een aparte `BTC / USDT`-vraag gaf alleen een bronbeperking,
+zonder setup-/strategie-/kasclaim. De geïsoleerde lokale infrastructuur is
+na afloop opgeruimd. Onafhankelijke QA- en Security-codeherbeoordelingen
+vonden op de definitieve diff geen blocker; dit is geen live-verdict.
+
 ## DCA-setup naar Paper-bot: bedrag, limieten en weekritme (26 november 2026)
 
 Phase: `LIVE_QA_ACCEPTED_SCOPE_LIMITED`; product-PR [#1375](https://github.com/gvangalen/antigravity-trading-tool/pull/1375), producthead `de28a53cea6f5af1baf53141c0bd8c380d0b7681`, eerste gedeployde merge-SHA `0d103cd27ad136451d5ccebb0d68a0be6c909ef4`; QA-only profielreparatie [#1377](https://github.com/gvangalen/antigravity-trading-tool/pull/1377), head `bb500bd45587298cac61db401f5171060a5195a7`, merge-SHA `094597349ba5adadb03a5d2ca514931cdc79fc46`. De release verwijdert de vaste persoonlijke botbudgetwaarde van €1.000. Bij het koppelen van een opgeslagen DCA-setup neemt het formulier het bevestigde bedrag en de uitvoeringsmodus over. De gebruiker stelt de eigen botlimieten en Paper-kas vast. De backend valideert bij een automatische bot het volledige bevestigde bedragbereik, beschikbare Paper-kas en de gekoppelde setupfrequentie. Een update kan de weekfrequentie niet stilzwijgend als dagfrequentie opslaan. Bestaande bots of orders worden door de release niet gewijzigd.
