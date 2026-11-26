@@ -321,12 +321,21 @@ def turn_contract_gap(
         for target in targets
         for name in (str(target.get("name") or ""),)
     )
+    score_only_pair_comparison = bool(
+        re.search(r"\b(?:score\w*|benchmark\w*)\b", question, re.I)
+        and not re.search(
+            r"\b(?:setup\w*|plan\w*|strateg\w*|configuratie\w*|rapport\w*|paaranalyse|positie\w*|portefeuille)\b",
+            question, re.I,
+        )
+    )
     asks_to_compare_saved_setups = bool(
         named_targets_in_question >= 2
         or len(re.findall(r"\b(?:setup|plan|strategie)\b", question, re.I)) >= 2
         or re.search(r"\b(?:setups|plannen|strategieën|strategies|plans)\b", question, re.I)
-        or contract.get("comparison_targets_inherited") is True
-        or re.search(r"\b(?:die twee|deze twee|beide|allebei|those two|both)\b", question, re.I)
+        or (contract.get("comparison_targets_inherited") is True and not score_only_pair_comparison)
+        or (not score_only_pair_comparison and re.search(
+            r"\b(?:die twee|deze twee|beide|allebei|those two|both)\b", question, re.I,
+        ))
         or not re.search(
             r"\b(?:rapport\w*|paaranalyse|positie\w*|portefeuille|score\w*|benchmark\w*)\b",
             question, re.I,

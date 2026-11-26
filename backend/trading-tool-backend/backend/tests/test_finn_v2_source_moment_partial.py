@@ -194,6 +194,27 @@ def test_typed_recovery_score_comparison_ignores_incidental_saved_setups():
     assert turn_contract_gap(contract, answer, typed_recovery=True) is None
 
 
+def test_typed_recovery_score_comparison_after_saved_setup_pair():
+    question = "Vergelijk per paar de scores van BTC/EUR en ETH/EUR."
+    contract = build_turn_contract(
+        message=question,
+        tool_trace=({"result": {"results": [
+            {"scope": "read_active_setup", "status": "completed", "data": {
+                "setup_id": 12, "name": "BTC herstelplan", "symbol": "BTC",
+            }},
+            {"scope": "read_active_setup", "status": "completed", "data": {
+                "setup_id": 13, "name": "ETH weekplan", "symbol": "ETH",
+            }},
+        ]}},),
+        previous_contract=_cross_source_contract(),
+    )
+    answer = "BTC/EUR heeft score 33,3/100; ETH/EUR heeft score 33,3/100."
+
+    assert contract["comparison_targets_inherited"] is True
+    assert turn_contract_gap(contract, answer) == "comparison_targets_missing"
+    assert turn_contract_gap(contract, answer, typed_recovery=True) is None
+
+
 def test_partial_answer_does_not_repeat_unread_eth_position_or_bot_status():
     evidence = (_evidence()[2],)
 
