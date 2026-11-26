@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: weekreflectie in accounttijdzone (26 november 2026)
 
-Phase: `PR_CANDIDATE_QA_PENDING`. Product-PR [#1384](https://github.com/gvangalen/antigravity-trading-tool/pull/1384),
+Phase: `LIVE_QA_ACCEPTED_READ_SCOPE_TRIGGER_UNTESTED`. Product-PR [#1384](https://github.com/gvangalen/antigravity-trading-tool/pull/1384),
 branch `codex/finn-week-reflection-zone-20261126`. Een ontbrekende accounttijdzone
 wordt eenmalig uit de browser herkend; de gebruiker kan een gevalideerde IANA-
 tijdzone in Profiel aanpassen. De weekgrenzen, opgeslagen samenvatting,
@@ -18,12 +18,21 @@ vlak voor de feedkaart. De eigenaarsscan krijgt een concurrent opgebouwde index.
 Build heeft **5580 passed, 7 skipped** in de volledige backend-suite, plus
 61 gerichte backendtests, 117 frontend commandtests en drie datumtests.
 Frontend typecheck, i18n-lint, build, audit:high, shellsyntax,
-Python-compilatie en diff-check zijn groen. PR-CI loopt nog. Onafhankelijke
+Python-compilatie en diff-check zijn groen. PR-CI en main-CI hadden elk vijf
+geslaagde jobs; Auto Deploy `45861037794` slaagde. GitHub main, publieke
+backend `/api/health` en frontend `/build-info.json` toonden daarna exact
+`fbf466e935b7eb60acd7a3a89dfd1e28e683f8fe`, beide HTTP 200. Onafhankelijke
 QA-, Security- en Architecture-codebeoordelingen vonden op de huidige
-implementatie geen blocker. Er is nog geen productie-uitrol of nieuwe
-ingelogde Paper-exit/weekreflectie-acceptatie voor deze kandidaat. De
-beschermde QA-child blijft inactief; de productguard wordt niet omzeild om
-een natuurlijke workertrigger te simuleren.
+implementatie geen blocker. Onafhankelijke ingelogde browser-QA accepteerde
+op deze exacte publieke SHA de read-only UI: Profiel toont de opgeslagen
+`Europe/Amsterdam`-zone, week 9 november toont één gesloten trade, een
+FINN-aandachtspunt en het opgeslagen moment met zone; de onbegrensde lijst
+van vier historische Paper-exits bleef gelijk bij weekwisseling. Er is
+geen accountvoorkeur opgeslagen of order gestart. Een verse automatische
+Paper-exit → finalizer → weekreflectiekaart → Bespreek is **niet getest**:
+de standaard geselecteerde week had nul gesloten trades en de beschermde
+QA-child blijft bewust inactief. Deze statusupdate maakt na merge een
+nieuwe publieke SHA; voor volgende QA geldt opnieuw exacte pariteit.
 
 ## FINN 3.0: brede profiel- en Paper-botvergelijking (26 november 2026)
 
