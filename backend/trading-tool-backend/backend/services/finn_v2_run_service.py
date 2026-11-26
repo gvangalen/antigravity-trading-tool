@@ -2110,6 +2110,35 @@ def _minimal_read_answer(
         gap = turn_contract_gap(
             turn_contract, text, typed_recovery=typed_source_moment_recovery,
         )
+        if gap == "comparison_targets_missing" and not typed_source_moment_recovery:
+            # The model can omit incidental saved setups while answering a
+            # cross-source bot, pair or position question. Use the same
+            # owner-read deterministic partial as the source-moment repair;
+            # never relax the contract for the model's free text.
+            from backend.services.finn_v2_source_moment_partial import render_source_moment_partial
+            partial = render_source_moment_partial(
+                question=message, evidence=current_evidence,
+                locale=getattr(prepared, "locale", "nl"),
+            )
+            if (partial
+                    and current_source_moments_supported(
+                        partial, current_evidence, question=message,
+                        typed_recovery=True,
+                    )
+                    and FinnResponsesAnswerVerifier._saved_entity_type_supported(
+                        partial, evidence, user_message=message,
+                    )
+                    and FinnResponsesAnswerVerifier._profile_presence_claim_supported(
+                        partial, evidence,
+                    )
+                    and FinnResponsesAnswerVerifier._price_relation_claim_supported(
+                        partial, evidence,
+                    )
+                    and turn_contract_gap(
+                        turn_contract, partial, typed_recovery=True,
+                    ) is None):
+                text = partial
+                gap = None
         if gap == "paper_cash_total_missing":
             cash = turn_contract.get("paper_cash_total")
             if isinstance(cash, (int, float)) and any(

@@ -103,6 +103,56 @@ def test_multi_asset_wrong_clock_recovers_only_owner_read_facts():
     assert turn_contract_gap(_cross_source_contract(), answer.text) == "comparison_targets_missing"
 
 
+def test_cross_source_contract_gap_recovers_owner_read_partial_answer():
+    question = (
+        "Vergelijk BTC/EUR met mijn open ETH-positie. Wat is de status van mijn "
+        "BTC-bot 129 en welke planvoorwaarden horen bij die bot? Vermeng geen "
+        "verschillende handelspaarbronnen. Lees alleen."
+    )
+    evidence = _evidence()
+    prepared = SimpleNamespace(
+        locale="nl", previous_response=None,
+        response=SimpleNamespace(
+            text="Ik kan hiermee geen nieuwe koop onderbouwen.",
+            tool_trace=({"name": "get_decision_history", "result": {
+                "results": list(evidence),
+            }},),
+            uses_previous_response=False,
+            turn_contract={**_cross_source_contract(), "question": question},
+        ),
+    )
+
+    answer = _minimal_read_answer(message=question, prepared=prepared)
+
+    assert answer.status == "completed", (answer.reason, answer.rejection_details)
+    assert "Bot #129" in answer.text
+    assert "gekoppelde plan vereist een benchmarkscore tussen 61 en 75" in answer.text
+    assert "0,00644603 ETH" in answer.text
+    assert "BTC/EUR" in answer.text
+    assert "Ik heb je vraag nog niet volledig beantwoord" not in answer.text
+
+
+def test_saved_setup_comparison_does_not_use_cross_source_contract_recovery():
+    question = "Vergelijk mijn BTC-setup en ETH-setup."
+    prepared = SimpleNamespace(
+        locale="nl", previous_response=None,
+        response=SimpleNamespace(
+            text="Ik kan hiermee geen nieuwe koop onderbouwen.",
+            tool_trace=({"name": "get_decision_history", "result": {
+                "results": list(_evidence()),
+            }},),
+            uses_previous_response=False,
+            turn_contract={**_cross_source_contract(), "question": question},
+        ),
+    )
+
+    answer = _minimal_read_answer(message=question, prepared=prepared)
+
+    assert answer.status == "unavailable"
+    assert answer.reason == "turn_contract_mismatch"
+    assert answer.rejection_details["gap"] == "comparison_targets_missing"
+
+
 def test_saved_report_bot_decision_preserves_clockless_status_and_plan_facts():
     evidence = [item for item in _evidence() if item["scope"] != "read_review_history"]
     report = next(item for item in evidence if item["scope"] == "read_latest_report")
