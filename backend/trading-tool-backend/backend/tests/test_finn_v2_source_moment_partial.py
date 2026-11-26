@@ -266,6 +266,29 @@ def test_mixed_bot_position_does_not_infer_zero_from_missing_quantity():
     assert "de ETH-positie" in answer
 
 
+def test_score_only_question_does_not_claim_open_zero_position():
+    question = "Vergelijk de actuele scores van BTC/EUR en ETH/EUR. Lees alleen."
+    evidence = (
+        {"scope": "read_asset_scores", "status": "completed", "data": {
+            "pair": "BTC/EUR", "market_id": 1,
+            "source_status": "available", "benchmark_score": 33.3,
+        }},
+        {"scope": "read_asset_scores", "status": "completed", "data": {
+            "pair": "ETH/EUR", "market_id": 2,
+            "source_status": "available", "benchmark_score": 34.4,
+        }},
+        {"scope": "read_portfolio", "status": "completed", "data": {
+            "bots": [{"bot_id": 301, "symbol": "ETH", "is_live": False,
+                      "position_qty": 0}],
+        }},
+    )
+    answer = render_source_moment_partial(question=question, evidence=evidence)
+    assert answer is not None
+    assert "BTC/EUR heeft benchmarkscore 33,3/100" in answer
+    assert "ETH/EUR heeft benchmarkscore 34,4/100" in answer
+    assert "positie" not in answer
+
+
 def test_conflicting_bot_reads_with_same_other_pair_do_not_restore_portfolio_status():
     question = (
         "Vergelijk BTC/EUR met mijn open ETH-positie. Wat is de status van mijn "

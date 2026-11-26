@@ -223,7 +223,7 @@ def render_source_moment_partial(
             if type(bot.get("bot_id")) is not int:
                 continue
             positions.setdefault((bot["bot_id"], symbol), set()).add(quantity or "unknown")
-    for (bot_id, symbol), quantities in sorted(positions.items()):
+    for (bot_id, symbol), quantities in (sorted(positions.items()) if asks_position else ()):
         eligible_reads = [item for item in portfolio_reads
                           if not item.get("asset") or str(item["asset"]).upper() == symbol]
         present_in_all = all(any(
@@ -235,7 +235,7 @@ def render_source_moment_partial(
         if present_in_all and quantities == {"0"} and asks_position:
             lines.append(f"In de gelezen Paper-portefeuille heeft bot #{bot_id} geen open {symbol}-positie (0 {symbol}).")
             confirmed_position_assets.add(symbol)
-        elif present_in_all and len(quantities) == 1 and "unknown" not in quantities:
+        elif present_in_all and len(quantities) == 1 and "unknown" not in quantities and "0" not in quantities:
             quantity = next(iter(quantities))
             lines.append(f"In de gelezen Paper-portefeuille staat bij bot #{bot_id} een open positie van {quantity} {symbol}.")
             confirmed_position_assets.add(symbol)
