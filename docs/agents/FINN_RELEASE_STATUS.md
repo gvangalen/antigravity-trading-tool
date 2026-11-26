@@ -4,9 +4,41 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: eigenaargebonden bot- en positieantwoord (26 november 2026)
+
+Phase: `LOCAL_GATES_COMPLETE_CI_PENDING`. Onafhankelijke ingelogde QA op publieke
+SHA `66bc7ccffa5e72f18329b7a020a81788fa89756e` gaf `NOT_ACCEPTED`:
+de oorspronkelijke rapport-/paar-/botvraag kreeg een veilig deelantwoord en
+de scorevraag werkte, maar de vraag naar BTC/EUR, open ETH-positie en bot 129
+kreeg alleen een vage melding dat de bot en positie niet konden worden
+teruggelezen. Er was geen voorstel, order of Live-actie.
+
+De nieuwe read-only route verplicht bij een genoemde bot met nummer en een
+open positie in een tweede asset één eigenaargebonden Paper-portefeuillelezing.
+De brongebonden hersteltekst kan botstatus en positie afzonderlijk noemen en
+vraagt gericht naar de ontbrekende bot-/plankoppeling. Een bekend afwijkend
+handelspaar wordt niet via de portefeuillestatus alsnog aan het gevraagde
+paar toegeschreven, ook niet bij herhaalde, onderling afwijkende botrecords.
+Deze route bevat geen account- of ordermutatie.
+
+Gemeten op implementatiehead `db448f79ad11b0668addf72a71b94e478d08e39d`:
+gerichte FINN-tests **1077/1077**; volledige backend **5605 passed, 7 skipped**
+(log SHA-256 `35266b30c74f57116c80c7602a975963e1b1c1548fd4df1c74d3e86faed71b20`); geïsoleerde API/worker-actiecontractmatrix **17/17**,
+nul brokerorders, Live-calls en productieverbindingen (artifact SHA-256
+`e43c955de0991608710d39da1c141260fcfc193bc9997f85c2933ecf54ce206d`).
+Echte providerselector development **20/20** (artifact SHA-256
+`adef65d10d26176552931d22885b1f74c106a88cbb9d9094c982cd34a9535c76`),
+zonder provider-, parse-, schema-, timeout- of validatiefout.
+Echte providerselector regressie **109/109** (artifact SHA-256
+`10a18d96e068feb8214241a32e0dc850c404e81e30f6ed46a5a6d7d3a3a4328b`),
+eveneens zonder provider-, parse-, schema-, timeout- of validatiefout.
+Onafhankelijke code-QA en Security vonden op de finale implementatiehead geen
+blocker. PR-CI, main-CI, Auto Deploy, publieke SHA-pariteit en ingelogde live
+QA staan nog open. Frontendbron is niet gewijzigd.
+
 ## FINN 3.0: deelantwoord bij gemengde paar- en botvraag (26 november 2026)
 
-Phase: `LOCAL_GATES_COMPLETE_CI_PENDING`. Onafhankelijke ingelogde QA op
+Phase: `LIVE_QA_NOT_ACCEPTED`. Onafhankelijke ingelogde QA op
 publieke SHA `181583fb976bab6ace5529d83812fe25a09eeba0` gaf
 `NOT_ACCEPTED`: de oorspronkelijke BTC/EUR-, BTC/USDT- en ETH-vraag kreeg
 wel een veilig brongebonden deelantwoord, maar een verwante vraag over

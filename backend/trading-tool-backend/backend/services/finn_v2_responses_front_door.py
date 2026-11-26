@@ -1489,6 +1489,16 @@ class FinnResponsesFrontDoor:
         )
 
     @staticmethod
+    def _asks_about_mixed_bot_position(message: str) -> bool:
+        """Keep a named bot and another asset's open position on one owner portfolio read."""
+        return bool(
+            re.search(r"\bbot\s*#?\s*\d+\b", message, re.I)
+            and FinnResponsesFrontDoor._asks_about_open_position(message)
+            and len(mentioned_catalog_symbols(message)) >= 2
+            and not re.search(r"\b(?:dagrapport|ochtendrapport|rapport|report)\b", message, re.I)
+        )
+
+    @staticmethod
     def _follows_account_state_bundle(message: str, previous_response: Mapping[str, Any] | None) -> bool:
         """Recheck the same saved facts when the trader explicitly refers back to them."""
         if not re.search(r"\b(?:dezelfde|hetzelfde|same)\b.{0,50}\b(?:feiten|gegevens|facts|details)\b", message, re.I):
@@ -3826,6 +3836,7 @@ class FinnResponsesFrontDoor:
         )
         account_bundle_followup = self._follows_account_state_bundle(message, previous_response)
         account_state_bundle = self._asks_about_account_state_bundle(message) or account_bundle_followup
+        mixed_bot_position = is_read_only_turn and self._asks_about_mixed_bot_position(message)
         previous_turn_contract = (previous_response or {}).get("turn_contract") or {}
         previous_focused_setup_id = previous_turn_contract.get("focused_setup_id")
         previous_focused_strategy_id = previous_turn_contract.get("focused_strategy_id")
@@ -4035,6 +4046,7 @@ class FinnResponsesFrontDoor:
         named_plan_comparison = bool(
             is_read_only_turn and (requests_comparison(message) or per_asset_plan_advice)
             and len(mentioned_assets) >= 2
+            and not mixed_bot_position
             and re.search(r"\b(?:plan\w*|setup\w*|concept\w*|opzet\w*)\b", message, re.I)
         )
         normalized_inventory_read = (
@@ -6505,6 +6517,8 @@ class FinnResponsesFrontDoor:
                     request_facts.explicit_entities
                 )
                 and pending_operation is None and not resuming_clarification
+                else "get_portfolio_and_exposure"
+                if mixed_bot_position and pending_operation is None and not resuming_clarification
                 else "get_portfolio_and_exposure"
                 if is_read_only_turn and coach_plan
                 and set(coach_plan.topics) == {"setup", "bot"}

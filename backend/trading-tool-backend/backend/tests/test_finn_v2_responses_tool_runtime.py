@@ -15832,6 +15832,37 @@ def test_open_position_question_requires_portfolio_read_before_model_answer(monk
     assert captured["required_read_tool_name"] == "get_portfolio_and_exposure"
 
 
+def test_named_bot_and_other_open_position_require_owner_portfolio_read(monkeypatch):
+    question = (
+        "Vergelijk BTC/EUR met mijn open ETH-positie. Wat is de status van mijn "
+        "BTC-bot 129 en welke planvoorwaarden horen bij die bot? Vermeng geen "
+        "verschillende handelspaarbronnen. Lees alleen."
+    )
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="mixed-read-required")
+    front.model_led_coach = True
+    captured = {}
+
+    async def capture_loop(_self, **kwargs):
+        captured.update(kwargs)
+        return FinnResponsesResult("Ik lees de eigenaargebonden feiten.", "answer", ())
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run", capture_loop,
+    )
+    assert front._asks_about_mixed_bot_position(question)
+    asyncio.run(front.run(
+        message=question, instructions="Lees feiten", conversation_context={}, verified_asset="BTC",
+        workspace_hints={"page": "/bot", "symbol": "BTC"},
+    ))
+    assert captured["required_read_tool_name"] == "get_portfolio_and_exposure"
+
+
+def test_two_saved_setup_comparison_keeps_inventory_read():
+    assert not FinnResponsesFrontDoor._asks_about_mixed_bot_position(
+        "Vergelijk mijn opgeslagen BTC-setup en ETH-setup."
+    )
+
+
 def test_paper_cash_position_budget_question_reads_portfolio_directly():
     question = (
         "Hoeveel AAPL-positie heb ik nu werkelijk open, wat is mijn Paper-kassaldo, "

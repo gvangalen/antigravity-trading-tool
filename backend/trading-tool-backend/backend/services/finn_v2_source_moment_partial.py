@@ -89,6 +89,15 @@ def render_source_moment_partial(
     selected_bot = _single(linked)
     bot_pair = str((selected_bot or {}).get("trading_pair") or (selected_bot or {}).get("pair") or "").upper()
     pair_bound = not pairs or bot_pair in pairs
+    linked_pairs = {
+        str(row.get("trading_pair") or row.get("pair") or "").upper()
+        for row in linked
+        if row.get("trading_pair") or row.get("pair")
+    }
+    portfolio_status_pair_safe = not linked_pairs or (
+        len(linked_pairs) == 1 and (not pairs or next(iter(linked_pairs)) in pairs)
+    )
+    portfolio_reads = [item for item in completed if item.get("scope") == "read_portfolio"]
     if len(requested_bot_ids) == 1:
         bot_id = next(iter(requested_bot_ids))
         status_rows = [item["data"] for item in completed
@@ -103,6 +112,22 @@ def render_source_moment_partial(
             if status in {"active", "paused"}:
                 translated = "actief" if status == "active" else "gepauzeerd"
                 lines.append(f"Bot #{bot_id} heeft volgens de gelezen botstatus de status {translated}.")
+        elif not status_rows and portfolio_status_pair_safe:
+            portfolio_bot_rows = [bot for item in portfolio_reads
+                                  for bot in item["data"].get("bots") or []
+                                  if isinstance(bot, dict) and bot.get("bot_id") == bot_id
+                                  and bot.get("is_live") is False
+                                  and str(bot.get("symbol") or "").upper().split("/", 1)[0] == bot_asset]
+            portfolio_bot = _single(portfolio_bot_rows)
+            if portfolio_bot is not None and all(any(
+                isinstance(bot, dict) and bot.get("bot_id") == bot_id
+                and bot.get("is_live") is False
+                for bot in item["data"].get("bots") or []
+            ) for item in portfolio_reads):
+                status = str(portfolio_bot.get("operational_status") or "").lower()
+                if status in {"active", "paused"}:
+                    translated = "actief" if status == "active" else "gepauzeerd"
+                    lines.append(f"In de gelezen Paper-portefeuille staat bot #{bot_id} op {translated}.")
         decisions = [row for item in completed if item.get("scope") == "read_review_history"
                      for row in item["data"].get("latest_bot_decisions") or []
                      if isinstance(row, dict) and row.get("bot_id") == bot_id
@@ -174,7 +199,6 @@ def render_source_moment_partial(
         lines.append("Een botplan beoordeelt daarnaast zijn eigen instapvoorwaarden; een rapportscore is geen koopopdracht.")
 
     positions: dict[tuple[int, str], set[str]] = {}
-    portfolio_reads = [item for item in completed if item.get("scope") == "read_portfolio"]
     for item in portfolio_reads:
         for bot in item["data"].get("bots") or []:
             if not isinstance(bot, dict) or bot.get("is_live") is not False:
@@ -208,6 +232,10 @@ def render_source_moment_partial(
         if asks_position:
             requested.append("de Paper-positie")
         subject = ", ".join(requested) if requested else "de genoemde bronnen"
+        if asks_bot and asks_position and len(requested_bot_ids) == 1:
+            bot_id = next(iter(requested_bot_ids))
+            return (f"Ik kan {subject} hier niet eenduidig teruglezen. "
+                    f"Wil je dat ik bot #{bot_id} en de Paper-portefeuille opnieuw controleer?")
         return f"Ik kan {subject} hier niet eenduidig teruglezen. Welk handelspaar wil je eerst laten controleren?"
     if re.search(r"\b(?:kopen|koop|buy|handelen|vervolgstap|wat\s+nu)\b", question, re.I):
         lines.append("Ik kan hiermee geen nieuwe koop onderbouwen. Controleer eerst de actuele score en de voorwaarden van het botplan voor het juiste handelspaar.")
@@ -216,12 +244,19 @@ def render_source_moment_partial(
         missing.append("het dagrapport")
     if asks_bot and (selected_bot is None or not pair_bound):
         missing.append("de koppeling tussen bot en plan")
-    if asks_position and "ETH" in assets and not any(line.startswith("In de gelezen Paper-portefeuille") for line in lines):
+    if asks_position and "ETH" in assets and not any(
+        line.startswith("In de gelezen Paper-portefeuille staat bij bot #") and line.endswith(" ETH.")
+        for line in lines
+    ):
         missing.append("de ETH-positie")
     if missing:
         lines.append("Ik kon " + ", ".join(missing) + " niet eenduidig bevestigen uit de gelezen gegevens.")
         if asks_bot and not pair_bound and requested_bot_ids:
-            lines.append(f"Welk handelspaar bedoel je voor bot #{next(iter(requested_bot_ids))}?")
+            bot_id = next(iter(requested_bot_ids))
+            if bot_pair and len(pairs) == 1:
+                lines.append(f"Bot #{bot_id} is gelezen voor {bot_pair}; wil je de voorwaarden voor dat handelspaar apart laten controleren?")
+            else:
+                lines.append(f"Wil je dat ik de koppeling en het eigen handelspaar van bot #{bot_id} opnieuw controleer?")
         else:
             lines.append("Welk van deze ontbrekende onderdelen wil je eerst laten controleren?")
     elif asks_preview:

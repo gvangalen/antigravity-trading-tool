@@ -141,6 +141,11 @@ def test_contract_recovery_does_not_bind_btc_eur_to_btc_usdt_bot():
     evidence = list(_evidence())
     linked = next(item for item in evidence if item["scope"] == "read_linked_bot")
     linked["data"] = {**linked["data"], "pair": "BTC/USDT"}
+    portfolio = next(item for item in evidence if item["scope"] == "read_portfolio")
+    portfolio["data"]["bots"].append({
+        "bot_id": 129, "symbol": "BTC", "is_live": False,
+        "operational_status": "active",
+    })
     prepared = SimpleNamespace(
         locale="nl", previous_response=None,
         response=SimpleNamespace(
@@ -160,7 +165,93 @@ def test_contract_recovery_does_not_bind_btc_eur_to_btc_usdt_bot():
     assert "0,00644603 ETH" in answer.text
     assert "gekoppelde plan vereist" not in answer.text
     assert "Bot #129 heeft volgens de gelezen botstatus" not in answer.text
-    assert answer.text.endswith("Welk handelspaar bedoel je voor bot #129?")
+    assert "bot #129 op actief" not in answer.text
+    assert answer.text.endswith(
+        "Bot #129 is gelezen voor BTC/USDT; wil je de voorwaarden voor dat handelspaar apart laten controleren?"
+    )
+
+
+def test_mixed_bot_position_portfolio_read_answers_known_facts_without_pair_claim():
+    question = (
+        "Vergelijk BTC/EUR met mijn open ETH-positie. Wat is de status van mijn "
+        "BTC-bot 129 en welke planvoorwaarden horen bij die bot? Vermeng geen "
+        "verschillende handelspaarbronnen. Lees alleen."
+    )
+    portfolio = {"scope": "read_portfolio", "status": "completed", "data": {
+        "read_at": "2026-11-26T16:31:00+00:00",
+        "bots": [
+            {"bot_id": 129, "symbol": "BTC", "is_live": False,
+             "operational_status": "active", "setup_id": 12},
+            {"bot_id": 301, "symbol": "ETH", "is_live": False,
+             "position_qty": 0.00644603},
+        ],
+    }}
+    prepared = SimpleNamespace(
+        locale="nl", previous_response=None,
+        response=SimpleNamespace(
+            text="Ik kan hiermee geen nieuwe koop onderbouwen.",
+            tool_trace=({"name": "get_portfolio_and_exposure", "result": {
+                "results": [portfolio],
+            }},),
+            uses_previous_response=False,
+            turn_contract={**_cross_source_contract(), "question": question},
+        ),
+    )
+
+    answer = _minimal_read_answer(message=question, prepared=prepared)
+
+    assert answer.status == "completed", (answer.reason, answer.rejection_details)
+    assert "In de gelezen Paper-portefeuille staat bot #129 op actief" in answer.text
+    assert "0,00644603 ETH" in answer.text
+    assert "gekoppelde plan vereist" not in answer.text
+    assert "BTC/EUR heeft benchmarkscore" not in answer.text
+    assert answer.text.endswith("Wil je dat ik de koppeling en het eigen handelspaar van bot #129 opnieuw controleer?")
+
+
+def test_conflicting_bot_reads_with_same_other_pair_do_not_restore_portfolio_status():
+    question = (
+        "Vergelijk BTC/EUR met mijn open ETH-positie. Wat is de status van mijn "
+        "BTC-bot 129 en welke planvoorwaarden horen bij die bot? Lees alleen."
+    )
+    evidence = list(_evidence())
+    linked = next(item for item in evidence if item["scope"] == "read_linked_bot")
+    linked["data"] = {**linked["data"], "pair": "BTC/USDT", "is_active": True}
+    evidence.append({**linked, "data": {**linked["data"], "is_active": False}})
+    portfolio = next(item for item in evidence if item["scope"] == "read_portfolio")
+    portfolio["data"]["bots"].append({
+        "bot_id": 129, "symbol": "BTC", "is_live": False,
+        "operational_status": "active",
+    })
+    answer = render_source_moment_partial(question=question, evidence=tuple(evidence))
+    assert answer is not None
+    assert "bot #129 op actief" not in answer
+    assert "Bot #129 heeft volgens de gelezen botstatus" not in answer
+
+
+def test_mixed_bot_position_does_not_treat_bot_status_as_eth_position():
+    question = (
+        "Vergelijk BTC/EUR met mijn open ETH-positie. Wat is de status van mijn "
+        "BTC-bot 129 en welke planvoorwaarden horen bij die bot? Lees alleen."
+    )
+    prepared = SimpleNamespace(
+        locale="nl", previous_response=None,
+        response=SimpleNamespace(
+            text="Ik kan hiermee geen nieuwe koop onderbouwen.",
+            tool_trace=({"name": "get_portfolio_and_exposure", "result": {"results": [{
+                "scope": "read_portfolio", "status": "completed", "data": {
+                    "bots": [{"bot_id": 129, "symbol": "BTC", "is_live": False,
+                              "operational_status": "active"}],
+                },
+            }]}},),
+            uses_previous_response=False,
+            turn_contract={**_cross_source_contract(), "question": question},
+        ),
+    )
+    answer = _minimal_read_answer(message=question, prepared=prepared)
+    assert answer.status == "completed", (answer.reason, answer.rejection_details)
+    assert "bot #129 op actief" in answer.text
+    assert "de ETH-positie" in answer.text
+    assert "open positie van" not in answer.text
 
 
 def test_saved_setup_comparison_does_not_use_cross_source_contract_recovery():
@@ -405,7 +496,7 @@ def test_unrelated_read_yields_specific_clarification_not_fake_source_answer():
         {"scope": "read_profile", "status": "completed", "data": {"style": "swing"}},
     ))
     assert answer == ("Ik kan de bot en zijn plan, de scores, de Paper-positie hier niet eenduidig teruglezen. "
-                      "Welk handelspaar wil je eerst laten controleren?")
+                      "Wil je dat ik bot #129 en de Paper-portefeuille opnieuw controleer?")
 
 
 def test_score_only_question_does_not_ask_for_report_bot_or_position():
