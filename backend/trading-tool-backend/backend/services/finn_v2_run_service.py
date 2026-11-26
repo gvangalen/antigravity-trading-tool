@@ -2057,15 +2057,25 @@ def _minimal_read_answer(
     ):
         if recovered := source_bound_coach_recovery():
             return recovered
-        return FinnResponsesVerifiedAnswer(
-            "unavailable", "Ik kan de bronmomenten in dit antwoord niet verifiëren.",
-            "source_moment_conflicts_with_source", evidence,
-            rejection_details={
-                "fact_mismatch": "current_source_moment",
-                "source_moment_rule": source_moment_diagnostics[0] if source_moment_diagnostics else "unknown",
-                "source_moment_facts": source_moment_repair_facts(evidence),
-            },
+        from backend.services.finn_v2_source_moment_partial import render_source_moment_partial
+        partial = render_source_moment_partial(
+            question=message, evidence=current_evidence,
+            locale=getattr(prepared, "locale", "nl"),
         )
+        if partial and current_source_moments_supported(
+            partial, current_evidence, question=message,
+        ):
+            text = partial
+        else:
+            return FinnResponsesVerifiedAnswer(
+                "unavailable", "Ik kan de bronmomenten in dit antwoord niet verifiëren.",
+                "source_moment_conflicts_with_source", evidence,
+                rejection_details={
+                    "fact_mismatch": "current_source_moment",
+                    "source_moment_rule": source_moment_diagnostics[0] if source_moment_diagnostics else "unknown",
+                    "source_moment_facts": source_moment_repair_facts(evidence),
+                },
+            )
     if not FinnResponsesAnswerVerifier._saved_entity_type_supported(
         text, evidence, user_message=message,
     ):
