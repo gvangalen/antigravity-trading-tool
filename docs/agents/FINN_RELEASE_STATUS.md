@@ -6,7 +6,10 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: antwoordcontract na bronmomentherstel (26 november 2026)
 
-Phase: `LOCAL_REPAIR_CANDIDATE_REVIEW_PENDING`. Onafhankelijke ingelogde QA
+Phase: `DEPLOY_IDENTITY_PENDING`. Product-PR
+[#1390](https://github.com/gvangalen/antigravity-trading-tool/pull/1390)
+is als `f69a0340f47b2ba802203fd6e26dd5dfd448b53e` samengevoegd.
+Onafhankelijke ingelogde QA
 op publieke SHA `f9c4445772eb97f5eaff8151fbceada4b5ef5641` gaf
 `NOT_ACCEPTED`: de exacte samengestelde BTC/EUR-, BTC/USDT- en ETH-vraag
 eindigde in run `finn-v2-run-a9bcccb923bd4f08afb0d779d3d3851d` met
@@ -25,9 +28,27 @@ bronmomentherstel die extra eis weg wanneer de gebruiker geen twee opgeslagen
 setups of plannen vergelijkt. Gewone modeltekst en echte vergelijking van
 meerdere opgeslagen setups houden de strenge doelcheck. Bij afwijzing toont
 de eigenaargebonden runrespons voortaan alleen de vaste contract-gap-code
-voor diagnose, zonder broninhoud. Gerichte regressies **50/50**. Brede Build-
-gates, onafhankelijke codebeoordeling, CI, deploy en ingelogde live hertest
-staan nog open.
+voor diagnose, zonder broninhoud. De uitzondering vereist twee expliciet
+genoemde handelsparen bij een vergelijking van alleen scores; verwijzingen
+naar twee eerdere setups behouden de strenge doelcontrole.
+
+Gemeten Build-gates op implementatiehead
+`d854a62a2e17567cc8d63972f8c3a29eb36e0a29`: gerichte regressies
+**52/52**; volledige backend **5597 passed, 7 skipped** (log SHA-256
+`20056f6f4afd1abf22ae2fd288bc38eb5df05d045ab9601dbd295dabd831c6de`).
+De geïsoleerde API/worker-actiecontractmatrix **17/17**, nul brokerorders,
+Live-calls en productieverbindingen (artifact SHA-256
+`96b670711b25053866191bf59e3047d9068e8e3d0aa683bc078d525540e1717a`).
+Echte providerselector development **20/20** (artifact SHA-256
+`67c2c86dc64603be771d36b9047f04e2387d36deafca8daef9b801fea2aadc59`)
+en regressie **109/109** (artifact SHA-256
+`785fffdac4df03fa5310f543ae42983c1fe3acfd237edf8cdcd243f990065540`),
+zonder provider-, parse-, schema- of validatiefouten. Frontendbron is niet
+gewijzigd. Onafhankelijke code-QA en Security vonden geen blocker op exact
+deze implementatiehead. PR-CI `45890559307` slaagde. Main-CI, Auto Deploy,
+publieke SHA-pariteit en ingelogde live hertest staan nog open. Deze
+statuswijziging zal zelf een volgende SHA creëren; QA test uitsluitend de
+laatste gedeployde SHA.
 
 ## FINN 3.0: live vervolg op bronmomentantwoord (26 november 2026)
 
