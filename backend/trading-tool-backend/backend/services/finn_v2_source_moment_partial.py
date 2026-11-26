@@ -89,6 +89,14 @@ def render_source_moment_partial(
     selected_bot = _single(linked)
     bot_pair = str((selected_bot or {}).get("trading_pair") or (selected_bot or {}).get("pair") or "").upper()
     pair_bound = not pairs or bot_pair in pairs
+    linked_pairs = {
+        str(row.get("trading_pair") or row.get("pair") or "").upper()
+        for row in linked
+        if row.get("trading_pair") or row.get("pair")
+    }
+    portfolio_status_pair_safe = not linked_pairs or (
+        len(linked_pairs) == 1 and (not pairs or next(iter(linked_pairs)) in pairs)
+    )
     portfolio_reads = [item for item in completed if item.get("scope") == "read_portfolio"]
     if len(requested_bot_ids) == 1:
         bot_id = next(iter(requested_bot_ids))
@@ -104,7 +112,7 @@ def render_source_moment_partial(
             if status in {"active", "paused"}:
                 translated = "actief" if status == "active" else "gepauzeerd"
                 lines.append(f"Bot #{bot_id} heeft volgens de gelezen botstatus de status {translated}.")
-        elif not status_rows and (selected_bot is None or pair_bound):
+        elif not status_rows and portfolio_status_pair_safe:
             portfolio_bot_rows = [bot for item in portfolio_reads
                                   for bot in item["data"].get("bots") or []
                                   if isinstance(bot, dict) and bot.get("bot_id") == bot_id

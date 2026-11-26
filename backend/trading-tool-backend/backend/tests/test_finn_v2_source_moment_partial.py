@@ -208,6 +208,26 @@ def test_mixed_bot_position_portfolio_read_answers_known_facts_without_pair_clai
     assert answer.text.endswith("Wil je dat ik de koppeling en het eigen handelspaar van bot #129 opnieuw controleer?")
 
 
+def test_conflicting_bot_reads_with_same_other_pair_do_not_restore_portfolio_status():
+    question = (
+        "Vergelijk BTC/EUR met mijn open ETH-positie. Wat is de status van mijn "
+        "BTC-bot 129 en welke planvoorwaarden horen bij die bot? Lees alleen."
+    )
+    evidence = list(_evidence())
+    linked = next(item for item in evidence if item["scope"] == "read_linked_bot")
+    linked["data"] = {**linked["data"], "pair": "BTC/USDT", "is_active": True}
+    evidence.append({**linked, "data": {**linked["data"], "is_active": False}})
+    portfolio = next(item for item in evidence if item["scope"] == "read_portfolio")
+    portfolio["data"]["bots"].append({
+        "bot_id": 129, "symbol": "BTC", "is_live": False,
+        "operational_status": "active",
+    })
+    answer = render_source_moment_partial(question=question, evidence=tuple(evidence))
+    assert answer is not None
+    assert "bot #129 op actief" not in answer
+    assert "Bot #129 heeft volgens de gelezen botstatus" not in answer
+
+
 def test_mixed_bot_position_does_not_treat_bot_status_as_eth_position():
     question = (
         "Vergelijk BTC/EUR met mijn open ETH-positie. Wat is de status van mijn "
