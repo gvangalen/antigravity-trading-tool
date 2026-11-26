@@ -816,7 +816,8 @@ class BotService:
                 semantics = "planned_exact"
             bounds = confirmed_dca_amount_bounds({
                 "setup_type": "dca", "execution_mode": strategy_row[6],
-                "base_amount": strategy_row[5], "decision_curve": curve,
+                "base_amount": float(strategy_row[5]) if strategy_row[5] is not None else None,
+                "decision_curve": curve,
                 "dca_amount_semantics": semantics,
             })
             dca_execution_changed = bool(changed_fields and changed_fields.intersection({
@@ -1000,6 +1001,10 @@ class BotService:
 
         await self.validate_bot_payload(merged, user_id, is_update=True, bot_id=bot_id,
                                         changed_fields=set(updates))
+        # Persist the validated setup cadence as well. Validation mutates the
+        # merged view; the repository writes only the explicit update fields.
+        if "cadence" in updates or merged.get("cadence") != existing.get("cadence"):
+            updates["cadence"] = merged.get("cadence")
         pressure_event = self._bot_update_pressure_event(existing, merged, updates)
         if pressure_event and not risk_acknowledged:
             raise HTTPException(

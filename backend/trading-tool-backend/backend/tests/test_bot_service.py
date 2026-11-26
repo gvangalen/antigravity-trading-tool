@@ -638,6 +638,39 @@ def test_null_mode_fields_cannot_bypass_live_budget_validation():
     assert not repo.updated
 
 
+def test_bot_update_persists_cadence_normalized_from_linked_setup(monkeypatch):
+    class Repo:
+        def __init__(self):
+            self.cadence = "daily"
+
+        async def lock_live_account(self, _user_id):
+            return None
+
+        async def lock_bot_config(self, _user_id, _bot_id):
+            return None
+
+        async def get_bot_config(self, _user_id, bot_id):
+            return {"id": bot_id, "strategy_id": 42, "mode": "manual",
+                    "is_live": False, "is_active": True, "cadence": self.cadence,
+                    "budget_total_eur": 100, "budget_daily_limit_eur": 50,
+                    "budget_min_order_eur": 1, "budget_max_order_eur": 50}
+
+        async def update_bot_config(self, _user_id, _bot_id, fields):
+            self.cadence = fields["cadence"]
+            return 9
+
+    service = BotService(_FakeSession())
+    repo = Repo()
+    service.repository = repo
+
+    async def validate(payload, _user_id, **_kwargs):
+        payload["cadence"] = "weekly"
+
+    monkeypatch.setattr(service, "validate_bot_payload", validate)
+    asyncio.run(service.update_bot_config(9, BotConfigUpdateSchema(name="Weekly DCA"), 7))
+    assert repo.cadence == "weekly"
+
+
 def test_bot_with_order_history_cannot_be_deleted():
     class Repo:
         def __init__(self):
@@ -1912,7 +1945,7 @@ def test_new_automatic_dca_bot_requires_limits_and_paper_cash_that_cover_plan():
     class DcaSession(_FakeSession):
         async def execute(self, query, params=None):
             if "from strategies s" in str(query).lower():
-                return _FakeResult((42, "ETH", 73, 73, "dca", 10, "fixed", None,
+                return _FakeResult((42, "ETH", 73, 73, "dca", Decimal("10.00"), "fixed", None,
                                     {"dca_amount_semantics": "planned_exact"}, "weekly"))
             return await super().execute(query, params)
 
@@ -1937,7 +1970,7 @@ def test_new_manual_dca_bot_needs_user_budget_without_auto_funding():
     class DcaSession(_FakeSession):
         async def execute(self, query, params=None):
             if "from strategies s" in str(query).lower():
-                return _FakeResult((42, "ETH", 73, 73, "dca", 10, "fixed", None,
+                return _FakeResult((42, "ETH", 73, 73, "dca", Decimal("10.00"), "fixed", None,
                                     {"dca_amount_semantics": "planned_exact"}, "weekly"))
             return await super().execute(query, params)
 
@@ -1960,7 +1993,7 @@ def test_switching_existing_dca_bot_to_auto_checks_full_score_band_range():
     class DcaSession(_FakeSession):
         async def execute(self, query, params=None):
             if "from strategies s" in str(query).lower():
-                return _FakeResult((42, "ETH", 73, 73, "dca", 20, "custom",
+                return _FakeResult((42, "ETH", 73, 73, "dca", Decimal("20.00"), "custom",
                                     smart["decision_curve"], {"dca_amount_semantics": "planned_exact"}, "weekly"))
             return await super().execute(query, params)
 
