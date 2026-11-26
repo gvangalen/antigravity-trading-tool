@@ -76,6 +76,10 @@ def render_source_moment_partial(
     named_bot_assets = {match.group(1).upper() for match in re.finditer(
         r"\b([A-Z]{2,10})[-\s]+bot\s*#?\s*\d+\b", question, re.I,
     )}
+    asks_report = bool(re.search(r"\brapport\w*\b|\bdagrapport\b", question, re.I))
+    asks_bot = bool(re.search(r"\bbot\b|\bbot\s*#?\s*\d+\b|\bbotplan\b", question, re.I))
+    asks_position = bool(re.search(r"\bpositie\w*\b|\bportefeuille\b", question, re.I))
+    asks_preview = bool(re.search(r"\bpreview\b", question, re.I))
     bot_asset = next(iter(named_bot_assets)) if len(named_bot_assets) == 1 else None
     paper_requested = bool(re.search(r"\bPaper\b", question, re.I))
     linked = [item["data"] for item in completed if item.get("scope") == "read_linked_bot"
@@ -196,21 +200,30 @@ def render_source_moment_partial(
             lines.append(f"In de gelezen Paper-portefeuille staat bij bot #{bot_id} een open positie van {quantity} {symbol}.")
 
     if not lines:
-        return ("Ik kan de genoemde bot, scores en Paper-positie hier niet eenduidig teruglezen. "
-                "Welk handelspaar en welke bot wil je eerst laten controleren?")
+        requested = []
+        if asks_bot:
+            requested.append("de bot en zijn plan")
+        if re.search(r"\bscore\w*\b", question, re.I):
+            requested.append("de scores")
+        if asks_position:
+            requested.append("de Paper-positie")
+        subject = ", ".join(requested) if requested else "de genoemde bronnen"
+        return f"Ik kan {subject} hier niet eenduidig teruglezen. Welk handelspaar wil je eerst laten controleren?"
     if re.search(r"\b(?:kopen|koop|buy|handelen|vervolgstap|wat\s+nu)\b", question, re.I):
         lines.append("Ik kan hiermee geen nieuwe koop onderbouwen. Controleer eerst de actuele score en de voorwaarden van het botplan voor het juiste handelspaar.")
     missing = []
-    if not reports:
+    if asks_report and not reports:
         missing.append("het dagrapport")
-    if selected_bot is None or not pair_bound:
+    if asks_bot and (selected_bot is None or not pair_bound):
         missing.append("de koppeling tussen bot en plan")
-    if "ETH" in assets and not any(line.startswith("In de gelezen Paper-portefeuille") for line in lines):
+    if asks_position and "ETH" in assets and not any(line.startswith("In de gelezen Paper-portefeuille") for line in lines):
         missing.append("de ETH-positie")
     if missing:
         lines.append("Ik kon " + ", ".join(missing) + " niet eenduidig bevestigen uit de gelezen gegevens.")
-    if len(pairs) > 1 and len(requested_bot_ids) == 1:
-        lines.append(f"Welk van de genoemde handelsparen hoort bij bot #{next(iter(requested_bot_ids))}?")
-    else:
-        lines.append("Welk brononderdeel wil je als eerste opnieuw laten beoordelen?")
+        if asks_bot and not pair_bound and requested_bot_ids:
+            lines.append(f"Welk handelspaar bedoel je voor bot #{next(iter(requested_bot_ids))}?")
+        else:
+            lines.append("Welk van deze ontbrekende onderdelen wil je eerst laten controleren?")
+    elif asks_preview:
+        lines.append("Wil je dat ik de handmatige preview en de bijbehorende setup apart controleer?")
     return "\n\n".join(lines)

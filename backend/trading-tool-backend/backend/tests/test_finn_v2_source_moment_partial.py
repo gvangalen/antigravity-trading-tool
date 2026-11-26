@@ -85,7 +85,7 @@ def test_multi_asset_wrong_clock_recovers_only_owner_read_facts():
     assert "BTC/USDT heeft benchmarkscore 40/100" not in answer.text
     assert "0,00644603 ETH" in answer.text
     assert "geen nieuwe koop onderbouwen" in answer.text
-    assert answer.text.endswith("Welk van de genoemde handelsparen hoort bij bot #129?")
+    assert answer.text.endswith("Wil je dat ik de handmatige preview en de bijbehorende setup apart controleer?")
 
 
 def test_partial_answer_does_not_repeat_unread_eth_position_or_bot_status():
@@ -175,15 +175,37 @@ def test_unrelated_weekly_report_and_unlinked_eth_setup_are_not_claimed():
 
     assert "gelezen dagrapport" not in answer
     assert "gekoppelde plan" not in answer
-    assert "genoemde bot, scores en Paper-positie" in answer
+    assert "de bot en zijn plan, de scores, de Paper-positie" in answer
 
 
 def test_unrelated_read_yields_specific_clarification_not_fake_source_answer():
     answer = render_source_moment_partial(question=QUESTION, evidence=(
         {"scope": "read_profile", "status": "completed", "data": {"style": "swing"}},
     ))
-    assert answer == ("Ik kan de genoemde bot, scores en Paper-positie hier niet eenduidig teruglezen. "
-                      "Welk handelspaar en welke bot wil je eerst laten controleren?")
+    assert answer == ("Ik kan de bot en zijn plan, de scores, de Paper-positie hier niet eenduidig teruglezen. "
+                      "Welk handelspaar wil je eerst laten controleren?")
+
+
+def test_score_only_question_does_not_ask_for_report_bot_or_position():
+    question = "Vergelijk de actuele scores van BTC/EUR en ETH/EUR."
+    evidence = (
+        {"scope": "read_asset_scores", "status": "completed", "asset": "BTC", "data": {
+            "pair": "BTC/EUR", "market_id": 1, "source_status": "available",
+            "benchmark_score": 55,
+        }},
+        {"scope": "read_asset_scores", "status": "completed", "asset": "ETH", "data": {
+            "pair": "ETH/EUR", "market_id": 2, "source_status": "available",
+            "benchmark_score": 60,
+        }},
+    )
+
+    answer = render_source_moment_partial(question=question, evidence=evidence)
+
+    assert "BTC/EUR heeft benchmarkscore 55/100" in answer
+    assert "ETH/EUR heeft benchmarkscore 60/100" in answer
+    assert "dagrapport" not in answer
+    assert "bot" not in answer.lower()
+    assert "positie" not in answer
 
 
 def test_bot_claims_omitted_when_decision_pair_differs_from_bound_bot_pair():
