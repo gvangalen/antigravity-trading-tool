@@ -256,6 +256,19 @@ def is_confirmed_dca_amount_rule(strategy: dict[str, Any]) -> bool:
     return curve == canonical["decision_curve"] and math.isclose(float(base), canonical["base_amount"], abs_tol=0.005)
 
 
+def confirmed_dca_amount_bounds(strategy: dict[str, Any]) -> tuple[float, float] | None:
+    """Return the smallest and largest saved purchase amounts for bot caps."""
+    if not is_confirmed_dca_amount_rule(strategy):
+        return None
+    base = float(strategy["base_amount"])
+    if strategy.get("execution_mode") == "fixed":
+        amount = round(base, 2)
+        return amount, amount
+    points = strategy["decision_curve"]["points"]
+    amounts = [round(base * float(point["y"]), 2) for point in points]
+    return min(amounts), max(amounts)
+
+
 def dca_due_on_date(setup: dict[str, Any], report_date: date) -> bool:
     """Evaluate the saved setup cadence for a nominal local report date."""
     frequency = str(setup.get("dca_frequency") or "").lower()

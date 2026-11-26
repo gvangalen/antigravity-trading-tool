@@ -3,7 +3,7 @@ from datetime import date
 
 from backend.domain.finn_dca_plan_contract import (
     split_confirmed_dca_plan, dca_due_on_date, dca_execution_period, benchmark_score, normalize_benchmark_weights,
-    is_confirmed_dca_amount_rule, validate_dca_setup_only,
+    is_confirmed_dca_amount_rule, confirmed_dca_amount_bounds, validate_dca_setup_only,
 )
 from backend.engine.decision_engine import DecisionEngineError, decide_amount
 from backend.engine.trading_bot_execution import _get_current_benchmark_weights
@@ -16,6 +16,19 @@ def _schedule():
         "name": "BTC maandag DCA", "symbol": "BTC", "setup_type": "dca",
         "timeframe": "1D", "dca_frequency": "weekly", "dca_day": "monday",
     }
+
+
+def test_confirmed_dca_bounds_match_the_saved_fixed_and_score_band_amounts():
+    _, fixed = split_confirmed_dca_plan({**_schedule(), "dca_amount_mode": "fixed", "base_amount": 10})
+    assert confirmed_dca_amount_bounds({"setup_type": "dca", **fixed}) == (10, 10)
+
+    _, smart = split_confirmed_dca_plan({
+        **_schedule(), "dca_amount_mode": "score_bands", "base_amount": 20,
+        "score_source": "benchmark_score", "low_threshold": 30, "high_threshold": 70,
+        "low_score_percent": 50, "mid_score_percent": 100, "high_score_percent": 200,
+    })
+    assert confirmed_dca_amount_bounds({"setup_type": "dca", **smart}) == (10, 40)
+    assert confirmed_dca_amount_bounds({"setup_type": "dca", **(smart | {"dca_amount_semantics": None})}) is None
 
 
 def test_setup_only_dca_rejects_a_hidden_amount_rule():
