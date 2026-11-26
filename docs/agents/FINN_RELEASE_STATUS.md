@@ -15,10 +15,10 @@ Een reeds opgeslagen week houdt zijn oorspronkelijke zone en UTC-grenzen.
 De finalizer behandelt alleen actieve eigenaren en controleert dat opnieuw
 vlak voor de feedkaart. De eigenaarsscan krijgt een concurrent opgebouwde index.
 
-Build heeft 61 gerichte backendtests, 117 frontend commandtests, drie
-datumtests, frontend typecheck, i18n-lint, build, audit:high, shellsyntax,
-Python-compilatie en diff-check groen gemeten. De volledige backend-suite en
-PR-CI lopen nog; hun uitkomst is nog geen releasebewijs. Onafhankelijke
+Build heeft **5580 passed, 7 skipped** in de volledige backend-suite, plus
+61 gerichte backendtests, 117 frontend commandtests en drie datumtests.
+Frontend typecheck, i18n-lint, build, audit:high, shellsyntax,
+Python-compilatie en diff-check zijn groen. PR-CI loopt nog. Onafhankelijke
 QA-, Security- en Architecture-codebeoordelingen vonden op de huidige
 implementatie geen blocker. Er is nog geen productie-uitrol of nieuwe
 ingelogde Paper-exit/weekreflectie-acceptatie voor deze kandidaat. De
