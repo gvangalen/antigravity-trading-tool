@@ -21,7 +21,7 @@ def _evidence():
         }},
         {"scope": "read_review_history", "status": "completed", "asset": "BTC", "data": {
             "latest_bot_decisions": [{
-                "bot_id": 129, "symbol": "BTC", "action": "hold",
+                "bot_id": 129, "symbol": "BTC", "pair": "BTC/EUR", "action": "hold",
                 "is_live": False,
                 "decision_at": "2026-11-26T16:25:00+00:00",
             }],
@@ -35,7 +35,8 @@ def _evidence():
             ]},
         }},
         {"scope": "read_linked_bot", "status": "completed", "asset": "BTC", "data": {
-            "bot_id": 129, "symbol": "BTC", "setup_id": 12, "is_live": False,
+            "bot_id": 129, "symbol": "BTC", "pair": "BTC/EUR",
+            "setup_id": 12, "is_live": False,
         }},
         {"scope": "read_active_setup", "status": "completed", "asset": "BTC", "data": {
             "setup_id": 12, "symbol": "BTC", "min_benchmark_score": 61,
@@ -78,7 +79,7 @@ def test_multi_asset_wrong_clock_recovers_only_owner_read_facts():
     assert "dagrapport" in answer.text
     assert "rapportmomentopname staat voor BTC/EUR benchmarkscore 36,7/100" in answer.text
     assert "rapportmomentopname staat voor BTC/USDT benchmarkscore 40/100" in answer.text
-    assert "handmatige preview" in answer.text
+    assert "handmatige preview kan een andere setup" in answer.text
     assert "BTC/EUR" in answer.text and "BTC/USDT" in answer.text
     assert "BTC/EUR heeft benchmarkscore 35/100" in answer.text
     assert "BTC/USDT heeft benchmarkscore 40/100" not in answer.text
@@ -181,3 +182,25 @@ def test_unrelated_read_yields_specific_clarification_not_fake_source_answer():
     ))
     assert answer == ("Ik kan de genoemde bot, scores en Paper-positie hier niet eenduidig teruglezen. "
                       "Welk handelspaar en welke bot wil je eerst laten controleren?")
+
+
+def test_bot_claims_omitted_when_decision_pair_differs_from_bound_bot_pair():
+    evidence = list(_evidence())
+    evidence[1]["data"]["latest_bot_decisions"][0]["pair"] = "BTC/USDT"
+
+    answer = render_source_moment_partial(question=QUESTION, evidence=tuple(evidence))
+
+    assert "laatst gelezen beslissing" not in answer
+    assert "blokkeringscode" not in answer
+
+
+def test_bot_and_plan_claims_omitted_without_exact_pair_binding():
+    evidence = list(_evidence())
+    evidence[3]["data"].pop("pair")
+
+    answer = render_source_moment_partial(question=QUESTION, evidence=tuple(evidence))
+
+    assert "Bot #129 heeft" not in answer
+    assert "laatst gelezen beslissing" not in answer
+    assert "gekoppelde plan vereist" not in answer
+    assert "koppeling tussen bot en plan" in answer

@@ -77,12 +77,20 @@ def render_source_moment_partial(
     )}
     bot_asset = next(iter(named_bot_assets)) if len(named_bot_assets) == 1 else None
     paper_requested = bool(re.search(r"\bPaper\b", question, re.I))
+    linked = [item["data"] for item in completed if item.get("scope") == "read_linked_bot"
+              and item["data"].get("bot_id") in requested_bot_ids
+              and item["data"].get("is_live") is False
+              and str(item["data"].get("symbol") or "").upper() == bot_asset]
+    selected_bot = _single(linked)
+    bot_pair = str((selected_bot or {}).get("trading_pair") or (selected_bot or {}).get("pair") or "").upper()
+    pair_bound = len(pairs) < 2 or bot_pair in pairs
     if len(requested_bot_ids) == 1:
         bot_id = next(iter(requested_bot_ids))
         status_rows = [item["data"] for item in completed
                        if item.get("scope") == "read_bot_status"
                        and item["data"].get("bot_id") == bot_id
                        and str(item.get("asset") or "").upper() == bot_asset
+                       and pair_bound
                        and (not paper_requested or item["data"].get("is_live") is False)]
         statuses = {str(row.get("operational_status") or "").lower() for row in status_rows}
         if len(statuses) == 1:
@@ -94,6 +102,8 @@ def render_source_moment_partial(
                      for row in item["data"].get("latest_bot_decisions") or []
                      if isinstance(row, dict) and row.get("bot_id") == bot_id
                      and str(row.get("symbol") or "").upper() == bot_asset
+                     and pair_bound
+                     and (len(pairs) < 2 or str(row.get("pair") or "").upper() == bot_pair)
                      and (not paper_requested or row.get("is_live") is False)]
         actions = {str(row.get("action") or "").lower() for row in decisions}
         if len(actions) == 1:
@@ -141,24 +151,19 @@ def render_source_moment_partial(
         if len(values) == 1 and None not in values:
             _, score = next(iter(values))
             lines.append(f"De gelezen paaranalyse voor {pair} heeft benchmarkscore {score}/100.")
-    linked = [item["data"] for item in completed if item.get("scope") == "read_linked_bot"
-              and item["data"].get("bot_id") in requested_bot_ids
-              and item["data"].get("is_live") is False
-              and str(item["data"].get("symbol") or "").upper() == bot_asset]
-    selected_bot = _single(linked)
     setups = [item["data"] for item in completed if item.get("scope") == "read_active_setup"
               and str(item["data"].get("symbol") or "").upper() == bot_asset]
     matched_setups = [row for row in setups if selected_bot is not None
                       and row.get("setup_id") == selected_bot.get("setup_id")
                       and row.get("setup_id") is not None]
     setup = _single(matched_setups)
-    if setup is not None:
+    if setup is not None and pair_bound:
         low = _score(setup.get("min_benchmark_score"))
         high = _score(setup.get("max_benchmark_score"))
         if low is not None and high is not None:
             lines.append(f"Het aan bot #{selected_bot['bot_id']} gekoppelde plan vereist een benchmarkscore tussen {low} en {high}.")
-            lines.append("Een handmatige preview toetst de score voor haar eigen handelspaar aan die grens; een score eronder blokkeert de instap. De genoemde preview zelf is in deze bronlezing niet bevestigd.")
-    if selected_bot is not None:
+            lines.append("Die grens hoort bij dit botplan. Een handmatige preview kan een andere setup en dus andere voorwaarden gebruiken.")
+    if selected_bot is not None and pair_bound:
         lines.append("Een botplan beoordeelt daarnaast zijn eigen instapvoorwaarden; een rapportscore is geen koopopdracht.")
 
     positions: dict[tuple[int, str], set[str]] = {}
@@ -195,7 +200,7 @@ def render_source_moment_partial(
     missing = []
     if not reports:
         missing.append("het dagrapport")
-    if selected_bot is None:
+    if selected_bot is None or not pair_bound:
         missing.append("de koppeling tussen bot en plan")
     if "ETH" in assets and not any(line.startswith("In de gelezen Paper-portefeuille") for line in lines):
         missing.append("de ETH-positie")
