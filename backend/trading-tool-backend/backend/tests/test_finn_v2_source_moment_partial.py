@@ -16,23 +16,36 @@ QUESTION = (
 def _evidence():
     return (
         {"scope": "read_bot_status", "status": "completed", "asset": "BTC", "data": {
-            "bot_id": 129, "operational_status": "paused",
+            "bot_id": 129, "operational_status": "paused", "is_live": False,
             "read_at": "2026-11-26T16:30:00+00:00",
         }},
         {"scope": "read_review_history", "status": "completed", "asset": "BTC", "data": {
             "latest_bot_decisions": [{
                 "bot_id": 129, "symbol": "BTC", "action": "hold",
+                "is_live": False,
                 "decision_at": "2026-11-26T16:25:00+00:00",
             }],
         }},
         {"scope": "read_latest_report", "status": "completed", "data": {
+            "report_type": "daily_reports",
             "generated_at": "2026-11-26T05:00:00+00:00",
+            "score_source_snapshot": {"assets": [
+                {"pair": "BTC/EUR", "score_status": "available", "benchmark_score": 36.7},
+                {"pair": "BTC/USDT", "score_status": "available", "benchmark_score": 40},
+            ]},
+        }},
+        {"scope": "read_linked_bot", "status": "completed", "asset": "BTC", "data": {
+            "bot_id": 129, "symbol": "BTC", "setup_id": 12, "is_live": False,
+        }},
+        {"scope": "read_active_setup", "status": "completed", "asset": "BTC", "data": {
+            "setup_id": 12, "symbol": "BTC", "min_benchmark_score": 61,
+            "max_benchmark_score": 75,
         }},
         {"scope": "read_asset_scores", "status": "completed", "asset": "BTC", "data": {
-            "pair": "BTC/EUR", "source_status": "available", "benchmark_score": 35.0,
+            "pair": "BTC/EUR", "market_id": 1, "source_status": "available", "benchmark_score": 35.0,
         }},
         {"scope": "read_asset_scores", "status": "completed", "asset": "BTC", "data": {
-            "pair": "BTC/USDT", "source_status": "unverified_scores", "benchmark_score": 40.0,
+            "pair": "BTC/USDT", "market_id": 2, "source_status": "unverified_scores", "benchmark_score": 40.0,
         }},
         {"scope": "read_portfolio", "status": "completed", "data": {
             "read_at": "2026-11-26T16:31:00+00:00",
@@ -63,6 +76,9 @@ def test_multi_asset_wrong_clock_recovers_only_owner_read_facts():
     assert "Bot #129" in answer.text
     assert "wachten" in answer.text
     assert "dagrapport" in answer.text
+    assert "rapportmomentopname staat voor BTC/EUR benchmarkscore 36,7/100" in answer.text
+    assert "rapportmomentopname staat voor BTC/USDT benchmarkscore 40/100" in answer.text
+    assert "handmatige preview" in answer.text
     assert "BTC/EUR" in answer.text and "BTC/USDT" in answer.text
     assert "BTC/EUR heeft benchmarkscore 35/100" in answer.text
     assert "BTC/USDT heeft benchmarkscore 40/100" not in answer.text
@@ -78,7 +94,7 @@ def test_partial_answer_does_not_repeat_unread_eth_position_or_bot_status():
 
     assert answer is not None
     assert "dagrapport" in answer
-    assert "ETH" not in answer
+    assert "open positie van" not in answer
     assert "gepauzeerd" not in answer
     assert "0,00644603" not in answer
     assert "setupmismatch" not in answer
@@ -91,3 +107,77 @@ def test_partial_answer_requires_completed_source_and_multi_source_question():
     assert render_source_moment_partial(
         question="Wat is de huidige botstatus van BTC?", evidence=_evidence(),
     ) is None
+
+
+def test_conflicting_pair_scores_and_portfolio_positions_are_omitted():
+    evidence = _evidence() + (
+        {"scope": "read_asset_scores", "status": "completed", "asset": "BTC", "data": {
+            "pair": "BTC/EUR", "market_id": 1, "source_status": "available", "benchmark_score": 36.7,
+        }},
+        {"scope": "read_portfolio", "status": "completed", "data": {
+            "bots": [{"bot_id": 301, "symbol": "ETH", "is_live": False,
+                      "position_qty": 0.007}],
+        }},
+    )
+
+    answer = render_source_moment_partial(question=QUESTION, evidence=evidence)
+
+    assert answer is not None
+    assert "BTC/EUR heeft benchmarkscore" not in answer
+    assert "0,00644603 ETH" not in answer
+    assert "0,007 ETH" not in answer
+
+
+def test_bot_status_and_decision_require_matching_asset_and_paper_mode():
+    evidence = (
+        {"scope": "read_bot_status", "status": "completed", "asset": "ETH", "data": {
+            "bot_id": 129, "operational_status": "paused", "is_live": False,
+        }},
+        {"scope": "read_review_history", "status": "completed", "asset": "BTC", "data": {
+            "latest_bot_decisions": [{"bot_id": 129, "symbol": "BTC", "action": "hold",
+                                      "is_live": True}],
+        }},
+    )
+
+    answer = render_source_moment_partial(question=QUESTION, evidence=evidence)
+
+    assert answer is not None
+    assert "status gepauzeerd" not in answer
+    assert "beslissing voor bot #129" not in answer
+
+
+def test_partial_explains_bound_setup_threshold_and_known_block_reason():
+    evidence = list(_evidence())
+    evidence[1]["data"]["latest_bot_decisions"][0]["safety_reason_code"] = "setup_mismatch"
+
+    answer = render_source_moment_partial(question=QUESTION, evidence=tuple(evidence))
+
+    assert "blokkeringscode" in answer and "opgeslagen setupvoorwaarden" in answer
+    assert "bot #129 gekoppelde plan vereist een benchmarkscore tussen 61 en 75" in answer
+    assert "rapportscore is geen koopopdracht" in answer
+
+
+def test_unrelated_weekly_report_and_unlinked_eth_setup_are_not_claimed():
+    evidence = (
+        {"scope": "read_latest_report", "status": "completed", "data": {
+            "report_type": "weekly_reports", "symbol": "ETH",
+        }},
+        {"scope": "read_active_setup", "status": "completed", "asset": "ETH", "data": {
+            "setup_id": 99, "symbol": "ETH", "min_benchmark_score": 61,
+            "max_benchmark_score": 75,
+        }},
+    )
+
+    answer = render_source_moment_partial(question=QUESTION, evidence=evidence)
+
+    assert "gelezen dagrapport" not in answer
+    assert "gekoppelde plan" not in answer
+    assert "genoemde bot, scores en Paper-positie" in answer
+
+
+def test_unrelated_read_yields_specific_clarification_not_fake_source_answer():
+    answer = render_source_moment_partial(question=QUESTION, evidence=(
+        {"scope": "read_profile", "status": "completed", "data": {"style": "swing"}},
+    ))
+    assert answer == ("Ik kan de genoemde bot, scores en Paper-positie hier niet eenduidig teruglezen. "
+                      "Welk handelspaar en welke bot wil je eerst laten controleren?")

@@ -22,7 +22,7 @@ def _quantity(value: Any) -> str | None:
         number = Decimal(str(value))
     except (InvalidOperation, TypeError, ValueError):
         return None
-    if not number.is_finite() or number <= 0:
+    if not number.is_finite() or number < 0:
         return None
     return format(number.normalize(), "f").replace(".", ",")
 
@@ -35,6 +35,20 @@ def _score(value: Any) -> str | None:
     if not number.is_finite() or not 0 <= number <= 100:
         return None
     return format(number.normalize(), "f").replace(".", ",")
+
+
+def _single(rows: list[Any]) -> Any | None:
+    """Use a fact only when repeated reads agree exactly."""
+    return rows[0] if rows and all(row == rows[0] for row in rows) else None
+
+
+def _safe_reason(value: Any) -> str | None:
+    # Reasons can originate in saved user text. Keep only known machine codes.
+    return {
+        "setup_mismatch": "de opgeslagen setupvoorwaarden sluiten niet aan",
+        "score_outside_band": "de score valt buiten de ingestelde band",
+        "benchmark_score_outside_band": "de score valt buiten de ingestelde band",
+    }.get(str(value or "").lower())
 
 
 def render_source_moment_partial(
@@ -58,63 +72,135 @@ def render_source_moment_partial(
 
     lines: list[str] = []
     requested_bot_ids = {int(match.group(1)) for match in _BOT_ID.finditer(question)}
+    named_bot_assets = {match.group(1).upper() for match in re.finditer(
+        r"\b([A-Z]{2,10})[-\s]+bot\s*#?\s*\d+\b", question, re.I,
+    )}
+    bot_asset = next(iter(named_bot_assets)) if len(named_bot_assets) == 1 else None
+    paper_requested = bool(re.search(r"\bPaper\b", question, re.I))
     if len(requested_bot_ids) == 1:
         bot_id = next(iter(requested_bot_ids))
         status_rows = [item["data"] for item in completed
                        if item.get("scope") == "read_bot_status"
-                       and item["data"].get("bot_id") == bot_id]
-        if status_rows:
-            status = str(status_rows[-1].get("operational_status") or "").lower()
+                       and item["data"].get("bot_id") == bot_id
+                       and str(item.get("asset") or "").upper() == bot_asset
+                       and (not paper_requested or item["data"].get("is_live") is False)]
+        statuses = {str(row.get("operational_status") or "").lower() for row in status_rows}
+        if len(statuses) == 1:
+            status = next(iter(statuses))
             if status in {"active", "paused"}:
                 translated = "actief" if status == "active" else "gepauzeerd"
                 lines.append(f"Bot #{bot_id} heeft volgens de gelezen botstatus de status {translated}.")
         decisions = [row for item in completed if item.get("scope") == "read_review_history"
                      for row in item["data"].get("latest_bot_decisions") or []
-                     if isinstance(row, dict) and row.get("bot_id") == bot_id]
-        if len(decisions) == 1:
-            action = str(decisions[0].get("action") or "").lower()
+                     if isinstance(row, dict) and row.get("bot_id") == bot_id
+                     and str(row.get("symbol") or "").upper() == bot_asset
+                     and (not paper_requested or row.get("is_live") is False)]
+        actions = {str(row.get("action") or "").lower() for row in decisions}
+        if len(actions) == 1:
+            action = next(iter(actions))
             if action in {"hold", "wait", "blocked"}:
                 lines.append(f"De laatst gelezen beslissing voor bot #{bot_id} is wachten; dat is geen uitgevoerde koop.")
 
-    if any(item.get("scope") == "read_latest_report" for item in completed):
-        lines.append("Het dagrapport is een opgeslagen momentopname. Een score daarin is geen actuele botbeslissing.")
-    if len(pairs) > 1:
-        named_pairs = " en ".join(sorted(pairs))
-        lines.append(f"{named_pairs} hebben afzonderlijke analyses en bronmomenten; vergelijk hun scores niet als één meting.")
-    pair_scores: dict[str, str] = {}
+        reasons = [_safe_reason(row.get("safety_reason_code") or row.get("reason_code"))
+                   for row in decisions]
+        reason = _single(reasons)
+        if reason:
+            lines.append(f"De opgeslagen blokkeringscode zegt dat {reason}.")
+
+    reports = [item["data"] for item in completed if item.get("scope") == "read_latest_report"
+               and item["data"].get("report_type") == "daily_reports"]
+    if _single(reports) is not None:
+        lines.append("Het gelezen dagrapport is een opgeslagen momentopname. De scores daarin zijn geen actuele botbeslissing.")
+        report = reports[0]
+        snapshot = report.get("score_source_snapshot") or {}
+        assets_in_report = snapshot.get("assets") if isinstance(snapshot, dict) else None
+        if isinstance(assets_in_report, list):
+            for pair in sorted(pairs):
+                rows = [row for row in assets_in_report if isinstance(row, dict)
+                        and str(row.get("pair") or "").upper() == pair]
+                values = [(_score(row.get("benchmark_score")) if row.get("score_status") == "available" else None)
+                          for row in rows]
+                value = _single(values)
+                if value is not None:
+                    lines.append(f"In die rapportmomentopname staat voor {pair} benchmarkscore {value}/100.")
+    if len(pairs) > 1 and (reports or any(item.get("scope") == "read_asset_scores" for item in completed)):
+        lines.append(f"{' en '.join(sorted(pairs))} zijn afzonderlijke handelsparen; hun scores en bronmomenten kunnen verschillen.")
+    pair_score_rows: dict[str, set[tuple[int, str] | None]] = {}
     for item in completed:
         if item.get("scope") != "read_asset_scores":
             continue
         data = item["data"]
         pair = str(data.get("pair") or "").upper()
         score = _score(data.get("benchmark_score"))
-        if pair in pairs and data.get("source_status") == "available" and score is not None:
-            pair_scores[pair] = score
-    for pair, score in sorted(pair_scores.items()):
-        lines.append(f"De gelezen paaranalyse voor {pair} heeft benchmarkscore {score}/100.")
-    if any(item.get("scope") == "read_active_setup" for item in completed):
-        lines.append("Een botplan heeft eigen instapvoorwaarden; vergelijk een score alleen met de voorwaarden van het bijbehorende handelspaar.")
+        market_id = data.get("market_id")
+        if pair in pairs:
+            valid = (data.get("source_status") == "available" and score is not None
+                     and type(market_id) is int and market_id > 0)
+            pair_score_rows.setdefault(pair, set()).add((market_id, score) if valid else None)
+    for pair, values in sorted(pair_score_rows.items()):
+        if len(values) == 1 and None not in values:
+            _, score = next(iter(values))
+            lines.append(f"De gelezen paaranalyse voor {pair} heeft benchmarkscore {score}/100.")
+    linked = [item["data"] for item in completed if item.get("scope") == "read_linked_bot"
+              and item["data"].get("bot_id") in requested_bot_ids
+              and item["data"].get("is_live") is False
+              and str(item["data"].get("symbol") or "").upper() == bot_asset]
+    selected_bot = _single(linked)
+    setups = [item["data"] for item in completed if item.get("scope") == "read_active_setup"
+              and str(item["data"].get("symbol") or "").upper() == bot_asset]
+    matched_setups = [row for row in setups if selected_bot is not None
+                      and row.get("setup_id") == selected_bot.get("setup_id")
+                      and row.get("setup_id") is not None]
+    setup = _single(matched_setups)
+    if setup is not None:
+        low = _score(setup.get("min_benchmark_score"))
+        high = _score(setup.get("max_benchmark_score"))
+        if low is not None and high is not None:
+            lines.append(f"Het aan bot #{selected_bot['bot_id']} gekoppelde plan vereist een benchmarkscore tussen {low} en {high}.")
+            lines.append("Een handmatige preview toetst de score voor haar eigen handelspaar aan die grens; een score eronder blokkeert de instap. De genoemde preview zelf is in deze bronlezing niet bevestigd.")
+    if selected_bot is not None:
+        lines.append("Een botplan beoordeelt daarnaast zijn eigen instapvoorwaarden; een rapportscore is geen koopopdracht.")
 
-    position_lines: set[str] = set()
-    for item in completed:
-        if item.get("scope") != "read_portfolio":
-            continue
+    positions: dict[tuple[int, str], set[str]] = {}
+    portfolio_reads = [item for item in completed if item.get("scope") == "read_portfolio"]
+    for item in portfolio_reads:
         for bot in item["data"].get("bots") or []:
             if not isinstance(bot, dict) or bot.get("is_live") is not False:
                 continue
             symbol = str(bot.get("symbol") or "").upper().split("/", 1)[0]
-            if symbol not in assets:
+            if symbol not in assets or (item.get("asset") and str(item["asset"]).upper() != symbol):
                 continue
             quantity = _quantity(bot.get("position_qty"))
-            if quantity is None or type(bot.get("bot_id")) is not int:
+            if type(bot.get("bot_id")) is not int:
                 continue
-            position_lines.add(f"In de gelezen Paper-portefeuille staat bij bot #{bot['bot_id']} een open positie van {quantity} {symbol}.")
-    lines.extend(sorted(position_lines))
+            positions.setdefault((bot["bot_id"], symbol), set()).add(quantity or "unknown")
+    for (bot_id, symbol), quantities in sorted(positions.items()):
+        eligible_reads = [item for item in portfolio_reads
+                          if not item.get("asset") or str(item["asset"]).upper() == symbol]
+        present_in_all = all(any(
+            isinstance(bot, dict) and bot.get("bot_id") == bot_id
+            and str(bot.get("symbol") or "").upper().split("/", 1)[0] == symbol
+            and bot.get("is_live") is False
+            for bot in item["data"].get("bots") or []
+        ) for item in eligible_reads)
+        if present_in_all and len(quantities) == 1 and "unknown" not in quantities and "0" not in quantities:
+            quantity = next(iter(quantities))
+            lines.append(f"In de gelezen Paper-portefeuille staat bij bot #{bot_id} een open positie van {quantity} {symbol}.")
 
     if not lines:
-        return None
+        return ("Ik kan de genoemde bot, scores en Paper-positie hier niet eenduidig teruglezen. "
+                "Welk handelspaar en welke bot wil je eerst laten controleren?")
     if re.search(r"\b(?:kopen|koop|buy|handelen|vervolgstap|wat\s+nu)\b", question, re.I):
         lines.append("Ik kan hiermee geen nieuwe koop onderbouwen. Controleer eerst de actuele score en de voorwaarden van het botplan voor het juiste handelspaar.")
+    missing = []
+    if not reports:
+        missing.append("het dagrapport")
+    if selected_bot is None:
+        missing.append("de koppeling tussen bot en plan")
+    if "ETH" in assets and not any(line.startswith("In de gelezen Paper-portefeuille") for line in lines):
+        missing.append("de ETH-positie")
+    if missing:
+        lines.append("Ik kon " + ", ".join(missing) + " niet eenduidig bevestigen uit de gelezen gegevens.")
     if len(pairs) > 1 and len(requested_bot_ids) == 1:
         lines.append(f"Welk van de genoemde handelsparen hoort bij bot #{next(iter(requested_bot_ids))}?")
     else:
