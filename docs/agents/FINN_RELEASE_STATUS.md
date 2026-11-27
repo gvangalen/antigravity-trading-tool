@@ -4,9 +4,51 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: Paper-Hold met risico en koersbron (27 november 2026)
+
+Phase: `LOCAL_VALIDATED_PR_PENDING`. Productbranch
+`codex/finn-hold-risk-coach-20261126`, implementatiecommit
+`570c9ec4c49079014314b261b60139a4b9c60d7a` op main
+`9a2cbb206f7749bda0e2aef2df5a6b29201256c5`.
+
+Onafhankelijke ingelogde QA van de vorige live versie accepteerde Smart DCA,
+feedkaart → Bespreek en profiel/portefeuillevergelijking. De samengestelde
+vraag naar de laatste BTC Paper-Hold, het beslismoment, de nieuwste koersbron,
+het normale risicoprofiel en een veilige vervolgstap faalde tweemaal: FINN
+toonde alleen het historische botbesluit. De generieke botbesluit-shortcut
+las geen profiel of marktbron. Deze read-only reparatie leest het opgeslagen
+besluit en profiel eigenaargebonden opnieuw en leest een koers alleen als het
+besluit één exact, ondersteund handelspaar heeft. De bestaande assetbrede
+BTC-bot krijgt een eerlijke melding dat geen exacte paarbron aan het besluit
+kan worden gekoppeld, plus de verifieerbare Holdreden en één veilige stap.
+Koers- en beslismoment blijven gescheiden in de gebruikerstijdzone; bij
+ontbrekende of ongeldige zone gebruikt deze nieuwe route UTC. Onbekende,
+meerdere of tegenstrijdige paren, BUY/SELL, onduidelijke Hold en ontbrekende
+bron geven geen verzonnen koers- of blokkadeadvies. Er is geen actie-,
+bevestigings-, bot- of orderroute veranderd.
+
+Gemeten lokale Build-evidence op de gerebased kandidaat: gerichte suites
+**1174 passed**; volledige backend **5623 passed, 7 skipped** (log SHA-256
+`9e85d2da081a0cc2b2667d260227a463ee6b9a09130aece18ea92b4f8efe6191`).
+Geïsoleerde API/worker-actiecontractmatrix **17/17**, nul brokerorders,
+Live-calls en productieverbindingen (artifact SHA-256
+`ea2c986c877404df0ca7fa405a4e4452f5c20b90ea4135f33cec18e11b115562`);
+adaptertests **28/28**, Smart DCA-schema/runtime en kalender-DCA-runtime
+geslaagd. Echte providerselector: development **20/20** (artifact SHA-256
+`3e9693ce4a179f14da17b38819c93debf4ae51cebbbb0ba2ac65c8aed7a7077f`)
+en regressie **109/109** (artifact SHA-256
+`ce1c6adcd86be676cc9077edc876cd046b022d44cbbbd7d99927a9e700dce9a6`),
+zonder provider-, schema- of timeoutfouten. Onafhankelijke code-QA en
+Security vonden na rebase geen blocker. Frontendbron is niet gewijzigd.
+PR-CI, deployidentiteit en onafhankelijke ingelogde hertest staan open; dit
+is geen live acceptatie.
+
 ## FINN 3.0: korte bot-/positievergelijking (27 november 2026)
 
-Phase: `DEPLOY_IDENTITY_VERIFIED_QA_PENDING`. Onafhankelijke ingelogde QA op exact
+Phase: `QA_AFGEROND_GEMELD_VERDICT_NIET_GEREGISTREERD`. De gebruiker bevestigde
+op 27 november dat deze kandidaat klaar is. Een formeel QA-verdict voor de
+laatste publieke SHA is niet in dit statusbestand geregistreerd; hier wordt
+geen `ACCEPTED`-uitkomst afgeleid. Onafhankelijke ingelogde QA op exact
 publieke SHA `97895d2a5a39979b1c5c36c53e2c2d8597a8f205` gaf
 `NOT_ACCEPTED` voor de korte vraag die BTC/EUR, BTC-bot 129 en de open
 ETH-positie vergelijkt. De lange bronvergelijking en een score-only vraag
