@@ -154,6 +154,9 @@ def test_minimal_live_read_replaces_conflicting_model_fx_clock():
         "FX-factor 0.92 op 12 november 14:03 UTC",
         "De FX-koers had bronmoment 12 november 14:03 UTC",
         "Geverifieerd FX-bronmoment: 12 november 14:03 UTC",
+        "Wisselkoersbron bij uitvoering: 12 november 14:03 UTC",
+        "FX-bronmoment: 12 november 14:02 UTC (15:03 CET)",
+        "FX-bronmoment: 12 november 14:02 UTC, 15:03 CET",
     ):
         answer = _minimal_read_answer(
             message=QUESTION, prepared=_prepared(text=(
@@ -163,6 +166,7 @@ def test_minimal_live_read_replaces_conflicting_model_fx_clock():
         )
         assert answer.status == "completed", answer.reason
         assert "14:03 UTC" not in answer.text
+        assert "15:03 CET" not in answer.text
         assert "Botbeslissing: 12 november 14:59 UTC" in answer.text
         assert answer.text.count("Geverifieerd FX-bronmoment") == 1
         assert "2026-11-12 15:02:00 CET (Europe/Amsterdam)" in answer.text
@@ -186,7 +190,10 @@ def test_historical_week_fx_moment_completion_is_idempotent():
 
 
 def test_minimal_live_read_does_not_invent_conflicting_fx_source_moment():
-    prepared = _prepared(text="Exitreden: eerste koersdoel.")
+    prepared = _prepared(text=(
+        "Exitreden: eerste koersdoel. "
+        "Geverifieerd FX-bronmoment: 12 november 14:04 UTC."
+    ))
     original = prepared.response.tool_trace[0]
     conflict = {**original, "result": {"results": [
         {**original["result"]["results"][0], "data": {
@@ -205,6 +212,21 @@ def test_minimal_live_read_does_not_invent_conflicting_fx_source_moment():
         message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
     )
     assert answer.status == "completed", answer.reason
+    assert "Geverifieerd FX-bronmoment" not in answer.text
+    assert "14:04 UTC" not in answer.text
+    assert "FX-bronmoment uit antwoordtekst niet geverifieerd" in answer.text
+
+
+def test_minimal_live_read_neutralizes_fx_clock_when_source_missing():
+    prepared = _prepared(text="FX-bron: 12 november 14:04 UTC.")
+    prepared.response.tool_trace[0]["result"]["results"][0]["data"]["closed_trades"][0][
+        "paper_exit_evidence"
+    ] = None
+    answer = _minimal_read_answer(
+        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert answer.status == "completed", answer.reason
+    assert "14:04 UTC" not in answer.text
     assert "Geverifieerd FX-bronmoment" not in answer.text
 
 

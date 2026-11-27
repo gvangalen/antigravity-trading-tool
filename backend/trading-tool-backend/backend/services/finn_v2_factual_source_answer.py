@@ -82,16 +82,19 @@ def _suppress_unbound_week_saved_claims(answer: str) -> str:
 
 _UNBOUND_FX_MOMENT_CLAIM = re.compile(
     r"(?P<label>(?:Geverifieerd\s+)?\b(?:FX(?:[- ]?(?:bron(?:moment)?|koers))?|"
-    r"(?:exit|uitvoerings)?wisselkoers)\b(?:(?![.;]\s|\n).){0,80}?)"
+    r"(?:exit|uitvoerings)?wisselkoers(?:bron(?:moment)?)?)\b"
+    r"(?:(?![.;]\s|\n).){0,80}?)"
     r"(?P<moment>(?:(?:\d{4}-\d{2}-\d{2}|\d{1,2}\s+[a-z]+(?:\s+\d{4})?)"
     r"\s*,?\s*)?\d{1,2}:\d{2}(?::\d{2})?\s+"
-    r"(?:[A-Za-z_]+/[A-Za-z_]+|UTC|GMT|CET|CEST)\b)",
+    r"(?:[A-Za-z_]+/[A-Za-z_]+|UTC|GMT|CET|CEST)\b)"
+    r"(?P<tail>(?:(?![.;]\s|\n).){0,80}?)"
+    r"(?=[.;]\s|\n|$)",
     re.I,
 )
 
 
 def _suppress_unbound_fx_moment_claims(
-    answer: str, verified_at: datetime, canonical_line: str,
+    answer: str, verified_at: datetime | None, canonical_line: str | None,
 ) -> str:
     """Keep only model FX clocks that denote the typed Paper-exit instant."""
     months = {name: month for month, name in enumerate((
@@ -100,6 +103,8 @@ def _suppress_unbound_fx_moment_claims(
     ), 1)}
 
     def verified(moment: str) -> bool:
+        if verified_at is None:
+            return False
         match = re.fullmatch(
             r"(?:(?P<iso>\d{4}-\d{2}-\d{2})|(?P<day>\d{1,2})\s+"
             r"(?P<month>[a-z]+)(?:\s+(?P<year>\d{4}))?)\s*,?\s*"
@@ -136,14 +141,16 @@ def _suppress_unbound_fx_moment_claims(
 
     def scrub(fragment: str) -> str:
         return _UNBOUND_FX_MOMENT_CLAIM.sub(
-            lambda match: (match.group(0) if verified(match.group("moment")) else
+            lambda match: (match.group(0) if not re.search(r"\d{1,2}:\d{2}", match.group("tail"))
+                           and verified(match.group("moment")) else
                            "FX-bronmoment uit antwoordtekst niet geverifieerd"),
             fragment,
         )
 
     # Only the exact line assembled from typed evidence is exempt. A model may
     # write the word "Geverifieerd" in front of an incorrect clock.
-    return canonical_line.join(scrub(fragment) for fragment in answer.split(canonical_line))
+    return (canonical_line.join(scrub(fragment) for fragment in answer.split(canonical_line))
+            if canonical_line else scrub(answer))
 
 
 def complete_historical_week_exit_moments(
@@ -282,7 +289,7 @@ def complete_historical_week_exit_moments(
         f"Geverifieerd FX-bronmoment bij AAPL Paper-uitvoering: "
         f"{fx_at_in_zone} ({zone_name})."
     ) if fx_at_in_zone else None
-    if fx_at_in_zone and re.search(r"\bbronmoment(?:en)?\b", question, re.I):
+    if re.search(r"\bbronmoment(?:en)?\b", question, re.I):
         answer = _suppress_unbound_fx_moment_claims(answer, verified_fx_at, fx_line)
     additions = []
     if exit_at not in answer:
