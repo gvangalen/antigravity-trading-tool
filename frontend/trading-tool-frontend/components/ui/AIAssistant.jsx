@@ -10,7 +10,7 @@ import { invalidateWatchlist, useWatchlist } from "@/hooks/useWatchlist";
 import { useModal } from "@/components/modal/ModalProvider";
 import { fetchSetups } from "@/lib/api/setups";
 import { fetchStrategies } from "@/lib/api/strategy";
-import { fetchBotConfigs } from "@/lib/api/botApi";
+import { executePaperDiscretionaryOrder, fetchBotConfigs } from "@/lib/api/botApi";
 import { useActiveSetup } from "@/app/providers/SetupProvider";
 import { useActiveBot } from "@/app/providers/ActiveBotProvider";
 import { actionButtonStyles } from "@/components/ui/actionButtonStyles";
@@ -1138,6 +1138,9 @@ function AIAssistantContent({
       }
       const verified = run?.response;
       const projection = run?.runtime_trace?.terminal_projection || run?.runtime_trace || {};
+      const paperOrderPreview = run?.runtime_trace?.paper_order_preview || projection?.paper_order_preview || null;
+      const paperOrderTurn = Boolean(paperOrderPreview ||
+        verified?.reasoning_provenance?.reasoning_source === "paper_order_contract");
       const setupDraft = projection?.setup_draft || null;
       const draftOperations = [
         "create_strategy", "create_bot",
@@ -1238,7 +1241,9 @@ function AIAssistantContent({
       setMessages((prev) => retireEarlierFinnProposalCards(
         prev, streamId, verified?.proposal_id,
       ).map((message) => (
-        message.streamId === streamId
+        message.streamId !== streamId && paperOrderTurn
+          ? { ...message, actions: (message.actions || []).filter((action) => action.type !== "paper_discretionary_order") }
+          : message.streamId === streamId
           ? {
               ...message,
               text: terminalText,
@@ -1271,7 +1276,11 @@ function AIAssistantContent({
                 (operationId === "create_bot" && !verifiedBotStrategyName)
                 || (requiresNamedTargetReview && !reviewedTargetName)
               )),
-              actions: verified?.proposal_id ? [{
+              actions: paperOrderPreview ? [{
+                type: "paper_discretionary_order",
+                preview: paperOrderPreview,
+                conversation_id: run?.conversation_id || projection?.conversation_id || null,
+              }] : verified?.proposal_id ? [{
                 type: "v2_proposal",
                 proposal_id: verified.proposal_id,
                 requires_confirmation: Boolean(verified.confirmation_required),
@@ -1872,6 +1881,35 @@ function AIAssistantContent({
     setExecutingAction(true);
 
     try {
+      if (action.type === "paper_discretionary_order") {
+        const preview = action.preview || {};
+        if (!preview.ok || !preview.preview_token || !action.conversation_id) {
+          throw new Error("Deze Paper-order is nog niet bevestigbaar. Controleer de vrije reserve en vraag een nieuwe preview.");
+        }
+        const [asset, quote_currency] = String(preview.pair || "").split("/");
+        const result = await executePaperDiscretionaryOrder({
+          conversation_id: action.conversation_id,
+          asset, quote_currency,
+          amount_quote: preview.amount_quote,
+          idempotency_key: preview.idempotency_key,
+          preview_token: preview.preview_token,
+        });
+        if (!result?.ok || !result?.order_id) throw new Error("De Paper-order is niet bevestigd. Ververs de preview.");
+        setMessages((current) => current.map((item) => ({
+          ...item,
+          actions: (item.actions || []).filter((candidate) =>
+            candidate.type !== "paper_discretionary_order"
+            || candidate.preview?.idempotency_key !== preview.idempotency_key),
+          text: (item.actions || []).some((candidate) =>
+            candidate.type === "paper_discretionary_order"
+            && candidate.preview?.idempotency_key === preview.idempotency_key)
+            ? `Paper-koop #${result.order_id} uitgevoerd voor ${preview.pair}. ${result.quantity} ${asset} staat in je totale Paper-portefeuille.`
+            : item.text,
+        })));
+        window.dispatchEvent(new Event("portfolio:updated"));
+        showSnackbar("Paper-koop uitgevoerd", "success");
+        return;
+      }
       if (action.type === "v2_proposal") {
         const latestProposal = await fetchFinnV2Proposal(action.proposal_id);
         if (!["draft", "pending_confirmation"].includes(latestProposal?.status)) {
@@ -2406,6 +2444,30 @@ function AIAssistantContent({
   const renderInlineActionCard = (message) => {
     if (isCollectingDraft(message)) return null;
     const actions = Array.isArray(message.actions) ? message.actions : [];
+    const paperOrder = actions.find((action) => action?.type === "paper_discretionary_order");
+    if (paperOrder) {
+      const preview = paperOrder.preview || {};
+      const [asset, quote] = String(preview.pair || "").split("/");
+      return <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50/70 p-4 text-sm dark:border-blue-900 dark:bg-blue-950/20">
+        <h3 className="font-bold text-slate-950 dark:text-white">{at("paperOrder.title")} · {preview.pair}</h3>
+        <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{at("paperOrder.explanation")}</p>
+        <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+          <dt>{at("paperOrder.amount")}</dt><dd className="text-right font-semibold">{preview.amount_quote} {quote}</dd>
+          <dt>{at("paperOrder.quoteTime")}</dt><dd className="text-right font-semibold">{preview.price_observed_at || "–"}</dd>
+          <dt>{at("paperOrder.price")}</dt><dd className="text-right font-semibold">{preview.price_quote} {quote}/{asset}</dd>
+          <dt>{at("paperOrder.quantity")}</dt><dd className="text-right font-semibold">{preview.quantity} {asset}</dd>
+          <dt>{at("paperOrder.fees")}</dt><dd className="text-right font-semibold">€{preview.fee_eur}</dd>
+          <dt>{at("paperOrder.cashDebit")}</dt><dd className="text-right font-semibold">€{preview.gross_eur}</dd>
+          <dt>{at("paperOrder.reserve")}</dt><dd className="text-right font-semibold">€{preview.reserve_cash_eur}</dd>
+        </dl>
+        {!preview.ok && <p className="mt-3 text-xs text-amber-800 dark:text-amber-200">{preview.message || "Boek eerst bestaande Paper-kas over naar je vrije reserve."}</p>}
+        <button type="button" disabled={!preview.ok || !preview.preview_token || loading || executingAction}
+          onClick={() => void handleExecuteAction(paperOrder)}
+          className={actionButtonStyles({ variant: "primary", className: "mt-4 rounded-xl px-4 py-2.5 text-xs" })}>
+          {at("paperOrder.confirm")}
+        </button>
+      </div>;
+    }
     const actionOnly = actions.filter((action) => (
       action?.requires_confirmation && action.type === "v2_proposal"
     ));

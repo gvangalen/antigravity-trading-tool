@@ -2614,6 +2614,7 @@ class FinnV2RunService:
         minimal_source_boundary: bool = False,
         verifier_ran: bool = True,
         reasoning_source: str = "responses_tool_loop",
+        paper_order_preview: dict[str, Any] | None = None,
     ) -> None:
         """Publish a verified free-chat read through the same polling/SSE model."""
         run = await self.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
@@ -2677,6 +2678,8 @@ class FinnV2RunService:
                 **({"local_model_only_experiment": True} if model_only_experiment else {}),
             },
         }
+        if paper_order_preview is not None:
+            response_json["paper_order_preview"] = paper_order_preview
         if previous_response:
             await self.runtime_contracts.record_previous_response_reference(
                 run_id=run_id,
@@ -5743,6 +5746,46 @@ class FinnV2RunService:
                         await session.commit()
                     return
 
+                if visible and conversation_id:
+                    from backend.services.paper_order_conversation_service import (
+                        DRAFT_KEY, PaperOrderConversationService,
+                    )
+
+                    async with async_session_factory() as session:
+                        conversations = FinnV2ConversationRepository(session)
+                        conversation = await conversations.get_by_id_for_user(
+                            conversation_id=conversation_id, user_id=user_id, for_update=True,
+                        )
+                        if conversation is not None and conversation.last_run_id == run_id:
+                            saved_context = dict(conversation.context_json or {})
+                            prior_order = dict(saved_context.get(DRAFT_KEY) or {})
+                            if PaperOrderConversationService.applies(run_message, prior_order):
+                                order_turn = await PaperOrderConversationService.advance(
+                                    message=run_message, prior=prior_order,
+                                    session=session, user_id=user_id, run_id=run_id,
+                                )
+                                if order_turn.draft is None:
+                                    saved_context.pop(DRAFT_KEY, None)
+                                else:
+                                    saved_context[DRAFT_KEY] = order_turn.draft
+                                await conversations.update_context(
+                                    conversation_id=conversation_id, user_id=user_id,
+                                    context=saved_context,
+                                )
+                                await cls(session).complete_responses_read(
+                                    run_id=run_id, user_id=user_id,
+                                    response_id=f"paper-order-{run_id}",
+                                    answer=FinnResponsesVerifiedAnswer(
+                                        status="completed", text=order_turn.text,
+                                        reason=None, evidence=(),
+                                    ),
+                                    paper_order_preview=order_turn.preview,
+                                    locale=str(context.get("locale") or "nl"),
+                                    reasoning_source="paper_order_contract",
+                                )
+                                await session.commit()
+                                return
+
                 prepared: FinnResponsesFrontDoorResult | None = None
                 if visible:
                     from backend.services.ai_usage_observability_service import ai_usage_context
@@ -6586,6 +6629,7 @@ class FinnV2RunService:
 
     async def envelope_from_run(self, run) -> AgentRunStatusEnvelope:
         response_payload = dict(run.response_json or {})
+        paper_order_preview = response_payload.pop("paper_order_preview", None)
         # Terminal delivery metadata is projected once when the run completes.
         # Polling and SSE can then serve the same envelope without reopening the
         # full verifier/evidence chain for every client poll.
@@ -6607,6 +6651,12 @@ class FinnV2RunService:
                         "terminal_response_type": "failure",
                         "error_code": "runtime_contract_terminal_projection_missing",
                     }
+        if (run.status == "completed" and isinstance(paper_order_preview, dict)
+                and run.conversation_id):
+            # Polling and SSE share this owner-scoped envelope. The signed
+            # preview is delivered here because VerifiedResponse deliberately
+            # contains only the normal read/proposal fields.
+            runtime_trace["paper_order_preview"] = paper_order_preview
         try:
             if response_payload:
                 response_payload["mode"] = normalize_interaction_mode(response_payload.get("mode"))

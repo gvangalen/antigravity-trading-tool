@@ -29,6 +29,27 @@ def test_paper_portfolio_sums_only_funded_cash_and_priced_positions():
     assert data.valuation_as_of == READ_AT
 
 
+def test_paper_total_counts_bot_cash_free_reserve_and_one_off_position_once():
+    data = project_portfolio({
+        "read_at": READ_AT,
+        "bots": [_bot(1, cash=1000, budget=5000)],
+        "paper_reserve_cash_eur": 200,
+        "manual_positions": [{
+            "market_id": 3, "symbol": "BTC", "quote_currency": "USDT",
+            "pair": "BTC/USDT", "quantity": 0.005,
+            "invested_eur": 290, "position_value_eur": 300,
+            "valuation_available": True, "price_as_of": READ_AT,
+        }],
+    }, environment="paper")
+    assert data.global_.cash_balance == 1200
+    assert data.global_.current_position_value == 300
+    assert data.global_.total_equity == 1500
+    assert data.global_.total_budget_limit == 5000
+    assert data.global_.paper_reserve_cash_eur == 200
+    assert data.global_.allocations_pct["Cash"] == 80.0
+    assert data.global_.allocations_pct["BTC"] == 20.0
+
+
 def test_budget_and_missing_quote_never_become_value_or_cash():
     data = project_portfolio({"bots": [
         _bot(1, initialized=False, budget=500),

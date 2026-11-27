@@ -148,6 +148,20 @@ export const transferPaperCash = async (payload) => handleApi(
   })
 );
 
+export const transferPaperReserve = async (payload) => handleApi(fetchAuth(
+  "/api/portfolio/paper-reserve/transfer",
+  { method: "POST", body: JSON.stringify(payload) },
+));
+
+export const fetchPaperDiscretionaryOrders = async () => handleApi(fetchAuth(
+  "/api/portfolio/paper-discretionary-orders", { forceFresh: true },
+));
+
+export const executePaperDiscretionaryOrder = async (payload) => handleApi(fetchAuth(
+  "/api/portfolio/paper-discretionary-orders",
+  { method: "POST", body: JSON.stringify(payload) },
+));
+
 /* =====================================================
    🔁 5. GENERATE BOT DECISION
 ===================================================== */

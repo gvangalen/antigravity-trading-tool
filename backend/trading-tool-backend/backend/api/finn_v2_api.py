@@ -130,6 +130,12 @@ async def get_finn_v2_conversation(
         content = response.get("content") if isinstance(response, dict) else None
         if isinstance(content, str) and content.strip():
             message = {"role": "assistant", "content": content}
+            paper_preview = dict(response.get("paper_order_preview") or {}) if isinstance(response, dict) else {}
+            active_paper_draft = dict((getattr(row, "context_json", None) or {}).get("paper_discretionary_order_draft") or {})
+            if paper_preview and active_paper_draft.get("idempotency_key") == paper_preview.get("idempotency_key") \
+                    and active_paper_draft.get("status") in {"preview_ready", "needs_reserve"}:
+                message["paper_order_preview"] = paper_preview
+                message["conversation_id"] = conversation_id
             if getattr(run, "status", None) == "clarification_required" and isinstance(response, dict):
                 projection = dict(response.get("_runtime_contract_projection") or {})
                 guided_draft = dict(projection.get("setup_draft") or projection.get("action_draft") or {})

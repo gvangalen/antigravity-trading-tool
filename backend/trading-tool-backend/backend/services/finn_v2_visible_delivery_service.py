@@ -208,6 +208,14 @@ class FinnV2VisibleDeliveryService:
                 "requires_confirmation": bool(response.get("confirmation_required")),
                 "mode": response.get("mode"),
             }]
+        paper_preview = dict((getattr(artifacts.get("run"), "response_json", None) or {}).get("paper_order_preview") or {})
+        if paper_preview:
+            payload["actions"] = [{
+                "type": "paper_discretionary_order",
+                "requires_confirmation": bool(paper_preview.get("ok") and paper_preview.get("preview_token")),
+                "preview": paper_preview,
+                "conversation_id": (artifacts.get("delivery_envelope") or {}).get("conversation_id"),
+            }]
         return payload
 
     def _pending_contract(self, *, trace_id: str, run_id: str, status: str, conversation_id: Optional[str], locale: Optional[str] = None) -> dict[str, Any]:
