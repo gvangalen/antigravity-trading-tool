@@ -2213,6 +2213,15 @@ def _minimal_read_answer(
                 "turn_contract_mismatch", evidence,
                 rejection_details={"gap": gap, "turn_contract": turn_contract},
             )
+    from backend.services.finn_v2_factual_source_answer import complete_historical_week_exit_moments
+    if str(getattr(prepared, "locale", "nl") or "nl").lower().startswith("nl"):
+        completed = complete_historical_week_exit_moments(
+            text, current_evidence, question=message, user_time_zone=user_time_zone,
+        )
+        if completed != text and current_source_moments_supported(
+            completed, current_evidence, question=message,
+        ):
+            text = completed
     return FinnResponsesVerifiedAnswer(
         "completed", text, None, evidence,
         used_previous_response=prepared.response.uses_previous_response,
