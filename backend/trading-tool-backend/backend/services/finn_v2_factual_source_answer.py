@@ -62,6 +62,23 @@ def _utc_instant(value: Any) -> datetime | None:
         return None
 
 
+_UNBOUND_WEEK_SAVED_CLAIM = re.compile(
+    r"(?P<label>\b(?:opgeslagen\s+)?weekreflectie\s+(?:gegenereerd|opgeslagen)\s*:\s*)"
+    r"(?P<moment>(?:(?:\d{4}-\d{2}-\d{2}|\d{1,2}\s+[a-z]+(?:\s+\d{4})?)"
+    r"\s*,?\s*)?\d{1,2}:\d{2}(?::\d{2})?\s+"
+    r"(?:[A-Za-z_]+/[A-Za-z_]+|[A-Z]{2,5}\b)"
+    r"(?:\s*\((?:[A-Za-z_]+/[A-Za-z_]+|UTC|GMT|CET|CEST|EST|EDT|PST|PDT)\))?)",
+    re.I,
+)
+
+
+def _suppress_unbound_week_saved_claims(answer: str) -> str:
+    """Remove draft storage clocks whose week cannot be proven from their text."""
+    return _UNBOUND_WEEK_SAVED_CLAIM.sub(
+        "Opslagmoment van deze weekreflectie niet geverifieerd", answer,
+    )
+
+
 def complete_historical_week_exit_moments(
     answer: str, evidence: tuple[dict[str, Any], ...], *, question: str,
     user_time_zone: str | None,
@@ -149,11 +166,15 @@ def complete_historical_week_exit_moments(
     saved_at, _ = _moment_in_zone(week.get("generated_at"), user_time_zone)
     if not exit_at or not saved_at:
         return answer
+    answer = _suppress_unbound_week_saved_claims(answer)
     additions = []
     if exit_at not in answer:
         additions.append(f"AAPL Paper-trade als gesloten geregistreerd: {exit_at} ({zone_name}).")
     if saved_at not in answer:
-        additions.append(f"Weekreflectie opgeslagen: {saved_at} ({zone_name}).")
+        additions.append(
+            f"Geverifieerd opslagmoment week {start.isoformat()} t/m {end.isoformat()}: "
+            f"{saved_at} ({zone_name})."
+        )
     return answer.rstrip() + ("\n" + "\n".join(additions) if additions else "")
 
 

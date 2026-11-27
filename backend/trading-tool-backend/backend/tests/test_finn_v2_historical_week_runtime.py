@@ -49,7 +49,7 @@ def test_minimal_live_read_completes_historical_exit_and_week_in_user_zone():
         assert answer.status == "completed", answer.reason
         # The recorded close is distinct from the model's 14:59 UTC decision.
         assert "AAPL Paper-trade als gesloten geregistreerd: 2026-11-12 16:02:00 CET" in answer.text
-        assert "Weekreflectie opgeslagen: 2026-11-16 06:15:00 CET" in answer.text
+        assert "Geverifieerd opslagmoment week 2026-11-09 t/m 2026-11-15: 2026-11-16 06:15:00 CET" in answer.text
 
 
 def test_minimal_live_read_does_not_complete_mismatched_or_missing_sources():
@@ -62,3 +62,27 @@ def test_minimal_live_read_does_not_complete_mismatched_or_missing_sources():
         )
         assert answer.status == "completed", answer.reason
         assert "als gesloten geregistreerd" not in answer.text
+
+
+def test_minimal_live_read_corrects_only_week_storage_clock():
+    draft = (
+        "Exitreden: eerste koersdoel. Botbeslissing: 12 november 14:59 UTC. "
+        "Paper-uitvoering: 12 november 14:59 UTC. FX-bron: 12 november 14:02 UTC. "
+        "Opgeslagen weekreflectie gegenereerd: 16 november 2026, 05:15:00 CET. "
+        "Lesbevestiging: 13 november 09:07:57 UTC."
+    )
+    answer = _minimal_read_answer(
+        message=QUESTION, prepared=_prepared(text=draft),
+        user_time_zone="Europe/Amsterdam",
+    )
+    assert answer.status == "completed", answer.reason
+    assert "Opslagmoment van deze weekreflectie niet geverifieerd" in answer.text
+    assert "Geverifieerd opslagmoment week 2026-11-09 t/m 2026-11-15: 2026-11-16 06:15:00 CET (Europe/Amsterdam)" in answer.text
+    assert "05:15:00 CET" not in answer.text
+    for unchanged in (
+        "Botbeslissing: 12 november 14:59 UTC",
+        "Paper-uitvoering: 12 november 14:59 UTC",
+        "FX-bron: 12 november 14:02 UTC",
+        "Lesbevestiging: 13 november 09:07:57 UTC",
+    ):
+        assert unchanged in answer.text
