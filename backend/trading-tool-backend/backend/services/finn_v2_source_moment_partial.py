@@ -238,7 +238,6 @@ def render_source_moment_partial(
             lines.append("Die grens hoort bij dit botplan. Een handmatige preview kan een andere setup en dus andere voorwaarden gebruiken.")
     if selected_bot is not None and pair_bound:
         lines.append("Een botplan beoordeelt daarnaast zijn eigen instapvoorwaarden; een rapportscore is geen koopopdracht.")
-        source_fact_count += 1
 
     positions: dict[tuple[int, str], set[str]] = {}
     known_position_bots: set[tuple[int, str]] = set()
