@@ -582,7 +582,7 @@ class ReviewToolAdapter:
                     "paper_exit_evidence": (
                         {key: review["paper_exit_evidence"].get(key) for key in (
                             "trigger", "source_price_currency", "saved_first_target",
-                            "execution_fx_eur_per_unit",
+                            "execution_fx_eur_per_unit", "execution_fx_observed_at",
                         )}
                         if review.get("environment") == "paper"
                         and isinstance(review.get("paper_exit_evidence"), dict)

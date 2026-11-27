@@ -194,6 +194,21 @@ def complete_historical_week_exit_moments(
     saved_at, _ = _moment_in_zone(week.get("generated_at"), user_time_zone)
     if not exit_at or not saved_at:
         return answer
+    fx_instants: set[datetime] = set()
+    for trade in matching_trades:
+        paper_exit = trade.get("paper_exit_evidence")
+        if not isinstance(paper_exit, dict):
+            continue
+        try:
+            factor = Decimal(str(paper_exit.get("execution_fx_eur_per_unit")))
+        except (InvalidOperation, TypeError, ValueError):
+            continue
+        fx_at = _utc_instant(paper_exit.get("execution_fx_observed_at"))
+        if factor.is_finite() and factor > 0 and fx_at is not None:
+            fx_instants.add(fx_at)
+    fx_at_in_zone = None
+    if len(fx_instants) == 1:
+        fx_at_in_zone, _ = _moment_in_zone(next(iter(fx_instants)), user_time_zone)
     answer = _suppress_unbound_week_saved_claims(answer)
     additions = []
     if exit_at not in answer:
@@ -202,6 +217,11 @@ def complete_historical_week_exit_moments(
         additions.append(
             f"Geverifieerd opslagmoment week {start.isoformat()} t/m {end.isoformat()}: "
             f"{saved_at} ({zone_name})."
+        )
+    if fx_at_in_zone and re.search(r"\bbronmoment(?:en)?\b", question, re.I):
+        additions.append(
+            f"Geverifieerd FX-bronmoment bij AAPL Paper-uitvoering: "
+            f"{fx_at_in_zone} ({zone_name})."
         )
     return answer.rstrip() + ("\n" + "\n".join(additions) if additions else "")
 

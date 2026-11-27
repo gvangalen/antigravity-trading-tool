@@ -28,6 +28,11 @@ def _prepared(*, text, trade_date="2026-11-12T15:02:00+00:00", week=True):
                     "closed_trades": [{
                         "review_id": 2127, "symbol": "AAPL", "environment": "paper",
                         "exit_at": trade_date,
+                        "paper_exit_evidence": {
+                            "trigger": "first_target",
+                            "execution_fx_eur_per_unit": 0.92,
+                            "execution_fx_observed_at": "2026-11-12T14:02:00+00:00",
+                        },
                     }],
                 },
             }]}},),
@@ -126,6 +131,44 @@ def test_minimal_live_read_scrubs_markdown_week_clock_after_repeated_reads():
         "Bevestigde les: 13 november 09:07:57 UTC",
     ):
         assert unchanged in answer.text
+
+
+def test_minimal_live_read_completes_missing_fx_source_moment_on_repeat():
+    prepared = _prepared(text=(
+        "Exitreden: eerste koersdoel. Botbeslissing: 12 november 14:59 UTC. "
+        "Paper-uitstap: 12 november 15:02 UTC. Les: 13 november 09:07 UTC. "
+        "Weekgeneratie: 16 november 05:15 UTC."
+    ))
+    prepared.response.tool_trace += prepared.response.tool_trace
+    answer = _minimal_read_answer(
+        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert answer.status == "completed", answer.reason
+    assert "Geverifieerd FX-bronmoment bij AAPL Paper-uitvoering: 2026-11-12 15:02:00 CET (Europe/Amsterdam)." in answer.text
+    assert "Geverifieerd opslagmoment week 2026-11-09 t/m 2026-11-15: 2026-11-16 06:15:00 CET" in answer.text
+
+
+def test_minimal_live_read_does_not_invent_conflicting_fx_source_moment():
+    prepared = _prepared(text="Exitreden: eerste koersdoel.")
+    original = prepared.response.tool_trace[0]
+    conflict = {**original, "result": {"results": [
+        {**original["result"]["results"][0], "data": {
+            **original["result"]["results"][0]["data"],
+            "closed_trades": [{
+                **original["result"]["results"][0]["data"]["closed_trades"][0],
+                "paper_exit_evidence": {
+                    "trigger": "first_target", "execution_fx_eur_per_unit": 0.92,
+                    "execution_fx_observed_at": "2026-11-12T14:03:00+00:00",
+                },
+            }],
+        }},
+    ]}}
+    prepared.response.tool_trace += (conflict,)
+    answer = _minimal_read_answer(
+        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert answer.status == "completed", answer.reason
+    assert "Geverifieerd FX-bronmoment" not in answer.text
 
 
 def test_minimal_live_read_rejects_conflicting_repeated_history():
