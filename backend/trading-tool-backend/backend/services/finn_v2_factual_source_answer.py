@@ -80,6 +80,12 @@ def _suppress_unbound_week_saved_claims(answer: str) -> str:
     )
 
 
+_NEXT_NON_FX_SOURCE = (
+    r"(?:,\s*|\s+en\s+)(?![^,.;\n]{0,45}\b(?:FX|wisselkoers)\b)"
+    r"[A-Za-zÀ-ÿ][^,.;\n]{0,45}?\s+\d{1,2}\s+[a-z]+"
+)
+
+
 _UNBOUND_FX_MOMENT_CLAIM = re.compile(
     r"(?P<label>(?:Geverifieerd\s+)?\b(?:FX(?:[- ]?(?:bron(?:moment)?|koers))?|"
     r"(?:exit|uitvoerings)?wisselkoers(?:bron(?:moment)?)?)\b"
@@ -88,9 +94,9 @@ _UNBOUND_FX_MOMENT_CLAIM = re.compile(
     r"\s*,?\s*)?\d{1,2}:\d{2}(?::\d{2})?\s+"
     r"(?:[A-Za-z_]+/[A-Za-z_]+|UTC|GMT|CET|CEST)\b)"
     r"(?P<tail>(?:(?![.;]\s|\n|,\s*[A-Za-zÀ-ÿ][^,.;\n]{0,35}:\s|"
-    r",\s*(?:botbeslissing|exitbeslissing|paper-uitstap|lesbevestiging)\s+\d).){0,80}?)"
+    + _NEXT_NON_FX_SOURCE + r").){0,80}?)"
     r"(?=[.;]\s|\n|,\s*[A-Za-zÀ-ÿ][^,.;\n]{0,35}:\s|"
-    r",\s*(?:botbeslissing|exitbeslissing|paper-uitstap|lesbevestiging)\s+\d|$)",
+    + _NEXT_NON_FX_SOURCE + r"|$)",
     re.I,
 )
 

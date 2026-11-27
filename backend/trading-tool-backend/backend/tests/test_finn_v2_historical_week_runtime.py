@@ -194,6 +194,10 @@ def test_historical_week_fx_scrub_preserves_next_labeled_source_after_comma():
         ("FX-bronmoment: 12 november 14:02 UTC", "botbeslissing: 12 november 14:59 UTC"),
         ("Wisselkoersbron bij uitvoering: 12 november 14:03 UTC",
          "botbeslissing 12 november 14:59 UTC"),
+        ("Wisselkoersbron bij uitvoering: 12 november 14:03 UTC",
+         "bevestigde les 13 november 09:07:57 UTC"),
+        ("Wisselkoersbron bij uitvoering: 12 november 14:03 UTC",
+         "geregistreerde sluiting 12 november 15:00:30 UTC"),
     ):
         answer = _minimal_read_answer(
             message=QUESTION, prepared=_prepared(text=f"{claim}, {bot_moment}."),
@@ -206,6 +210,19 @@ def test_historical_week_fx_scrub_preserves_next_labeled_source_after_comma():
             assert "14:03 UTC" not in answer.text
         else:
             assert claim in answer.text
+
+
+def test_historical_week_fx_scrub_preserves_source_joined_with_en():
+    answer = _minimal_read_answer(
+        message=QUESTION, prepared=_prepared(text=(
+            "Het FX-bronmoment was 12 november 14:03 UTC en de botbeslissing "
+            "was 12 november 14:59 UTC."
+        )), user_time_zone="Europe/Amsterdam",
+    )
+    assert answer.status == "completed", answer.reason
+    assert "14:03 UTC" not in answer.text
+    assert "en de botbeslissing was 12 november 14:59 UTC" in answer.text
+    assert answer.text.count("Geverifieerd FX-bronmoment") == 1
 
 
 def test_minimal_live_read_does_not_invent_conflicting_fx_source_moment():
