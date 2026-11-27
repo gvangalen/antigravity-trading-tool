@@ -1500,6 +1500,40 @@ class FinnResponsesFrontDoor:
         )
 
     @staticmethod
+    def _mixed_portfolio_environment(message: str) -> str | None:
+        """Keep this cross-asset coach read away from broker account retrieval."""
+        selected: set[str] = set()
+        excluded: set[str] = set()
+        for match in re.finditer(r"\b(?:Paper|Live)\b", message, re.I):
+            term = match.group().lower()
+            before = message[max(0, match.start() - 64):match.start()]
+            after = message[match.end():match.end() + 48]
+            if re.search(
+                r"\b(?:geen|niet|zonder|no|not|without)\b[^.!?]{0,48}$",
+                before, re.I,
+            ) or re.search(
+                r"^(?:[-\s]+(?:account|portefeuille|portfolio|gegevens|data|positie|bot))?"
+                r"\s*(?:niet\b|no\b|not\b|moet\s+buiten\s+beschouwing\s+blijven\b|"
+                r"buiten\s+beschouwing\s+laten\b)", after, re.I,
+            ):
+                excluded.add(term)
+            else:
+                selected.add(term)
+        paper_scope = bool(re.search(
+            r"\b(?:alleen|uitsluitend|enkel|only)\s+Paper\b"
+            r"|\bPaper[-\s]+(?:account|portefeuille|portfolio|positie|position|gegevens|data|bots)\b",
+            message, re.I,
+        ))
+        if "paper" in selected and "live" not in selected and paper_scope:
+            return "paper"
+        if "live" in excluded and "live" not in selected:
+            return "paper"
+        # A mixed bot/position explanation never needs the broker balance.
+        # Even an apparent Live instruction can be quoted or conditional;
+        # that account must be read through its separate direct route.
+        return None
+
+    @staticmethod
     def _follows_account_state_bundle(message: str, previous_response: Mapping[str, Any] | None) -> bool:
         """Recheck the same saved facts when the trader explicitly refers back to them."""
         if not re.search(r"\b(?:dezelfde|hetzelfde|same)\b.{0,50}\b(?:feiten|gegevens|facts|details)\b", message, re.I):
@@ -5279,7 +5313,16 @@ class FinnResponsesFrontDoor:
                     call = replace(call, inputs={**call.inputs, "environment": "paper"})
                 if full_portfolio_requested and portfolio_only_read:
                     portfolio_inputs = {key: value for key, value in call.inputs.items() if key != "asset"}
-                    if re.search(r"\bPaper\b", message, re.I) and not re.search(r"\bLive\b", message, re.I):
+                    if mixed_bot_position:
+                        # A model-selected Live/Paper filter can hide the named
+                        # bot or the other asset's position from this one
+                        # comparison. Only the user's own environment choice
+                        # may narrow the owner-wide portfolio read.
+                        portfolio_inputs.pop("environment", None)
+                        chosen_environment = self._mixed_portfolio_environment(message)
+                        if chosen_environment:
+                            portfolio_inputs["environment"] = chosen_environment
+                    elif re.search(r"\bPaper\b", message, re.I) and not re.search(r"\bLive\b", message, re.I):
                         portfolio_inputs["environment"] = "paper"
                     call = replace(call, inputs=portfolio_inputs)
                 if call.name == "get_active_plan_and_strategy" and not pending_operation:
@@ -5317,6 +5360,21 @@ class FinnResponsesFrontDoor:
                     call, message=message, read_only=call.operation_id is None and not pending_operation,
                     previous_response=previous_response, owner_user_id=self.user_id,
                 )
+                if (is_read_only_turn and mixed_bot_position
+                        and call.operation_id is None and not pending_operation
+                        and ("read_portfolio" in call.read_tools
+                             or call.name in {"get_portfolio_and_exposure", "get_saved_bots",
+                                              "get_profile_portfolio_and_bots"})):
+                    # Normalize before the first read, including a bundled
+                    # profile/portfolio tool. Otherwise its model-selected
+                    # environment can fetch Live account data or hide Paper
+                    # facts before the later owner-wide portfolio read.
+                    portfolio_inputs = {key: value for key, value in call.inputs.items()
+                                        if key not in {"asset", "environment"}}
+                    chosen_environment = self._mixed_portfolio_environment(message)
+                    if chosen_environment:
+                        portfolio_inputs["environment"] = chosen_environment
+                    call = replace(call, inputs=portfolio_inputs)
                 if call.name == "get_current_asset_scores" and mentioned_assets and len(score_scopes) > 1:
                     score_reads = [await self.reads(replace(
                         call, inputs={
@@ -5682,7 +5740,12 @@ class FinnResponsesFrontDoor:
                         key: value for key, value in call.inputs.items()
                         if key == "environment"
                     }
-                    if re.search(r"\bPaper\b", message, re.I) and not re.search(r"\bLive\b", message, re.I):
+                    if mixed_bot_position:
+                        portfolio_inputs = {}
+                        chosen_environment = self._mixed_portfolio_environment(message)
+                        if chosen_environment:
+                            portfolio_inputs["environment"] = chosen_environment
+                    elif re.search(r"\bPaper\b", message, re.I) and not re.search(r"\bLive\b", message, re.I):
                         portfolio_inputs["environment"] = "paper"
                     portfolio_result = await self.reads(replace(
                         call, name="get_portfolio_and_exposure", inputs=portfolio_inputs,
