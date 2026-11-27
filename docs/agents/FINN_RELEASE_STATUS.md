@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: laatst beschikbare marktcontext bij assetbrede Paper-Hold (27 november 2026)
 
-Phase: `DEPLOY_IDENTITY_VERIFIED_QA_PENDING`. Branch `codex/finn-assetwide-quote-20261127`
+Phase: `QA_ACCEPTED_SCOPED`. Branch `codex/finn-assetwide-quote-20261127`
 is gebaseerd op de voor de vorige Paper-Hold-route live geverifieerde main-SHA
 `38685f504db72954c971d5b6a595a0413b155c9e`. De onafhankelijke ingelogde
 QA accepteerde de opgeslagen Holdreden, beslis- en risicomomenten in twee nieuwe
@@ -45,9 +45,24 @@ PR-CI `45982360078` en main-CI `45983642542` slaagden elk met vijf jobs.
 Auto Deploy `45984758071` slaagde. GitHub main en publieke backend
 `/api/health` en frontend `/build-info.json` rapporteerden alle drie exact
 die merge-SHA; beide endpoints gaven HTTP 200. De statuswijziging maakt
-zelf een nieuwe publieke SHA; haar main-CI, Auto Deploy en publieke pariteit
-moeten nog slagen vóór de onafhankelijke ingelogde QA. Een live browserverdict
-voor de twee koersbronnen is er nog niet.
+zelf een nieuwe publieke SHA. Status-PR
+[#1402](https://github.com/gvangalen/antigravity-trading-tool/pull/1402)
+is gemerged als `a8729b8e6f7ef115c5fac83a3e1ae7ede1576786`; zijn
+PR-CI `45985116518` en main-CI `45986251174` hadden elk vijf groene jobs,
+Auto Deploy `45987417336` slaagde. GitHub main, backend en frontend meldden
+exact die SHA met HTTP 200.
+
+Onafhankelijke ingelogde browser-QA gaf op die definitieve SHA **ACCEPTED**
+voor de assetbrede BTC Paper-Hold-leesflow: twee nieuwe FINN-gesprekken,
+waarvan één na refresh, waren completed en noemden dezelfde opgeslagen
+Holdreden en het beslismoment, het normale risicoprofiel en één veilige
+vervolgstap. BTC/EUR en BTC/USDT verschenen elk met eigen valuta, provider
+en bronmoment in de gebruikerstijdzone, expliciet als algemene marktcontext
+en niet als bewezen botbeslissings- of uitvoeringskoers. Botdetails toonden
+geen order; QA zag geen voorstel, botactie of accountmutatie. De analyse-UI
+toonde later afgeronde marktmetingen en bevestigde paar en valuta, maar kon
+de exacte eerdere ruwe prijs/provider/seconde niet onafhankelijk teruglezen;
+die historische meetrij blijft buiten dit zichtbare browserverdict.
 
 ## FINN 3.0: Paper-Hold met risico en koersbron (27 november 2026)
 
