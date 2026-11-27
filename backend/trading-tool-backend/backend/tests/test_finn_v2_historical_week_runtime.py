@@ -153,6 +153,7 @@ def test_minimal_live_read_replaces_conflicting_model_fx_clock():
         "FX-bron: 12 november 14:03 UTC",
         "FX-factor 0.92 op 12 november 14:03 UTC",
         "De FX-koers had bronmoment 12 november 14:03 UTC",
+        "Geverifieerd FX-bronmoment: 12 november 14:03 UTC",
     ):
         answer = _minimal_read_answer(
             message=QUESTION, prepared=_prepared(text=(
