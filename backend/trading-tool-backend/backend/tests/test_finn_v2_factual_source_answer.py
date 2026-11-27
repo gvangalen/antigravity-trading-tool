@@ -37,6 +37,45 @@ def test_historical_week_exit_moments_use_user_zone_and_are_idempotent():
     )
     assert "2026-11-12 09:59:00 EST" in ny
     assert "2026-11-16 00:15:00 EST" in ny
+    corrected_ny = complete_historical_week_exit_moments(
+        "Opgeslagen weekreflectie gegenereerd: 16 november 2026, 05:15:00 EST. "
+        "Botbeslissing: 12 november 14:59 UTC.", evidence, question=question,
+        user_time_zone="America/New_York",
+    )
+    assert "Geverifieerd opslagmoment week 2026-11-09 t/m 2026-11-15: 2026-11-16 00:15:00 EST (America/New_York)" in corrected_ny
+    assert "05:15:00 EST" not in corrected_ny
+    assert "Botbeslissing: 12 november 14:59 UTC." in corrected_ny
+    earlier_week = complete_historical_week_exit_moments(
+        "De week 2–8 november had een ander resultaat. "
+        "Opgeslagen weekreflectie gegenereerd: 16 november 2026, 05:15:00 CET.",
+        evidence, question=question, user_time_zone="Europe/Amsterdam",
+    )
+    assert "05:15:00 CET" not in earlier_week
+    assert "Geverifieerd opslagmoment week 2026-11-09 t/m 2026-11-15: 2026-11-16 06:15:00 CET" in earlier_week
+    earlier_storage = complete_historical_week_exit_moments(
+        "Opgeslagen weekreflectie gegenereerd: 9 november 2026, 05:15:00 CET.",
+        evidence, question=question, user_time_zone="Europe/Amsterdam",
+    )
+    assert "9 november 2026, 05:15:00 CET" not in earlier_storage
+    two_weeks_same_save_day = complete_historical_week_exit_moments(
+        "De week 2 tot 8 november: opgeslagen weekreflectie gegenereerd: "
+        "16 november 2026, 05:15:00 CET. De week 9 tot 15 november: "
+        "opgeslagen weekreflectie gegenereerd: 16 november 2026, 05:15:00 CET.",
+        evidence, question=question, user_time_zone="Europe/Amsterdam",
+    )
+    assert "05:15:00 CET" not in two_weeks_same_save_day
+    assert "Geverifieerd opslagmoment week 2026-11-09 t/m 2026-11-15: 2026-11-16 06:15:00 CET" in two_weeks_same_save_day
+    relative_weeks = complete_historical_week_exit_moments(
+        "De voorgaande week: opgeslagen weekreflectie gegenereerd: "
+        "16 november 2026, 05:15:00 CET (geen bewijs van plantrouw). "
+        "De gevraagde week: opgeslagen weekreflectie gegenereerd: "
+        "16 november 2026, 05:15:00 CET (Europe/Amsterdam).",
+        evidence, question=question, user_time_zone="Europe/Amsterdam",
+    )
+    assert relative_weeks.count("Opslagmoment van deze weekreflectie niet geverifieerd") == 2
+    assert "(geen bewijs van plantrouw)" in relative_weeks
+    assert "05:15:00 CET" not in relative_weeks
+    assert "Geverifieerd opslagmoment week 2026-11-09 t/m 2026-11-15: 2026-11-16 06:15:00 CET" in relative_weeks
     assert complete_historical_week_exit_moments(
         "antwoord", evidence, question=question, user_time_zone=None,
     ) == "antwoord"
