@@ -1,14 +1,105 @@
 import asyncio
 from datetime import datetime, timezone
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor
 from backend.services.finn_v2_responses_answer_verifier import FinnResponsesAnswerVerifier
 from backend.services.finn_v2_responses_loop import FinnResponsesResult
 from backend.services.finn_v2_factual_source_answer import (
+    complete_historical_week_exit_moments,
     mentions_technical_indicator, render_bot_decision, render_closed_paper_exit_facts,
     render_account_market_report_facts,
 )
 from backend.services.asset_catalog_service import requested_catalog_trading_pair
+
+
+def test_historical_week_exit_moments_use_user_zone_and_are_idempotent():
+    evidence = ({"scope": "read_review_history", "status": "completed", "data": {
+        "weekly_reflection": {"week_start": "2026-11-09", "week_end": "2026-11-15",
+                              "generated_at": "2026-11-16T05:15:00+00:00"},
+        "closed_trades": [{"symbol": "AAPL", "environment": "paper",
+                           "exit_at": "2026-11-12T14:59:00+00:00"}],
+    }},)
+    question = "Bespreek de AAPL Paper-exit en mijn weekreflectie van 9–15 november."
+    answer = complete_historical_week_exit_moments(
+        "Het eerste doel werd bereikt.", evidence, question=question,
+        user_time_zone="Europe/Amsterdam",
+    )
+    assert "2026-11-12 15:59:00 CET" in answer
+    assert "2026-11-16 06:15:00 CET" in answer
+    assert complete_historical_week_exit_moments(
+        answer, evidence, question=question, user_time_zone="Europe/Amsterdam",
+    ) == answer
+    ny = complete_historical_week_exit_moments(
+        "Bronmomenten: 14:59 UTC en 05:15 UTC.", evidence, question=question,
+        user_time_zone="America/New_York",
+    )
+    assert "2026-11-12 09:59:00 EST" in ny
+    assert "2026-11-16 00:15:00 EST" in ny
+    assert complete_historical_week_exit_moments(
+        "antwoord", evidence, question=question, user_time_zone=None,
+    ) == "antwoord"
+    assert complete_historical_week_exit_moments(
+        "antwoord", evidence, question=question, user_time_zone="Invalid/Zone",
+    ) == "antwoord"
+    mismatched = ({**evidence[0], "data": {**evidence[0]["data"],
+                  "closed_trades": [{**evidence[0]["data"]["closed_trades"][0],
+                                     "symbol": "MSFT"}]}},)
+    assert complete_historical_week_exit_moments(
+        "antwoord", mismatched, question=question,
+        user_time_zone="Europe/Amsterdam",
+    ) == "antwoord"
+    assert complete_historical_week_exit_moments(
+        "De gevraagde exit was op 5 november.", evidence,
+        question="Vergelijk mijn AAPL Paper-exit van 5 november met de weekreflectie van 9–15 november.",
+        user_time_zone="Europe/Amsterdam",
+    ) == "De gevraagde exit was op 5 november."
+    for reference in ("trade-reflectie #999", "trade-review #999", "review #999", "dossier #999"):
+        assert complete_historical_week_exit_moments(
+            "antwoord", evidence,
+            question=f"Bespreek de afgesloten AAPL Paper-trade in {reference} en de weekreflectie van 9–15 november.",
+            user_time_zone="Europe/Amsterdam",
+        ) == "antwoord"
+    assert complete_historical_week_exit_moments(
+        "De gevraagde exit was op 05/11/2026.", evidence,
+        question="Vergelijk mijn AAPL Paper-exit van 05/11/2026 met de weekreflectie van 9–15 november.",
+        user_time_zone="Europe/Amsterdam",
+    ) == "De gevraagde exit was op 05/11/2026."
+    iso_week = complete_historical_week_exit_moments(
+        "antwoord", evidence,
+        question="Bespreek mijn afgesloten AAPL Paper-trade en weekreflectie 2026-11-09 tot 2026-11-15.",
+        user_time_zone="Europe/Amsterdam",
+    )
+    assert "2026-11-12 15:59:00 CET" in iso_week
+
+
+def test_historical_week_answer_verifier_completes_utc_only_draft():
+    question = ("Bespreek mijn afgesloten AAPL Paper-trade en de weekreflectie "
+                "van 9–15 november. Wat was de exitreden? Lees alleen.")
+    row = {"scope": "read_review_history", "status": "completed", "data": {
+        "weekly_reflection": {"week_start": "2026-11-09", "week_end": "2026-11-15",
+                              "generated_at": "2026-11-16T05:15:00+00:00",
+                              "time_zone": "Europe/Amsterdam"},
+        "closed_trades": [{"symbol": "AAPL", "environment": "paper",
+                           "exit_at": "2026-11-12T14:59:00+00:00"}],
+    }}
+    draft = "AAPL exit: 12 november 14:59 UTC. Week opgeslagen: 16 november 05:15 UTC."
+    result = FinnResponsesResult(
+        text=draft, response_id="historical-week", answer_kind="free_text",
+        tool_trace=({"name": "get_review_history", "status": "completed",
+                     "result": {"results": [row]}},),
+    )
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=True, passes=True, reason_codes=[],
+    )))
+    verified = asyncio.run(FinnResponsesAnswerVerifier(semantic=semantic).verify(
+        message=question, result=result, locale="nl", user_time_zone="Europe/Amsterdam",
+    ))
+    assert verified.status == "completed"
+    assert "2026-11-12 15:59:00 CET" in verified.text
+    assert "2026-11-16 06:15:00 CET" in verified.text
+    assert "als gesloten geregistreerd" in verified.text
 
 
 def _run(message, results, *, verified_asset=None, workspace_hints=None):
