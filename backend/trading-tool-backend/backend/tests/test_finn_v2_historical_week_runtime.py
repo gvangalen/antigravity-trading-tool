@@ -148,6 +148,42 @@ def test_minimal_live_read_completes_missing_fx_source_moment_on_repeat():
     assert "Geverifieerd opslagmoment week 2026-11-09 t/m 2026-11-15: 2026-11-16 06:15:00 CET" in answer.text
 
 
+def test_minimal_live_read_replaces_conflicting_model_fx_clock():
+    for fx_claim in (
+        "FX-bron: 12 november 14:03 UTC",
+        "FX-factor 0.92 op 12 november 14:03 UTC",
+        "De FX-koers had bronmoment 12 november 14:03 UTC",
+    ):
+        answer = _minimal_read_answer(
+            message=QUESTION, prepared=_prepared(text=(
+                "Botbeslissing: 12 november 14:59 UTC. "
+                f"{fx_claim}. De Paper-uitstap raakte het eerste koersdoel."
+            )), user_time_zone="Europe/Amsterdam",
+        )
+        assert answer.status == "completed", answer.reason
+        assert "14:03 UTC" not in answer.text
+        assert "Botbeslissing: 12 november 14:59 UTC" in answer.text
+        assert answer.text.count("Geverifieerd FX-bronmoment") == 1
+        assert "2026-11-12 15:02:00 CET (Europe/Amsterdam)" in answer.text
+
+
+def test_historical_week_fx_moment_completion_is_idempotent():
+    from backend.services.finn_v2_factual_source_answer import complete_historical_week_exit_moments
+
+    prepared = _prepared(text="FX-bronmoment: 12 november 14:03 UTC.")
+    evidence = tuple(prepared.response.tool_trace[0]["result"]["results"])
+    first = complete_historical_week_exit_moments(
+        prepared.response.text, evidence, question=QUESTION,
+        user_time_zone="Europe/Amsterdam",
+    )
+    second = complete_historical_week_exit_moments(
+        first, evidence, question=QUESTION, user_time_zone="Europe/Amsterdam",
+    )
+    assert second == first
+    assert first.count("Geverifieerd FX-bronmoment") == 1
+    assert "14:03 UTC" not in first
+
+
 def test_minimal_live_read_does_not_invent_conflicting_fx_source_moment():
     prepared = _prepared(text="Exitreden: eerste koersdoel.")
     original = prepared.response.tool_trace[0]
