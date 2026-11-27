@@ -20954,3 +20954,248 @@ def test_named_single_asset_plan_read_ignores_other_open_page_asset(tool_asset):
     ))
     assert len(calls) == 1
     assert result.response.turn_contract["targets"][0]["name"] == "ETH/EUR concept"
+
+
+def test_latest_paper_hold_coach_reads_exact_pair_quote_and_saved_risk():
+    question = (
+        "Waarom heeft mijn bestaande BTC Paper-bot bij de laatste beslissing geen order geplaatst? "
+        "Lees de opgeslagen Hold-reden en het beslismoment opnieuw, onderscheid die van de "
+        "nieuwste koersbron en geef één veilige vervolgstap passend bij mijn normale "
+        "risicoprofiel. Lees alleen; wijzig niets."
+    )
+    calls = []
+
+    async def read(call):
+        calls.append(call)
+        if call.name == "get_decision_history":
+            assert call.read_tools == ("read_review_history", "read_profile")
+            return {"status": "completed", "results": [
+                {"scope": "read_review_history", "status": "completed", "data": {
+                    "latest_bot_decisions": [{
+                        "bot_id": 56, "symbol": "BTC", "pair": "BTC/USDT", "is_live": False,
+                        "action": "hold", "persistence_status": "skipped",
+                        "decision_at": "2026-11-26T18:33:29+00:00",
+                        "safety_state": "blocked",
+                        "safety_reason_code": "strategy_price_currency_unconfirmed",
+                        "safety_reason": "Bevestig eerst de valuta van de opgeslagen koersniveaus in de strategie.",
+                    }],
+                }},
+                {"scope": "read_profile", "status": "completed", "data": {
+                    "has_profile": True, "trader_profile": {"risk_profiles": ["balanced"]},
+                }},
+            ]}
+        assert call.name == "get_market_snapshot"
+        assert call.inputs["quote_currency"] == "USDT"
+        return {"status": "completed", "results": [
+            {"scope": "read_market_snapshot", "status": "completed", "data": {
+                "symbol": "BTC", "quote_currency": "USDT", "price": 95000,
+                "price_provider": "test-provider",
+                "source_observed_at_utc": "2026-11-26T18:40:00+00:00",
+            }},
+        ]}
+
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7,
+                                   run_id="hold-quote-risk", model_led_coach=True)
+    front.reads = read
+    result = asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="BTC",
+        workspace_hints={"page": "/bot", "symbol": "BTC", "time_zone": "Europe/Amsterdam"},
+    ))
+    assert len(calls) == 2
+    assert result.response.answer_kind == "factual_source"
+    assert "BTC/USDT-koers" in result.response.text
+    assert "95000" in result.response.text
+    assert "19:33:29" in result.response.text
+    assert "19:40:00" in result.response.text
+    assert "normaal" in result.response.text
+    assert "Veilige vervolgstap" in result.response.text
+    assert "valuta van de opgeslagen koersniveaus" in result.response.text
+    checked = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=question, result=result.response, locale="nl",
+        user_time_zone="Europe/Amsterdam",
+    ))
+    assert checked.status == "completed", (checked.reason, checked.rejection_details)
+    tampered = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=question, result=replace(result.response, text=result.response.text.replace("BTC/USDT", "BTC/EUR")),
+        locale="nl", user_time_zone="Europe/Amsterdam",
+    ))
+    assert tampered.status == "unavailable"
+    for explicit_pair in (
+        "Vergelijk ook de BTC/EUR-koersbron met BTC/USDT.",
+        "Ik bedoel BTC/USDC als koersbron.",
+        "Ik bedoel BTC / USDT als koersbron.",
+    ):
+        cross_pair = asyncio.run(FinnResponsesAnswerVerifier().verify(
+            message=question + " " + explicit_pair,
+            result=result.response, locale="nl", user_time_zone="Europe/Amsterdam",
+        ))
+        assert cross_pair.status == "unavailable", explicit_pair
+
+
+def test_paper_hold_coach_without_quote_does_not_imply_a_quote_moment():
+    from backend.services.finn_v2_factual_source_answer import render_bot_hold_quote_coach
+
+    decision = {"status": "completed", "results": [
+        {"scope": "read_review_history", "status": "completed", "data": {
+            "latest_bot_decisions": [{
+                "bot_id": 56, "symbol": "BTC", "pair": "BTC/USDT", "is_live": False,
+                "action": "hold", "persistence_status": "skipped",
+                "decision_at": "2026-11-26T18:33:29+00:00",
+            }],
+        }},
+        {"scope": "read_profile", "status": "completed", "data": {
+            "has_profile": True, "trader_profile": {"risk_profiles": ["balanced"]},
+        }},
+    ]}
+    quote = {"status": "unavailable", "results": [
+        {"scope": "read_market_snapshot", "status": "unavailable", "reason": "source_unavailable"},
+    ]}
+    text = render_bot_hold_quote_coach(decision, quote, symbol="BTC", user_time_zone="America/New_York")
+    assert "koersbron nu niet lezen" in text
+    assert "koersbronmoment zijn verschillende" not in text
+    assert "laatst beschikbare BTC/USDT-koers is" not in text
+    assert "13:33:29 EST" in text
+
+
+def test_asset_wide_paper_hold_keeps_risk_and_safe_step_without_pair_quote():
+    from backend.services.finn_v2_factual_source_answer import render_bot_hold_quote_coach
+
+    decision = {"status": "completed", "results": [
+        {"scope": "read_review_history", "status": "completed", "data": {
+            "latest_bot_decisions": [{
+                "bot_id": 56, "symbol": "BTC", "is_live": False,
+                "action": "hold", "persistence_status": "skipped",
+                "decision_at": "2026-11-26T18:33:29+00:00",
+                "safety_reason_code": "strategy_price_currency_unconfirmed",
+                "safety_reason": "Valuta van koersniveaus niet bevestigd",
+            }],
+        }},
+        {"scope": "read_profile", "status": "completed", "data": {
+            "has_profile": True, "trader_profile": {"risk_profiles": ["balanced"]},
+        }},
+    ]}
+    text = render_bot_hold_quote_coach(
+        decision, None, symbol="BTC", bot_id=56, user_time_zone="Europe/Amsterdam",
+    )
+    assert "19:33:29 CET" in text
+    assert "zonder vast handelspaar" in text
+    assert "geen exacte koersbron" in text
+    assert "risicoprofiel is normaal" in text
+    assert "Veilige vervolgstap: Controleer de valuta" in text
+    assert "BTC/USDT" not in text
+
+    question = ("Waarom heeft mijn bestaande BTC Paper-bot bij de laatste beslissing "
+                "geen order geplaatst? Lees de Hold-reden en nieuwste koersbron en geef "
+                "één veilige vervolgstap passend bij mijn normale risicoprofiel. Lees alleen.")
+    calls = []
+
+    async def read(call):
+        calls.append(call)
+        assert call.name == "get_decision_history"
+        return decision
+
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7,
+                                   run_id="assetwide-hold", model_led_coach=True)
+    front.reads = read
+    result = asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="BTC",
+        workspace_hints={"page": "/bot", "symbol": "BTC", "time_zone": "Europe/Amsterdam"},
+    ))
+    assert len(calls) == 1
+    assert "geen exacte koersbron" in result.response.text
+    checked = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=question, result=result.response, locale="nl", user_time_zone="Europe/Amsterdam",
+    ))
+    assert checked.status == "completed", checked.reason
+
+    decision["results"][0]["data"]["latest_bot_decisions"][0]["pair"] = "BTC/USDC"
+    unsupported = render_bot_hold_quote_coach(
+        decision, None, symbol="BTC", bot_id=56, user_time_zone="Invalid/TimeZone",
+    )
+    assert "niet als ondersteund paar verifiëren" in unsupported
+    assert "zonder vast handelspaar" not in unsupported
+    assert "Veilige vervolgstap" not in unsupported
+    assert "18:33:29 UTC" in unsupported
+    decision["results"][0]["data"]["latest_bot_decisions"][0].update(
+        {"pair": None, "symbol": "BTC/USDT"})
+    symbol_pair = render_bot_hold_quote_coach(decision, None, symbol="BTC", bot_id=56)
+    assert "niet als ondersteund paar verifiëren" in symbol_pair
+    assert "zonder vast handelspaar" not in symbol_pair
+
+
+@pytest.mark.parametrize("decisions", [
+    [{"bot_id": 56, "symbol": "BTC", "pair": "BTC/USDT", "is_live": False,
+      "action": "buy", "persistence_status": "executed",
+      "decision_at": "2026-11-26T18:33:29+00:00"}],
+    [{"bot_id": 56, "symbol": "BTC", "pair": "BTC/USDT", "is_live": False,
+      "action": "sell", "persistence_status": "completed",
+      "decision_at": "2026-11-26T18:33:29+00:00"}],
+    [{"bot_id": bot_id, "symbol": "BTC", "pair": "BTC/USDT", "is_live": False,
+      "action": "hold", "persistence_status": "planned",
+      "decision_at": "2026-11-26T18:33:29+00:00"}
+     for bot_id in (56, 57)],
+])
+def test_paper_hold_coach_does_not_invent_a_blockade_or_quote_for_other_decisions(decisions):
+    question = ("Waarom heeft mijn BTC Paper-bot bij de laatste beslissing geen order geplaatst? "
+                "Vergelijk de nieuwste koersbron en geef één veilige vervolgstap. Lees alleen.")
+    calls = []
+
+    async def read(call):
+        calls.append(call)
+        assert call.name == "get_decision_history"
+        return {"status": "completed", "results": [
+            {"scope": "read_review_history", "status": "completed", "data": {
+                "latest_bot_decisions": decisions,
+            }},
+            {"scope": "read_profile", "status": "completed", "data": {
+                "has_profile": True, "trader_profile": {"risk_profiles": ["balanced"]},
+            }},
+        ]}
+
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7,
+                                   run_id="hold-negative", model_led_coach=True)
+    front.reads = read
+    result = asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="BTC",
+        workspace_hints={"page": "/bot", "symbol": "BTC"},
+    ))
+    assert len(calls) == 1
+    assert "geen eenduidig opgeslagen Paper-Hold" in result.response.text
+    assert "Veilige vervolgstap" not in result.response.text
+    assert "laatst beschikbare BTC/USDT-koers" not in result.response.text
+    checked = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=question, result=result.response, locale="nl",
+    ))
+    assert checked.status == "completed", checked.reason
+
+
+def test_paper_hold_coach_does_not_call_conflicting_saved_risks_normal():
+    from backend.services.finn_v2_factual_source_answer import render_bot_hold_quote_coach
+
+    decision = {"status": "completed", "results": [
+        {"scope": "read_review_history", "status": "completed", "data": {
+            "latest_bot_decisions": [{
+                "bot_id": 56, "symbol": "BTC", "pair": "BTC/USDT", "is_live": False,
+                "action": "hold", "persistence_status": "planned",
+                "decision_at": "2026-11-26T18:33:29+00:00",
+                "safety_state": "blocked", "safety_reason": "Valuta niet bevestigd",
+            }],
+        }},
+        {"scope": "read_profile", "status": "completed", "data": {
+            "has_profile": True,
+            "trader_profile": {"risk_profiles": ["balanced", "aggressive"]},
+        }},
+    ]}
+    quote = {"status": "completed", "results": [
+        {"scope": "read_market_snapshot", "status": "completed", "data": {
+            "symbol": "BTC", "quote_currency": "USDT", "price": 95000,
+            "price_provider": "test-provider",
+            "source_observed_at_utc": "2026-11-26T18:40:00+00:00",
+        }},
+    ]}
+    text = render_bot_hold_quote_coach(decision, quote, symbol="BTC")
+    assert "geen eenduidig normaal risicoprofiel" in text
+    assert "risicoprofiel is normaal" not in text
