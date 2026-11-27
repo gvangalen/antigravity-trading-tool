@@ -4,10 +4,48 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
-## FINN 3.0: opgeslagen voorwaarden bij oude BTC-bot (27 november 2026)
+## FINN 3.0: stabiele gemengde bot- en positieread (27 november 2026)
 
 Phase: `BUILD_GATES_PASSED_STATUS_CI_PENDING`. Branch
-`codex/finn-mixed-coach-legacy-market-20261127` op live/main
+`codex/finn-mixed-coach-portfolio-scope-20261127` op live/main
+`5be9c89af825faa5fb315ae42dd3182166a628c4`. Onafhankelijke ingelogde
+QA gaf op die live SHA `NOT_ACCEPTED` voor de identieke gemengde vraag in
+twee nieuwe gesprekken met refresh ertussen: de eerste beurt noemde bot 129,
+beide ETH-nulposities en de opgeslagen BTC-setupgrenzen 61–75 op 4H correct,
+maar de tweede gaf alleen een generieke verduidelijking. Een afzonderlijke
+rechtstreekse bot-/setupvraag was wel inhoudelijk goed. Geen accountmutatie.
+
+De lokale herstelbatch verwijdert bij deze read-only vraag het door het model
+gekozen asset- en Live/Paper-filter vóór zowel de primaire gebundelde
+profiel-/portfolioread als een aanvullende portfolioread. De gebruikerskeuze
+voor Paper of expliciete uitsluiting van Live blijft mogelijk. Deze gemengde
+route vraagt nooit een Live-brokerbalans op; daarvoor bestaat de afzonderlijke
+directe leesroute. Alle reads blijven eigenaargebonden. Er zijn geen acties,
+bots, orders of accounts gewijzigd. De daadwerkelijke oorzaak van de tweede
+live beurt is zonder runtrace niet bewezen; de regressie reproduceerde wel
+de gelekte modelgekozen filters.
+
+Producthead `8683743b97169a9a7fe569675a602d0d0a75c9db`:
+betrokken Responses-/bronweergavesuites `1121 passed`; volledige backend
+`5649 passed, 7 skipped`. De geïsoleerde API/worker-actiecontractmatrix op
+een vers gestarte lokale stack slaagde `17/17` zonder productieverbinding of
+Live-actie (artifact SHA-256
+`c5a8a1d1abcd239b17f061bb159e5dac3756afb201e435a85a432bcaebf93df9`).
+Adaptertests `28/28`, Smart DCA- en kalender-DCA-runtimecontroles groen.
+Echte-providerselector development `20/20` (artifact SHA-256
+`741d1880a552fb9d26764668e91955d6e9a3a906872b913513c8120c5a37c47f`)
+en regressie `109/109` (artifact SHA-256
+`fc0d45943182dc2657e45e49c241fc1fe8d6b09a7ef1670c3197e726257043d0`),
+zonder provider-, schema-, parse-, timeout- of validatiefout. Onafhankelijke
+QA- en Security-codebeoordelingen op deze head vonden geen blocker.
+Producthead-PR-CI `46028641514` had vijf groene jobs. De statuscommit
+vereist nog groene PR-CI; merge, main-CI, Auto Deploy, publieke SHA-pariteit
+en de twee identieke ingelogde browserbeurten blijven open.
+
+## FINN 3.0: opgeslagen voorwaarden bij oude BTC-bot (27 november 2026)
+
+Phase: `LIVE_NOT_ACCEPTED`. Branch
+`codex/finn-mixed-coach-legacy-market-20261127` op de toenmalige live/main
 `8336fab050e73b6169bb280c25d59b69a8309591`. Onafhankelijke ingelogde
 QA gaf op die SHA `NOT_ACCEPTED` voor de gemengde BTC/EUR-, BTC-bot-129- en
 ETH-positievraag: in twee nieuwe gesprekken, ook na refresh, noemde FINN
@@ -41,8 +79,10 @@ en regressie `109/109` (artifact SHA-256
 zonder provider-, schema-, parse-, timeout- of validatiefout. Onafhankelijke
 QA- en Security-codebeoordeling op deze producthead vonden geen blocker.
 Producthead-PR-CI `46020315725` had vijf groene jobs. Deze statuscommit
-vereist eigen groene PR-CI; merge, main-CI, Auto Deploy, publieke SHA-pariteit
-en dezelfde ingelogde browservraag na refresh staan nog open.
+had daarna groene PR-CI; main-CI `46023937594` en Auto Deploy `46025123310`
+slaagden op live SHA `5be9c89af825faa5fb315ae42dd3182166a628c4`, met
+publieke backend-/frontendpariteit. De eerste browservraag slaagde, de
+identieke herhaling na refresh niet; de herstelbatch hierboven volgt daarop.
 
 ## FINN 3.0: gemengde bot-, positie- en planvraag (27 november 2026)
 
