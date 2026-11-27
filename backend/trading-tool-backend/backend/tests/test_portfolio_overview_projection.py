@@ -50,6 +50,19 @@ def test_paper_total_counts_bot_cash_free_reserve_and_one_off_position_once():
     assert data.global_.allocations_pct["BTC"] == 20.0
 
 
+def test_owner_can_value_paper_reserve_without_creating_any_bot():
+    data = project_portfolio({
+        "read_at": READ_AT, "bots": [], "paper_reserve_cash_eur": 1250,
+        "manual_positions": [],
+    }, environment="paper")
+    assert data.valuation_status == "available"
+    assert data.global_.total_equity == 1250
+    assert data.global_.cash_balance == 1250
+    assert data.global_.paper_reserve_cash_eur == 1250
+    assert data.global_.total_budget_limit == 0
+    assert data.bots == []
+
+
 def test_asset_scoped_paper_view_does_not_attribute_owner_wide_reserve():
     payload = {
         "read_at": READ_AT,

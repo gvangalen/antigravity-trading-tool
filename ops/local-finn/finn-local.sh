@@ -68,12 +68,16 @@ case "${1:-}" in
     (cd "$BACKEND" && PYTHONPATH=. pytest -q backend/tests/test_finn_v2_action_adapter_registry.py)
     (cd "$BACKEND" && PYTHONPATH=. python3 backend/scripts/verify_smart_dca_schedule_migration.py)
     (cd "$BACKEND" && PYTHONPATH=. python3 backend/scripts/verify_smart_dca_confirmed_runtime.py)
-    (cd "$BACKEND" && PYTHONPATH=. python3 backend/scripts/verify_calendar_dca_confirmed_runtime.py) ;;
+    (cd "$BACKEND" && PYTHONPATH=. python3 backend/scripts/verify_calendar_dca_confirmed_runtime.py)
+    (cd "$BACKEND" && PYTHONPATH=. python3 backend/scripts/probe_local_paper_funding.py) ;;
+  paper-funding)
+    require_env; load_env
+    (cd "$BACKEND" && PYTHONPATH=. python3 backend/scripts/probe_local_paper_funding.py) ;;
   selector-eval)
     require_env; load_env
     shift
     (cd "$BACKEND" && FINN_V2_REAL_SELECTOR_EVAL=1 PYTHONPATH=. python3 backend/scripts/run_finn_v2_selector_eval.py "$@") ;;
   stop) stop_local_processes; docker compose -f "$ROOT/docker-compose.finn-local.yml" down ;;
   reset) "$0" stop; docker compose -f "$ROOT/docker-compose.finn-local.yml" down -v; find "$PID_DIR" -type f -maxdepth 1 -delete 2>/dev/null || true; rmdir "$PID_DIR" 2>/dev/null || true ;;
-  *) echo "usage: $0 {start|health|logs|matrix|selector-eval|stop|reset}" >&2; exit 2 ;;
+  *) echo "usage: $0 {start|health|logs|matrix|paper-funding|selector-eval|stop|reset}" >&2; exit 2 ;;
 esac

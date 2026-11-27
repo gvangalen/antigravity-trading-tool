@@ -73,9 +73,21 @@ def _snapshot_verified_paper(cur, user_id: int, bucket: BucketType, ts: datetime
         WHERE user_id=%s AND quantity > 0 ORDER BY market_id
     """, (user_id,))
     manual_positions = cur.fetchall()
-    if ((not bots or not any(row[2] for row in bots)) and reserve_cash <= 0 and not manual_positions
-            or any(row[5] or (not row[2] and row[7]) for row in bots)):
+    if any(row[5] or (not row[2] and row[7]) for row in bots):
         return False
+    if (not bots or not any(row[2] for row in bots)) and reserve_cash <= 0 and not manual_positions:
+        # A final withdrawal must replace an earlier positive point in the
+        # current bucket. Do not start an empty history for untouched users.
+        cur.execute("""
+            SELECT 1 WHERE EXISTS (
+                SELECT 1 FROM portfolio_value_snapshots_v2
+                WHERE user_id=%s AND environment='paper'
+            ) OR EXISTS (
+                SELECT 1 FROM paper_reserve_funding WHERE user_id=%s
+            )
+        """, (user_id, user_id))
+        if cur.fetchone() is None:
+            return False
     cur.execute("""
         SELECT quote_currency, eur_per_unit, observed_at, provider, provider_pair FROM portfolio_fx_rates
         WHERE quote_currency IN ('USD','USDT')

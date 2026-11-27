@@ -10,12 +10,15 @@ import json
 
 
 class _Cursor:
-    def __init__(self, *, bots, prices, fx, quote_rows=None):
+    def __init__(self, *, bots, prices, fx, quote_rows=None,
+                 reserve_cash=0, prior_paper_history=False):
         self.bots, self.prices, self.fx = bots, prices, fx
         self.quote_rows = quote_rows or {}
         self.rows = []
         self.snapshots = []
         self.queries = []
+        self.reserve_cash = reserve_cash
+        self.prior_paper_history = prior_paper_history
 
     def execute(self, sql, params=None):
         statement = " ".join(sql.lower().split())
@@ -24,6 +27,10 @@ class _Cursor:
             self.rows = [(row if len(row) == 9 else
                           (*row, None) if len(row) == 8 else
                           (*row, False, None)) for row in self.bots]
+        elif "from paper_reserve_accounts" in statement:
+            self.rows = [(self.reserve_cash,)]
+        elif "from paper_reserve_funding" in statement and "exists" in statement:
+            self.rows = [(1,)] if self.prior_paper_history else []
         elif "from portfolio_fx_rates" in statement and "quote_currency in" in statement:
             self.rows = self.fx
         elif "from portfolio_fx_rates" in statement:
@@ -158,6 +165,24 @@ def test_empty_paper_bot_does_not_hide_funded_history():
     ], prices={}, fx=[])
     assert _snapshot_verified_paper(cursor, 17, "1h", now) is True
     assert cursor.snapshots[0][3:7] == (10000.0, 10000.0, 0.0, 2)
+
+
+def test_full_reserve_withdrawal_writes_verified_zero_point_without_bots():
+    now = datetime.now(timezone.utc)
+    cursor = _Cursor(bots=[], prices={}, fx=[], reserve_cash=100)
+    assert _snapshot_verified_paper(cursor, 17, "1h", now) is True
+    assert cursor.snapshots[-1][3:7] == (100.0, 100.0, 0.0, 0)
+    cursor.reserve_cash = 0
+    cursor.prior_paper_history = True
+    assert _snapshot_verified_paper(cursor, 17, "1h", now) is True
+    assert cursor.snapshots[-1][3:7] == (0.0, 0.0, 0.0, 0)
+
+
+def test_untouched_empty_paper_account_does_not_start_history():
+    now = datetime.now(timezone.utc)
+    cursor = _Cursor(bots=[], prices={}, fx=[])
+    assert _snapshot_verified_paper(cursor, 17, "1h", now) is False
+    assert cursor.snapshots == []
 
 
 def test_twenty_assets_use_one_price_read_and_one_complete_snapshot():

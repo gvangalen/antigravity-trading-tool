@@ -153,6 +153,11 @@ export const transferPaperReserve = async (payload) => handleApi(fetchAuth(
   { method: "POST", body: JSON.stringify(payload) },
 ));
 
+export const fundPaperReserve = async (payload) => handleApi(fetchAuth(
+  "/api/portfolio/paper-reserve/funding",
+  { method: "POST", body: JSON.stringify(payload) },
+));
+
 export const fetchPaperDiscretionaryOrders = async () => handleApi(fetchAuth(
   "/api/portfolio/paper-discretionary-orders", { forceFresh: true },
 ));

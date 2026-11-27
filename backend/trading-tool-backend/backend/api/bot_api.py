@@ -146,6 +146,12 @@ class PaperReserveTransferRequest(BaseModel):
     idempotency_key: constr(min_length=8, max_length=128)
 
 
+class PaperReserveFundingRequest(BaseModel):
+    direction: Literal["add", "remove"]
+    amount_eur: condecimal(gt=Decimal("0"), max_digits=20, decimal_places=2)
+    idempotency_key: constr(min_length=8, max_length=128)
+
+
 @router.post("/portfolio/paper-reserve/transfer")
 async def transfer_paper_reserve(
     payload: PaperReserveTransferRequest,
@@ -160,6 +166,22 @@ async def transfer_paper_reserve(
         user_id=current_user["id"], bot_id=payload.bot_id,
         direction=payload.direction, amount_eur=payload.amount_eur,
         idempotency_key=payload.idempotency_key,
+    )
+
+
+@router.post("/portfolio/paper-reserve/funding")
+async def fund_paper_reserve(
+    payload: PaperReserveFundingRequest,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+    service: BotService = Depends(get_bot_service),
+):
+    _apply_sensitive_order_rate_limit(
+        user_id=current_user["id"], request=request, action_key="paper_reserve_funding",
+    )
+    return await service.fund_paper_reserve(
+        user_id=current_user["id"], direction=payload.direction,
+        amount_eur=payload.amount_eur, idempotency_key=payload.idempotency_key,
     )
 
 

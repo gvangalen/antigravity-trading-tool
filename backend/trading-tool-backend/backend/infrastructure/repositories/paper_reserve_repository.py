@@ -25,6 +25,65 @@ class PaperReserveRepository:
         row = result.first()
         return Decimal(str(row[0])) if row else Decimal("0")
 
+    async def fund(
+        self, *, user_id: int, direction: str, amount_eur: Decimal,
+        idempotency_key: str,
+    ) -> dict:
+        """Adjust only the owner's unallocated virtual Paper budget once.
+
+        Caller owns commit. No bot or broker balance is modified here.
+        """
+        if direction not in {"add", "remove"}:
+            raise ValueError("paper_funding_direction_invalid")
+        if (not amount_eur.is_finite() or amount_eur <= 0
+                or amount_eur != amount_eur.quantize(Decimal("0.01"))):
+            raise ValueError("paper_funding_amount_invalid")
+        if not 8 <= len(idempotency_key) <= 128:
+            raise ValueError("paper_funding_key_invalid")
+        params = {"user_id": user_id, "direction": direction,
+                  "amount_eur": str(amount_eur), "idempotency_key": idempotency_key}
+        await self.session.execute(text("SELECT pg_advisory_xact_lock(:user_id, 0)"), params)
+        prior = await self.session.execute(text("""
+            SELECT id, direction, amount_eur FROM paper_reserve_funding
+            WHERE user_id=:user_id AND idempotency_key=:idempotency_key
+        """), params)
+        existing = prior.first()
+        if existing:
+            if (existing[1] != direction
+                    or Decimal(str(existing[2])) != amount_eur):
+                raise ValueError("paper_funding_key_reused")
+            return {"funding_id": int(existing[0]), "replayed": True,
+                    "cash_eur": str(await self.cash(user_id))}
+
+        current_cash = await self.cash(user_id, lock=True)
+        # This is the NUMERIC(20, 2) storage boundary, not a product budget cap.
+        if direction == "add" and current_cash + amount_eur > Decimal("999999999999999999.99"):
+            raise ValueError("paper_funding_storage_overflow")
+        if direction == "add":
+            updated = await self.session.execute(text("""
+                UPDATE paper_reserve_accounts
+                SET cash_eur=cash_eur+CAST(:amount_eur AS NUMERIC), updated_at=NOW()
+                WHERE user_id=:user_id RETURNING cash_eur
+            """), params)
+        else:
+            updated = await self.session.execute(text("""
+                UPDATE paper_reserve_accounts
+                SET cash_eur=cash_eur-CAST(:amount_eur AS NUMERIC), updated_at=NOW()
+                WHERE user_id=:user_id AND cash_eur>=CAST(:amount_eur AS NUMERIC)
+                RETURNING cash_eur
+            """), params)
+        balance = updated.scalar_one_or_none()
+        if balance is None:
+            raise ValueError("paper_funding_insufficient_reserve")
+        row = await self.session.execute(text("""
+            INSERT INTO paper_reserve_funding
+                (user_id, direction, amount_eur, idempotency_key)
+            VALUES (:user_id, :direction, CAST(:amount_eur AS NUMERIC),
+                    :idempotency_key) RETURNING id
+        """), params)
+        return {"funding_id": int(row.scalar_one()), "replayed": False,
+                "cash_eur": str(balance)}
+
     async def transfer(
         self, *, user_id: int, bot_id: int, direction: str,
         amount_eur: Decimal, idempotency_key: str,

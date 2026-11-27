@@ -4,10 +4,11 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { ArrowRight, RefreshCw, Wallet } from "lucide-react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-import { fetchBotTrades, fetchPaperDiscretionaryOrders, fetchPortfolioSummary, fetchVerifiedPortfolioHistory, saveLiveCashAllocations, transferPaperCash, transferPaperReserve } from "@/lib/api/botApi";
+import { fetchBotTrades, fetchPaperDiscretionaryOrders, fetchPortfolioSummary, fetchVerifiedPortfolioHistory, fundPaperReserve, saveLiveCashAllocations, transferPaperCash, transferPaperReserve } from "@/lib/api/botApi";
 import { openFinnContext } from "@/lib/finnCommandSearch";
 import { formatCurrency, formatDateTime, formatNumber } from "@/lib/i18n";
 import { PORTFOLIO_TIME_OPTIONS } from "@/lib/portfolioDateTime.mjs";
+import { normalizePaperBudgetAmount } from "@/lib/paperBudgetAmount.mjs";
 import { useTranslation } from "@/app/providers/I18nProvider";
 
 const known = (value) => value !== null && value !== undefined && Number.isFinite(Number(value));
@@ -37,6 +38,10 @@ function PortfolioPageInner() {
   const [reserveTransferSaving, setReserveTransferSaving] = useState(false);
   const [reserveTransferError, setReserveTransferError] = useState(null);
   const reserveTransferKey = useRef(null);
+  const [reserveFunding, setReserveFunding] = useState({ direction: "add", amount: "", confirmed: false });
+  const [reserveFundingSaving, setReserveFundingSaving] = useState(false);
+  const [reserveFundingError, setReserveFundingError] = useState(null);
+  const reserveFundingKey = useRef(null);
   const [manualTrades, setManualTrades] = useState([]);
 
   const money = useCallback((value) => known(value)
@@ -221,6 +226,30 @@ function PortfolioPageInner() {
     }
   };
 
+  const saveReserveFunding = async (event) => {
+    event.preventDefault();
+    const amountText = normalizePaperBudgetAmount(reserveFunding.amount);
+    if (!amountText || !reserveFunding.confirmed) {
+      setReserveFundingError(copy.paperFundingInvalid || "Controleer het bedrag en bevestig de Paper-budgetwijziging.");
+      return;
+    }
+    setReserveFundingSaving(true);
+    setReserveFundingError(null);
+    try {
+      reserveFundingKey.current ||= crypto.randomUUID();
+      // Keep cents exact in JSON; the server checks available reserve on remove.
+      await fundPaperReserve({ direction: reserveFunding.direction, amount_eur: amountText,
+        idempotency_key: reserveFundingKey.current });
+      reserveFundingKey.current = null;
+      setReserveFunding({ direction: "add", amount: "", confirmed: false });
+      await load();
+    } catch (cause) {
+      setReserveFundingError(cause?.message || copy.paperFundingFailed || "Paper-budget aanpassen is niet gelukt.");
+    } finally {
+      setReserveFundingSaving(false);
+    }
+  };
+
   return (
     <main className="mx-auto w-full max-w-7xl space-y-8 px-4 py-8 pb-28 text-slate-900 dark:text-slate-100 sm:px-6 lg:px-8">
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -252,7 +281,30 @@ function PortfolioPageInner() {
         <h2 className="text-lg font-semibold">{copy.paperReserveTitle || "Vrije Paper-reserve"}</h2>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{copy.paperReserveHelp || "Vrije kas voor losse Paper-orders. Botbudgetten zijn limieten en tellen niet als cash."}</p>
         <p className="mt-3 text-xl font-bold tabular-nums">{money(global.paper_reserve_cash_eur)}</p>
-        {bots.length > 0 && <form onSubmit={saveReserveTransfer} className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end">
+        <form onSubmit={saveReserveFunding} className="mt-4 grid gap-3 border-b border-slate-200 pb-5 dark:border-slate-800 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+          <label className="text-sm font-medium">{copy.paperFundingDirection || "Paper-budget"}
+            <select value={reserveFunding.direction} onChange={(event) => { reserveFundingKey.current = null; setReserveFunding((current) => ({ ...current, direction: event.target.value, confirmed: false })); setReserveFundingError(null); }}
+              className="mt-1 block w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 dark:border-slate-700">
+              <option value="add">{copy.paperFundingAdd || "Virtuele kas toevoegen"}</option>
+              <option value="remove">{copy.paperFundingRemove || "Vrije virtuele kas verminderen"}</option>
+            </select>
+          </label>
+          <label className="text-sm font-medium">{copy.paperTransferAmount || "Bedrag (€)"}
+            <input required type="text" inputMode="decimal" value={reserveFunding.amount}
+              onChange={(event) => { reserveFundingKey.current = null; setReserveFunding((current) => ({ ...current, amount: event.target.value, confirmed: false })); setReserveFundingError(null); }}
+              className="mt-1 block w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 dark:border-slate-700" />
+          </label>
+          <button type="submit" disabled={!reserveFunding.confirmed || reserveFundingSaving}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{copy.paperFundingSubmit || "Budget aanpassen"}</button>
+          <label className="flex items-center gap-2 text-sm sm:col-span-3">
+            <input type="checkbox" checked={reserveFunding.confirmed}
+              onChange={(event) => setReserveFunding((current) => ({ ...current, confirmed: event.target.checked }))} />
+            {copy.paperFundingConfirm || "Ik bevestig dat dit alleen virtueel Paper-budget is en geen echt geld."}
+          </label>
+          {reserveFundingError && <p role="alert" className="text-sm text-red-700 sm:col-span-3">{reserveFundingError}</p>}
+        </form>
+        {bots.length > 0 && <h3 className="mt-5 text-sm font-semibold">{copy.paperTransferTitle || "Bestaande Paper-kas overboeken"}</h3>}
+        {bots.length > 0 && <form onSubmit={saveReserveTransfer} className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end">
           <label className="text-sm font-medium">{copy.paperReserveDirection || "Richting"}
             <select value={reserveTransfer.direction} onChange={(event) => { reserveTransferKey.current = null; setReserveTransfer((current) => ({ ...current, direction: event.target.value, confirmed: false })); }}
               className="mt-1 block w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 dark:border-slate-700">

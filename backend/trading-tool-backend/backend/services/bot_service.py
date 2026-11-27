@@ -991,6 +991,38 @@ class BotService:
         return {"ok": True, **result, "amount_eur": float(amount),
                 "bot_id": bot_id, "direction": direction}
 
+    async def fund_paper_reserve(
+        self, *, user_id: int, direction: str,
+        amount_eur: Decimal, idempotency_key: str,
+    ) -> dict:
+        """Set owner-controlled virtual Paper cash outside bot budgets."""
+        from backend.infrastructure.repositories.paper_reserve_repository import PaperReserveRepository
+        try:
+            result = await PaperReserveRepository(self.session).fund(
+                user_id=user_id, direction=direction,
+                amount_eur=Decimal(str(amount_eur)),
+                idempotency_key=idempotency_key,
+            )
+            await self.session.commit()
+        except ValueError as exc:
+            await self.session.rollback()
+            messages = {
+                "paper_funding_direction_invalid": "Kies een geldige Paper-budgetmutatie.",
+                "paper_funding_amount_invalid": "Gebruik een positief bedrag in hele eurocenten.",
+                "paper_funding_key_invalid": "De budgetreferentie is ongeldig.",
+                "paper_funding_key_reused": "Deze referentie hoort bij een andere budgetmutatie.",
+                "paper_funding_insufficient_reserve": "De vrije Paper-reserve is te laag.",
+                "paper_funding_storage_overflow": "Dit bedrag past niet in de Paper-kasadministratie.",
+            }
+            raise HTTPException(409, messages.get(str(exc), "Paper-budgetmutatie geweigerd.")) from exc
+        if not result["replayed"]:
+            try:
+                await asyncio.to_thread(sync_snapshot_all_for_user, user_id)
+            except Exception:
+                logger.exception("Paper snapshot after reserve funding failed for user=%s", user_id)
+        return {"ok": True, **result, "amount_eur": float(amount_eur),
+                "direction": direction, "currency": "EUR", "virtual_only": True}
+
     async def update_bot_config(self, bot_id: int, payload: BotConfigUpdateSchema, user_id: int) -> dict:
         # Match the order-submission lock order. History and validation must
         # observe any sending intent committed before this update can proceed.
