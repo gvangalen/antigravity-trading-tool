@@ -4,6 +4,35 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: historische tijdzoneaanvulling in de actieve leesroute (27 november 2026)
+
+Phase: `PR_CI_RUNNING`. Branch `codex/finn-reflection-timezone-runtime-20261127`,
+producthead `ef8f98f7ede57e1280c5040cd19616a52890530e`,
+[PR #1411](https://github.com/gvangalen/antigravity-trading-tool/pull/1411).
+Onafhankelijke ingelogde QA op live `3eb267b76d5b9e4a0ef336b8bd4460031d947ba0`
+las tweemaal de juiste AAPL-week 9–15 november en de exitreden eerste doel,
+maar gaf de geregistreerde sluiting niet afzonderlijk in CET. Oorzaak:
+`_minimal_read_answers_enabled()` selecteert voor deze read-only coachbeurt
+`_minimal_read_answer`; deze route sloeg de vorige tijdzoneaanvulling in de
+algemene antwoordverifier over. De nieuwe kandidaat roept de bestaande
+eigenaargebonden, fail-closed aanvulling aan op de actieve route na de
+bron-, entiteit-, prijs- en contractchecks. Het gewijzigde runtimegedrag is
+nog niet live geaccepteerd.
+
+De lokale regressie gebruikt exact de browserprompt en twee UTC-antwoorden;
+zij onderscheidt een beslissing om 14:59 UTC van een later geregistreerde
+sluiting en verifieert ontbreken en verkeerde koppeling van bronnen. Gerichte
+suite `68 passed`. Volledige backend `5671 passed, 7 skipped` (log SHA-256
+`daa701b9fcab8249ddd9a1f332637fbf749c77e0220b53a4d762ab7d2fab439f`).
+Echte-providerselector development `20/20` (artifact SHA-256
+`e39a4b74bef1afa9ba6639020e44cc20f294a99f1747fbde65fbe73675d7e8ee`)
+en regression `109/109` (SHA-256
+`71c373d0d4aa5b0610db94a9d35f41d1c5aa43c1ecc20fd80b9f9ae4039893c7`),
+zonder provider-, schema-, parse-, validatie- of timeoutfouten. Onafhankelijke
+QA- en Security-codebeoordelingen: geen blocker. Er zijn geen actiecontracten,
+bots, orders of frontendflows gewijzigd. Finale PR-CI, main-CI, Auto Deploy,
+publieke SHA-pariteit en de ingelogde herhaalproef staan nog open.
+
 ## FINN 3.0: bronmomenten historische AAPL-weekreflectie in gebruikerstijdzone (27 november 2026)
 
 Phase: `PR_CI_RUNNING`. Branch `codex/finn-reflection-timezone-20261127`,
