@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from time import monotonic
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Tuple
@@ -782,9 +782,31 @@ class FinnV2ToolExecutionService:
                 selected_asset = asset_state["asset"]
             return await self.report_adapter.execute(user_id=user_id, asset=selected_asset, selector=selector)
         if tool_name == "read_review_history":
-            message_review_id = self.review_adapter.requested_review_id(getattr(run, "message", ""))
-            verified_review_id = selector.get("_verified_review_id")
+            message = str(getattr(run, "message", "") or "")
+            message_review_id = self.review_adapter.requested_review_id(message)
+            asks_weekly_reflection = any(
+                not re.match(r"\s*#\s*\d", message[subject.end():])
+                for subject in ReviewToolAdapter.positive_week_subjects(message)
+            )
             feed_context = getattr(run, "client_context_json", {}) or {}
+            selected_week = None
+            if feed_context.get("page") == "/report":
+                try:
+                    candidate = date.fromisoformat(str(feed_context.get("reflection_week") or ""))
+                    if candidate.weekday() == 0:
+                        selected_week = candidate
+                except ValueError:
+                    pass
+            invalid_requested_week = False
+            try:
+                requested_week_start = self.review_adapter.requested_week_start(
+                    message, reference_year=selected_week.year if selected_week else None)
+            except ValueError:
+                requested_week_start = None
+                invalid_requested_week = True
+            verified_review_id = selector.get("_verified_review_id")
+            if asks_weekly_reflection and not invalid_requested_week and requested_week_start is None:
+                requested_week_start = selected_week
             feed_item_id = str(feed_context.get("feed_item_id") or "").strip()
             if not feed_item_id and getattr(run, "conversation_id", None):
                 from backend.infrastructure.repositories.finn_v2_conversation_repository import FinnV2ConversationRepository
@@ -810,9 +832,9 @@ class FinnV2ToolExecutionService:
                 user_id=user_id, asset=selector.get("asset"), selector=selector,
                 selected_feed_decision_id=selected_decision_id,
                 selected_feed_snapshot=selected_feed_snapshot,
-                include_weekly_reflection=bool(re.search(
-                    r"weekreflectie|wekelijkse reflectie|weekly reflection|wochenreflexion",
-                    str(getattr(run, "message", "") or ""), re.I)),
+                include_weekly_reflection=asks_weekly_reflection and not invalid_requested_week,
+                requested_week_start=requested_week_start,
+                invalid_requested_week=invalid_requested_week,
                 review_id=message_review_id or (
                     verified_review_id if type(verified_review_id) is int and verified_review_id > 0 else None
                 ),

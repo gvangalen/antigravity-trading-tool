@@ -251,6 +251,12 @@ class FinnResponsesReadExecutor:
                 "and month merely because the user's question omitted the year."
             )
         if call.name == "get_closed_trade_review":
+            weekly = next((
+                (item.get("data") or {}).get("weekly_reflection")
+                for item in results if item.get("scope") == "read_review_history"
+                and isinstance(item.get("data"), dict)
+                and isinstance((item.get("data") or {}).get("weekly_reflection"), dict)
+            ), None)
             review_rows = [
                 row for item in results if item.get("scope") == "read_review_history"
                 for row in ((item.get("data") or {}).get("closed_trades") or [])
@@ -271,6 +277,13 @@ class FinnResponsesReadExecutor:
                 "distinct; never infer a conversion or full plan adherence from them. "
                 "The separate owner-scoped portfolio read gives current balances and exposure; "
                 "do not present them as balances at the historical exit time."
+                + (
+                    f" The selected saved weekly reflection covers {weekly['week_start']} through "
+                    f"{weekly['week_end']}. Name that period when discussing it; do not replace it "
+                    "with a newer week. Its observed_patterns are attention themes, not proof "
+                    "of full plan adherence."
+                    if weekly and weekly.get("week_start") and weekly.get("week_end") else ""
+                )
                 + (
                     " Multiple confirmed lessons are present without a verified review ID. "
                     "Do not treat one as 'this lesson': identify each by review ID or ask which review the user means."

@@ -212,6 +212,20 @@ test("sending from the visible bot ignores a stale chat asset and prior bot flow
   assert.equal(noBot.symbol, "BTC");
 });
 
+test("the selected reflection week outranks a stale chat week", () => {
+  const current = resolveFinnSubmissionContext({
+    pathname: "/report",
+    livePageContext: { page: "/report", reflection_week: "2026-11-09" },
+    latestAssistantState: { current_flow: "read_review_history", reflection_week: "2026-11-16" },
+  });
+  assert.equal(current.reflection_week, "2026-11-09");
+  const elsewhere = resolveFinnSubmissionContext({
+    pathname: "/portfolio", livePageContext: { page: "/portfolio" },
+    latestAssistantState: { current_flow: "read_review_history", reflection_week: "2026-11-09" },
+  });
+  assert.equal(elsewhere.reflection_week, undefined);
+});
+
 test("a selected feed card keeps its own asset on another bot page", () => {
   const submitted = resolveFinnSubmissionContext({
     pathname: "/bot",

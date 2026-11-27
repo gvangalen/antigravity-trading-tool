@@ -1,5 +1,6 @@
 import asyncio
 from datetime import date, datetime, timezone
+import pytest
 
 from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
@@ -12,6 +13,37 @@ def test_saved_week_reflection_question_selects_owner_review_read():
     )
     assert "review" in facts.explicit_entities
     assert FinnV2OperationClassificationService()._deterministic_graph_read_operation(facts) == "read_review_history"
+
+
+def test_explicit_reflection_week_does_not_borrow_the_trade_date():
+    question = ("Bespreek mijn afgesloten AAPL Paper-trade van 12 november en de "
+                "opgeslagen weekreflectie van 9–15 november 2026.")
+    assert ReviewToolAdapter.requested_week_start(question) == date(2026, 11, 9)
+    assert ReviewToolAdapter.requested_week_start(
+        "Bespreek de weekreflectie van 2026-11-09") == date(2026, 11, 9)
+    with pytest.raises(ValueError, match="reflection_week_invalid"):
+        ReviewToolAdapter.requested_week_start(
+            "Bespreek de weekreflectie van 10–15 november 2026")
+    with pytest.raises(ValueError, match="reflection_week_invalid"):
+        ReviewToolAdapter.requested_week_start(
+            "Bespreek de weekreflectie van 2026-11-10")
+    assert ReviewToolAdapter.requested_week_start(
+        "Bespreek de weekreflectie van 9–15 november", reference_year=2026) == date(2026, 11, 9)
+    assert ReviewToolAdapter.requested_week_start(
+        "Bespreek mijn reflectie van 9–15 november", reference_year=2026) == date(2026, 11, 9)
+    assert ReviewToolAdapter.requested_week_start(
+        "Discuss the weekly reflection from 9–15 November 2026") == date(2026, 11, 9)
+    assert ReviewToolAdapter.requested_week_start(
+        "Bespreek de weekreflectie van 9 tot 15 nov.", reference_year=2026) == date(2026, 11, 9)
+    assert ReviewToolAdapter.requested_week_start(
+        "Bespreek de weekreflectie van 30 nov – 6 dec 2026") == date(2026, 11, 30)
+    with pytest.raises(ValueError, match="reflection_week_invalid"):
+        ReviewToolAdapter.requested_week_start("Bespreek de weekreflectie van 9–15 november")
+    with pytest.raises(ValueError, match="reflection_week_invalid"):
+        ReviewToolAdapter.requested_week_start(
+            "Bespreek deze reflectie van maandag 10 november 2026", reference_year=2026)
+    assert not ReviewToolAdapter.mentions_weekly_reflection(
+        "Bespreek dossier #456, niet de weekreflectie")
 
 
 def test_owner_saved_week_reflection_is_read_with_review_history():
@@ -53,6 +85,50 @@ def test_owner_saved_week_reflection_is_read_with_review_history():
     assert weekly["trades"] == 1
     assert weekly["observed_patterns"] == [{"theme": "risk", "count": 1}]
     assert "raw_instruction" not in str(result["data"])
+
+
+def test_requested_historical_week_is_owner_scoped_and_never_falls_back_to_latest():
+    class Empty:
+        async def get_latest_bot_decisions_for_owner(self, _user_id):
+            return []
+        async def get_bot_history(self, _user_id, _days):
+            return []
+        async def recent(self, _user_id, *, days, limit, symbol=None):
+            return {"status": "no_data", "coverage": {"trades": 0,
+                "analyzed": 0, "pending": 0, "unavailable": 0}, "reviews": []}
+
+    class Session:
+        def __init__(self, present):
+            self.present = present
+        async def execute(self, sql, params):
+            assert params == {"user_id": 42, "week_start": date(2026, 11, 9)}
+            assert "week_start=:week_start" in str(sql)
+            class Result:
+                def __init__(self, present):
+                    self.present = present
+                def mappings(self):
+                    return self
+                def first(self):
+                    return ({"week_start": date(2026, 11, 9),
+                             "week_end": date(2026, 11, 16),
+                             "generated_at": datetime(2026, 11, 16, 5, 15, tzinfo=timezone.utc),
+                             "summary": {"trades": 1, "plans": 1, "analyzed": 1}}
+                            if self.present else None)
+            return Result(self.present)
+
+    from backend.domain.finn_v2_source_registry import FinnV2InformationSourceRegistry
+    for present in (True, False):
+        adapter = object.__new__(ReviewToolAdapter)
+        adapter.session = Session(present)
+        adapter.repository = Empty()
+        adapter.bot_service = Empty()
+        adapter.closed_trades = Empty()
+        adapter.sources = FinnV2InformationSourceRegistry()
+        result = asyncio.run(adapter.execute(
+            user_id=42, include_weekly_reflection=True,
+            requested_week_start=date(2026, 11, 9)))
+        weekly = result["data"].weekly_reflection
+        assert (weekly["week_start"] if weekly else None) == ("2026-11-09" if present else None)
 
 
 def test_referenced_bot_minute_reads_owner_scoped_historical_reason():
