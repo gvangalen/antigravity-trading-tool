@@ -146,9 +146,19 @@ def render_source_moment_partial(
     setup_market_id = (setup or {}).get("market_id")
     same_market = (type(bot_market_id) is int and bot_market_id > 0
                    and bot_market_id == setup_market_id)
+    market_id_conflict = (type(bot_market_id) is int and bot_market_id > 0
+                          and type(setup_market_id) is int and setup_market_id > 0
+                          and bot_market_id != setup_market_id)
+    parent_linked = bool(selected_bot is not None and setup is not None
+                         and portfolio_parent_consistent
+                         and not market_id_conflict
+                         and (not bot_pair or not setup_pair or bot_pair == setup_pair))
     verified_bot_plan = bool(selected_bot is not None and setup is not None
                              and portfolio_parent_consistent
                              and bot_pair and setup_pair == bot_pair and same_market)
+    unbound_parent_plan = bool(parent_linked and not verified_bot_plan
+                               and not bot_pair and not setup_pair
+                               and bot_market_id is None and setup_market_id is None)
     linked_pairs = {
         str(row.get("trading_pair") or row.get("pair") or "").upper()
         for row in linked
@@ -251,16 +261,28 @@ def render_source_moment_partial(
             _, score = next(iter(values))
             lines.append(f"De gelezen paaranalyse voor {pair} heeft benchmarkscore {score}/100.")
             source_fact_count += 1
-    if verified_bot_plan:
+    if verified_bot_plan or unbound_parent_plan:
         low = _score(setup.get("min_benchmark_score"))
         high = _score(setup.get("max_benchmark_score"))
         if low is not None and high is not None:
-            lines.append(
-                f"Bot #{selected_bot['bot_id']} hoort bij {bot_pair}; de gekoppelde setup "
-                f"vereist voor dat handelspaar een benchmarkscore tussen {low} en {high}."
-            )
+            if verified_bot_plan:
+                lines.append(
+                    f"Bot #{selected_bot['bot_id']} hoort bij {bot_pair}; de gekoppelde setup "
+                    f"vereist voor dat handelspaar een benchmarkscore tussen {low} en {high}."
+                )
+            else:
+                timeframe = str(setup.get("timeframe") or "").strip()
+                period = f" op {timeframe}" if timeframe else ""
+                lines.append(
+                    f"Bot #{selected_bot['bot_id']} is via zijn opgeslagen strategie gekoppeld "
+                    f"aan een {bot_asset}-setup{period}. In die setup staat een benchmarkscore "
+                    f"tussen {low} en {high}. Het exacte handelspaar of markt-ID van deze "
+                    "botconfiguratie is niet bevestigd; ik kan niet bevestigen dat de bot "
+                    "deze grens voor een specifiek handelspaar toepast."
+                )
             source_fact_count += 1
-            lines.append("Die grens hoort bij dit botplan. Een handmatige preview kan een andere setup en dus andere voorwaarden gebruiken.")
+            if verified_bot_plan:
+                lines.append("Die grens hoort bij dit botplan. Een handmatige preview kan een andere setup en dus andere voorwaarden gebruiken.")
     if verified_bot_plan:
         lines.append("Een botplan beoordeelt daarnaast zijn eigen instapvoorwaarden; een rapportscore is geen koopopdracht.")
 
@@ -306,7 +328,10 @@ def render_source_moment_partial(
 
     if lines and len(pairs) == 1 and asks_bot and asks_position and not (asks_report or asks_scores):
         pair = next(iter(pairs))
-        lines.append(f"{pair} is het genoemde analysepaar; de botvoorwaarden horen bij het eigen botpaar.")
+        if unbound_parent_plan:
+            lines.append(f"{pair} is het genoemde analysepaar; voor deze bot is geen eigen handelspaar geverifieerd.")
+        else:
+            lines.append(f"{pair} is het genoemde analysepaar; de botvoorwaarden horen bij het eigen botpaar.")
 
     if require_facts and source_fact_count == 0:
         return None
@@ -329,13 +354,17 @@ def render_source_moment_partial(
     missing = []
     if asks_report and not reports:
         missing.append("het dagrapport")
-    if asks_bot and not verified_bot_plan:
+    if asks_bot and not (verified_bot_plan or unbound_parent_plan):
         missing.append("de koppeling tussen bot en plan")
+    elif asks_bot and unbound_parent_plan:
+        missing.append("de exacte uitvoeringsmarkt van de bot")
     for symbol in sorted(named_position_assets - confirmed_position_assets):
         missing.append(f"de {symbol}-positie")
     if missing:
         lines.append("Ik kon " + ", ".join(missing) + " niet eenduidig bevestigen uit de gelezen gegevens.")
-        if asks_bot and not pair_bound and requested_bot_ids:
+        if asks_bot and unbound_parent_plan:
+            lines.append("Controleer het handelspaar in de botconfiguratie voordat je deze voor uitvoering gebruikt.")
+        elif asks_bot and not pair_bound and requested_bot_ids:
             bot_id = next(iter(requested_bot_ids))
             if bot_pair and len(pairs) == 1:
                 lines.append(f"Bot #{bot_id} is gelezen voor {bot_pair}; wil je de voorwaarden voor dat handelspaar apart laten controleren?")

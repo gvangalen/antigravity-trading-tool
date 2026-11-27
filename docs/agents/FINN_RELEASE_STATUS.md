@@ -4,6 +4,33 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: opgeslagen voorwaarden bij oude BTC-bot (27 november 2026)
+
+Phase: `BUILD_LOCAL_CANDIDATE`. Branch
+`codex/finn-mixed-coach-legacy-market-20261127` op live/main
+`8336fab050e73b6169bb280c25d59b69a8309591`. Onafhankelijke ingelogde
+QA gaf op die SHA `NOT_ACCEPTED` voor de gemengde BTC/EUR-, BTC-bot-129- en
+ETH-positievraag: in twee nieuwe gesprekken, ook na refresh, noemde FINN
+de bot actief en beide ETH-bots op nul, maar liet hij de gevraagde
+planvoorwaarden weg. Er was geen paarverwisseling of accountmutatie.
+
+Read-only QA in Mijn plan zag dat bot 129 via een strategie met naam
+“BTC score 61–75 | Paper €100” aan de setup “BTC long — hogere
+benchmarkscore (concept)” hangt. De setup toont BTC, 4H en de categorie
+“De markt trekt aan”, maar geen exact handelspaar of markt-ID in de UI.
+Een afzonderlijke FINN-koppelingsvraag gaf slechts een onvolledig antwoord.
+De cijfers in de naam zijn op zichzelf geen uitvoeringsregel.
+
+De lokale herstelkandidaat toont bij precies een eigenaargebonden,
+structureel gekoppelde oude bot en setup zonder paar én markt-ID de
+opgeslagen numerieke setup-scoregrenzen, terwijl hij expliciet zegt dat
+de uitvoeringsmarkt en toepassing door de bot niet zijn bewezen.
+Bots of setups met een tegenstrijdig paar of markt-ID blijven afgeschermd.
+Geen bot-, setup-, actie- of orderrecord wordt gewijzigd. De betrokken
+Responses- en bronweergavesuites zijn lokaal `1102 passed`; volledige
+backend, geïsoleerde actiematrix, echte-providerselector, onafhankelijke
+codebeoordeling, CI, deploy en live hertest staan nog open.
+
 ## FINN 3.0: gemengde bot-, positie- en planvraag (27 november 2026)
 
 Phase: `BUILD_GATES_PASSED_STATUS_CI_PENDING`. Branch `codex/finn-mixed-coach-plan-20261127`
