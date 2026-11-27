@@ -17,6 +17,25 @@ _PAIR = re.compile(r"\b([A-Z][A-Z0-9]*)/(EUR|USD|USDT)\b", re.I)
 _BOT_ID = re.compile(r"\bbot\s*#?\s*(\d+)\b", re.I)
 
 
+def is_mixed_bot_position_question(question: str) -> bool:
+    """A named bot and another asset's position need one bounded source answer."""
+    assets = mentioned_catalog_symbols(question)
+    bot_assets = {
+        match.group(1).upper() for match in re.finditer(
+            r"\b([A-Z]{2,10})[-\s]+bot\s*#?\s*\d+\b", question, re.I,
+        )
+    }
+    position_assets = {
+        match.group(1).upper() for match in re.finditer(
+            r"\b([A-Z]{2,10})[-\s]+(?:Paper[-\s]+)?(?:positie|position)\b",
+            question, re.I,
+        )
+    }
+    return bool(_BOT_ID.search(question) and bot_assets & assets
+                and position_assets & assets and len(assets) > 1
+                and any(bot != position for bot in bot_assets for position in position_assets))
+
+
 def _quantity(value: Any) -> str | None:
     try:
         number = Decimal(str(value))
