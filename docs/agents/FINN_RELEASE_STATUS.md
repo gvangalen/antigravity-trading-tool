@@ -4,6 +4,32 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: gemengde bot-, positie- en planvraag (27 november 2026)
+
+Phase: `BUILD_LOCAL_CANDIDATE`. Branch `codex/finn-mixed-coach-plan-20261127`
+op main `98169a3fb4e893f81668d994ca2ebb13ce6a167e`. Een ingelogde,
+alleen-lezende browserproef in het Paper Test-account liet zien dat FINN bij
+de vraag over BTC/EUR, BTC-bot 129 en de open ETH-positie de paren niet meer
+verwisselt en de ETH-nulpositie noemt, maar de gevraagde planvoorwaarden
+weglaat. De gekozen portefeuilleleesroute bevat de botstatus en positie,
+maar geen scoregrenzen of geverifieerd botpaar.
+
+De lokale kandidaat vervolgt deze read-only route uitsluitend vanuit de
+eigenaargebonden Paper-portefeuille met de exacte bot-, setup- en
+strategie-ID. Het antwoord toont de scoregrenzen alleen wanneer de nieuw
+gelezen bot en setup dezelfde parent en hetzelfde eigen handelspaar hebben.
+BTC/EUR en de BTC/USDT-botvoorwaarden blijven afzonderlijk; onzekere of
+tegenstrijdige koppelingen blijven onbekend. Er is geen actie- of
+ordercontract aangepast.
+
+Gerichte runtimesuites: `1100 passed`; volledige backend: `5627 passed,
+7 skipped`. De lokale worker-actiecontractmatrix en echte-providerselector
+zijn op deze werkplek nog niet uitgevoerd: de werkboom heeft geen lokale
+FINN-secretconfiguratie, en de bestaande lokale worker/server draaien vanuit
+een andere checkout. Deze kandidaat is daarom nog niet vrijgegeven voor
+merge, deploy of onafhankelijke live QA. CI, publieke SHA-pariteit en
+definitief QA-verdict staan open.
+
 ## FINN 3.0: laatst beschikbare marktcontext bij assetbrede Paper-Hold (27 november 2026)
 
 Phase: `QA_ACCEPTED_SCOPED`. Branch `codex/finn-assetwide-quote-20261127`

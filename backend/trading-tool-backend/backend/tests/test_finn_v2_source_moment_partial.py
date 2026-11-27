@@ -55,7 +55,7 @@ def _evidence():
             "setup_id": 12, "is_live": False,
         }},
         {"scope": "read_active_setup", "status": "completed", "asset": "BTC", "data": {
-            "setup_id": 12, "symbol": "BTC", "min_benchmark_score": 61,
+            "setup_id": 12, "symbol": "BTC", "pair": "BTC/EUR", "min_benchmark_score": 61,
             "max_benchmark_score": 75,
         }},
         {"scope": "read_asset_scores", "status": "completed", "asset": "BTC", "data": {
@@ -128,7 +128,7 @@ def test_cross_source_contract_gap_recovers_owner_read_partial_answer():
 
     assert answer.status == "completed", (answer.reason, answer.rejection_details)
     assert "Bot #129" in answer.text
-    assert "gekoppelde plan vereist een benchmarkscore tussen 61 en 75" in answer.text
+    assert "gekoppelde setup vereist voor dat handelspaar een benchmarkscore tussen 61 en 75" in answer.text
     assert "0,00644603 ETH" in answer.text
     assert "BTC/EUR" in answer.text
     assert "rapportmomentopname" not in answer.text
@@ -174,6 +174,61 @@ def test_contract_recovery_does_not_bind_btc_eur_to_btc_usdt_bot():
     assert answer.text.endswith(
         "Bot #129 is gelezen voor BTC/USDT; wil je de voorwaarden voor dat handelspaar apart laten controleren?"
     )
+
+
+def test_mixed_bot_position_reads_other_bot_pair_conditions_separately():
+    question = (
+        "Vergelijk BTC/EUR met mijn open ETH-positie. Wat is de status van mijn "
+        "BTC-bot 129 en welke planvoorwaarden horen bij die bot? Vermeng geen "
+        "verschillende handelspaarbronnen. Lees alleen."
+    )
+    evidence = list(_evidence())
+    linked = next(item for item in evidence if item["scope"] == "read_linked_bot")
+    linked["data"] = {**linked["data"], "pair": "BTC/USDT"}
+    setup = next(item for item in evidence if item["scope"] == "read_active_setup")
+    setup["data"] = {**setup["data"], "pair": "BTC/USDT"}
+    answer = render_source_moment_partial(
+        question=question, evidence=tuple(evidence), require_facts=True,
+    )
+    assert answer is not None
+    assert "Bot #129 hoort bij BTC/USDT" in answer
+    assert "benchmarkscore tussen 61 en 75" in answer
+    assert "BTC/EUR is het genoemde analysepaar" in answer
+    assert "BTC/EUR heeft benchmarkscore 35/100" not in answer
+    prepared = SimpleNamespace(
+        locale="nl", previous_response=None,
+        response=SimpleNamespace(
+            text="BTC/EUR 35 ligt onder de botband 61–75.",
+            tool_trace=({"name": "get_portfolio_and_exposure",
+                         "result": {"results": evidence}},),
+            uses_previous_response=False,
+            turn_contract={**_cross_source_contract(), "question": question},
+        ),
+    )
+    verified = _minimal_read_answer(message=question, prepared=prepared)
+    assert verified.status == "completed", (verified.reason, verified.rejection_details)
+    assert "Bot #129 hoort bij BTC/USDT" in verified.text
+    assert "BTC/EUR 35 ligt onder" not in verified.text
+
+
+def test_mixed_bot_position_does_not_use_changed_portfolio_parent():
+    question = (
+        "Vergelijk BTC/EUR met mijn open ETH-positie. Wat is de status van mijn "
+        "BTC-bot 129 en welke planvoorwaarden horen bij die bot? Lees alleen."
+    )
+    evidence = list(_evidence())
+    portfolio = next(item for item in evidence if item["scope"] == "read_portfolio")
+    portfolio["data"] = {**portfolio["data"], "bots": [
+        *portfolio["data"]["bots"],
+        {"bot_id": 129, "symbol": "BTC", "is_live": False,
+         "setup_id": 99, "strategy_id": 13, "operational_status": "active"},
+    ]}
+    answer = render_source_moment_partial(
+        question=question, evidence=tuple(evidence), require_facts=True,
+    )
+    assert answer is not None
+    assert "benchmarkscore tussen 61 en 75" not in answer
+    assert "koppeling tussen bot en plan niet eenduidig" in answer
 
 
 def test_mixed_bot_position_portfolio_read_answers_known_facts_without_pair_claim():
@@ -566,7 +621,7 @@ def test_saved_report_bot_decision_preserves_clockless_status_and_plan_facts():
     assert "0,00644603 ETH" in answer.text
     assert "Bot #129 heeft volgens de gelezen botstatus de status gepauzeerd" in answer.text
     assert "Het gelezen dagrapport is een opgeslagen momentopname" in answer.text
-    assert "gekoppelde plan vereist een benchmarkscore tussen 61 en 75" in answer.text
+    assert "gekoppelde setup vereist voor dat handelspaar een benchmarkscore tussen 61 en 75" in answer.text
     assert "geen nieuwe koop onderbouwen" in answer.text
     assert "handmatige preview en de bijbehorende setup apart controleer" in answer.text
     assert "10:00 CET" not in answer.text
@@ -732,7 +787,7 @@ def test_partial_explains_bound_setup_threshold_and_known_block_reason():
     answer = render_source_moment_partial(question=QUESTION, evidence=tuple(evidence))
 
     assert "opgeslagen botreden" in answer and "opgeslagen setupvoorwaarden" in answer
-    assert "bot #129 gekoppelde plan vereist een benchmarkscore tussen 61 en 75" in answer
+    assert "gekoppelde setup vereist voor dat handelspaar een benchmarkscore tussen 61 en 75" in answer
     assert "rapportscore is geen koopopdracht" in answer
 
 

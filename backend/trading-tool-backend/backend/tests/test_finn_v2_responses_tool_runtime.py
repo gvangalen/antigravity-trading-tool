@@ -15897,6 +15897,72 @@ def test_named_bot_and_other_open_position_require_owner_portfolio_read(monkeypa
     assert captured["required_read_tool_name"] == "get_portfolio_and_exposure"
 
 
+def test_mixed_bot_position_reads_exact_portfolio_bot_parents(monkeypatch):
+    question = (
+        "Vergelijk BTC/EUR met mijn open ETH-positie. Wat is de status van mijn "
+        "BTC-bot 129 en welke planvoorwaarden horen bij die bot? Vermeng geen "
+        "verschillende handelspaarbronnen. Lees alleen."
+    )
+    @asynccontextmanager
+    async def session_factory():
+        yield SimpleNamespace(commit=AsyncMock())
+
+    selected_calls = []
+
+    class FakeRead:
+        async def __call__(self, call):
+            selected_calls.append(call)
+            if call.name == "get_portfolio_and_exposure":
+                return {"status": "completed", "results": [{
+                    "scope": "read_portfolio", "status": "completed", "data": {"bots": [
+                        {"bot_id": 129, "symbol": "BTC", "is_live": False,
+                         "setup_id": 12, "strategy_id": 13, "operational_status": "active"},
+                        {"bot_id": 301, "symbol": "ETH", "is_live": False,
+                         "position_qty": 0},
+                    ]},
+                }]}
+            assert call.name == "get_active_plan_and_strategy"
+            assert call.inputs == {"setup_id": 12, "strategy_id": 13, "bot_id": 129}
+            assert call.read_tools == ("read_active_setup", "read_linked_bot", "read_bot_status")
+            return {"status": "completed", "results": [
+                {"scope": "read_active_setup", "status": "completed", "asset": "BTC",
+                 "data": {"setup_id": 12, "symbol": "BTC", "pair": "BTC/USDT",
+                          "min_benchmark_score": 61, "max_benchmark_score": 75}},
+                {"scope": "read_linked_bot", "status": "completed", "asset": "BTC",
+                 "data": {"bot_id": 129, "symbol": "BTC", "setup_id": 12,
+                          "strategy_id": 13, "pair": "BTC/USDT", "is_live": False}},
+                {"scope": "read_bot_status", "status": "completed", "asset": "BTC",
+                 "data": {"bot_id": 129, "operational_status": "active", "is_live": False}},
+            ]}
+
+    FakeRead.session_factory = staticmethod(session_factory)
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnV2RuntimeContractRepository.record_responses_progress",
+        AsyncMock(),
+    )
+    fake = FakeResponses(
+        response("mixed-read", calls=[tool_call(
+            "call-portfolio", "get_portfolio_and_exposure", {},
+        )]),
+        response("mixed-answer", text="Ik controleer de gelezen bot en positie."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session_factory=session_factory,
+        user_id=7, run_id="mixed-bot-parent-read", model_led_coach=True,
+    )
+    front.reads = FakeRead()
+    result = asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="BTC",
+        workspace_hints={"page": "/portfolio", "symbol": "BTC"},
+    ))
+    assert [call.name for call in selected_calls] == [
+        "get_portfolio_and_exposure", "get_active_plan_and_strategy",
+    ]
+    scopes = {item["scope"] for item in result.response.tool_trace[0]["result"]["results"]}
+    assert {"read_portfolio", "read_active_setup", "read_linked_bot", "read_bot_status"} <= scopes
+
+
 def test_two_saved_setup_comparison_keeps_inventory_read():
     assert not FinnResponsesFrontDoor._asks_about_mixed_bot_position(
         "Vergelijk mijn opgeslagen BTC-setup en ETH-setup."

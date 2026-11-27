@@ -5332,6 +5332,59 @@ class FinnResponsesFrontDoor:
                     }
                 else:
                     read_result = await self.reads(call)
+                if (is_read_only_turn and mixed_bot_position
+                        and call.name == "get_portfolio_and_exposure"
+                        and call.operation_id is None and not pending_operation):
+                    # The account-wide portfolio establishes the named bot and
+                    # the other asset's position, but does not contain the
+                    # bot's score boundaries or trading pair. Follow only its
+                    # owner-scoped parent IDs; the workspace pair may differ.
+                    bot_refs = {
+                        (asset.upper(), int(bot_id))
+                        for asset, bot_id in re.findall(
+                            r"\b([A-Z]{2,10})[-\s]+bot\s*#?\s*(\d+)\b", message, re.I,
+                        )
+                    }
+                    if len(bot_refs) == 1:
+                        bot_asset, bot_id = next(iter(bot_refs))
+                        portfolio_bots = [
+                            bot for item in read_result.get("results") or []
+                            if isinstance(item, dict)
+                            and item.get("scope") == "read_portfolio"
+                            and item.get("status") == "completed"
+                            and isinstance(item.get("data"), dict)
+                            for bot in item["data"].get("bots") or []
+                            if isinstance(bot, dict)
+                            and bot.get("bot_id") == bot_id
+                            and str(bot.get("symbol") or "").upper() == bot_asset
+                            and bot.get("is_live") is False
+                        ]
+                        identities = {
+                            (bot.get("setup_id"), bot.get("strategy_id"))
+                            for bot in portfolio_bots
+                        }
+                        if len(identities) == 1 and portfolio_bots:
+                            setup_id, strategy_id = next(iter(identities))
+                            if (type(setup_id) is int and setup_id > 0
+                                    and type(strategy_id) is int and strategy_id > 0):
+                                plan_result = await self.reads(replace(
+                                    call, name="get_active_plan_and_strategy",
+                                    inputs={"setup_id": setup_id, "strategy_id": strategy_id,
+                                            "bot_id": bot_id},
+                                    read_tools=("read_active_setup", "read_linked_bot",
+                                                "read_bot_status"),
+                                    evaluation_operation_id=None,
+                                ))
+                                read_result = {
+                                    **read_result,
+                                    "status": (
+                                        "completed" if read_result.get("status") == "completed"
+                                        and plan_result.get("status") == "completed"
+                                        else "partial"
+                                    ),
+                                    "results": [*(read_result.get("results") or []),
+                                                *(plan_result.get("results") or [])],
+                                }
                 if call.operation_id is None and call.evaluation_operation_id and not pending_operation:
                     # An evaluation contract selects the main reasoning path, but a
                     # question can also request independent factual domains. Read
