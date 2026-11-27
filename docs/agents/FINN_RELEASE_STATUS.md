@@ -4,6 +4,41 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: eenduidig opslagmoment voor historische weekreflectie (27 november 2026)
+
+Phase: `LOCAL_GATES_PASSED_PENDING_PR_CI`. Branch
+`codex/finn-reflection-clock-consistency-20261127`; producthead
+`a0a29e8ba929dac7fcca1376adbeb5a139a851ea`.
+Onafhankelijke ingelogde QA op live `18861da0c02782d4971f655a59264256bce90f79`
+zag na refresh de juiste AAPL Paper-exit en week 9–15 november 2026,
+maar in één antwoord stond de weekopslag tegelijk als `05:15 CET` en
+`06:15 CET`. De eerste tijd kwam uit vrije modeltekst; de tweede uit de
+eigenaargebonden opgeslagen bron en was correct.
+
+Deze kandidaat verwijdert uitsluitend onbewezen datum/tijd uit expliciet
+gelabelde modelzinnen over het opslagmoment van een weekreflectie. Hij toont
+het opgeslagen `generated_at` afzonderlijk met de exacte weekperiode in de
+IANA-tijdzone van de gebruiker. De Paper-exit, botbeslissing, FX-bron en
+lesbevestiging blijven afzonderlijk. Ook bij twee in één antwoord genoemde
+weken wordt geen modeltijd aan de verkeerde week toegeschreven. De actieve
+minimal-read-route gebruikt deze helper. Er zijn geen actiecontracten,
+bots, orders of frontendflows gewijzigd.
+
+Gerichte lokale historische-week- en bronantwoordtests: `42 passed`.
+Volledige backend op productcode: `5672 passed, 7 skipped` (log SHA-256
+`154508dcf1be099e91909ede1afdc53849d90b225b532d612e37c66d1ea1cf79`).
+Echte-providerselector development `20/20` (artifact SHA-256
+`ce3f379836b036ce2be042f619c1e94cb7cdf13d86e6275c448fba6126fd2f54`)
+en regression `109/109` (artifact SHA-256
+`49db9e8c2191fea0cd20faa2f2ab98fdeb1c8d257189d87b57ea5b5d5a70471b`),
+zonder provider-, schema-, parse-, validatie- of timeoutfouten. Er zijn geen
+gewijzigde actiecontracten; een worker-actiematrix is voor deze uitsluitend
+read-only tekstcorrectie niet van toepassing. Onafhankelijke QA- en
+Security-codeherreviews op producthead: geen blocker; de eerdere P2 rond
+weekbinding en haakjes is gesloten. PR-CI, main-CI, Auto Deploy, publieke
+SHA-pariteit en onafhankelijke ingelogde hertest staan nog open. Dit is geen
+live acceptatie.
+
 ## FINN 3.0: historische tijdzoneaanvulling in de actieve leesroute (27 november 2026)
 
 Phase: `PR_CI_RUNNING`. Branch `codex/finn-reflection-timezone-runtime-20261127`,
