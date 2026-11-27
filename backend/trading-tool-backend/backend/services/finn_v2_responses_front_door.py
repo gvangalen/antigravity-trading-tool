@@ -1512,8 +1512,9 @@ class FinnResponsesFrontDoor:
                 r"\b(?:geen|niet|zonder|no|not|without)\b[^.!?]{0,48}$",
                 before, re.I,
             ) or re.search(
-                r"^[^.!?]{0,40}\b(?:niet|no|not|uitsluiten|overslaan|"
-                r"buiten\s+beschouwing\s+blijven)\b", after, re.I,
+                r"^(?:[-\s]+(?:account|portefeuille|portfolio|gegevens|data|positie|bot))?"
+                r"\s*(?:niet\b|no\b|not\b|moet\s+buiten\s+beschouwing\s+blijven\b|"
+                r"buiten\s+beschouwing\s+laten\b)", after, re.I,
             ):
                 excluded.add(term)
             else:
@@ -1529,9 +1530,10 @@ class FinnResponsesFrontDoor:
             return "paper"
         if "live" in selected and "paper" not in selected and "live" not in excluded:
             if re.search(
-                r"\b(?:alleen|uitsluitend|enkel|only)\s+Live\b"
-                r"|\b(?:lees|controleer|toon|bekijk|read|show|check)\b"
-                r"[^.!?]{0,32}\bLive[-\s]+(?:account|portefeuille|portfolio)\b",
+                r"(?:^|[.!?]\s*)(?:alleen|uitsluitend|enkel|only)\s+Live\b"
+                r"|\b(?:lees|controleer|toon|bekijk|read|show|check)\s+"
+                r"(?:(?:nu|alleen|uitsluitend)\s+)?(?:mijn|my)\s+"
+                r"Live[-\s]+(?:account|portefeuille|portfolio)\b",
                 message, re.I,
             ):
                 return "live"
