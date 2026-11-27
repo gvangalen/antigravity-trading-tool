@@ -86,3 +86,118 @@ def test_minimal_live_read_corrects_only_week_storage_clock():
         "Lesbevestiging: 13 november 09:07:57 UTC",
     ):
         assert unchanged in answer.text
+
+
+def test_minimal_live_read_completes_repeated_owner_history_reads():
+    prepared = _prepared(text=(
+        "Exitreden: eerste koersdoel. De opgeslagen weekreflectie over 9–15 "
+        "november 2026 registreert één trade. Weekreflectie gegenereerd: "
+        "16 november 2026, 05:15 UTC (06:15 CET, Amsterdamse tijd)."
+    ))
+    prepared.response.tool_trace += prepared.response.tool_trace
+    answer = _minimal_read_answer(
+        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert answer.status == "completed", answer.reason
+    assert "AAPL Paper-trade als gesloten geregistreerd: 2026-11-12 16:02:00 CET" in answer.text
+    assert "Geverifieerd opslagmoment week 2026-11-09 t/m 2026-11-15: 2026-11-16 06:15:00 CET" in answer.text
+
+
+def test_minimal_live_read_rejects_conflicting_repeated_history():
+    prepared = _prepared(text="Exitreden: eerste doel. Weekreflectie opgeslagen: 05:15 UTC.")
+    original = prepared.response.tool_trace[0]
+    conflicting_week = {**original, "result": {"results": [
+        {**original["result"]["results"][0], "data": {
+            **original["result"]["results"][0]["data"],
+            "weekly_reflection": {
+                **original["result"]["results"][0]["data"]["weekly_reflection"],
+                "generated_at": "2026-11-16T06:15:00+00:00",
+            },
+        }},
+    ]}}
+    prepared.response.tool_trace += (conflicting_week,)
+    answer = _minimal_read_answer(
+        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert answer.status == "completed", answer.reason
+    assert "als gesloten geregistreerd" not in answer.text
+    assert "Geverifieerd opslagmoment" not in answer.text
+
+    for identity_change in ({"symbol": "MSFT"}, {"environment": "live"}):
+        conflicting_identity = _prepared(
+            text="Exitreden: eerste doel. Weekreflectie opgeslagen: 05:15 UTC.",
+        )
+        original = conflicting_identity.response.tool_trace[0]
+        changed = {**original, "result": {"results": [
+            {**original["result"]["results"][0], "data": {
+                **original["result"]["results"][0]["data"],
+                "closed_trades": [{
+                    **original["result"]["results"][0]["data"]["closed_trades"][0],
+                    **identity_change,
+                }],
+            }},
+        ]}}
+        conflicting_identity.response.tool_trace += (changed,)
+        answer = _minimal_read_answer(
+            message=QUESTION, prepared=conflicting_identity,
+            user_time_zone="Europe/Amsterdam",
+        )
+        assert answer.status == "completed", answer.reason
+        assert "als gesloten geregistreerd" not in answer.text
+
+    conflicting_outside_week = _prepared(text="Exitreden: eerste doel. Weekreflectie opgeslagen: 05:15 UTC.")
+    original = conflicting_outside_week.response.tool_trace[0]
+    outside = {**original, "result": {"results": [
+        {**original["result"]["results"][0], "data": {
+            **original["result"]["results"][0]["data"],
+            "closed_trades": [{
+                **original["result"]["results"][0]["data"]["closed_trades"][0],
+                "exit_at": "2026-11-05T15:02:00+00:00",
+            }],
+        }},
+    ]}}
+    conflicting_outside_week.response.tool_trace += (outside,)
+    answer = _minimal_read_answer(
+        message=QUESTION, prepared=conflicting_outside_week,
+        user_time_zone="Europe/Amsterdam",
+    )
+    assert answer.status == "completed", answer.reason
+    assert "als gesloten geregistreerd" not in answer.text
+
+    separate_old_dossier = _prepared(text="Exitreden: eerste doel. Weekreflectie opgeslagen: 05:15 UTC.")
+    old_trade = {**original, "result": {"results": [
+        {**original["result"]["results"][0], "data": {
+            **original["result"]["results"][0]["data"],
+            "closed_trades": [{
+                **original["result"]["results"][0]["data"]["closed_trades"][0],
+                "review_id": 1999, "exit_at": "2026-11-05T15:02:00+00:00",
+            }],
+        }},
+    ]}}
+    separate_old_dossier.response.tool_trace += (old_trade,)
+    answer = _minimal_read_answer(
+        message=QUESTION, prepared=separate_old_dossier,
+        user_time_zone="Europe/Amsterdam",
+    )
+    assert answer.status == "completed", answer.reason
+    assert "als gesloten geregistreerd" in answer.text
+    assert "Geverifieerd opslagmoment" in answer.text
+
+    conflicting_trade = _prepared(text="Exitreden: eerste doel. Weekreflectie opgeslagen: 05:15 UTC.")
+    original = conflicting_trade.response.tool_trace[0]
+    other_trade = {**original, "result": {"results": [
+        {**original["result"]["results"][0], "data": {
+            **original["result"]["results"][0]["data"],
+            "closed_trades": [{
+                **original["result"]["results"][0]["data"]["closed_trades"][0],
+                "exit_at": "2026-11-12T15:10:00+00:00",
+            }],
+        }},
+    ]}}
+    conflicting_trade.response.tool_trace += (other_trade,)
+    answer = _minimal_read_answer(
+        message=QUESTION, prepared=conflicting_trade,
+        user_time_zone="Europe/Amsterdam",
+    )
+    assert answer.status == "completed", answer.reason
+    assert "als gesloten geregistreerd" not in answer.text
