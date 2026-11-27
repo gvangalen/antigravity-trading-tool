@@ -2037,8 +2037,14 @@ def _minimal_read_answer(
             question=message, evidence=current_evidence,
             locale=getattr(prepared, "locale", "nl"),
         )
+        # A question with all of its subjects already named is not resolved
+        # by a generic "which asset?" prompt. Treat a partial without any
+        # source-backed fact as unavailable, so the turn cannot look done.
+        partial_has_facts = bool(partial) and not partial.startswith((
+            "Ik kan ", "Welk asset ", "Welk handelspaar ",
+        ))
         contract = getattr(prepared.response, "turn_contract", None)
-        if (partial
+        if (partial_has_facts
                 and current_source_moments_supported(
                     partial, current_evidence, question=message, typed_recovery=True,
                 )

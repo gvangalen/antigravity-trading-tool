@@ -322,6 +322,29 @@ def test_mixed_bot_position_failed_recovery_never_returns_model_pair_mix():
     assert "61–75" not in answer.text
 
 
+def test_mixed_bot_position_without_completed_reads_is_not_marked_answered():
+    question = (
+        "Vergelijk BTC/EUR met mijn open ETH-positie. Wat is de status van mijn "
+        "BTC-bot 129 en welke planvoorwaarden horen bij die bot? Lees alleen."
+    )
+    prepared = SimpleNamespace(
+        locale="nl", previous_response=None,
+        response=SimpleNamespace(
+            text="BTC/EUR 33,3 ligt onder de botband 61–75.",
+            tool_trace=(), uses_previous_response=False,
+            turn_contract={**_cross_source_contract(), "question": question},
+        ),
+    )
+
+    answer = _minimal_read_answer(message=question, prepared=prepared)
+
+    assert answer.status == "unavailable"
+    assert answer.reason == "mixed_bot_position_source_incomplete"
+    assert "bot en Paper-portefeuille afzonderlijk" in answer.text
+    assert "Welk asset" not in answer.text
+    assert "33,3" not in answer.text
+
+
 def test_mixed_bot_position_does_not_infer_zero_from_missing_quantity():
     question = "Vergelijk BTC/EUR met mijn open ETH-positie en BTC-bot 129. Lees alleen."
     evidence = ({"scope": "read_portfolio", "status": "completed", "data": {
