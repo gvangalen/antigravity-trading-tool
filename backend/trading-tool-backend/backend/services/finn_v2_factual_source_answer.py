@@ -52,6 +52,16 @@ def _moment_in_zone(value: Any, user_time_zone: str | None) -> tuple[str | None,
         return None, zone_name
 
 
+def _utc_instant(value: Any) -> datetime | None:
+    try:
+        instant = value if isinstance(value, datetime) else datetime.fromisoformat(
+            str(value).replace("Z", "+00:00")
+        )
+        return instant.astimezone(timezone.utc) if instant.tzinfo is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _number(value: Any) -> str | None:
     try:
         amount = Decimal(str(value))
@@ -214,10 +224,55 @@ def latest_paper_bot_pair(
     return pair if re.fullmatch(rf"{re.escape(symbol)}/(?:EUR|USDT)", pair) else None
 
 
+def asset_wide_paper_hold(
+    result: dict[str, Any], *, symbol: str, bot_id: int | None = None,
+    requested_pair: str | None = None,
+) -> bool:
+    row = latest_paper_hold_decision(
+        result, symbol=symbol, bot_id=bot_id, requested_pair=requested_pair,
+    )
+    return bool(row and requested_pair is None
+                and not str(row.get("pair") or "").strip()
+                and str(row.get("symbol") or "").upper() == symbol)
+
+
+def _asset_wide_quote_context(
+    result: dict[str, Any] | None, *, symbol: str, quote: str,
+    user_time_zone: str,
+) -> str:
+    label = f"{symbol}/{quote}"
+    unavailable = f"Voor {label} kan ik geen gedateerde koersbron verifiëren."
+    market, _ = _read(result or {"results": []}, "read_market_snapshot")
+    if not isinstance(market, dict):
+        return unavailable
+    source_ref = market.get("source_ref")
+    market_id = market.get("market_id")
+    price = _number(market.get("price"))
+    source_at = market.get("source_observed_at_utc")
+    ref_at = source_ref.get("source_observed_at_utc") if isinstance(source_ref, dict) else None
+    at, zone_name = _moment_in_zone(source_at, user_time_zone)
+    source_utc = _utc_instant(source_at)
+    ref_utc = _utc_instant(ref_at)
+    if (market.get("symbol") != symbol or market.get("pair") != label
+            or market.get("quote_currency") != quote
+            or type(market_id) is not int or market_id <= 0
+            or not isinstance(source_ref, dict)
+            or source_ref.get("market_id") != market_id
+            or type(source_ref.get("measurement_id")) is not int
+            or source_ref["measurement_id"] <= 0
+            or source_utc is None or source_utc != ref_utc
+            or not at or not price or Decimal(price) <= 0):
+        return unavailable
+    provider = str(market.get("price_provider") or "onbekend")
+    return (f"De laatst beschikbare {label}-koers als algemene marktcontext is "
+            f"{price} {quote} van {provider}, bronmoment {at} ({zone_name}).")
+
+
 def render_bot_hold_quote_coach(
     decision_result: dict[str, Any], quote_result: dict[str, Any] | None,
     *, symbol: str, bot_id: int | None = None, requested_pair: str | None = None,
     user_time_zone: str | None = None,
+    asset_quote_results: dict[str, dict[str, Any]] | None = None,
 ) -> str:
     """Keep the saved Paper hold, latest pair quote and saved risk separate."""
     try:
@@ -251,7 +306,13 @@ def render_bot_hold_quote_coach(
         quote_result or {"results": []}, symbol=symbol, quote_currency=quote,
         user_time_zone=user_time_zone,
     ) if quote else (f"Deze Paper-bot is voor {symbol} zonder vast handelspaar opgeslagen. "
-                     "Ik kan daarom geen exacte koersbron aan dit botbesluit koppelen."))
+                     "Ik kan daarom geen exacte koersbron aan dit botbesluit koppelen. "
+                     + (" ".join(_asset_wide_quote_context(
+                         asset_quote_results.get(unit), symbol=symbol, quote=unit,
+                         user_time_zone=user_time_zone,
+                     ) for unit in ("EUR", "USDT"))
+                        + " Deze marktmetingen zijn geen bewezen bron van het botbesluit of uitvoeringskoers."
+                        if asset_quote_results is not None else "")))
     profile, _ = _read(decision_result, "read_profile")
     stored = profile.get("trader_profile") if isinstance(profile, dict) else None
     risks = stored.get("risk_profiles") if isinstance(stored, dict) else None

@@ -4,9 +4,52 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: laatst beschikbare marktcontext bij assetbrede Paper-Hold (27 november 2026)
+
+Phase: `LOCAL_BUILD_VALIDATION`. Branch `codex/finn-assetwide-quote-20261127`
+is gebaseerd op de voor de vorige Paper-Hold-route live geverifieerde main-SHA
+`38685f504db72954c971d5b6a595a0413b155c9e`. De onafhankelijke ingelogde
+QA accepteerde de opgeslagen Holdreden, beslis- en risicomomenten in twee nieuwe
+chats, ook na refresh. Daarbij bleef één productgat zichtbaar: de assetbrede
+BTC-bot heeft geen vast paar en de shortcut las daarom helemaal geen koers.
+Dit komt niet door beurssluiting. Een koers van BTC/USDT mag niet achteraf
+als bron van dat botbesluit worden geclaimd, maar is wel als afzonderlijke
+laatst bekende marktmeting te tonen.
+
+Deze kandidaat leest bij precies één eigenaargebonden, paarloze Paper-Hold
+BTC/EUR en BTC/USDT afzonderlijk. Iedere getoonde prijs vereist de juiste
+valuta, markt-ID, measurement-ID en volledige UTC-broninstant; ontbrekende
+of tegenstrijdige bronnen worden per paar als onbekend getoond. Het besluit,
+de twee marktmetingen en de niet-geverifieerde uitvoeringskoers blijven
+expliciet gescheiden. De gebruiker ziet de bronmomenten in diens tijdzone.
+Er is geen actie-, bot-, order- of accountmutatie toegevoegd. Een expliciet
+gevraagd paar, een ambigu besluit en BUY/SELL behouden hun bestaande grens.
+
+Build lokaal: gerichte Responses-toolruntime en bronreferenties `1067 passed`;
+volledige backend `5625 passed, 7 skipped` (log SHA-256
+`2dd3df971eeafd405e185e53aa7c4647c1d7cf6ec8201323dd6103ff223b209d`). De geïsoleerde
+API/worker-actiecontractmatrix slaagde `17/17`,
+geen brokerorders of productieverbindingen (artifact SHA-256
+`995dfbdd2ba005cd559db29c20da271ca4a1636f8b9ee7204e7b62802d79f847`);
+actieadaptertests `28/28` en
+Smart DCA- en kalender-DCA-runtimecontroles groen. Echte providerselector
+development `20/20` en regressie `109/109` zonder provider-, schema-, timeout-
+of validatiefouten (artifacts SHA-256
+`7f16a9079223e33931bdb2b00698be35a44310d94e0bcb02425e6a24ff195275`
+en `4a75a2742011107c32f8fa83a49e7e73cf95e8bb7791743f4abace36969281a4`).
+Onafhankelijke QA-, Security- en Architecture-codebeoordeling
+vonden na de bronfix geen blocker. PR, CI, Auto Deploy, publieke
+SHA-pariteit en ingelogde live acceptatie zijn voor deze kandidaat nog open.
+
 ## FINN 3.0: Paper-Hold met risico en koersbron (27 november 2026)
 
-Phase: `DEPLOY_IDENTITY_VERIFIED_QA_PENDING`. Product-PR
+Phase: `QA_ACCEPTED` voor de afgebakende Paper-Hold-coachroute op publieke SHA
+`38685f504db72954c971d5b6a595a0413b155c9e`. Onafhankelijke ingelogde
+browser-QA zag in twee nieuwe chats, ook na refresh, het opgeslagen Holdbesluit,
+risicoprofiel en veilige vervolgstap zonder account- of orderwijziging. De
+assetbrede bot kreeg terecht geen als besluitbron toegeschreven paarprijs;
+de afzonderlijke laatst bekende marktcontext is de nieuwe kandidaat hierboven.
+Product-PR
 [#1399](https://github.com/gvangalen/antigravity-trading-tool/pull/1399), branch
 `codex/finn-hold-risk-coach-20261126`, implementatiecommit
 `570c9ec4c49079014314b261b60139a4b9c60d7a` op main

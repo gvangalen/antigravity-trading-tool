@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
 from backend.schemas.finn_v2_evidence_schema import MarketSnapshotData
 from backend.services.finn_v2_tool_adapters.display_source_moment import display_source_moment
@@ -30,6 +32,10 @@ class MarketToolAdapter:
         # Receipt/update time does not establish the age of the provider's
         # price. Missing source provenance must stay unknown to the coach.
         observed_at = display_source_moment(getattr(snapshot, "source_observed_at", None))
+        raw_observed_at = getattr(snapshot, "source_observed_at", None)
+        raw_observed_utc = (raw_observed_at.replace(tzinfo=raw_observed_at.tzinfo or timezone.utc)
+                            .astimezone(timezone.utc)
+                            if isinstance(raw_observed_at, datetime) else None)
         payload = {
             "symbol": snapshot.symbol,
             "market_id": market_id,
@@ -39,6 +45,7 @@ class MarketToolAdapter:
                 measurement_id=getattr(snapshot, "id", None),
                 source_observed_at=getattr(snapshot, "source_observed_at", None),
             ),
+            "source_observed_at_utc": raw_observed_utc,
             "price": float(snapshot.price) if snapshot.price is not None else None,
             "quote_currency": (
                 str(snapshot.quote_currency).upper()
