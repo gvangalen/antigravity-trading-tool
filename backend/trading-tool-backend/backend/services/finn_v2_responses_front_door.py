@@ -1500,6 +1500,34 @@ class FinnResponsesFrontDoor:
         )
 
     @staticmethod
+    def _mixed_portfolio_environment(message: str) -> str | None:
+        """Use only an affirmative user choice to fetch a Live account."""
+        selected: set[str] = set()
+        excluded: set[str] = set()
+        for match in re.finditer(r"\b(?:Paper|Live)\b", message, re.I):
+            term = match.group().lower()
+            before = message[max(0, match.start() - 32):match.start()]
+            if re.search(
+                r"\b(?:geen|niet|zonder|no|not|without)\s+"
+                r"(?:(?:mijn|de|het|een|the|my)\s+)?$", before, re.I,
+            ):
+                excluded.add(term)
+            else:
+                selected.add(term)
+        if "paper" in selected and "live" not in selected:
+            return "paper"
+        if "live" in excluded and "live" not in selected:
+            return "paper"
+        if "live" in selected and "paper" not in selected and "live" not in excluded:
+            if re.search(
+                r"\b(?:alleen|uitsluitend|enkel|only|mijn|my)\s+Live\b"
+                r"|\bLive[-\s]+(?:account|portefeuille|portfolio|positie|position|bot)\b",
+                message, re.I,
+            ):
+                return "live"
+        return None
+
+    @staticmethod
     def _follows_account_state_bundle(message: str, previous_response: Mapping[str, Any] | None) -> bool:
         """Recheck the same saved facts when the trader explicitly refers back to them."""
         if not re.search(r"\b(?:dezelfde|hetzelfde|same)\b.{0,50}\b(?:feiten|gegevens|facts|details)\b", message, re.I):
@@ -5285,9 +5313,10 @@ class FinnResponsesFrontDoor:
                         # comparison. Only the user's own environment choice
                         # may narrow the owner-wide portfolio read.
                         portfolio_inputs.pop("environment", None)
-                        if re.search(r"\bLive\b", message, re.I) and not re.search(r"\bPaper\b", message, re.I):
-                            portfolio_inputs["environment"] = "live"
-                    if re.search(r"\bPaper\b", message, re.I) and not re.search(r"\bLive\b", message, re.I):
+                        chosen_environment = self._mixed_portfolio_environment(message)
+                        if chosen_environment:
+                            portfolio_inputs["environment"] = chosen_environment
+                    elif re.search(r"\bPaper\b", message, re.I) and not re.search(r"\bLive\b", message, re.I):
                         portfolio_inputs["environment"] = "paper"
                     call = replace(call, inputs=portfolio_inputs)
                 if call.name == "get_active_plan_and_strategy" and not pending_operation:
@@ -5690,7 +5719,12 @@ class FinnResponsesFrontDoor:
                         key: value for key, value in call.inputs.items()
                         if key == "environment"
                     }
-                    if re.search(r"\bPaper\b", message, re.I) and not re.search(r"\bLive\b", message, re.I):
+                    if mixed_bot_position:
+                        portfolio_inputs = {}
+                        chosen_environment = self._mixed_portfolio_environment(message)
+                        if chosen_environment:
+                            portfolio_inputs["environment"] = chosen_environment
+                    elif re.search(r"\bPaper\b", message, re.I) and not re.search(r"\bLive\b", message, re.I):
                         portfolio_inputs["environment"] = "paper"
                     portfolio_result = await self.reads(replace(
                         call, name="get_portfolio_and_exposure", inputs=portfolio_inputs,

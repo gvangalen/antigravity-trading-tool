@@ -15897,13 +15897,22 @@ def test_named_bot_and_other_open_position_require_owner_portfolio_read(monkeypa
     assert captured["required_read_tool_name"] == "get_portfolio_and_exposure"
 
 
-@pytest.mark.parametrize("model_environment", ["live", "paper"])
-def test_mixed_bot_position_reads_exact_portfolio_bot_parents(monkeypatch, model_environment):
+@pytest.mark.parametrize("model_environment,suffix,expected_inputs", [
+    ("live", "", {}),
+    ("paper", "", {}),
+    ("live", " Lees geen Live-gegevens.", {"environment": "paper"}),
+    ("live", " Alleen Paper, niet Live.", {"environment": "paper"}),
+    ("paper", " Alleen Live, geen Paper.", {"environment": "live"}),
+    ("live", " Vergelijk Paper en Live.", {}),
+])
+def test_mixed_bot_position_reads_exact_portfolio_bot_parents(
+    monkeypatch, model_environment, suffix, expected_inputs,
+):
     question = (
         "Vergelijk BTC/EUR met mijn open ETH-positie. Wat is de status van mijn "
         "BTC-bot 129 en welke planvoorwaarden horen bij die bot? Vermeng geen "
         "verschillende handelspaarbronnen. Lees alleen."
-    )
+    ) + suffix
     @asynccontextmanager
     async def session_factory():
         yield SimpleNamespace(commit=AsyncMock())
@@ -15962,9 +15971,73 @@ def test_mixed_bot_position_reads_exact_portfolio_bot_parents(monkeypatch, model
     assert [call.name for call in selected_calls] == [
         "get_portfolio_and_exposure", "get_active_plan_and_strategy",
     ]
-    assert selected_calls[0].inputs == {}
+    assert selected_calls[0].inputs == expected_inputs
     scopes = {item["scope"] for item in result.response.tool_trace[0]["result"]["results"]}
     assert {"read_portfolio", "read_active_setup", "read_linked_bot", "read_bot_status"} <= scopes
+
+
+@pytest.mark.parametrize("suffix,expected_inputs", [
+    ("", {}),
+    (" Alleen Paper, niet Live.", {"environment": "paper"}),
+])
+def test_mixed_bot_position_secondary_portfolio_read_drops_model_filter(
+    monkeypatch, suffix, expected_inputs,
+):
+    question = (
+        "Vergelijk BTC/EUR met mijn open ETH-positie. Wat is de status van mijn "
+        "BTC-bot 129 en welke planvoorwaarden horen bij die bot? Lees alleen."
+    ) + suffix
+
+    @asynccontextmanager
+    async def session_factory():
+        yield SimpleNamespace(commit=AsyncMock())
+
+    selected_calls = []
+
+    class FakeRead:
+        async def __call__(self, call):
+            selected_calls.append(call)
+            if call.name == "get_profile_portfolio_and_bots":
+                return {"status": "completed", "results": [{
+                    "scope": "read_profile", "status": "completed", "asset": "BTC",
+                    "data": {"focus_asset": "BTC"},
+                }]}
+            assert call.name == "get_portfolio_and_exposure"
+            return {"status": "completed", "results": [{
+                "scope": "read_portfolio", "status": "completed", "data": {"bots": [
+                    {"bot_id": 129, "symbol": "BTC", "is_live": False,
+                     "setup_id": 12, "strategy_id": 13},
+                    {"bot_id": 301, "symbol": "ETH", "is_live": False,
+                     "position_qty": 0},
+                ]},
+            }]}
+
+    FakeRead.session_factory = staticmethod(session_factory)
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnV2RuntimeContractRepository.record_responses_progress",
+        AsyncMock(),
+    )
+    fake = FakeResponses(
+        response("mixed-plan-read", calls=[tool_call(
+            "call-plan", "get_profile_portfolio_and_bots",
+            {"asset": "BTC", "environment": "live"},
+        )]),
+        response("mixed-answer", text="Ik controleer de gelezen bot en positie."),
+    )
+    front = FinnResponsesFrontDoor(
+        client=SimpleNamespace(responses=fake), session_factory=session_factory,
+        user_id=7, run_id="mixed-secondary-portfolio", model_led_coach=True,
+    )
+    front.reads = FakeRead()
+    asyncio.run(front.run(
+        message=question, instructions=front._model_led_instructions("nl"),
+        conversation_context={}, verified_asset="BTC",
+        workspace_hints={"page": "/portfolio", "symbol": "BTC"},
+    ))
+    assert [call.name for call in selected_calls] == [
+        "get_profile_portfolio_and_bots", "get_portfolio_and_exposure",
+    ]
+    assert selected_calls[1].inputs == expected_inputs
 
 
 def test_two_saved_setup_comparison_keeps_inventory_read():
