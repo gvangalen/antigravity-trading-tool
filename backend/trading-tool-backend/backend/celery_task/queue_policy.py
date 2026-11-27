@@ -57,6 +57,7 @@ TASK_QUEUE_ROUTES: Dict[str, str] = {
     "backend.celery_task.user_scoring_sync_task.sync_all_users_scores": "scoring",
     "backend.celery_task.portfolio_snapshot_task.run_portfolio_snapshot": "portfolio",
     "backend.celery_task.portfolio_fx_task.refresh_portfolio_fx_rates": "market_data",
+    "backend.celery_task.btc_watch_wallet_task.refresh_btc_watch_wallets": "market_data",
     "backend.celery_task.setup_task.run_setup_agent_daily": "scoring",
     "backend.celery_task.regime_memory_task.run_regime_memory": "scoring",
     "backend.celery_task.trading_bot_task.run_daily_trading_bot": "execution_critical",

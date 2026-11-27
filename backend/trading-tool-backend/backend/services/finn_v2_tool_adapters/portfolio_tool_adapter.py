@@ -6,6 +6,9 @@ from backend.services.live_portfolio_allocation_service import read_allocations,
 from backend.services.finn_v2_tool_adapters.display_source_moment import amsterdam_source_moment
 from backend.infrastructure.repositories.paper_reserve_repository import PaperReserveRepository
 from backend.services.portfolio_fx_service import price_in_eur
+from backend.services.btc_watch_wallet_service import BtcWatchWalletService
+from backend.schemas.finn_v2_evidence_schema import PortfolioWatchWalletData
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import text
 
 
@@ -63,6 +66,36 @@ class PortfolioToolAdapter:
                 if account else {}
             )
         data = project_portfolio(payload, asset=asset, environment=environment)
+        # Watch-only Bitcoin is a separate real holding. It is never merged
+        # into virtual Paper equity, broker cash, or any bot budget.
+        if getattr(self, "session", None) is not None and requested_asset in (None, "BTC"):
+            watch_rows = await BtcWatchWalletService(self.session).list(user_id)
+            prices = await self.repository.get_valuatable_market_prices(["BTC"]) if watch_rows else {}
+            market = prices.get("BTC") or {}
+            quote = str(market.get("quote_currency") or "").upper()
+            fx = (await self.repository.get_portfolio_fx_rates()).get(quote) if quote in {"USD", "USDT"} else None
+            eur_price, price_at, _, _ = price_in_eur(
+                price=market.get("price"), price_at=market.get("observed_at"),
+                quote_currency=quote, fx=fx,
+            )
+            now = datetime.now(timezone.utc)
+            for row in watch_rows:
+                observed = row.get("fetched_at")
+                if observed and observed.tzinfo is None:
+                    observed = observed.replace(tzinfo=timezone.utc)
+                stale = observed is None or now - observed > timedelta(hours=24)
+                row["stale"] = stale
+                row["valuation_available"] = bool(
+                    row["sync_status"] == "available" and not stale
+                    and row["quantity_btc"] is not None and eur_price is not None
+                )
+                row["position_value_eur"] = (
+                    float(row["quantity_btc"]) * eur_price if row["valuation_available"] else None
+                )
+                row["price_as_of"] = price_at if row["valuation_available"] else None
+            data.watch_wallets = [PortfolioWatchWalletData.parse_obj(row) for row in watch_rows]
+            if watch_rows:
+                data.covered_scopes.append("watch_only_btc_self_custody")
         summary = {
             "title": "portfolio",
             "total_equity": data.global_.total_equity,
@@ -70,12 +103,22 @@ class PortfolioToolAdapter:
             "requested_asset": requested_asset,
             "read_at_amsterdam": amsterdam_source_moment(data.read_at),
             "valuation_as_of_amsterdam": amsterdam_source_moment(data.valuation_as_of),
+            "watch_wallet_count": len(data.watch_wallets),
         }
+        wallet_observations = [wallet.fetched_at for wallet in data.watch_wallets
+                               if wallet.sync_status == "available" and wallet.fetched_at]
+        evidence_as_of = data.valuation_as_of or (min(wallet_observations) if wallet_observations else None)
+        wallet_only = bool(data.watch_wallets) and not data.bots and not data.manual_positions
+        wallet_freshness = (
+            "fresh" if all(wallet.sync_status == "available" and not wallet.stale
+                           for wallet in data.watch_wallets) else "stale"
+        ) if wallet_only and data.valuation_as_of is None else None
         return {
             "data": data,
             "summary": summary,
-            "as_of": data.valuation_as_of,
-            "source": "bot_portfolios",
+            "as_of": evidence_as_of,
+            **({"freshness_status": wallet_freshness} if wallet_freshness is not None else {}),
+            "source": "portfolio_plus_watch_only_btc" if data.watch_wallets else "bot_portfolios",
             "schema_name": "PortfolioData",
             "entity_type": "portfolio",
             "asset": requested_asset,

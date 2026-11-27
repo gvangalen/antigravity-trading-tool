@@ -12912,6 +12912,8 @@ def test_portfolio_readback_identifies_each_bot_budget_separately():
     assert "sum across the selected bots" in result["evidence_boundary"]
     assert "budget_total_eur=0 disables only that optional cap" in result["evidence_boundary"]
     assert "missing Paper cash is a separate reason" in result["evidence_boundary"]
+    assert "data.watch_wallets are read-only self-custody BTC accounts" in result["evidence_boundary"]
+    assert "separate from global.total_equity" in result["evidence_boundary"]
 
 
 def test_plan_evidence_coverage_distinguishes_saved_facts_from_full_assessment():

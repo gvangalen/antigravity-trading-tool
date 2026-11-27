@@ -202,6 +202,25 @@ def test_deploy_restores_validated_environment_after_secrets_file() -> None:
     assert 'v20.19.5/bin' in rollback_source
 
 
+def test_watch_wallet_pilot_env_is_explicit_and_retractable() -> None:
+    ecosystem = REPO_ROOT / "ops" / "deploy" / "ecosystem.shared.js"
+    script = (
+        "const apps=require(process.argv[1]).createEcosystem('production').apps;"
+        "console.log(JSON.stringify(apps.map(app=>({name:app.name, enabled:app.env.BTC_WATCH_WALLET_ENABLED,"
+        "pilot:app.env.BTC_WATCH_PILOT_USER_IDS}))));"
+    )
+    for configured, expected in (({}, ("false", "")),
+                                 ({"BTC_WATCH_WALLET_ENABLED": "true", "BTC_WATCH_PILOT_USER_IDS": "7,12"},
+                                  ("true", "7,12"))):
+        env = dict(os.environ)
+        env.pop("BTC_WATCH_WALLET_ENABLED", None)
+        env.pop("BTC_WATCH_PILOT_USER_IDS", None)
+        env.update(configured)
+        result = subprocess.run(["node", "-e", script, str(ecosystem)], env=env,
+                                text=True, capture_output=True, check=True)
+        assert all((app["enabled"], app["pilot"]) == expected for app in json.loads(result.stdout))
+
+
 def test_release_identity_is_written_before_pm2_and_loaded_by_every_process(tmp_path: Path) -> None:
     deploy_source = DEPLOY_SCRIPT.read_text(encoding="utf-8")
     rollback_source = (REPO_ROOT / "ops" / "deploy" / "rollback_env.sh").read_text(encoding="utf-8")

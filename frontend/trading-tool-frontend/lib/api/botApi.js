@@ -561,6 +561,30 @@ export const fetchPortfolioSummary = async (environment = null) => {
   return handleApi(fetchAuth(`/api/portfolio/summary${query ? `?${query}` : ""}`, { forceFresh: true }));
 };
 
+export const fetchBtcWatchWallets = async () => ensureArray(await handleApi(
+  fetchAuth("/api/portfolio/watch-wallets", { forceFresh: true }),
+));
+
+export const fetchBtcWatchProviderStatus = async () => handleApi(fetchAuth(
+  "/api/portfolio/watch-wallets/provider-status", { forceFresh: true },
+));
+
+export const createBtcWatchWallet = async (payload) => handleApi(fetchAuth(
+  "/api/portfolio/watch-wallets", { method: "POST", body: JSON.stringify(payload) },
+));
+
+export const previewBtcWatchWallet = async (payload) => handleApi(fetchAuth(
+  "/api/portfolio/watch-wallets/preview", { method: "POST", body: JSON.stringify(payload) },
+));
+
+export const refreshBtcWatchWallet = async (walletId) => handleApi(fetchAuth(
+  `/api/portfolio/watch-wallets/${encodeURIComponent(walletId)}/refresh`, { method: "POST" },
+));
+
+export const removeBtcWatchWallet = async (walletId) => handleApi(fetchAuth(
+  `/api/portfolio/watch-wallets/${encodeURIComponent(walletId)}`, { method: "DELETE" },
+));
+
 export const saveLiveCashAllocations = async (allocations) => handleApi(fetchAuth(
   "/api/portfolio/live-cash-allocations",
   { method: "PUT", body: JSON.stringify({ allocations }) },

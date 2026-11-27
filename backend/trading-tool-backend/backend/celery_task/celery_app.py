@@ -195,6 +195,10 @@ celery_app.conf.beat_schedule = {
         "backend.celery_task.portfolio_fx_task.refresh_portfolio_fx_rates",
         crontab(minute=4),
     ),
+    "refresh_btc_watch_wallets": build_task_schedule_entry(
+        "backend.celery_task.btc_watch_wallet_task.refresh_btc_watch_wallets",
+        crontab(minute="*/5"),
+    ),
     "sync_configured_market_snapshots": build_task_schedule_entry(
         "backend.celery_task.market_task.sync_configured_market_snapshots",
         crontab(minute="*/5"),
@@ -301,6 +305,7 @@ try:
         import backend.celery_task.bot_reconciliation_task
         import backend.celery_task.portfolio_snapshot_task
         import backend.celery_task.portfolio_fx_task
+        import backend.celery_task.btc_watch_wallet_task
         import backend.celery_task.finn_trade_review_task
         import backend.celery_task.system_task
         import backend.celery_task.daily_report_task
