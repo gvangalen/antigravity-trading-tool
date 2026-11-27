@@ -189,6 +189,25 @@ def test_historical_week_fx_moment_completion_is_idempotent():
     assert "14:03 UTC" not in first
 
 
+def test_historical_week_fx_scrub_preserves_next_labeled_source_after_comma():
+    for claim, bot_moment in (
+        ("FX-bronmoment: 12 november 14:02 UTC", "botbeslissing: 12 november 14:59 UTC"),
+        ("Wisselkoersbron bij uitvoering: 12 november 14:03 UTC",
+         "botbeslissing 12 november 14:59 UTC"),
+    ):
+        answer = _minimal_read_answer(
+            message=QUESTION, prepared=_prepared(text=f"{claim}, {bot_moment}."),
+            user_time_zone="Europe/Amsterdam",
+        )
+        assert answer.status == "completed", answer.reason
+        assert bot_moment in answer.text
+        assert answer.text.count("Geverifieerd FX-bronmoment") == 1
+        if "14:03" in claim:
+            assert "14:03 UTC" not in answer.text
+        else:
+            assert claim in answer.text
+
+
 def test_minimal_live_read_does_not_invent_conflicting_fx_source_moment():
     prepared = _prepared(text=(
         "Exitreden: eerste koersdoel. "

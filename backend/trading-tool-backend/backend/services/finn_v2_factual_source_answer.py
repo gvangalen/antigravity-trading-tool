@@ -87,8 +87,10 @@ _UNBOUND_FX_MOMENT_CLAIM = re.compile(
     r"(?P<moment>(?:(?:\d{4}-\d{2}-\d{2}|\d{1,2}\s+[a-z]+(?:\s+\d{4})?)"
     r"\s*,?\s*)?\d{1,2}:\d{2}(?::\d{2})?\s+"
     r"(?:[A-Za-z_]+/[A-Za-z_]+|UTC|GMT|CET|CEST)\b)"
-    r"(?P<tail>(?:(?![.;]\s|\n).){0,80}?)"
-    r"(?=[.;]\s|\n|$)",
+    r"(?P<tail>(?:(?![.;]\s|\n|,\s*[A-Za-zÀ-ÿ][^,.;\n]{0,35}:\s|"
+    r",\s*(?:botbeslissing|exitbeslissing|paper-uitstap|lesbevestiging)\s+\d).){0,80}?)"
+    r"(?=[.;]\s|\n|,\s*[A-Za-zÀ-ÿ][^,.;\n]{0,35}:\s|"
+    r",\s*(?:botbeslissing|exitbeslissing|paper-uitstap|lesbevestiging)\s+\d|$)",
     re.I,
 )
 
