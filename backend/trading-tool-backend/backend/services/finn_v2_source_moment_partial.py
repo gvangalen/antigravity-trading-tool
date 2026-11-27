@@ -142,9 +142,13 @@ def render_source_moment_partial(
     setup_pair = str((setup or {}).get("pair") or "").upper()
     if not setup_pair and setup is not None and setup.get("quote_currency"):
         setup_pair = f'{bot_asset}/{str(setup["quote_currency"]).upper()}'
+    bot_market_id = (selected_bot or {}).get("market_id")
+    setup_market_id = (setup or {}).get("market_id")
+    same_market = (type(bot_market_id) is int and bot_market_id > 0
+                   and bot_market_id == setup_market_id)
     verified_bot_plan = bool(selected_bot is not None and setup is not None
                              and portfolio_parent_consistent
-                             and bot_pair and setup_pair == bot_pair)
+                             and bot_pair and setup_pair == bot_pair and same_market)
     linked_pairs = {
         str(row.get("trading_pair") or row.get("pair") or "").upper()
         for row in linked

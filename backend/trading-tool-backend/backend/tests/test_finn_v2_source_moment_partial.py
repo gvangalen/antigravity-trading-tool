@@ -52,10 +52,11 @@ def _evidence():
         }},
         {"scope": "read_linked_bot", "status": "completed", "asset": "BTC", "data": {
             "bot_id": 129, "symbol": "BTC", "pair": "BTC/EUR",
-            "setup_id": 12, "is_live": False,
+            "setup_id": 12, "market_id": 1, "is_live": False,
         }},
         {"scope": "read_active_setup", "status": "completed", "asset": "BTC", "data": {
-            "setup_id": 12, "symbol": "BTC", "pair": "BTC/EUR", "min_benchmark_score": 61,
+            "setup_id": 12, "symbol": "BTC", "pair": "BTC/EUR", "market_id": 1,
+            "min_benchmark_score": 61,
             "max_benchmark_score": 75,
         }},
         {"scope": "read_asset_scores", "status": "completed", "asset": "BTC", "data": {
@@ -184,9 +185,9 @@ def test_mixed_bot_position_reads_other_bot_pair_conditions_separately():
     )
     evidence = list(_evidence())
     linked = next(item for item in evidence if item["scope"] == "read_linked_bot")
-    linked["data"] = {**linked["data"], "pair": "BTC/USDT"}
+    linked["data"] = {**linked["data"], "pair": "BTC/USDT", "market_id": 2}
     setup = next(item for item in evidence if item["scope"] == "read_active_setup")
-    setup["data"] = {**setup["data"], "pair": "BTC/USDT"}
+    setup["data"] = {**setup["data"], "pair": "BTC/USDT", "market_id": 2}
     answer = render_source_moment_partial(
         question=question, evidence=tuple(evidence), require_facts=True,
     )
@@ -223,6 +224,22 @@ def test_mixed_bot_position_does_not_use_changed_portfolio_parent():
         {"bot_id": 129, "symbol": "BTC", "is_live": False,
          "setup_id": 99, "strategy_id": 13, "operational_status": "active"},
     ]}
+    answer = render_source_moment_partial(
+        question=question, evidence=tuple(evidence), require_facts=True,
+    )
+    assert answer is not None
+    assert "benchmarkscore tussen 61 en 75" not in answer
+    assert "koppeling tussen bot en plan niet eenduidig" in answer
+
+
+def test_mixed_bot_position_does_not_bind_same_pair_across_markets():
+    question = (
+        "Vergelijk BTC/EUR met mijn open ETH-positie. Wat is de status van mijn "
+        "BTC-bot 129 en welke planvoorwaarden horen bij die bot? Lees alleen."
+    )
+    evidence = list(_evidence())
+    linked = next(item for item in evidence if item["scope"] == "read_linked_bot")
+    linked["data"] = {**linked["data"], "market_id": 2}
     answer = render_source_moment_partial(
         question=question, evidence=tuple(evidence), require_facts=True,
     )

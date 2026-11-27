@@ -15927,10 +15927,11 @@ def test_mixed_bot_position_reads_exact_portfolio_bot_parents(monkeypatch):
             return {"status": "completed", "results": [
                 {"scope": "read_active_setup", "status": "completed", "asset": "BTC",
                  "data": {"setup_id": 12, "symbol": "BTC", "pair": "BTC/USDT",
-                          "min_benchmark_score": 61, "max_benchmark_score": 75}},
+                          "market_id": 2, "min_benchmark_score": 61, "max_benchmark_score": 75}},
                 {"scope": "read_linked_bot", "status": "completed", "asset": "BTC",
                  "data": {"bot_id": 129, "symbol": "BTC", "setup_id": 12,
-                          "strategy_id": 13, "pair": "BTC/USDT", "is_live": False}},
+                          "strategy_id": 13, "pair": "BTC/USDT", "market_id": 2,
+                          "is_live": False}},
                 {"scope": "read_bot_status", "status": "completed", "asset": "BTC",
                  "data": {"bot_id": 129, "operational_status": "active", "is_live": False}},
             ]}
