@@ -6,9 +6,11 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: dubbele historische leesresultaten bij weekreflectie (27 november 2026)
 
-Phase: `LOCAL_GATES_PASSED_PENDING_PR_CI`. Branch
+Phase: `READY_FOR_INDEPENDENT_QA_AFTER_STATUS_DEPLOY`. Product branch
 `codex/finn-week-multiple-reads-20261127`, producthead
-`3eb41f28f87399ed7d22209c97d5382aad50c714`.
+`3eb41f28f87399ed7d22209c97d5382aad50c714`;
+[PR #1414](https://github.com/gvangalen/antigravity-trading-tool/pull/1414)
+merged in `359722b7a587648a4d2409d08f7b29a7c52b08d6`.
 Onafhankelijke ingelogde browser-QA op live
 `dd543e9026614e638e69c65670fabe44bb83bbf6` gaf `NOT_ACCEPTED`:
 beide nieuwe gesprekken lazen de juiste AAPL Paper-exit en week 9–15 november,
@@ -34,9 +36,17 @@ en regression `109/109` (artifact SHA-256
 zonder provider-, schema-, parse-, validatie- of timeoutfouten. Er zijn geen
 gewijzigde actiecontracten; de worker-actiematrix is voor deze read-only
 bronmomentcorrectie niet van toepassing. Onafhankelijke QA- en Security-
-codebeoordeling op de productlogica vonden geen blocker. PR-CI, main-CI,
-Auto Deploy, publieke SHA-pariteit en nieuwe onafhankelijke browser-QA staan
-open. Dit is geen live acceptatie.
+codebeoordeling op de productlogica vonden geen blocker. PR-CI
+[46074622482](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46074622482)
+en main-CI
+[46075578709](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46075578709)
+hebben beide vijf groene jobs. Auto Deploy
+[46076420436](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46076420436)
+is geslaagd. Backend-health en frontend build-info gaven beide HTTP 200 en
+exact SHA `359722b7a587648a4d2409d08f7b29a7c52b08d6`, gelijk aan main;
+er was geen nieuwere deploy pending. Deze statusupdate krijgt zelf een latere
+SHA. QA bindt de browserhertest aan de definitieve publieke status-only SHA
+nadat ook die Auto Deploy geslaagd is. Nog geen live acceptatie.
 
 ## FINN 3.0: eenduidig opslagmoment voor historische weekreflectie (27 november 2026)
 
