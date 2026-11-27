@@ -213,16 +213,21 @@ def test_historical_week_fx_scrub_preserves_next_labeled_source_after_comma():
 
 
 def test_historical_week_fx_scrub_preserves_source_joined_with_en():
-    answer = _minimal_read_answer(
-        message=QUESTION, prepared=_prepared(text=(
-            "Het FX-bronmoment was 12 november 14:03 UTC en de botbeslissing "
-            "was 12 november 14:59 UTC."
-        )), user_time_zone="Europe/Amsterdam",
-    )
-    assert answer.status == "completed", answer.reason
-    assert "14:03 UTC" not in answer.text
-    assert "en de botbeslissing was 12 november 14:59 UTC" in answer.text
-    assert answer.text.count("Geverifieerd FX-bronmoment") == 1
+    for text, expected_bot in (
+        ("Het FX-bronmoment was 12 november 14:03 UTC en de botbeslissing "
+         "was 12 november 14:59 UTC.",
+         "en de botbeslissing was 12 november 14:59 UTC"),
+        ("Op 12 november was het FX-bronmoment 14:02 UTC en de botbeslissing "
+         "om 14:59 UTC.", "en de botbeslissing om 14:59 UTC"),
+    ):
+        answer = _minimal_read_answer(
+            message=QUESTION, prepared=_prepared(text=text),
+            user_time_zone="Europe/Amsterdam",
+        )
+        assert answer.status == "completed", answer.reason
+        assert expected_bot in answer.text
+        assert answer.text.count("Geverifieerd FX-bronmoment") == 1
+        assert "14:03 UTC" not in answer.text
 
 
 def test_minimal_live_read_does_not_invent_conflicting_fx_source_moment():

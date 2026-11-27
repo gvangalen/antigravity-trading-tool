@@ -80,12 +80,6 @@ def _suppress_unbound_week_saved_claims(answer: str) -> str:
     )
 
 
-_NEXT_NON_FX_SOURCE = (
-    r"(?:,\s*|\s+en\s+)(?![^,.;\n]{0,45}\b(?:FX|wisselkoers)\b)"
-    r"[A-Za-zÀ-ÿ][^,.;\n]{0,45}?\s+\d{1,2}\s+[a-z]+"
-)
-
-
 _UNBOUND_FX_MOMENT_CLAIM = re.compile(
     r"(?P<label>(?:Geverifieerd\s+)?\b(?:FX(?:[- ]?(?:bron(?:moment)?|koers))?|"
     r"(?:exit|uitvoerings)?wisselkoers(?:bron(?:moment)?)?)\b"
@@ -93,10 +87,10 @@ _UNBOUND_FX_MOMENT_CLAIM = re.compile(
     r"(?P<moment>(?:(?:\d{4}-\d{2}-\d{2}|\d{1,2}\s+[a-z]+(?:\s+\d{4})?)"
     r"\s*,?\s*)?\d{1,2}:\d{2}(?::\d{2})?\s+"
     r"(?:[A-Za-z_]+/[A-Za-z_]+|UTC|GMT|CET|CEST)\b)"
-    r"(?P<tail>(?:(?![.;]\s|\n|,\s*[A-Za-zÀ-ÿ][^,.;\n]{0,35}:\s|"
-    + _NEXT_NON_FX_SOURCE + r").){0,80}?)"
-    r"(?=[.;]\s|\n|,\s*[A-Za-zÀ-ÿ][^,.;\n]{0,35}:\s|"
-    + _NEXT_NON_FX_SOURCE + r"|$)",
+    r"(?P<alternative>\s*(?:\([^)]*\d{1,2}:\d{2}[^)]*\)|"
+    r"(?:,|\ben\b)\s*(?:(?:\d{4}-\d{2}-\d{2}|\d{1,2}\s+[a-z]+"
+    r"(?:\s+\d{4})?)\s*,?\s*)?\d{1,2}:\d{2}(?::\d{2})?\s+"
+    r"(?:[A-Za-z_]+/[A-Za-z_]+|UTC|GMT|CET|CEST)\b))?",
     re.I,
 )
 
@@ -149,7 +143,7 @@ def _suppress_unbound_fx_moment_claims(
 
     def scrub(fragment: str) -> str:
         return _UNBOUND_FX_MOMENT_CLAIM.sub(
-            lambda match: (match.group(0) if not re.search(r"\d{1,2}:\d{2}", match.group("tail"))
+            lambda match: (match.group(0) if not match.group("alternative")
                            and verified(match.group("moment")) else
                            "FX-bronmoment uit antwoordtekst niet geverifieerd"),
             fragment,
