@@ -807,19 +807,41 @@ async def get_portfolio_summary(
     return {"data": result["data"], "as_of": result["as_of"]}
 
 
-class BtcWatchWalletCreateRequest(BaseModel):
-    label: constr(min_length=1, max_length=80)
+class BtcWatchWalletPreviewRequest(BaseModel):
     xpub: constr(min_length=100, max_length=128)
     script_type: Literal["legacy", "nested_segwit", "native_segwit", "taproot"]
     provider_sharing_confirmed: Literal[True]
+
+
+class BtcWatchWalletCreateRequest(BtcWatchWalletPreviewRequest):
+    label: constr(min_length=1, max_length=80)
+    preview_token: constr(min_length=40, max_length=512)
+    balance_confirmed: Literal[True]
 
 
 @router.get("/portfolio/watch-wallets/provider-status")
 async def btc_watch_wallet_provider_status(
     current_user: dict = Depends(get_current_user),
 ):
-    from backend.services.btc_watch_wallet_service import provider_configured
-    return {"configured": provider_configured(), "provider": "alchemy_blockbook"}
+    from backend.services.btc_watch_wallet_service import provider_configured, wallet_link_enabled
+    return {"configured": provider_configured(), "enabled": wallet_link_enabled(current_user["id"]),
+            "provider": "alchemy_blockbook"}
+
+
+@router.post("/portfolio/watch-wallets/preview")
+async def preview_btc_watch_wallet(
+    payload: BtcWatchWalletPreviewRequest,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from backend.services.btc_watch_wallet_service import BtcWatchWalletService
+    _apply_sensitive_order_rate_limit(
+        user_id=current_user["id"], request=request, action_key="watch_wallet_preview",
+    )
+    return await BtcWatchWalletService(db).preview(
+        current_user["id"], xpub=payload.xpub, script_type=payload.script_type,
+    )
 
 
 @router.get("/portfolio/watch-wallets")
@@ -845,6 +867,7 @@ async def create_btc_watch_wallet(
     return await BtcWatchWalletService(db).create(
         current_user["id"], label=payload.label,
         xpub=payload.xpub, script_type=payload.script_type,
+        preview_token=payload.preview_token,
     )
 
 
@@ -855,7 +878,8 @@ async def refresh_btc_watch_wallet(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    from backend.services.btc_watch_wallet_service import BtcWatchWalletService
+    from backend.services.btc_watch_wallet_service import BtcWatchWalletService, require_wallet_link_enabled
+    require_wallet_link_enabled(current_user["id"])
     _apply_sensitive_order_rate_limit(
         user_id=current_user["id"], request=request, action_key="watch_wallet_refresh",
     )

@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { ArrowRight, RefreshCw, Wallet } from "lucide-react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-import { createBtcWatchWallet, fetchBotTrades, fetchBtcWatchProviderStatus, fetchBtcWatchWallets, fetchPaperDiscretionaryOrders, fetchPortfolioSummary, fetchVerifiedPortfolioHistory, fundPaperReserve, refreshBtcWatchWallet, removeBtcWatchWallet, saveLiveCashAllocations, transferPaperCash, transferPaperReserve } from "@/lib/api/botApi";
+import { createBtcWatchWallet, fetchBotTrades, fetchBtcWatchProviderStatus, fetchBtcWatchWallets, fetchPaperDiscretionaryOrders, fetchPortfolioSummary, fetchVerifiedPortfolioHistory, fundPaperReserve, previewBtcWatchWallet, refreshBtcWatchWallet, removeBtcWatchWallet, saveLiveCashAllocations, transferPaperCash, transferPaperReserve } from "@/lib/api/botApi";
 import { openFinnContext } from "@/lib/finnCommandSearch";
 import { formatCurrency, formatDateTime, formatNumber } from "@/lib/i18n";
 import { PORTFOLIO_TIME_OPTIONS } from "@/lib/portfolioDateTime.mjs";
@@ -44,10 +44,14 @@ function PortfolioPageInner() {
   const reserveFundingKey = useRef(null);
   const [manualTrades, setManualTrades] = useState([]);
   const [watchWallets, setWatchWallets] = useState([]);
-  const [watchProviderReady, setWatchProviderReady] = useState(false);
+  const [watchProviderStatus, setWatchProviderStatus] = useState({ configured: false, enabled: false });
+  const watchProviderReady = watchProviderStatus.configured && watchProviderStatus.enabled;
   const [watchWalletDraft, setWatchWalletDraft] = useState({ label: "", xpub: "", script_type: "native_segwit", provider_sharing_confirmed: false });
   const [watchWalletBusy, setWatchWalletBusy] = useState(false);
   const [watchWalletError, setWatchWalletError] = useState(null);
+  const [watchPreview, setWatchPreview] = useState(null);
+  const [watchBalanceConfirmed, setWatchBalanceConfirmed] = useState(false);
+  const watchPreviewSequence = useRef(0);
 
   const money = useCallback((value) => known(value)
     ? formatCurrency(Number(value), locale, "EUR", { maximumFractionDigits: 2 })
@@ -73,7 +77,9 @@ function PortfolioPageInner() {
         setLoadedHistory({ environment, data: history.status === "fulfilled" ? history.value : null });
         setManualTrades(discretionary.status === "fulfilled" && Array.isArray(discretionary.value) ? discretionary.value : []);
         if (wallets.status === "fulfilled") setWatchWallets(wallets.value);
-        setWatchProviderReady(watchProvider.status === "fulfilled" && watchProvider.value?.configured === true);
+        setWatchProviderStatus(watchProvider.status === "fulfilled"
+          ? { configured: watchProvider.value?.configured === true, enabled: watchProvider.value?.enabled === true }
+          : { configured: false, enabled: false });
         if (environment === "live") setCashDraft(Object.fromEntries(
           (summary.value?.data?.bots || []).map((bot) => [bot.bot_id,
             known(bot.cash_eur) ? String(bot.cash_eur) : ""]),
@@ -133,6 +139,7 @@ function PortfolioPageInner() {
     return { ...wallet, stale, valuation_available: Boolean(sameObservation && !stale && valuation.valuation_available),
       position_value_eur: sameObservation && !stale ? valuation.position_value_eur : null };
   });
+  const watchPreviewExpired = watchPreview && walletClock - new Date(watchPreview.observed_at).getTime() > 10 * 60 * 1000;
   const valuationAvailable = Boolean(overview?.valuation_available);
   const result = valuationAvailable && known(global.realized_pnl) && known(global.unrealized_pnl)
     ? Number(global.realized_pnl) + Number(global.unrealized_pnl) : null;
@@ -163,14 +170,45 @@ function PortfolioPageInner() {
     setEnvironment(nextEnvironment);
   };
 
+  const previewWatchWallet = async (event) => {
+    event.preventDefault();
+    const sequence = ++watchPreviewSequence.current;
+    const draft = { ...watchWalletDraft };
+    setWatchWalletBusy(true);
+    setWatchWalletError(null);
+    setWatchPreview(null);
+    try {
+      const preview = await previewBtcWatchWallet(draft);
+      if (sequence === watchPreviewSequence.current) {
+        setWatchPreview(preview);
+        setWatchBalanceConfirmed(false);
+      }
+    } catch (cause) {
+      if (sequence === watchPreviewSequence.current) setWatchWalletError(cause?.message || copy.watchWalletError);
+    } finally {
+      if (sequence === watchPreviewSequence.current) setWatchWalletBusy(false);
+    }
+  };
+
+  const invalidateWatchPreview = () => {
+    watchPreviewSequence.current += 1;
+    setWatchPreview(null);
+    setWatchBalanceConfirmed(false);
+    setWatchWalletBusy(false);
+  };
+
   const addWatchWallet = async (event) => {
     event.preventDefault();
+    if (!watchPreview || !watchBalanceConfirmed) return;
     setWatchWalletBusy(true);
     setWatchWalletError(null);
     try {
-      await createBtcWatchWallet(watchWalletDraft);
+      await createBtcWatchWallet({ ...watchWalletDraft, preview_token: watchPreview.preview_token,
+        balance_confirmed: true });
       setWatchWalletDraft((current) => ({ ...current, xpub: "", provider_sharing_confirmed: false }));
-      setWatchWallets(await fetchBtcWatchWallets());
+      setWatchPreview(null);
+      setWatchBalanceConfirmed(false);
+      await load();
     } catch (cause) {
       setWatchWalletError(cause?.message || copy.watchWalletError);
     } finally {
@@ -345,7 +383,8 @@ function PortfolioPageInner() {
       <section className="rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
         <h2 className="text-lg font-semibold">{copy.watchWalletTitle}</h2>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{copy.watchWalletHelp}</p>
-        {!watchProviderReady && <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">{copy.watchWalletProviderUnavailable}</p>}
+        <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{copy.watchWalletSteps} <a href="https://support.ledger.com/article/360011069619-zd" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">{copy.watchWalletLedgerGuide}</a></p>
+        {!watchProviderReady && <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">{watchProviderStatus.configured ? copy.watchWalletPilotUnavailable : copy.watchWalletProviderUnavailable}</p>}
         {pricedWatchWallets.length > 0 && <ul className="mt-4 space-y-3">
           {pricedWatchWallets.map((wallet) => <li key={wallet.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-700">
             <div>
@@ -359,24 +398,36 @@ function PortfolioPageInner() {
             </div>
           </li>)}
         </ul>}
-        <form onSubmit={addWatchWallet} className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+        {watchProviderReady && <form onSubmit={watchPreview ? addWatchWallet : previewWatchWallet} className="mt-4 grid gap-3 sm:grid-cols-2 sm:items-end">
           <label className="text-sm font-medium">{copy.watchWalletLabel}
-            <input required maxLength={80} value={watchWalletDraft.label} onChange={(event) => setWatchWalletDraft((current) => ({ ...current, label: event.target.value }))} className="mt-1 block w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 dark:border-slate-700" />
+            <input required maxLength={80} disabled={watchWalletBusy} value={watchWalletDraft.label} onChange={(event) => setWatchWalletDraft((current) => ({ ...current, label: event.target.value }))} className="mt-1 block w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 dark:border-slate-700" />
           </label>
           <label className="text-sm font-medium">{copy.watchWalletType}
-            <select value={watchWalletDraft.script_type} onChange={(event) => setWatchWalletDraft((current) => ({ ...current, script_type: event.target.value }))} className="mt-1 block w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 dark:border-slate-700">
+            <select disabled={watchWalletBusy} value={watchWalletDraft.script_type} onChange={(event) => { setWatchWalletDraft((current) => ({ ...current, script_type: event.target.value })); invalidateWatchPreview(); }} className="mt-1 block w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 dark:border-slate-700">
               <option value="native_segwit">{copy.watchWalletNativeSegwit}</option><option value="taproot">{copy.watchWalletTaproot}</option><option value="nested_segwit">{copy.watchWalletNestedSegwit}</option><option value="legacy">{copy.watchWalletLegacy}</option>
             </select>
           </label>
-          <button type="submit" disabled={watchWalletBusy || !watchProviderReady || !watchWalletDraft.xpub.trim() || !watchWalletDraft.provider_sharing_confirmed} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{copy.watchWalletAdd}</button>
-          <label className="text-sm font-medium sm:col-span-3">{copy.watchWalletXpub}
-            <input required type="password" autoComplete="off" value={watchWalletDraft.xpub} onChange={(event) => setWatchWalletDraft((current) => ({ ...current, xpub: event.target.value }))} className="mt-1 block w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 font-mono text-sm dark:border-slate-700" />
+          <p className="text-xs text-slate-500 dark:text-slate-400 sm:col-span-2">{copy.watchWalletTypeHelp}</p>
+          <label className="text-sm font-medium sm:col-span-2">{copy.watchWalletXpub}
+            <input required type="password" autoComplete="off" disabled={watchWalletBusy} value={watchWalletDraft.xpub} onChange={(event) => { setWatchWalletDraft((current) => ({ ...current, xpub: event.target.value })); invalidateWatchPreview(); }} className="mt-1 block w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 font-mono text-sm dark:border-slate-700" />
           </label>
-          <label className="flex items-start gap-2 text-sm sm:col-span-3">
-            <input type="checkbox" checked={watchWalletDraft.provider_sharing_confirmed} onChange={(event) => setWatchWalletDraft((current) => ({ ...current, provider_sharing_confirmed: event.target.checked }))} />
+          <label className="flex items-start gap-2 text-sm sm:col-span-2">
+            <input type="checkbox" disabled={watchWalletBusy} checked={watchWalletDraft.provider_sharing_confirmed} onChange={(event) => { setWatchWalletDraft((current) => ({ ...current, provider_sharing_confirmed: event.target.checked })); invalidateWatchPreview(); }} />
             {copy.watchWalletProviderConsent}
           </label>
-        </form>
+          {!watchPreview && <button type="submit" disabled={watchWalletBusy || !watchWalletDraft.xpub.trim() || !watchWalletDraft.provider_sharing_confirmed} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 sm:col-span-2">{copy.watchWalletPreview}</button>}
+          {watchPreview && <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm dark:border-blue-900 dark:bg-blue-950/30 sm:col-span-2">
+            <p className="font-semibold">{copy.watchWalletPreviewTitle}: {watchPreview.quantity_btc} BTC</p>
+            <p className="mt-1 text-slate-600 dark:text-slate-300">{copy.watchWalletPreviewObserved}: {time(watchPreview.observed_at) || "—"}</p>
+            <p className="mt-2">{copy.watchWalletCompare}</p>
+            {watchPreviewExpired && <p className="mt-2 text-amber-700">{copy.watchWalletPreviewExpired}</p>}
+            <label className="mt-3 flex items-start gap-2"><input type="checkbox" checked={watchBalanceConfirmed} onChange={(event) => setWatchBalanceConfirmed(event.target.checked)} />{copy.watchWalletBalanceConfirm}</label>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="submit" disabled={watchWalletBusy || watchPreviewExpired || !watchBalanceConfirmed} className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white disabled:opacity-50">{copy.watchWalletAdd}</button>
+              <button type="button" disabled={watchWalletBusy} onClick={previewWatchWallet} className="rounded-lg border border-slate-300 px-4 py-2 dark:border-slate-700">{copy.watchWalletPreviewAgain}</button>
+            </div>
+          </div>}
+        </form>}
         {watchWalletError && <p role="alert" className="mt-3 text-sm text-red-700">{watchWalletError}</p>}
       </section>
 

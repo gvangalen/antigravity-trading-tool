@@ -6,15 +6,38 @@ blockchainprovider kan alle afgeleide adressen en transacties volgen. De UI
 vereist daarom een afzonderlijke expliciete bevestiging. De gebruiker voert
 nooit een herstelzin of privésleutel in.
 
+Koppelen heeft twee stappen. Na expliciete provider-toestemming leest de
+preview één saldo zonder het account op te slaan. De gebruiker vergelijkt het
+bevestigde BTC-saldo en accounttype met Ledger Wallet. Alleen een tweede,
+eigenaargebonden bevestiging met een maximaal tien minuten geldig ondertekend
+previewbewijs slaat de versleutelde xpub en de previewmeting op. Bij wijziging
+van xpub of accounttype is opnieuw een preview nodig. Een verkeerde keuze van
+het adrestype kan een nul- of onjuist saldo opleveren.
+
 ## Provider
 
 De backend gebruikt de vaste Alchemy Bitcoin UTXO/Blockbook xpub-endpoint.
 Configureer `ALCHEMY_BITCOIN_API_KEY` uitsluitend in de beschermde backend- en
 workeromgeving; de waarde wordt niet naar de browser gestuurd. De Bitcoin
-UTXO-functie moet voor de Alchemy-app ingeschakeld zijn. Zonder geldige sleutel
+UTXO-functie moet voor de Alchemy-app ingeschakeld zijn; een bestaande Alchemy-
+app met die functie volstaat, een nieuwe app is niet verplicht. Zonder geldige sleutel
 blijven koppelen en vernieuwen uitgeschakeld. Controleer vóór vrijgave met een
 synthetische publieke account-xpub dat de provider een `balance` in satoshi's
 teruggeeft; een sleutel alleen bewijst geen endpointtoegang.
+
+## Gefaseerde vrijgave
+
+De functie staat standaard uit. Zet voor een beperkte pilot alleen
+`BTC_WATCH_PILOT_USER_IDS` op een kommagescheiden lijst van bestaande
+gebruikers-ID's. Pas na geslaagde onafhankelijke QA kan
+`BTC_WATCH_WALLET_ENABLED=true` de functie voor alle accounts openen.
+Backend, worker en publieke providerstatus lezen dezelfde flags. Een
+uitgeschakelde account kan bestaande koppelingen nog zien en verwijderen,
+maar niet toevoegen of verversen; de worker ververst uitsluitend toegelaten
+accounts. Test de exacte productie-SHA met een publieke test-xpub en controleer
+ook verlopen saldi, eigenaarsisolatie, FINN-bronvermelding en het uitblijven
+van een order- of ondertekenpad. Bewaar geen echte gebruiker-xpub in tests of
+release-artifacts.
 
 De backend bouwt zelf een output descriptor voor het door de gebruiker gekozen
 accounttype. De provider ontdekt ontvang- en wisselgeldadressen. De app bewaart

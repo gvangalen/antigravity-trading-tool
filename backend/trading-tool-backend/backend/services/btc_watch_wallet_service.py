@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
+import hmac
+import json
 import logging
 import os
 import re
+import time
 from datetime import datetime, timezone
 from decimal import Decimal
 from urllib.parse import quote
@@ -35,6 +39,57 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 def provider_configured() -> bool:
     return bool(re.fullmatch(r"[A-Za-z0-9_-]{8,128}", os.getenv("ALCHEMY_BITCOIN_API_KEY", "").strip()))
+
+
+def pilot_user_ids() -> set[int]:
+    return {int(part) for part in os.getenv("BTC_WATCH_PILOT_USER_IDS", "").split(",")
+            if part.strip().isdigit() and int(part) > 0}
+
+
+def wallet_rollout_all_enabled() -> bool:
+    return os.getenv("BTC_WATCH_WALLET_ENABLED", "").lower() == "true"
+
+
+def wallet_link_enabled(user_id: int) -> bool:
+    return wallet_rollout_all_enabled() or user_id in pilot_user_ids()
+
+
+def require_wallet_link_enabled(user_id: int) -> None:
+    if not wallet_link_enabled(user_id):
+        raise HTTPException(403, "BTC-walletkoppeling is voor dit account nog niet beschikbaar.")
+
+
+def _preview_secret() -> bytes:
+    secret = os.getenv("ENCRYPTION_KEY", "")
+    if not secret:
+        raise HTTPException(503, "BTC-walletkoppeling is niet volledig geconfigureerd.")
+    return secret.encode()
+
+
+def _signed_preview(payload: dict) -> str:
+    encoded = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()).decode().rstrip("=")
+    signature = hmac.new(_preview_secret(), encoded.encode(), hashlib.sha256).hexdigest()
+    return f"{encoded}.{signature}"
+
+
+def _verified_preview(token: str, *, user_id: int, xpub: str, script_type: str) -> dict:
+    try:
+        encoded, signature = token.split(".", 1)
+        if len(token) > 512 or not hmac.compare_digest(
+            hmac.new(_preview_secret(), encoded.encode(), hashlib.sha256).hexdigest(), signature
+        ):
+            raise ValueError
+        payload = json.loads(base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)))
+        age = int(time.time()) - int(payload["iat"])
+        if (payload.get("v") != 1 or payload.get("u") != user_id
+                or payload.get("h") != hashlib.sha256(xpub.encode()).hexdigest()
+                or payload.get("t") != script_type or not 0 <= age <= 600):
+            raise ValueError
+        payload["c"] = _sats(payload["c"])
+        payload["n"] = _sats(payload["n"], signed=True)
+        return payload
+    except (ValueError, TypeError, KeyError, OverflowError, base64.binascii.Error):
+        raise HTTPException(409, "Saldovoorbeeld is verlopen of hoort niet bij dit account. Controleer opnieuw.") from None
 
 
 def validate_account_xpub(value: str) -> str:
@@ -117,7 +172,26 @@ class BtcWatchWalletService:
             "watch_only": True,
         }
 
-    async def create(self, user_id: int, *, label: str, xpub: str, script_type: str) -> dict:
+    async def preview(self, user_id: int, *, xpub: str, script_type: str) -> dict:
+        require_wallet_link_enabled(user_id)
+        if script_type not in _WRAPPERS:
+            raise HTTPException(422, "Type BTC-account is ongeldig.")
+        try:
+            key = validate_account_xpub(xpub)
+        except ValueError:
+            raise HTTPException(422, "Gebruik een publieke BTC-account-xpub uit Ledger Wallet.") from None
+        confirmed, unconfirmed = await fetch_xpub_balance(key, script_type)
+        issued_at = int(time.time())
+        token = _signed_preview({"v": 1, "u": user_id, "h": hashlib.sha256(key.encode()).hexdigest(),
+                                 "t": script_type, "c": confirmed, "n": unconfirmed, "iat": issued_at})
+        return {"quantity_btc": str(Decimal(confirmed) / Decimal(100_000_000)),
+                "confirmed_sats": confirmed, "unconfirmed_sats": unconfirmed,
+                "observed_at": datetime.fromtimestamp(issued_at, timezone.utc),
+                "script_type": script_type, "provider": "alchemy_blockbook", "preview_token": token}
+
+    async def create(self, user_id: int, *, label: str, xpub: str, script_type: str,
+                     preview_token: str) -> dict:
+        require_wallet_link_enabled(user_id)
         if not provider_configured():
             raise HTTPException(503, "BTC-walletprovider is nog niet geconfigureerd.")
         try:
@@ -126,12 +200,13 @@ class BtcWatchWalletService:
             raise HTTPException(422, "Gebruik een publieke BTC-account-xpub uit Ledger Wallet.") from None
         if script_type not in _WRAPPERS or not 1 <= len(label.strip()) <= 80:
             raise HTTPException(422, "BTC-accountgegevens zijn ongeldig.")
+        preview = _verified_preview(preview_token, user_id=user_id, xpub=key, script_type=script_type)
         count = await self.session.execute(text(
             "SELECT COUNT(*) FROM btc_watch_wallets WHERE user_id=:user_id"
         ), {"user_id": user_id})
         if int(count.scalar_one()) >= 10:
             raise HTTPException(409, "Maximaal tien BTC-accounts per gebruiker.")
-        digest = hashlib.sha256(key.encode()).hexdigest()
+        digest = hmac.new(_preview_secret(), key.encode(), hashlib.sha256).hexdigest()
         duplicate = await self.session.execute(text("""
             SELECT 1 FROM btc_watch_wallets WHERE user_id=:user_id AND xpub_fingerprint=:digest
         """), {"user_id": user_id, "digest": digest})
@@ -139,13 +214,16 @@ class BtcWatchWalletService:
             raise HTTPException(409, "Dit BTC-account is al gekoppeld.")
         row = await self.session.execute(text("""
             INSERT INTO btc_watch_wallets
-                (user_id, label, xpub_encrypted, xpub_fingerprint, script_type)
-            VALUES (:user_id, :label, :encrypted, :digest, :script_type)
+                (user_id, label, xpub_encrypted, xpub_fingerprint, script_type,
+                 confirmed_sats, unconfirmed_sats, sync_status, provider, fetched_at, last_attempt_at)
+            VALUES (:user_id, :label, :encrypted, :digest, :script_type,
+                    :confirmed, :unconfirmed, 'available', 'alchemy_blockbook', :observed, :observed)
             RETURNING id, label, script_type, confirmed_sats, unconfirmed_sats,
                       sync_status, provider, fetched_at, last_attempt_at
         """), {"user_id": user_id, "label": label.strip(),
                "encrypted": EncryptionUtils.encrypt(key), "digest": digest,
-               "script_type": script_type})
+               "script_type": script_type, "confirmed": preview["c"], "unconfirmed": preview["n"],
+               "observed": datetime.fromtimestamp(preview["iat"], timezone.utc)})
         result = self._public(dict(row.first()._mapping))
         await self.session.commit()
         return result

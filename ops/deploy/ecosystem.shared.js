@@ -114,6 +114,8 @@ const SHARED_RUNTIME_ENV = pickRuntimeEnv([
   "ALPHA_VANTAGE_API_KEY",
   "COINMARKETCAP_API_KEY",
   "ALCHEMY_BITCOIN_API_KEY",
+  "BTC_WATCH_WALLET_ENABLED",
+  "BTC_WATCH_PILOT_USER_IDS",
   "BINANCE_API_KEY",
   "BINANCE_API_SECRET",
   "BYBIT_API_KEY",
@@ -168,6 +170,10 @@ const SHARED_RUNTIME_ENV = pickRuntimeEnv([
 // survive a release when the protected environment deliberately omits a key.
 // A protected value in SHARED_RUNTIME_ENV always takes precedence.
 const FINN_RUNTIME_DEFAULT_ENV = {
+  // PM2 merges process env on --update-env. Explicit defaults retract an
+  // earlier watch-wallet pilot when the protected env removes its flags.
+  BTC_WATCH_WALLET_ENABLED: "false",
+  BTC_WATCH_PILOT_USER_IDS: "",
   // A missing protected rollout setting must also clear a stale PM2 value.
   FINN_TRADE_REVIEW_ROLLOUT: "off",
   FINN_TRADE_REVIEW_USER_IDS: "",

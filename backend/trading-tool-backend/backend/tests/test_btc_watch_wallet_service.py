@@ -11,8 +11,10 @@ from pydantic import ValidationError
 from backend.api.bot_api import BtcWatchWalletCreateRequest
 from backend.services.btc_watch_wallet_service import (
     BtcWatchWalletService,
+    _verified_preview,
     fetch_xpub_balance,
     validate_account_xpub,
+    wallet_link_enabled,
 )
 from backend.services.finn_v2_reasoning_context_service import FinnV2ReasoningContextService
 
@@ -44,6 +46,39 @@ def test_account_link_requires_explicit_provider_sharing_confirmation():
         BtcWatchWalletCreateRequest(
             label="Ledger", xpub=XPUB, script_type="native_segwit",
             provider_sharing_confirmed=False,
+        )
+
+
+def test_wallet_rollout_defaults_off_and_can_target_one_owner(monkeypatch):
+    monkeypatch.delenv("BTC_WATCH_WALLET_ENABLED", raising=False)
+    monkeypatch.setenv("BTC_WATCH_PILOT_USER_IDS", "7, invalid, 12")
+    assert wallet_link_enabled(7) is True
+    assert wallet_link_enabled(12) is True
+    assert wallet_link_enabled(8) is False
+
+
+def test_preview_is_owner_bound_and_required_before_saving(monkeypatch):
+    monkeypatch.setenv("BTC_WATCH_PILOT_USER_IDS", "7")
+    monkeypatch.setenv("ENCRYPTION_KEY", "test-preview-signing-key")
+
+    async def balance(_xpub, _script_type):
+        return 123456789, 0
+
+    monkeypatch.setattr("backend.services.btc_watch_wallet_service.fetch_xpub_balance", balance)
+    preview = asyncio.run(BtcWatchWalletService(None).preview(7, xpub=XPUB, script_type="native_segwit"))
+    assert preview["quantity_btc"] == "1.23456789"
+    assert XPUB not in str(preview)
+    token = preview["preview_token"]
+    assert _verified_preview(token, user_id=7, xpub=XPUB, script_type="native_segwit")["c"] == 123456789
+    for owner, kind, candidate in ((8, "native_segwit", token), (7, "taproot", token),
+                                    (7, "native_segwit", token[:-1] + "0")):
+        with pytest.raises(HTTPException) as error:
+            _verified_preview(candidate, user_id=owner, xpub=XPUB, script_type=kind)
+        assert error.value.status_code == 409
+    with pytest.raises(ValidationError):
+        BtcWatchWalletCreateRequest(
+            label="Ledger", xpub=XPUB, script_type="native_segwit",
+            provider_sharing_confirmed=True, balance_confirmed=True,
         )
 
 

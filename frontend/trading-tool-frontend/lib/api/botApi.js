@@ -573,6 +573,10 @@ export const createBtcWatchWallet = async (payload) => handleApi(fetchAuth(
   "/api/portfolio/watch-wallets", { method: "POST", body: JSON.stringify(payload) },
 ));
 
+export const previewBtcWatchWallet = async (payload) => handleApi(fetchAuth(
+  "/api/portfolio/watch-wallets/preview", { method: "POST", body: JSON.stringify(payload) },
+));
+
 export const refreshBtcWatchWallet = async (walletId) => handleApi(fetchAuth(
   `/api/portfolio/watch-wallets/${encodeURIComponent(walletId)}/refresh`, { method: "POST" },
 ));
