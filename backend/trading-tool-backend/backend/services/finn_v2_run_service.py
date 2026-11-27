@@ -2021,6 +2021,52 @@ def _minimal_read_answer(
                 "bot_plan_lineage_unverified", current_evidence,
             )
 
+    # For a named bot and another asset's position, a fluent model answer can
+    # combine a score for the question's pair with a plan band for the bot's
+    # different pair, or overlook a verified zero position. Use the bounded
+    # current-turn reads for this narrow comparison even when the model's
+    # prose happens to pass the generic source-moment check.
+    from backend.services.finn_v2_source_moment_partial import (
+        is_mixed_bot_position_question, render_source_moment_partial,
+    )
+    forced_source_partial = False
+    if is_mixed_bot_position_question(message):
+        from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
+        from backend.services.finn_v2_turn_contract import turn_contract_gap
+        partial = render_source_moment_partial(
+            question=message, evidence=current_evidence,
+            locale=getattr(prepared, "locale", "nl"), require_facts=True,
+        )
+        contract = getattr(prepared.response, "turn_contract", None)
+        if (partial
+                and current_source_moments_supported(
+                    partial, current_evidence, question=message, typed_recovery=True,
+                )
+                and FinnResponsesAnswerVerifier._saved_entity_type_supported(
+                    partial, evidence, user_message=message,
+                )
+                and FinnResponsesAnswerVerifier._profile_presence_claim_supported(partial, evidence)
+                and FinnResponsesAnswerVerifier._price_relation_claim_supported(partial, evidence)
+                and (not contract or turn_contract_gap(contract, partial, typed_recovery=True) is None)):
+            text = partial
+            forced_source_partial = True
+        else:
+            language = str(getattr(prepared, "locale", "nl") or "nl").split("-")[0].lower()
+            clarification = {
+                "en": ("I cannot reliably connect this bot's plan and the position to the "
+                       "named trading pairs. Shall I check the bot and portfolio separately?"),
+                "de": ("Ich kann den Botplan und die Position nicht eindeutig den genannten "
+                       "Handelspaaren zuordnen. Soll ich Bot und Portfolio getrennt prüfen?"),
+            }.get(language, (
+                "Ik kan het botplan en de positie niet eenduidig aan de genoemde "
+                "handelsparen koppelen. Wil je dat ik de bot en Paper-portefeuille "
+                "afzonderlijk controleer?"
+            ))
+            return FinnResponsesVerifiedAnswer(
+                "unavailable", clarification, "mixed_bot_position_source_incomplete",
+                current_evidence,
+            )
+
     if not FinnResponsesAnswerVerifier._latest_quote_claim_supported(text, tuple(
         item for call in prepared.response.tool_trace
         for item in (call.get("result") or {}).get("results") or []
@@ -2052,7 +2098,7 @@ def _minimal_read_answer(
         current_source_moments_supported, source_moment_repair_facts,
     )
     source_moment_diagnostics: list[str] = []
-    typed_source_moment_recovery = False
+    typed_source_moment_recovery = forced_source_partial
     if not current_source_moments_supported(
         text, current_evidence, question=message, diagnostics=source_moment_diagnostics,
     ):

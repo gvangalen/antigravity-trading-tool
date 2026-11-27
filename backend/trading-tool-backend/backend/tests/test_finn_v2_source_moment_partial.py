@@ -2,7 +2,9 @@ from types import SimpleNamespace
 
 from backend.services.finn_v2_run_service import _minimal_read_answer
 from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
-from backend.services.finn_v2_source_moment_partial import render_source_moment_partial
+from backend.services.finn_v2_source_moment_partial import (
+    is_mixed_bot_position_question, render_source_moment_partial,
+)
 from backend.services.finn_v2_turn_contract import build_turn_contract, turn_contract_gap
 
 
@@ -248,6 +250,167 @@ def test_mixed_bot_position_reports_verified_zero_without_unasked_report_score()
     assert "de ETH-positie niet eenduidig" not in answer.text
     assert "36,7" not in answer.text
     assert "rapportmomentopname" not in answer.text
+
+
+def test_mixed_bot_position_overrides_fluid_model_pair_mix_and_uses_zero_read():
+    question = (
+        "Vergelijk BTC/EUR met mijn open ETH-positie. Wat is de status van mijn "
+        "BTC-bot 129 en welke planvoorwaarden horen bij die bot? Vermeng geen "
+        "verschillende handelspaarbronnen. Lees alleen."
+    )
+    evidence = list(_evidence())
+    linked = next(item for item in evidence if item["scope"] == "read_linked_bot")
+    linked["data"] = {**linked["data"], "pair": "BTC/USDT"}
+    portfolio = next(item for item in evidence if item["scope"] == "read_portfolio")
+    portfolio["data"] = {**portfolio["data"], "bots": [
+        {"bot_id": 129, "symbol": "BTC", "is_live": False,
+         "operational_status": "active"},
+        {"bot_id": 301, "symbol": "ETH", "is_live": False,
+         "position_qty": 0},
+    ]}
+    prepared = SimpleNamespace(
+        locale="nl", previous_response=None,
+        response=SimpleNamespace(
+            text=("Voor BTC/EUR ligt de score 33,3 onder de 61–75-band van bot 129. "
+                  "De ETH-uitlezing is niet specifiek genoeg om de positie te bevestigen."),
+            tool_trace=({"name": "get_portfolio_and_exposure", "result": {
+                "results": evidence,
+            }},),
+            uses_previous_response=False,
+            turn_contract={**_cross_source_contract(), "question": question},
+        ),
+    )
+
+    assert is_mixed_bot_position_question(question)
+    answer = _minimal_read_answer(message=question, prepared=prepared)
+
+    assert answer.status == "completed", (answer.reason, answer.rejection_details)
+    assert "bot #301 geen open ETH-positie (0 ETH)" in answer.text
+    assert "BTC/EUR is het genoemde analysepaar" in answer.text
+    assert "BTC/USDT" in answer.text
+    assert "33,3" not in answer.text
+    assert "61 en 75" not in answer.text
+    assert "niet specifiek genoeg" not in answer.text
+
+
+def test_mixed_bot_position_intent_excludes_score_only_question():
+    assert not is_mixed_bot_position_question(
+        "Vergelijk de actuele scores van BTC/EUR en ETH/EUR. Lees alleen."
+    )
+
+
+def test_mixed_bot_position_failed_recovery_never_returns_model_pair_mix():
+    question = (
+        "Vergelijk BTC/EUR met mijn open ETH-positie. Wat is de status van mijn "
+        "BTC-bot 129 en welke planvoorwaarden horen bij die bot? Lees alleen."
+    )
+    model_text = "BTC/EUR 33,3 ligt onder de 61–75-band van mijn BTC/USDT-bot."
+    prepared = SimpleNamespace(
+        locale="en", previous_response=None,
+        response=SimpleNamespace(
+            text=model_text, tool_trace=(), uses_previous_response=False,
+            turn_contract={**_cross_source_contract(), "question": question},
+        ),
+    )
+
+    answer = _minimal_read_answer(message=question, prepared=prepared)
+
+    assert answer.status == "unavailable"
+    assert answer.reason == "mixed_bot_position_source_incomplete"
+    assert "check the bot and portfolio separately" in answer.text
+    assert "33,3" not in answer.text
+    assert "61–75" not in answer.text
+
+
+def test_mixed_bot_position_without_completed_reads_is_not_marked_answered():
+    question = (
+        "Vergelijk BTC/EUR met mijn open ETH-positie. Wat is de status van mijn "
+        "BTC-bot 129 en welke planvoorwaarden horen bij die bot? Lees alleen."
+    )
+    prepared = SimpleNamespace(
+        locale="nl", previous_response=None,
+        response=SimpleNamespace(
+            text="BTC/EUR 33,3 ligt onder de botband 61–75.",
+            tool_trace=(), uses_previous_response=False,
+            turn_contract={**_cross_source_contract(), "question": question},
+        ),
+    )
+
+    answer = _minimal_read_answer(message=question, prepared=prepared)
+
+    assert answer.status == "unavailable"
+    assert answer.reason == "mixed_bot_position_source_incomplete"
+    assert "bot en Paper-portefeuille afzonderlijk" in answer.text
+    assert "Welk asset" not in answer.text
+    assert "33,3" not in answer.text
+
+
+def test_mixed_bot_position_two_pairs_without_reads_is_not_marked_answered():
+    question = (
+        "Vergelijk BTC/EUR en BTC/USDT met mijn open ETH-positie. "
+        "Welke planvoorwaarden horen bij BTC-bot 129? Lees alleen."
+    )
+    prepared = SimpleNamespace(
+        locale="nl", previous_response=None,
+        response=SimpleNamespace(
+            text="BTC/EUR 33,3 ligt onder de BTC/USDT-botband 61–75.",
+            tool_trace=(), uses_previous_response=False,
+            turn_contract={**_cross_source_contract(), "question": question},
+        ),
+    )
+
+    assert render_source_moment_partial(
+        question=question, evidence=(), require_facts=True,
+    ) is None
+    answer = _minimal_read_answer(message=question, prepared=prepared)
+
+    assert answer.status == "unavailable"
+    assert answer.reason == "mixed_bot_position_source_incomplete"
+    assert "Welk van de genoemde handelsparen" not in answer.text
+    assert "33,3" not in answer.text
+
+
+def test_mixed_bot_position_invalid_score_read_does_not_count_as_fact():
+    question = (
+        "Vergelijk de scores van BTC/EUR en BTC/USDT met mijn open ETH-positie "
+        "en BTC-bot 129. Lees alleen."
+    )
+    evidence = ({"scope": "read_asset_scores", "status": "completed", "data": {
+        "pair": "BTC/EUR", "market_id": 1, "source_status": "unverified_scores",
+        "benchmark_score": 33.3,
+    }},)
+
+    assert render_source_moment_partial(
+        question=question, evidence=evidence, require_facts=True,
+    ) is None
+
+
+def test_mixed_bot_position_linked_bot_only_does_not_count_explanation_as_fact():
+    question = (
+        "Vergelijk BTC/EUR met mijn open ETH-positie. Wat is de status van mijn "
+        "BTC-bot 129 en welke planvoorwaarden horen bij die bot? Lees alleen."
+    )
+    evidence = ({"scope": "read_linked_bot", "status": "completed", "data": {
+        "bot_id": 129, "symbol": "BTC", "pair": "BTC/EUR",
+        "setup_id": 12, "is_live": False,
+    }},)
+    prepared = SimpleNamespace(
+        locale="nl", previous_response=None,
+        response=SimpleNamespace(
+            text="BTC/EUR 33,3 ligt onder de 61–75-band van bot 129.",
+            tool_trace=({"name": "get_linked_bot", "result": {"results": list(evidence)}},),
+            uses_previous_response=False,
+            turn_contract={**_cross_source_contract(), "question": question},
+        ),
+    )
+
+    assert render_source_moment_partial(
+        question=question, evidence=evidence, require_facts=True,
+    ) is None
+    answer = _minimal_read_answer(message=question, prepared=prepared)
+    assert answer.status == "unavailable"
+    assert answer.reason == "mixed_bot_position_source_incomplete"
+    assert "33,3" not in answer.text
 
 
 def test_mixed_bot_position_does_not_infer_zero_from_missing_quantity():
