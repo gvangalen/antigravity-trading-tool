@@ -807,6 +807,76 @@ async def get_portfolio_summary(
     return {"data": result["data"], "as_of": result["as_of"]}
 
 
+class BtcWatchWalletCreateRequest(BaseModel):
+    label: constr(min_length=1, max_length=80)
+    xpub: constr(min_length=100, max_length=128)
+    script_type: Literal["legacy", "nested_segwit", "native_segwit", "taproot"]
+    provider_sharing_confirmed: Literal[True]
+
+
+@router.get("/portfolio/watch-wallets/provider-status")
+async def btc_watch_wallet_provider_status(
+    current_user: dict = Depends(get_current_user),
+):
+    from backend.services.btc_watch_wallet_service import provider_configured
+    return {"configured": provider_configured(), "provider": "alchemy_blockbook"}
+
+
+@router.get("/portfolio/watch-wallets")
+async def list_btc_watch_wallets(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from backend.services.btc_watch_wallet_service import BtcWatchWalletService
+    return await BtcWatchWalletService(db).list(current_user["id"])
+
+
+@router.post("/portfolio/watch-wallets")
+async def create_btc_watch_wallet(
+    payload: BtcWatchWalletCreateRequest,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from backend.services.btc_watch_wallet_service import BtcWatchWalletService
+    _apply_sensitive_order_rate_limit(
+        user_id=current_user["id"], request=request, action_key="watch_wallet_create",
+    )
+    return await BtcWatchWalletService(db).create(
+        current_user["id"], label=payload.label,
+        xpub=payload.xpub, script_type=payload.script_type,
+    )
+
+
+@router.post("/portfolio/watch-wallets/{wallet_id}/refresh")
+async def refresh_btc_watch_wallet(
+    wallet_id: int,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from backend.services.btc_watch_wallet_service import BtcWatchWalletService
+    _apply_sensitive_order_rate_limit(
+        user_id=current_user["id"], request=request, action_key="watch_wallet_refresh",
+    )
+    return await BtcWatchWalletService(db).refresh(current_user["id"], wallet_id)
+
+
+@router.delete("/portfolio/watch-wallets/{wallet_id}")
+async def remove_btc_watch_wallet(
+    wallet_id: int,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from backend.services.btc_watch_wallet_service import BtcWatchWalletService
+    _apply_sensitive_order_rate_limit(
+        user_id=current_user["id"], request=request, action_key="watch_wallet_remove",
+    )
+    await BtcWatchWalletService(db).remove(current_user["id"], wallet_id)
+    return {"ok": True}
+
+
 class LiveCashAllocation(BaseModel):
     bot_id: int
     amount_eur: condecimal(ge=Decimal("0"), max_digits=20, decimal_places=2)

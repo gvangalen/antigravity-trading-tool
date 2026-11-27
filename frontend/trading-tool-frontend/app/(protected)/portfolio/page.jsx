@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { ArrowRight, RefreshCw, Wallet } from "lucide-react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-import { fetchBotTrades, fetchPaperDiscretionaryOrders, fetchPortfolioSummary, fetchVerifiedPortfolioHistory, fundPaperReserve, saveLiveCashAllocations, transferPaperCash, transferPaperReserve } from "@/lib/api/botApi";
+import { createBtcWatchWallet, fetchBotTrades, fetchBtcWatchProviderStatus, fetchBtcWatchWallets, fetchPaperDiscretionaryOrders, fetchPortfolioSummary, fetchVerifiedPortfolioHistory, fundPaperReserve, refreshBtcWatchWallet, removeBtcWatchWallet, saveLiveCashAllocations, transferPaperCash, transferPaperReserve } from "@/lib/api/botApi";
 import { openFinnContext } from "@/lib/finnCommandSearch";
 import { formatCurrency, formatDateTime, formatNumber } from "@/lib/i18n";
 import { PORTFOLIO_TIME_OPTIONS } from "@/lib/portfolioDateTime.mjs";
@@ -43,6 +43,11 @@ function PortfolioPageInner() {
   const [reserveFundingError, setReserveFundingError] = useState(null);
   const reserveFundingKey = useRef(null);
   const [manualTrades, setManualTrades] = useState([]);
+  const [watchWallets, setWatchWallets] = useState([]);
+  const [watchProviderReady, setWatchProviderReady] = useState(false);
+  const [watchWalletDraft, setWatchWalletDraft] = useState({ label: "", xpub: "", script_type: "native_segwit", provider_sharing_confirmed: false });
+  const [watchWalletBusy, setWatchWalletBusy] = useState(false);
+  const [watchWalletError, setWatchWalletError] = useState(null);
 
   const money = useCallback((value) => known(value)
     ? formatCurrency(Number(value), locale, "EUR", { maximumFractionDigits: 2 })
@@ -56,15 +61,19 @@ function PortfolioPageInner() {
     setLoading(true);
     setError(null);
     try {
-      const [summary, history, discretionary] = await Promise.allSettled([
+      const [summary, history, discretionary, wallets, watchProvider] = await Promise.allSettled([
         fetchPortfolioSummary(environment), fetchVerifiedPortfolioHistory(environment),
         environment === "paper" ? fetchPaperDiscretionaryOrders() : Promise.resolve([]),
+        fetchBtcWatchWallets(),
+        fetchBtcWatchProviderStatus(),
       ]);
       if (summary.status === "rejected") throw summary.reason;
       if (sequence === requestSequence.current) {
         setLoadedOverview({ environment, data: summary.value?.data || null });
         setLoadedHistory({ environment, data: history.status === "fulfilled" ? history.value : null });
         setManualTrades(discretionary.status === "fulfilled" && Array.isArray(discretionary.value) ? discretionary.value : []);
+        if (wallets.status === "fulfilled") setWatchWallets(wallets.value);
+        setWatchProviderReady(watchProvider.status === "fulfilled" && watchProvider.value?.configured === true);
         if (environment === "live") setCashDraft(Object.fromEntries(
           (summary.value?.data?.bots || []).map((bot) => [bot.bot_id,
             known(bot.cash_eur) ? String(bot.cash_eur) : ""]),
@@ -111,6 +120,19 @@ function PortfolioPageInner() {
   }, [selectedId, detailTab]);
 
   const global = overview?.global || {};
+  const [walletClock, setWalletClock] = useState(Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setWalletClock(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const pricedWatchWallets = watchWallets.map((wallet) => {
+    const valuation = (overview?.watch_wallets || []).find((item) => item.id === wallet.id);
+    const sameObservation = wallet.sync_status === "available" && valuation?.sync_status === "available"
+      && wallet.fetched_at === valuation.fetched_at;
+    const stale = !wallet.fetched_at || walletClock - new Date(wallet.fetched_at).getTime() > 24 * 60 * 60 * 1000;
+    return { ...wallet, stale, valuation_available: Boolean(sameObservation && !stale && valuation.valuation_available),
+      position_value_eur: sameObservation && !stale ? valuation.position_value_eur : null };
+  });
   const valuationAvailable = Boolean(overview?.valuation_available);
   const result = valuationAvailable && known(global.realized_pnl) && known(global.unrealized_pnl)
     ? Number(global.realized_pnl) + Number(global.unrealized_pnl) : null;
@@ -139,6 +161,49 @@ function PortfolioPageInner() {
     setError(null);
     setSelectedId(null);
     setEnvironment(nextEnvironment);
+  };
+
+  const addWatchWallet = async (event) => {
+    event.preventDefault();
+    setWatchWalletBusy(true);
+    setWatchWalletError(null);
+    try {
+      await createBtcWatchWallet(watchWalletDraft);
+      setWatchWalletDraft((current) => ({ ...current, xpub: "", provider_sharing_confirmed: false }));
+      setWatchWallets(await fetchBtcWatchWallets());
+    } catch (cause) {
+      setWatchWalletError(cause?.message || copy.watchWalletError);
+    } finally {
+      setWatchWalletBusy(false);
+    }
+  };
+
+  const refreshWatchWallet = async (id) => {
+    setWatchWalletBusy(true);
+    setWatchWalletError(null);
+    try {
+      await refreshBtcWatchWallet(id);
+      await load();
+    } catch (cause) {
+      setWatchWalletError(cause?.message || copy.watchWalletError);
+      setWatchWallets(await fetchBtcWatchWallets().catch(() => watchWallets));
+    } finally {
+      setWatchWalletBusy(false);
+    }
+  };
+
+  const deleteWatchWallet = async (id) => {
+    if (!window.confirm(copy.watchWalletRemoveConfirm)) return;
+    setWatchWalletBusy(true);
+    setWatchWalletError(null);
+    try {
+      await removeBtcWatchWallet(id);
+      setWatchWallets(await fetchBtcWatchWallets());
+    } catch (cause) {
+      setWatchWalletError(cause?.message || copy.watchWalletError);
+    } finally {
+      setWatchWalletBusy(false);
+    }
   };
 
   const saveCash = async () => {
@@ -276,6 +341,44 @@ function PortfolioPageInner() {
       {statusMessage && !loading && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">{statusMessage}</p>}
       {environment === "paper" && <p className="text-xs text-slate-500 dark:text-slate-400">{copy.paperMoney}</p>}
       {environment === "live" && <p className="text-xs text-slate-500 dark:text-slate-400">{copy.liveAttribution}</p>}
+
+      <section className="rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
+        <h2 className="text-lg font-semibold">{copy.watchWalletTitle}</h2>
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{copy.watchWalletHelp}</p>
+        {!watchProviderReady && <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">{copy.watchWalletProviderUnavailable}</p>}
+        {pricedWatchWallets.length > 0 && <ul className="mt-4 space-y-3">
+          {pricedWatchWallets.map((wallet) => <li key={wallet.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-700">
+            <div>
+              <p className="font-semibold">{wallet.label} · {wallet.quantity_btc === null ? "—" : `${wallet.quantity_btc} BTC`}</p>
+              <p className="text-sm text-slate-600 dark:text-slate-300">{wallet.valuation_available ? money(wallet.position_value_eur) : copy.watchWalletValueUnavailable}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{copy.watchWalletReadOnly} · {wallet.sync_status === "available" ? (time(wallet.fetched_at) || "—") : copy.watchWalletPending}{wallet.stale ? ` · ${copy.watchWalletStale}` : ""}</p>
+            </div>
+            <div className="flex gap-2">
+              <button type="button" disabled={watchWalletBusy || !watchProviderReady} onClick={() => refreshWatchWallet(wallet.id)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:opacity-50 dark:border-slate-700">{copy.refresh}</button>
+              <button type="button" disabled={watchWalletBusy} onClick={() => deleteWatchWallet(wallet.id)} className="rounded-lg border border-red-300 px-3 py-2 text-sm text-red-700 dark:border-red-800">{copy.watchWalletRemove}</button>
+            </div>
+          </li>)}
+        </ul>}
+        <form onSubmit={addWatchWallet} className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+          <label className="text-sm font-medium">{copy.watchWalletLabel}
+            <input required maxLength={80} value={watchWalletDraft.label} onChange={(event) => setWatchWalletDraft((current) => ({ ...current, label: event.target.value }))} className="mt-1 block w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 dark:border-slate-700" />
+          </label>
+          <label className="text-sm font-medium">{copy.watchWalletType}
+            <select value={watchWalletDraft.script_type} onChange={(event) => setWatchWalletDraft((current) => ({ ...current, script_type: event.target.value }))} className="mt-1 block w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 dark:border-slate-700">
+              <option value="native_segwit">{copy.watchWalletNativeSegwit}</option><option value="taproot">{copy.watchWalletTaproot}</option><option value="nested_segwit">{copy.watchWalletNestedSegwit}</option><option value="legacy">{copy.watchWalletLegacy}</option>
+            </select>
+          </label>
+          <button type="submit" disabled={watchWalletBusy || !watchProviderReady || !watchWalletDraft.xpub.trim() || !watchWalletDraft.provider_sharing_confirmed} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{copy.watchWalletAdd}</button>
+          <label className="text-sm font-medium sm:col-span-3">{copy.watchWalletXpub}
+            <input required type="password" autoComplete="off" value={watchWalletDraft.xpub} onChange={(event) => setWatchWalletDraft((current) => ({ ...current, xpub: event.target.value }))} className="mt-1 block w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 font-mono text-sm dark:border-slate-700" />
+          </label>
+          <label className="flex items-start gap-2 text-sm sm:col-span-3">
+            <input type="checkbox" checked={watchWalletDraft.provider_sharing_confirmed} onChange={(event) => setWatchWalletDraft((current) => ({ ...current, provider_sharing_confirmed: event.target.checked }))} />
+            {copy.watchWalletProviderConsent}
+          </label>
+        </form>
+        {watchWalletError && <p role="alert" className="mt-3 text-sm text-red-700">{watchWalletError}</p>}
+      </section>
 
       {environment === "paper" && <section className="rounded-2xl border border-slate-200 p-5 dark:border-slate-800">
         <h2 className="text-lg font-semibold">{copy.paperReserveTitle || "Vrije Paper-reserve"}</h2>

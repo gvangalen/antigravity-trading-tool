@@ -416,7 +416,7 @@ class FinnResponsesReadExecutor:
                     " The saved plan, score and quote remain available without a linked bot. "
                     "Do not infer a bot decision or call an absent bot inactive."
                 )
-        if call.name in {"get_portfolio_and_exposure", "get_saved_bots"}:
+        if call.name in {"get_portfolio_and_exposure", "get_saved_bots", "get_profile_portfolio_and_bots"}:
             output["evidence_boundary"] = (
                 "For a saved bot, bots[].operational_status=paused means it is paused; "
                 "do not call that bot inactive, removed, or broken. "
@@ -455,7 +455,15 @@ class FinnResponsesReadExecutor:
                 "A bot's price_as_of is its market-price date; the outer as_of is the oldest "
                 "required price date when a valuation is available. If valuation_available is "
                 "false, do not infer cash or equity from budgets. Translate technical field "
-                "names such as as_of into natural language."
+                "names such as as_of into natural language. "
+                "data.watch_wallets are read-only self-custody BTC accounts observed through "
+                "a third-party xpub provider, never Paper cash, a bot position, or broker holdings. "
+                "Their confirmed quantity is separate from global.total_equity and must not "
+                "be added to Paper simulation value. Use each wallet's fetched_at as its "
+                "balance observation time and its stale/sync_status fields before describing "
+                "the balance as current. Its EUR valuation is separate and usable only when "
+                "valuation_available is true; otherwise report BTC quantity without an "
+                "inferred EUR value. Do not infer that FINN can sign, spend, or trade the wallet."
             )
         if any(item["scope"] == "read_linked_bot" and item["status"] == "completed" for item in results):
             output["evidence_boundary"] = (

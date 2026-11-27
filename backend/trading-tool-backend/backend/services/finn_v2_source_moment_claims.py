@@ -309,6 +309,14 @@ def source_moment_repair_facts(evidence: tuple[dict[str, Any], ...]) -> list[dic
             kind = "quote_source"
         elif scope == "read_portfolio":
             label, value, kind = "portfolio", data.get("read_at"), "read_time"
+            for wallet in data.get("watch_wallets") or []:
+                if not isinstance(wallet, dict) or wallet.get("sync_status") != "available":
+                    continue
+                wallet_read = _utc(wallet.get("fetched_at"))
+                if wallet_read:
+                    wallet_label = str(wallet.get("label") or wallet.get("id") or "BTC wallet")
+                    key = ("wallet_balance_retrieved", wallet_label)
+                    moments[key] = max(wallet_read, moments.get(key, wallet_read))
         elif scope == "read_bot_status":
             label, value, kind = str(data.get("bot_id") or "bot"), data.get("read_at"), "bot_status_read_time"
         elif scope == "read_latest_report":

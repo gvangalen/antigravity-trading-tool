@@ -342,6 +342,25 @@ class PortfolioManualPositionData(BaseModel):
     price_as_of: Optional[datetime] = None
 
 
+class PortfolioWatchWalletData(BaseModel):
+    id: int
+    label: str
+    asset: Literal["BTC"] = "BTC"
+    source: Literal["self_custody_xpub"] = "self_custody_xpub"
+    script_type: str
+    quantity_btc: Optional[str] = None
+    confirmed_sats: Optional[int] = None
+    unconfirmed_sats: Optional[int] = None
+    sync_status: str
+    provider: Optional[str] = None
+    fetched_at: Optional[datetime] = None
+    watch_only: bool = True
+    position_value_eur: Optional[float] = None
+    valuation_available: bool = False
+    price_as_of: Optional[datetime] = None
+    stale: bool = False
+
+
 class PortfolioBotData(BaseModel):
     bot_id: Optional[int] = None
     name: Optional[str] = None
@@ -379,6 +398,7 @@ class PortfolioData(BaseModel):
     global_: PortfolioGlobalData = Field(default_factory=PortfolioGlobalData, alias="global")
     bots: List[PortfolioBotData] = Field(default_factory=list)
     manual_positions: List[PortfolioManualPositionData] = Field(default_factory=list)
+    watch_wallets: List[PortfolioWatchWalletData] = Field(default_factory=list)
     read_at: Optional[datetime] = None
     valuation_available: bool = False
     environment: Optional[Literal["paper", "live"]] = None

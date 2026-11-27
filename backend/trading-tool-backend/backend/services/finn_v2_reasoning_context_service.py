@@ -908,9 +908,16 @@ class FinnV2ReasoningContextService:
             }
         if tool_name == "read_portfolio":
             global_payload = payload.get("global") or payload.get("global_") or {}
+            watch_wallets = [{key: wallet.get(key) for key in (
+                "id", "label", "asset", "source", "quantity_btc", "sync_status",
+                "fetched_at", "stale", "position_value_eur", "valuation_available",
+                "price_as_of", "watch_only",
+            )} for wallet in (payload.get("watch_wallets") or [])[:10] if isinstance(wallet, dict)]
             return {
                 "global": global_payload,
                 "bots": payload.get("bots", [])[:50],
+                "watch_wallets": watch_wallets,
+                "watch_wallets_separate_from_global_equity": True,
                 "valuation_status": payload.get("valuation_status"),
                 "valuation_available": payload.get("valuation_available"),
                 "valuation_as_of": payload.get("valuation_as_of"),
