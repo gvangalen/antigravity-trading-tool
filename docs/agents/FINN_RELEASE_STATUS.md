@@ -4,6 +4,43 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: historische weekreflectie bij Paper-exit (27 november 2026)
+
+Phase: `PR_CI_PASSED_PENDING_MERGE`. Branch
+`codex/finn-report-feed-trigger-20261127` op main
+`460a6d211c12e92a140dd7981268037e2c976f96`, producthead
+`2049ff96591840627367da4f9378b6bc2945b186`, draft [PR #1409](https://github.com/gvangalen/antigravity-trading-tool/pull/1409).
+In de ingelogde read-only proef werd de AAPL Paper-exit correct gelezen, maar
+FINN verklaarde de opgeslagen weekreflectie van 9–15 november afwezig en
+besprak de nieuwere week 16–22 november. De historische feedkaart en link
+bestonden wel. Er was geen accountmutatie.
+
+De kandidaat bindt een expliciet genoemde reflectieweek aan de eigenaar en
+`week_start`; een geldige periode in de vraag wint van een andere geselecteerde
+paginaweek. Ongeldige of ambigue expliciete datums vallen gesloten. Een
+uitgesloten weekreflectie of uitsluitend trade-dossier leest geen extra week.
+De rapportpagina geeft zijn zichtbare weekselector aan FINN door. De
+Responses-leesgrens noemt de daadwerkelijk opgehaalde weekperiode. Dit is een
+read-only herstel; er zijn geen actiecontracten, bot-, order- of
+uitvoeringsregels gewijzigd.
+
+Gemeten lokale gates op de producthead: volledige backend
+`5667 passed, 7 skipped` (log SHA-256
+`5d62a1f803c636ace555b759a4fd38da7bfe489467c0683c03a8c0778df017b1`);
+frontend productiebuild, typecheck, i18n lint/test en commandotests groen;
+echte-providerselector development `20/20` (artifact SHA-256
+`b4b29340d238710daf0a96b5fe88d8eef80f12417146510c1a801edf7fde7edd`)
+en regression `109/109` (SHA-256
+`f33ec148feb45ff4937fcc285e573431c1e1dc4cb22f522b1caf0ca44cf82e0b`),
+zonder provider-, schema-, parse-, timeout- of validatiefout. De
+high-severity frontend-audit slaagde en meldt één bestaande moderate Next.js
+advisory. Onafhankelijke QA- en Security-codebeoordelingen vonden in deze
+scope geen blocker. Producthead-PR-CI [46054581378](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46054581378)
+heeft vijf geslaagde jobs. De statuscommit vereist opnieuw PR-CI. Merge,
+main-CI, Auto Deploy, publieke backend-/frontend-SHA-pariteit en de
+ingelogde antwoordproef op de exacte oude week blijven open; dit is geen
+live-acceptatie van de volledige Paper-exit → weekreflectie-keten.
+
 ## FINN 3.0: stabiele gemengde bot- en positieread (27 november 2026)
 
 Phase: `BUILD_GATES_PASSED_STATUS_CI_PENDING`. Branch
