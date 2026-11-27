@@ -248,6 +248,50 @@ def test_mixed_bot_position_does_not_bind_same_pair_across_markets():
     assert "koppeling tussen bot en plan niet eenduidig" in answer
 
 
+def test_mixed_bot_position_explains_saved_legacy_setup_without_inventing_pair():
+    question = (
+        "Vergelijk BTC/EUR met mijn open ETH-positie. Wat is de status van mijn "
+        "BTC-bot 129 en welke planvoorwaarden horen bij die bot? Vermeng geen "
+        "verschillende handelspaarbronnen. Lees alleen."
+    )
+    evidence = list(_evidence())
+    linked = next(item for item in evidence if item["scope"] == "read_linked_bot")
+    linked["data"] = {**linked["data"], "pair": None, "market_id": None,
+                      "strategy_id": 13}
+    setup = next(item for item in evidence if item["scope"] == "read_active_setup")
+    setup["data"] = {**setup["data"], "pair": None, "market_id": None,
+                     "timeframe": "4H"}
+    portfolio = next(item for item in evidence if item["scope"] == "read_portfolio")
+    portfolio["data"] = {**portfolio["data"], "bots": [
+        *portfolio["data"]["bots"],
+        {"bot_id": 129, "symbol": "BTC", "setup_id": 12,
+         "strategy_id": 13, "is_live": False, "operational_status": "active"},
+    ]}
+    answer = render_source_moment_partial(
+        question=question, evidence=tuple(evidence), require_facts=True,
+    )
+    assert answer is not None
+    assert "BTC-setup op 4H" in answer
+    assert "benchmarkscore tussen 61 en 75" in answer
+    assert "geen eigen handelspaar geverifieerd" in answer
+    assert "niet bevestigen dat de bot deze grens" in answer
+    assert "de koppeling tussen bot en plan niet eenduidig" not in answer
+    prepared = SimpleNamespace(
+        locale="nl", previous_response=None,
+        response=SimpleNamespace(
+            text="BTC/EUR 35 ligt onder de botband 61–75.",
+            tool_trace=({"name": "get_portfolio_and_exposure",
+                         "result": {"results": evidence}},),
+            uses_previous_response=False,
+            turn_contract={**_cross_source_contract(), "question": question},
+        ),
+    )
+    verified = _minimal_read_answer(message=question, prepared=prepared)
+    assert verified.status == "completed", (verified.reason, verified.rejection_details)
+    assert "BTC-setup op 4H" in verified.text
+    assert "BTC/EUR 35 ligt onder" not in verified.text
+
+
 def test_mixed_bot_position_portfolio_read_answers_known_facts_without_pair_claim():
     question = (
         "Vergelijk BTC/EUR met mijn open ETH-positie. Wat is de status van mijn "
