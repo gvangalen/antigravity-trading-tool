@@ -75,6 +75,7 @@ def _safe_reason(value: Any) -> str | None:
 
 def render_source_moment_partial(
     *, question: str, evidence: tuple[dict[str, Any], ...], locale: str = "nl",
+    require_facts: bool = False,
 ) -> str | None:
     """Recover a useful read-only answer without repeating an unverified clock."""
     language = str(locale or "nl").split("-")[0].lower()
@@ -87,12 +88,15 @@ def render_source_moment_partial(
     completed = [item for item in evidence if item.get("status") == "completed"
                  and isinstance(item.get("data"), dict)]
     if not completed:
+        if require_facts:
+            return None
         bot_ids = {int(match.group(1)) for match in _BOT_ID.finditer(question)}
         if len(pairs) > 1 and len(bot_ids) == 1:
             return f"Welk van de genoemde handelsparen hoort bij bot #{next(iter(bot_ids))}?"
         return "Welk asset of welke bron wil je als eerste laten controleren?"
 
     lines: list[str] = []
+    source_fact_count = 0
     requested_bot_ids = {int(match.group(1)) for match in _BOT_ID.finditer(question)}
     named_bot_assets = {match.group(1).upper() for match in re.finditer(
         r"\b([A-Z]{2,10})[-\s]+bot\s*#?\s*\d+\b", question, re.I,
@@ -139,6 +143,7 @@ def render_source_moment_partial(
             if status in {"active", "paused"}:
                 translated = "actief" if status == "active" else "gepauzeerd"
                 lines.append(f"Bot #{bot_id} heeft volgens de gelezen botstatus de status {translated}.")
+                source_fact_count += 1
         elif not status_rows and portfolio_status_pair_safe:
             portfolio_bot_rows = [bot for item in portfolio_reads
                                   for bot in item["data"].get("bots") or []
@@ -155,6 +160,7 @@ def render_source_moment_partial(
                 if status in {"active", "paused"}:
                     translated = "actief" if status == "active" else "gepauzeerd"
                     lines.append(f"In de gelezen Paper-portefeuille staat bot #{bot_id} op {translated}.")
+                    source_fact_count += 1
         decisions = [row for item in completed if item.get("scope") == "read_review_history"
                      for row in item["data"].get("latest_bot_decisions") or []
                      if isinstance(row, dict) and row.get("bot_id") == bot_id
@@ -167,12 +173,14 @@ def render_source_moment_partial(
             action = next(iter(actions))
             if action in {"hold", "wait", "blocked"}:
                 lines.append(f"De laatst gelezen beslissing voor bot #{bot_id} is wachten; dat is geen uitgevoerde koop.")
+                source_fact_count += 1
 
         reasons = [_safe_reason(row.get("safety_reason"))
                    for row in decisions]
         reason = _single(reasons)
         if reason:
             lines.append(f"De opgeslagen botreden is dat {reason}.")
+            source_fact_count += 1
         elif actions == {"hold"}:
             lines.append("De concrete reden voor dit wachtbesluit kan ik uit de gecontroleerde velden hier niet bevestigen.")
 
@@ -180,6 +188,7 @@ def render_source_moment_partial(
                and item["data"].get("report_type") == "daily_reports"]
     if asks_report and _single(reports) is not None:
         lines.append("Het gelezen dagrapport is een opgeslagen momentopname. De scores daarin zijn geen actuele botbeslissing.")
+        source_fact_count += 1
         report = reports[0]
         snapshot = report.get("score_source_snapshot") or {}
         assets_in_report = snapshot.get("assets") if isinstance(snapshot, dict) else None
@@ -192,6 +201,7 @@ def render_source_moment_partial(
                 value = _single(values)
                 if value is not None:
                     lines.append(f"In die rapportmomentopname staat voor {pair} benchmarkscore {value}/100.")
+                    source_fact_count += 1
     if (asks_report or asks_scores) and len(pairs) > 1 and (
         reports or any(item.get("scope") == "read_asset_scores" for item in completed)
     ):
@@ -212,6 +222,7 @@ def render_source_moment_partial(
         if len(values) == 1 and None not in values:
             _, score = next(iter(values))
             lines.append(f"De gelezen paaranalyse voor {pair} heeft benchmarkscore {score}/100.")
+            source_fact_count += 1
     setups = [item["data"] for item in completed if item.get("scope") == "read_active_setup"
               and str(item["data"].get("symbol") or "").upper() == bot_asset]
     matched_setups = [row for row in setups if selected_bot is not None
@@ -223,9 +234,11 @@ def render_source_moment_partial(
         high = _score(setup.get("max_benchmark_score"))
         if low is not None and high is not None:
             lines.append(f"Het aan bot #{selected_bot['bot_id']} gekoppelde plan vereist een benchmarkscore tussen {low} en {high}.")
+            source_fact_count += 1
             lines.append("Die grens hoort bij dit botplan. Een handmatige preview kan een andere setup en dus andere voorwaarden gebruiken.")
     if selected_bot is not None and pair_bound:
         lines.append("Een botplan beoordeelt daarnaast zijn eigen instapvoorwaarden; een rapportscore is geen koopopdracht.")
+        source_fact_count += 1
 
     positions: dict[tuple[int, str], set[str]] = {}
     known_position_bots: set[tuple[int, str]] = set()
@@ -253,10 +266,12 @@ def render_source_moment_partial(
         ) for item in eligible_reads)
         if present_in_all and quantities == {"0"} and asks_position:
             lines.append(f"In de gelezen Paper-portefeuille heeft bot #{bot_id} geen open {symbol}-positie (0 {symbol}).")
+            source_fact_count += 1
             known_position_bots.add((bot_id, symbol))
         elif present_in_all and len(quantities) == 1 and "unknown" not in quantities and "0" not in quantities:
             quantity = next(iter(quantities))
             lines.append(f"In de gelezen Paper-portefeuille staat bij bot #{bot_id} een open positie van {quantity} {symbol}.")
+            source_fact_count += 1
             known_position_bots.add((bot_id, symbol))
 
     confirmed_position_assets = {
@@ -269,6 +284,8 @@ def render_source_moment_partial(
         pair = next(iter(pairs))
         lines.append(f"{pair} is het genoemde analysepaar; de botvoorwaarden horen bij het eigen botpaar.")
 
+    if require_facts and source_fact_count == 0:
+        return None
     if not lines:
         requested = []
         if asks_bot:

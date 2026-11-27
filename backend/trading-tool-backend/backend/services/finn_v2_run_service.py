@@ -2035,16 +2035,10 @@ def _minimal_read_answer(
         from backend.services.finn_v2_turn_contract import turn_contract_gap
         partial = render_source_moment_partial(
             question=message, evidence=current_evidence,
-            locale=getattr(prepared, "locale", "nl"),
+            locale=getattr(prepared, "locale", "nl"), require_facts=True,
         )
-        # A question with all of its subjects already named is not resolved
-        # by a generic "which asset?" prompt. Treat a partial without any
-        # source-backed fact as unavailable, so the turn cannot look done.
-        partial_has_facts = bool(partial) and not partial.startswith((
-            "Ik kan ", "Welk asset ", "Welk handelspaar ",
-        ))
         contract = getattr(prepared.response, "turn_contract", None)
-        if (partial_has_facts
+        if (partial
                 and current_source_moments_supported(
                     partial, current_evidence, question=message, typed_recovery=True,
                 )
