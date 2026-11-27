@@ -26,6 +26,12 @@ runtime matrix. Its artifact is written to
 loads the same local environment before making real provider calls, so its
 telemetry cannot fall back to another database.
 
+`matrix` also runs the owner-funded Paper-reserve contract. To run just that
+contract, use `ops/local-finn/finn-local.sh paper-funding`. It creates and
+removes a synthetic local user, checks funding,
+replay, overdraft, a zero history point after full withdrawal, and a race
+between withdrawal and one Paper order. It never uses a broker.
+
 PM2 parity is verified by `pytest -q backend/trading-tool-backend/backend/tests/test_finn_local_integration.py`:
 the production ecosystem worker commands, work directories, queue names and
 environment names are compared with this local harness.

@@ -957,6 +957,72 @@ class BotService:
         return {"ok": True, **result, "amount_eur": float(amount),
                 "source_bot_id": source_bot_id, "target_bot_id": target_bot_id}
 
+    async def transfer_paper_reserve(
+        self, *, user_id: int, bot_id: int, direction: str,
+        amount_eur: Decimal, idempotency_key: str,
+    ) -> dict:
+        from backend.infrastructure.repositories.paper_reserve_repository import PaperReserveRepository
+
+        amount = Decimal(str(amount_eur))
+        try:
+            result = await PaperReserveRepository(self.session).transfer(
+                user_id=user_id, bot_id=bot_id, direction=direction,
+                amount_eur=amount, idempotency_key=idempotency_key,
+            )
+            await self.session.commit()
+        except ValueError as exc:
+            await self.session.rollback()
+            messages = {
+                "paper_reserve_direction_invalid": "Kies een geldige Paper-overboeking.",
+                "paper_reserve_amount_invalid": "Gebruik een positief bedrag in hele eurocenten.",
+                "paper_reserve_key_invalid": "De overboekingsreferentie is ongeldig.",
+                "paper_reserve_key_reused": "Deze referentie hoort bij een andere overboeking.",
+                "paper_reserve_bot_invalid": "Kies een bestaande Paper-bot van dit account.",
+                "paper_reserve_bot_unverified": "De Paper-bot heeft nog niet geverifieerde transacties.",
+                "paper_reserve_insufficient_bot_cash": "De bot heeft onvoldoende vrije Paper-kas.",
+                "paper_reserve_insufficient_cash": "De vrije Paper-reserve is te laag.",
+            }
+            raise HTTPException(409, messages.get(str(exc), "Paper-overboeking geweigerd.")) from exc
+        if not result["replayed"]:
+            try:
+                await asyncio.to_thread(sync_snapshot_all_for_user, user_id)
+            except Exception:
+                logger.exception("Paper snapshot after reserve transfer failed for user=%s", user_id)
+        return {"ok": True, **result, "amount_eur": float(amount),
+                "bot_id": bot_id, "direction": direction}
+
+    async def fund_paper_reserve(
+        self, *, user_id: int, direction: str,
+        amount_eur: Decimal, idempotency_key: str,
+    ) -> dict:
+        """Set owner-controlled virtual Paper cash outside bot budgets."""
+        from backend.infrastructure.repositories.paper_reserve_repository import PaperReserveRepository
+        try:
+            result = await PaperReserveRepository(self.session).fund(
+                user_id=user_id, direction=direction,
+                amount_eur=Decimal(str(amount_eur)),
+                idempotency_key=idempotency_key,
+            )
+            await self.session.commit()
+        except ValueError as exc:
+            await self.session.rollback()
+            messages = {
+                "paper_funding_direction_invalid": "Kies een geldige Paper-budgetmutatie.",
+                "paper_funding_amount_invalid": "Gebruik een positief bedrag in hele eurocenten.",
+                "paper_funding_key_invalid": "De budgetreferentie is ongeldig.",
+                "paper_funding_key_reused": "Deze referentie hoort bij een andere budgetmutatie.",
+                "paper_funding_insufficient_reserve": "De vrije Paper-reserve is te laag.",
+                "paper_funding_storage_overflow": "Dit bedrag past niet in de Paper-kasadministratie.",
+            }
+            raise HTTPException(409, messages.get(str(exc), "Paper-budgetmutatie geweigerd.")) from exc
+        if not result["replayed"]:
+            try:
+                await asyncio.to_thread(sync_snapshot_all_for_user, user_id)
+            except Exception:
+                logger.exception("Paper snapshot after reserve funding failed for user=%s", user_id)
+        return {"ok": True, **result, "amount_eur": float(amount_eur),
+                "direction": direction, "currency": "EUR", "virtual_only": True}
+
     async def update_bot_config(self, bot_id: int, payload: BotConfigUpdateSchema, user_id: int) -> dict:
         # Match the order-submission lock order. History and validation must
         # observe any sending intent committed before this update can proceed.

@@ -64,9 +64,30 @@ def _snapshot_verified_paper(cur, user_id: int, bucket: BucketType, ts: datetime
         ORDER BY c.id
     """, (user_id,))
     bots = cur.fetchall()
-    if (not bots or not any(row[2] for row in bots)
-            or any(row[5] or (not row[2] and row[7]) for row in bots)):
+    cur.execute("SELECT cash_eur FROM paper_reserve_accounts WHERE user_id=%s", (user_id,))
+    reserve_row = cur.fetchone()
+    reserve_cash = float(reserve_row[0]) if reserve_row else 0.0
+    cur.execute("""
+        SELECT market_id, asset_symbol, quote_currency, quantity, invested_eur
+        FROM paper_discretionary_positions
+        WHERE user_id=%s AND quantity > 0 ORDER BY market_id
+    """, (user_id,))
+    manual_positions = cur.fetchall()
+    if any(row[5] or (not row[2] and row[7]) for row in bots):
         return False
+    if (not bots or not any(row[2] for row in bots)) and reserve_cash <= 0 and not manual_positions:
+        # A final withdrawal must replace an earlier positive point in the
+        # current bucket. Do not start an empty history for untouched users.
+        cur.execute("""
+            SELECT 1 WHERE EXISTS (
+                SELECT 1 FROM portfolio_value_snapshots_v2
+                WHERE user_id=%s AND environment='paper'
+            ) OR EXISTS (
+                SELECT 1 FROM paper_reserve_funding WHERE user_id=%s
+            )
+        """, (user_id, user_id))
+        if cur.fetchone() is None:
+            return False
     cur.execute("""
         SELECT quote_currency, eur_per_unit, observed_at, provider, provider_pair FROM portfolio_fx_rates
         WHERE quote_currency IN ('USD','USDT')
@@ -75,8 +96,10 @@ def _snapshot_verified_paper(cur, user_id: int, bucket: BucketType, ts: datetime
                               "provider": row[3], "provider_pair": row[4]} for row in cur.fetchall()}
     held_symbols = sorted({str(row[1]).upper() for row in bots
                            if float(row[4] or 0) != 0 and row[8] is None})
-    held_market_ids = sorted({int(row[8]) for row in bots
-                              if float(row[4] or 0) != 0 and row[8] is not None})
+    held_market_ids = sorted(
+        {int(row[8]) for row in bots if float(row[4] or 0) != 0 and row[8] is not None}
+        | {int(row[0]) for row in manual_positions}
+    )
     prices = {}
     if held_symbols:
         cur.execute("""
@@ -138,7 +161,7 @@ def _snapshot_verified_paper(cur, user_id: int, bucket: BucketType, ts: datetime
             prices[(str(quote.symbol).upper(), market_id)] = (
                 quote.price, quote.source_observed_at, quote.quote_currency, quote.id,
             )
-    cash = 0.0
+    cash = reserve_cash
     position_value = 0.0
     source_times = []
     evidence = []
@@ -174,6 +197,27 @@ def _snapshot_verified_paper(cur, user_id: int, bucket: BucketType, ts: datetime
             "eur_per_unit": factor, "fx_at": fx_at.isoformat() if fx_at else None,
             "fx_provider": fx_row.get("provider"), "fx_provider_pair": fx_row.get("provider_pair"),
         })
+    manual_evidence = []
+    for market_id, symbol, quote_currency, qty, invested_eur in manual_positions:
+        price_row = prices.get((str(symbol).upper(), int(market_id)))
+        if not price_row or str(price_row[2]).upper() != str(quote_currency).upper():
+            return False
+        price, source_at, quote, price_row_id = price_row
+        eur_price, effective_at, factor, fx_at = price_in_eur(
+            price=price, price_at=source_at, quote_currency=quote,
+            fx=fx.get(str(quote).upper()), now=now,
+        )
+        if eur_price is None:
+            return False
+        position_value += float(qty) * eur_price
+        source_times.append(effective_at)
+        manual_evidence.append({
+            "market_id": int(market_id), "symbol": str(symbol).upper(),
+            "quote_currency": str(quote_currency).upper(), "quantity": float(qty),
+            "invested_eur": float(invested_eur), "price_row_id": price_row_id,
+            "price_at": source_at.isoformat(), "eur_per_unit": factor,
+            "fx_at": fx_at.isoformat() if fx_at else None,
+        })
     cur.execute("""
         INSERT INTO portfolio_value_snapshots_v2
           (user_id, environment, bucket, ts, equity_eur, cash_eur,
@@ -187,7 +231,9 @@ def _snapshot_verified_paper(cur, user_id: int, bucket: BucketType, ts: datetime
           evidence_json=EXCLUDED.evidence_json
     """, (user_id, bucket, ts, cash + position_value, cash,
           position_value, len(bots), min(source_times) if source_times else now,
-          json.dumps({"valuation_version": 2, "positions": evidence})))
+          json.dumps({"valuation_version": 2, "positions": evidence,
+                      "paper_reserve_cash_eur": reserve_cash,
+                      "manual_positions": manual_evidence})))
     return True
 
 

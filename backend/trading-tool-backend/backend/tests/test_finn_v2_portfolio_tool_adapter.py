@@ -84,6 +84,7 @@ def test_portfolio_adapter_keeps_owner_scope_and_filters_only_the_existing_ledge
     assert result["summary"]["valuation_as_of_amsterdam"].endswith((" CET", " CEST"))
     assert result["data"].global_.dict() == {
         "currency": "EUR",
+        "paper_reserve_cash_eur": None,
         "total_equity": 350.0,
         "cash_balance": 100.0,
         "invested_value": 200.0,

@@ -327,6 +327,19 @@ class PortfolioGlobalData(BaseModel):
     unrealized_pnl: Optional[float] = None
     total_budget_limit: Optional[float] = None
     allocations_pct: dict[str, float] = Field(default_factory=dict)
+    paper_reserve_cash_eur: Optional[float] = None
+
+
+class PortfolioManualPositionData(BaseModel):
+    market_id: int
+    symbol: str
+    quote_currency: str
+    pair: str
+    quantity: float
+    invested_eur: float
+    position_value_eur: Optional[float] = None
+    valuation_available: bool = False
+    price_as_of: Optional[datetime] = None
 
 
 class PortfolioBotData(BaseModel):
@@ -365,6 +378,7 @@ class PortfolioBotData(BaseModel):
 class PortfolioData(BaseModel):
     global_: PortfolioGlobalData = Field(default_factory=PortfolioGlobalData, alias="global")
     bots: List[PortfolioBotData] = Field(default_factory=list)
+    manual_positions: List[PortfolioManualPositionData] = Field(default_factory=list)
     read_at: Optional[datetime] = None
     valuation_available: bool = False
     environment: Optional[Literal["paper", "live"]] = None

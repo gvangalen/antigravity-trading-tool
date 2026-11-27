@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import logging
 import os
 from time import perf_counter
@@ -6,7 +7,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from pydantic import BaseModel, Field, condecimal, conlist
+from pydantic import BaseModel, Field, condecimal, conlist, constr
 from sqlalchemy import text
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +15,9 @@ from backend.infrastructure.database import get_db, measure_read_connection_acqu
 from backend.utils.auth_utils import get_current_user
 from backend.utils.rate_limit import SharedRateLimiter, client_ip
 from backend.services.bot_service import BotService
+from backend.services.paper_discretionary_order_service import PaperDiscretionaryOrderService
+from backend.infrastructure.repositories.paper_reserve_repository import PaperReserveRepository
+from backend.infrastructure.repositories.finn_v2_conversation_repository import FinnV2ConversationRepository
 from backend.services.finn_trade_review_service import FinnTradeReviewService
 from backend.services.finn_trade_screenshot import MAX_BYTES
 from backend.services.finn_trade_analysis_service import FinnTradeAnalysisService
@@ -133,6 +137,178 @@ async def transfer_paper_cash(
         target_bot_id=payload.target_bot_id, amount_eur=payload.amount_eur,
         idempotency_key=payload.idempotency_key,
     )
+
+
+class PaperReserveTransferRequest(BaseModel):
+    bot_id: int
+    direction: Literal["bot_to_reserve", "reserve_to_bot"]
+    amount_eur: condecimal(gt=Decimal("0"), max_digits=20, decimal_places=2)
+    idempotency_key: constr(min_length=8, max_length=128)
+
+
+class PaperReserveFundingRequest(BaseModel):
+    direction: Literal["add", "remove"]
+    amount_eur: condecimal(gt=Decimal("0"), max_digits=20, decimal_places=2)
+    idempotency_key: constr(min_length=8, max_length=128)
+
+
+@router.post("/portfolio/paper-reserve/transfer")
+async def transfer_paper_reserve(
+    payload: PaperReserveTransferRequest,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+    service: BotService = Depends(get_bot_service),
+):
+    _apply_sensitive_order_rate_limit(
+        user_id=current_user["id"], request=request, action_key="paper_reserve_transfer",
+    )
+    return await service.transfer_paper_reserve(
+        user_id=current_user["id"], bot_id=payload.bot_id,
+        direction=payload.direction, amount_eur=payload.amount_eur,
+        idempotency_key=payload.idempotency_key,
+    )
+
+
+@router.post("/portfolio/paper-reserve/funding")
+async def fund_paper_reserve(
+    payload: PaperReserveFundingRequest,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+    service: BotService = Depends(get_bot_service),
+):
+    _apply_sensitive_order_rate_limit(
+        user_id=current_user["id"], request=request, action_key="paper_reserve_funding",
+    )
+    return await service.fund_paper_reserve(
+        user_id=current_user["id"], direction=payload.direction,
+        amount_eur=payload.amount_eur, idempotency_key=payload.idempotency_key,
+    )
+
+
+class PaperDiscretionaryPreviewRequest(BaseModel):
+    asset: constr(min_length=2, max_length=20)
+    quote_currency: Literal["EUR", "USDT"]
+    amount_quote: condecimal(gt=Decimal("0"), max_digits=20, decimal_places=2)
+    idempotency_key: constr(min_length=8, max_length=128)
+
+
+class PaperDiscretionaryExecuteRequest(PaperDiscretionaryPreviewRequest):
+    preview_token: constr(min_length=16)
+    conversation_id: constr(min_length=8, max_length=128)
+
+
+@router.get("/portfolio/paper-reserve")
+async def get_paper_reserve(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    cash = await PaperReserveRepository(db).cash(current_user["id"])
+    return {"cash_eur": str(cash), "currency": "EUR"}
+
+
+@router.get("/portfolio/paper-discretionary-orders")
+async def list_paper_discretionary_orders(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    rows = await db.execute(text("""
+        SELECT id, asset_symbol, quote_currency, side, notional_quote,
+               gross_eur, fee_eur, quantity, price_quote, created_at
+        FROM paper_discretionary_orders
+        WHERE user_id=:user_id
+        ORDER BY created_at DESC, id DESC LIMIT 50
+    """), {"user_id": current_user["id"]})
+    return [dict(row._mapping) for row in rows.fetchall()]
+
+
+@router.post("/portfolio/paper-discretionary-orders/preview")
+async def preview_paper_discretionary_order(
+    payload: PaperDiscretionaryPreviewRequest,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _apply_sensitive_order_rate_limit(
+        user_id=current_user["id"], request=request, action_key="paper_discretionary_preview",
+    )
+    return await PaperDiscretionaryOrderService(db).preview(
+        user_id=current_user["id"], **payload.dict(),
+    )
+
+
+@router.post("/portfolio/paper-discretionary-orders")
+async def execute_paper_discretionary_order(
+    payload: PaperDiscretionaryExecuteRequest,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _apply_sensitive_order_rate_limit(
+        user_id=current_user["id"], request=request, action_key="paper_discretionary_order",
+    )
+    try:
+        conversations = FinnV2ConversationRepository(db)
+        conversation = await conversations.get_by_id_for_user(
+            conversation_id=payload.conversation_id, user_id=current_user["id"],
+            for_update=True,
+        )
+        draft = dict((conversation.context_json or {}).get("paper_discretionary_order_draft") or {}) if conversation else {}
+        if (draft.get("status") == "executed"
+                and draft.get("idempotency_key") == payload.idempotency_key
+                and draft.get("asset") == payload.asset.upper()
+                and draft.get("quote_currency") == payload.quote_currency
+                and draft.get("amount_quote") == str(payload.amount_quote)
+                and draft.get("preview_token_hash") == hashlib.sha256(payload.preview_token.encode()).hexdigest()):
+            return await PaperDiscretionaryOrderService(db).execute(
+                user_id=current_user["id"], asset=payload.asset,
+                quote_currency=payload.quote_currency,
+                amount_quote=payload.amount_quote,
+                idempotency_key=payload.idempotency_key,
+                preview_token=payload.preview_token,
+            )
+        if (draft.get("status") != "preview_ready"
+                or draft.get("idempotency_key") != payload.idempotency_key
+                or draft.get("preview_token") != payload.preview_token
+                or draft.get("asset") != payload.asset.upper()
+                or draft.get("quote_currency") != payload.quote_currency
+                or draft.get("amount_quote") != str(payload.amount_quote)):
+            raise HTTPException(409, "Deze Paper-orderkaart is niet meer actueel. Vraag FINN om een nieuwe preview.")
+        result = await PaperDiscretionaryOrderService(db).execute(
+            user_id=current_user["id"], asset=payload.asset,
+            quote_currency=payload.quote_currency,
+            amount_quote=payload.amount_quote,
+            idempotency_key=payload.idempotency_key,
+            preview_token=payload.preview_token,
+        )
+        # execute() commits the ledger atomically. Replays return the same
+        # order and the conversation is then retired separately.
+        conversation = await conversations.get_by_id_for_user(
+            conversation_id=payload.conversation_id, user_id=current_user["id"],
+            for_update=True,
+        )
+        context = dict(conversation.context_json or {})
+        context["paper_discretionary_order_draft"] = {
+            "status": "executed", "order_id": result["order_id"],
+            "idempotency_key": payload.idempotency_key,
+            "asset": payload.asset.upper(),
+            "quote_currency": payload.quote_currency,
+            "amount_quote": str(payload.amount_quote),
+            "preview_token_hash": hashlib.sha256(payload.preview_token.encode()).hexdigest(),
+        }
+        await conversations.update_context(
+            conversation_id=payload.conversation_id, user_id=current_user["id"],
+            context=context,
+        )
+        await db.commit()
+        try:
+            from backend.services.bot_service import sync_snapshot_all_for_user
+            await asyncio.to_thread(sync_snapshot_all_for_user, current_user["id"])
+        except Exception:
+            logging.getLogger(__name__).exception("Paper order snapshot failed after committed order")
+        return result
+    except Exception:
+        await db.rollback()
+        raise
 
 # ==========================================================
 # 📄 BOT DECISIONS (TODAY/HISTORY)
