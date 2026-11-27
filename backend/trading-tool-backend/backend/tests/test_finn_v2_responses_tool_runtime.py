@@ -15909,10 +15909,12 @@ def test_named_bot_and_other_open_position_require_owner_portfolio_read(monkeypa
     ("live", " Mijn BTC Paper-bot en ETH-positie staan los.", {}),
     ("paper", " Mijn BTC Live-bot en ETH-positie staan los.", {}),
     ("live", " Alleen Paper, niet Live.", {"environment": "paper"}),
-    ("paper", " Alleen Live, geen Paper.", {"environment": "live"}),
-    ("paper", " Lees mijn Live-account.", {"environment": "live"}),
-    ("paper", " Lees mijn Live-account maar wijzig niet de bot.", {"environment": "live"}),
-    ("paper", " Toon mijn Live-account.", {"environment": "live"}),
+    ("paper", " Alleen Live, geen Paper.", {}),
+    ("paper", " Lees mijn Live-account.", {}),
+    ("paper", " Lees mijn Live-account maar wijzig niet de bot.", {}),
+    ("paper", " Toon mijn Live-account.", {}),
+    ("live", " Wat doet de knop ‘Toon mijn Live-account’?", {}),
+    ("live", " Lees mijn Live-account pas nadat ik akkoord geef.", {}),
     ("live", " Vergelijk Paper en Live.", {}),
 ])
 def test_mixed_bot_position_reads_exact_portfolio_bot_parents(

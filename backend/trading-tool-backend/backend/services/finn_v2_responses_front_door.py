@@ -1501,7 +1501,7 @@ class FinnResponsesFrontDoor:
 
     @staticmethod
     def _mixed_portfolio_environment(message: str) -> str | None:
-        """Use only an affirmative user choice to fetch a Live account."""
+        """Keep this cross-asset coach read away from broker account retrieval."""
         selected: set[str] = set()
         excluded: set[str] = set()
         for match in re.finditer(r"\b(?:Paper|Live)\b", message, re.I):
@@ -1528,15 +1528,9 @@ class FinnResponsesFrontDoor:
             return "paper"
         if "live" in excluded and "live" not in selected:
             return "paper"
-        if "live" in selected and "paper" not in selected and "live" not in excluded:
-            if re.search(
-                r"(?:^|[.!?]\s*)(?:alleen|uitsluitend|enkel|only)\s+Live\b"
-                r"|\b(?:lees|controleer|toon|bekijk|read|show|check)\s+"
-                r"(?:(?:nu|alleen|uitsluitend)\s+)?(?:mijn|my)\s+"
-                r"Live[-\s]+(?:account|portefeuille|portfolio)\b",
-                message, re.I,
-            ):
-                return "live"
+        # A mixed bot/position explanation never needs the broker balance.
+        # Even an apparent Live instruction can be quoted or conditional;
+        # that account must be read through its separate direct route.
         return None
 
     @staticmethod
