@@ -4,6 +4,34 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: bronmomenten historische AAPL-weekreflectie in gebruikerstijdzone (27 november 2026)
+
+Phase: `PR_CI_RUNNING`. Branch `codex/finn-reflection-timezone-20261127`,
+producthead `e05b362c679e34f44187553efc34f1e2155ebb40`,
+[PR #1410](https://github.com/gvangalen/antigravity-trading-tool/pull/1410).
+Onafhankelijke live QA op eerdere SHA `ff698d2af0a4af231f40e5f135aded7d250749e7`
+vond de juiste AAPL-week 9–15 november bij een herhaalde vraag, maar het
+tweede antwoord gaf de exit- en opslagmomenten alleen in UTC. Deze kandidaat
+vult uit dezelfde eigenaargebonden read uitsluitend ontbrekende bronmomenten
+aan in de IANA-tijdzone van de gebruiker. De opgeslagen trade-afsluiting is
+apart gelabeld van een botbeslissing. Afwijkend dossier-ID, andere expliciete
+exitdatum, ambigue datum, ongeldige zone of ontbrekende bron laat de aanvulling
+achterwege. Er is geen actiecontract, bot, order of frontend-flow gewijzigd.
+
+Gerichte backendregressies `66 passed`; volledige backend op de finale diff
+`5669 passed, 7 skipped` (log SHA-256
+`12303403b8edeb4e48026158237734e74147c1db5e20c64a89396dd33b17bc25`).
+Onafhankelijke QA- en Security-
+codeherreviews vonden op de definitieve productdiff geen blocker. De
+echte-providerselector gaf development `20/20` (artifact SHA-256
+`72f66e729b081c235527abac3d16ba8d90d42720ce4a118f95afce9c8dbac225`)
+en regression `109/109` (SHA-256
+`4f678771c33b6c2b254ca6160dafb308cf97457c18a583d743f6ddcc9dd7267a`),
+zonder provider-, schema-, parse-, validatie- of timeoutfouten.
+Finale PR-CI, main-CI, Auto Deploy en exact
+publieke backend-/frontend-SHA-pariteit staan nog open. De ingelogde herhaalproef
+en het onafhankelijke live QA-verdict volgen pas op de definitieve publieke SHA.
+
 ## FINN 3.0: historische weekreflectie bij Paper-exit (27 november 2026)
 
 Phase: `PR_CI_PASSED_PENDING_MERGE`. Branch

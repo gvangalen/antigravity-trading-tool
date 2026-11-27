@@ -51,6 +51,7 @@ from backend.services.finn_v2_profile_paper_fit_answer import render_profile_pap
 from backend.services.finn_v2_fomo_plan_answer import render_fomo_plan_answer
 from backend.services.finn_v2_two_plan_checks_answer import verified_two_plan_checks
 from backend.services.finn_v2_factual_source_answer import (
+    complete_historical_week_exit_moments,
     render_bot_decision, render_closed_paper_exit_facts, render_selected_paper_feed_decision, render_latest_quote, render_portfolio_read_time,
     render_report_and_quote_times, render_report_and_technical_read,
     render_report_bot_check_comparison, render_multi_asset_report_bot_comparison,
@@ -3086,10 +3087,16 @@ class FinnResponsesAnswerVerifier:
                 user_time_zone=user_time_zone,
             )
             if checked.status == "completed" and checked.text.strip() != result.text.strip():
-                if checked.text == complete_requested_bot_status_read_time(
-                    result.text, checked.evidence, question=message,
-                    user_time_zone=user_time_zone,
-                ):
+                if checked.text in {
+                    complete_requested_bot_status_read_time(
+                        result.text, checked.evidence, question=message,
+                        user_time_zone=user_time_zone,
+                    ),
+                    complete_historical_week_exit_moments(
+                        result.text, checked.evidence, question=message,
+                        user_time_zone=user_time_zone,
+                    ),
+                }:
                     return checked
                 # Existing source and safety checks may synthesize a safe
                 # replacement. In the single-owner path that is feedback to
@@ -6255,6 +6262,13 @@ class FinnResponsesAnswerVerifier:
             final_text = f"{lead}\n\n{final_text}"
         if result.answer_kind == "free_text" and str(locale or "nl").lower().startswith("nl"):
             complete_text = complete_requested_bot_status_read_time(
+                final_text, evidence, question=message, user_time_zone=user_time_zone,
+            )
+            if complete_text != final_text and current_source_moments_supported(
+                complete_text, evidence, question=message,
+            ):
+                final_text = complete_text
+            complete_text = complete_historical_week_exit_moments(
                 final_text, evidence, question=message, user_time_zone=user_time_zone,
             )
             if complete_text != final_text and current_source_moments_supported(

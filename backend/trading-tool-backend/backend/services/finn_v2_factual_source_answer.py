@@ -62,6 +62,101 @@ def _utc_instant(value: Any) -> datetime | None:
         return None
 
 
+def complete_historical_week_exit_moments(
+    answer: str, evidence: tuple[dict[str, Any], ...], *, question: str,
+    user_time_zone: str | None,
+) -> str:
+    """Show the two verified source moments in the user's zone for a weekly exit review."""
+    if not user_time_zone or not re.search(r"\b(?:weekreflectie|wekelijkse reflectie)\b", question, re.I) \
+            or not re.search(r"\bAAPL\b", question, re.I) \
+            or not re.search(r"\bPaper\b", question, re.I) \
+            or not re.search(r"\b(?:exitreden|exit|uitstap|verkoop|afgesloten)\b", question, re.I):
+        return answer
+    try:
+        ZoneInfo(user_time_zone)
+    except (ZoneInfoNotFoundError, TypeError, ValueError):
+        return answer
+    rows = [item["data"] for item in evidence
+            if item.get("scope") == "read_review_history"
+            and item.get("status") == "completed" and isinstance(item.get("data"), dict)]
+    if len(rows) != 1:
+        return answer
+    week = rows[0].get("weekly_reflection")
+    if not isinstance(week, dict):
+        return answer
+    try:
+        start = datetime.fromisoformat(str(week["week_start"])).date()
+        end = datetime.fromisoformat(str(week["week_end"])).date()
+    except (KeyError, TypeError, ValueError):
+        return answer
+    try:
+        period_zone = ZoneInfo(str(week.get("time_zone") or user_time_zone))
+    except (ZoneInfoNotFoundError, TypeError, ValueError):
+        return answer
+    trades = [trade for trade in rows[0].get("closed_trades") or []
+              if isinstance(trade, dict) and trade.get("symbol") == "AAPL"
+              and str(trade.get("environment") or "").lower() == "paper"
+              and (instant := _utc_instant(trade.get("exit_at"))) is not None
+              and start <= instant.astimezone(period_zone).date() <= end]
+    if len(trades) != 1:
+        return answer
+    requested_ids = {int(match.group(1)) for match in re.finditer(
+        r"\b(?:dossier|trade(?:[- ]?(?:reflectie|review))?|review)\s*#\s*(\d+)\b",
+        question, re.I,
+    )}
+    if requested_ids and requested_ids != {trades[0].get("review_id")}:
+        return answer
+    # A separately named exit date can refer to another trade than the week.
+    # Remove the week range before interpreting dates as trade references.
+    without_week = re.sub(
+        r"\b\d{1,2}\s*[–—-]\s*\d{1,2}\s+"
+        r"(?:jan(?:uari)?|feb(?:ruari)?|mrt|maart|apr(?:il)?|mei|jun(?:i)?|"
+        r"jul(?:i)?|aug(?:ustus)?|sep(?:tember)?|okt(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b",
+        "", question, flags=re.I,
+    )
+    without_week = re.sub(
+        rf"\b{re.escape(start.isoformat())}\s*(?:tot|t/m|[–—-])\s*"
+        rf"{re.escape(end.isoformat())}\b", "", without_week, flags=re.I,
+    )
+    exit_date = _utc_instant(trades[0]["exit_at"]).astimezone(period_zone).date()
+    for match in re.finditer(r"\b\d{4}-\d{2}-\d{2}\b", without_week):
+        try:
+            if datetime.fromisoformat(match.group()).date() != exit_date:
+                return answer
+        except ValueError:
+            return answer
+    without_week = re.sub(r"\b\d{4}-\d{2}-\d{2}\b", "", without_week)
+    # Numeric locale dates are ambiguous (day/month versus month/day). Do not
+    # guess which exit they identify; the week range itself was removed above.
+    if re.search(r"\b\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?\b", without_week):
+        return answer
+    month_numbers = {name: number for number, names in enumerate((
+        ("januari", "jan"), ("februari", "feb"), ("maart", "mrt"),
+        ("april", "apr"), ("mei",), ("juni", "jun"), ("juli", "jul"),
+        ("augustus", "aug"), ("september", "sep"), ("oktober", "okt"),
+        ("november", "nov"), ("december", "dec"),
+    ), 1) for name in names}
+    for match in re.finditer(
+        r"\b(\d{1,2})\s+(januari|jan|februari|feb|maart|mrt|april|apr|mei|"
+        r"juni|jun|juli|jul|augustus|aug|september|sep|oktober|okt|"
+        r"november|nov|december|dec)(?:\s+(\d{4}))?\b", without_week, re.I,
+    ):
+        if (int(match.group(1)), month_numbers[match.group(2).lower()]) != (
+            exit_date.day, exit_date.month,
+        ) or (match.group(3) and int(match.group(3)) != exit_date.year):
+            return answer
+    exit_at, zone_name = _moment_in_zone(trades[0]["exit_at"], user_time_zone)
+    saved_at, _ = _moment_in_zone(week.get("generated_at"), user_time_zone)
+    if not exit_at or not saved_at:
+        return answer
+    additions = []
+    if exit_at not in answer:
+        additions.append(f"AAPL Paper-trade als gesloten geregistreerd: {exit_at} ({zone_name}).")
+    if saved_at not in answer:
+        additions.append(f"Weekreflectie opgeslagen: {saved_at} ({zone_name}).")
+    return answer.rstrip() + ("\n" + "\n".join(additions) if additions else "")
+
+
 def _number(value: Any) -> str | None:
     try:
         amount = Decimal(str(value))
