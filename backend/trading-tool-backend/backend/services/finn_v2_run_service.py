@@ -2050,6 +2050,22 @@ def _minimal_read_answer(
                 and (not contract or turn_contract_gap(contract, partial, typed_recovery=True) is None)):
             text = partial
             forced_source_partial = True
+        else:
+            language = str(getattr(prepared, "locale", "nl") or "nl").split("-")[0].lower()
+            clarification = {
+                "en": ("I cannot reliably connect this bot's plan and the position to the "
+                       "named trading pairs. Shall I check the bot and portfolio separately?"),
+                "de": ("Ich kann den Botplan und die Position nicht eindeutig den genannten "
+                       "Handelspaaren zuordnen. Soll ich Bot und Portfolio getrennt prüfen?"),
+            }.get(language, (
+                "Ik kan het botplan en de positie niet eenduidig aan de genoemde "
+                "handelsparen koppelen. Wil je dat ik de bot en Paper-portefeuille "
+                "afzonderlijk controleer?"
+            ))
+            return FinnResponsesVerifiedAnswer(
+                "unavailable", clarification, "mixed_bot_position_source_incomplete",
+                current_evidence,
+            )
 
     if not FinnResponsesAnswerVerifier._latest_quote_claim_supported(text, tuple(
         item for call in prepared.response.tool_trace

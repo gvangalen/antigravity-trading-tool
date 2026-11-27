@@ -299,6 +299,29 @@ def test_mixed_bot_position_intent_excludes_score_only_question():
     )
 
 
+def test_mixed_bot_position_failed_recovery_never_returns_model_pair_mix():
+    question = (
+        "Vergelijk BTC/EUR met mijn open ETH-positie. Wat is de status van mijn "
+        "BTC-bot 129 en welke planvoorwaarden horen bij die bot? Lees alleen."
+    )
+    model_text = "BTC/EUR 33,3 ligt onder de 61–75-band van mijn BTC/USDT-bot."
+    prepared = SimpleNamespace(
+        locale="en", previous_response=None,
+        response=SimpleNamespace(
+            text=model_text, tool_trace=(), uses_previous_response=False,
+            turn_contract={**_cross_source_contract(), "question": question},
+        ),
+    )
+
+    answer = _minimal_read_answer(message=question, prepared=prepared)
+
+    assert answer.status == "unavailable"
+    assert answer.reason == "mixed_bot_position_source_incomplete"
+    assert "check the bot and portfolio separately" in answer.text
+    assert "33,3" not in answer.text
+    assert "61–75" not in answer.text
+
+
 def test_mixed_bot_position_does_not_infer_zero_from_missing_quantity():
     question = "Vergelijk BTC/EUR met mijn open ETH-positie en BTC-bot 129. Lees alleen."
     evidence = ({"scope": "read_portfolio", "status": "completed", "data": {
