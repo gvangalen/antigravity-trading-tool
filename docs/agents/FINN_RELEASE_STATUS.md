@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: korte bot-/positievergelijking (27 november 2026)
 
-Phase: `LOCAL_GATES_COMPLETE_CI_PENDING`. Onafhankelijke ingelogde QA op exact
+Phase: `DEPLOY_IDENTITY_VERIFIED_QA_PENDING`. Onafhankelijke ingelogde QA op exact
 publieke SHA `97895d2a5a39979b1c5c36c53e2c2d8597a8f205` gaf
 `NOT_ACCEPTED` voor de korte vraag die BTC/EUR, BTC-bot 129 en de open
 ETH-positie vergelijkt. De lange bronvergelijking en een score-only vraag
@@ -44,7 +44,17 @@ en regressie **109/109** (artifact SHA-256
 `b885722c5740c6532102562d13aeaa166257210195cf8f2de068b81116cc0760`),
 beide zonder provider-, schema-, parse-, timeout- of validatiefout. CI,
 Auto Deploy, publieke SHA-pariteit en ingelogde live QA voor deze
-reparatie zijn nog open.
+reparatie zijn nog open ten tijde van de productcommit.
+
+Reparatie-PR [#1397](https://github.com/gvangalen/antigravity-trading-tool/pull/1397)
+is als `eb6b0a1ee63024e2a26c83566bf792ccc0a5925b` samengevoegd.
+PR-CI `45917289172`, main-CI `45918158292` en Auto Deploy `45918995995`
+slaagden voor die productcommit. Main wees naar dezelfde SHA; publieke
+backend-health en frontend-build-info gaven beide HTTP 200 en exact die
+SHA terug. Deze statuswijziging creëert zelf een nieuwe commit en vereist
+daarom opnieuw succesvolle main-CI, Auto Deploy en publieke SHA-pariteit
+voordat onafhankelijke ingelogde QA de definitieve live revisie test. Er
+is nog geen live QA-verdict voor deze reparatie.
 
 ## FINN 3.0: nulpositie en gevraagde broninhoud (26 november 2026)
 
