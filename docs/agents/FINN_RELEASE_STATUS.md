@@ -6,7 +6,8 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: Paper-Hold met risico en koersbron (27 november 2026)
 
-Phase: `LOCAL_VALIDATED_PR_PENDING`. Productbranch
+Phase: `DEPLOY_IDENTITY_VERIFIED_QA_PENDING`. Product-PR
+[#1399](https://github.com/gvangalen/antigravity-trading-tool/pull/1399), branch
 `codex/finn-hold-risk-coach-20261126`, implementatiecommit
 `570c9ec4c49079014314b261b60139a4b9c60d7a` op main
 `9a2cbb206f7749bda0e2aef2df5a6b29201256c5`.
@@ -40,8 +41,17 @@ en regressie **109/109** (artifact SHA-256
 `ce1c6adcd86be676cc9077edc876cd046b022d44cbbbd7d99927a9e700dce9a6`),
 zonder provider-, schema- of timeoutfouten. Onafhankelijke code-QA en
 Security vonden na rebase geen blocker. Frontendbron is niet gewijzigd.
-PR-CI, deployidentiteit en onafhankelijke ingelogde hertest staan open; dit
-is geen live acceptatie.
+De onafhankelijke ingelogde hertest staat nog open; dit is geen live
+acceptatie.
+
+PR #1399 is als `1e01799c648a20febde1a9427c32498303b39ade` gemerged.
+PR-CI `45949249142` en main-CI `45950165928` hadden elk vijf geslaagde
+jobs. Auto Deploy `45951021607` slaagde op de merge-SHA. GitHub main en
+publieke backend `/api/health` en frontend `/build-info.json` gaven daarna
+alle drie exact de merge-SHA; beide HTTP-endpoints gaven `200`.
+De afzonderlijke statusupdate creëert opnieuw een publieke SHA. Haar eigen
+main-CI, Auto Deploy en SHA-pariteit moeten geslaagd zijn voordat de
+onafhankelijke ingelogde QA op de definitieve revisie start.
 
 ## FINN 3.0: korte bot-/positievergelijking (27 november 2026)
 
