@@ -80,7 +80,13 @@ def test_paper_amount_parser_never_takes_a_formatted_suffix(text, expected):
     assert PaperOrderConversationService._amount(text, "USDT") == expected
 
 
-def test_ambiguous_amount_clears_previous_preview_and_asks_again(monkeypatch):
+@pytest.mark.parametrize("correction", [
+    "Wijzig naar 1 234,56 USDT",
+    "Wijzig naar 500",
+    "Wijzig naar 1 234,56",
+    "Corrigeer het bedrag",
+])
+def test_missing_or_ambiguous_correction_clears_previous_preview_and_asks_again(monkeypatch, correction):
     preview = AsyncMock()
     monkeypatch.setattr(PaperDiscretionaryOrderService, "preview", preview)
     prior = {
@@ -89,7 +95,7 @@ def test_ambiguous_amount_clears_previous_preview_and_asks_again(monkeypatch):
         "idempotency_key": "paper-order-old-run",
     }
     result = asyncio.run(PaperOrderConversationService.advance(
-        message="Wijzig naar 1 234,56 USDT", prior=prior,
+        message=correction, prior=prior,
         session=None, user_id=7, run_id="new-run",
     ))
     assert result.preview is None

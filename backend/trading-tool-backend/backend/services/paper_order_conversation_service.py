@@ -27,6 +27,7 @@ _READ_ONLY = re.compile(r"\b(?:moet\s+ik|zou\s+ik|waarom|hoe\s+werkt|leg\s+uit|"
                         r"wat\s+is|niet\s+kopen|geen\s+order|zonder\s+order)\b", re.I)
 _CANCEL = re.compile(r"^\s*(?:annuleer|stop|cancel|laat\s+maar)\s*[.!]?\s*$", re.I)
 _REVISE = re.compile(r"\b(?:wijzig|verander|corrigeer|opnieuw|nieuwe\s+preview|probeer\s+opnieuw)\b", re.I)
+_CHANGE = re.compile(r"\b(?:wijzig|verander|corrigeer)\b", re.I)
 _QUOTES = re.compile(r"(?<![A-Z])(?:EUR|USDT)(?![A-Z])", re.I)
 _MONEY = (r"(?:\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?"
           r"|\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?"
@@ -118,10 +119,10 @@ class PaperOrderConversationService:
         amount = cls._amount(message, draft["quote_currency"])
         if amount is not None:
             draft["amount_quote"] = amount
-        elif _AMOUNT.search(message):
+        elif _AMOUNT.search(message) or re.search(r"\d", message) or _CHANGE.search(message):
             # The user attempted to change the amount, but its formatting is
-            # ambiguous. Retire the prior preview instead of silently reusing
-            # its old amount.
+            # missing/ambiguous. Retire the prior preview instead of silently
+            # reusing its old amount (including "Wijzig naar 500").
             draft.pop("amount_quote", None)
         if not draft.get("amount_quote"):
             return PaperOrderChatTurn(
