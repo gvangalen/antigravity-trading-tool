@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: opgeslagen voorwaarden bij oude BTC-bot (27 november 2026)
 
-Phase: `BUILD_LOCAL_CANDIDATE`. Branch
+Phase: `BUILD_GATES_PASSED_STATUS_CI_PENDING`. Branch
 `codex/finn-mixed-coach-legacy-market-20261127` op live/main
 `8336fab050e73b6169bb280c25d59b69a8309591`. Onafhankelijke ingelogde
 QA gaf op die SHA `NOT_ACCEPTED` voor de gemengde BTC/EUR-, BTC-bot-129- en
@@ -26,10 +26,23 @@ structureel gekoppelde oude bot en setup zonder paar én markt-ID de
 opgeslagen numerieke setup-scoregrenzen, terwijl hij expliciet zegt dat
 de uitvoeringsmarkt en toepassing door de bot niet zijn bewezen.
 Bots of setups met een tegenstrijdig paar of markt-ID blijven afgeschermd.
-Geen bot-, setup-, actie- of orderrecord wordt gewijzigd. De betrokken
-Responses- en bronweergavesuites zijn lokaal `1102 passed`; volledige
-backend, geïsoleerde actiematrix, echte-providerselector, onafhankelijke
-codebeoordeling, CI, deploy en live hertest staan nog open.
+Geen bot-, setup-, actie- of orderrecord wordt gewijzigd.
+
+Producthead `a054f7345fdc12a2086435d610dacfd1bb239e64`:
+betrokken Responses- en bronweergavesuites `1102 passed`; volledige backend
+`5630 passed, 7 skipped`. De geïsoleerde lokale API/worker-actiecontractmatrix
+slaagde `17/17` zonder productieverbinding of Live-actie (artifact SHA-256
+`cfdb4a5aff0058fc85e8302dde60f7c6a52ade7bd8ded627a73980b554d29498`).
+Actieadaptertests `28/28`, Smart DCA- en kalender-DCA-runtimecontroles groen.
+Echte-providerselector development `20/20` (artifact SHA-256
+`bbeb870044d38065308e5d644c8bcd286a429a605b82a8c2d285fc99c27e00dc`)
+en regressie `109/109` (artifact SHA-256
+`a16820b989fcf7378fa1120d0960b480b829c6bf02cc87511e88e6eeeb075c9a`),
+zonder provider-, schema-, parse-, timeout- of validatiefout. Onafhankelijke
+QA- en Security-codebeoordeling op deze producthead vonden geen blocker.
+Producthead-PR-CI `46020315725` had vijf groene jobs. Deze statuscommit
+vereist eigen groene PR-CI; merge, main-CI, Auto Deploy, publieke SHA-pariteit
+en dezelfde ingelogde browservraag na refresh staan nog open.
 
 ## FINN 3.0: gemengde bot-, positie- en planvraag (27 november 2026)
 
