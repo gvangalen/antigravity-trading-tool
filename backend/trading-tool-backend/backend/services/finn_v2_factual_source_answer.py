@@ -87,8 +87,11 @@ _UNBOUND_FX_MOMENT_CLAIM = re.compile(
     r"(?P<moment>(?:(?:\d{4}-\d{2}-\d{2}|\d{1,2}\s+[a-z]+(?:\s+\d{4})?)"
     r"\s*,?\s*)?\d{1,2}:\d{2}(?::\d{2})?\s+"
     r"(?:[A-Za-z_]+/[A-Za-z_]+|UTC|GMT|CET|CEST)\b)"
-    r"(?P<alternative>\s*(?:\([^)]*\d{1,2}:\d{2}[^)]*\)|"
-    r"(?:,|\ben\b)\s*(?:(?:\d{4}-\d{2}-\d{2}|\d{1,2}\s+[a-z]+"
+    r"(?P<alternative>\s*(?:\(\s*(?:(?:\d{4}-\d{2}-\d{2}|\d{1,2}\s+[a-z]+"
+    r"(?:\s+\d{4})?)\s*,?\s*)?\d{1,2}:\d{2}(?::\d{2})?\s+"
+    r"(?:[A-Za-z_]+/[A-Za-z_]+|UTC|GMT|CET|CEST)\s*\)|"
+    r"(?:,|\ben\b)\s*(?:(?:op|om)\s+)?"
+    r"(?:(?:\d{4}-\d{2}-\d{2}|\d{1,2}\s+[a-z]+"
     r"(?:\s+\d{4})?)\s*,?\s*)?\d{1,2}:\d{2}(?::\d{2})?\s+"
     r"(?:[A-Za-z_]+/[A-Za-z_]+|UTC|GMT|CET|CEST)\b))?",
     re.I,

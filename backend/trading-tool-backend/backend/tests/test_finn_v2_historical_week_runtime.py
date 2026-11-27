@@ -157,6 +157,8 @@ def test_minimal_live_read_replaces_conflicting_model_fx_clock():
         "Wisselkoersbron bij uitvoering: 12 november 14:03 UTC",
         "FX-bronmoment: 12 november 14:02 UTC (15:03 CET)",
         "FX-bronmoment: 12 november 14:02 UTC, 15:03 CET",
+        "FX-bronmoment: 12 november 14:02 UTC, op 12 november 15:03 CET",
+        "FX-bronmoment: 12 november 14:02 UTC en om 12 november 15:03 CET",
     ):
         answer = _minimal_read_answer(
             message=QUESTION, prepared=_prepared(text=(
@@ -228,6 +230,19 @@ def test_historical_week_fx_scrub_preserves_source_joined_with_en():
         assert expected_bot in answer.text
         assert answer.text.count("Geverifieerd FX-bronmoment") == 1
         assert "14:03 UTC" not in answer.text
+
+
+def test_historical_week_fx_scrub_preserves_labeled_source_in_parentheses():
+    answer = _minimal_read_answer(
+        message=QUESTION, prepared=_prepared(text=(
+            "FX-bronmoment: 12 november 14:02 UTC "
+            "(botbeslissing: 12 november 14:59 UTC)."
+        )), user_time_zone="Europe/Amsterdam",
+    )
+    assert answer.status == "completed", answer.reason
+    assert "FX-bronmoment: 12 november 14:02 UTC" in answer.text
+    assert "(botbeslissing: 12 november 14:59 UTC)" in answer.text
+    assert answer.text.count("Geverifieerd FX-bronmoment") == 1
 
 
 def test_minimal_live_read_does_not_invent_conflicting_fx_source_moment():
