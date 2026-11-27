@@ -137,7 +137,7 @@ class FinnResponsesReadExecutor:
             if read_tool == "read_market_snapshot" and isinstance(data, dict):
                 # Preserve the exact provider instant for freshness checks in
                 # the tool service; format only the model-facing evidence.
-                source_instant = data.get("source_observed_at") or data.get("as_of") or as_of
+                source_instant = data.get("source_observed_at_utc")
                 data = {
                     **data,
                     "as_of": display_source_moment(data.get("as_of")),

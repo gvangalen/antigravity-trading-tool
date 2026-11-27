@@ -125,6 +125,7 @@ class MarketSnapshotData(BaseModel):
     source: str
     as_of: Optional[datetime] = None
     source_observed_at: Optional[datetime] = None
+    source_observed_at_utc: Optional[datetime] = None
 
 
 class ForwardReturnYearData(BaseModel):

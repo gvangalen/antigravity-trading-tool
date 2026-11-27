@@ -77,7 +77,7 @@ from backend.services.finn_v2_factual_source_answer import (
     render_portfolio_read_time, render_report_and_quote_times,
     render_report_and_technical_read, render_report_bot_check_comparison,
     render_multi_asset_report_bot_comparison, render_account_market_report_facts,
-    latest_paper_bot_pair, render_bot_hold_quote_coach,
+    latest_paper_bot_pair, asset_wide_paper_hold, render_bot_hold_quote_coach,
 )
 
 logger = logging.getLogger(__name__)
@@ -2588,22 +2588,37 @@ class FinnResponsesFrontDoor:
                 decision_pair = latest_paper_bot_pair(
                     decision_read, symbol=symbol, bot_id=bot_id, requested_pair=requested)
                 quote_read = None
-                if decision_pair:
-                    quote_currency = decision_pair.split("/", 1)[1]
+                asset_quote_results = None
+                quote_units = ((decision_pair.split("/", 1)[1],) if decision_pair else
+                               ("EUR", "USDT") if not slash_pairs and asset_wide_paper_hold(
+                                   decision_read, symbol=symbol, bot_id=bot_id,
+                                   requested_pair=requested,
+                               ) else ())
+                if len(quote_units) == 2:
+                    asset_quote_results = {}
+                for quote_currency in quote_units:
                     quote_call = replace(catalog.validate("get_market_snapshot", {"asset": symbol}),
                                          read_tools=("read_market_snapshot",),
                                          inputs={"asset": symbol, "quote_currency": quote_currency})
                     try:
-                        quote_read = await self.reads(quote_call)
+                        current_quote_read = await self.reads(quote_call)
                     except Exception:
                         logger.exception("FINN Paper hold coach quote read failed")
-                        quote_read = {"status": "unavailable", "results": []}
+                        current_quote_read = {"status": "unavailable", "results": [{
+                            "scope": "read_market_snapshot", "status": "unavailable",
+                            "reason": "source_unavailable",
+                        }]}
                     trace.append({"name": quote_call.name,
-                                  "status": quote_read.get("status", "unavailable"),
-                                  "arguments": quote_call.inputs, "result": quote_read})
+                                  "status": current_quote_read.get("status", "unavailable"),
+                                  "arguments": quote_call.inputs, "result": current_quote_read})
+                    if asset_quote_results is not None:
+                        asset_quote_results[quote_currency] = current_quote_read
+                    else:
+                        quote_read = current_quote_read
                 answer = render_bot_hold_quote_coach(
                     decision_read, quote_read, symbol=symbol, bot_id=bot_id,
                     requested_pair=requested, user_time_zone=workspace_hints.get("time_zone"),
+                    asset_quote_results=asset_quote_results,
                 )
                 return FinnResponsesFrontDoorResult(
                     FinnResponsesResult(

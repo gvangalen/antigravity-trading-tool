@@ -1,9 +1,11 @@
 import asyncio
+import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from backend.services.market_source_ref import market_source_ref
 from backend.services.finn_v2_tool_adapters.market_tool_adapter import MarketToolAdapter
+from backend.services.finn_v2_factual_source_answer import _asset_wide_quote_context
 from backend.engine import trading_bot_execution as worker
 
 
@@ -22,7 +24,7 @@ def test_finn_market_read_binds_ref_to_selected_exact_quote():
     quote = SimpleNamespace(
         id=987, market_id=43, symbol="BTC", price=70000,
         quote_currency="EUR", price_provider="binance", change_24h=1.2,
-        volume=5, source_observed_at=datetime(2026, 11, 8, 9, 30),
+        volume=5, source_observed_at=datetime(2026, 11, 8, 9, 30, 0, 926000),
     )
 
     class Repository:
@@ -37,7 +39,13 @@ def test_finn_market_read_binds_ref_to_selected_exact_quote():
     assert result["data"].source_ref.measurement_id == 987
     assert result["data"].source_ref.market_id == 43
     assert result["data"].source_ref.source_observed_at_utc == (
-        datetime(2026, 11, 8, 9, 30, tzinfo=timezone.utc))
+        datetime(2026, 11, 8, 9, 30, 0, 926000, tzinfo=timezone.utc))
+    assert result["data"].source_observed_at_utc == (
+        datetime(2026, 11, 8, 9, 30, 0, 926000, tzinfo=timezone.utc))
+    read = {"results": [{"scope": "read_market_snapshot", "status": "completed",
+                         "data": json.loads(result["data"].json())}]}
+    assert "70000 EUR" in _asset_wide_quote_context(
+        read, symbol="BTC", quote="EUR", user_time_zone="UTC")
 
 
 def test_paper_quote_context_preserves_selected_measurement_id():

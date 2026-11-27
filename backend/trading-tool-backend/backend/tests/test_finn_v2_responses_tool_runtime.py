@@ -13023,6 +13023,46 @@ def test_market_source_moment_is_formatted_only_after_tool_freshness_check():
     assert market["data"]["source_observed_at"] == "2026-10-10T04:20:11+00:00"
 
 
+def test_market_read_preserves_independent_raw_instant_for_asset_quote_binding():
+    from backend.services.finn_v2_factual_source_answer import _asset_wide_quote_context
+
+    raw = "2026-10-10T04:20:11.926000+00:00"
+
+    class Reads:
+        async def execute_tool(self, **kwargs):
+            assert kwargs["tool_name"] == "read_market_snapshot"
+            return SimpleNamespace(
+                success=True, availability="available", freshness_status="unknown",
+                as_of=raw, source="market_data", asset="BTC", error_codes=[],
+                result={
+                    "symbol": "BTC", "pair": "BTC/EUR", "quote_currency": "EUR",
+                    "market_id": 11, "price": 90000, "price_provider": "provider",
+                    "as_of": raw, "source_observed_at": raw,
+                    "source_observed_at_utc": raw,
+                    "source_ref": {"market_id": 11, "measurement_id": 101,
+                                   "source_observed_at_utc": raw},
+                },
+            )
+
+    executor = FinnResponsesReadExecutor(session=object(), user_id=44, run_id="raw-source")
+    executor.reads = Reads()
+    read = asyncio.run(executor(replace(FinnResponsesToolCatalog().validate(
+        "get_market_snapshot", {"asset": "BTC"},
+    ), read_tools=("read_market_snapshot",))))
+    market = next(item for item in read["results"] if item["scope"] == "read_market_snapshot")
+    assert market["data"]["source_observed_at"] == "2026-10-10T04:20:11+00:00"
+    assert market["data"]["source_observed_at_utc"] == raw
+    assert "90000 EUR" in _asset_wide_quote_context(
+        read, symbol="BTC", quote="EUR", user_time_zone="UTC")
+    market["data"]["source_ref"]["source_observed_at_utc"] = "2026-10-10T04:20:11.926001+00:00"
+    assert "90000 EUR" not in _asset_wide_quote_context(
+        read, symbol="BTC", quote="EUR", user_time_zone="UTC")
+    market["data"]["source_ref"]["source_observed_at_utc"] = raw
+    market["data"]["source_observed_at_utc"] = None
+    assert "90000 EUR" not in _asset_wide_quote_context(
+        read, symbol="BTC", quote="EUR", user_time_zone="UTC")
+
+
 def test_portfolio_evaluation_repair_uses_portfolio_evidence_not_plan_template():
     semantic = SimpleNamespace(verify_async=AsyncMock(side_effect=[
         SimpleNamespace(available=True, passes=False, reason_codes=["insufficient_evidence"]),
@@ -21092,8 +21132,22 @@ def test_asset_wide_paper_hold_keeps_risk_and_safe_step_without_pair_quote():
 
     async def read(call):
         calls.append(call)
-        assert call.name == "get_decision_history"
-        return decision
+        if call.name == "get_decision_history":
+            return decision
+        assert call.name == "get_market_snapshot"
+        unit = call.inputs["quote_currency"]
+        market_id = {"EUR": 11, "USDT": 12}[unit]
+        at = {"EUR": "2026-11-26T18:40:00+00:00",
+              "USDT": "2026-11-26T18:45:00+00:00"}[unit]
+        return {"status": "completed", "results": [{
+            "scope": "read_market_snapshot", "status": "completed", "data": {
+                "symbol": "BTC", "pair": f"BTC/{unit}", "quote_currency": unit,
+                "market_id": market_id, "price": 95000 if unit == "EUR" else 100000,
+                "price_provider": "test-provider", "source_observed_at_utc": at,
+                "source_ref": {"market_id": market_id, "measurement_id": market_id,
+                               "source_observed_at_utc": at},
+            },
+        }]}
 
     front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7,
                                    run_id="assetwide-hold", model_led_coach=True)
@@ -21103,12 +21157,36 @@ def test_asset_wide_paper_hold_keeps_risk_and_safe_step_without_pair_quote():
         conversation_context={}, verified_asset="BTC",
         workspace_hints={"page": "/bot", "symbol": "BTC", "time_zone": "Europe/Amsterdam"},
     ))
-    assert len(calls) == 1
+    assert [call.name for call in calls] == [
+        "get_decision_history", "get_market_snapshot", "get_market_snapshot"]
     assert "geen exacte koersbron" in result.response.text
+    assert "BTC/EUR-koers als algemene marktcontext" in result.response.text
+    assert "BTC/USDT-koers als algemene marktcontext" in result.response.text
+    assert "19:40:00" in result.response.text
+    assert "19:45:00" in result.response.text
     checked = asyncio.run(FinnResponsesAnswerVerifier().verify(
         message=question, result=result.response, locale="nl", user_time_zone="Europe/Amsterdam",
     ))
     assert checked.status == "completed", checked.reason
+    reversed_trace = (result.response.tool_trace[0], result.response.tool_trace[2],
+                      result.response.tool_trace[1])
+    wrong_order = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=question, result=replace(result.response, tool_trace=reversed_trace),
+        locale="nl", user_time_zone="Europe/Amsterdam",
+    ))
+    assert wrong_order.status == "unavailable"
+    malformed_trace = ({**result.response.tool_trace[0], "result": []},
+                       *result.response.tool_trace[1:])
+    malformed = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=question, result=replace(result.response, tool_trace=malformed_trace),
+        locale="nl", user_time_zone="Europe/Amsterdam",
+    ))
+    assert malformed.status == "unavailable"
+    explicit_pair = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=question + " Bedoel geen BTC / USDT als botbron.", result=result.response,
+        locale="nl", user_time_zone="Europe/Amsterdam",
+    ))
+    assert explicit_pair.status == "unavailable"
 
     decision["results"][0]["data"]["latest_bot_decisions"][0]["pair"] = "BTC/USDC"
     unsupported = render_bot_hold_quote_coach(
@@ -21123,6 +21201,60 @@ def test_asset_wide_paper_hold_keeps_risk_and_safe_step_without_pair_quote():
     symbol_pair = render_bot_hold_quote_coach(decision, None, symbol="BTC", bot_id=56)
     assert "niet als ondersteund paar verifiëren" in symbol_pair
     assert "zonder vast handelspaar" not in symbol_pair
+
+
+def test_asset_wide_quote_context_rejects_unbound_or_missing_source():
+    from backend.services.finn_v2_factual_source_answer import render_bot_hold_quote_coach
+
+    decision = {"status": "completed", "results": [
+        {"scope": "read_review_history", "status": "completed", "data": {
+            "latest_bot_decisions": [{
+                "bot_id": 56, "symbol": "BTC", "pair": None, "is_live": False,
+                "action": "hold", "persistence_status": "skipped",
+                "decision_at": "2026-11-26T18:33:29+00:00",
+            }],
+        }},
+        {"scope": "read_profile", "status": "completed", "data": {
+            "has_profile": True, "trader_profile": {"risk_profiles": ["balanced"]},
+        }},
+    ]}
+    eur = {"status": "completed", "results": [{
+        "scope": "read_market_snapshot", "status": "completed", "data": {
+            "symbol": "BTC", "pair": "BTC/EUR", "quote_currency": "EUR",
+            "market_id": 11, "price": 95000, "price_provider": "provider",
+            "source_observed_at": "2026-11-26T18:40:00+00:00",
+            "source_observed_at_utc": "2026-11-26T18:40:00+00:00",
+            "source_ref": {"market_id": 12, "measurement_id": 101,
+                           "source_observed_at_utc": "2026-11-26T18:40:00+00:00"},
+        },
+    }]}
+    missing = {"status": "unavailable", "results": [{
+        "scope": "read_market_snapshot", "status": "unavailable",
+        "reason": "source_unavailable",
+    }]}
+    text = render_bot_hold_quote_coach(
+        decision, None, symbol="BTC", bot_id=56, user_time_zone="America/New_York",
+        asset_quote_results={"EUR": eur, "USDT": missing},
+    )
+    assert "geen gedateerde koersbron verifiëren" in text
+    assert "95000" not in text
+    assert "algemene marktcontext is" not in text
+    eur["results"][0]["data"]["source_ref"]["market_id"] = 11
+    text = render_bot_hold_quote_coach(
+        decision, None, symbol="BTC", bot_id=56, user_time_zone="America/New_York",
+        asset_quote_results={"EUR": eur, "USDT": missing},
+    )
+    assert "95000 EUR" in text
+    assert "13:40:00 EST" in text
+    assert "BTC/USDT kan ik geen gedateerde koersbron" in text
+    assert "geen bewezen bron van het botbesluit of uitvoeringskoers" in text
+    eur["results"][0]["data"]["source_ref"]["source_observed_at_utc"] = (
+        "2026-11-26T18:40:00.000001+00:00")
+    mismatched_instant = render_bot_hold_quote_coach(
+        decision, None, symbol="BTC", bot_id=56, user_time_zone="America/New_York",
+        asset_quote_results={"EUR": eur, "USDT": missing},
+    )
+    assert "95000 EUR" not in mismatched_instant
 
 
 @pytest.mark.parametrize("decisions", [

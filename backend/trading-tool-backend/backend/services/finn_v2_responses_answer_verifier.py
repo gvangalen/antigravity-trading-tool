@@ -54,7 +54,7 @@ from backend.services.finn_v2_factual_source_answer import (
     render_bot_decision, render_closed_paper_exit_facts, render_selected_paper_feed_decision, render_latest_quote, render_portfolio_read_time,
     render_report_and_quote_times, render_report_and_technical_read,
     render_report_bot_check_comparison, render_multi_asset_report_bot_comparison,
-    render_account_market_report_facts, latest_paper_bot_pair,
+    render_account_market_report_facts, latest_paper_bot_pair, asset_wide_paper_hold,
     render_bot_hold_quote_coach,
 )
 
@@ -3118,8 +3118,9 @@ class FinnResponsesAnswerVerifier:
             return checked
         evidence = tuple(
             item
-            for call in result.tool_trace
-            for item in (call.get("result", {}).get("results") or [])
+            for call in result.tool_trace if isinstance(call, dict)
+            for payload in (call.get("result"),) if isinstance(payload, dict)
+            for item in (payload.get("results") or [])
             if isinstance(item, dict)
         )
         if result.answer_kind in {"selected_strategy_next_step", "selected_strategy_next_step_unavailable"}:
@@ -3223,7 +3224,7 @@ class FinnResponsesAnswerVerifier:
             calls = result.tool_trace
             if result.response_id.startswith("bot-hold-quote-coach-"):
                 symbols = mentioned_catalog_symbols(message)
-                decision_call = calls[0] if len(calls) in {1, 2} else None
+                decision_call = calls[0] if len(calls) in {1, 2, 3} else None
                 args = (decision_call.get("arguments") or {}) if isinstance(decision_call, dict) else {}
                 symbol = str(args.get("asset") or "").upper()
                 requested = requested_catalog_trading_pair(message)
@@ -3233,16 +3234,37 @@ class FinnResponsesAnswerVerifier:
                     r"\b[A-Z][A-Z0-9]*\s*/\s*[A-Z][A-Z0-9]*\b", message, re.I)
                     if (normalized := re.sub(r"\s+", "", item.upper())).split("/", 1)[0] in symbols}
                 decision_read = decision_call.get("result") if isinstance(decision_call, dict) else None
-                scopes = {item.get("scope") for item in (decision_read or {}).get("results") or []
-                          if isinstance(item, dict)}
+                scopes = ({item.get("scope") for item in (decision_read.get("results") or [])
+                           if isinstance(item, dict)} if isinstance(decision_read, dict) else set())
                 bot_id = focused_bot_id(message, previous_response)
                 pair = (latest_paper_bot_pair(
                     decision_read, symbol=symbol, bot_id=bot_id,
                     requested_pair=requested_pair,
                 ) if isinstance(decision_read, dict) else None)
+                asset_wide = bool(isinstance(decision_read, dict) and not slash_pairs
+                                  and asset_wide_paper_hold(
+                                      decision_read, symbol=symbol, bot_id=bot_id,
+                                      requested_pair=requested_pair,
+                                  ))
                 quote_read = calls[1].get("result") if len(calls) == 2 and isinstance(calls[1], dict) else None
                 quote_args = ((calls[1].get("arguments") or {})
                               if len(calls) == 2 and isinstance(calls[1], dict) else {})
+                asset_quote_results = {}
+                asset_quote_valid = len(calls) == 3 and asset_wide
+                if asset_quote_valid:
+                    for index, unit in enumerate(("EUR", "USDT"), start=1):
+                        call = calls[index]
+                        call_args = (call.get("arguments") or {}) if isinstance(call, dict) else {}
+                        read = call.get("result") if isinstance(call, dict) else None
+                        read_scopes = {item.get("scope") for item in read.get("results") or []
+                                       if isinstance(item, dict)} if isinstance(read, dict) else set()
+                        if (not isinstance(call, dict) or call.get("name") != "get_market_snapshot"
+                                or call_args != {"asset": symbol, "quote_currency": unit}
+                                or not isinstance(read, dict)
+                                or read_scopes != {"read_market_snapshot"}):
+                            asset_quote_valid = False
+                            break
+                        asset_quote_results[unit] = read
                 valid = (
                     len(symbols) == 1 and symbol in symbols
                     and len({item.upper() for item in re.findall(
@@ -3254,7 +3276,8 @@ class FinnResponsesAnswerVerifier:
                     and args.get("_latest_bot_decisions_only") is True
                     and scopes == {"read_review_history", "read_profile"}
                     and isinstance(decision_read, dict)
-                    and ((pair is None and len(calls) == 1)
+                    and ((asset_wide and asset_quote_valid)
+                         or (pair is None and not asset_wide and len(calls) == 1)
                          or (pair is not None and len(calls) == 2
                              and isinstance(calls[1], dict)
                              and calls[1].get("name") == "get_market_snapshot"
@@ -3267,6 +3290,7 @@ class FinnResponsesAnswerVerifier:
                 expected = (render_bot_hold_quote_coach(
                     decision_read, quote_read, symbol=symbol, bot_id=bot_id,
                     requested_pair=requested_pair, user_time_zone=user_time_zone,
+                    asset_quote_results=asset_quote_results if asset_wide else None,
                 ) if valid else None)
                 if expected is None or expected != result.text:
                     return FinnResponsesVerifiedAnswer(
