@@ -103,6 +103,31 @@ def test_minimal_live_read_completes_repeated_owner_history_reads():
     assert "Geverifieerd opslagmoment week 2026-11-09 t/m 2026-11-15: 2026-11-16 06:15:00 CET" in answer.text
 
 
+def test_minimal_live_read_scrubs_markdown_week_clock_after_repeated_reads():
+    prepared = _prepared(text=(
+        "Exitbeslissing: 12 november 14:59 UTC. "
+        "Exitwisselkoers: 12 november 14:02 UTC. "
+        "Bevestigde les: 13 november 09:07:57 UTC. "
+        "**Opgeslagen weekreflectie gegenereerd:** "
+        "16 november 2026, 05:15:00 Europe/Amsterdam."
+    ))
+    prepared.response.tool_trace += prepared.response.tool_trace
+    answer = _minimal_read_answer(
+        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert answer.status == "completed", answer.reason
+    assert "05:15:00 Europe/Amsterdam" not in answer.text
+    assert "Opslagmoment van deze weekreflectie niet geverifieerd" in answer.text
+    assert "AAPL Paper-trade als gesloten geregistreerd: 2026-11-12 16:02:00 CET" in answer.text
+    assert "Geverifieerd opslagmoment week 2026-11-09 t/m 2026-11-15: 2026-11-16 06:15:00 CET" in answer.text
+    for unchanged in (
+        "Exitbeslissing: 12 november 14:59 UTC",
+        "Exitwisselkoers: 12 november 14:02 UTC",
+        "Bevestigde les: 13 november 09:07:57 UTC",
+    ):
+        assert unchanged in answer.text
+
+
 def test_minimal_live_read_rejects_conflicting_repeated_history():
     prepared = _prepared(text="Exitreden: eerste doel. Weekreflectie opgeslagen: 05:15 UTC.")
     original = prepared.response.tool_trace[0]
