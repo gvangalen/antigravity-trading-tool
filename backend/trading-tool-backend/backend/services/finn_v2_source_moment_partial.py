@@ -120,22 +120,50 @@ def render_source_moment_partial(
     selected_bot = _single(linked)
     bot_pair = str((selected_bot or {}).get("trading_pair") or (selected_bot or {}).get("pair") or "").upper()
     pair_bound = not pairs or bot_pair in pairs
+    portfolio_reads = [item for item in completed if item.get("scope") == "read_portfolio"]
+    portfolio_bot_refs = [
+        bot for item in portfolio_reads for bot in item["data"].get("bots") or []
+        if isinstance(bot, dict) and bot.get("bot_id") in requested_bot_ids
+        and str(bot.get("symbol") or "").upper() == bot_asset
+        and bot.get("is_live") is False
+    ]
+    portfolio_parent_consistent = all(
+        (bot.get("setup_id") is None or bot.get("setup_id") == selected_bot.get("setup_id"))
+        and (bot.get("strategy_id") is None
+             or bot.get("strategy_id") == selected_bot.get("strategy_id"))
+        for bot in portfolio_bot_refs
+    ) if selected_bot is not None else False
+    setups = [item["data"] for item in completed if item.get("scope") == "read_active_setup"
+              and str(item["data"].get("symbol") or "").upper() == bot_asset]
+    matched_setups = [row for row in setups if selected_bot is not None
+                      and row.get("setup_id") == selected_bot.get("setup_id")
+                      and row.get("setup_id") is not None]
+    setup = _single(matched_setups)
+    setup_pair = str((setup or {}).get("pair") or "").upper()
+    if not setup_pair and setup is not None and setup.get("quote_currency"):
+        setup_pair = f'{bot_asset}/{str(setup["quote_currency"]).upper()}'
+    bot_market_id = (selected_bot or {}).get("market_id")
+    setup_market_id = (setup or {}).get("market_id")
+    same_market = (type(bot_market_id) is int and bot_market_id > 0
+                   and bot_market_id == setup_market_id)
+    verified_bot_plan = bool(selected_bot is not None and setup is not None
+                             and portfolio_parent_consistent
+                             and bot_pair and setup_pair == bot_pair and same_market)
     linked_pairs = {
         str(row.get("trading_pair") or row.get("pair") or "").upper()
         for row in linked
         if row.get("trading_pair") or row.get("pair")
     }
     portfolio_status_pair_safe = not linked_pairs or (
-        len(linked_pairs) == 1 and (not pairs or next(iter(linked_pairs)) in pairs)
+        len(linked_pairs) == 1 and (pair_bound or verified_bot_plan)
     )
-    portfolio_reads = [item for item in completed if item.get("scope") == "read_portfolio"]
     if len(requested_bot_ids) == 1:
         bot_id = next(iter(requested_bot_ids))
         status_rows = [item["data"] for item in completed
                        if item.get("scope") == "read_bot_status"
                        and item["data"].get("bot_id") == bot_id
                        and str(item.get("asset") or "").upper() == bot_asset
-                       and pair_bound
+                       and (pair_bound or verified_bot_plan)
                        and (not paper_requested or item["data"].get("is_live") is False)]
         statuses = {str(row.get("operational_status") or "").lower() for row in status_rows}
         if len(statuses) == 1:
@@ -165,8 +193,8 @@ def render_source_moment_partial(
                      for row in item["data"].get("latest_bot_decisions") or []
                      if isinstance(row, dict) and row.get("bot_id") == bot_id
                      and str(row.get("symbol") or "").upper() == bot_asset
-                     and pair_bound
-                     and (not pairs or str(row.get("pair") or "").upper() == bot_pair)
+                     and (pair_bound or verified_bot_plan)
+                     and (not bot_pair or str(row.get("pair") or "").upper() == bot_pair)
                      and (not paper_requested or row.get("is_live") is False)]
         actions = {str(row.get("action") or "").lower() for row in decisions}
         if len(actions) == 1:
@@ -223,20 +251,17 @@ def render_source_moment_partial(
             _, score = next(iter(values))
             lines.append(f"De gelezen paaranalyse voor {pair} heeft benchmarkscore {score}/100.")
             source_fact_count += 1
-    setups = [item["data"] for item in completed if item.get("scope") == "read_active_setup"
-              and str(item["data"].get("symbol") or "").upper() == bot_asset]
-    matched_setups = [row for row in setups if selected_bot is not None
-                      and row.get("setup_id") == selected_bot.get("setup_id")
-                      and row.get("setup_id") is not None]
-    setup = _single(matched_setups)
-    if setup is not None and pair_bound:
+    if verified_bot_plan:
         low = _score(setup.get("min_benchmark_score"))
         high = _score(setup.get("max_benchmark_score"))
         if low is not None and high is not None:
-            lines.append(f"Het aan bot #{selected_bot['bot_id']} gekoppelde plan vereist een benchmarkscore tussen {low} en {high}.")
+            lines.append(
+                f"Bot #{selected_bot['bot_id']} hoort bij {bot_pair}; de gekoppelde setup "
+                f"vereist voor dat handelspaar een benchmarkscore tussen {low} en {high}."
+            )
             source_fact_count += 1
             lines.append("Die grens hoort bij dit botplan. Een handmatige preview kan een andere setup en dus andere voorwaarden gebruiken.")
-    if selected_bot is not None and pair_bound:
+    if verified_bot_plan:
         lines.append("Een botplan beoordeelt daarnaast zijn eigen instapvoorwaarden; een rapportscore is geen koopopdracht.")
 
     positions: dict[tuple[int, str], set[str]] = {}
@@ -304,7 +329,7 @@ def render_source_moment_partial(
     missing = []
     if asks_report and not reports:
         missing.append("het dagrapport")
-    if asks_bot and (selected_bot is None or not pair_bound):
+    if asks_bot and not verified_bot_plan:
         missing.append("de koppeling tussen bot en plan")
     for symbol in sorted(named_position_assets - confirmed_position_assets):
         missing.append(f"de {symbol}-positie")

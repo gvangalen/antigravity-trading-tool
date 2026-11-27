@@ -4,6 +4,44 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: gemengde bot-, positie- en planvraag (27 november 2026)
+
+Phase: `BUILD_GATES_PASSED_STATUS_CI_PENDING`. Branch `codex/finn-mixed-coach-plan-20261127`
+op main `98169a3fb4e893f81668d994ca2ebb13ce6a167e`. Een ingelogde,
+alleen-lezende browserproef in het Paper Test-account liet zien dat FINN bij
+de vraag over BTC/EUR, BTC-bot 129 en de open ETH-positie de paren niet meer
+verwisselt en de ETH-nulpositie noemt, maar de gevraagde planvoorwaarden
+weglaat. De gekozen portefeuilleleesroute bevat de botstatus en positie,
+maar geen scoregrenzen of geverifieerd botpaar.
+
+De lokale kandidaat vervolgt deze read-only route uitsluitend vanuit de
+eigenaargebonden Paper-portefeuille met de exacte bot-, setup- en
+strategie-ID. Het antwoord toont de scoregrenzen alleen wanneer de nieuw
+gelezen bot en setup dezelfde parent, hetzelfde eigen handelspaar en hetzelfde
+positieve markt-ID hebben.
+BTC/EUR en de BTC/USDT-botvoorwaarden blijven afzonderlijk; onzekere of
+tegenstrijdige koppelingen blijven onbekend. Er is geen actie- of
+ordercontract aangepast.
+
+Producthead `f958fefe2c088864faa69bc09c6c57970b228267`: gerichte
+runtimesuites `1101 passed`; volledige backend `5629 passed, 7 skipped`.
+De geïsoleerde lokale API/worker-actiecontractmatrix op de definitieve
+productcode slaagde `17/17`, zonder productieverbinding, brokerorder,
+Live-tradingcall of Live-bot (artifact SHA-256
+`d18257d1ae8e889ba9ac5350d66db72c3d1c15a22bf667e2c98d107d4f3a062a`).
+Actieadaptertests `28/28`, Smart DCA- en kalender-DCA-controles groen.
+Echte-providerselector development `20/20` (artifact SHA-256
+`68f8f3751d08d7c0b36fd224c6fa97df4370698b446a562e651787c57e28b652`)
+en regressie `109/109` (artifact SHA-256
+`fd6fd2ee5d795e34dc5dbb43820a37fb2a6e7a5311d7040d9f073bf8bab32f84`)
+zonder provider-, schema-, parse-, timeout- of validatiefout. Onafhankelijke
+QA- en Security-codebeoordeling op de producthead vonden na de markt-ID-fix
+geen blocker. Producthead-PR-CI `46003264486` had vijf groene jobs. Deze
+statuscommit vereist eigen groene PR-CI; merge, Auto Deploy, publieke
+SHA-pariteit en ingelogde live QA staan nog open. De live QA moet speciaal
+controleren of bot 129 een geverifieerd markt-ID teruggeeft en de bot-eigen
+scoreband afzonderlijk van BTC/EUR en de ETH-positie zichtbaar wordt.
+
 ## FINN 3.0: laatst beschikbare marktcontext bij assetbrede Paper-Hold (27 november 2026)
 
 Phase: `QA_ACCEPTED_SCOPED`. Branch `codex/finn-assetwide-quote-20261127`
