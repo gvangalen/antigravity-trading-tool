@@ -4,9 +4,39 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: Markdown-opmaak in historisch weekopslagmoment (27 november 2026)
+
+Phase: `READY_FOR_PR_CI`. Product branch
+`codex/finn-week-markdown-clock-20261127`, producthead
+`c4ef957c5d3e16c7a0ad94d739e245de995091a9`.
+Onafhankelijke ingelogde browser-QA op definitieve live SHA
+`d01df415ea7399cb37224b624f1e5e17fd62fe8c` gaf opnieuw
+`NOT_ACCEPTED`: beide antwoorden noemden de geregistreerde AAPL Paper-sluiting,
+maar de eerste beurt toonde naast het geverifieerde weekopslagmoment
+`06:15 CET` ook `05:15:00 Europe/Amsterdam` uit vrije modeltekst. De tweede
+beurt na refresh was correct. Er waren geen account-, bot- of ordermutaties.
+
+Lokaal reproduceerde dezelfde zichtbare labelzin de fout wanneer de ruwe
+antwoordtekst Markdown-opmaak om het label bevatte. De kandidaat herkent die
+opmaak nu bij het opschonen van uitsluitend onbewezen weekopslagklokken. De
+getypeerde, aan week 9–15 november gebonden bron blijft leidend; Paper-sluiting,
+exitbeslissing, FX- en lesmoment blijven afzonderlijk. De actieve minimal-read-
+route met herhaalde eigenaargebonden reads heeft een nieuwe regressie.
+Gerichte tests: `45 passed`; volledige backend: `5675 passed, 7 skipped`
+(log SHA-256 `ae07dd58716a7f5220a1db5463d64a9d371258e2c3bc00281fe33daf96d0b41e`).
+Echte-providerselector development `20/20` (artifact SHA-256
+`1d678f5054628c0b486e220fd4b88934c9c7c6f22da2d04db7964ba222c331f9`)
+en regression `109/109` (artifact SHA-256
+`0028009e4a887466eb1e01fffd638f67f9bd197c0ad6d12f94bf3c2f7ad3e562`),
+zonder provider-, schema-, parse-, validatie- of timeoutfouten. Er is geen
+gewijzigd actiecontract; de worker-actiematrix is voor deze uitsluitend
+read-only tekstcorrectie niet van toepassing. Onafhankelijke QA- en Security-
+codebeoordeling vonden geen blocker. Nog geen live acceptatie voor deze
+kandidaat.
+
 ## FINN 3.0: dubbele historische leesresultaten bij weekreflectie (27 november 2026)
 
-Phase: `READY_FOR_INDEPENDENT_QA_AFTER_STATUS_DEPLOY`. Product branch
+Phase: `LIVE_NOT_ACCEPTED`. Product branch
 `codex/finn-week-multiple-reads-20261127`, producthead
 `3eb41f28f87399ed7d22209c97d5382aad50c714`;
 [PR #1414](https://github.com/gvangalen/antigravity-trading-tool/pull/1414)
