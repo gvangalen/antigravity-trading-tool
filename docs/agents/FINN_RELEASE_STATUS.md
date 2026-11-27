@@ -6,9 +6,11 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: eenduidig opslagmoment voor historische weekreflectie (27 november 2026)
 
-Phase: `LOCAL_GATES_PASSED_PENDING_PR_CI`. Branch
+Phase: `READY_FOR_INDEPENDENT_QA_AFTER_STATUS_DEPLOY`. Product branch
 `codex/finn-reflection-clock-consistency-20261127`; producthead
-`a0a29e8ba929dac7fcca1376adbeb5a139a851ea`.
+`a0a29e8ba929dac7fcca1376adbeb5a139a851ea`;
+[PR #1412](https://github.com/gvangalen/antigravity-trading-tool/pull/1412)
+merged in `79034d7ec0153cedf3c1a21ec1bee312dc800505`.
 Onafhankelijke ingelogde QA op live `18861da0c02782d4971f655a59264256bce90f79`
 zag na refresh de juiste AAPL Paper-exit en week 9–15 november 2026,
 maar in één antwoord stond de weekopslag tegelijk als `05:15 CET` en
@@ -35,9 +37,18 @@ zonder provider-, schema-, parse-, validatie- of timeoutfouten. Er zijn geen
 gewijzigde actiecontracten; een worker-actiematrix is voor deze uitsluitend
 read-only tekstcorrectie niet van toepassing. Onafhankelijke QA- en
 Security-codeherreviews op producthead: geen blocker; de eerdere P2 rond
-weekbinding en haakjes is gesloten. PR-CI, main-CI, Auto Deploy, publieke
-SHA-pariteit en onafhankelijke ingelogde hertest staan nog open. Dit is geen
-live acceptatie.
+weekbinding en haakjes is gesloten. PR-CI
+[46068814237](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46068814237)
+en main-CI
+[46069741356](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46069741356)
+hebben elk vijf groene jobs. Auto Deploy
+[46070610679](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46070610679)
+is geslaagd. Publieke backend-health en frontend build-info gaven beide HTTP
+200 en SHA `79034d7ec0153cedf3c1a21ec1bee312dc800505`; op dat moment was
+geen nieuwere deploy pending. Deze statusupdate maakt zelf een latere SHA.
+QA bindt de ingelogde hertest pas aan de definitieve publieke SHA na de
+status-only Auto Deploy. De onafhankelijke browseruitkomst staat nog open;
+dit is geen live acceptatie.
 
 ## FINN 3.0: historische tijdzoneaanvulling in de actieve leesroute (27 november 2026)
 
