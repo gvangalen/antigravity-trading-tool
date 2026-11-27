@@ -30,7 +30,7 @@ def project_portfolio(
     )
     reserve_cash = (
         float(payload.get("paper_reserve_cash_eur") or 0)
-        if environment != "live" else 0.0
+        if environment != "live" and symbol is None else 0.0
     )
     read_at = payload.get("read_at") or datetime.now(timezone.utc)
     mixed = len({bool(row.get("is_live")) for row in rows}) > 1
@@ -200,7 +200,7 @@ def project_portfolio(
         invested_value=invested, current_position_value=position_value,
         realized_pnl=realized, unrealized_pnl=unrealized,
         total_budget_limit=budget, allocations_pct=allocations,
-        paper_reserve_cash_eur=reserve_cash if environment != "live" else None,
+        paper_reserve_cash_eur=reserve_cash if environment != "live" and symbol is None else None,
     )
     return PortfolioData.parse_obj({
         "global": global_data.dict(), "bots": [bot.dict() for bot in bots],
@@ -218,7 +218,7 @@ def project_portfolio(
         "balance_time_basis": account.get("balance_time_basis") if account and symbol is None else None,
         "covered_scopes": [
             "paper_bot_portfolio_valuation" if rows and not live and not mixed else "bot_ledger",
-            *(["paper_reserve"] if environment != "live" and "paper_reserve_cash_eur" in payload else []),
+            *(["paper_reserve"] if environment != "live" and symbol is None and "paper_reserve_cash_eur" in payload else []),
             *(["paper_discretionary_positions"] if environment != "live" and "manual_positions" in payload else []),
             "broker_account_total" if account and symbol is None else "budget", "exposure",
         ],

@@ -209,6 +209,9 @@ class FinnV2VisibleDeliveryService:
                 "mode": response.get("mode"),
             }]
         paper_preview = dict((getattr(artifacts.get("run"), "response_json", None) or {}).get("paper_order_preview") or {})
+        payload["paper_order_turn"] = (
+            (response.get("reasoning_provenance") or {}).get("reasoning_source") == "paper_order_contract"
+        )
         if paper_preview:
             payload["actions"] = [{
                 "type": "paper_discretionary_order",

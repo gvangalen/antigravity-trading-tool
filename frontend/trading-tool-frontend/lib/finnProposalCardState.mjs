@@ -5,6 +5,13 @@ export function inactiveProposalIds(proposalIds, settledResults) {
   ));
 }
 
+export function retireEarlierPaperOrderCards(messages, activeStreamId, isPaperOrderTurn) {
+  if (!isPaperOrderTurn) return messages;
+  return messages.map((message) => message.streamId !== activeStreamId
+    ? { ...message, actions: (message.actions || []).filter((action) => action.type !== "paper_discretionary_order") }
+    : message);
+}
+
 export function setupDraftFrequencyLabel(supplied, translate) {
   if (supplied?.setup_type !== "dca") return "";
   const label = (value) => {
@@ -117,10 +124,13 @@ export function mapBackendSessionMessages(messages = []) {
         isComplete: true,
       };
       const paperPreview = message.role === "assistant" ? message.paper_order_preview : null;
-      if (paperPreview?.pair && paperPreview?.idempotency_key) {
+      const paperPreviewActive = Number.isFinite(Date.parse(paperPreview?.expires_at))
+        && Date.parse(paperPreview.expires_at) > Date.now();
+      if (paperPreview?.pair && paperPreview?.idempotency_key
+          && (!paperPreview.ok || paperPreviewActive)) {
         return { ...base, actions: [{
           type: "paper_discretionary_order",
-          requires_confirmation: Boolean(paperPreview.ok && paperPreview.preview_token),
+          requires_confirmation: Boolean(paperPreview.ok && paperPreview.preview_token && paperPreviewActive),
           preview: paperPreview,
           conversation_id: message.conversation_id,
         }] };

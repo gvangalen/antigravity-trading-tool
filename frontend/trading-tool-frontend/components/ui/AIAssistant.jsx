@@ -29,7 +29,7 @@ import { affirmativeJourneyReply, journeyNextStepAfterConfirmedWrite } from "@/l
 import { clearActiveFinnConversation, readActiveFinnConversation, writeActiveFinnConversation } from "@/lib/finnActiveConversation.mjs";
 import { parseFinnChatText } from "@/lib/finnChatText.mjs";
 import { finnSubmissionLocale } from "@/lib/finnChatLocale.mjs";
-import { inactiveProposalIds, isFinnProposalCorrection, mapBackendSessionMessages, retireEarlierFinnProposalCards, retireFinnProposalCards, setupDraftFrequencyLabel, setupDraftFromProposal, tradeSetupReviewComplete, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "@/lib/finnProposalCardState.mjs";
+import { inactiveProposalIds, isFinnProposalCorrection, mapBackendSessionMessages, retireEarlierFinnProposalCards, retireEarlierPaperOrderCards, retireFinnProposalCards, setupDraftFrequencyLabel, setupDraftFromProposal, tradeSetupReviewComplete, suspendedProposalIds, suspendFinnProposalCards, verifiedPaperBotStrategy } from "@/lib/finnProposalCardState.mjs";
 import { conversationQuestionChoices, draftConversationCopy, hasConfirmableDraft, isCollectingDraft, isOpenClarification } from "@/lib/finnDraftConversation.mjs";
 import { matchAssetsInText, fetchTradingMarkets } from "@/lib/api/assets";
 import { fetchWatchlist } from "@/lib/api/watchlist";
@@ -1238,12 +1238,11 @@ function AIAssistantContent({
         "activate_paper_bot", "activate_live_bot",
       ].includes(operationId);
       const reviewedTargetName = immutableProposalState?.review_target_name || null;
-      setMessages((prev) => retireEarlierFinnProposalCards(
-        prev, streamId, verified?.proposal_id,
+      setMessages((prev) => retireEarlierPaperOrderCards(
+        retireEarlierFinnProposalCards(prev, streamId, verified?.proposal_id),
+        streamId, paperOrderTurn,
       ).map((message) => (
-        message.streamId !== streamId && paperOrderTurn
-          ? { ...message, actions: (message.actions || []).filter((action) => action.type !== "paper_discretionary_order") }
-          : message.streamId === streamId
+        message.streamId === streamId
           ? {
               ...message,
               text: terminalText,
@@ -1672,8 +1671,13 @@ function AIAssistantContent({
               : parseSuggestedActions(originalResponse);
           const latestProposalId = (Array.isArray(envelope?.actions) ? envelope.actions : [])
             .find((action) => action?.type === "v2_proposal")?.proposal_id;
+          const directPaperOrderTurn = Boolean(envelope?.paper_order_turn ||
+            (envelope?.actions || []).some((action) => action?.type === "paper_discretionary_order"));
           setMessages(prev => {
-            const copy = [...retireEarlierFinnProposalCards(prev, streamId, latestProposalId)];
+            const copy = retireEarlierPaperOrderCards(
+              retireEarlierFinnProposalCards(prev, streamId, latestProposalId),
+              streamId, directPaperOrderTurn,
+            );
             const msgIndex = copy.findIndex(message => message.streamId === streamId);
             if (msgIndex >= 0 && copy[msgIndex].role === "assistant") {
               copy[msgIndex] = {
@@ -1883,7 +1887,9 @@ function AIAssistantContent({
     try {
       if (action.type === "paper_discretionary_order") {
         const preview = action.preview || {};
-        if (!preview.ok || !preview.preview_token || !action.conversation_id) {
+        if (!preview.ok || !preview.preview_token || !action.conversation_id
+            || !Number.isFinite(Date.parse(preview.expires_at))
+            || Date.parse(preview.expires_at) <= Date.now()) {
           throw new Error("Deze Paper-order is nog niet bevestigbaar. Controleer de vrije reserve en vraag een nieuwe preview.");
         }
         const [asset, quote_currency] = String(preview.pair || "").split("/");
@@ -2461,7 +2467,9 @@ function AIAssistantContent({
           <dt>{at("paperOrder.reserve")}</dt><dd className="text-right font-semibold">€{preview.reserve_cash_eur}</dd>
         </dl>
         {!preview.ok && <p className="mt-3 text-xs text-amber-800 dark:text-amber-200">{preview.message || "Boek eerst bestaande Paper-kas over naar je vrije reserve."}</p>}
-        <button type="button" disabled={!preview.ok || !preview.preview_token || loading || executingAction}
+        <button type="button" disabled={!preview.ok || !preview.preview_token
+          || !Number.isFinite(Date.parse(preview.expires_at))
+          || Date.parse(preview.expires_at) <= Date.now() || loading || executingAction}
           onClick={() => void handleExecuteAction(paperOrder)}
           className={actionButtonStyles({ variant: "primary", className: "mt-4 rounded-xl px-4 py-2.5 text-xs" })}>
           {at("paperOrder.confirm")}

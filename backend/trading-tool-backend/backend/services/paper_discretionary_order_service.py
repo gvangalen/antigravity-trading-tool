@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_DOWN, ROUND_HALF_UP
 
 from fastapi import HTTPException
@@ -42,6 +42,15 @@ class PaperDiscretionaryOrderService:
         quote_currency = str(quote_currency or "").strip().upper()
         if quote_currency not in {"EUR", "USDT"}:
             raise HTTPException(422, "Kies een exact EUR- of USDT-handelspaar.")
+        # Reject unknown/non-crypto symbols locally before the market resolver
+        # can perform an outbound venue lookup for an untrusted preview input.
+        catalog = await self.session.execute(text("""
+            SELECT 1 FROM asset_catalog
+            WHERE symbol=:asset AND asset_class='crypto' AND is_active=TRUE
+            LIMIT 1
+        """), {"asset": asset})
+        if catalog.first() is None:
+            raise HTTPException(422, "Kies een actief crypto-asset uit de catalogus.")
         try:
             market = await TradingMarketService(self.session).resolve(asset, quote_currency)
         except MarketUnavailable as exc:
@@ -82,6 +91,7 @@ class PaperDiscretionaryOrderService:
             raise HTTPException(422, "Het bedrag is te klein voor een Paper-order.")
         cash = await self.reserve.cash(user_id)
         allowed = cash >= gross_eur
+        expires_at = datetime.now(timezone.utc) + PREVIEW_TTL
         token = create_token({
             "user_id": user_id, "market_id": quote["market_id"],
             "asset": quote["asset"], "quote_currency": quote["quote_currency"],
@@ -105,6 +115,7 @@ class PaperDiscretionaryOrderService:
             "price_observed_at": quote["market_price_at"].isoformat(),
             "fx_observed_at": quote["market_fx_as_of"].isoformat() if quote["market_fx_as_of"] else None,
             "reserve_cash_eur": str(cash), "preview_token": token,
+            "expires_at": expires_at.isoformat() if allowed else None,
             "idempotency_key": idempotency_key,
             "requires_explicit_confirmation": True,
             "not_persisted": True, "exchange_order_created": False,

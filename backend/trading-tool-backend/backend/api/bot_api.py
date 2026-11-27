@@ -202,9 +202,13 @@ async def list_paper_discretionary_orders(
 @router.post("/portfolio/paper-discretionary-orders/preview")
 async def preview_paper_discretionary_order(
     payload: PaperDiscretionaryPreviewRequest,
+    request: Request,
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    _apply_sensitive_order_rate_limit(
+        user_id=current_user["id"], request=request, action_key="paper_discretionary_preview",
+    )
     return await PaperDiscretionaryOrderService(db).preview(
         user_id=current_user["id"], **payload.dict(),
     )

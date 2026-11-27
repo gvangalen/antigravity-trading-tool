@@ -28,7 +28,10 @@ _READ_ONLY = re.compile(r"\b(?:moet\s+ik|zou\s+ik|waarom|hoe\s+werkt|leg\s+uit|"
 _CANCEL = re.compile(r"^\s*(?:annuleer|stop|cancel|laat\s+maar)\s*[.!]?\s*$", re.I)
 _REVISE = re.compile(r"\b(?:wijzig|verander|corrigeer|opnieuw|nieuwe\s+preview|probeer\s+opnieuw)\b", re.I)
 _QUOTES = re.compile(r"(?<![A-Z])(?:EUR|USDT)(?![A-Z])", re.I)
-_AMOUNT = re.compile(r"(?<![\w])(?:€\s*)?(\d{1,9}(?:[.,]\d{1,2})?)\s*(EUR|USDT|€)(?![A-Z])", re.I)
+_MONEY = (r"(?:\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?"
+          r"|\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?"
+          r"|\d{1,9}(?:[.,]\d{1,2})?)")
+_AMOUNT = re.compile(rf"(?<![\w.,])(?:€\s*)?({_MONEY})\s*(EUR|USDT|€)(?![A-Z])", re.I)
 
 
 @dataclass(frozen=True)
@@ -55,7 +58,14 @@ class PaperOrderConversationService:
         for match in matches:
             currency = "EUR" if match.group(2) == "€" else match.group(2).upper()
             if quote_currency is None or currency == quote_currency:
-                valid.append(match.group(1).replace(",", "."))
+                raw = match.group(1)
+                if re.fullmatch(r"\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?", raw):
+                    normalized = raw.replace(".", "").replace(",", ".")
+                elif re.fullmatch(r"\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?", raw):
+                    normalized = raw.replace(",", "")
+                else:
+                    normalized = raw.replace(",", ".")
+                valid.append(normalized)
         return valid[0] if len(valid) == 1 else None
 
     @classmethod

@@ -11,6 +11,7 @@ import pytest
 from backend.services.paper_order_conversation_service import PaperOrderConversationService
 from backend.services.paper_discretionary_order_service import PaperDiscretionaryOrderService
 from backend.services.finn_v2_run_service import FinnV2RunService
+from backend.services.trading_market_service import TradingMarketService
 
 
 def test_one_off_paper_buy_retains_pair_and_amount_between_turns(monkeypatch):
@@ -59,6 +60,20 @@ def test_one_off_paper_buy_retains_pair_and_amount_between_turns(monkeypatch):
     asyncio.run(flow())
 
 
+@pytest.mark.parametrize(("text", "expected"), [
+    ("1000 USDT", "1000"),
+    ("1.234,56 USDT", "1234.56"),
+    ("1,234.56 USDT", "1234.56"),
+    ("1.000.000 USDT", "1000000"),
+    ("1,000 USDT", "1000"),
+    ("1.000,00 USDT", "1000.00"),
+    ("1.23.4 USDT", None),
+    ("1000,0000 USDT", None),
+])
+def test_paper_amount_parser_never_takes_a_formatted_suffix(text, expected):
+    assert PaperOrderConversationService._amount(text, "USDT") == expected
+
+
 def test_paper_preview_needs_owned_free_reserve(monkeypatch):
     service = PaperDiscretionaryOrderService(session=None)
     observed = datetime.now(timezone.utc)
@@ -87,6 +102,21 @@ def test_paper_preview_needs_owned_free_reserve(monkeypatch):
     assert allowed["ok"] is True
     assert allowed["requires_explicit_confirmation"] is True
     assert isinstance(allowed["preview_token"], str)
+
+
+def test_unknown_asset_is_rejected_before_outbound_market_lookup(monkeypatch):
+    class Missing:
+        def first(self):
+            return None
+
+    session = SimpleNamespace(execute=AsyncMock(return_value=Missing()))
+    market_lookup = AsyncMock()
+    monkeypatch.setattr(TradingMarketService, "resolve", market_lookup)
+    service = PaperDiscretionaryOrderService(session)
+    with pytest.raises(Exception) as raised:
+        asyncio.run(service._quote("UNKNOWNCOIN", "USDT"))
+    assert raised.value.status_code == 422
+    market_lookup.assert_not_called()
 
 
 def test_confirmed_paper_fill_uses_fresh_price_and_replays_once():

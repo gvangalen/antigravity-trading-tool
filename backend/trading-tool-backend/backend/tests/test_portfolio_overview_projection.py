@@ -50,6 +50,25 @@ def test_paper_total_counts_bot_cash_free_reserve_and_one_off_position_once():
     assert data.global_.allocations_pct["BTC"] == 20.0
 
 
+def test_asset_scoped_paper_view_does_not_attribute_owner_wide_reserve():
+    payload = {
+        "read_at": READ_AT,
+        "bots": [_bot(1, cash=100, budget=2000)],
+        "paper_reserve_cash_eur": 900,
+        "manual_positions": [],
+    }
+    total = project_portfolio(payload, environment="paper")
+    btc = project_portfolio(payload, asset="BTC", environment="paper")
+    eth = project_portfolio(payload, asset="ETH", environment="paper")
+    assert total.global_.cash_balance == 1000
+    assert btc.global_.total_equity is None
+    assert btc.valuation_status == "empty"
+    assert btc.global_.paper_reserve_cash_eur is None
+    assert eth.global_.cash_balance == 100
+    assert eth.global_.total_equity == 100
+    assert eth.global_.paper_reserve_cash_eur is None
+
+
 def test_budget_and_missing_quote_never_become_value_or_cash():
     data = project_portfolio({"bots": [
         _bot(1, initialized=False, budget=500),

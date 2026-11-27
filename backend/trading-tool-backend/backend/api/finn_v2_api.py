@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import datetime, timezone
 from typing import AsyncGenerator
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -132,8 +133,13 @@ async def get_finn_v2_conversation(
             message = {"role": "assistant", "content": content}
             paper_preview = dict(response.get("paper_order_preview") or {}) if isinstance(response, dict) else {}
             active_paper_draft = dict((getattr(row, "context_json", None) or {}).get("paper_discretionary_order_draft") or {})
+            try:
+                preview_active = datetime.fromisoformat(str(paper_preview.get("expires_at"))).astimezone(timezone.utc) > datetime.now(timezone.utc)
+            except (TypeError, ValueError):
+                preview_active = False
             if paper_preview and active_paper_draft.get("idempotency_key") == paper_preview.get("idempotency_key") \
-                    and active_paper_draft.get("status") in {"preview_ready", "needs_reserve"}:
+                    and active_paper_draft.get("status") in {"preview_ready", "needs_reserve"} \
+                    and (not paper_preview.get("ok") or preview_active):
                 message["paper_order_preview"] = paper_preview
                 message["conversation_id"] = conversation_id
             if getattr(run, "status", None) == "clarification_required" and isinstance(response, dict):
