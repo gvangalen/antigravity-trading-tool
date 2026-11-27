@@ -1507,9 +1507,13 @@ class FinnResponsesFrontDoor:
         for match in re.finditer(r"\b(?:Paper|Live)\b", message, re.I):
             term = match.group().lower()
             before = message[max(0, match.start() - 64):match.start()]
+            after = message[match.end():match.end() + 48]
             if re.search(
                 r"\b(?:geen|niet|zonder|no|not|without)\b[^.!?]{0,48}$",
                 before, re.I,
+            ) or re.search(
+                r"^[^.!?]{0,40}\b(?:niet|no|not|uitsluiten|overslaan|"
+                r"buiten\s+beschouwing\s+blijven)\b", after, re.I,
             ):
                 excluded.add(term)
             else:
@@ -1526,7 +1530,8 @@ class FinnResponsesFrontDoor:
         if "live" in selected and "paper" not in selected and "live" not in excluded:
             if re.search(
                 r"\b(?:alleen|uitsluitend|enkel|only)\s+Live\b"
-                r"|\bLive[-\s]+(?:account|portefeuille|portfolio)\b",
+                r"|\b(?:lees|controleer|toon|bekijk|read|show|check)\b"
+                r"[^.!?]{0,32}\bLive[-\s]+(?:account|portefeuille|portfolio)\b",
                 message, re.I,
             ):
                 return "live"

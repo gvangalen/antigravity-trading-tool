@@ -15902,6 +15902,8 @@ def test_named_bot_and_other_open_position_require_owner_portfolio_read(monkeypa
     ("paper", "", {}),
     ("live", " Lees geen Live-gegevens.", {"environment": "paper"}),
     ("live", " Lees geen gegevens uit mijn Live-account.", {"environment": "paper"}),
+    ("live", " Mijn Live-account moet buiten beschouwing blijven.", {"environment": "paper"}),
+    ("live", " Ik bedoel mijn Live-account niet.", {"environment": "paper"}),
     ("live", " Mijn BTC Paper-bot en ETH-positie staan los.", {}),
     ("paper", " Mijn BTC Live-bot en ETH-positie staan los.", {}),
     ("live", " Alleen Paper, niet Live.", {"environment": "paper"}),
