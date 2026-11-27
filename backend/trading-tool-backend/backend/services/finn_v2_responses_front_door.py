@@ -1506,22 +1506,27 @@ class FinnResponsesFrontDoor:
         excluded: set[str] = set()
         for match in re.finditer(r"\b(?:Paper|Live)\b", message, re.I):
             term = match.group().lower()
-            before = message[max(0, match.start() - 32):match.start()]
+            before = message[max(0, match.start() - 64):match.start()]
             if re.search(
-                r"\b(?:geen|niet|zonder|no|not|without)\s+"
-                r"(?:(?:mijn|de|het|een|the|my)\s+)?$", before, re.I,
+                r"\b(?:geen|niet|zonder|no|not|without)\b[^.!?]{0,48}$",
+                before, re.I,
             ):
                 excluded.add(term)
             else:
                 selected.add(term)
-        if "paper" in selected and "live" not in selected:
+        paper_scope = bool(re.search(
+            r"\b(?:alleen|uitsluitend|enkel|only)\s+Paper\b"
+            r"|\bPaper[-\s]+(?:account|portefeuille|portfolio|positie|position|gegevens|data|bots)\b",
+            message, re.I,
+        ))
+        if "paper" in selected and "live" not in selected and paper_scope:
             return "paper"
         if "live" in excluded and "live" not in selected:
             return "paper"
         if "live" in selected and "paper" not in selected and "live" not in excluded:
             if re.search(
-                r"\b(?:alleen|uitsluitend|enkel|only|mijn|my)\s+Live\b"
-                r"|\bLive[-\s]+(?:account|portefeuille|portfolio|positie|position|bot)\b",
+                r"\b(?:alleen|uitsluitend|enkel|only)\s+Live\b"
+                r"|\bLive[-\s]+(?:account|portefeuille|portfolio)\b",
                 message, re.I,
             ):
                 return "live"
@@ -5354,6 +5359,21 @@ class FinnResponsesFrontDoor:
                     call, message=message, read_only=call.operation_id is None and not pending_operation,
                     previous_response=previous_response, owner_user_id=self.user_id,
                 )
+                if (is_read_only_turn and mixed_bot_position
+                        and call.operation_id is None and not pending_operation
+                        and ("read_portfolio" in call.read_tools
+                             or call.name in {"get_portfolio_and_exposure", "get_saved_bots",
+                                              "get_profile_portfolio_and_bots"})):
+                    # Normalize before the first read, including a bundled
+                    # profile/portfolio tool. Otherwise its model-selected
+                    # environment can fetch Live account data or hide Paper
+                    # facts before the later owner-wide portfolio read.
+                    portfolio_inputs = {key: value for key, value in call.inputs.items()
+                                        if key not in {"asset", "environment"}}
+                    chosen_environment = self._mixed_portfolio_environment(message)
+                    if chosen_environment:
+                        portfolio_inputs["environment"] = chosen_environment
+                    call = replace(call, inputs=portfolio_inputs)
                 if call.name == "get_current_asset_scores" and mentioned_assets and len(score_scopes) > 1:
                     score_reads = [await self.reads(replace(
                         call, inputs={

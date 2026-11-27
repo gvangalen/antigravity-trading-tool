@@ -15901,8 +15901,12 @@ def test_named_bot_and_other_open_position_require_owner_portfolio_read(monkeypa
     ("live", "", {}),
     ("paper", "", {}),
     ("live", " Lees geen Live-gegevens.", {"environment": "paper"}),
+    ("live", " Lees geen gegevens uit mijn Live-account.", {"environment": "paper"}),
+    ("live", " Mijn BTC Paper-bot en ETH-positie staan los.", {}),
+    ("paper", " Mijn BTC Live-bot en ETH-positie staan los.", {}),
     ("live", " Alleen Paper, niet Live.", {"environment": "paper"}),
     ("paper", " Alleen Live, geen Paper.", {"environment": "live"}),
+    ("paper", " Lees mijn Live-account.", {"environment": "live"}),
     ("live", " Vergelijk Paper en Live.", {}),
 ])
 def test_mixed_bot_position_reads_exact_portfolio_bot_parents(
@@ -16037,6 +16041,7 @@ def test_mixed_bot_position_secondary_portfolio_read_drops_model_filter(
     assert [call.name for call in selected_calls] == [
         "get_profile_portfolio_and_bots", "get_portfolio_and_exposure",
     ]
+    assert selected_calls[0].inputs == expected_inputs
     assert selected_calls[1].inputs == expected_inputs
 
 
