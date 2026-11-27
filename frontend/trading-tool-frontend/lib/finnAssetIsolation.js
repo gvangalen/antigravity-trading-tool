@@ -125,6 +125,9 @@ export function resolveFinnSubmissionContext({
     locale,
     symbol: selectedCommandSymbol || overrideSymbol || commandContext.symbol || base.symbol,
   };
+  // The visible reflection selector outranks an older conversation state.
+  if (pathname === "/report") request.reflection_week = livePageContext?.reflection_week || null;
+  else delete request.reflection_week;
   if (pathname === "/bot") {
     const selectedFeedSymbol = commandContext.feed_item_id
       ? normalizeScopedAssetSymbol(commandContext.symbol) : null;

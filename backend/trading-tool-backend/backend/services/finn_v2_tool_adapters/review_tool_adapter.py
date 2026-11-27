@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 import json
 import math
 import re
@@ -18,6 +18,29 @@ from backend.services.finn_v2_tool_adapters.display_source_moment import amsterd
 
 
 class ReviewToolAdapter:
+    _WEEK_SUBJECT = re.compile(
+        r"\b(?:weekreflectie|wekelijkse reflectie|weekly reflection|wochenreflexion|"
+        r"(?:mijn|deze|de|opgeslagen)\s+reflectie)\b", re.I)
+
+    @classmethod
+    def positive_week_subjects(cls, message: str):
+        text_value = str(message or "")
+        for match in cls._WEEK_SUBJECT.finditer(text_value):
+            preceding = text_value[max(0, match.start() - 25):match.start()]
+            if re.search(r"\b(?:niet|geen|zonder|not|without|kein|keine)\s+"
+                         r"(?:(?:de|een|mijn|deze|the|a|my|this|die|meine|diese)\s+)?$",
+                         preceding, re.I):
+                continue
+            following = text_value[match.end():match.end() + 45]
+            if re.search(r"\b(?:niet\s+(?:meenemen|lezen|bespreken|tonen|ophalen|gebruiken)|"
+                         r"not\s+(?:include|read|discuss|show|use))\b", following, re.I):
+                continue
+            yield match
+
+    @classmethod
+    def mentions_weekly_reflection(cls, message: str) -> bool:
+        return any(cls.positive_week_subjects(message))
+
     def __init__(self, session):
         self.session = session
         self.bot_service = BotService(session)
@@ -29,6 +52,63 @@ class ReviewToolAdapter:
     def requested_review_id(message: str) -> int | None:
         match = re.search(r"\b(?:trade[ -]?review|trade[ -]?reflectie|review|reflectie|dossier)\s*#\s*(\d{1,12})\b", str(message or ""), re.I)
         return int(match.group(1)) if match else None
+
+    @staticmethod
+    def requested_week_start(message: str, *, reference_year: int | None = None) -> date | None:
+        """Resolve an explicitly dated reflection week, without borrowing a trade date."""
+        text_value = str(message or "")
+        subjects = list(ReviewToolAdapter.positive_week_subjects(text_value))
+        subject = next((match for match in subjects
+                        if not re.match(r"\s*#\s*\d", text_value[match.end():])), None)
+        if subject is None:
+            return None
+        clause = text_value[subject.end():subject.end() + 120].strip()
+        iso = re.match(r"^(?:van|voor|over|from|of|vom|für)?\s*(20\d{2}-\d{2}-\d{2})\b", clause, re.I)
+        if iso:
+            try:
+                week = date.fromisoformat(iso.group(1))
+                if week.weekday() != 0:
+                    raise ValueError("reflection_week_invalid")
+                return week
+            except ValueError:
+                raise ValueError("reflection_week_invalid") from None
+        months = {
+            "januari": 1, "jan": 1, "january": 1, "februari": 2, "feb": 2, "february": 2,
+            "maart": 3, "mrt": 3, "march": 3, "mar": 3, "april": 4, "apr": 4,
+            "mei": 5, "may": 5, "juni": 6, "jun": 6, "june": 6,
+            "juli": 7, "jul": 7, "july": 7, "augustus": 8, "aug": 8, "august": 8,
+            "september": 9, "sep": 9, "sept": 9, "oktober": 10, "okt": 10,
+            "october": 10, "oct": 10, "november": 11, "nov": 11,
+            "december": 12, "dec": 12,
+        }
+        month_pattern = "|".join(sorted(months, key=len, reverse=True))
+        named = re.match(
+            rf"^(?:van|voor|over|from|of|vom|für)?\s*(\d{{1,2}})(?:\s+({month_pattern})\.?)?\s*"
+            rf"(?:[–—-]|tot|to|bis)\s*"
+            rf"(\d{{1,2}})\s+({month_pattern})\.?(?:\s+(20\d{{2}}))?"
+            rf"(?=$|[.,;!?]|\s(?!20\d{{2}}))", clause, re.I)
+        if not named:
+            if (re.match(r"^(?:van|voor|over|from|of|vom|für)?\s*\d", clause, re.I)
+                    or (re.match(r"^(?:van|voor|over|from|of|vom|für)\b", clause, re.I)
+                        and re.search(r"\d", clause[:60]))):
+                raise ValueError("reflection_week_invalid")
+            return None
+        year = int(named.group(5)) if named.group(5) else reference_year
+        if year is None or not 2000 <= year <= 2099:
+            raise ValueError("reflection_week_invalid")
+        try:
+            end_month = months[named.group(4).lower()]
+            end = date(year, end_month, int(named.group(3)))
+            start_month = (months[named.group(2).lower()] if named.group(2) else
+                           end_month if int(named.group(1)) <= int(named.group(3)) else
+                           (end_month - 2) % 12 + 1)
+            start_year = year - 1 if start_month == 12 and end_month == 1 else year
+            week = date(start_year, start_month, int(named.group(1)))
+        except ValueError:
+            raise ValueError("reflection_week_invalid") from None
+        if week.weekday() != 0 or end != week + timedelta(days=6):
+            raise ValueError("reflection_week_invalid")
+        return week
 
     @staticmethod
     def _utc_instant(value: datetime | str) -> datetime:
@@ -82,7 +162,9 @@ class ReviewToolAdapter:
                       review_id: int | None = None,
                       selected_feed_decision_id: int | None = None,
                       selected_feed_snapshot: dict | None = None,
-                      include_weekly_reflection: bool = False, **_kwargs):
+                      include_weekly_reflection: bool = False,
+                      requested_week_start: date | None = None,
+                      invalid_requested_week: bool = False, **_kwargs):
         self.sources.get("review_history").validate_request(user_id=user_id)
         selected_feed_decision = None
         if review_id is None and type(selected_feed_decision_id) is int and selected_feed_decision_id > 0:
@@ -423,13 +505,20 @@ class ReviewToolAdapter:
         )
         weekly_reflection = None
         weekly_as_of = None
-        if include_weekly_reflection and review_id is None:
-            saved = await self.session.execute(text("""
+        if invalid_requested_week:
+            items.append("De opgegeven weekreflectieperiode is ongeldig of onduidelijk. Vraag om de begindatum (maandag) in JJJJ-MM-DD; gebruik geen andere weekreflectie.")
+        if include_weekly_reflection:
+            if requested_week_start is not None and (type(requested_week_start) is not date
+                                                     or requested_week_start.weekday() != 0):
+                raise ValueError("reflection_week_invalid")
+            week_filter = "AND week_start=:week_start" if requested_week_start else ""
+            saved = await self.session.execute(text(f"""
                 SELECT week_start, week_end, summary, generated_at
                 FROM finn_weekly_trade_reflections
-                WHERE user_id=:user_id
+                WHERE user_id=:user_id {week_filter}
                 ORDER BY week_start DESC LIMIT 1
-            """), {"user_id": user_id})
+            """), {"user_id": user_id, **({"week_start": requested_week_start}
+                                     if requested_week_start else {})})
             row = saved.mappings().first()
             if row:
                 summary = row["summary"]

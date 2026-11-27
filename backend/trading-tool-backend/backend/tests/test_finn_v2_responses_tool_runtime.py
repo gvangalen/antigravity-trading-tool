@@ -1,6 +1,6 @@
 import asyncio
 import json
-from datetime import datetime
+from datetime import date, datetime
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from types import SimpleNamespace
@@ -24,6 +24,7 @@ from backend.services.finn_v2_responses_tool_catalog import (
 from backend.services.finn_v2_responses_read_executor import FinnResponsesReadExecutor
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
 from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
+from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
 from backend.services.finn_v2_responses_proposal_selection import FinnResponsesProposalSelection
 from backend.services.finn_v2_responses_front_door import (
     FinnResponsesFrontDoor, _verified_listed_setup_reference, _explicit_rule_transfer_assets,
@@ -311,6 +312,24 @@ def test_unbound_confirmed_lessons_require_review_ids_in_the_read_boundary():
     assert "identify each by review ID or ask which review" in result["evidence_boundary"]
 
 
+def test_closed_trade_read_boundary_names_the_selected_week_not_the_latest_week():
+    reader = FinnResponsesReadExecutor(session=object(), user_id=7, run_id="weekly-review")
+    async def execute_tool(*, tool_name, **_kwargs):
+        return ToolExecutionResult(
+            tool_name=tool_name, status="completed", success=True,
+            result={"weekly_reflection": {
+                "week_start": "2026-11-09", "week_end": "2026-11-15",
+                "observed_patterns": [{"theme": "exit_process", "count": 1}],
+            }} if tool_name == "read_review_history" else {},
+            entity_type="review_history" if tool_name == "read_review_history" else "portfolio",
+        )
+    reader.reads.execute_tool = AsyncMock(side_effect=execute_tool)
+    result = asyncio.run(reader(FinnResponsesToolCatalog().validate("get_closed_trade_review", {})))
+    boundary = result["evidence_boundary"]
+    assert "2026-11-09 through 2026-11-15" in boundary
+    assert "do not replace it with a newer week" in boundary
+
+
 @pytest.mark.parametrize("message, expected_id", [
     ("Wat kan ik van deze les leren?", 123),
     ("Lees trade-review #456", 456),
@@ -319,6 +338,7 @@ def test_review_tool_uses_explicit_id_before_verified_prior_id(message, expected
     service = object.__new__(FinnV2ToolExecutionService)
     service.review_adapter = SimpleNamespace(
         requested_review_id=lambda text: 456 if "#456" in text else None,
+        requested_week_start=lambda _text, **_kwargs: None,
         execute=AsyncMock(return_value={"data": {"closed_trade_review_ids": [expected_id]}}),
     )
     asyncio.run(service._dispatch_tool(
@@ -328,6 +348,167 @@ def test_review_tool_uses_explicit_id_before_verified_prior_id(message, expected
     ))
     assert service.review_adapter.execute.await_args.kwargs["review_id"] == expected_id
     assert service.review_adapter.execute.await_args.kwargs["user_id"] == 7
+
+
+def test_selected_report_week_is_forwarded_only_from_report_context():
+    service = object.__new__(FinnV2ToolExecutionService)
+    service.review_adapter = SimpleNamespace(
+        requested_review_id=lambda _text: None,
+        requested_week_start=lambda _text, **_kwargs: None,
+        execute=AsyncMock(return_value={"data": {"weekly_reflection": None}}),
+    )
+    asyncio.run(service._dispatch_tool(
+        tool_name="read_review_history", user_id=7, selector={},
+        run=SimpleNamespace(message="Bespreek deze reflectie", client_context_json={
+            "page": "/report", "reflection_week": "2026-11-09"}), shared_state={},
+    ))
+    selected = service.review_adapter.execute.await_args.kwargs
+    assert selected["requested_week_start"] == date(2026, 11, 9)
+    assert selected["include_weekly_reflection"] is True
+
+
+def test_invalid_explicit_week_never_falls_back_to_page_or_latest():
+    service = object.__new__(FinnV2ToolExecutionService)
+    service.review_adapter = SimpleNamespace(
+        requested_review_id=lambda _text: None,
+        requested_week_start=ReviewToolAdapter.requested_week_start,
+        execute=AsyncMock(return_value={"data": {"weekly_reflection": None}}),
+    )
+    asyncio.run(service._dispatch_tool(
+        tool_name="read_review_history", user_id=7, selector={},
+        run=SimpleNamespace(message="Bespreek de weekreflectie van 2026-11-10",
+                            client_context_json={"page": "/report", "reflection_week": "2026-11-09"}),
+        shared_state={},
+    ))
+    selected = service.review_adapter.execute.await_args.kwargs
+    assert selected["requested_week_start"] is None
+    assert selected["include_weekly_reflection"] is False
+    assert selected["invalid_requested_week"] is True
+
+
+def test_invalid_date_in_this_reflection_does_not_select_a_different_page_week():
+    service = object.__new__(FinnV2ToolExecutionService)
+    service.review_adapter = SimpleNamespace(
+        requested_review_id=ReviewToolAdapter.requested_review_id,
+        requested_week_start=ReviewToolAdapter.requested_week_start,
+        execute=AsyncMock(return_value={"data": {"weekly_reflection": None}}),
+    )
+    asyncio.run(service._dispatch_tool(
+        tool_name="read_review_history", user_id=7, selector={},
+        run=SimpleNamespace(message="Bespreek deze reflectie van 2026-11-10",
+                            client_context_json={"page": "/report", "reflection_week": "2026-11-09"}),
+        shared_state={},
+    ))
+    selected = service.review_adapter.execute.await_args.kwargs
+    assert selected["include_weekly_reflection"] is False
+    assert selected["invalid_requested_week"] is True
+
+
+def test_explicit_reflection_dossier_id_does_not_load_page_week():
+    service = object.__new__(FinnV2ToolExecutionService)
+    service.review_adapter = SimpleNamespace(
+        requested_review_id=ReviewToolAdapter.requested_review_id,
+        requested_week_start=ReviewToolAdapter.requested_week_start,
+        execute=AsyncMock(return_value={"data": {"weekly_reflection": None}}),
+    )
+    asyncio.run(service._dispatch_tool(
+        tool_name="read_review_history", user_id=7, selector={},
+        run=SimpleNamespace(message="Bespreek uitsluitend de reflectie #456",
+                            client_context_json={"page": "/report", "reflection_week": "2026-11-09"}),
+        shared_state={},
+    ))
+    selected = service.review_adapter.execute.await_args.kwargs
+    assert selected["review_id"] == 456
+    assert selected["include_weekly_reflection"] is False
+    assert selected["requested_week_start"] is None
+
+
+def test_explicit_dossier_and_separate_week_read_both_requested_sources():
+    service = object.__new__(FinnV2ToolExecutionService)
+    service.review_adapter = SimpleNamespace(
+        requested_review_id=ReviewToolAdapter.requested_review_id,
+        requested_week_start=ReviewToolAdapter.requested_week_start,
+        execute=AsyncMock(return_value={"data": {"weekly_reflection": None}}),
+    )
+    asyncio.run(service._dispatch_tool(
+        tool_name="read_review_history", user_id=7, selector={},
+        run=SimpleNamespace(message="Bespreek de reflectie #456 en de weekreflectie van 2026-11-09",
+                            client_context_json={"page": "/report", "reflection_week": "2026-11-16"}),
+        shared_state={},
+    ))
+    selected = service.review_adapter.execute.await_args.kwargs
+    assert selected["review_id"] == 456
+    assert selected["include_weekly_reflection"] is True
+    assert selected["requested_week_start"] == date(2026, 11, 9)
+
+
+@pytest.mark.parametrize("message, invalid", [
+    ("Bespreek dossier #456, niet de weekreflectie", False),
+    ("Bespreek de reflectie #456, niet de opgeslagen reflectie", False),
+    ("Bespreek dossier #456, niet mijn weekreflectie", False),
+    ("Discuss dossier #456, not my weekly reflection", False),
+    ("Bespreek dossier #456. De weekreflectie niet meenemen.", False),
+    ("Bespreek deze reflectie van maandag 10 november 2026", True),
+])
+def test_negated_or_unverifiable_week_never_loads_page_week(message, invalid):
+    service = object.__new__(FinnV2ToolExecutionService)
+    service.review_adapter = SimpleNamespace(
+        requested_review_id=ReviewToolAdapter.requested_review_id,
+        requested_week_start=ReviewToolAdapter.requested_week_start,
+        execute=AsyncMock(return_value={"data": {"weekly_reflection": None}}),
+    )
+    asyncio.run(service._dispatch_tool(
+        tool_name="read_review_history", user_id=7, selector={},
+        run=SimpleNamespace(message=message, client_context_json={
+            "page": "/report", "reflection_week": "2026-11-16"}), shared_state={},
+    ))
+    selected = service.review_adapter.execute.await_args.kwargs
+    assert selected["include_weekly_reflection"] is False
+    assert selected["requested_week_start"] is None
+    assert selected["invalid_requested_week"] is invalid
+
+
+@pytest.mark.parametrize("message", [
+    "Bespreek de weekreflectie van 9–15 november",
+    "Bespreek mijn reflectie van 9–15 november",
+    "Discuss the weekly reflection from 9–15 November 2026",
+])
+def test_explicit_week_overrides_a_different_selected_week(message):
+    service = object.__new__(FinnV2ToolExecutionService)
+    service.review_adapter = SimpleNamespace(
+        requested_review_id=ReviewToolAdapter.requested_review_id,
+        requested_week_start=ReviewToolAdapter.requested_week_start,
+        execute=AsyncMock(return_value={"data": {"weekly_reflection": None}}),
+    )
+    asyncio.run(service._dispatch_tool(
+        tool_name="read_review_history", user_id=7, selector={},
+        run=SimpleNamespace(message=message,
+                            client_context_json={"page": "/report", "reflection_week": "2026-11-16"}),
+        shared_state={},
+    ))
+    selected = service.review_adapter.execute.await_args.kwargs
+    assert selected["requested_week_start"] == date(2026, 11, 9)
+    assert selected["include_weekly_reflection"] is True
+    assert selected["invalid_requested_week"] is False
+
+
+def test_page_week_cannot_expand_a_trade_review_only_question():
+    service = object.__new__(FinnV2ToolExecutionService)
+    service.review_adapter = SimpleNamespace(
+        requested_review_id=ReviewToolAdapter.requested_review_id,
+        requested_week_start=ReviewToolAdapter.requested_week_start,
+        execute=AsyncMock(return_value={"data": {"weekly_reflection": None}}),
+    )
+    asyncio.run(service._dispatch_tool(
+        tool_name="read_review_history", user_id=7, selector={},
+        run=SimpleNamespace(message="Bespreek uitsluitend trade-review #456",
+                            client_context_json={"page": "/report", "reflection_week": "2026-11-09"}),
+        shared_state={},
+    ))
+    selected = service.review_adapter.execute.await_args.kwargs
+    assert selected["review_id"] == 456
+    assert selected["requested_week_start"] is None
+    assert selected["include_weekly_reflection"] is False
 
 
 def test_raw_coach_baseline_cannot_be_enabled_outside_local_fixture(monkeypatch):

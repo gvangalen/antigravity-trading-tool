@@ -776,6 +776,8 @@ function AIAssistantContent({
       activeSetupSymbol: contextualSetup?.symbol,
       selectedAsset: globalSymbol,
     });
+    const visibleReflectionWeek = pathname === "/report" && typeof document !== "undefined"
+      ? document.getElementById("reflection-week")?.value : null;
 
     const pageMap = {
       "/dashboard": t?.nav?.dashboard || "Dashboard",
@@ -814,6 +816,8 @@ function AIAssistantContent({
       bot_id: botPage ? botContext.botId : focusedBotId || null,
       strategy_id: contextualStrategy?.id || contextualSetup?.strategy_id || null,
       setup_name: botPage ? contextualSetup?.name || null : searchParams.get("name") || contextualSetup?.name || null,
+      reflection_week: /^\d{4}-\d{2}-\d{2}$/.test(visibleReflectionWeek || "")
+        ? visibleReflectionWeek : null,
       finn_draft: finnDraft,
     };
   };
