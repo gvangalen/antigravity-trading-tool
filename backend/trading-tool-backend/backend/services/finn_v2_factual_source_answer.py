@@ -63,7 +63,8 @@ def _utc_instant(value: Any) -> datetime | None:
 
 
 _UNBOUND_WEEK_SAVED_CLAIM = re.compile(
-    r"(?P<label>\b(?:opgeslagen\s+)?weekreflectie\s+(?:gegenereerd|opgeslagen)\s*:\s*)"
+    r"(?P<label>(?:\*{1,2})?\b(?:opgeslagen\s+)?weekreflectie\s+"
+    r"(?:gegenereerd|opgeslagen)(?:\*{1,2})?\s*:(?:\*{1,2})?\s*)"
     r"(?P<moment>(?:(?:\d{4}-\d{2}-\d{2}|\d{1,2}\s+[a-z]+(?:\s+\d{4})?)"
     r"\s*,?\s*)?\d{1,2}:\d{2}(?::\d{2})?\s+"
     r"(?:[A-Za-z_]+/[A-Za-z_]+|[A-Z]{2,5}\b)"

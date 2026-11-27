@@ -76,6 +76,14 @@ def test_historical_week_exit_moments_use_user_zone_and_are_idempotent():
     assert "(geen bewijs van plantrouw)" in relative_weeks
     assert "05:15:00 CET" not in relative_weeks
     assert "Geverifieerd opslagmoment week 2026-11-09 t/m 2026-11-15: 2026-11-16 06:15:00 CET" in relative_weeks
+    markdown_claim = complete_historical_week_exit_moments(
+        "- **Weekreflectie opgeslagen:** 16 november 2026, 05:15:00 "
+        "Europe/Amsterdam (geen bewijs van plantrouw).",
+        evidence, question=question, user_time_zone="Europe/Amsterdam",
+    )
+    assert "05:15:00 Europe/Amsterdam" not in markdown_claim
+    assert "(geen bewijs van plantrouw)" in markdown_claim
+    assert "2026-11-16 06:15:00 CET (Europe/Amsterdam)" in markdown_claim
     assert complete_historical_week_exit_moments(
         "antwoord", evidence, question=question, user_time_zone=None,
     ) == "antwoord"
