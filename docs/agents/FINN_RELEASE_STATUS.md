@@ -4,6 +4,48 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: korte bot-/positievergelijking (27 november 2026)
+
+Phase: `LOCAL_GATES_COMPLETE_CI_PENDING`. Onafhankelijke ingelogde QA op exact
+publieke SHA `97895d2a5a39979b1c5c36c53e2c2d8597a8f205` gaf
+`NOT_ACCEPTED` voor de korte vraag die BTC/EUR, BTC-bot 129 en de open
+ETH-positie vergelijkt. De lange bronvergelijking en een score-only vraag
+slaagden. Vanaf de botpagina liet FINN echter een BTC/EUR-score naast de
+61–75-band van een bot met BTC/USDT-prijsbasis zien en zei tegelijk dat de
+bot niet aan BTC/EUR was gekoppeld. De gelezen ETH-nulpositie werd niet
+genoemd. Vanaf Portfolio gaf hij slechts een verduidelijkingsvraag. QA zag
+geen voorstel, accountwijziging of order; de browser gaf geen run-ID of
+foutcode voor deze voltooide beurten.
+
+De oorzaak in de backend was dat de brongebonden deelantwoordroute alleen
+werd gebruikt na een verifierfout. Een vloeiend modelantwoord met een
+onjuiste vergelijking kon die route passeren. Voor een expliciet genoemde
+bot en een positie in een ander asset kiest FINN nu het gecontroleerde
+deelantwoord uit de eigenaargebonden lezingen van de huidige beurt, en
+voert de bestaande bron-, entiteit-, profiel-, prijs- en beurtcontractchecks
+op dat antwoord uit. De route noemt een exact gelezen nulpositie als geen
+open positie en houdt een onbekende bot-/paarkoppeling open; zij plaatst
+geen order en wijzigt geen bot of portefeuille. Zonder een werkelijk
+gerenderd bronfeit, of als een controle het deelantwoord afwijst, geeft
+FINN een gerichte verduidelijking met status `unavailable`; het onjuiste
+modelproza wordt niet hergebruikt.
+
+Onafhankelijke code-QA en Security vonden op implementatiehead
+`a63fc319b2317493bdf5ebac203281e302ed0216` geen blocker. Gemeten op
+deze lokale kandidaat: gerichte FINN-tests **1088/1088** groen; volledige
+backend **5616 passed, 7 skipped** (log SHA-256
+`6642d0ba56b1777950385a04d5acfd9c092c225fb20617eeb0a627137726540c`).
+Geïsoleerde API/worker-actiecontractmatrix **17/17**, nul brokerorders,
+Live-calls en productieverbindingen (artifact SHA-256
+`4c904cf232f9d678f250d26fe4e969555192e5c10de4f7ae99cfe1b4c1382263`).
+Echte providerselector development **20/20** (artifact SHA-256
+`c45a6be7682996454036aeb3e039895083b26bc2155281f00df553104d513a6b`)
+en regressie **109/109** (artifact SHA-256
+`b885722c5740c6532102562d13aeaa166257210195cf8f2de068b81116cc0760`),
+beide zonder provider-, schema-, parse-, timeout- of validatiefout. CI,
+Auto Deploy, publieke SHA-pariteit en ingelogde live QA voor deze
+reparatie zijn nog open.
+
 ## FINN 3.0: nulpositie en gevraagde broninhoud (26 november 2026)
 
 Phase: `DEPLOY_IDENTITY_VERIFIED_QA_PENDING`. Onafhankelijke ingelogde QA op exact publieke
