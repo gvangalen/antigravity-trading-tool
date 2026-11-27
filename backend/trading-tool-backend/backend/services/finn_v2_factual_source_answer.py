@@ -96,10 +96,18 @@ def complete_historical_week_exit_moments(
     rows = [item["data"] for item in evidence
             if item.get("scope") == "read_review_history"
             and item.get("status") == "completed" and isinstance(item.get("data"), dict)]
-    if len(rows) != 1:
+    weeks = [row["weekly_reflection"] for row in rows
+             if isinstance(row.get("weekly_reflection"), dict)]
+    if not weeks:
         return answer
-    week = rows[0].get("weekly_reflection")
-    if not isinstance(week, dict):
+    week = weeks[0]
+    # The model can read the same owner-scoped history twice in one turn. A
+    # duplicate read is safe; conflicting saved weeks are not.
+    week_key = tuple(week.get(key) for key in
+                     ("week_start", "week_end", "generated_at", "time_zone"))
+    if any(tuple(candidate.get(key) for key in
+                 ("week_start", "week_end", "generated_at", "time_zone")) != week_key
+           for candidate in weeks[1:]):
         return answer
     try:
         start = datetime.fromisoformat(str(week["week_start"])).date()
@@ -110,11 +118,30 @@ def complete_historical_week_exit_moments(
         period_zone = ZoneInfo(str(week.get("time_zone") or user_time_zone))
     except (ZoneInfoNotFoundError, TypeError, ValueError):
         return answer
-    trades = [trade for trade in rows[0].get("closed_trades") or []
-              if isinstance(trade, dict) and trade.get("symbol") == "AAPL"
-              and str(trade.get("environment") or "").lower() == "paper"
-              and (instant := _utc_instant(trade.get("exit_at"))) is not None
-              and start <= instant.astimezone(period_zone).date() <= end]
+    all_trades = [trade for row in rows for trade in row.get("closed_trades") or []
+                  if isinstance(trade, dict)]
+    # Check a dossier's identity and registered exit across every read before
+    # filtering by week. Otherwise an inconsistent out-of-week duplicate can
+    # disappear and make the remaining timestamp look verified.
+    dossiers: dict[int, tuple[str, str, datetime | None]] = {}
+    for trade in all_trades:
+        review_id = trade.get("review_id")
+        if type(review_id) is not int:
+            continue
+        identity = (str(trade.get("symbol") or ""),
+                    str(trade.get("environment") or "").lower(),
+                    _utc_instant(trade.get("exit_at")))
+        if review_id in dossiers and dossiers[review_id] != identity:
+            return answer
+        dossiers[review_id] = identity
+    matching_trades = [trade for trade in all_trades
+                       if trade.get("symbol") == "AAPL"
+                       and str(trade.get("environment") or "").lower() == "paper"
+                       and (instant := _utc_instant(trade.get("exit_at"))) is not None
+                       and start <= instant.astimezone(period_zone).date() <= end]
+    unique_trades = {(trade.get("review_id"), str(trade["exit_at"])): trade
+                     for trade in matching_trades}
+    trades = list(unique_trades.values())
     if len(trades) != 1:
         return answer
     requested_ids = {int(match.group(1)) for match in re.finditer(

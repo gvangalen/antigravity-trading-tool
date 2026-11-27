@@ -4,9 +4,43 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: dubbele historische leesresultaten bij weekreflectie (27 november 2026)
+
+Phase: `LOCAL_GATES_PASSED_PENDING_PR_CI`. Branch
+`codex/finn-week-multiple-reads-20261127`, producthead
+`3eb41f28f87399ed7d22209c97d5382aad50c714`.
+Onafhankelijke ingelogde browser-QA op live
+`dd543e9026614e638e69c65670fabe44bb83bbf6` gaf `NOT_ACCEPTED`:
+beide nieuwe gesprekken lazen de juiste AAPL Paper-exit en week 9–15 november,
+zonder de vroegere onjuiste `05:15 CET`-claim; in de eerste beurt ontbrak
+echter de afzonderlijk geregistreerde sluiting in CET. Na refresh stond die
+in de tweede beurt wel naast het geverifieerde weekopslagmoment. Geen account-
+of ordermutatie.
+
+De actieve minimal-read-route kon lokaal dezelfde omissie reproduceren zodra
+één FINN-beurt twee identieke eigenaargebonden `read_review_history`-resultaten
+had. De helper eiste ten onrechte precies één resultaat. De kandidaat
+accepteert herhaalde consistente week- en tradebronnen; conflicten over
+week, dossier-ID, symbool, Paper/Live-omgeving of UTC-sluiting worden vóór
+de weekselectie fail-closed behandeld. Een apart oud dossier buiten de week
+blokkeert de juiste bron niet. Er zijn geen actiecontracten, bots, orders of
+frontendflows gewijzigd. Gerichte regressies `44 passed`; volledige backend
+`5674 passed, 7 skipped` (log SHA-256
+`c7fe510f548360149248bc47173c98381c7c07b813f12c6d0cfcd345f2bb929a`).
+Echte-providerselector development `20/20` (artifact SHA-256
+`c6e25da0ecb0d7e00e43b86319397dd8f7fe8d65d97c43932ddb743a48a58c3f`)
+en regression `109/109` (artifact SHA-256
+`99a64ef162d7c6567b5049356d98980ef39e538554c1b4f1f4cb425f0e77c2a9`),
+zonder provider-, schema-, parse-, validatie- of timeoutfouten. Er zijn geen
+gewijzigde actiecontracten; de worker-actiematrix is voor deze read-only
+bronmomentcorrectie niet van toepassing. Onafhankelijke QA- en Security-
+codebeoordeling op de productlogica vonden geen blocker. PR-CI, main-CI,
+Auto Deploy, publieke SHA-pariteit en nieuwe onafhankelijke browser-QA staan
+open. Dit is geen live acceptatie.
+
 ## FINN 3.0: eenduidig opslagmoment voor historische weekreflectie (27 november 2026)
 
-Phase: `READY_FOR_INDEPENDENT_QA_AFTER_STATUS_DEPLOY`. Product branch
+Phase: `LIVE_NOT_ACCEPTED`. Product branch
 `codex/finn-reflection-clock-consistency-20261127`; producthead
 `a0a29e8ba929dac7fcca1376adbeb5a139a851ea`;
 [PR #1412](https://github.com/gvangalen/antigravity-trading-tool/pull/1412)
@@ -46,9 +80,16 @@ hebben elk vijf groene jobs. Auto Deploy
 is geslaagd. Publieke backend-health en frontend build-info gaven beide HTTP
 200 en SHA `79034d7ec0153cedf3c1a21ec1bee312dc800505`; op dat moment was
 geen nieuwere deploy pending. Deze statusupdate maakt zelf een latere SHA.
-QA bindt de ingelogde hertest pas aan de definitieve publieke SHA na de
-status-only Auto Deploy. De onafhankelijke browseruitkomst staat nog open;
-dit is geen live acceptatie.
+De status-only revisie `dd543e9026614e638e69c65670fabe44bb83bbf6`
+doorliep main-CI [46071868697](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46071868697)
+met vijf groene jobs en Auto Deploy
+[46072718031](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46072718031)
+met succes; backend/frontend waren beide HTTP 200 en exact die SHA.
+Onafhankelijke ingelogde browser-QA gaf op die revisie `NOT_ACCEPTED`:
+de foutieve `05:15 CET`-claim verdween en de tweede beurt na refresh had
+beide geverifieerde CET-momenten, maar de eerste voltooide beurt miste de
+afzonderlijk geregistreerde sluiting. De volgende herstelkandidaat hierboven
+pakt dit herhaalbaarheidsprobleem aan.
 
 ## FINN 3.0: historische tijdzoneaanvulling in de actieve leesroute (27 november 2026)
 
