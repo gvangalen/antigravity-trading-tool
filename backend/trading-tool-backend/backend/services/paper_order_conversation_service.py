@@ -56,6 +56,10 @@ class PaperOrderConversationService:
         matches = list(_AMOUNT.finditer(message))
         valid = []
         for match in matches:
+            # Never accept the numeric suffix of a space/apostrophe-grouped
+            # amount (for example, "1 234,56" must not become "234.56").
+            if re.search(r"\d[\s'’]+$", message[:match.start()]):
+                continue
             currency = "EUR" if match.group(2) == "€" else match.group(2).upper()
             if quote_currency is None or currency == quote_currency:
                 raw = match.group(1)
@@ -83,6 +87,12 @@ class PaperOrderConversationService:
         draft = dict(prior or {})
         if draft.get("status") not in {"collecting", "preview_ready", "needs_reserve"}:
             draft = {"status": "collecting"}
+        else:
+            # Any new order turn invalidates the prior card before collecting
+            # corrections or issuing a fresh, uniquely keyed preview.
+            draft["status"] = "collecting"
+            draft.pop("preview_token", None)
+            draft.pop("idempotency_key", None)
         asset = resolve_catalog_symbol_mention(message)
         if asset:
             draft["asset"] = asset
@@ -108,6 +118,11 @@ class PaperOrderConversationService:
         amount = cls._amount(message, draft["quote_currency"])
         if amount is not None:
             draft["amount_quote"] = amount
+        elif _AMOUNT.search(message):
+            # The user attempted to change the amount, but its formatting is
+            # ambiguous. Retire the prior preview instead of silently reusing
+            # its old amount.
+            draft.pop("amount_quote", None)
         if not draft.get("amount_quote"):
             return PaperOrderChatTurn(
                 f"Hoeveel {draft['quote_currency']} wil je éénmalig aan {draft['asset']} besteden? "

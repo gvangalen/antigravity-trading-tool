@@ -69,9 +69,36 @@ def test_one_off_paper_buy_retains_pair_and_amount_between_turns(monkeypatch):
     ("1.000,00 USDT", "1000.00"),
     ("1.23.4 USDT", None),
     ("1000,0000 USDT", None),
+    ("1 000 USDT", None),
+    ("1 234,56 USDT", None),
+    ("1\u00a0234,56 USDT", None),
+    ("1\u202f234,56 USDT", None),
+    ("1'234,56 USDT", None),
+    ("1’234,56 USDT", None),
 ])
 def test_paper_amount_parser_never_takes_a_formatted_suffix(text, expected):
     assert PaperOrderConversationService._amount(text, "USDT") == expected
+
+
+def test_ambiguous_amount_clears_previous_preview_and_asks_again(monkeypatch):
+    preview = AsyncMock()
+    monkeypatch.setattr(PaperDiscretionaryOrderService, "preview", preview)
+    prior = {
+        "status": "preview_ready", "asset": "BTC", "quote_currency": "USDT",
+        "amount_quote": "1000", "preview_token": "old-token",
+        "idempotency_key": "paper-order-old-run",
+    }
+    result = asyncio.run(PaperOrderConversationService.advance(
+        message="Wijzig naar 1 234,56 USDT", prior=prior,
+        session=None, user_id=7, run_id="new-run",
+    ))
+    assert result.preview is None
+    assert result.draft.get("amount_quote") is None
+    assert result.draft["status"] == "collecting"
+    assert "preview_token" not in result.draft
+    assert "idempotency_key" not in result.draft
+    assert "Hoeveel USDT" in result.text
+    preview.assert_not_called()
 
 
 def test_paper_preview_needs_owned_free_reserve(monkeypatch):
