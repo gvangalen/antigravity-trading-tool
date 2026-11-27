@@ -5279,6 +5279,14 @@ class FinnResponsesFrontDoor:
                     call = replace(call, inputs={**call.inputs, "environment": "paper"})
                 if full_portfolio_requested and portfolio_only_read:
                     portfolio_inputs = {key: value for key, value in call.inputs.items() if key != "asset"}
+                    if mixed_bot_position:
+                        # A model-selected Live/Paper filter can hide the named
+                        # bot or the other asset's position from this one
+                        # comparison. Only the user's own environment choice
+                        # may narrow the owner-wide portfolio read.
+                        portfolio_inputs.pop("environment", None)
+                        if re.search(r"\bLive\b", message, re.I) and not re.search(r"\bPaper\b", message, re.I):
+                            portfolio_inputs["environment"] = "live"
                     if re.search(r"\bPaper\b", message, re.I) and not re.search(r"\bLive\b", message, re.I):
                         portfolio_inputs["environment"] = "paper"
                     call = replace(call, inputs=portfolio_inputs)

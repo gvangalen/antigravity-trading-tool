@@ -15897,7 +15897,8 @@ def test_named_bot_and_other_open_position_require_owner_portfolio_read(monkeypa
     assert captured["required_read_tool_name"] == "get_portfolio_and_exposure"
 
 
-def test_mixed_bot_position_reads_exact_portfolio_bot_parents(monkeypatch):
+@pytest.mark.parametrize("model_environment", ["live", "paper"])
+def test_mixed_bot_position_reads_exact_portfolio_bot_parents(monkeypatch, model_environment):
     question = (
         "Vergelijk BTC/EUR met mijn open ETH-positie. Wat is de status van mijn "
         "BTC-bot 129 en welke planvoorwaarden horen bij die bot? Vermeng geen "
@@ -15943,7 +15944,8 @@ def test_mixed_bot_position_reads_exact_portfolio_bot_parents(monkeypatch):
     )
     fake = FakeResponses(
         response("mixed-read", calls=[tool_call(
-            "call-portfolio", "get_portfolio_and_exposure", {},
+            "call-portfolio", "get_portfolio_and_exposure",
+            {"asset": "BTC", "environment": model_environment},
         )]),
         response("mixed-answer", text="Ik controleer de gelezen bot en positie."),
     )
@@ -15960,6 +15962,7 @@ def test_mixed_bot_position_reads_exact_portfolio_bot_parents(monkeypatch):
     assert [call.name for call in selected_calls] == [
         "get_portfolio_and_exposure", "get_active_plan_and_strategy",
     ]
+    assert selected_calls[0].inputs == {}
     scopes = {item["scope"] for item in result.response.tool_trace[0]["result"]["results"]}
     assert {"read_portfolio", "read_active_setup", "read_linked_bot", "read_bot_status"} <= scopes
 
