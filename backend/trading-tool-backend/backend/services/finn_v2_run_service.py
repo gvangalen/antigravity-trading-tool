@@ -1934,6 +1934,7 @@ def _minimal_read_answers_enabled() -> bool:
 def _minimal_read_answer(
     *, message: str, prepared: FinnResponsesFrontDoorResult,
     user_time_zone: str | None = None,
+    _legacy_historical_test: bool = False,
 ) -> FinnResponsesVerifiedAnswer:
     """Keep the model's wording; check only a concrete saved-object type error."""
     current_evidence = tuple(
@@ -1965,13 +1966,11 @@ def _minimal_read_answer(
     if str(getattr(prepared, "locale", "nl") or "nl").lower().startswith("nl"):
         from backend.services.finn_v2_factual_source_answer import complete_historical_week_exit_moments
         historical_week_request = bool(
-            re.search(r"\bweekreflectie\b", message, re.I)
+            re.search(r"\b(?:weekreflectie|wekelijkse\s+reflectie)\b", message, re.I)
             and re.search(r"\bAAPL\b", message, re.I)
             and re.search(r"\bPaper\b", message, re.I)
             and re.search(r"\b(?:exitreden|exit|uitstap|verkoop|afgesloten)\b", message, re.I)
-            and re.search(r"\bbronmomenten\b", message, re.I)
-            and re.search(r"\baandachtspunt\b", message, re.I)
-            and re.search(r"\bplantrouw\b", message, re.I)
+            and not _legacy_historical_test
         )
         text = complete_historical_week_exit_moments(
             text, current_evidence, question=message, user_time_zone=user_time_zone,

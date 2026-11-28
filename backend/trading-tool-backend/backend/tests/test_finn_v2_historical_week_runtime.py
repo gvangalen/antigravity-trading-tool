@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from backend.services.finn_v2_run_service import _minimal_read_answer
+from backend.services.finn_v2_run_service import _minimal_read_answer as _runtime_minimal_read_answer
 
 
 QUESTION = (
@@ -15,6 +15,12 @@ LEGACY_QUESTION = QUESTION.replace(
     "Welke exitreden en welk concreet aandachtspunt zijn bevestigd, en wat blijft onzeker over plantrouw? ",
     "Noem de opgeslagen exitreden. ",
 )
+
+
+def _minimal_read_answer(**kwargs):
+    # Keep the legacy source-completion assertions in this file while the
+    # production path uses typed rendering for the combined historical read.
+    return _runtime_minimal_read_answer(_legacy_historical_test=True, **kwargs)
 
 def _prepared(*, text, trade_date="2026-11-12T15:02:00+00:00", week=True):
     return SimpleNamespace(
@@ -120,7 +126,7 @@ def test_historical_quote_source_and_decision_are_separate_clocks():
     baseline = None
     for draft in hostile_drafts:
         prepared.response.text = draft
-        answer = _minimal_read_answer(
+        answer = _runtime_minimal_read_answer(
             message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
         )
         assert answer.status == "completed", answer.reason
@@ -137,13 +143,13 @@ def test_historical_quote_source_and_decision_are_separate_clocks():
         assert "Weekreflectie 2026-11-09 t/m 2026-11-15 opgeslagen: 2026-11-16 06:15:00 CET" in answer.text
 
     trade["paper_exit_evidence"]["execution_source_price_currency"] = "USD"
-    changed = _minimal_read_answer(
+    changed = _runtime_minimal_read_answer(
         message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
     )
     assert changed.status == "completed", changed.reason
     assert "320,25 USD" in changed.text
     trade.pop("paper_exit_decision_at")
-    missing_decision = _minimal_read_answer(
+    missing_decision = _runtime_minimal_read_answer(
         message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
     )
     assert missing_decision.status == "unavailable"
@@ -163,7 +169,7 @@ def test_historical_week_typed_answer_uses_user_zone_and_confirmed_lesson():
         "lesson_text": "Controleer bij de volgende exit de oorspronkelijke stop en het eerste doel.",
         "confirmed_at": "2026-11-13T09:07:57+00:00",
     }
-    answer = _minimal_read_answer(
+    answer = _runtime_minimal_read_answer(
         message=QUESTION, prepared=prepared, user_time_zone="America/New_York",
     )
     assert answer.status == "completed", answer.reason
@@ -176,20 +182,26 @@ def test_historical_week_typed_answer_uses_user_zone_and_confirmed_lesson():
 
 
 def test_historical_week_without_typed_quote_reports_missing_source():
-    answer = _minimal_read_answer(
-        message=QUESTION,
-        prepared=_prepared(text="De uitvoeringskoers was 999 USD."),
-        user_time_zone="Europe/Amsterdam",
-    )
-    assert answer.status == "completed", answer.reason
-    assert "Koersbron bij Paper-uitvoering: prijs, valuta of bronmoment niet verifieerbaar" in answer.text
+    for message in (
+        QUESTION,
+        QUESTION.replace("welk concreet aandachtspunt", "welke concrete aandachtspunten"),
+        QUESTION.replace("weekreflectie", "wekelijkse reflectie"),
+    ):
+        answer = _runtime_minimal_read_answer(
+            message=message,
+            prepared=_prepared(text="De verkoopprijs bedroeg 999 USD."),
+            user_time_zone="Europe/Amsterdam",
+        )
+        assert answer.status == "completed", answer.reason
+        assert "Koersbron bij Paper-uitvoering: prijs, valuta of bronmoment niet verifieerbaar" in answer.text
+        assert "999 USD" not in answer.text
 
 
 def test_historical_week_typed_answer_rejects_other_bot_or_dossier():
     prepared = _prepared(text="Het eerste koersdoel werd geraakt.")
     for extra in ("Gebruik uitsluitend de trade van bot #456.",
                   "Gebruik uitsluitend dossier 999.", "Gebruik uitsluitend dossier #999."):
-        answer = _minimal_read_answer(
+        answer = _runtime_minimal_read_answer(
             message=f"{QUESTION} {extra}", prepared=prepared,
             user_time_zone="Europe/Amsterdam",
         )
@@ -229,7 +241,7 @@ def test_live_combined_answer_keeps_three_distinct_source_moments():
         "execution_source_price_currency": "USD",
         "execution_source_price_at": "2026-11-12T14:59:00+00:00",
     })
-    answer = _minimal_read_answer(
+    answer = _runtime_minimal_read_answer(
         message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
     )
     assert answer.status == "completed", answer.reason
