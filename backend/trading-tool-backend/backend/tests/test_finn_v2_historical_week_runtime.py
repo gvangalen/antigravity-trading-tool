@@ -92,214 +92,92 @@ def test_historical_exit_decision_compounds_cannot_claim_registered_close_clock(
 
 
 def test_historical_quote_source_and_decision_are_separate_clocks():
-    from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
-
-    prepared = _prepared(
-        text=("Exitbeslissing en USD-koers van 358,60: "
-              "12 november 2026, 14:59:00 UTC."),
-        trade_date="2026-11-12T15:00:30+00:00",
-    )
+    prepared = _prepared(text="Onjuist modelantwoord.", trade_date="2026-11-12T15:00:30+00:00")
     trade = prepared.response.tool_trace[0]["result"]["results"][0]["data"]["closed_trades"][0]
     trade["paper_exit_decision_at"] = "2026-11-12T15:00:30+00:00"
     trade["paper_exit_evidence"].update({
         "source_price_currency": "USD", "source_price": 358.60,
         "source_price_at": "2026-11-12T14:59:00+00:00",
-        "execution_source_price": 358.60,
-        "execution_source_price_currency": "USD",
+        "execution_source_price": 320.25,
+        "execution_source_price_currency": "EUR",
         "execution_source_price_at": "2026-11-12T14:59:00+00:00",
     })
-    evidence = tuple(prepared.response.tool_trace[0]["result"]["results"])
-    assert not current_source_moments_supported(
-        prepared.response.text, evidence, question=QUESTION,
-        user_time_zone="Europe/Amsterdam",
+    hostile_drafts = (
+        "De uitvoeringskoers was 999 USD om 14:59 UTC.",
+        "De uitvoeringskoers was -320,25 EUR.",
+        "De uitvoeringskoers was 320,25 GBP.",
+        "De uitvoeringskoers was €999,00.",
+        "De verkoop werd uitgevoerd tegen 999 USD.",
+        "Voor bot #456: uitvoeringskoers 999 USD.",
+        "Op 12 november 2026 om 14:58 UTC werd de uitvoeringskoers vastgelegd.",
+        "Zowel de uitvoeringskoers als de exitbeslissing: 15:00:30 UTC.",
     )
-    completed = _minimal_read_answer(
-        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
-    )
-    assert completed.status == "completed", completed.reason
-    assert "Exitbeslissing en USD-koers" not in completed.text
-    assert ("Koersbron bij AAPL Paper-exitbeoordeling: 358,60 USD op "
-            "12 november 2026, 14:59:00 UTC") in completed.text
-    assert ("Geverifieerde AAPL Paper-exitbeslissing: 2026-11-12 16:00:30 CET "
-            "(2026-11-12 15:00:30 UTC; Europe/Amsterdam)") in completed.text
-    assert "AAPL Paper-trade als gesloten geregistreerd: 2026-11-12 16:00:30 CET" in completed.text
+    baseline = None
+    for draft in hostile_drafts:
+        prepared.response.text = draft
+        answer = _minimal_read_answer(
+            message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+        )
+        assert answer.status == "completed", answer.reason
+        assert answer.text == (baseline or answer.text)
+        baseline = answer.text
+        assert draft not in answer.text
+        assert "999" not in answer.text
+        assert "GBP" not in answer.text
+        assert "bot #456" not in answer.text
+        assert "Koersbron bij exitbeoordeling: 358,60 USD; bronmoment 2026-11-12 15:59:00 CET" in answer.text
+        assert "Koersbron bij Paper-uitvoering: 320,25 EUR; bronmoment 2026-11-12 15:59:00 CET" in answer.text
+        assert "Botbeslissing: 2026-11-12 16:00:30 CET" in answer.text
+        assert "Paper-sluiting geregistreerd: 2026-11-12 16:00:30 CET" in answer.text
+        assert "Weekreflectie 2026-11-09 t/m 2026-11-15 opgeslagen: 2026-11-16 06:15:00 CET" in answer.text
 
-    prepared.response.text = (
-        "Exitbeslissing en uitvoeringskoers: "
-        "12 november 2026, 15:00:30 UTC."
-    )
-    execution = _minimal_read_answer(
-        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
-    )
-    assert execution.status == "completed", execution.reason
-    assert "Exitbeslissing en uitvoeringskoers" not in execution.text
-    assert ("Koersbron bij AAPL Paper-uitvoering: 358,60 USD op "
-            "2026-11-12 15:59:00 CET (2026-11-12 14:59:00 UTC; Europe/Amsterdam)") in execution.text
-    assert "Geverifieerde AAPL Paper-exitbeslissing: 2026-11-12 16:00:30 CET" in execution.text
-
-    trade["paper_exit_evidence"]["execution_source_price_currency"] = "EUR"
-    different_currency = _minimal_read_answer(
-        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
-    )
-    assert different_currency.status == "completed", different_currency.reason
-    assert "Koersbron bij AAPL Paper-uitvoering: 358,60 EUR" in different_currency.text
     trade["paper_exit_evidence"]["execution_source_price_currency"] = "USD"
-
-    prepared.response.text = (
-        "Exitbeslissing en USD-koers van 358,60: "
-        "12 november 2026, 14:59:00 UTC en de botbeslissing "
-        "12 november 2026, 15:00:30 UTC."
+    changed = _minimal_read_answer(
+        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
     )
-    assert current_source_moments_supported(
-        prepared.response.text, evidence, question=QUESTION,
+    assert changed.status == "completed", changed.reason
+    assert "320,25 USD" in changed.text
+    trade.pop("paper_exit_decision_at")
+    missing_decision = _minimal_read_answer(
+        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert missing_decision.status == "unavailable"
+
+
+def test_historical_week_typed_answer_uses_user_zone_and_confirmed_lesson():
+    prepared = _prepared(text="De uitvoeringskoers was -999 GBP.")
+    trade = prepared.response.tool_trace[0]["result"]["results"][0]["data"]["closed_trades"][0]
+    trade["paper_exit_evidence"].update({
+        "source_price_currency": "USD", "source_price": 358.60,
+        "source_price_at": "2026-11-12T14:59:00+00:00",
+        "execution_source_price": 320.25,
+        "execution_source_price_currency": "EUR",
+        "execution_source_price_at": "2026-11-12T14:59:00+00:00",
+    })
+    trade["confirmed_lesson"] = {
+        "lesson_text": "Controleer bij de volgende exit de oorspronkelijke stop en het eerste doel.",
+        "confirmed_at": "2026-11-13T09:07:57+00:00",
+    }
+    answer = _minimal_read_answer(
+        message=QUESTION, prepared=prepared, user_time_zone="America/New_York",
+    )
+    assert answer.status == "completed", answer.reason
+    assert "09:59:00 EST (America/New_York)" in answer.text
+    assert "10:02:00 EST (America/New_York)" in answer.text
+    assert "00:15:00 EST (America/New_York)" in answer.text
+    assert "Door gebruiker bevestigde les (2026-11-13 04:07:57 EST)" in answer.text
+    assert "-999" not in answer.text
+    assert "GBP" not in answer.text
+
+
+def test_historical_week_without_typed_quote_rejects_model_execution_price():
+    answer = _minimal_read_answer(
+        message=QUESTION,
+        prepared=_prepared(text="De uitvoeringskoers was 999 USD."),
         user_time_zone="Europe/Amsterdam",
     )
-    for wrong in (
-        "Exitbeslissing en USD-koers van 358,60: "
-        "12 november 2026, 14:59:00 UTC en de botbeslissing "
-        "12 november 2026, 14:58:00 UTC.",
-        "Exitbeslissing en USD-koers van 359,60: "
-        "12 november 2026, 14:59:00 UTC en de botbeslissing "
-        "12 november 2026, 15:00:30 UTC.",
-    ):
-        assert not current_source_moments_supported(
-            wrong, evidence, question=QUESTION, user_time_zone="Europe/Amsterdam",
-        )
-    assert not current_source_moments_supported(
-        "Exitbeslissing en USD-koers van 358,60: "
-        "12 november 2026, 15:00:30 UTC en de botbeslissing "
-        "12 november 2026, 14:59:00 UTC.",
-        evidence, question=QUESTION, user_time_zone="Europe/Amsterdam",
-    )
-    prepared.response.text = (
-        "Exitbeslissing en USD-koers van 358,60: "
-        "12 november 2026, 14:59:00 UTC."
-    )
-
-    trade["paper_exit_evidence"]["source_price_at"] = "2026-11-12T14:58:00+00:00"
-    unsafe = _minimal_read_answer(
-        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
-    )
-    assert unsafe.status == "unavailable"
-
-    trade["paper_exit_evidence"].pop("source_price_at")
-    missing = _minimal_read_answer(
-        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
-    )
-    assert missing.status == "unavailable"
-
-    trade["paper_exit_evidence"]["source_price_at"] = "2026-11-12T14:59:00+00:00"
-    for prefix in ("Voor een eerdere AAPL-trade: ",
-                   "Voor de AAPL-ochtendtrade: ",
-                   "De exitbeslissing voor een andere AAPL-review: ",
-                   "Voor dossier #999: ", "Voor review 999: ",
-                   "Voor bot #456: "):
-        prepared.response.text = prefix + (
-            "Exitbeslissing en USD-koers van 358,60: "
-            "12 november 2026, 14:59:00 UTC."
-        )
-        unsafe = _minimal_read_answer(
-            message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
-        )
-        assert unsafe.status == "unavailable", prefix
-
-    prepared.response.text = (
-        "Exitbeslissing en USD-koers van 358,60: "
-        "12 november 2026, 15:00:30 UTC."
-    )
-    wrong_quote_clock = _minimal_read_answer(
-        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
-    )
-    assert wrong_quote_clock.status == "unavailable"
-
-    for noun in ("de USD-koers van 358,60", "de uitvoeringskoers"):
-        prepared.response.text = (
-            f"Exitbeslissing en {noun}: 12 november 2026, 15:00:30 UTC."
-        )
-        with_article = _minimal_read_answer(
-            message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
-        )
-        if "USD-koers" in noun:
-            assert with_article.status == "unavailable"
-        else:
-            assert with_article.status == "completed", with_article.reason
-            assert "Koersbron bij AAPL Paper-uitvoering: 358,60 USD" in with_article.text
-    for noun in ("de uitvoeringsprijs", "de geregistreerde uitvoeringskoers"):
-        prepared.response.text = (
-            f"Exitbeslissing en {noun}: 12 november 2026, 15:00:30 UTC."
-        )
-        unsupported = _minimal_read_answer(
-            message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
-        )
-        assert unsupported.status == "unavailable", noun
-    for reverse in (
-        "De uitvoeringskoers en de exitbeslissing: 12 november 2026, 15:00:30 UTC.",
-        "De koersbron en de uitstapbeslissing: 12 november 2026, 15:00:30 UTC.",
-        "Zowel de uitvoeringskoers als de exitbeslissing: 12 november 2026, 15:00:30 UTC.",
-        "De Paper-sluiting en de botbeslissing: 12 november 2026, 15:00:30 UTC.",
-    ):
-        prepared.response.text = reverse
-        unsupported = _minimal_read_answer(
-            message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
-        )
-        assert unsupported.status == "unavailable", reverse
-
-    for wrong_quote in (
-        "De uitvoeringskoers was van 12 november 2026 om 14:58:00 UTC, "
-        "de exitbeslissing van 12 november 2026 om 15:00:30 UTC.",
-        "De uitvoeringskoers was om 14:58:00 UTC, "
-        "de exitbeslissing van 12 november 2026 om 15:00:30 UTC.",
-        "De uitvoeringskoers was van 12 november 2026 om 14:58:00 UTC. "
-        "De exitbeslissing was op 12 november 2026 om 15:00:30 UTC.",
-        "De uitvoeringskoers was 999 USD op 12 november 2026 om 14:59:00 UTC. "
-        "De exitbeslissing was op 12 november 2026 om 15:00:30 UTC.",
-        "De uitvoeringskoers was 999 op 12 november 2026 om 14:59:00 UTC. "
-        "De exitbeslissing was op 12 november 2026 om 15:00:30 UTC.",
-        "De uitvoeringskoers was 358,60 EUR op 12 november 2026 om 14:59:00 UTC. "
-        "De exitbeslissing was op 12 november 2026 om 15:00:30 UTC.",
-        "Op 12 november 2026 om 14:58:00 UTC werd de uitvoeringskoers vastgelegd. "
-        "De exitbeslissing was op 12 november 2026 om 15:00:30 UTC.",
-        "Voor bot #456: uitvoeringskoers op 12 november 2026 om 14:59:00 UTC. "
-        "De exitbeslissing was op 12 november 2026 om 15:00:30 UTC.",
-        "Uitvoeringskoers op 12 november 2026 om 14:59:00 UTC: 999 USD. "
-        "De exitbeslissing was op 12 november 2026 om 15:00:30 UTC.",
-        "De uitvoeringskoers was 999 USD. "
-        "De exitbeslissing was op 12 november 2026 om 15:00:30 UTC.",
-        "De uitvoeringskoers was USD 999 op 12 november 2026 om 14:59:00 UTC. "
-        "De exitbeslissing was op 12 november 2026 om 15:00:30 UTC.",
-        "De uitvoeringskoers bedroeg $999 op 12 november 2026 om 14:59:00 UTC. "
-        "De exitbeslissing was op 12 november 2026 om 15:00:30 UTC.",
-        "De uitvoeringskoers was €999,00. "
-        "De exitbeslissing was op 12 november 2026 om 15:00:30 UTC.",
-        "De Paper-exit werd uitgevoerd tegen 999 USD. "
-        "De exitbeslissing was op 12 november 2026 om 15:00:30 UTC.",
-        "De exitbeslissing viel op 12 november 2026 om 15:00:30 UTC, "
-        "met een uitvoeringskoers op 12 november 2026 om 14:58:00 UTC.",
-    ):
-        prepared.response.text = wrong_quote
-        unsupported = _minimal_read_answer(
-            message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
-        )
-        assert unsupported.status == "unavailable", wrong_quote
-
-    prepared.response.text = (
-        "Op basis van de koers nam de bot de exitbeslissing "
-        "op 12 november 2026 om 15:00:30 UTC."
-    )
-    supported_decision_context = _minimal_read_answer(
-        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
-    )
-    assert supported_decision_context.status == "completed", supported_decision_context.reason
-
-    prepared.response.text = (
-        "Exitbeslissing en USD-koers van 358,60: "
-        "12 november 2026, 14:59:00 UTC."
-    )
-    trade.pop("paper_exit_decision_at")
-    no_decision = _minimal_read_answer(
-        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
-    )
-    assert no_decision.status == "unavailable"
+    assert answer.status == "unavailable"
+    assert "999" not in answer.text
 
 
 def test_live_week_saved_clock_and_fx_markdown_are_sanitized():
@@ -338,7 +216,7 @@ def test_live_combined_answer_keeps_three_distinct_source_moments():
         message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
     )
     assert answer.status == "completed", answer.reason
-    assert "Koersbron bij AAPL Paper-exitbeoordeling: 358,60 USD op 12 november 2026, 14:59:00 UTC" in answer.text
+    assert "Koersbron bij exitbeoordeling: 358,60 USD; bronmoment 2026-11-12 15:59:00 CET" in answer.text
     assert "2026-11-12 15:02:00 CET" in answer.text  # separate FX source
     assert "2026-11-12 16:00:30 CET" in answer.text  # decision and close may coincide
     assert "2026-11-16 06:15:00 CET" in answer.text  # saved week

@@ -279,6 +279,8 @@ def _bot_decision_clocks_supported(
         answer, flags=re.I,
     ):
         subject = marker.search(clause)
+        if subject is None:
+            continue
         # An historical "exit decision and ..." sentence names at least two
         # events. A single clock cannot establish both, regardless of the
         # second event's wording. Two clocks are accepted only by the narrow
@@ -289,164 +291,18 @@ def _bot_decision_clocks_supported(
         decision_second = re.search(
             r"\ben\s+(?:de\s+)?(?:uitstap|exit)[- ]?besliss\w*\b", clause, re.I,
         )
-        source_clause = re.sub(
-            r"\bFX-brontijd:\s*(?:zie de afzonderlijk geverifieerde bronregel|"
-            r"niet verifieerbaar uit opgeslagen bewijs)", "", clause, flags=re.I,
-        )
-        decision_with_other_source = (
-            re.search(r"\b(?:(?:uitstap|exit|bot)[- ]?)?besliss\w*\b|\bbotbesluit\w*\b",
-                      source_clause, re.I)
-            and re.search(
-                r"\b(?:koersbron\w*|prijsbron\w*|uitvoeringskoers|uitvoeringsprijs|"
-                r"(?:EUR|USD|USDT)[- ]?koers|Paper[- ]sluit\w*|"
-                r"geregistreerde\s+sluiting|wisselkoersbron\w*|FX[- ]?bronmoment)\b",
-                source_clause, re.I,
-            )
-        )
-        has_explicit_quote_label = bool(re.search(
-            r"\b(?:koersbron\w*|prijsbron\w*|uitvoeringskoers|"
-            r"uitvoeringsprijs|(?:EUR|USD|USDT)[- ]?koers|"
-            r"Paper[- ]?exit\s+werd\s+uitgevoerd\s+tegen)\b",
-            clause, re.I,
-        ))
-        if historical_question and (
-            decision_with_other_source or decision_first or decision_second
-            or has_explicit_quote_label
-        ):
+        if historical_question and (decision_first or decision_second):
             paired_dated = list(_DATED_MOMENT.finditer(clause))
             paired_bare = [clock for clock in _ZONED_CLOCK.finditer(clause)
                            if not any(date.start() <= clock.start() and clock.end() <= date.end()
                                       for date in paired_dated)]
-            # A shared clock can never support both a decision and a second
-            # source. Leave separately labeled clocks to the typed checks
-            # below, including independent FX and bot timestamps.
-            if decision_with_other_source and len(paired_dated) + len(paired_bare) == 1:
-                return False
-            if (decision_first or decision_second) and (paired_dated or paired_bare):
-                if (decision_second or len(paired_dated) != 2 or paired_bare
+            if ((paired_dated or paired_bare)
+                    and (decision_second or len(paired_dated) != 2 or paired_bare
                     or not re.search(
                         r"\ben\s+(?:de\s+)?"
                         r"(?:(?:EUR|USD|USDT)[- ]?koers\s+van|uitvoeringskoers)\b",
-                        clause, re.I)):
-                    return False
-            # Check a quote's own clock even when its label precedes the
-            # decision. The decision-clock check below cannot infer that a
-            # preceding 14:58 quote is wrong from a correct 15:00 decision.
-            quote_labels = list(re.finditer(
-                r"\b(?:koersbron\w*|prijsbron\w*|uitvoeringskoers|"
-                r"uitvoeringsprijs|(?:EUR|USD|USDT)[- ]?koers|"
-                r"Paper[- ]?exit\s+werd\s+uitgevoerd\s+tegen)\b",
-                clause, re.I,
-            ))
-            decision_labels = list(re.finditer(
-                r"\b(?:(?:uitstap|exit|bot)[- ]?)?besliss\w*\b|\bbotbesluit\w*\b",
-                clause, re.I,
-            ))
-            stated_bot_ids = {int(match.group(1)) for match in re.finditer(
-                r"\bbot\s*#?\s*(\d+)\b", clause, re.I,
-            )}
-            stated_review_ids = {int(match.group(1)) for match in re.finditer(
-                r"\b(?:dossier|trade|review)\s*#?\s*(\d+)\b", clause, re.I,
-            )}
-            for label in quote_labels:
-                if (historical_decision is None
-                        or stated_bot_ids and stated_bot_ids != {historical_decision[0]}):
-                    return False
-                segment_start = max((item.end() for item in decision_labels
-                                     if item.end() <= label.start()), default=0)
-                segment_end = min((item.start() for item in decision_labels
-                                   if item.start() > label.end()), default=len(clause))
-                after = [item for item in paired_dated
-                         if label.end() <= item.start() < segment_end]
-                before = [item for item in paired_dated
-                          if segment_start <= item.start() < label.start()]
-                # The nearest side of a source label owns its clock. If both
-                # sides claim times, the attribution is ambiguous.
-                if before and after:
-                    return False
-                quote_claims = after or before
-                # A bare zoned clock has no date to bind to the selected
-                # closed trade. Never let it bypass the dated quote check.
-                if any(segment_start <= item.start() < segment_end for item in paired_bare):
-                    return False
-                label_text = label.group(0).lower()
-                execution = ("uitvoer" in label_text or "uitvoering" in
-                             clause[label.end():segment_end].lower())
-                key = "execution_source_price_at" if execution else "source_price_at"
-                observed: dict[int, tuple[datetime, str, str]] = {}
-                for item in evidence:
-                    if (item.get("scope") != "read_review_history"
-                            or item.get("status") != "completed"
-                            or not isinstance(item.get("data"), dict)):
-                        continue
-                    for row in item["data"].get("closed_trades") or []:
-                        if (not isinstance(row, dict) or type(row.get("review_id")) is not int
-                                or stated_review_ids and stated_review_ids != {row.get("review_id")}
-                                or row.get("bot_id") != historical_decision[0]
-                                or str(row.get("symbol") or "").upper() != historical_decision[1]
-                                or _utc(row.get("paper_exit_decision_at")) != historical_decision[2]
-                                or not isinstance(row.get("paper_exit_evidence"), dict)):
-                            continue
-                        facts = row["paper_exit_evidence"]
-                        at = _utc(facts.get(key))
-                        currency = str(facts.get(
-                            "execution_source_price_currency" if execution
-                            else "source_price_currency") or "").upper()
-                        price = str(facts.get(
-                            "execution_source_price" if execution else "source_price") or "")
-                        candidate = (at, currency, price)
-                        if (at is None or currency not in {"EUR", "USD", "USDT"}
-                                or not price or (row["review_id"] in observed
-                                                 and observed[row["review_id"]] != candidate)):
-                            return False
-                        observed[row["review_id"]] = candidate
-                if len(observed) != 1:
-                    return False
-                at, currency, price = next(iter(observed.values()))
-                segment = clause[segment_start:segment_end]
-                segment = _DATED_MOMENT.sub(" ", segment)
-                segment = _ZONED_CLOCK.sub(" ", segment)
-                currency_claims = re.findall(r"\b(?:EUR|USD|USDT)\b", segment, re.I)
-                if any(unit.upper() != currency for unit in currency_claims):
-                    return False
-                symbol_claims = re.findall(r"[$€]", segment)
-                if any(("USD" if symbol == "$" else "EUR") != currency
-                       for symbol in symbol_claims):
-                    return False
-                amount_claims = re.findall(
-                    r"\b(\d+(?:[.,]\d+)?)\s*(?:EUR|USD|USDT)\b|"
-                    r"\b(?:EUR|USD|USDT)[- ]?koers\s+van\s+(\d+(?:[.,]\d+)?)\b|"
-                    r"\b(?:EUR|USD|USDT)\s+(\d+(?:[.,]\d+)?)\b|"
-                    r"[$€]\s*(\d+(?:[.,]\d+)?)\b",
-                    segment, re.I,
-                )
-                unqualified_amounts = re.findall(
-                    r"\b(?:was|van|bedroeg|:)\s*(\d+(?:[.,]\d+)?)\b", segment, re.I,
-                )
-                numeric_segment = re.sub(
-                    r"\b(?:bot|dossier|trade|review)\s*#?\s*\d+\b", " ", segment,
-                    flags=re.I,
-                )
-                if (re.search(r"\b\d+(?:[.,]\d+)?\b", numeric_segment)
-                        and not amount_claims and not unqualified_amounts):
-                    return False
-                try:
-                    if any(Decimal(next(value for value in groups if value).replace(",", "."))
-                           != Decimal(price) for groups in amount_claims) or any(
-                        Decimal(amount.replace(",", ".")) != Decimal(price)
-                        for amount in unqualified_amounts
-                    ):
-                        return False
-                except (InvalidOperation, ValueError):
-                    return False
-                if any(
-                    (claim := _claimed_moment(moment.group(0))) is None
-                    or not _same_moment(claim, at)
-                    for moment in quote_claims
-                ):
-                    return False
-        if subject is None:
-            continue
+                        clause, re.I))):
+                return False
         ids = {int(match.group(1)) for match in re.finditer(r"\bbot\s*#?\s*(\d+)\b", clause, re.I)}
         # Locate the clock nearest the status read verb. A sentence may also
         # contain a saved Hold decision in either order; only the read clock
