@@ -244,6 +244,8 @@ def test_historical_week_respects_week_only_and_live_only_scope():
     )
     assert trailing_negation.status == "completed", trailing_negation.reason
     assert "Paper-exit" not in trailing_negation.text
+    assert all("closed_trades" not in (item.get("data") or {})
+               for item in trailing_negation.evidence)
 
     live_only = _runtime_minimal_read_answer(
         message=f"{QUESTION} Gebruik alleen Live-gegevens, geen Paper-trades.",
@@ -293,6 +295,14 @@ def test_historical_week_respects_week_only_and_live_only_scope():
     )
     assert live_not_paper.status == "unavailable"
     assert "AAPL Paper-exit" not in live_not_paper.text
+    assert not live_not_paper.evidence
+    without_paper = _runtime_minimal_read_answer(
+        message="Bespreek mijn AAPL Live-exit en de opgeslagen weekreflectie, "
+                "zonder Paper-gegevens.",
+        prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert without_paper.status == "unavailable"
+    assert not without_paper.evidence
 
 
 def test_historical_aapl_paper_renderer_does_not_capture_other_asset_or_live():

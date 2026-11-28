@@ -1980,7 +1980,7 @@ def _minimal_read_answer(
         return FinnResponsesVerifiedAnswer(
             "unavailable", "De weekreflectie is in deze vraag uitgesloten; ik toon de "
             "opgeslagen weeksamenvatting daarom niet.",
-            "weekly_reflection_excluded", current_evidence,
+            "weekly_reflection_excluded", (),
         )
     exit_requested = bool(re.search(
         r"\b(?:exit\w*|uitstap\w*|verkoop\w*|afgesloten|gesloten|"
@@ -1989,7 +1989,8 @@ def _minimal_read_answer(
     ))
     only_live = bool(re.search(
         r"\b(?:(?:gebruik\s+)?(?:alleen|uitsluitend|only|exclusively)\s+Live|"
-        r"(?:geen|niet|no|not)\s+Paper(?:[- ]?trades?)?)\b",
+        r"(?:geen|niet|no|not|zonder|without)\s+Paper"
+        r"(?:[- ]?(?:trades?|gegevens|data))?)\b",
         message, re.I,
     ))
     exclude_individual = bool(re.search(
@@ -2006,8 +2007,18 @@ def _minimal_read_answer(
             return FinnResponsesVerifiedAnswer(
                 "unavailable", "Met deze uitlezing kan ik geen Live-trade "
                 "voor deze week onderbouwen.",
-                "live_history_not_verified", current_evidence,
+                "live_history_not_verified", (),
             )
+        current_evidence = tuple(
+            {"scope": item.get("scope"), "status": item.get("status"),
+             "source": item.get("source"),
+             "data": {"weekly_reflection": item["data"]["weekly_reflection"]}}
+            for item in current_evidence
+            if item.get("scope") == "read_review_history"
+            and item.get("status") == "completed"
+            and isinstance(item.get("data"), dict)
+            and isinstance(item["data"].get("weekly_reflection"), dict)
+        )
         from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
         from backend.services.finn_v2_factual_source_answer import _moment_in_zone
         try:
@@ -2042,7 +2053,7 @@ def _minimal_read_answer(
                                    and requested_start != saved_start):
             return FinnResponsesVerifiedAnswer(
                 "unavailable", "De gelezen weekreflectie hoort niet bij de gevraagde week.",
-                "weekly_reflection_week_mismatch", current_evidence,
+                "weekly_reflection_week_mismatch", (),
             )
         saved_at, zone = _moment_in_zone(week.get("generated_at"), user_time_zone)
         if not saved_at or not week.get("week_start") or not week.get("week_end"):
