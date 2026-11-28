@@ -1976,7 +1976,7 @@ def _minimal_read_answer(
     )
     from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
     week_requested = ReviewToolAdapter.mentions_weekly_reflection(message)
-    if historical_read and ReviewToolAdapter._WEEK_SUBJECT.search(message) and not week_requested:
+    if ReviewToolAdapter._WEEK_SUBJECT.search(message) and not week_requested:
         return FinnResponsesVerifiedAnswer(
             "unavailable", "De weekreflectie is in deze vraag uitgesloten; ik toon de "
             "opgeslagen weeksamenvatting daarom niet.",
@@ -1989,12 +1989,14 @@ def _minimal_read_answer(
     ))
     only_live = bool(re.search(
         r"\b(?:(?:gebruik\s+)?(?:alleen|uitsluitend|only|exclusively)\s+Live|"
-        r"geen\s+Paper[- ]?trades?|no\s+Paper[- ]?trades?)\b",
+        r"(?:geen|niet|no|not)\s+Paper(?:[- ]?trades?)?)\b",
         message, re.I,
     ))
     exclude_individual = bool(re.search(
         r"\b(?:laat\s+individuele\s+trades?\s+buiten\s+beschouwing|"
         r"zonder\s+individuele\s+trades?|exclude\s+individual\s+trades?|"
+        r"(?:niet|not)\s+(?:(?:mijn|de|the|my)\s+)?(?:AAPL\s+)?"
+        r"(?:Paper[- ]?)?(?:exit\w*|trade\w*|uitstap\w*)|"
         r"bespreek\s+niet\b[^.!?\n]{0,60}\b(?:exit\w*|trade\w*|uitstap\w*)\b"
         r"[^.!?\n]{0,60}\bmaar\s+alleen)\b",
         message, re.I,

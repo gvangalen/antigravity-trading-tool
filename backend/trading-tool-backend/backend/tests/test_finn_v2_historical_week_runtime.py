@@ -237,6 +237,14 @@ def test_historical_week_respects_week_only_and_live_only_scope():
     assert "Paper-exit" not in negated_exit.text
     assert "999 USD" not in negated_exit.text
 
+    trailing_negation = _runtime_minimal_read_answer(
+        message="Geef alleen mijn weekreflectie van 9–15 november, niet mijn "
+                "AAPL Paper-exit.",
+        prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert trailing_negation.status == "completed", trailing_negation.reason
+    assert "Paper-exit" not in trailing_negation.text
+
     live_only = _runtime_minimal_read_answer(
         message=f"{QUESTION} Gebruik alleen Live-gegevens, geen Paper-trades.",
         prepared=prepared, user_time_zone="Europe/Amsterdam",
@@ -269,6 +277,22 @@ def test_historical_week_respects_week_only_and_live_only_scope():
     assert excluded_week.status == "unavailable"
     assert "999 USD" not in excluded_week.text
     assert "Opgeslagen weekreflectie" not in excluded_week.text
+    week_only_prepared = _prepared(text="Opgeslagen weekreflectie 9–15 november.")
+    week_only_prepared.response.tool_trace[0]["result"]["results"][0]["data"]["closed_trades"] = []
+    excluded_without_trade = _runtime_minimal_read_answer(
+        message="Toon niet mijn weekreflectie; leg uit wat plantrouw betekent.",
+        prepared=week_only_prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert excluded_without_trade.status == "unavailable"
+    assert "Opgeslagen weekreflectie" not in excluded_without_trade.text
+
+    live_not_paper = _runtime_minimal_read_answer(
+        message="Bespreek mijn AAPL Live-exit (niet Paper) en de opgeslagen "
+                "weekreflectie.",
+        prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert live_not_paper.status == "unavailable"
+    assert "AAPL Paper-exit" not in live_not_paper.text
 
 
 def test_historical_aapl_paper_renderer_does_not_capture_other_asset_or_live():
