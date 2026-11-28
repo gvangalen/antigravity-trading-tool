@@ -123,7 +123,9 @@ def _one_requested_paper_exit_decision(
     if (len(requested_symbols) > 1 or len(stated_symbols) > 1
             or requested_symbols and stated_symbols and requested_symbols != stated_symbols):
         return None, True
-    selected_symbols = requested_symbols or stated_symbols
+    # An asset in generated prose can check a uniquely selected dossier, but
+    # cannot narrow two owner-read trades when the user named no asset.
+    selected_symbols = requested_symbols
     without_week = re.sub(
         r"\b\d{1,2}\s*[–—-]\s*\d{1,2}\s+(?:" + _MONTH_PATTERN + r")\b",
         "", question or "", flags=re.I,
@@ -201,6 +203,8 @@ def _one_requested_paper_exit_decision(
     if len(candidates) != 1:
         return None, bool(selected_ids or requested_date or selected_symbols)
     if stated_ids and stated_ids != {candidates[0][0]}:
+        return None, True
+    if stated_symbols and candidates[0][1][1] not in stated_symbols:
         return None, True
     bot_id, symbol, decision_at, _ = candidates[0][1]
     return (bot_id, symbol, decision_at), False

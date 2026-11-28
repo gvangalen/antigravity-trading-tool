@@ -191,6 +191,22 @@ def test_historical_iso_date_and_named_asset_must_match_the_closed_dossier():
     )
 
 
+def test_model_named_asset_cannot_choose_between_two_user_trades():
+    from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
+
+    prepared = _prepared(text="De historische AAPL-botbeslissing was 12 november 2026 14:59 UTC.")
+    row = prepared.response.tool_trace[0]["result"]["results"][0]
+    row["data"]["closed_trades"].append({
+        **row["data"]["closed_trades"][0], "review_id": 3000, "symbol": "MSFT",
+        "paper_exit_decision_at": "2026-11-12T14:58:00+00:00",
+    })
+    assert not current_source_moments_supported(
+        prepared.response.text, (row,),
+        question="Bespreek mijn afgesloten trade van 12 november.",
+        user_time_zone="Europe/Amsterdam",
+    )
+
+
 def test_historical_exit_clock_cannot_replace_current_bot_clock():
     from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
 
