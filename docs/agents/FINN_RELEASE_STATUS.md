@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: setupscore als concrete vervolgstap (28 november 2026)
 
-Phase: `PR_CI_GREEN_AWAITING_DEPLOY`. Productbranch
+Phase: `DEPLOY_IDENTITY_VERIFIED_QA_PENDING`. Productbranch
 `codex/finn-setup-score-coaching-20261128`, productcodehead
 `1d3d84be5343e6cf6dde681eb057e4249c6638ba` in
 [PR #1434](https://github.com/gvangalen/antigravity-trading-tool/pull/1434).
@@ -29,7 +29,18 @@ Gemeten Build-gates op de productcodehead: geselecteerde runtime
 (47 waarschuwingen, 393,73 s), `git diff --check` schoon. Onafhankelijke
 QA-codeherreview op de exacte productcodehead: geen blocker; geen live run.
 PR-CI [46142369084](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46142369084)
-heeft vijf groene jobs. Deze kandidaat is nog niet gemerged of live getest.
+en de status-PR-CI
+[46143171745](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46143171745)
+hadden elk vijf groene jobs. PR #1434 is gemerged in
+`563975900127260d3f21f807d7b8f4eb0d0da70a`; main-CI
+[46143923283](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46143923283)
+had vijf groene jobs en Auto Deploy
+[46144602328](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46144602328)
+slaagde. GitHub main, publieke backend `/api/health` en frontend
+`/build-info.json` toonden daarna exact die merge-SHA met HTTP 200. De
+ingelogde live browserproef is nog niet uitgevoerd. Deze statusupdate maakt
+zelf een nieuwe commit; de CI-, deploy- en publieke SHA-pariteit daarvan
+worden apart gecontroleerd vóór de QA-handoff.
 De vorige feedrelease hieronder is wel live maar haar natuurlijke
 gebeurtenistriggers hebben nog geen onafhankelijke QA-acceptatie. Die
 open dekkingsscope gaat mee in de live QA van de nieuwe publieke SHA;
