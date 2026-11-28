@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: analysekaart opent bruikbaar setupgesprek (28 november 2026)
 
-Phase: `BUILD_VALIDATED_PENDING_MERGE_DEPLOY_QA`. Branch
+Phase: `LIVE_BUILD_VERIFIED_PENDING_INDEPENDENT_QA`. Branch
 `codex/finn-mstr-feed-coaching-20261128`, gebaseerd op main
 `63f2a958916feb20613dc6a86b244ca172050833`; laatste productcodehead
 `f36ef79fcda9d39d469b330501b3f34bc047b17c` in
@@ -41,13 +41,24 @@ en regression `109/109` (SHA-256
 100% operation/entity en nul provider-, schema-, timeout-, parse- of
 validatiefouten; lokale telemetry zonder fout na schema-bootstrap.
 PR-CI [46118663303](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46118663303)
-op die productcodehead had vijf groene jobs. Onafhankelijke QA-codeherreview
-en Security-herreview op dezelfde head: geen blocker, geen live verdict.
+op de productcodehead en PR-CI
+[46125573288](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46125573288)
+op de release-statushead hadden elk vijf groene jobs. Onafhankelijke
+QA-codeherreview en Security-herreview op de productcodehead: geen blocker,
+geen live verdict. [PR #1429](https://github.com/gvangalen/antigravity-trading-tool/pull/1429)
+is gemerged in `a881c0c5e235d06a85695cc998dc725cd48e5fa6`; main-CI
+[46126254422](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46126254422)
+had vijf groene jobs en Auto Deploy
+[46126854546](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46126854546)
+slaagde. GitHub main, publieke backend `/api/health` en frontend
+`/build-info.json` toonden daarna exact die merge-SHA; beide endpoints gaven
+HTTP 200. Deze statusupdate maakt zelf een latere commit. Onafhankelijke QA
+start pas na groene CI, geslaagde Auto Deploy en publieke pariteit van die
+definitieve statuscommit.
 
-Nog open: CI op de statuscommit, merge, laatste main-CI en Auto Deploy,
-backend/frontend HTTP 200 en exacte publieke SHA-pariteit, daarna een
-onafhankelijke ingelogde QA-proef van de zichtbare MSTR-feedkaart en het
-setupgesprek. De vorige browseruitkomst blijft tot die proef `NOT_ACCEPTED`.
+Nog open: onafhankelijke ingelogde QA-proef van de zichtbare MSTR-feedkaart,
+de directe Bespreek-knop, de juiste setupkeuzes en het vervolg in dezelfde
+chat. De vorige browseruitkomst blijft tot die proef `NOT_ACCEPTED`.
 
 ## FINN 3.0: getypeerde historische AAPL Paper-exit en weekreflectie
 
