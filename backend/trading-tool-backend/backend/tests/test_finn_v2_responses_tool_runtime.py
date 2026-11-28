@@ -4319,6 +4319,278 @@ def test_selected_paper_next_step_does_not_borrow_other_btc_bot():
     assert verified is False and "blijft open" in missing
 
 
+@pytest.mark.parametrize("pair,market_id,existing,score_available,locale", [
+    ("MSTR", None, False, True, "nl"), ("BTC/USDT", 34, False, True, "nl"),
+    ("MSTR", None, True, True, "nl"), ("MSTR", None, False, False, "nl"),
+    ("MSTR", None, False, True, "en"), ("MSTR", None, False, True, "de"),
+])
+def test_selected_analysis_card_offers_setup_choices_without_source_dump(
+    monkeypatch, pair, market_id, existing, score_available, locale,
+):
+    asset = pair.split("/")[0]
+    feed = [
+        {"facts": {"feed_item_id": "selected", "event_type": "analysis_ready",
+                   "selection_origin": "current_run", "historical_notification": True,
+                   "symbol": asset, "historical_event_facts": {
+                       "trading_pair": pair, "market_id": market_id}}},
+        {"facts": {"feed_item_id": "selected", "current_source_status": (
+            "available" if score_available else "missing_scores"),
+                   "current_benchmark_score": 42.7 if score_available else None,
+                   "current_score_as_of": "2026-11-27"}},
+    ]
+    async def unexpected_provider_call(_self, **kwargs):
+        raise AssertionError("A selected analysis discussion uses verified reads")
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run", unexpected_provider_call,
+    )
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7,
+                                   run_id="analysis-discuss")
+    async def read(call):
+        if call.name == "get_saved_setup_inventory":
+            setups = ([{"setup_id": 12, "name": "MSTR plan", "symbol": asset,
+                       "pair": "MSTR/USD", "market_id": None}] if existing else [])
+            return {"status": "completed", "results": [{
+                "scope": "read_saved_setup_inventory", "status": "completed", "data": {
+                    "asset_filter": asset, "setups": setups, "setup_count": len(setups), "complete": True,
+                },
+            }]}
+        assert call.name == "get_current_asset_scores"
+        assert call.inputs["asset"] == asset
+        return {"status": "completed", "results": [{
+            "scope": "read_asset_scores", "status": "completed", "data": {
+                "symbol": asset, "pair": pair if market_id else None, "market_id": market_id,
+                "source_status": "available" if score_available else "missing_scores",
+                "benchmark_score": 42.7 if score_available else None,
+                "as_of": "2026-11-27",
+            },
+        }]}
+    front.reads = read
+    message = {
+        "en": f"I want to explore a setup for {pair}. What are my options, which would you recommend and what do you need me to choose? Do not change anything.",
+        "de": f"Ich möchte ein Setup für {pair} erkunden. Welche Möglichkeiten gibt es, welche empfiehlst du und was muss ich wählen? Ändere nichts.",
+    }.get(locale, f"Ik wil een setup voor {pair} verkennen. Welke mogelijkheden zijn er, welke raad je aan en wat moet ik kiezen? Maak niets aan.")
+    result = asyncio.run(front.run(
+        message=message,
+        instructions="", conversation_context={}, verified_asset=asset, feed_evidence=feed,
+        locale=locale,
+    ))
+    assert result.proposal_analysis is None
+    assert result.response.answer_kind == "selected_analysis_next_step"
+    if existing:
+        assert "al een opgeslagen setup" in result.response.text
+        assert "swing-setup" not in result.response.text
+    else:
+        if locale == "nl":
+            assert "swing-setup" in result.response.text
+            assert "positie-setup" in result.response.text
+            assert "DCA-setup" in result.response.text
+            assert ("42,7/100" in result.response.text) is score_available
+            if not score_available:
+                assert "geen complete benchmarkscore" in result.response.text
+        else:
+            assert ("42.7/100" in result.response.text) is (locale == "en")
+            assert ("42,7/100" in result.response.text) is (locale == "de")
+            assert "DCA" in result.response.text
+    assert "bronmoment" not in result.response.text
+    assert "verouderd" not in result.response.text
+    verified = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=message, result=result.response, locale=locale,
+    ))
+    assert verified.status == "completed"
+    if pair == "BTC/USDT":
+        wrong_pair = [dict(call) for call in result.response.tool_trace]
+        wrong_pair[0]["selection"] = {**wrong_pair[0]["selection"], "pair": "BTC/EUR"}
+        rejected = asyncio.run(FinnResponsesAnswerVerifier().verify(
+            message=message,
+            result=replace(result.response, tool_trace=tuple(wrong_pair)), locale=locale,
+        ))
+        assert rejected.status == "unavailable"
+        wrong_date = [dict(call) for call in result.response.tool_trace]
+        wrong_date[0]["selection"] = {**wrong_date[0]["selection"],
+                                       "score_as_of": "2026-11-26"}
+        wrong_date[1]["selection"] = dict(wrong_date[0]["selection"])
+        rejected = asyncio.run(FinnResponsesAnswerVerifier().verify(
+            message=message,
+            result=replace(result.response, tool_trace=tuple(wrong_date)), locale=locale,
+        ))
+        assert rejected.status == "unavailable"
+
+
+def test_selected_analysis_card_does_not_borrow_setup_from_other_pair():
+    feed = [
+        {"facts": {"feed_item_id": "selected", "event_type": "analysis_ready",
+                   "selection_origin": "current_run", "historical_notification": True,
+                   "symbol": "BTC", "historical_event_facts": {
+                       "trading_pair": "BTC/USDT", "market_id": 34}}},
+        {"facts": {"feed_item_id": "selected", "current_source_status": "available",
+                   "current_benchmark_score": 42.7, "current_score_as_of": "2026-11-27"}},
+    ]
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7,
+                                   run_id="analysis-pair")
+    async def read(call):
+        if call.name == "get_saved_setup_inventory":
+            return {"status": "completed", "results": [{
+                "scope": "read_saved_setup_inventory", "status": "completed", "data": {
+                    "asset_filter": "BTC", "setups": [{"setup_id": 19, "symbol": "BTC",
+                                                     "pair": "BTC/EUR", "market_id": 18}],
+                    "setup_count": 1, "complete": True,
+                },
+            }]}
+        return {"status": "completed", "results": [{
+            "scope": "read_asset_scores", "status": "completed", "data": {
+                "symbol": "BTC", "pair": "BTC/USDT", "market_id": 34,
+                "source_status": "available", "benchmark_score": 42.7,
+                "as_of": "2026-11-27",
+            },
+        }]}
+    front.reads = read
+    result = asyncio.run(front.run(
+        message=("Ik wil een setup voor BTC/USDT verkennen. Welke mogelijkheden zijn er, "
+                 "welke raad je aan en wat moet ik kiezen? Maak niets aan."),
+        instructions="", conversation_context={}, verified_asset="BTC", feed_evidence=feed,
+    ))
+    assert result.response.answer_kind == "selected_analysis_next_step"
+    assert "swing-setup" in result.response.text
+    assert "BTC/EUR" not in result.response.text
+
+
+@pytest.mark.parametrize("question", [
+    "Ik wil een setup voor BTC/EUR verkennen. Maak niets aan.",
+    "Ik wil een setup voor BTC / EUR verkennen. Maak niets aan.",
+    "Ik wil een setup voor BTC tegen EUR verkennen. Maak niets aan.",
+    "Ik wil een setup voor BTC tegen euro verkennen. Maak niets aan.",
+    "Ik wil een setup voor BTC in EUR verkennen. Maak niets aan.",
+    "Ik wil een setup voor Bitcoin in euro verkennen. Maak niets aan.",
+    "Ik wil een setup voor BTC in € verkennen. Maak niets aan.",
+    "Ik wil een setup voor BTC in USDC verkennen. Maak niets aan.",
+    "Ik wil een setup voor ETH/EUR verkennen. Maak niets aan.",
+    "Welke setup past bij BTC in euro?",
+])
+def test_selected_analysis_card_asks_when_question_targets_another_pair(question):
+    feed = [
+        {"facts": {"feed_item_id": "selected", "event_type": "analysis_ready",
+                   "selection_origin": "current_run", "historical_notification": True,
+                   "symbol": "BTC", "historical_event_facts": {
+                       "trading_pair": "BTC/USDT", "market_id": 34}}},
+    ]
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7,
+                                   run_id="analysis-conflict")
+    async def read(_call):
+        raise AssertionError("A conflicting target must stop before any source read")
+    front.reads = read
+    result = asyncio.run(front.run(
+        message=question, instructions="", conversation_context={},
+        verified_asset="BTC", feed_evidence=feed,
+    ))
+    assert result.response.answer_kind == "selected_analysis_target_conflict"
+    assert "BTC/USDT" in result.response.text
+    assert "Wil je die analyse of een ander asset of handelspaar" in result.response.text
+    assert "benchmarkscore" not in result.response.text
+    verified = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=question, result=result.response, locale="nl",
+    ))
+    assert verified.status == "completed"
+
+
+def test_selected_analysis_card_does_not_consume_an_edited_draft():
+    feed = [{"facts": {"feed_item_id": "selected", "event_type": "analysis_ready",
+                       "selection_origin": "current_run", "historical_notification": True,
+                       "symbol": "MSTR", "historical_event_facts": {"trading_pair": "MSTR"}}}]
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7,
+                                   run_id="analysis-edited")
+    async def read(_call):
+        raise AssertionError("An edited feed draft cannot consume the card score")
+    front.reads = read
+    result = asyncio.run(front.run(
+        message=("Ik wil een setup voor MSTR verkennen. Welke mogelijkheden zijn er, "
+                 "welke raad je aan en wat moet ik kiezen? Maak niets aan."),
+        instructions="", conversation_context={}, verified_asset="MSTR",
+        feed_evidence=feed, workspace_hints={"feed_draft_edited": True},
+    ))
+    assert result.response.answer_kind == "selected_analysis_target_conflict"
+    assert "benchmarkscore" not in result.response.text
+
+
+def test_selected_analysis_card_fails_closed_when_current_score_changes(monkeypatch):
+    feed = [
+        {"facts": {"feed_item_id": "selected", "event_type": "analysis_ready",
+                   "selection_origin": "current_run", "historical_notification": True,
+                   "symbol": "MSTR", "historical_event_facts": {"trading_pair": "MSTR"}}},
+        {"facts": {"feed_item_id": "selected", "current_source_status": "available",
+                   "current_benchmark_score": 42.7, "current_score_as_of": "2026-11-27"}},
+    ]
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7,
+                                   run_id="analysis-mismatch")
+    async def read(call):
+        if call.name == "get_saved_setup_inventory":
+            return {"status": "completed", "results": [{
+                "scope": "read_saved_setup_inventory", "status": "completed", "data": {
+                    "asset_filter": "MSTR", "setups": [], "setup_count": 0, "complete": True,
+                },
+            }]}
+        return {"status": "completed", "results": [{
+            "scope": "read_asset_scores", "status": "completed", "data": {
+                "symbol": "MSTR", "pair": None, "market_id": None,
+                "source_status": "available", "benchmark_score": 42.7,
+                "as_of": "2026-11-28",
+            },
+        }]}
+    front.reads = read
+    result = asyncio.run(front.run(
+        message=("Ik wil een setup voor MSTR verkennen. Welke mogelijkheden zijn er, "
+                 "welke raad je aan en wat moet ik kiezen? Maak niets aan."),
+        instructions="", conversation_context={},
+        verified_asset="MSTR", feed_evidence=feed,
+    ))
+    assert result.response.answer_kind == "selected_analysis_next_step_unavailable"
+    assert "swing-setup" not in result.response.text
+
+
+@pytest.mark.parametrize("market_id,include_current", [(None, True), (34, False)])
+def test_selected_analysis_card_never_uses_model_when_evidence_is_incomplete(
+    monkeypatch, market_id, include_current,
+):
+    feed = [{"facts": {
+        "feed_item_id": "selected", "event_type": "analysis_ready",
+        "selection_origin": "current_run", "historical_notification": True,
+        "symbol": "BTC", "historical_event_facts": {
+            "trading_pair": "BTC/USDT", "market_id": market_id,
+        },
+    }}]
+    if include_current:
+        feed.append({"facts": {"feed_item_id": "selected", "current_source_status": "available",
+                               "current_benchmark_score": 42.7,
+                               "current_score_as_of": "2026-11-27"}})
+
+    async def unexpected_provider_call(_self, **_kwargs):
+        raise AssertionError("Historical score must never reach the model")
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run",
+        unexpected_provider_call,
+    )
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7,
+                                   run_id="analysis-incomplete")
+
+    async def unexpected_read(_call):
+        raise AssertionError("Invalid selection must stop before source reads")
+
+    front.reads = unexpected_read
+    message = ("Ik wil een setup voor BTC/USDT verkennen. Welke mogelijkheden zijn er, "
+               "welke raad je aan en wat moet ik kiezen? Maak niets aan.")
+    result = asyncio.run(front.run(
+        message=message, instructions="", conversation_context={},
+        verified_asset="BTC", feed_evidence=feed,
+    ))
+    assert result.response.answer_kind == "selected_analysis_next_step_unavailable"
+    assert result.response.tool_trace == ()
+    assert "42,7" not in result.response.text
+    verified = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=message, result=result.response, locale="nl",
+    ))
+    assert verified.status == "unavailable"
+
+
 def test_selected_strategy_advice_uses_only_current_exact_setup_and_score():
     feed = [
         {"facts": {"feed_item_id": "selected", "event_type": "strategy_next_step",

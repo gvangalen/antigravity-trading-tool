@@ -4,6 +4,51 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: analysekaart opent bruikbaar setupgesprek (28 november 2026)
+
+Phase: `BUILD_VALIDATED_PENDING_MERGE_DEPLOY_QA`. Branch
+`codex/finn-mstr-feed-coaching-20261128`, gebaseerd op main
+`63f2a958916feb20613dc6a86b244ca172050833`; laatste productcodehead
+`f36ef79fcda9d39d469b330501b3f34bc047b17c` in
+[PR #1429](https://github.com/gvangalen/antigravity-trading-tool/pull/1429).
+De ingelogde MSTR-proef op de vorige live versie was `NOT_ACCEPTED`: de
+feedknop vroeg om benchmarkbronnen en bronmomenten en FINN gaf een technische
+opsomming met een koerslabel in plaats van setupkeuzes. De kandidaat stelt
+in web en mobiel een korte vraag over mogelijke setups. De geselecteerde,
+onbewerkte analysekaart wordt read-only tegen actuele eigenaargebonden
+score- en volledige setupinventaris herlezen. Bij ontbrekende setup bespreekt
+FINN swing-, positie- en DCA-richtingen met één keuzevraag; bij bestaande
+setup vraagt hij eerst om vergelijking. Een onvolledige of afwijkende
+kaartcontext eindigt zonder modelaanroep of scoreclaim. Koersuitvoering,
+bevestiging, actiecontracten en providerselectie zijn niet gewijzigd; de
+worker-actiematrix voor gewijzigde actiecontracten is daarom niet van
+toepassing.
+
+Gemeten lokale Build-gates op de productcodehead: geselecteerde analysekaart
+`21/21`, Responses-runtime `1120 passed`; volledige backend-suite met
+uitsluitend een geïsoleerde lokale DB/Redis-verbinding `5734 passed, 7 skipped`
+(47 waarschuwingen, 396,21 s). De eerste algemene suitepoging had 13
+configuratiefouten doordat de local_finn-queueprefix aan repositorybrede
+tests was doorgegeven; dezelfde betrokken tests waren daarna `82/82` groen
+met standaard queuebeleid, gevolgd door de volledige groene suite.
+Frontend-commandtests `117/117`, i18n `45/45`, voorsteltests `10/10`, build,
+typecheck en lint:i18n groen. Mobiele chatprompts `26/26`, typecheck en lint
+exit 0; lint toont 89 bestaande waarschuwingen. High-audit exit 0 met één
+moderate Next.js-melding. Echte Responses-provider development `20/20`
+(artifact SHA-256 `a4ffd24faf30d7d383ad2b487eb9563969051db2d75e6c7df63fddaf1e97682b`)
+en regression `109/109` (SHA-256
+`684fa0a5eef98397b4244e76286f533e36f1f48a2cdfeb120d7e3addbd861151`):
+100% operation/entity en nul provider-, schema-, timeout-, parse- of
+validatiefouten; lokale telemetry zonder fout na schema-bootstrap.
+PR-CI [46118663303](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46118663303)
+op die productcodehead had vijf groene jobs. Onafhankelijke QA-codeherreview
+en Security-herreview op dezelfde head: geen blocker, geen live verdict.
+
+Nog open: CI op de statuscommit, merge, laatste main-CI en Auto Deploy,
+backend/frontend HTTP 200 en exacte publieke SHA-pariteit, daarna een
+onafhankelijke ingelogde QA-proef van de zichtbare MSTR-feedkaart en het
+setupgesprek. De vorige browseruitkomst blijft tot die proef `NOT_ACCEPTED`.
+
 ## FINN 3.0: getypeerde historische AAPL Paper-exit en weekreflectie
 
 Phase: `LIVE_QA_ACCEPTED_VISIBLE_BROWSER_SCOPE`. Product branch

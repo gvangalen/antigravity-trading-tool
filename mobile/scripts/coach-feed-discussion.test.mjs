@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { coachFeedDiscussionPrompt, coachFeedQuoteCurrency, coachFeedDraftWasEdited } from '../src/services/coachFeedDiscussion.ts';
+import { coachFeedDiscussionQuestion } from '../../frontend/trading-tool-frontend/lib/finnCommandSearch.js';
 
 test('edited mobile feed question is marked separately from the default prompt', () => {
   assert.equal(coachFeedDraftWasEdited('feed-1', 'Bespreek BTC/USDT', 'Bespreek BTC/USDT'), false);
@@ -19,6 +20,18 @@ test('mobile coach prompts reread the exact pair and stay advisory', () => {
   assert.doesNotMatch(prompt, /BTC\/EUR/);
   assert.equal(coachFeedQuoteCurrency(item), 'USDT');
   assert.equal(coachFeedQuoteCurrency({ ...item, evidence: { trading_pair: 'BTC/USDT/OTHER' } }), undefined);
+});
+
+test('analysis card uses the same setup question on mobile and web', () => {
+  const item = { event_type: 'analysis_ready', symbol: 'BTC',
+    evidence: { trading_pair: 'BTC/USDT', market_id: 34 },
+    title: 'Analyse bruikbaar', description: '' };
+  for (const language of ['nl', 'en', 'de']) {
+    const prompt = coachFeedDiscussionPrompt(item, language);
+    assert.equal(prompt, coachFeedDiscussionQuestion(item, language));
+    assert.match(prompt, /BTC\/USDT/);
+    assert.doesNotMatch(prompt, /bronmomenten|source times|Quellenzeitpunkte/i);
+  }
 });
 
 test('mobile Paper decision asks for historical execution evidence', () => {
