@@ -189,7 +189,8 @@ def _suppress_unbound_fx_moment_claims(
 def complete_historical_week_exit_moments(
     answer: str, evidence: tuple[dict[str, Any], ...], *, question: str,
     user_time_zone: str | None, typed: bool = False,
-) -> str | None:
+    include_selected_review_id: bool = False,
+) -> str | tuple[str, int] | None:
     """Show the two verified source moments in the user's zone for a weekly exit review."""
     if not user_time_zone or (not typed and (
             not re.search(r"\b(?:weekreflectie|wekelijkse reflectie)\b", question, re.I)
@@ -335,6 +336,8 @@ def complete_historical_week_exit_moments(
         requested_symbols = mentioned_catalog_symbols(question)
         if requested_symbols and requested_symbols != {"AAPL"}:
             return None
+        if type(trades[0].get("review_id")) is not int:
+            return None
         if not decision_at_in_zone or any(trade != trades[0] for trade in matching_trades):
             return None
         facts = trades[0].get("paper_exit_evidence")
@@ -408,7 +411,10 @@ def complete_historical_week_exit_moments(
                              "beschikbaar in deze bronnen.")
         lines.append("Onzeker blijft of alle oorspronkelijke planvoorwaarden zijn gevolgd; "
                      "het opgeslagen exitlabel alleen bewijst geen volledige plantrouw.")
-        return "\n".join(lines)
+        rendered = "\n".join(lines)
+        if include_selected_review_id:
+            return rendered, trades[0]["review_id"]
+        return rendered
     # A price source observation is not the bot decision. Rewrite the narrow
     # mixed draft only when every owner-bound copy agrees on the typed quote.
     quote_facts = [trade.get("paper_exit_evidence") for trade in matching_trades]

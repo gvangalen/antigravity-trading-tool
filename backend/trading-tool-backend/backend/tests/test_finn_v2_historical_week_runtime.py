@@ -216,6 +216,24 @@ def test_historical_week_typed_answer_rejects_other_bot_or_dossier():
         assert answer.status == "unavailable", extra
 
 
+def test_historical_week_answer_evidence_contains_only_selected_dossier():
+    prepared = _prepared(text="Het model noemt ook dossier 9001.")
+    trades = prepared.response.tool_trace[0]["result"]["results"][0]["data"]["closed_trades"]
+    trades.append({
+        "review_id": 9001, "symbol": "MSFT", "environment": "paper",
+        "exit_at": "2026-11-12T15:02:00+00:00",
+    })
+    answer = _runtime_minimal_read_answer(
+        message=f"{QUESTION} Gebruik uitsluitend dossier #2127.",
+        prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert answer.status == "completed", answer.reason
+    published = [trade for item in answer.evidence
+                 for trade in (item.get("data") or {}).get("closed_trades") or []]
+    assert [trade["review_id"] for trade in published] == [2127]
+    assert "9001" not in answer.text
+
+
 def test_historical_week_respects_week_only_and_live_only_scope():
     prepared = _prepared(text="De verkoopprijs bedroeg 999 USD.")
     week_only = _runtime_minimal_read_answer(

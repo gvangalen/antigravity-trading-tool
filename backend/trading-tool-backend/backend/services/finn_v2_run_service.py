@@ -2079,16 +2079,36 @@ def _minimal_read_answer(
     )
     if typed_historical or str(getattr(prepared, "locale", "nl") or "nl").lower().startswith("nl"):
         from backend.services.finn_v2_factual_source_answer import complete_historical_week_exit_moments
-        text = complete_historical_week_exit_moments(
+        rendered = complete_historical_week_exit_moments(
             text, current_evidence, question=message, user_time_zone=user_time_zone,
-            typed=typed_historical,
+            typed=typed_historical, include_selected_review_id=typed_historical,
         )
-        if text is None:
+        if rendered is None:
             return FinnResponsesVerifiedAnswer(
                 "unavailable", "Ik kan deze AAPL Paper-exit en weekreflectie niet eenduidig "
                 "aan hetzelfde opgeslagen dossier koppelen.",
-                "historical_week_exit_evidence_unavailable", current_evidence,
+                "historical_week_exit_evidence_unavailable",
+                () if typed_historical else current_evidence,
             )
+        if typed_historical:
+            text, selected_review_id = rendered
+            current_evidence = tuple(
+                {"scope": item.get("scope"), "status": item.get("status"),
+                 "source": item.get("source"),
+                 "data": {
+                     "weekly_reflection": item["data"].get("weekly_reflection"),
+                     "closed_trades": [trade for trade in item["data"].get("closed_trades") or []
+                                       if isinstance(trade, dict)
+                                       and trade.get("review_id") == selected_review_id],
+                 }}
+                for item in current_evidence
+                if item.get("scope") == "read_review_history"
+                and item.get("status") == "completed"
+                and isinstance(item.get("data"), dict)
+            )
+            evidence = current_evidence
+        else:
+            text = rendered
     # A direct question about the owner's saved profile is a readback of
     # typed database facts. The model can otherwise deny a profile that the
     # same turn successfully read, and this minimal path skips the semantic
