@@ -145,10 +145,15 @@ def _suppress_unbound_fx_moment_claims(
             return False
 
     def scrub(fragment: str) -> str:
+        replacement = (
+            "FX-brontijd: zie de afzonderlijk geverifieerde bronregel"
+            if canonical_line else
+            "FX-brontijd: niet verifieerbaar uit opgeslagen bewijs"
+        )
         return _UNBOUND_FX_MOMENT_CLAIM.sub(
             lambda match: (match.group(0) if not match.group("alternative")
                            and verified(match.group("moment")) else
-                           "FX-bronmoment uit antwoordtekst niet geverifieerd"),
+                           replacement),
             fragment,
         )
 
