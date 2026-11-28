@@ -4,6 +4,36 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: analysekaart opent bruikbaar setupgesprek (28 november 2026)
+
+Phase: `LOCAL_CANDIDATE_PENDING_REQUIRED_GATES`. Branch
+`codex/finn-mstr-feed-coaching-20261128`, gebaseerd op main
+`63f2a958916feb20613dc6a86b244ca172050833`. De ingelogde MSTR-proef van
+de gebruiker op de vorige live versie is `NOT_ACCEPTED`: de feedknop vroeg
+letterlijk om benchmarkbronnen en bronmomenten; FINN gaf daarop een technische
+opsomming, noemde een koers van dezelfde dag verouderd voor uitvoering, en
+bood nauwelijks een setupkeuze. De kandidaat maakt de zichtbare vraag kort
+en gebruikersgericht. Voor een geselecteerde, onbewerkte analysekaart leest
+de read-only FINN-route de actuele eigenaargebonden score en volledige
+setupinventaris opnieuw. Bij een ontbrekende setup biedt hij een swing-,
+positie- en DCA-richting met één keuzevraag; een bestaande setup wordt niet
+gedupliceerd en BTC/EUR wordt niet met BTC/USDT verwisseld. Een koers wordt
+niet als uitvoeringsprijs gepresenteerd. De handelsprijscontrole en
+bevestigingsgrens zijn niet gewijzigd.
+
+Gericht lokaal: zes nieuwe backendgevallen groen; de betrokken Responses-
+runtime-suite had vóór de laatste kleine grenscontrole `1102 passed`.
+Frontend-commandtests `117/117`, i18n-tests `45/45`, voorsteltests `10/10`,
+build en typecheck groen. `npm audit --omit=dev --audit-level=high` eindigde
+met exit 0 en één gematigde Next.js-melding. De volledige lokale backendrun
+is **niet groen afgetekend**: na 5577 geslaagde en zeven overgeslagen tests
+bleef een bestaande test op een externe verbinding wachten; de run is na
+400 seconden onderbroken. De echte-providerselector kon lokaal niet draaien
+omdat `OPENAI_API_KEY` hier ontbreekt. Deze geselecteerde feedroute roept
+de provider niet aan en wijzigt geen actiecontract; dat is geen vervanging
+voor een vereiste provider- of releasegate. Er is nog geen PR-CI, deploy,
+publieke SHA-pariteit of onafhankelijke live QA voor deze kandidaat.
+
 ## FINN 3.0: getypeerde historische AAPL Paper-exit en weekreflectie
 
 Phase: `LIVE_QA_ACCEPTED_VISIBLE_BROWSER_SCOPE`. Product branch

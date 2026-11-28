@@ -3130,6 +3130,38 @@ class FinnResponsesAnswerVerifier:
             for item in (payload.get("results") or [])
             if isinstance(item, dict)
         )
+        if result.answer_kind in {"selected_analysis_next_step", "selected_analysis_next_step_unavailable"}:
+            scopes = {row.get("scope"): row for row in evidence if isinstance(row, dict)}
+            inventory = scopes.get("read_saved_setup_inventory") or {}
+            scored = scopes.get("read_asset_scores") or {}
+            inventory_data = inventory.get("data") if inventory.get("status") == "completed" else None
+            score_data = scored.get("data") if scored.get("status") == "completed" else None
+            setups = inventory_data.get("setups") if isinstance(inventory_data, dict) else None
+            verified = (
+                len(result.tool_trace) == 2
+                and {call.get("name") for call in result.tool_trace}
+                == {"get_saved_setup_inventory", "get_current_asset_scores"}
+                and isinstance(inventory_data, dict)
+                and inventory_data.get("complete") is True
+                and isinstance(setups, list)
+                and type(inventory_data.get("setup_count")) is int
+                and len(setups) == inventory_data["setup_count"]
+                and isinstance(score_data, dict)
+                and ((score_data.get("source_status") == "available"
+                      and type(score_data.get("benchmark_score")) in {int, float}
+                      and 0 <= score_data["benchmark_score"] <= 100)
+                     or (score_data.get("source_status") != "available"
+                         and score_data.get("benchmark_score") is None))
+                and str(score_data.get("symbol") or "").upper()
+                == str(inventory_data.get("asset_filter") or "").upper()
+                and str(score_data.get("symbol") or "").upper() in result.text.upper()
+            )
+            if verified and result.answer_kind == "selected_analysis_next_step":
+                return FinnResponsesVerifiedAnswer("completed", result.text, None, evidence)
+            return FinnResponsesVerifiedAnswer(
+                "unavailable", "Ik kan deze analysemelding nu niet verifiëren.",
+                "selected_analysis_next_step_unavailable", evidence,
+            )
         if result.answer_kind in {"selected_strategy_next_step", "selected_strategy_next_step_unavailable"}:
             # These are real owner-bound setup, strategy-collection and exact
             # pair-score reads. A front-door marker alone is not evidence.
