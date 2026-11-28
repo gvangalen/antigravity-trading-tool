@@ -2192,14 +2192,27 @@ class FinnResponsesFrontDoor:
             quote = pair.partition("/")[2] if pair.startswith(f"{asset}/") else ""
             market_id = historical.get("market_id")
             language = locale.lower().split("-")[0]
-            explicit_pairs = set(re.findall(
-                r"(?<![A-Z0-9])([A-Z0-9][A-Z0-9._-]{0,19}/[A-Z]{2,12})(?![A-Z0-9])",
+            explicit_pairs = {f"{base}/{currency}" for base, currency in re.findall(
+                r"(?<![A-Z0-9])([A-Z0-9][A-Z0-9._-]{0,19})\s*/\s*([A-Z]{2,12})(?![A-Z0-9])",
+                message.upper(), re.I,
+            )}
+            explicit_pairs.update(f"{base}/{currency}" for base, currency in re.findall(
+                r"\b([A-Z0-9][A-Z0-9._-]{0,19})\s+"
+                r"(?:TEGEN|VERSUS|VS|AGAINST|GEGEN)\s+([A-Z]{2,12})\b",
                 message.upper(), re.I,
             ))
             explicit_assets = mentioned_catalog_symbols(message)
+            currency_mentions = set(re.findall(r"\b(?:EUR|USDT|USD)\b", message.upper()))
+            other_currencies = currency_mentions - {quote} if quote else set()
             if ((explicit_pairs and explicit_pairs != {pair})
-                    or (explicit_assets and explicit_assets != {asset})):
-                requested = ", ".join(sorted(explicit_pairs or explicit_assets))
+                    or (explicit_assets and explicit_assets != {asset})
+                    or other_currencies):
+                target_base = next(iter(explicit_assets)) if len(explicit_assets) == 1 else asset
+                requested_targets = (explicit_pairs
+                                     | {f"{target_base}/{currency}" for currency in other_currencies})
+                if not requested_targets:
+                    requested_targets = explicit_assets
+                requested = ", ".join(sorted(requested_targets))
                 clarification = {
                     "en": f"This update is about {pair}, but you asked about {requested}. Which analysis should we discuss? I have changed nothing.",
                     "de": f"Diese Meldung betrifft {pair}, du fragst aber nach {requested}. Welche Analyse sollen wir besprechen? Ich habe nichts geändert.",

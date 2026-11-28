@@ -4455,6 +4455,9 @@ def test_selected_analysis_card_does_not_borrow_setup_from_other_pair():
 
 @pytest.mark.parametrize("question", [
     "Ik wil een setup voor BTC/EUR verkennen. Maak niets aan.",
+    "Ik wil een setup voor BTC / EUR verkennen. Maak niets aan.",
+    "Ik wil een setup voor BTC tegen EUR verkennen. Maak niets aan.",
+    "Ik wil een setup voor BTC in EUR verkennen. Maak niets aan.",
     "Ik wil een setup voor ETH/EUR verkennen. Maak niets aan.",
 ])
 def test_selected_analysis_card_asks_when_question_targets_another_pair(question):
