@@ -336,6 +336,13 @@ def complete_historical_week_exit_moments(
                                              answer.find("\n", match.end())) if stop >= 0]
             clause_end = min(next_stops, default=len(answer))
             clause = answer[clause_start:clause_end]
+            stated_ids = {int(ref.group(1)) for ref in re.finditer(
+                r"\b(?:dossier|trade(?:[- ]?(?:reflectie|review))?|review)\s*#?\s*(\d+)\b",
+                clause, re.I,
+            )}
+            if (verified_decision_at is None
+                    or (stated_ids and stated_ids != {trades[0].get("review_id")})):
+                return match.group(0)
             if ((re.search(r"\b(?:eerdere|vorige|voorgaande|andere|oudere)\b", clause, re.I)
                     and re.search(r"\b(?:trade|dossier|review)\b", clause, re.I))
                     or re.search(r"\b(?:ochtend|middag|avond)[- ]?trade\b", clause, re.I)):

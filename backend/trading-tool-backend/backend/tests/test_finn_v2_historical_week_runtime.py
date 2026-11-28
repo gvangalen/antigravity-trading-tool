@@ -136,7 +136,8 @@ def test_historical_quote_source_and_decision_are_separate_clocks():
     trade["paper_exit_evidence"]["source_price_at"] = "2026-11-12T14:59:00+00:00"
     for prefix in ("Voor een eerdere AAPL-trade: ",
                    "Voor de AAPL-ochtendtrade: ",
-                   "De exitbeslissing voor een andere AAPL-review: "):
+                   "De exitbeslissing voor een andere AAPL-review: ",
+                   "Voor dossier #999: ", "Voor review 999: "):
         prepared.response.text = prefix + (
             "Exitbeslissing en USD-koers van 358,60: "
             "12 november 2026, 14:59:00 UTC."
@@ -145,6 +146,16 @@ def test_historical_quote_source_and_decision_are_separate_clocks():
             message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
         )
         assert unsafe.status == "unavailable", prefix
+
+    prepared.response.text = (
+        "Exitbeslissing en USD-koers van 358,60: "
+        "12 november 2026, 14:59:00 UTC."
+    )
+    trade.pop("paper_exit_decision_at")
+    no_decision = _minimal_read_answer(
+        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert no_decision.status == "unavailable"
 
 
 def test_live_week_saved_clock_and_fx_markdown_are_sanitized():
