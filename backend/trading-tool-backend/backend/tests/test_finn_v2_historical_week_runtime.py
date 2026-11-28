@@ -88,6 +88,44 @@ def test_historical_bot_clock_requires_typed_owner_bound_exit_decision():
     assert not current_source_moments_supported(prepared.response.text, (row,), question=QUESTION)
 
 
+def test_historical_clock_cannot_be_attributed_to_another_closed_trade():
+    from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
+
+    prepared = _prepared(text="Bij trade #2128 was de botbeslissing 12 november 2026 14:59 UTC.")
+    row = prepared.response.tool_trace[0]["result"]["results"][0]
+    other = {**row["data"]["closed_trades"][0], "review_id": 2128,
+             "exit_at": "2026-11-12T18:00:00+00:00",
+             "paper_exit_decision_at": "2026-11-12T17:59:00+00:00"}
+    row["data"]["closed_trades"].append(other)
+    row["data"]["latest_bot_decisions"] = [{
+        "bot_id": 129, "symbol": "AAPL", "decision_at": "2026-11-27T18:48:00+00:00",
+    }]
+    assert not current_source_moments_supported(
+        prepared.response.text, (row,), question="Bespreek trade #2128 voor AAPL.",
+    )
+    assert not current_source_moments_supported(
+        "Bij dossier #999 was de botbeslissing 12 november 2026 14:59 UTC.",
+        (row,), question="Bespreek dossier #999 voor AAPL.",
+    )
+    assert not current_source_moments_supported(
+        "De botbeslissing voor AAPL was 12 november 2026 14:59 UTC.",
+        (row,), question="Bespreek mijn AAPL-trades van 12 november.",
+    )
+
+
+def test_conflicting_reads_for_same_closed_review_do_not_verify_a_bot_clock():
+    from copy import deepcopy
+    from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
+
+    prepared = _prepared(text="Bij dossier #2127 was de botbeslissing 12 november 2026 14:59 UTC.")
+    row = prepared.response.tool_trace[0]["result"]["results"][0]
+    conflict = deepcopy(row)
+    conflict["data"]["closed_trades"][0]["paper_exit_decision_at"] = "2026-11-12T14:58:00+00:00"
+    assert not current_source_moments_supported(
+        prepared.response.text, (row, conflict), question="Bespreek dossier #2127 voor AAPL.",
+    )
+
+
 def test_historical_exit_clock_cannot_replace_current_bot_clock():
     from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
 

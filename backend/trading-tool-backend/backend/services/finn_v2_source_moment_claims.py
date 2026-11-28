@@ -95,6 +95,70 @@ def _same_moment(claim: tuple[datetime, bool], observed: datetime) -> bool:
     return stated == (expected if has_seconds else expected.replace(second=0))
 
 
+def _one_requested_paper_exit_decision(
+    evidence: tuple[dict[str, Any], ...], *, question: str | None, answer: str,
+) -> tuple[tuple[int | None, str, datetime] | None, bool]:
+    """Bind an old bot clock to one owner-read closed dossier, never another trade."""
+    review_pattern = re.compile(
+        r"\b(?:dossier|trade(?:[- ]?(?:reflectie|review))?|review)\s*#\s*(\d+)\b", re.I,
+    )
+    requested_ids = {int(match.group(1)) for match in review_pattern.finditer(question or "")}
+    stated_ids = {int(match.group(1)) for match in review_pattern.finditer(answer)}
+    if len(requested_ids) > 1 or len(stated_ids) > 1 or (
+        requested_ids and stated_ids and requested_ids != stated_ids
+    ):
+        return None, True
+    selected_ids = requested_ids or stated_ids
+    without_week = re.sub(
+        r"\b\d{1,2}\s*[–—-]\s*\d{1,2}\s+(?:" + _MONTH_PATTERN + r")\b",
+        "", question or "", flags=re.I,
+    )
+    named_dates = {
+        (int(match.group(1)), _MONTHS[match.group(2).lower()],
+         int(match.group(3)) if match.group(3) else None)
+        for match in re.finditer(
+            r"\b(\d{1,2})\s+(" + _MONTH_PATTERN + r")(?:\s+(20\d{2}))?\b",
+            without_week, re.I,
+        )
+    }
+    if len(named_dates) > 1:
+        return None, True
+    requested_date = next(iter(named_dates), None)
+    selected: dict[int, tuple[int | None, str, datetime, datetime]] = {}
+    for item in evidence:
+        if (item.get("scope") != "read_review_history" or item.get("status") != "completed"
+                or not isinstance(item.get("data"), dict)):
+            continue
+        for row in item["data"].get("closed_trades") or []:
+            if not isinstance(row, dict) or str(row.get("environment") or "").lower() != "paper":
+                continue
+            review_id = row.get("review_id")
+            exit_facts = row.get("paper_exit_evidence")
+            decision_at = _utc(row.get("paper_exit_decision_at"))
+            exit_at = _utc(row.get("exit_at"))
+            symbol = str(row.get("symbol") or "").upper()
+            if (type(review_id) is not int or not isinstance(exit_facts, dict)
+                    or exit_facts.get("trigger") not in {"first_target", "stop_loss"}
+                    or decision_at is None or exit_at is None or not symbol):
+                continue
+            candidate = (row.get("bot_id"), symbol, decision_at, exit_at)
+            if review_id in selected and selected[review_id] != candidate:
+                return None, True
+            selected[review_id] = candidate
+    candidates = [(review_id, value) for review_id, value in selected.items()
+                  if not selected_ids or review_id in selected_ids]
+    if requested_date is not None:
+        day, month, year = requested_date
+        candidates = [(review_id, value) for review_id, value in candidates
+                      if any((local.day, local.month) == (day, month)
+                             and (year is None or local.year == year)
+                             for local in (value[3], value[3].astimezone(_AMSTERDAM)))]
+    if len(candidates) != 1:
+        return None, bool(selected_ids or requested_date)
+    bot_id, symbol, decision_at, _ = candidates[0][1]
+    return (bot_id, symbol, decision_at), False
+
+
 def _bot_decision_clocks_supported(
     answer: str, evidence: tuple[dict[str, Any], ...], *, question: str | None = None,
     typed_recovery: bool = False,
@@ -102,20 +166,21 @@ def _bot_decision_clocks_supported(
     """Check bot clocks in prose against saved report or current decision rows."""
     decisions: list[tuple[int | None, str, datetime]] = []
     current_decisions: list[tuple[int | None, str, datetime]] = []
+    historical_decision, historical_unsafe = _one_requested_paper_exit_decision(
+        evidence, question=question, answer=answer,
+    )
+    if historical_unsafe and re.search(
+        r"\b(?:(?:bot)?besluit\w*|(?:bot)?besliss\w*|(?:bot)?beoordel\w*)\b",
+        answer, re.I,
+    ) and (_DATED_MOMENT.search(answer) or _ZONED_CLOCK.search(answer)):
+        return False
+    if historical_decision is not None:
+        decisions.append(historical_decision)
     for item in evidence:
         if item.get("status") != "completed" or not isinstance(item.get("data"), dict):
             continue
         data = item["data"]
         if item.get("scope") == "read_review_history":
-            for row in data.get("closed_trades") or []:
-                if not isinstance(row, dict) or str(row.get("environment") or "").lower() != "paper":
-                    continue
-                exit_facts = row.get("paper_exit_evidence")
-                instant = _utc(row.get("paper_exit_decision_at"))
-                if (isinstance(exit_facts, dict)
-                        and exit_facts.get("trigger") in {"first_target", "stop_loss"}
-                        and instant):
-                    decisions.append((row.get("bot_id"), str(row.get("symbol") or "").upper(), instant))
             rows = data.get("latest_bot_decisions") or []
             for row in rows:
                 if not isinstance(row, dict):
@@ -216,7 +281,8 @@ def _bot_decision_clocks_supported(
                  if symbol and re.search(rf"\b{re.escape(symbol)}\b", clause, re.I)]
         relevant = named or relevant
         if not relevant:
-            if re.search(r"\b(?:besluit\w*|besliss\w*|beoordel\w*|hold)\b", clause, re.I) and (
+            if re.search(r"\b(?:(?:bot)?besluit\w*|(?:bot)?besliss\w*|"
+                         r"(?:bot)?beoordel\w*|hold)\b", clause, re.I) and (
                 _DATED_MOMENT.search(clause) or _ZONED_CLOCK.search(clause)
             ):
                 return False
