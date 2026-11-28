@@ -55,6 +55,10 @@ class FinnClosedTradeReflectionService:
                     JOIN bot_decisions d ON d.id=l.decision_id AND d.user_id=l.user_id
                     WHERE l.id=r.closing_ledger_id AND l.user_id=r.user_id
                       AND d.decision_kind='paper_exit') AS paper_exit_evidence,
+                   (SELECT d.decision_ts FROM bot_ledger l
+                    JOIN bot_decisions d ON d.id=l.decision_id AND d.user_id=l.user_id
+                    WHERE l.id=r.closing_ledger_id AND l.user_id=r.user_id
+                      AND d.decision_kind='paper_exit') AS paper_exit_decision_at,
                    (SELECT jsonb_build_object('order_id',o.id,'decision_id',d.id,
                                'decision_at',d.decision_ts,
                                'trade_plan',d.scores_json->'trade_plan')
@@ -113,6 +117,10 @@ class FinnClosedTradeReflectionService:
                     JOIN bot_decisions d ON d.id=l.decision_id AND d.user_id=l.user_id
                     WHERE l.id=r.closing_ledger_id AND l.user_id=r.user_id
                       AND d.decision_kind='paper_exit') AS paper_exit_evidence,
+                   (SELECT d.decision_ts FROM bot_ledger l
+                    JOIN bot_decisions d ON d.id=l.decision_id AND d.user_id=l.user_id
+                    WHERE l.id=r.closing_ledger_id AND l.user_id=r.user_id
+                      AND d.decision_kind='paper_exit') AS paper_exit_decision_at,
                    (SELECT jsonb_build_object('order_id',o.id,'decision_id',d.id,
                                'decision_at',d.decision_ts,
                                'trade_plan',d.scores_json->'trade_plan')
@@ -278,6 +286,13 @@ class FinnClosedTradeReflectionService:
             "native_pnl_status": row.get("native_pnl_status") if derivative else None,
             "execution_sources": row.get("execution_sources") or [],
             "paper_exit_evidence": paper_exit,
+            "paper_exit_decision_at": (
+                row["paper_exit_decision_at"].replace(
+                    tzinfo=row["paper_exit_decision_at"].tzinfo or timezone.utc,
+                ).astimezone(timezone.utc).isoformat()
+                if paper_exit and isinstance(row.get("paper_exit_decision_at"), datetime)
+                else None
+            ),
             "entry_at": row["entry_at"].isoformat(), "exit_at": row["exit_at"].isoformat(),
             "pnl_eur_before_fees": str(row["pnl_eur_before_fees"]) if row.get("pnl_eur_before_fees") is not None else None,
             "has_plan": has_proven_plan,

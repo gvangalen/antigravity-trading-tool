@@ -149,6 +149,41 @@ def test_historical_week_answer_verifier_completes_utc_only_draft():
     assert "als gesloten geregistreerd" in verified.text
 
 
+def test_historical_bot_clock_verifier_uses_the_user_zone_on_all_paths():
+    question = ("Bespreek mijn afgesloten AAPL Paper-trade van 12 november en "
+                "weekreflectie van 9–15 november. Noem de bronmomenten apart.")
+    row = {"scope": "read_review_history", "status": "completed", "data": {
+        "weekly_reflection": {"week_start": "2026-11-09", "week_end": "2026-11-15",
+                              "generated_at": "2026-11-16T05:15:00+00:00",
+                              "time_zone": "Europe/Amsterdam"},
+        "latest_bot_decisions": [{"bot_id": 129, "symbol": "AAPL",
+                                  "decision_at": "2026-11-27T18:48:00+00:00"}],
+        "closed_trades": [{"review_id": 2127, "bot_id": 129, "symbol": "AAPL",
+                           "environment": "paper", "exit_at": "2026-11-12T15:00:30+00:00",
+                           "paper_exit_decision_at": "2026-11-12T14:59:00+00:00",
+                           "paper_exit_evidence": {"trigger": "first_target"}}],
+    }}
+    result = FinnResponsesResult(
+        text="De historische AAPL-botbeslissing was 12 november 2026 14:59 UTC.",
+        response_id="historical-bot-clock", answer_kind="free_text",
+        tool_trace=({"name": "get_review_history", "status": "completed",
+                     "result": {"results": [row]}},),
+    )
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=True, passes=True, reason_codes=[],
+    )))
+    verified = asyncio.run(FinnResponsesAnswerVerifier(semantic=semantic).verify(
+        message=question, result=result, locale="nl", user_time_zone="Europe/Amsterdam",
+    ))
+    assert verified.status == "completed", verified.reason
+    assert "12 november 2026 14:59 UTC" in verified.text
+    assert "AAPL Paper-trade als gesloten geregistreerd" in verified.text
+    without_zone = asyncio.run(FinnResponsesAnswerVerifier(semantic=semantic).verify(
+        message=question, result=result, locale="nl",
+    ))
+    assert without_zone.status == "unavailable"
+
+
 def _run(message, results, *, verified_asset=None, workspace_hints=None):
     front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7,
                                    run_id="factual-source-test", model_led_coach=True)

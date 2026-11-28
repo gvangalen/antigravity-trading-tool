@@ -93,7 +93,8 @@ _UNBOUND_FX_MOMENT_CLAIM = re.compile(
     r"(?:,|\ben\b)\s*(?:(?:op|om)\s+)?"
     r"(?:(?:\d{4}-\d{2}-\d{2}|\d{1,2}\s+[a-z]+"
     r"(?:\s+\d{4})?)\s*,?\s*)?\d{1,2}:\d{2}(?::\d{2})?\s+"
-    r"(?:[A-Za-z_]+/[A-Za-z_]+|UTC|GMT|CET|CEST)\b))?",
+    r"(?:[A-Za-z_]+/[A-Za-z_]+|UTC|GMT|CET|CEST)\b))?"
+    r"(?P<markdown_close>\*\*)?",
     re.I,
 )
 
@@ -150,12 +151,18 @@ def _suppress_unbound_fx_moment_claims(
             if canonical_line else
             "FX-brontijd: niet verifieerbaar uit opgeslagen bewijs"
         )
-        return _UNBOUND_FX_MOMENT_CLAIM.sub(
-            lambda match: (match.group(0) if not match.group("alternative")
-                           and verified(match.group("moment")) else
-                           replacement),
-            fragment,
-        )
+        def replace(match: re.Match[str]) -> str:
+            if not match.group("alternative") and verified(match.group("moment")):
+                return match.group(0)
+            # In `FX-bronmoment: **tijd**`, the opening stars sit inside the
+            # rejected claim, while the closing stars follow the clock. Drop
+            # both with the claim; keep an outer `**FX-bronmoment: tijd**`
+            # pair balanced when its opening stars are outside the match.
+            embedded_open = "**" in match.group("label")
+            close = match.group("markdown_close") or ""
+            return replacement + ("" if embedded_open else close)
+
+        return _UNBOUND_FX_MOMENT_CLAIM.sub(replace, fragment)
 
     # Only the exact line assembled from typed evidence is exempt. A model may
     # write the word "Geverifieerd" in front of an incorrect clock.

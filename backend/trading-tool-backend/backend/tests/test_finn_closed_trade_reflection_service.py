@@ -203,19 +203,27 @@ def test_paper_exit_reason_is_distinct_safe_reflection_evidence():
         "trigger": "first_target", "source_price_currency": "USD",
         "saved_first_target": 357.42, "execution_fx_eur_per_unit": 0.9,
         "untrusted_internal": "never expose",
-    }}
+    }, "paper_exit_decision_at": datetime.fromisoformat("2026-11-12T14:59:00+00:00")}
     safe = FinnClosedTradeReflectionService._safe_row(row)
     assert safe["paper_exit_evidence"]["trigger"] == "first_target"
+    assert safe["paper_exit_decision_at"] == "2026-11-12T14:59:00+00:00"
+    assert FinnClosedTradeReflectionService._safe_row({
+        **row, "paper_exit_decision_at": datetime(2026, 11, 12, 14, 59),
+    })["paper_exit_decision_at"] == "2026-11-12T14:59:00+00:00"
     assert "paper_exit:decision" in safe["evidence_ids"]
     assert "untrusted_internal" not in safe["paper_exit_evidence"]
     assert "paper_exit:decision" not in FinnClosedTradeReflectionService._safe_row(
         {**row, "execution_environment": "live"})["evidence_ids"]
+    assert FinnClosedTradeReflectionService._safe_row(
+        {**row, "execution_environment": "live"})["paper_exit_decision_at"] is None
 
     adapter = object.__new__(ReviewToolAdapter)
     adapter.repository = EmptyLatestDecisions()
     adapter.sources = FinnV2InformationSourceRegistry()
     adapter.closed_trades = FinnClosedTradeReflectionService(Session({7: {81: row}}))
-    item = asyncio.run(adapter.execute(user_id=7, review_id=81))["data"].items[0]
+    typed = asyncio.run(adapter.execute(user_id=7, review_id=81))["data"]
+    assert typed.closed_trades[0].paper_exit_decision_at.isoformat() == "2026-11-12T14:59:00+00:00"
+    item = typed.items[0]
     assert "vastgelegd Paper-exitlabel first_target" in item
     assert "eerste doel 357.42 USD" in item
     assert "EUR-factor bij uitvoering 0.9" in item

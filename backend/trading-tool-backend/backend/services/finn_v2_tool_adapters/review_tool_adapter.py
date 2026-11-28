@@ -588,6 +588,12 @@ class ReviewToolAdapter:
                         and isinstance(review.get("paper_exit_evidence"), dict)
                         else None
                     ),
+                    "paper_exit_decision_at": (
+                        review.get("paper_exit_decision_at")
+                        if review.get("environment") == "paper"
+                        and isinstance(review.get("paper_exit_evidence"), dict)
+                        else None
+                    ),
                     "evidence_ids": review["evidence_ids"][:20],
                     "confirmed_lesson": (
                         {

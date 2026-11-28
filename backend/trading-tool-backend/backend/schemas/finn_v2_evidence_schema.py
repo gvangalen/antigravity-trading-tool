@@ -420,6 +420,7 @@ class ClosedTradeEvidenceData(BaseModel):
     plan_source_evidence: Optional[Dict[str, Any]] = None
     order_plan_evidence: Optional[Dict[str, Any]] = None
     paper_exit_evidence: Optional[Dict[str, Any]] = None
+    paper_exit_decision_at: Optional[datetime] = None
     evidence_ids: List[str] = Field(default_factory=list)
     confirmed_lesson: Optional[ConfirmedTradeLessonEvidenceData] = None
 

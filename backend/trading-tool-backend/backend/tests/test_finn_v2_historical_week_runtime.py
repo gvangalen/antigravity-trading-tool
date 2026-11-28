@@ -27,7 +27,9 @@ def _prepared(*, text, trade_date="2026-11-12T15:02:00+00:00", week=True):
                     } if week else None),
                     "closed_trades": [{
                         "review_id": 2127, "symbol": "AAPL", "environment": "paper",
+                        "bot_id": 129,
                         "exit_at": trade_date,
+                        "paper_exit_decision_at": "2026-11-12T14:59:00+00:00",
                         "paper_exit_evidence": {
                             "trigger": "first_target",
                             "execution_fx_eur_per_unit": 0.92,
@@ -55,6 +57,183 @@ def test_minimal_live_read_completes_historical_exit_and_week_in_user_zone():
         # The recorded close is distinct from the model's 14:59 UTC decision.
         assert "AAPL Paper-trade als gesloten geregistreerd: 2026-11-12 16:02:00 CET" in answer.text
         assert "Geverifieerd opslagmoment week 2026-11-09 t/m 2026-11-15: 2026-11-16 06:15:00 CET" in answer.text
+
+
+def test_historical_paper_bot_clock_is_not_compared_with_newer_bot_check():
+    prepared = _prepared(text=(
+        "Historische botbeslissing voor AAPL: 12 november 2026 14:59 UTC. "
+        "De Paper-uitstap raakte het eerste koersdoel; volledige plantrouw blijft onzeker."
+    ))
+    prepared.response.tool_trace[0]["result"]["results"][0]["data"]["latest_bot_decisions"] = [{
+        "bot_id": 129, "symbol": "AAPL", "decision_at": "2026-11-27T18:48:00+00:00",
+    }]
+    answer = _minimal_read_answer(
+        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert answer.status == "completed", answer.reason
+    assert "12 november 2026 14:59 UTC" in answer.text
+    assert "Geverifieerd FX-bronmoment" in answer.text
+
+
+def test_historical_bot_clock_requires_typed_owner_bound_exit_decision():
+    from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
+
+    prepared = _prepared(text="Historische botbeslissing voor AAPL: 12 november 2026 14:59 UTC.")
+    row = prepared.response.tool_trace[0]["result"]["results"][0]
+    row["data"]["latest_bot_decisions"] = [{
+        "bot_id": 129, "symbol": "AAPL", "decision_at": "2026-11-27T18:48:00+00:00",
+    }]
+    assert current_source_moments_supported(
+        prepared.response.text, (row,), question=QUESTION, user_time_zone="Europe/Amsterdam",
+    )
+    row["data"]["closed_trades"][0].pop("paper_exit_decision_at")
+    assert not current_source_moments_supported(
+        prepared.response.text, (row,), question=QUESTION, user_time_zone="Europe/Amsterdam",
+    )
+
+
+def test_historical_clock_cannot_be_attributed_to_another_closed_trade():
+    from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
+
+    prepared = _prepared(text="Bij trade #2128 was de botbeslissing 12 november 2026 14:59 UTC.")
+    row = prepared.response.tool_trace[0]["result"]["results"][0]
+    other = {**row["data"]["closed_trades"][0], "review_id": 2128,
+             "exit_at": "2026-11-12T18:00:00+00:00",
+             "paper_exit_decision_at": "2026-11-12T17:59:00+00:00"}
+    row["data"]["closed_trades"].append(other)
+    row["data"]["latest_bot_decisions"] = [{
+        "bot_id": 129, "symbol": "AAPL", "decision_at": "2026-11-27T18:48:00+00:00",
+    }]
+    assert not current_source_moments_supported(
+        prepared.response.text, (row,), question="Bespreek trade #2128 voor AAPL.",
+        user_time_zone="Europe/Amsterdam",
+    )
+    assert not current_source_moments_supported(
+        "Historische botbeslissing bij dossier #2128: 27 november 2026 18:48 UTC.",
+        (row,), question="Bespreek dossier #2128 voor AAPL.",
+        user_time_zone="Europe/Amsterdam",
+    )
+    assert not current_source_moments_supported(
+        "Bij dossier #999 was de botbeslissing 12 november 2026 14:59 UTC.",
+        (row,), question="Bespreek dossier #999 voor AAPL.",
+        user_time_zone="Europe/Amsterdam",
+    )
+    assert not current_source_moments_supported(
+        "De botbeslissing voor AAPL was 12 november 2026 14:59 UTC.",
+        (row,), question="Bespreek mijn AAPL-trades van 12 november.",
+        user_time_zone="Europe/Amsterdam",
+    )
+    assert not current_source_moments_supported(
+        "Bij dossier #2127 was de botbeslissing 12 november 2026 14:59 UTC.",
+        (row,), question="Bespreek mijn afgesloten AAPL-trade van 12 november.",
+        user_time_zone="Europe/Amsterdam",
+    )
+
+
+def test_conflicting_reads_for_same_closed_review_do_not_verify_a_bot_clock():
+    from copy import deepcopy
+    from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
+
+    prepared = _prepared(text="Bij dossier #2127 was de botbeslissing 12 november 2026 14:59 UTC.")
+    row = prepared.response.tool_trace[0]["result"]["results"][0]
+    conflict = deepcopy(row)
+    conflict["data"]["closed_trades"][0]["paper_exit_decision_at"] = "2026-11-12T14:58:00+00:00"
+    assert not current_source_moments_supported(
+        prepared.response.text, (row, conflict), question="Bespreek dossier #2127 voor AAPL.",
+        user_time_zone="Europe/Amsterdam",
+    )
+
+
+def test_historical_trade_date_uses_the_users_zone_only():
+    from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
+
+    prepared = _prepared(text="De botbeslissing voor de AAPL-trade van 12 november was 14:59 UTC.")
+    row = prepared.response.tool_trace[0]["result"]["results"][0]
+    row["data"]["closed_trades"][0]["exit_at"] = "2026-11-12T23:30:00+00:00"
+    question = "Bespreek mijn afgesloten AAPL-trade van 12 november."
+    assert not current_source_moments_supported(
+        prepared.response.text, (row,), question=question,
+        user_time_zone="Europe/Amsterdam",
+    )
+    assert current_source_moments_supported(
+        prepared.response.text, (row,), question=question,
+        user_time_zone="UTC",
+    )
+    assert not current_source_moments_supported(
+        prepared.response.text, (row,), question=question,
+    )
+
+
+def test_historical_iso_date_and_named_asset_must_match_the_closed_dossier():
+    from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
+
+    prepared = _prepared(text="Historische botbeslissing voor AAPL: 12 november 2026 14:59 UTC.")
+    row = prepared.response.tool_trace[0]["result"]["results"][0]
+    assert not current_source_moments_supported(
+        prepared.response.text, (row,),
+        question="Bespreek mijn afgesloten AAPL-trade van 2026-11-05.",
+        user_time_zone="Europe/Amsterdam",
+    )
+    assert not current_source_moments_supported(
+        prepared.response.text, (row,),
+        question="Bespreek mijn afgesloten AAPL-trade van 05/11/2026.",
+        user_time_zone="Europe/Amsterdam",
+    )
+    assert not current_source_moments_supported(
+        "Historische botbeslissing voor MSFT: 12 november 2026 14:59 UTC.",
+        (row,), question="Bespreek mijn afgesloten MSFT-trade van 12 november.",
+        user_time_zone="Europe/Amsterdam",
+    )
+    assert current_source_moments_supported(
+        prepared.response.text, (row,),
+        question="Bespreek mijn afgesloten AAPL-trade van 2026-11-12.",
+        user_time_zone="Europe/Amsterdam",
+    )
+
+
+def test_model_named_asset_cannot_choose_between_two_user_trades():
+    from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
+
+    prepared = _prepared(text="De historische AAPL-botbeslissing was 12 november 2026 14:59 UTC.")
+    row = prepared.response.tool_trace[0]["result"]["results"][0]
+    row["data"]["closed_trades"].append({
+        **row["data"]["closed_trades"][0], "review_id": 3000, "symbol": "MSFT",
+        "paper_exit_decision_at": "2026-11-12T14:58:00+00:00",
+    })
+    assert not current_source_moments_supported(
+        prepared.response.text, (row,),
+        question="Bespreek mijn afgesloten trade van 12 november.",
+        user_time_zone="Europe/Amsterdam",
+    )
+
+
+def test_trade_without_decision_evidence_still_counts_for_ambiguity():
+    from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
+
+    prepared = _prepared(text="De historische AAPL-botbeslissing was 12 november 2026 14:59 UTC.")
+    row = prepared.response.tool_trace[0]["result"]["results"][0]
+    row["data"]["closed_trades"].append({
+        **row["data"]["closed_trades"][0], "review_id": 3000,
+        "paper_exit_decision_at": None, "paper_exit_evidence": None,
+    })
+    assert not current_source_moments_supported(
+        prepared.response.text, (row,),
+        question="Bespreek mijn afgesloten AAPL-trade van 12 november.",
+        user_time_zone="Europe/Amsterdam",
+    )
+
+
+def test_historical_exit_clock_cannot_replace_current_bot_clock():
+    from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
+
+    prepared = _prepared(text="De laatste botbeslissing voor AAPL was 12 november 2026 14:59 UTC.")
+    row = prepared.response.tool_trace[0]["result"]["results"][0]
+    row["data"]["latest_bot_decisions"] = [{
+        "bot_id": 129, "symbol": "AAPL", "decision_at": "2026-11-27T18:48:00+00:00",
+    }]
+    assert not current_source_moments_supported(
+        prepared.response.text, (row,), question="Wat was de laatste AAPL-botbeslissing?",
+    )
 
 
 def test_minimal_live_read_does_not_complete_mismatched_or_missing_sources():
@@ -174,6 +353,20 @@ def test_minimal_live_read_replaces_conflicting_model_fx_clock():
         assert "2026-11-12 15:02:00 CET (Europe/Amsterdam)" in answer.text
         assert "FX-brontijd: zie de afzonderlijk geverifieerde bronregel" in answer.text
         assert "uit antwoordtekst niet geverifieerd" not in answer.text
+
+
+def test_conflicting_fx_clock_inside_markdown_does_not_leave_closing_stars():
+    answer = _minimal_read_answer(
+        message=QUESTION,
+        prepared=_prepared(text=(
+            "De Paper-uitstap raakte het eerste koersdoel. "
+            "FX-bronmoment: **12 november 14:03 UTC**"
+        )),
+        user_time_zone="Europe/Amsterdam",
+    )
+    assert answer.status == "completed", answer.reason
+    assert "FX-brontijd: zie de afzonderlijk geverifieerde bronregel**" not in answer.text
+    assert "FX-brontijd: zie de afzonderlijk geverifieerde bronregel" in answer.text
 
 
 def test_historical_week_fx_moment_completion_is_idempotent():

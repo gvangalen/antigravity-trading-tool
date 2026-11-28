@@ -3487,6 +3487,7 @@ class FinnResponsesAnswerVerifier:
         source_moment_diagnostics: list[str] = []
         if result.answer_kind == "free_text" and not current_source_moments_supported(
             result.text, evidence, question=message, diagnostics=source_moment_diagnostics,
+            user_time_zone=user_time_zone,
         ):
             return FinnResponsesVerifiedAnswer(
                 "unavailable",
@@ -6265,14 +6266,14 @@ class FinnResponsesAnswerVerifier:
                 final_text, evidence, question=message, user_time_zone=user_time_zone,
             )
             if complete_text != final_text and current_source_moments_supported(
-                complete_text, evidence, question=message,
+                complete_text, evidence, question=message, user_time_zone=user_time_zone,
             ):
                 final_text = complete_text
             complete_text = complete_historical_week_exit_moments(
                 final_text, evidence, question=message, user_time_zone=user_time_zone,
             )
             if complete_text != final_text and current_source_moments_supported(
-                complete_text, evidence, question=message,
+                complete_text, evidence, question=message, user_time_zone=user_time_zone,
             ):
                 final_text = complete_text
         return FinnResponsesVerifiedAnswer("completed", final_text, None, evidence, bool(previous_answer))

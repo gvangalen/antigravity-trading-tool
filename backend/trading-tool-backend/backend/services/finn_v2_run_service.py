@@ -2041,6 +2041,7 @@ def _minimal_read_answer(
         if (partial
                 and current_source_moments_supported(
                     partial, current_evidence, question=message, typed_recovery=True,
+                    user_time_zone=user_time_zone,
                 )
                 and FinnResponsesAnswerVerifier._saved_entity_type_supported(
                     partial, evidence, user_message=message,
@@ -2101,6 +2102,7 @@ def _minimal_read_answer(
     typed_source_moment_recovery = forced_source_partial
     if not current_source_moments_supported(
         text, current_evidence, question=message, diagnostics=source_moment_diagnostics,
+        user_time_zone=user_time_zone,
     ):
         if recovered := source_bound_coach_recovery():
             return recovered
@@ -2111,10 +2113,12 @@ def _minimal_read_answer(
         )
         if partial and not current_source_moments_supported(
             partial, current_evidence, question=message, typed_recovery=True,
+            user_time_zone=user_time_zone,
         ):
             partial = "Welk handelspaar wil je eerst laten controleren?"
         if partial and current_source_moments_supported(
             partial, current_evidence, question=message, typed_recovery=True,
+            user_time_zone=user_time_zone,
         ):
             text = partial
             typed_source_moment_recovery = True
@@ -2169,7 +2173,7 @@ def _minimal_read_answer(
             if (partial
                     and current_source_moments_supported(
                         partial, current_evidence, question=message,
-                        typed_recovery=True,
+                        typed_recovery=True, user_time_zone=user_time_zone,
                     )
                     and FinnResponsesAnswerVerifier._saved_entity_type_supported(
                         partial, evidence, user_message=message,
@@ -2220,6 +2224,7 @@ def _minimal_read_answer(
         )
         if completed != text and current_source_moments_supported(
             completed, current_evidence, question=message,
+            user_time_zone=user_time_zone,
         ):
             text = completed
     return FinnResponsesVerifiedAnswer(
