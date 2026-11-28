@@ -56,7 +56,9 @@ from backend.services.watchlist_conversation_service import ambiguous_asset_chan
 from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
 from backend.services.finn_v2_account_bundle_answer import render_account_bundle_answer
 from backend.services.finn_v2_profile_paper_fit_answer import render_profile_paper_fit_answer
-from backend.services.finn_v2_analysis_setup_coaching import render_analysis_setup_coaching
+from backend.services.finn_v2_analysis_setup_coaching import (
+    matching_analysis_setups, render_analysis_setup_coaching,
+)
 from backend.services.finn_v2_smart_dca_coach_answer import (
     render_saved_smart_dca_coach_answer, saved_smart_dca_identity_matched,
     smart_dca_identity_question, smart_dca_source_unavailable_text,
@@ -2252,11 +2254,9 @@ class FinnResponsesFrontDoor:
                 inventory = inventory_rows[0].get("data") if len(inventory_rows) == 1 else None
                 scored = score_rows[0].get("data") if len(score_rows) == 1 else None
                 setups = inventory.get("setups") if isinstance(inventory, dict) else None
-                matching = ([row for row in setups if isinstance(row, dict)
-                             and str(row.get("symbol") or "").upper() == asset
-                             and row.get("market_id") == market_id
-                             and (str(row.get("pair") or "").upper() == pair if quote
-                                  else True)]
+                matching = (matching_analysis_setups(
+                    setups, symbol=asset, pair=pair, market_id=market_id,
+                )
                             if isinstance(setups, list) else None)
                 score_matches = (isinstance(scored, dict)
                                  and str(scored.get("symbol") or "").upper() == asset

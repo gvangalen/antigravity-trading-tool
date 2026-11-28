@@ -48,7 +48,9 @@ from backend.services.finn_v2_paper_position_answer import (
     render_paper_position_cash_answer,
 )
 from backend.services.finn_v2_profile_paper_fit_answer import render_profile_paper_fit_answer
-from backend.services.finn_v2_analysis_setup_coaching import render_analysis_setup_coaching
+from backend.services.finn_v2_analysis_setup_coaching import (
+    matching_analysis_setups, render_analysis_setup_coaching,
+)
 from backend.services.finn_v2_fomo_plan_answer import render_fomo_plan_answer
 from backend.services.finn_v2_two_plan_checks_answer import verified_two_plan_checks
 from backend.services.finn_v2_factual_source_answer import (
@@ -3192,11 +3194,10 @@ class FinnResponsesAnswerVerifier:
             if verified and result.answer_kind == "selected_analysis_next_step":
                 pair = str(selection["pair"]).upper()
                 symbol = str(selection["symbol"]).upper()
-                matching = [row for row in setups if isinstance(row, dict)
-                            and str(row.get("symbol") or "").upper() == symbol
-                            and row.get("market_id") == selection.get("market_id")
-                            and (str(row.get("pair") or "").upper() == pair
-                                 if selection.get("market_id") is not None else True)]
+                matching = matching_analysis_setups(
+                    setups, symbol=symbol, pair=pair,
+                    market_id=selection.get("market_id"),
+                )
                 expected = render_analysis_setup_coaching(
                     subject=pair, matching=matching, scored=score_data,
                     language=locale.lower().split("-")[0],

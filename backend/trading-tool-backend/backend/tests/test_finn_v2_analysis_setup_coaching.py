@@ -1,4 +1,6 @@
-from backend.services.finn_v2_analysis_setup_coaching import render_analysis_setup_coaching
+from backend.services.finn_v2_analysis_setup_coaching import (
+    matching_analysis_setups, render_analysis_setup_coaching,
+)
 
 
 def render(score, setups, language="nl"):
@@ -13,7 +15,8 @@ def test_saved_score_zone_gives_distance_and_next_step():
     setup = [{"min_benchmark_score": 50, "max_benchmark_score": 70}]
     below = render(42.7, setup)
     assert "7,3 punten onder de ondergrens van 50" in below
-    assert "instapvoorwaarde, risicogrens en exit" in below
+    assert "wanneer je wilt instappen, hoeveel risico je neemt" in below
+    assert "opgeslagen instapvoorwaarde" not in below
     assert "geen koopsein" not in below
     assert "binnen de opgeslagen scorezone" in render(61, setup)
     assert "5 punten boven de bovengrens van 70" in render(75, setup)
@@ -21,11 +24,22 @@ def test_saved_score_zone_gives_distance_and_next_step():
 
 def test_missing_or_ambiguous_threshold_does_not_invent_distance():
     assert "scorezone" in render(42.7, [{"min_benchmark_score": None}])
-    assert "afstand tot een scoregrens nu niet berekenen" in render(
+    assert "geen bruikbare scorezone opgeslagen" in render(
         42.7, [{"min_benchmark_score": 75, "max_benchmark_score": 50}],
     )
     assert "2 opgeslagen setups" in render(42.7, [{}, {}])
     assert "7,3" not in render(42.7, [{}, {}])
+
+
+def test_stock_quote_must_match_catalog_before_using_saved_threshold():
+    rows = [
+        {"symbol": "MSTR", "market_id": None, "quote_currency": "EUR",
+         "pair": "MSTR/EUR", "min_benchmark_score": 50},
+        {"symbol": "MSTR", "market_id": None, "quote_currency": "USD",
+         "pair": "MSTR/USD", "min_benchmark_score": 60},
+    ]
+    assert matching_analysis_setups(rows, symbol="MSTR", pair="MSTR", market_id=None) == rows[1:]
+    assert matching_analysis_setups(rows[:1], symbol="MSTR", pair="MSTR", market_id=None) == []
 
 
 def test_no_saved_setup_proposes_choices_without_signal_boilerplate():
