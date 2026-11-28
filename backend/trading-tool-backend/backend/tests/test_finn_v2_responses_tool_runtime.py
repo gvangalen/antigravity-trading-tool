@@ -4546,6 +4546,51 @@ def test_selected_analysis_card_fails_closed_when_current_score_changes(monkeypa
     assert "swing-setup" not in result.response.text
 
 
+@pytest.mark.parametrize("market_id,include_current", [(None, True), (34, False)])
+def test_selected_analysis_card_never_uses_model_when_evidence_is_incomplete(
+    monkeypatch, market_id, include_current,
+):
+    feed = [{"facts": {
+        "feed_item_id": "selected", "event_type": "analysis_ready",
+        "selection_origin": "current_run", "historical_notification": True,
+        "symbol": "BTC", "historical_event_facts": {
+            "trading_pair": "BTC/USDT", "market_id": market_id,
+        },
+    }}]
+    if include_current:
+        feed.append({"facts": {"feed_item_id": "selected", "current_source_status": "available",
+                               "current_benchmark_score": 42.7,
+                               "current_score_as_of": "2026-11-27"}})
+
+    async def unexpected_provider_call(_self, **_kwargs):
+        raise AssertionError("Historical score must never reach the model")
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run",
+        unexpected_provider_call,
+    )
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7,
+                                   run_id="analysis-incomplete")
+
+    async def unexpected_read(_call):
+        raise AssertionError("Invalid selection must stop before source reads")
+
+    front.reads = unexpected_read
+    message = ("Ik wil een setup voor BTC/USDT verkennen. Welke mogelijkheden zijn er, "
+               "welke raad je aan en wat moet ik kiezen? Maak niets aan.")
+    result = asyncio.run(front.run(
+        message=message, instructions="", conversation_context={},
+        verified_asset="BTC", feed_evidence=feed,
+    ))
+    assert result.response.answer_kind == "selected_analysis_next_step_unavailable"
+    assert result.response.tool_trace == ()
+    assert "42,7" not in result.response.text
+    verified = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=message, result=result.response, locale="nl",
+    ))
+    assert verified.status == "unavailable"
+
+
 def test_selected_strategy_advice_uses_only_current_exact_setup_and_score():
     feed = [
         {"facts": {"feed_item_id": "selected", "event_type": "strategy_next_step",

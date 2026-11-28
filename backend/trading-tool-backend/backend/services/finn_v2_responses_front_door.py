@@ -2322,6 +2322,19 @@ class FinnResponsesFrontDoor:
                                         response_id_reusable=False),
                     None, previous_response, locale=locale,
                 )
+            # A selected card with incomplete or invalid current evidence must
+            # never fall through to the model with its historical score.
+            return FinnResponsesFrontDoorResult(
+                FinnResponsesResult(
+                    text={
+                        "en": "I cannot verify the current analysis for this update right now.",
+                        "de": "Ich kann die aktuelle Analyse für diese Meldung gerade nicht prüfen.",
+                    }.get(language, "Ik kan de huidige analyse voor deze melding even niet controleren."),
+                    response_id=f"selected-analysis-unavailable-{self.run_id}",
+                    tool_trace=(), answer_kind="selected_analysis_next_step_unavailable",
+                    model_led_coach=False, response_id_reusable=False,
+                ), None, previous_response, locale=locale,
+            )
         if (workspace_hints.get("feed_draft_edited") is not True
                 and _explicit_discussion_only(message)
                 and re.search(r"\b(?:strategie|strategy|strategien|strategieën)\b", message, re.I)):

@@ -21,8 +21,8 @@ gedupliceerd en BTC/EUR wordt niet met BTC/USDT verwisseld. Een koers wordt
 niet als uitvoeringsprijs gepresenteerd. De handelsprijscontrole en
 bevestigingsgrens zijn niet gewijzigd.
 
-Gericht lokaal na de onafhankelijke codebevindingen: negentien nieuwe
-backendgevallen groen; de betrokken Responses-runtime-suite `1118 passed`.
+Gericht lokaal na de onafhankelijke codebevindingen: 21 geselecteerde
+backendgevallen groen; de betrokken Responses-runtime-suite `1120 passed`.
 De Security-review van de eerste head vond dat een expliciete vraag naar
 BTC/EUR of ETH/EUR vanuit een BTC/USDT-kaart de kaart kon overnemen. De
 herstelkandidaat vraagt vóór enige read welk paar bedoeld is. De QA-review
@@ -37,7 +37,11 @@ vóór reads en de modelroute een verduidelijkingsvraag, zonder scoreclaim.
 De mobiele NL/EN/DE-feedvragen zijn gelijkgetrokken met web; een gedeelde
 promptregressie en de mobiele chattests `26/26` zijn groen. Mobile typecheck
 en lint geven exit 0; lint toont 89 bestaande waarschuwingen, geen fouten.
-Security-herreview van deze head staat nog open.
+QA gaf op de voorlaatste head geen blocker. Security vond nog een val-through
+naar het model bij een geselecteerde kaart zonder volledig actueel bewijs.
+De laatste kandidaat eindigt daar nu met unavailable zonder provider- of
+scoreclaim; twee regressiegevallen dekken ontbrekende kaartstatus en
+ongeldig markt-ID. Herreview van deze laatste wijziging staat nog open.
 Frontend-commandtests `117/117`, i18n-tests `45/45`, voorsteltests `10/10`,
 build en typecheck groen. `npm audit --omit=dev --audit-level=high` eindigde
 met exit 0 en één gematigde Next.js-melding. De volledige lokale backendrun
@@ -46,7 +50,8 @@ bleef een bestaande test op een externe verbinding wachten; de run is na
 400 seconden onderbroken. De echte-providerselector kon lokaal niet draaien
 omdat `OPENAI_API_KEY` hier ontbreekt. Deze geselecteerde feedroute roept
 de provider niet aan en wijzigt geen actiecontract; dat is geen vervanging
-voor een vereiste provider- of releasegate. Er is nog geen PR-CI, deploy,
+voor een vereiste provider- of releasegate. PR-CI voor de laatste head moet
+nog groen worden; er is nog geen deploy,
 publieke SHA-pariteit of onafhankelijke live QA voor deze kandidaat.
 
 ## FINN 3.0: getypeerde historische AAPL Paper-exit en weekreflectie
