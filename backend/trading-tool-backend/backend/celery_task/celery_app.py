@@ -167,6 +167,10 @@ celery_app.conf.beat_schedule = {
         "backend.celery_task.finn_trade_review_task.analyze_pending_trade_reviews",
         crontab(minute="*/1"),
     ),
+    "recover_finn_trade_review_feed": build_task_schedule_entry(
+        "backend.celery_task.finn_trade_review_task.recover_trade_review_feed",
+        crontab(minute="*/15"),
+    ),
     "finalize_finn_weekly_trade_reflections": build_task_schedule_entry(
         "backend.celery_task.finn_trade_review_task.finalize_weekly_trade_reflections",
         crontab(hour=6, minute=15),

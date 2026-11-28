@@ -5,6 +5,7 @@ import { ArrowRight, RefreshCw, Wallet } from "lucide-react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { fetchBotTrades, fetchPortfolioSummary, fetchVerifiedPortfolioHistory, saveLiveCashAllocations, transferPaperCash } from "@/lib/api/botApi";
+import { getAssistantPreferences, updateAssistantPreferences } from "@/lib/api/ai";
 import { openFinnContext } from "@/lib/finnCommandSearch";
 import { formatCurrency, formatDateTime, formatNumber } from "@/lib/i18n";
 import { PORTFOLIO_TIME_OPTIONS } from "@/lib/portfolioDateTime.mjs";
@@ -32,6 +33,9 @@ function PortfolioPageInner() {
   const [paperTransfer, setPaperTransfer] = useState({ source: "", target: "", amount: "", confirmed: false });
   const [paperTransferSaving, setPaperTransferSaving] = useState(false);
   const [paperTransferError, setPaperTransferError] = useState(null);
+  const [cashAlertDraft, setCashAlertDraft] = useState({ paper: "", live: "" });
+  const [cashAlertSaving, setCashAlertSaving] = useState(false);
+  const [cashAlertError, setCashAlertError] = useState(false);
   const transferKey = useRef(null);
 
   const money = useCallback((value) => known(value)
@@ -75,6 +79,37 @@ function PortfolioPageInner() {
     return () => window.removeEventListener("portfolio:updated", load);
   }, [load]);
   useEffect(() => { setSelectedId(null); setTrades([]); }, [environment]);
+  useEffect(() => {
+    let active = true;
+    getAssistantPreferences().then((response) => {
+      if (!active) return;
+      const preferences = response?.preferences || {};
+      setCashAlertDraft(Object.fromEntries(["paper", "live"].map((key) => {
+        const limit = preferences[`${key}_cash_alert_below_pct`];
+        return [key, Number.isInteger(limit) && limit > 0 ? String(limit) : ""];
+      })));
+    }).catch(() => { if (active) setCashAlertError(true); });
+    return () => { active = false; };
+  }, []);
+
+  const saveCashAlert = async (event) => {
+    event.preventDefault();
+    const draft = cashAlertDraft[environment] || "";
+    const limit = draft.trim() === "" ? 0 : Number(draft);
+    if (!Number.isInteger(limit) || limit < 0 || limit > 99) {
+      setCashAlertError(true);
+      return;
+    }
+    setCashAlertSaving(true);
+    setCashAlertError(false);
+    try {
+      await updateAssistantPreferences({ [`${environment}_cash_alert_below_pct`]: limit });
+    } catch {
+      setCashAlertError(true);
+    } finally {
+      setCashAlertSaving(false);
+    }
+  };
 
   // A render after switching tabs must never relabel the previous environment's
   // money as the newly selected one, even before the next effect starts.
@@ -211,6 +246,24 @@ function PortfolioPageInner() {
       {error && <div role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-200">{copy.loadError} {error}</div>}
       {statusMessage && !loading && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">{statusMessage}</p>}
       {environment === "paper" && <p className="text-xs text-slate-500 dark:text-slate-400">{copy.paperMoney}</p>}
+      <form onSubmit={saveCashAlert}
+        className="flex flex-wrap items-end gap-3 rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
+        <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+          {environment === "paper" ? copy.cashAlertLabel : copy.liveCashAlertLabel}
+          <span className="mt-1 block text-xs font-normal text-slate-500">
+            {environment === "paper" ? copy.cashAlertHelp : copy.liveCashAlertHelp}
+          </span>
+          <input type="number" min="1" max="99" step="1" value={cashAlertDraft[environment] || ""}
+            onChange={(event) => setCashAlertDraft((current) => ({ ...current, [environment]: event.target.value }))}
+            placeholder={copy.cashAlertOff}
+            className="mt-2 w-36 rounded-lg border border-slate-300 bg-transparent px-3 py-2 dark:border-slate-700" />
+        </label>
+        <button type="submit" disabled={cashAlertSaving}
+          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+          {copy.cashAlertSave}
+        </button>
+        {cashAlertError && <span role="alert" className="text-sm text-red-600">{copy.cashAlertError}</span>}
+      </form>
       {environment === "live" && <p className="text-xs text-slate-500 dark:text-slate-400">{copy.liveAttribution}</p>}
 
       {environment === "paper" && bots.length > 1 && <form onSubmit={savePaperTransfer}

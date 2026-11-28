@@ -2,7 +2,8 @@ import logging
 import json
 import math
 import os
-from datetime import timedelta, timezone
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation
 from celery import shared_task
 
 from backend.utils.db import get_db_connection
@@ -395,12 +396,13 @@ def publish_coach_bot_decision(user_id: int, decision_id: int):
                 SELECT d.id, d.bot_id, d.symbol, d.market_id, d.decision_kind,
                        d.action, d.status, d.decision_ts,
                        d.amount_eur, d.reason_json, o.quote_amount_eur AS filled_amount_eur,
-                       o.status AS order_status,
+                       o.status AS order_status, o.id AS order_id,
+                       o.updated_at AS order_updated_at,
                        b.name AS bot_name, b.is_live
                 FROM bot_decisions d JOIN bot_configs b
                   ON b.id=d.bot_id AND b.user_id=d.user_id
                 LEFT JOIN LATERAL (
-                    SELECT quote_amount_eur, status FROM bot_orders
+                    SELECT id, quote_amount_eur, status, updated_at FROM bot_orders
                     WHERE decision_id=d.id AND bot_id=d.bot_id AND user_id=d.user_id
                       AND execution_environment='paper'
                     ORDER BY id DESC LIMIT 1
@@ -426,6 +428,65 @@ def publish_coach_bot_decision(user_id: int, decision_id: int):
                 return None
             if decision_at is not None and decision_at.tzinfo is None:
                 decision_at = decision_at.replace(tzinfo=timezone.utc)
+            portfolio_impact = {}
+            if row["status"] == "executed" and row["order_status"] == "filled":
+                # A complete snapshot is the only source for an account-wide
+                # cash percentage. It must include this bot's settled fill.
+                snapshot_result = await session.execute(text("""
+                    SELECT ts, source_min_at, equity_eur, cash_eur, position_value_eur,
+                           evidence_json
+                    FROM portfolio_value_snapshots_v2
+                    WHERE user_id=:user_id AND environment='paper' AND bucket='1h'
+                    ORDER BY ts DESC LIMIT 1
+                """), {"user_id": user_id})
+                snapshot = snapshot_result.mappings().first()
+                order_at = row["order_updated_at"]
+                if order_at is not None and order_at.tzinfo is None:
+                    order_at = order_at.replace(tzinfo=timezone.utc)
+                later_fill = await session.execute(text("""
+                    SELECT 1 FROM bot_orders
+                    WHERE user_id=:user_id AND execution_environment='paper'
+                      AND status='filled'
+                      AND (updated_at, id) > (:order_at, :order_id)
+                    LIMIT 1
+                """), {"user_id": user_id, "order_at": order_at,
+                       "order_id": row["order_id"]}) if order_at and row["order_id"] else None
+                if (snapshot and order_at and timedelta(0) <= datetime.now(timezone.utc) - order_at
+                        <= timedelta(days=1) and later_fill and later_fill.first() is None):
+                    raw_evidence = snapshot["evidence_json"] or {}
+                    if isinstance(raw_evidence, str):
+                        try:
+                            raw_evidence = json.loads(raw_evidence)
+                        except (TypeError, ValueError):
+                            raw_evidence = {}
+                    positions = raw_evidence.get("positions") or [] if isinstance(raw_evidence, dict) else []
+                    bot_snapshot = next((item for item in positions if isinstance(item, dict)
+                                         and item.get("bot_id") == row["bot_id"]), None)
+                    updated_at = bot_snapshot.get("portfolio_updated_at") if bot_snapshot else None
+                    try:
+                        updated_at = datetime.fromisoformat(updated_at) if updated_at else None
+                        if updated_at and updated_at.tzinfo is None:
+                            updated_at = updated_at.replace(tzinfo=timezone.utc)
+                        equity = Decimal(str(snapshot["equity_eur"]))
+                        cash = Decimal(str(snapshot["cash_eur"]))
+                        position = Decimal(str(snapshot["position_value_eur"]))
+                        observed = snapshot["source_min_at"]
+                        if observed and observed.tzinfo is None:
+                            observed = observed.replace(tzinfo=timezone.utc)
+                        current = datetime.now(timezone.utc)
+                        if (updated_at and updated_at >= order_at - timedelta(seconds=5)
+                                and observed and timedelta(0) <= current - observed <= timedelta(hours=1)
+                                and equity.is_finite() and cash.is_finite() and position.is_finite()
+                                and equity > 0 and 0 <= cash <= equity and position >= 0
+                                and abs(equity - cash - position) < Decimal("0.02")):
+                            portfolio_impact = {
+                                "portfolio_cash_pct": float(round(cash * 100 / equity, 1)),
+                                "portfolio_position_pct": float(round(position * 100 / equity, 1)),
+                                "portfolio_cash_eur": format(cash.quantize(Decimal("0.01")), "f"),
+                                "portfolio_valuation_at": observed.isoformat(),
+                            }
+                    except (InvalidOperation, TypeError, ValueError):
+                        pass
             item_id = await FinnCoachFeedService(session).publish(
                 user_id=user_id, event_key=f"bot-decision:{decision_id}",
                 event_type="bot_decision", subject_type="bot",
@@ -438,7 +499,7 @@ def publish_coach_bot_decision(user_id: int, decision_id: int):
                           "order_status": row["order_status"],
                           "reasons": reasons,
                           "decision_id": row["id"], "bot_id": row["bot_id"],
-                          "source_observed_at": decision_at},
+                          "source_observed_at": decision_at, **portfolio_impact},
                 expires_at=(decision_at + timedelta(days=2)
                             if str(row["action"]).lower() in {"hold", "houd_vast"}
                             and decision_at else None),
@@ -570,13 +631,13 @@ def recover_coach_feed_events():
                 JOIN bot_configs b ON b.id=d.bot_id AND b.user_id=d.user_id
                 CROSS JOIN finn_coach_feed_runtime r
                 LEFT JOIN LATERAL (
-                    SELECT status FROM bot_orders o
+                    SELECT status, updated_at FROM bot_orders o
                     WHERE o.decision_id=d.id AND o.bot_id=d.bot_id
                       AND o.user_id=d.user_id AND o.execution_environment='paper'
                     ORDER BY o.id DESC LIMIT 1
                 ) o ON TRUE
                 LEFT JOIN LATERAL (
-                    SELECT evidence FROM finn_coach_feed_items f
+                    SELECT evidence, status FROM finn_coach_feed_items f
                     WHERE f.user_id=d.user_id
                       AND f.event_key='bot-decision:' || d.id::TEXT
                     ORDER BY f.created_at DESC, f.id DESC LIMIT 1
@@ -587,7 +648,20 @@ def recover_coach_feed_events():
                   AND (f.evidence IS NULL
                        OR f.evidence->>'status' IS DISTINCT FROM d.status
                        OR f.evidence->>'action' IS DISTINCT FROM d.action
-                       OR f.evidence->>'order_status' IS DISTINCT FROM o.status)
+                       OR f.evidence->>'order_status' IS DISTINCT FROM o.status
+                       OR (o.status='filled' AND f.status IN ('unread','read')
+                           AND f.evidence->>'portfolio_cash_pct' IS NULL
+                           AND o.updated_at >= NOW() - INTERVAL '1 day'
+                           AND EXISTS (
+                             SELECT 1 FROM portfolio_value_snapshots_v2 s,
+                               LATERAL jsonb_array_elements(s.evidence_json->'positions') AS p(item)
+                             WHERE s.user_id=d.user_id AND s.environment='paper'
+                               AND s.bucket='1h' AND s.ts >= NOW() - INTERVAL '2 hours'
+                               AND s.source_min_at >= NOW() - INTERVAL '1 hour'
+                               AND p.item->>'bot_id'=d.bot_id::TEXT
+                               AND (p.item->>'portfolio_updated_at')::TIMESTAMPTZ
+                                   >= o.updated_at - INTERVAL '5 seconds'
+                           )))
                 ORDER BY d.id LIMIT 12
             """)
             decisions = cur.fetchall()

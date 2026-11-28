@@ -14,6 +14,7 @@ from typing import Any
 
 from sqlalchemy import text
 
+from backend.domain.benchmark_score_zones import BENCHMARK_SCORE_BANDS
 from backend.utils.openai_client import StructuredOutputSpec, ask_gpt_structured_response_async
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,16 @@ def _verified_benchmark_score(value: Any) -> str | None:
     if not score.is_finite() or not 0 <= score <= 100:
         return None
     return format(score.normalize(), "f")
+
+
+def _benchmark_score_zone(value: Any) -> str | None:
+    """Use the same whole-point zones displayed by the benchmark and Smart DCA."""
+    score = _verified_benchmark_score(value)
+    if score is None:
+        return None
+    point = int(Decimal(score) + Decimal("0.5"))
+    return next((name for name, minimum, maximum, _ in BENCHMARK_SCORE_BANDS
+                 if minimum <= point <= maximum), None)
 
 
 def _same_utc_moment(first: datetime | None, second: datetime | None) -> bool:
@@ -381,6 +392,81 @@ def _fallback(kind: str, subject: str, evidence: dict, *, focus: str = "brief") 
             "de": {"title": "Hohe aktuelle Positionskonzentration · Paper",
                    "body": f"{name} ({pair}): Zum angegebenen Bewertungszeitpunkt beträgt die Position {exposure}% des Bot-Werts. Deine gespeicherte Exposure-Einstellung beträgt {limit}%. Dies vergleicht den aktuellen Bot-Wert und bewertet keine früheren Orders. Nichts wurde geändert."},
         }
+    if kind == "portfolio_cash_low":
+        cash_pct = evidence.get("cash_pct")
+        limit_pct = evidence.get("limit_pct")
+        cash_eur = evidence.get("cash_eur")
+        below = cash_pct is not None and limit_pct is not None and cash_pct < limit_pct
+        return {
+            "nl": {"title": "Paper-cash onder jouw grens" if below else "Paper-cash rond jouw grens",
+                   "body": f"Je Paper-portefeuille bestaat voor {cash_pct}% uit cash (€{cash_eur}). Je ingestelde grens is {limit_pct}%. Bekijk je portefeuille voordat je een volgende aankoop beoordeelt."},
+            "en": {"title": "Paper cash below your limit" if below else "Paper cash near your limit",
+                   "body": f"Cash is {cash_pct}% (€{cash_eur}) of your Paper portfolio. Your saved limit is {limit_pct}%. Review your portfolio before considering another purchase."},
+            "de": {"title": "Paper-Guthaben unter deiner Grenze" if below else "Paper-Guthaben nahe deiner Grenze",
+                   "body": f"Dein Paper-Portfolio besteht zu {cash_pct}% (€{cash_eur}) aus Guthaben. Deine gespeicherte Grenze beträgt {limit_pct}%. Prüfe dein Portfolio vor einem weiteren Kauf."},
+        }
+    if kind == "live_portfolio_cash_low":
+        cash_pct = evidence.get("cash_pct")
+        limit_pct = evidence.get("limit_pct")
+        cash_eur = evidence.get("cash_eur")
+        below = cash_pct is not None and limit_pct is not None and cash_pct < limit_pct
+        return {
+            "nl": {"title": "Live EUR-saldo onder jouw grens" if below else "Live EUR-saldo rond jouw grens",
+                   "body": f"Je gecontroleerde Live-portefeuille bestaat voor {cash_pct}% uit EUR (€{cash_eur}). Je ingestelde grens is {limit_pct}%. Dit is het totale EUR-saldo bij de broker, inclusief eventueel gereserveerde EUR."},
+            "en": {"title": "Live EUR balance below your limit" if below else "Live EUR balance near your limit",
+                   "body": f"EUR is {cash_pct}% (€{cash_eur}) of your verified Live portfolio. Your saved limit is {limit_pct}%. This is the broker's total EUR balance, including any reserved EUR."},
+            "de": {"title": "Live-EUR-Bestand unter deiner Grenze" if below else "Live-EUR-Bestand nahe deiner Grenze",
+                   "body": f"Dein geprüftes Live-Portfolio besteht zu {cash_pct}% aus EUR (€{cash_eur}). Deine gespeicherte Grenze beträgt {limit_pct}%. Dies ist der gesamte EUR-Bestand beim Broker, einschließlich reservierter EUR."},
+        }
+    if kind == "live_trade_filled":
+        symbol = str(evidence.get("symbol") or subject).strip().upper()[:20]
+        action = evidence.get("side")
+        partial = evidence.get("order_status") == "partial"
+        cash_pct = evidence.get("portfolio_cash_pct")
+        titles = {
+            "nl": f"{symbol}: {'aankoop' if action == 'buy' else 'verkoop'} {'deels ' if partial else ''}uitgevoerd",
+            "en": f"{symbol}: {'buy' if action == 'buy' else 'sell'} {'partly ' if partial else ''}filled",
+            "de": f"{symbol}: {'Kauf' if action == 'buy' else 'Verkauf'} {'teilweise ' if partial else ''}ausgeführt",
+        }
+        bodies = {
+            "nl": f"De broker heeft deze order bevestigd. Uitgevoerd bedrag: {_bot_amount(evidence, 'nl')}.",
+            "en": f"The broker confirmed this order. Executed amount: {_bot_amount(evidence, 'en')}.",
+            "de": f"Der Broker hat diese Order bestätigt. Ausgeführter Betrag: {_bot_amount(evidence, 'de')}.",
+        }
+        if cash_pct is not None:
+            bodies["nl"] += f" Bij de gecontroleerde Live-balans was het EUR-aandeel {cash_pct}%."
+            bodies["en"] += f" At the verified Live balance check, EUR was {cash_pct}%."
+            bodies["de"] += f" Bei der geprüften Live-Bilanz betrug der EUR-Anteil {cash_pct}%."
+        return {locale: {"title": titles[locale], "body": bodies[locale]} for locale in LOCALES}
+    if kind == "live_order_attention":
+        uncertain = evidence.get("order_status") == "unknown_exchange_state"
+        return {
+            "nl": {"title": "Live-order: uitkomst controleren" if uncertain else "Live-order niet afgerond",
+                   "body": "De uitkomst bij de broker is nog niet bevestigd. Controleer deze order bij de broker voordat je opnieuw bestelt." if uncertain else "Deze Live-order is niet als volledig uitgevoerd bevestigd. Bekijk de orderstatus en de vastgelegde reden."},
+            "en": {"title": "Live order: check outcome" if uncertain else "Live order not completed",
+                   "body": "The broker outcome is not confirmed yet. Check this order with the broker before placing it again." if uncertain else "This Live order was not confirmed as fully filled. Review its status and recorded reason."},
+            "de": {"title": "Live-Order: Ausgang prüfen" if uncertain else "Live-Order nicht abgeschlossen",
+                   "body": "Das Ergebnis beim Broker ist noch nicht bestätigt. Prüfe diese Order beim Broker, bevor du erneut bestellst." if uncertain else "Diese Live-Order wurde nicht als vollständig ausgeführt bestätigt. Prüfe Status und gespeicherten Grund."},
+        }
+    if kind == "trade_review_ready":
+        symbol = str(evidence.get("symbol") or subject).strip().upper()[:20]
+        return {
+            "nl": {"title": f"Analyse van je gesloten {symbol}-trade staat klaar",
+                   "body": "Bekijk FINN's terugblik op deze trade en bepaal zelf welke les je wilt vastleggen."},
+            "en": {"title": f"Your closed {symbol} trade analysis is ready",
+                   "body": "Review FINN's assessment of this trade and choose which lesson you want to record."},
+            "de": {"title": f"Analyse deines geschlossenen {symbol}-Trades ist bereit",
+                   "body": "Sieh dir FINNs Rückblick auf diesen Trade an und entscheide, welche Lehre du festhalten möchtest."},
+        }
+    if kind == "live_broker_data_blocked":
+        return {
+            "nl": {"title": "Live-portefeuille niet volledig controleerbaar",
+                   "body": "FINN kon de brokerbalans en alle benodigde koersen al meer dan een uur niet volledig controleren. Controleer je exchange-koppeling en de Live-botstatus."},
+            "en": {"title": "Live portfolio cannot be fully verified",
+                   "body": "FINN has been unable to fully verify the broker balance and required prices for over an hour. Check your exchange connection and Live bot status."},
+            "de": {"title": "Live-Portfolio nicht vollständig prüfbar",
+                   "body": "FINN konnte Brokerbestand und benötigte Kurse seit über einer Stunde nicht vollständig prüfen. Prüfe Exchange-Verbindung und Live-Botstatus."},
+        }
     if kind == "plan_review":
         pair = str(evidence.get("trading_pair") or evidence.get("symbol") or "").strip()[:30]
         market = f" ({pair})" if pair else ""
@@ -670,7 +756,7 @@ class FinnCoachFeedService:
                       expires_at: datetime | None = None,
                       revision: str | None = None) -> str | None:
         """One row per owner/event. Unchanged evidence never reopens or regenerates."""
-        if not event_key or event_type not in {"plan_match", "plan_review", "position_risk", "weekly_reflection", "improvement_suggestion", "data_blocked", "proposal_pending", "market_move", "bot_decision", "live_bot_paused", "daily_report_ready", "periodic_report_ready", "watchlist_added", "analysis_ready", "strategy_next_step", "paper_next_step"}:
+        if not event_key or event_type not in {"plan_match", "plan_review", "position_risk", "portfolio_cash_low", "live_portfolio_cash_low", "live_trade_filled", "live_order_attention", "trade_review_ready", "live_broker_data_blocked", "weekly_reflection", "improvement_suggestion", "data_blocked", "proposal_pending", "market_move", "bot_decision", "live_bot_paused", "daily_report_ready", "periodic_report_ready", "watchlist_added", "analysis_ready", "strategy_next_step", "paper_next_step"}:
             raise ValueError("feed_event_invalid")
         facts = {**evidence, "subject": str(subject or "")[:120]}
         digest = hashlib.sha256(str(revision or _json(facts)).encode()).hexdigest()
@@ -772,9 +858,51 @@ class FinnCoachFeedService:
                 event_type in {"strategy_next_step", "paper_next_step"}
                 and current["status"] == "resolved"
             ):
+                old_facts = current.get("evidence") or {}
+                if isinstance(old_facts, str):
+                    try:
+                        old_facts = json.loads(old_facts)
+                    except ValueError:
+                        old_facts = {}
+                if not isinstance(old_facts, dict):
+                    old_facts = {}
+                if event_type in {"portfolio_cash_low", "live_portfolio_cash_low", "live_trade_filled", "live_order_attention", "live_broker_data_blocked"} and current["status"] in VISIBLE:
+                    await self.session.execute(text("""
+                        UPDATE finn_coach_feed_items
+                        SET evidence=CAST(:evidence AS JSONB),
+                            copy_json=CAST(:copy_json AS JSONB),
+                            copy_source='verified_facts',
+                            source_observed_at=:source_observed_at,
+                            expires_at=:expires_at, updated_at=NOW()
+                        WHERE id=CAST(:id AS UUID) AND user_id=:user_id
+                          AND status IN ('unread','read')
+                    """), {"id": str(current["id"]), "user_id": user_id,
+                           "evidence": _json(facts),
+                           "copy_json": _json(_fallback(event_type, subject, facts)),
+                           "source_observed_at": source_observed_at,
+                           "expires_at": expires_at})
+                if event_type == "analysis_ready" and current["status"] in VISIBLE:
+                    if (old_facts.get("score_as_of") != facts.get("score_as_of")
+                            or old_facts.get("benchmark_score") != facts.get("benchmark_score")):
+                        # Refresh the shown measurement without creating another
+                        # notification or changing its read state.
+                        await self.session.execute(text("""
+                            UPDATE finn_coach_feed_items
+                            SET evidence=CAST(:evidence AS JSONB),
+                                copy_json=CAST(:copy_json AS JSONB),
+                                copy_source='verified_facts',
+                                updated_at=NOW()
+                            WHERE id=CAST(:id AS UUID) AND user_id=:user_id
+                              AND status IN ('unread','read')
+                        """), {"id": str(current["id"]), "user_id": user_id,
+                               "evidence": _json(facts),
+                               "copy_json": _json(_fallback(event_type, subject, facts))})
                 if (event_type == "bot_decision" and current["status"] in VISIBLE
-                        and source_observed_at
-                        and not _same_utc_moment(source_observed_at, previous_source)):
+                        and ((source_observed_at
+                              and not _same_utc_moment(source_observed_at, previous_source))
+                             or (facts.get("portfolio_cash_pct") is not None
+                                 and (old_facts.get("portfolio_cash_pct"))
+                                 != facts.get("portfolio_cash_pct")))):
                     # Today's assessment row is updated in place. Keep one
                     # feed card for an unchanged bot state, but show its latest
                     # verified decision time instead of the first poll time.
@@ -810,7 +938,7 @@ class FinnCoachFeedService:
             "source_observed_at": source_observed_at,
             "copy_json": _json(_fallback(event_type, subject, facts)),
             "copy_source": ("verified_facts" if event_type in {
-                                "position_risk", "weekly_reflection", "improvement_suggestion",
+                                "position_risk", "portfolio_cash_low", "live_portfolio_cash_low", "live_trade_filled", "live_order_attention", "trade_review_ready", "live_broker_data_blocked", "weekly_reflection", "improvement_suggestion",
                                 "bot_decision", "watchlist_added", "analysis_ready", "strategy_next_step", "paper_next_step", "daily_report_ready", "periodic_report_ready"} or event_type == "data_blocked" and facts.get("bot_id")
                             else "fact_fallback"),
             "expires_at": expires_at,
@@ -910,7 +1038,7 @@ class FinnCoachFeedService:
                     evidence={"symbol": asset, "trading_pair": pair, "market_id": market_id,
                               "source_status": "available", "score_as_of": str(assessment.get("as_of") or ""),
                               "benchmark_score": score},
-                    revision=f"available:{str(assessment.get('as_of') or '')[:10]}:{score}",
+                    revision=f"available:zone:{_benchmark_score_zone(score)}",
                     expires_at=datetime.now(timezone.utc) + timedelta(days=14),
                 )
                 if item:
@@ -1086,6 +1214,328 @@ class FinnCoachFeedService:
                 created.append(item_id)
         return created
 
+    async def reconcile_paper_cash_alert(self, *, user_id: int) -> list[str]:
+        """Alert once per low-cash episode using a complete, recent Paper snapshot."""
+        event_key = "portfolio-cash:paper"
+        setting = await self.session.execute(text("""
+            SELECT ai_preferences->>'paper_cash_alert_below_pct' AS cash_limit
+            FROM users WHERE id=:user_id
+        """), {"user_id": user_id})
+        row = setting.mappings().first()
+        try:
+            limit = int(row["cash_limit"]) if row and row["cash_limit"] is not None else 0
+        except (TypeError, ValueError):
+            limit = 0
+        if not 1 <= limit <= 99:
+            await self.resolve(user_id=user_id, event_key=event_key)
+            return []
+
+        result = await self.session.execute(text("""
+            SELECT ts, source_min_at, equity_eur, cash_eur, covered_bot_count
+            FROM portfolio_value_snapshots_v2
+            WHERE user_id=:user_id AND environment='paper' AND bucket='1h'
+            ORDER BY ts DESC LIMIT 1
+        """), {"user_id": user_id})
+        snapshot = result.mappings().first()
+        now = datetime.now(timezone.utc)
+        try:
+            equity = Decimal(str(snapshot["equity_eur"])) if snapshot else Decimal(0)
+            cash = Decimal(str(snapshot["cash_eur"])) if snapshot else Decimal(-1)
+            cash_pct = (cash * 100 / equity) if equity > 0 else Decimal(-1)
+        except (InvalidOperation, TypeError, ValueError, ZeroDivisionError):
+            cash_pct = Decimal(-1)
+            cash = Decimal(-1)
+            equity = Decimal(0)
+        observed = _utc_source_moment(snapshot.get("source_min_at")) if snapshot else None
+        captured = _utc_source_moment(snapshot.get("ts")) if snapshot else None
+        valid = (snapshot and int(snapshot.get("covered_bot_count") or 0) > 0
+                 and cash.is_finite() and equity.is_finite() and cash_pct.is_finite()
+                 and 0 <= cash <= equity and 0 <= cash_pct <= 100
+                 and observed and captured
+                 and timedelta(0) <= now - observed <= timedelta(hours=1)
+                 and timedelta(0) <= now - captured <= timedelta(hours=2))
+        if not valid:
+            return []
+
+        previous = await self.session.execute(text("""
+            SELECT status FROM finn_coach_feed_items
+            WHERE user_id=:user_id AND event_key=:event_key
+            ORDER BY created_at DESC, id DESC LIMIT 1
+        """), {"user_id": user_id, "event_key": event_key})
+        current = previous.mappings().first()
+        # Five percentage points of recovery prevents repeated alerts at the
+        # boundary as prices move. Acknowledged cards remain acknowledged.
+        if cash_pct >= limit + 5:
+            await self.resolve(user_id=user_id, event_key=event_key)
+            return []
+        if cash_pct >= limit and not current:
+            return []
+        if cash_pct >= limit and current["status"] not in VISIBLE:
+            return []
+        evidence = {"environment": "paper", "cash_pct": float(round(cash_pct, 1)),
+                    "cash_eur": format(cash.quantize(Decimal("0.01")), "f"),
+                    "equity_eur": format(equity.quantize(Decimal("0.01")), "f"),
+                    "limit_pct": limit, "valuation_as_of": observed.isoformat()}
+        item = await self.publish(
+            user_id=user_id, event_key=event_key, event_type="portfolio_cash_low",
+            subject_type="portfolio", subject_id="paper", subject="Paper-portefeuille",
+            symbol=None, priority=3, evidence=evidence, source_observed_at=observed,
+            expires_at=now + timedelta(hours=1), revision=f"paper:below:{limit}",
+        )
+        return [item] if item else []
+
+    async def publish_trade_review_ready(self, *, user_id: int, review_id: int) -> str | None:
+        """Notify only after the owner's finished analysis is persisted."""
+        result = await self.session.execute(text("""
+            SELECT id, symbol, analysis_status, analysis_json IS NOT NULL AS has_analysis,
+                   analysis_updated_at, exit_at
+            FROM finn_trade_reviews WHERE id=:review_id AND user_id=:user_id
+        """), {"review_id": review_id, "user_id": user_id})
+        review = result.mappings().first()
+        event_key = f"trade-review:{review_id}"
+        if not review or review["analysis_status"] != "ready" or not review["has_analysis"]:
+            await self.resolve(user_id=user_id, event_key=event_key)
+            return None
+        observed = _utc_source_moment(review["analysis_updated_at"])
+        if not observed:
+            return None
+        return await self.publish(
+            user_id=user_id, event_key=event_key, event_type="trade_review_ready",
+            subject_type="trade_review", subject_id=str(review_id),
+            subject=str(review["symbol"]), symbol=str(review["symbol"]).upper(),
+            evidence={"review_id": review_id, "symbol": str(review["symbol"]).upper(),
+                      "exit_at": str(review["exit_at"])},
+            source_observed_at=observed,
+            expires_at=observed + timedelta(days=7), priority=2,
+            revision=f"trade-review-ready:{review_id}",
+        )
+
+    async def reconcile_live_portfolio_events(self, *, user_id: int) -> list[str]:
+        """Observe confirmed Live fills and a verified broker cash threshold.
+
+        This is read-only: a broker failure leaves prior cards alone and cannot
+        turn a missing balance into zero cash. Paper ledgers are never mixed in.
+        """
+        from backend.services.live_portfolio_allocation_service import read_live_account
+
+        setting = await self.session.execute(text("""
+            SELECT ai_preferences->>'live_cash_alert_below_pct' AS cash_limit
+            FROM users WHERE id=:user_id
+        """), {"user_id": user_id})
+        row = setting.mappings().first()
+        try:
+            limit = int(row["cash_limit"]) if row and row["cash_limit"] is not None else 0
+        except (TypeError, ValueError):
+            limit = 0
+        if not 1 <= limit <= 99:
+            limit = 0
+            await self.resolve(user_id=user_id, event_key="portfolio-cash:live")
+
+        result = await self.session.execute(text("""
+            SELECT o.id, o.bot_id, o.symbol, o.side, o.status, o.updated_at,
+                   o.executed_qty, b.name AS bot_name,
+                   ledger.amount_eur AS ledger_amount_eur
+            FROM bot_orders o
+            JOIN bot_configs b ON b.id=o.bot_id AND b.user_id=o.user_id AND b.is_live=TRUE
+            JOIN bot_executions e ON e.bot_order_id=o.id AND e.user_id=o.user_id
+            JOIN LATERAL (
+                SELECT SUM(ABS(l.cash_delta_eur)) AS amount_eur
+                FROM bot_ledger l
+                WHERE l.user_id=o.user_id AND l.bot_id=o.bot_id
+                  AND l.order_id=o.id AND l.entry_type='execute'
+            ) ledger ON ledger.amount_eur > 0
+            WHERE o.user_id=:user_id AND o.execution_environment='live'
+              AND o.exchange_order_id IS NOT NULL AND o.status IN ('filled','partial')
+              AND e.status=o.status AND e.filled_qty > 0
+              AND o.updated_at >= NOW() - INTERVAL '1 day'
+            ORDER BY o.updated_at DESC, o.id DESC LIMIT 40
+        """), {"user_id": user_id})
+        orders = result.mappings().all()
+        problems_result = await self.session.execute(text("""
+            WITH recent AS (
+                SELECT id FROM bot_orders
+                WHERE user_id=:user_id AND execution_environment='live'
+                  AND updated_at >= NOW() - INTERVAL '1 day'
+                ORDER BY updated_at DESC, id DESC LIMIT 80
+            ), unresolved AS (
+                SELECT id FROM bot_orders
+                WHERE user_id=:user_id AND execution_environment='live'
+                  AND status='unknown_exchange_state'
+                ORDER BY updated_at DESC, id DESC LIMIT 80
+            )
+            SELECT o.id, o.bot_id, o.symbol, o.status, o.updated_at,
+                   b.name AS bot_name
+            FROM bot_orders o
+            JOIN bot_configs b ON b.id=o.bot_id AND b.user_id=o.user_id AND b.is_live=TRUE
+            WHERE o.user_id=:user_id AND o.execution_environment='live'
+              AND o.id IN (SELECT id FROM recent UNION SELECT id FROM unresolved)
+              AND o.status IN ('ready','approved','pending','sending','sent',
+                               'unknown_exchange_state','failed','rejected',
+                               'cancelled','error','filled','partial')
+            ORDER BY o.updated_at DESC, o.id DESC LIMIT 160
+        """), {"user_id": user_id})
+        problem_orders = problems_result.mappings().all()
+        active_result = await self.session.execute(text("""
+            SELECT COUNT(*) AS active_count FROM bot_configs
+            WHERE user_id=:user_id AND is_live=TRUE AND is_active=TRUE
+        """), {"user_id": user_id})
+        active_live_bots = int(active_result.scalar_one() or 0)
+        created = []
+        for order in reversed(problem_orders):
+            event_key = f"live-order-problem:{order['id']}"
+            if order["status"] not in {"unknown_exchange_state", "failed", "rejected",
+                                       "error"}:
+                await self.resolve(user_id=user_id, event_key=event_key)
+                continue
+            observed_order = _utc_source_moment(order.get("updated_at"))
+            if not observed_order:
+                continue
+            item = await self.publish(
+                user_id=user_id, event_key=event_key, event_type="live_order_attention",
+                subject_type="bot", subject_id=str(order["bot_id"]),
+                subject=str(order["bot_name"] or "Live-bot"),
+                symbol=str(order["symbol"] or "").upper(), priority=4,
+                evidence={"environment": "live", "order_id": order["id"],
+                          "bot_id": order["bot_id"], "order_status": order["status"]},
+                source_observed_at=observed_order,
+                expires_at=(None if order["status"] == "unknown_exchange_state"
+                            else datetime.now(timezone.utc) + timedelta(days=2)),
+                revision=f"live-problem:{order['id']}:{order['status']}",
+            )
+            if item:
+                created.append(item)
+        if not limit and not orders and not active_live_bots:
+            await self.session.execute(text("""
+                UPDATE finn_live_balance_observations
+                SET first_unavailable_at=NULL, last_checked_at=NOW()
+                WHERE user_id=:user_id
+            """), {"user_id": user_id})
+            await self.resolve(user_id=user_id, event_key="live-broker-data:account")
+            return created
+
+        account = await read_live_account(self.session, user_id)
+        now = datetime.now(timezone.utc)
+        observed = _utc_source_moment(account.get("as_of")) if account else None
+        try:
+            cash = Decimal(str(account["total_eur"]))
+            free = Decimal(str(account["cash_eur"]))
+            position = Decimal(str(account["position_value_eur"]))
+            equity = cash + position
+            account_complete = (all(value.is_finite() for value in (cash, free, position, equity))
+                     and 0 <= free <= cash and cash >= 0 and position >= 0
+                     and observed is not None
+                     and timedelta(0) <= now - observed <= timedelta(minutes=5))
+            valid = account_complete and equity > 0
+            cash_pct = cash * 100 / equity if valid else None
+        except (KeyError, TypeError, ValueError, InvalidOperation):
+            account_complete = valid = False
+        if active_live_bots:
+            if account_complete:
+                await self.session.execute(text("""
+                    INSERT INTO finn_live_balance_observations
+                        (user_id, first_unavailable_at, last_available_at, last_checked_at)
+                    VALUES (:user_id, NULL, NOW(), NOW())
+                    ON CONFLICT (user_id) DO UPDATE SET first_unavailable_at=NULL,
+                        last_available_at=NOW(), last_checked_at=NOW()
+                """), {"user_id": user_id})
+                await self.resolve(user_id=user_id, event_key="live-broker-data:account")
+            else:
+                observation = await self.session.execute(text("""
+                    INSERT INTO finn_live_balance_observations
+                        (user_id, first_unavailable_at, last_checked_at)
+                    VALUES (:user_id, NOW(), NOW())
+                    ON CONFLICT (user_id) DO UPDATE SET
+                        first_unavailable_at=CASE
+                            WHEN finn_live_balance_observations.last_checked_at
+                                 < NOW() - INTERVAL '30 minutes' THEN NOW()
+                            ELSE COALESCE(
+                                finn_live_balance_observations.first_unavailable_at, NOW())
+                        END,
+                        last_checked_at=NOW()
+                    RETURNING first_unavailable_at
+                """), {"user_id": user_id})
+                first_unavailable = _utc_source_moment(observation.scalar_one())
+                if first_unavailable and now - first_unavailable >= timedelta(hours=1):
+                    item = await self.publish(
+                        user_id=user_id, event_key="live-broker-data:account",
+                        event_type="live_broker_data_blocked", subject_type="portfolio",
+                        subject_id="live", subject="Live-portefeuille", symbol=None,
+                        priority=4, evidence={"environment": "live",
+                                              "active_live_bots": active_live_bots,
+                                              "first_unavailable_at": first_unavailable.isoformat()},
+                        source_observed_at=now, expires_at=now + timedelta(hours=2),
+                        revision=f"live-broker-unavailable:{first_unavailable.isoformat()}",
+                    )
+                    if item:
+                        created.append(item)
+        else:
+            await self.session.execute(text("""
+                UPDATE finn_live_balance_observations
+                SET first_unavailable_at=NULL, last_checked_at=NOW()
+                WHERE user_id=:user_id
+            """), {"user_id": user_id})
+            await self.resolve(user_id=user_id, event_key="live-broker-data:account")
+        newest_order_id = orders[0]["id"] if orders else None
+        for order in reversed(orders):
+            filled_at = _utc_source_moment(order.get("updated_at"))
+            if not filled_at or order.get("side") not in {"buy", "sell"}:
+                continue
+            try:
+                qty = Decimal(str(order["executed_qty"]))
+                amount = Decimal(str(order["ledger_amount_eur"]))
+            except (KeyError, TypeError, ValueError, InvalidOperation):
+                continue
+            if (not all(value.is_finite() for value in (qty, amount))
+                    or min(qty, amount) <= 0 or amount > 1_000_000_000):
+                continue
+            facts = {"environment": "live", "is_live": True, "order_id": order["id"],
+                     "bot_id": order["bot_id"], "symbol": order["symbol"],
+                     "side": order["side"], "order_status": order["status"],
+                     "amount_eur": format(amount.quantize(Decimal("0.01")), "f")}
+            if valid and order["id"] == newest_order_id and observed >= filled_at:
+                facts.update({"portfolio_cash_pct": float(round(cash_pct, 1)),
+                              "portfolio_cash_eur": format(cash.quantize(Decimal("0.01")), "f"),
+                              "portfolio_valuation_at": observed.isoformat()})
+            item = await self.publish(
+                user_id=user_id, event_key=f"live-order:{order['id']}",
+                event_type="live_trade_filled", subject_type="bot",
+                subject_id=str(order["bot_id"]), subject=str(order["bot_name"] or "Live-bot"),
+                symbol=str(order["symbol"] or "").upper(), evidence=facts,
+                source_observed_at=filled_at, priority=3,
+                revision=f"live-fill:{order['id']}:{order['status']}",
+            )
+            if item:
+                created.append(item)
+
+        if not limit or not valid:
+            return created
+        previous = await self.session.execute(text("""
+            SELECT status FROM finn_coach_feed_items
+            WHERE user_id=:user_id AND event_key='portfolio-cash:live'
+            ORDER BY created_at DESC, id DESC LIMIT 1
+        """), {"user_id": user_id})
+        current = previous.mappings().first()
+        if cash_pct >= limit + 5:
+            await self.resolve(user_id=user_id, event_key="portfolio-cash:live")
+            return created
+        if cash_pct >= limit and (not current or current["status"] not in VISIBLE):
+            return created
+        facts = {"environment": "live", "cash_pct": float(round(cash_pct, 1)),
+                 "cash_eur": format(cash.quantize(Decimal("0.01")), "f"),
+                 "equity_eur": format(equity.quantize(Decimal("0.01")), "f"),
+                 "limit_pct": limit, "valuation_as_of": observed.isoformat(),
+                 "exchange_name": str(account["exchange_name"])}
+        item = await self.publish(
+            user_id=user_id, event_key="portfolio-cash:live",
+            event_type="live_portfolio_cash_low", subject_type="portfolio",
+            subject_id="live", subject="Live-portefeuille", symbol=None,
+            priority=4, evidence=facts, source_observed_at=observed,
+            expires_at=now + timedelta(hours=1), revision=f"live:below:{limit}",
+        )
+        if item:
+            created.append(item)
+        return created
+
     async def reconcile_improvement_suggestions(self, *, user_id: int, symbol: str,
                                                 market_id: int | None = None) -> list[str]:
         """Suggest a review of verified configuration gaps, without editing it."""
@@ -1142,7 +1592,7 @@ class FinnCoachFeedService:
             "weight_revision": revisions_row.get("weight_revision"),
         }
         revision = _json({key: value for key, value in evidence.items()
-                          if key not in {"score_as_of"}})
+                          if key not in {"score_as_of", "checked_date"}})
         item = await self.publish(
             user_id=user_id, event_key=key, event_type="improvement_suggestion",
             subject_type="asset", subject_id=scope, subject=pair,
@@ -1276,7 +1726,7 @@ class FinnCoachFeedService:
                 revision=_json({"scope": scope, "setup_id": setup["id"],
                                 "name": setup.get("name"), "plan_status": plan_status,
                                 "source_status": source_status,
-                                "score_band": score_point // 5 if score_point is not None else None,
+                                "score_zone": _benchmark_score_zone(score_point),
                                 "conditions": match.get("conditions"),
                                 "direction": direction, "move_band": int(abs(change) // 5)}),
             )
@@ -1302,7 +1752,7 @@ class FinnCoachFeedService:
                     revision=_json({"kind": "setup", "setup_id": setup["id"],
                                     "market_id": market_id,
                                     "conditions": match.get("conditions"),
-                                    "score_band": score_point // 5 if score_point is not None else None}),
+                                    "score_zone": _benchmark_score_zone(score_point)}),
                 )
                 if improvement:
                     created.append(improvement)
@@ -1373,8 +1823,8 @@ class FinnCoachFeedService:
                           "missing_indicators": missing,
                           "indicative_benchmark_score": assessment.get("indicative_benchmark_score"),
                           "candidate_only": True},
-                revision=_json({"missing": missing, "score": assessment.get("indicative_benchmark_score"),
-                                "setup_id": bot["setup_id"], "mode": bool(bot["is_live"])}),
+                revision=_json({"missing": missing, "setup_id": bot["setup_id"],
+                                "mode": bool(bot["is_live"])}),
             )
             if item:
                 created.append(item)
@@ -1445,8 +1895,7 @@ class FinnCoachFeedService:
                           "source_observed_at": moments},
                 revision=_json({"status": "matches", "setup_id": match["setup_id"],
                                 "name": match.get("name"), "conditions": match.get("conditions"),
-                                "components": match.get("components"),
-                                "benchmark_score": assessment.get("benchmark_score")}),
+                                "components": match.get("components")}),
             )
             if item:
                 created.append(item)
@@ -1557,8 +2006,15 @@ class FinnCoachFeedService:
         # Distinct persisted decisions may repeat the same planned state. The
         # active feed needs the latest outcome; history keeps every decision.
         seen_bot_states: set[tuple[str, str, str]] = set()
+        seen_analysis_pairs: set[str] = set()
         visible: list[dict] = []
         for row in rows:
+            if row["event_type"] == "analysis_ready":
+                pair = str((row.get("evidence") or {}).get("trading_pair")
+                           or row.get("symbol") or row.get("subject_id") or "").upper()
+                if pair in seen_analysis_pairs:
+                    continue
+                seen_analysis_pairs.add(pair)
             if row["event_type"] == "bot_decision":
                 state = _bot_state(row.get("evidence") or {})
                 if state.endswith(("_planned", "_failed", "_skipped", "_recorded")):
@@ -1727,6 +2183,26 @@ class FinnCoachFeedService:
             factual = _bot_fallback(str((row.get("evidence") or {}).get("subject") or row["symbol"] or ""),
                                     row.get("evidence") or {})[row["locale"]]
             row["title"], row["description"] = factual["title"], factual["body"]
+        if (row["event_type"] == "bot_decision" and verified_decision_status == "executed"
+                and verified_order_status == "filled"
+                and _same_utc_moment(row.get("source_observed_at"), verified_decision_ts)):
+            facts = row.get("evidence") or {}
+            try:
+                cash_pct = Decimal(str(facts.get("portfolio_cash_pct")))
+                position_pct = Decimal(str(facts.get("portfolio_position_pct")))
+                cash_eur = Decimal(str(facts.get("portfolio_cash_eur")))
+            except (InvalidOperation, TypeError, ValueError):
+                cash_pct = position_pct = cash_eur = None
+            if (cash_pct is not None and all(value.is_finite() for value in (cash_pct, position_pct, cash_eur))
+                    and 0 <= cash_pct <= 100 and 0 <= position_pct <= 100
+                    and abs(cash_pct + position_pct - 100) <= 0.2 and cash_eur >= 0):
+                pct = str(cash_pct).replace(".", ",") if row["locale"] in {"nl", "de"} else str(cash_pct)
+                eur = f"{cash_eur:.2f}".replace(".", ",") if row["locale"] in {"nl", "de"} else f"{cash_eur:.2f}"
+                row["description"] += {
+                    "nl": f" Na deze uitvoering toont de gecontroleerde Paper-portefeuille {pct}% cash (€{eur}).",
+                    "en": f" After this execution, the verified Paper portfolio shows {pct}% cash (€{eur}).",
+                    "de": f" Nach dieser Ausführung zeigt das geprüfte Paper-Portfolio {pct}% Guthaben (€{eur}).",
+                }[row["locale"]]
         for key in ("created_at", "updated_at", "source_observed_at", "expires_at", "activity_at"):
             if row.get(key) is not None:
                 row[key] = row[key].isoformat()

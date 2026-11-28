@@ -1,4 +1,8 @@
 export function coachFeedDetailsHref(item = {}) {
+  if (item.event_type === "trade_review_ready" && /^[1-9]\d*$/.test(String(item.subject_id || ""))) {
+    return `/report?trade_review_id=${encodeURIComponent(item.subject_id)}#finn-trades-title`;
+  }
+  if (item.subject_type === "portfolio") return "/portfolio";
   if (item.subject_type === "report") {
     return `/report?type=${encodeURIComponent(item.evidence?.report_type || "daily")}&date=${encodeURIComponent(item.evidence?.report_date || "")}`;
   }
