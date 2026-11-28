@@ -14,6 +14,7 @@ from typing import Any
 
 from sqlalchemy import text
 
+from backend.domain.benchmark_score_zones import BENCHMARK_SCORE_BANDS
 from backend.utils.openai_client import StructuredOutputSpec, ask_gpt_structured_response_async
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,16 @@ def _verified_benchmark_score(value: Any) -> str | None:
     if not score.is_finite() or not 0 <= score <= 100:
         return None
     return format(score.normalize(), "f")
+
+
+def _benchmark_score_zone(value: Any) -> str | None:
+    """Use the same whole-point zones displayed by the benchmark and Smart DCA."""
+    score = _verified_benchmark_score(value)
+    if score is None:
+        return None
+    point = int(Decimal(score) + Decimal("0.5"))
+    return next((name for name, minimum, maximum, _ in BENCHMARK_SCORE_BANDS
+                 if minimum <= point <= maximum), None)
 
 
 def _same_utc_moment(first: datetime | None, second: datetime | None) -> bool:
@@ -772,6 +783,28 @@ class FinnCoachFeedService:
                 event_type in {"strategy_next_step", "paper_next_step"}
                 and current["status"] == "resolved"
             ):
+                if event_type == "analysis_ready" and current["status"] in VISIBLE:
+                    old_facts = current.get("evidence") or {}
+                    if isinstance(old_facts, str):
+                        try:
+                            old_facts = json.loads(old_facts)
+                        except ValueError:
+                            old_facts = {}
+                    if (old_facts.get("score_as_of") != facts.get("score_as_of")
+                            or old_facts.get("benchmark_score") != facts.get("benchmark_score")):
+                        # Refresh the shown measurement without creating another
+                        # notification or changing its read state.
+                        await self.session.execute(text("""
+                            UPDATE finn_coach_feed_items
+                            SET evidence=CAST(:evidence AS JSONB),
+                                copy_json=CAST(:copy_json AS JSONB),
+                                copy_source='verified_facts',
+                                updated_at=NOW()
+                            WHERE id=CAST(:id AS UUID) AND user_id=:user_id
+                              AND status IN ('unread','read')
+                        """), {"id": str(current["id"]), "user_id": user_id,
+                               "evidence": _json(facts),
+                               "copy_json": _json(_fallback(event_type, subject, facts))})
                 if (event_type == "bot_decision" and current["status"] in VISIBLE
                         and source_observed_at
                         and not _same_utc_moment(source_observed_at, previous_source)):
@@ -910,7 +943,7 @@ class FinnCoachFeedService:
                     evidence={"symbol": asset, "trading_pair": pair, "market_id": market_id,
                               "source_status": "available", "score_as_of": str(assessment.get("as_of") or ""),
                               "benchmark_score": score},
-                    revision=f"available:{str(assessment.get('as_of') or '')[:10]}:{score}",
+                    revision=f"available:zone:{_benchmark_score_zone(score)}",
                     expires_at=datetime.now(timezone.utc) + timedelta(days=14),
                 )
                 if item:
@@ -1142,7 +1175,7 @@ class FinnCoachFeedService:
             "weight_revision": revisions_row.get("weight_revision"),
         }
         revision = _json({key: value for key, value in evidence.items()
-                          if key not in {"score_as_of"}})
+                          if key not in {"score_as_of", "checked_date"}})
         item = await self.publish(
             user_id=user_id, event_key=key, event_type="improvement_suggestion",
             subject_type="asset", subject_id=scope, subject=pair,
@@ -1276,7 +1309,7 @@ class FinnCoachFeedService:
                 revision=_json({"scope": scope, "setup_id": setup["id"],
                                 "name": setup.get("name"), "plan_status": plan_status,
                                 "source_status": source_status,
-                                "score_band": score_point // 5 if score_point is not None else None,
+                                "score_zone": _benchmark_score_zone(score_point),
                                 "conditions": match.get("conditions"),
                                 "direction": direction, "move_band": int(abs(change) // 5)}),
             )
@@ -1302,7 +1335,7 @@ class FinnCoachFeedService:
                     revision=_json({"kind": "setup", "setup_id": setup["id"],
                                     "market_id": market_id,
                                     "conditions": match.get("conditions"),
-                                    "score_band": score_point // 5 if score_point is not None else None}),
+                                    "score_zone": _benchmark_score_zone(score_point)}),
                 )
                 if improvement:
                     created.append(improvement)
@@ -1373,8 +1406,8 @@ class FinnCoachFeedService:
                           "missing_indicators": missing,
                           "indicative_benchmark_score": assessment.get("indicative_benchmark_score"),
                           "candidate_only": True},
-                revision=_json({"missing": missing, "score": assessment.get("indicative_benchmark_score"),
-                                "setup_id": bot["setup_id"], "mode": bool(bot["is_live"])}),
+                revision=_json({"missing": missing, "setup_id": bot["setup_id"],
+                                "mode": bool(bot["is_live"])}),
             )
             if item:
                 created.append(item)
@@ -1445,8 +1478,7 @@ class FinnCoachFeedService:
                           "source_observed_at": moments},
                 revision=_json({"status": "matches", "setup_id": match["setup_id"],
                                 "name": match.get("name"), "conditions": match.get("conditions"),
-                                "components": match.get("components"),
-                                "benchmark_score": assessment.get("benchmark_score")}),
+                                "components": match.get("components")}),
             )
             if item:
                 created.append(item)
@@ -1557,8 +1589,15 @@ class FinnCoachFeedService:
         # Distinct persisted decisions may repeat the same planned state. The
         # active feed needs the latest outcome; history keeps every decision.
         seen_bot_states: set[tuple[str, str, str]] = set()
+        seen_analysis_pairs: set[str] = set()
         visible: list[dict] = []
         for row in rows:
+            if row["event_type"] == "analysis_ready":
+                pair = str((row.get("evidence") or {}).get("trading_pair")
+                           or row.get("symbol") or row.get("subject_id") or "").upper()
+                if pair in seen_analysis_pairs:
+                    continue
+                seen_analysis_pairs.add(pair)
             if row["event_type"] == "bot_decision":
                 state = _bot_state(row.get("evidence") or {})
                 if state.endswith(("_planned", "_failed", "_skipped", "_recorded")):

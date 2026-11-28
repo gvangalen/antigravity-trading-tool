@@ -47,8 +47,8 @@ def test_analysis_ready_copy_names_only_a_verified_benchmark_score():
     )["nl"]["body"]
 
 
-def test_resolved_analysis_card_does_not_reopen_for_the_same_score_day():
-    digest = hashlib.sha256(b"available:2026-11-23:42.3").hexdigest()
+def test_resolved_analysis_card_does_not_reopen_for_the_same_score_zone():
+    digest = hashlib.sha256(b"available:zone:pressure").hexdigest()
 
     class Rows:
         def mappings(self):
@@ -65,11 +65,83 @@ def test_resolved_analysis_card_does_not_reopen_for_the_same_score_day():
         user_id=7, event_key="analysis-ready:BTC:34",
         event_type="analysis_ready", subject_type="asset", subject_id="71",
         subject="BTC/USDT", symbol="BTC", evidence={"score_as_of": "2026-11-23",
-        "benchmark_score": 42.3}, revision="available:2026-11-23:42.3",
+        "benchmark_score": 42.3}, revision="available:zone:pressure",
     ))
 
     assert result is None
     assert session.execute.await_count == 2
+
+
+@pytest.mark.parametrize(("score", "zone"), [
+    (0, "heavy_pressure"), (25.49, "heavy_pressure"),
+    (25.5, "pressure"), (45.49, "pressure"),
+    (45.5, "no_direction"), (60.49, "no_direction"),
+    (60.5, "gaining_strength"), (75.49, "gaining_strength"),
+    (75.5, "strong"), (100, "strong"),
+])
+def test_feed_analysis_uses_the_displayed_benchmark_zone(score, zone):
+    assert module._benchmark_score_zone(score) == zone
+
+
+def test_same_analysis_zone_refreshes_visible_facts_without_new_card():
+    digest = hashlib.sha256(b"available:zone:pressure").hexdigest()
+
+    class Rows:
+        def mappings(self):
+            return self
+
+        def first(self):
+            return {"id": "previous", "fingerprint": digest,
+                    "status": "read", "source_observed_at": None,
+                    "updated_at": None, "evidence": {
+                        "score_as_of": "2026-11-27", "benchmark_score": "42.7"}}
+
+    session = SimpleNamespace(execute=AsyncMock(side_effect=[None, Rows(), None]))
+    feed = module.FinnCoachFeedService(session)
+    result = asyncio.run(feed.publish(
+        user_id=7, event_key="analysis-ready:MSTR:asset",
+        event_type="analysis_ready", subject_type="asset", subject_id="71",
+        subject="MSTR", symbol="MSTR", evidence={
+            "score_as_of": "2026-11-28", "benchmark_score": "42.7"},
+        revision="available:zone:pressure",
+    ))
+
+    assert result is None
+    assert session.execute.await_count == 3
+    assert "UPDATE finn_coach_feed_items" in str(session.execute.await_args.args[0])
+    assert "INSERT" not in str(session.execute.await_args.args[0])
+    assert "2026-11-28" in session.execute.await_args.args[1]["evidence"]
+
+
+def test_active_feed_shows_one_analysis_card_per_pair_even_with_two_event_keys(monkeypatch):
+    rows = [
+        {"id": "new", "event_type": "analysis_ready", "symbol": "MSTR",
+         "evidence": {"trading_pair": "MSTR"}},
+        {"id": "old", "event_type": "analysis_ready", "symbol": "MSTR",
+         "evidence": {"trading_pair": "MSTR"}},
+        {"id": "usd", "event_type": "analysis_ready", "symbol": "BTC",
+         "evidence": {"trading_pair": "BTC/USDT"}},
+        {"id": "eur", "event_type": "analysis_ready", "symbol": "BTC",
+         "evidence": {"trading_pair": "BTC/EUR"}},
+    ]
+
+    class Result:
+        def mappings(self):
+            return self
+
+        def all(self):
+            return rows
+
+    session = SimpleNamespace(execute=AsyncMock(return_value=Result()))
+    monkeypatch.setattr(module.FinnCoachFeedService, "_serialize",
+                        staticmethod(lambda row, locale: row))
+    feed = module.FinnCoachFeedService(session)
+
+    active = asyncio.run(feed.list(user_id=7))
+    history = asyncio.run(feed.list(user_id=7, history=True))
+
+    assert [row["id"] for row in active] == ["new", "usd", "eur"]
+    assert [row["id"] for row in history] == ["new", "old", "usd", "eur"]
 
 
 def test_manual_plan_review_does_not_refer_to_a_nonexistent_bot():
@@ -350,18 +422,23 @@ def test_analysis_ready_requires_verified_score_and_no_setup(monkeypatch):
     service.resolve = AsyncMock()
     assert asyncio.run(service.reconcile_journey_next_steps(
         user_id=7, symbol="BTC", market_id=34)) == ["card"]
-    assert service.publish.await_args.kwargs["revision"] == "available:2026-11-19:52"
+    assert service.publish.await_args.kwargs["revision"] == "available:zone:no_direction"
     assert service.publish.await_args.kwargs["evidence"]["benchmark_score"] == "52"
     Match.score = 49
     service.publish.reset_mock()
     assert asyncio.run(service.reconcile_journey_next_steps(
         user_id=7, symbol="BTC", market_id=34)) == ["card"]
-    assert service.publish.await_args.kwargs["revision"] == "available:2026-11-19:49"
+    assert service.publish.await_args.kwargs["revision"] == "available:zone:no_direction"
     Match.as_of = "2026-11-20"
     service.publish.reset_mock()
     assert asyncio.run(service.reconcile_journey_next_steps(
         user_id=7, symbol="BTC", market_id=34)) == ["card"]
-    assert service.publish.await_args.kwargs["revision"] == "available:2026-11-20:49"
+    assert service.publish.await_args.kwargs["revision"] == "available:zone:no_direction"
+    Match.score = 42.7
+    service.publish.reset_mock()
+    assert asyncio.run(service.reconcile_journey_next_steps(
+        user_id=7, symbol="BTC", market_id=34)) == ["card"]
+    assert service.publish.await_args.kwargs["revision"] == "available:zone:pressure"
     Match.status = "stale_sources"
     service.publish.reset_mock()
     assert asyncio.run(service.reconcile_journey_next_steps(
