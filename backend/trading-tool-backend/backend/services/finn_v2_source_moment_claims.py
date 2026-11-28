@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 import re
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -394,8 +395,59 @@ def _bot_decision_clocks_supported(
         bare_claims = [clock for clock in _ZONED_CLOCK.finditer(following)
                        if not any(date.start() <= clock.start() and clock.end() <= date.end()
                                   for date in dated_claims)]
-        if combined_price and len(dated_claims) + len(bare_claims) == 1:
-            return False
+        if combined_price and historical_question:
+            # Two separately stated times are valid only when this owner's
+            # selected dossier proves one decision and one price observation.
+            # A single shared clock (or an untyped/bare clock) cannot prove
+            # which event the model meant.
+            if (historical_decision is None or len(dated_claims) != 2 or bare_claims):
+                return False
+            execution = "uitvoeringskoers" in combined_price.group(0).lower()
+            quote_key = "execution_source_price_at" if execution else "source_price_at"
+            price_key = "execution_source_price" if execution else "source_price"
+            quote_rows = {}
+            for item in evidence:
+                if (item.get("scope") != "read_review_history" or item.get("status") != "completed"
+                        or not isinstance(item.get("data"), dict)):
+                    continue
+                for row in item["data"].get("closed_trades") or []:
+                    if (not isinstance(row, dict) or type(row.get("review_id")) is not int
+                            or row.get("bot_id") != historical_decision[0]
+                            or str(row.get("symbol") or "").upper() != historical_decision[1]
+                            or _utc(row.get("paper_exit_decision_at")) != historical_decision[2]
+                            or not isinstance(row.get("paper_exit_evidence"), dict)):
+                        continue
+                    facts = row["paper_exit_evidence"]
+                    candidate = (_utc(facts.get(quote_key)),
+                                 str(facts.get("source_price_currency") or "").upper(),
+                                 str(facts.get(price_key) or ""))
+                    if (row["review_id"] in quote_rows
+                            and quote_rows[row["review_id"]] != candidate):
+                        return False
+                    quote_rows[row["review_id"]] = candidate
+            if len(quote_rows) != 1:
+                return False
+            quote_at, currency, raw_price = next(iter(quote_rows.values()))
+            if quote_at is None or currency not in {"EUR", "USD", "USDT"}:
+                return False
+            if not execution:
+                price_claim = re.search(
+                    r"\b(EUR|USD|USDT)[- ]?koers\s+van\s+(\d+(?:[.,]\d+)?)\b",
+                    following, re.I,
+                )
+                try:
+                    if (price_claim is None or price_claim.group(1).upper() != currency
+                            or Decimal(price_claim.group(2).replace(",", ".")) != Decimal(raw_price)):
+                        return False
+                except (InvalidOperation, ValueError):
+                    return False
+            claims = [_claimed_moment(moment.group(0)) for moment in dated_claims]
+            if (any(claim is None for claim in claims)
+                    or not any(_same_moment(claims[0], first)
+                               and _same_moment(claims[1], second)
+                               for first, second in ((quote_at, historical_decision[2]),
+                                                     (historical_decision[2], quote_at)))):
+                return False
         dated = dated_claims
         if dated:
             for match in dated:

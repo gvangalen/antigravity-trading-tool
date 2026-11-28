@@ -145,6 +145,17 @@ def test_historical_quote_source_and_decision_are_separate_clocks():
         prepared.response.text, evidence, question=QUESTION,
         user_time_zone="Europe/Amsterdam",
     )
+    for wrong in (
+        "Exitbeslissing en USD-koers van 358,60: "
+        "12 november 2026, 14:59:00 UTC en de botbeslissing "
+        "12 november 2026, 14:58:00 UTC.",
+        "Exitbeslissing en USD-koers van 359,60: "
+        "12 november 2026, 14:59:00 UTC en de botbeslissing "
+        "12 november 2026, 15:00:30 UTC.",
+    ):
+        assert not current_source_moments_supported(
+            wrong, evidence, question=QUESTION, user_time_zone="Europe/Amsterdam",
+        )
     prepared.response.text = (
         "Exitbeslissing en USD-koers van 358,60: "
         "12 november 2026, 14:59:00 UTC."
