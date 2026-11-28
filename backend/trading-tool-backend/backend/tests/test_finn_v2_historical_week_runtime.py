@@ -207,6 +207,22 @@ def test_model_named_asset_cannot_choose_between_two_user_trades():
     )
 
 
+def test_trade_without_decision_evidence_still_counts_for_ambiguity():
+    from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
+
+    prepared = _prepared(text="De historische AAPL-botbeslissing was 12 november 2026 14:59 UTC.")
+    row = prepared.response.tool_trace[0]["result"]["results"][0]
+    row["data"]["closed_trades"].append({
+        **row["data"]["closed_trades"][0], "review_id": 3000,
+        "paper_exit_decision_at": None, "paper_exit_evidence": None,
+    })
+    assert not current_source_moments_supported(
+        prepared.response.text, (row,),
+        question="Bespreek mijn afgesloten AAPL-trade van 12 november.",
+        user_time_zone="Europe/Amsterdam",
+    )
+
+
 def test_historical_exit_clock_cannot_replace_current_bot_clock():
     from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
 

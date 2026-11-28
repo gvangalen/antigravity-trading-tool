@@ -170,7 +170,7 @@ def _one_requested_paper_exit_decision(
         date_zone = None
     if requested_date is not None and date_zone is None:
         return None, True
-    selected: dict[int, tuple[int | None, str, datetime, datetime]] = {}
+    selected: dict[int, tuple[int | None, str, datetime | None, datetime, bool]] = {}
     for item in evidence:
         if (item.get("scope") != "read_review_history" or item.get("status") != "completed"
                 or not isinstance(item.get("data"), dict)):
@@ -183,11 +183,11 @@ def _one_requested_paper_exit_decision(
             decision_at = _utc(row.get("paper_exit_decision_at"))
             exit_at = _utc(row.get("exit_at"))
             symbol = str(row.get("symbol") or "").upper()
-            if (type(review_id) is not int or not isinstance(exit_facts, dict)
-                    or exit_facts.get("trigger") not in {"first_target", "stop_loss"}
-                    or decision_at is None or exit_at is None or not symbol):
+            if type(review_id) is not int or exit_at is None or not symbol:
                 continue
-            candidate = (row.get("bot_id"), symbol, decision_at, exit_at)
+            has_exit_evidence = (isinstance(exit_facts, dict)
+                                 and exit_facts.get("trigger") in {"first_target", "stop_loss"})
+            candidate = (row.get("bot_id"), symbol, decision_at, exit_at, has_exit_evidence)
             if review_id in selected and selected[review_id] != candidate:
                 return None, True
             selected[review_id] = candidate
@@ -206,7 +206,9 @@ def _one_requested_paper_exit_decision(
         return None, True
     if stated_symbols and candidates[0][1][1] not in stated_symbols:
         return None, True
-    bot_id, symbol, decision_at, _ = candidates[0][1]
+    bot_id, symbol, decision_at, _, has_exit_evidence = candidates[0][1]
+    if not has_exit_evidence or decision_at is None:
+        return None, True
     return (bot_id, symbol, decision_at), False
 
 
