@@ -80,6 +80,84 @@ def _suppress_unbound_week_saved_claims(answer: str) -> str:
     )
 
 
+_UNBOUND_FX_MOMENT_CLAIM = re.compile(
+    r"(?P<label>(?:Geverifieerd\s+)?\b(?:FX(?:[- ]?(?:bron(?:moment)?|koers))?|"
+    r"(?:exit|uitvoerings)?wisselkoers(?:bron(?:moment)?)?)\b"
+    r"(?:(?![.;]\s|\n).){0,80}?)"
+    r"(?P<moment>(?:(?:\d{4}-\d{2}-\d{2}|\d{1,2}\s+[a-z]+(?:\s+\d{4})?)"
+    r"\s*,?\s*)?\d{1,2}:\d{2}(?::\d{2})?\s+"
+    r"(?:[A-Za-z_]+/[A-Za-z_]+|UTC|GMT|CET|CEST)\b)"
+    r"(?P<alternative>\s*(?:\(\s*(?:(?:\d{4}-\d{2}-\d{2}|\d{1,2}\s+[a-z]+"
+    r"(?:\s+\d{4})?)\s*,?\s*)?\d{1,2}:\d{2}(?::\d{2})?\s+"
+    r"(?:[A-Za-z_]+/[A-Za-z_]+|UTC|GMT|CET|CEST)\s*\)|"
+    r"(?:,|\ben\b)\s*(?:(?:op|om)\s+)?"
+    r"(?:(?:\d{4}-\d{2}-\d{2}|\d{1,2}\s+[a-z]+"
+    r"(?:\s+\d{4})?)\s*,?\s*)?\d{1,2}:\d{2}(?::\d{2})?\s+"
+    r"(?:[A-Za-z_]+/[A-Za-z_]+|UTC|GMT|CET|CEST)\b))?",
+    re.I,
+)
+
+
+def _suppress_unbound_fx_moment_claims(
+    answer: str, verified_at: datetime | None, canonical_line: str | None,
+) -> str:
+    """Keep only model FX clocks that denote the typed Paper-exit instant."""
+    months = {name: month for month, name in enumerate((
+        "januari", "februari", "maart", "april", "mei", "juni", "juli",
+        "augustus", "september", "oktober", "november", "december",
+    ), 1)}
+
+    def verified(moment: str) -> bool:
+        if verified_at is None:
+            return False
+        match = re.fullmatch(
+            r"(?:(?P<iso>\d{4}-\d{2}-\d{2})|(?P<day>\d{1,2})\s+"
+            r"(?P<month>[a-z]+)(?:\s+(?P<year>\d{4}))?)\s*,?\s*"
+            r"(?P<hour>\d{1,2}):(?P<minute>\d{2})(?::(?P<second>\d{2}))?\s+"
+            r"(?P<zone>[A-Za-z_]+/[A-Za-z_]+|UTC|GMT|CET|CEST)",
+            moment, re.I,
+        )
+        if not match:
+            return False
+        try:
+            if match.group("iso"):
+                day = datetime.fromisoformat(match.group("iso")).date()
+            else:
+                month = months[match.group("month").lower()]
+                day = datetime(int(match.group("year") or verified_at.year),
+                               month, int(match.group("day"))).date()
+            label = match.group("zone")
+            zone = (timezone.utc if label.upper() in {"UTC", "GMT"}
+                    else ZoneInfo("Europe/Amsterdam") if label.upper() in {"CET", "CEST"}
+                    else ZoneInfo(label))
+            claimed = datetime(
+                day.year, day.month, day.day, int(match.group("hour")),
+                int(match.group("minute")), int(match.group("second") or 0),
+                tzinfo=zone,
+            )
+            if label.upper() in {"CET", "CEST"} and claimed.tzname() != label.upper():
+                return False
+            actual = verified_at.astimezone(timezone.utc)
+            stated = claimed.astimezone(timezone.utc)
+            return (stated == actual if match.group("second") is not None
+                    else stated.replace(second=0) == actual.replace(second=0))
+        except (KeyError, TypeError, ValueError, ZoneInfoNotFoundError):
+            return False
+
+    def scrub(fragment: str) -> str:
+        return _UNBOUND_FX_MOMENT_CLAIM.sub(
+            lambda match: (match.group(0) if not match.group("alternative")
+                           and verified(match.group("moment")) else
+                           "FX-bronmoment uit antwoordtekst niet geverifieerd"),
+            fragment,
+        )
+
+    # Only the exact line assembled from typed evidence is exempt. A model may
+    # write the word "Geverifieerd" in front of an incorrect clock.
+    return (canonical_line.join(scrub(fragment) for fragment in answer.split(canonical_line))
+            if canonical_line else scrub(answer))
+
+
 def complete_historical_week_exit_moments(
     answer: str, evidence: tuple[dict[str, Any], ...], *, question: str,
     user_time_zone: str | None,
@@ -194,7 +272,30 @@ def complete_historical_week_exit_moments(
     saved_at, _ = _moment_in_zone(week.get("generated_at"), user_time_zone)
     if not exit_at or not saved_at:
         return answer
+    fx_instants: set[datetime] = set()
+    for trade in matching_trades:
+        paper_exit = trade.get("paper_exit_evidence")
+        if not isinstance(paper_exit, dict):
+            continue
+        try:
+            factor = Decimal(str(paper_exit.get("execution_fx_eur_per_unit")))
+        except (InvalidOperation, TypeError, ValueError):
+            continue
+        fx_at = _utc_instant(paper_exit.get("execution_fx_observed_at"))
+        if factor.is_finite() and factor > 0 and fx_at is not None:
+            fx_instants.add(fx_at)
+    fx_at_in_zone = None
+    verified_fx_at = None
+    if len(fx_instants) == 1:
+        verified_fx_at = next(iter(fx_instants))
+        fx_at_in_zone, _ = _moment_in_zone(verified_fx_at, user_time_zone)
     answer = _suppress_unbound_week_saved_claims(answer)
+    fx_line = (
+        f"Geverifieerd FX-bronmoment bij AAPL Paper-uitvoering: "
+        f"{fx_at_in_zone} ({zone_name})."
+    ) if fx_at_in_zone else None
+    if re.search(r"\bbronmoment(?:en)?\b", question, re.I):
+        answer = _suppress_unbound_fx_moment_claims(answer, verified_fx_at, fx_line)
     additions = []
     if exit_at not in answer:
         additions.append(f"AAPL Paper-trade als gesloten geregistreerd: {exit_at} ({zone_name}).")
@@ -203,6 +304,9 @@ def complete_historical_week_exit_moments(
             f"Geverifieerd opslagmoment week {start.isoformat()} t/m {end.isoformat()}: "
             f"{saved_at} ({zone_name})."
         )
+    if fx_at_in_zone and re.search(r"\bbronmoment(?:en)?\b", question, re.I):
+        if fx_line not in answer:
+            additions.append(fx_line)
     return answer.rstrip() + ("\n" + "\n".join(additions) if additions else "")
 
 

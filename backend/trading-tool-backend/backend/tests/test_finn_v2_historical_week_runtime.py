@@ -28,6 +28,11 @@ def _prepared(*, text, trade_date="2026-11-12T15:02:00+00:00", week=True):
                     "closed_trades": [{
                         "review_id": 2127, "symbol": "AAPL", "environment": "paper",
                         "exit_at": trade_date,
+                        "paper_exit_evidence": {
+                            "trigger": "first_target",
+                            "execution_fx_eur_per_unit": 0.92,
+                            "execution_fx_observed_at": "2026-11-12T14:02:00+00:00",
+                        },
                     }],
                 },
             }]}},),
@@ -126,6 +131,159 @@ def test_minimal_live_read_scrubs_markdown_week_clock_after_repeated_reads():
         "Bevestigde les: 13 november 09:07:57 UTC",
     ):
         assert unchanged in answer.text
+
+
+def test_minimal_live_read_completes_missing_fx_source_moment_on_repeat():
+    prepared = _prepared(text=(
+        "Exitreden: eerste koersdoel. Botbeslissing: 12 november 14:59 UTC. "
+        "Paper-uitstap: 12 november 15:02 UTC. Les: 13 november 09:07 UTC. "
+        "Weekgeneratie: 16 november 05:15 UTC."
+    ))
+    prepared.response.tool_trace += prepared.response.tool_trace
+    answer = _minimal_read_answer(
+        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert answer.status == "completed", answer.reason
+    assert "Geverifieerd FX-bronmoment bij AAPL Paper-uitvoering: 2026-11-12 15:02:00 CET (Europe/Amsterdam)." in answer.text
+    assert "Geverifieerd opslagmoment week 2026-11-09 t/m 2026-11-15: 2026-11-16 06:15:00 CET" in answer.text
+
+
+def test_minimal_live_read_replaces_conflicting_model_fx_clock():
+    for fx_claim in (
+        "FX-bron: 12 november 14:03 UTC",
+        "FX-factor 0.92 op 12 november 14:03 UTC",
+        "De FX-koers had bronmoment 12 november 14:03 UTC",
+        "Geverifieerd FX-bronmoment: 12 november 14:03 UTC",
+        "Wisselkoersbron bij uitvoering: 12 november 14:03 UTC",
+        "FX-bronmoment: 12 november 14:02 UTC (15:03 CET)",
+        "FX-bronmoment: 12 november 14:02 UTC, 15:03 CET",
+        "FX-bronmoment: 12 november 14:02 UTC, op 12 november 15:03 CET",
+        "FX-bronmoment: 12 november 14:02 UTC en om 12 november 15:03 CET",
+    ):
+        answer = _minimal_read_answer(
+            message=QUESTION, prepared=_prepared(text=(
+                "Botbeslissing: 12 november 14:59 UTC. "
+                f"{fx_claim}. De Paper-uitstap raakte het eerste koersdoel."
+            )), user_time_zone="Europe/Amsterdam",
+        )
+        assert answer.status == "completed", answer.reason
+        assert "14:03 UTC" not in answer.text
+        assert "15:03 CET" not in answer.text
+        assert "Botbeslissing: 12 november 14:59 UTC" in answer.text
+        assert answer.text.count("Geverifieerd FX-bronmoment") == 1
+        assert "2026-11-12 15:02:00 CET (Europe/Amsterdam)" in answer.text
+
+
+def test_historical_week_fx_moment_completion_is_idempotent():
+    from backend.services.finn_v2_factual_source_answer import complete_historical_week_exit_moments
+
+    prepared = _prepared(text="FX-bronmoment: 12 november 14:03 UTC.")
+    evidence = tuple(prepared.response.tool_trace[0]["result"]["results"])
+    first = complete_historical_week_exit_moments(
+        prepared.response.text, evidence, question=QUESTION,
+        user_time_zone="Europe/Amsterdam",
+    )
+    second = complete_historical_week_exit_moments(
+        first, evidence, question=QUESTION, user_time_zone="Europe/Amsterdam",
+    )
+    assert second == first
+    assert first.count("Geverifieerd FX-bronmoment") == 1
+    assert "14:03 UTC" not in first
+
+
+def test_historical_week_fx_scrub_preserves_next_labeled_source_after_comma():
+    for claim, bot_moment in (
+        ("FX-bronmoment: 12 november 14:02 UTC", "botbeslissing: 12 november 14:59 UTC"),
+        ("Wisselkoersbron bij uitvoering: 12 november 14:03 UTC",
+         "botbeslissing 12 november 14:59 UTC"),
+        ("Wisselkoersbron bij uitvoering: 12 november 14:03 UTC",
+         "bevestigde les 13 november 09:07:57 UTC"),
+        ("Wisselkoersbron bij uitvoering: 12 november 14:03 UTC",
+         "geregistreerde sluiting 12 november 15:00:30 UTC"),
+    ):
+        answer = _minimal_read_answer(
+            message=QUESTION, prepared=_prepared(text=f"{claim}, {bot_moment}."),
+            user_time_zone="Europe/Amsterdam",
+        )
+        assert answer.status == "completed", answer.reason
+        assert bot_moment in answer.text
+        assert answer.text.count("Geverifieerd FX-bronmoment") == 1
+        if "14:03" in claim:
+            assert "14:03 UTC" not in answer.text
+        else:
+            assert claim in answer.text
+
+
+def test_historical_week_fx_scrub_preserves_source_joined_with_en():
+    for text, expected_bot in (
+        ("Het FX-bronmoment was 12 november 14:03 UTC en de botbeslissing "
+         "was 12 november 14:59 UTC.",
+         "en de botbeslissing was 12 november 14:59 UTC"),
+        ("Op 12 november was het FX-bronmoment 14:02 UTC en de botbeslissing "
+         "om 14:59 UTC.", "en de botbeslissing om 14:59 UTC"),
+    ):
+        answer = _minimal_read_answer(
+            message=QUESTION, prepared=_prepared(text=text),
+            user_time_zone="Europe/Amsterdam",
+        )
+        assert answer.status == "completed", answer.reason
+        assert expected_bot in answer.text
+        assert answer.text.count("Geverifieerd FX-bronmoment") == 1
+        assert "14:03 UTC" not in answer.text
+
+
+def test_historical_week_fx_scrub_preserves_labeled_source_in_parentheses():
+    answer = _minimal_read_answer(
+        message=QUESTION, prepared=_prepared(text=(
+            "FX-bronmoment: 12 november 14:02 UTC "
+            "(botbeslissing: 12 november 14:59 UTC)."
+        )), user_time_zone="Europe/Amsterdam",
+    )
+    assert answer.status == "completed", answer.reason
+    assert "FX-bronmoment: 12 november 14:02 UTC" in answer.text
+    assert "(botbeslissing: 12 november 14:59 UTC)" in answer.text
+    assert answer.text.count("Geverifieerd FX-bronmoment") == 1
+
+
+def test_minimal_live_read_does_not_invent_conflicting_fx_source_moment():
+    prepared = _prepared(text=(
+        "Exitreden: eerste koersdoel. "
+        "Geverifieerd FX-bronmoment: 12 november 14:04 UTC."
+    ))
+    original = prepared.response.tool_trace[0]
+    conflict = {**original, "result": {"results": [
+        {**original["result"]["results"][0], "data": {
+            **original["result"]["results"][0]["data"],
+            "closed_trades": [{
+                **original["result"]["results"][0]["data"]["closed_trades"][0],
+                "paper_exit_evidence": {
+                    "trigger": "first_target", "execution_fx_eur_per_unit": 0.92,
+                    "execution_fx_observed_at": "2026-11-12T14:03:00+00:00",
+                },
+            }],
+        }},
+    ]}}
+    prepared.response.tool_trace += (conflict,)
+    answer = _minimal_read_answer(
+        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert answer.status == "completed", answer.reason
+    assert "Geverifieerd FX-bronmoment" not in answer.text
+    assert "14:04 UTC" not in answer.text
+    assert "FX-bronmoment uit antwoordtekst niet geverifieerd" in answer.text
+
+
+def test_minimal_live_read_neutralizes_fx_clock_when_source_missing():
+    prepared = _prepared(text="FX-bron: 12 november 14:04 UTC.")
+    prepared.response.tool_trace[0]["result"]["results"][0]["data"]["closed_trades"][0][
+        "paper_exit_evidence"
+    ] = None
+    answer = _minimal_read_answer(
+        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert answer.status == "completed", answer.reason
+    assert "14:04 UTC" not in answer.text
+    assert "Geverifieerd FX-bronmoment" not in answer.text
 
 
 def test_minimal_live_read_rejects_conflicting_repeated_history():
