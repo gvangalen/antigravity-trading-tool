@@ -235,6 +235,8 @@ def test_historical_quote_source_and_decision_are_separate_clocks():
     for reverse in (
         "De uitvoeringskoers en de exitbeslissing: 12 november 2026, 15:00:30 UTC.",
         "De koersbron en de uitstapbeslissing: 12 november 2026, 15:00:30 UTC.",
+        "Zowel de uitvoeringskoers als de exitbeslissing: 12 november 2026, 15:00:30 UTC.",
+        "De Paper-sluiting en de botbeslissing: 12 november 2026, 15:00:30 UTC.",
     ):
         prepared.response.text = reverse
         unsupported = _minimal_read_answer(

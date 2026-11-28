@@ -291,18 +291,36 @@ def _bot_decision_clocks_supported(
         decision_second = re.search(
             r"\ben\s+(?:de\s+)?(?:uitstap|exit)[- ]?besliss\w*\b", clause, re.I,
         )
-        if historical_question and (decision_first or decision_second):
+        source_clause = re.sub(
+            r"\bFX-brontijd:\s*(?:zie de afzonderlijk geverifieerde bronregel|"
+            r"niet verifieerbaar uit opgeslagen bewijs)", "", clause, flags=re.I,
+        )
+        decision_with_other_source = (
+            re.search(r"\b(?:(?:uitstap|exit|bot)[- ]?)?besliss\w*\b|\bbotbesluit\w*\b",
+                      source_clause, re.I)
+            and re.search(
+                r"\b(?:koers(?!doel)\w*|prijs(?!doel)\w*|uitvoer\w*|"
+                r"sluit\w*|registr\w*|wisselkoers\w*|FX(?:[- ]?bron\w*)?)\b",
+                source_clause, re.I,
+            )
+        )
+        if historical_question and (decision_with_other_source or decision_first or decision_second):
             paired_dated = list(_DATED_MOMENT.finditer(clause))
             paired_bare = [clock for clock in _ZONED_CLOCK.finditer(clause)
                            if not any(date.start() <= clock.start() and clock.end() <= date.end()
                                       for date in paired_dated)]
-            if ((paired_dated or paired_bare)
-                    and (decision_second or len(paired_dated) != 2 or paired_bare
+            # A shared clock can never support both a decision and a second
+            # source. Leave separately labeled clocks to the typed checks
+            # below, including independent FX and bot timestamps.
+            if decision_with_other_source and len(paired_dated) + len(paired_bare) == 1:
+                return False
+            if (decision_first or decision_second) and (paired_dated or paired_bare):
+                if (decision_second or len(paired_dated) != 2 or paired_bare
                     or not re.search(
                         r"\ben\s+(?:de\s+)?"
                         r"(?:(?:EUR|USD|USDT)[- ]?koers\s+van|uitvoeringskoers)\b",
-                        clause, re.I))):
-                return False
+                        clause, re.I)):
+                    return False
         ids = {int(match.group(1)) for match in re.finditer(r"\bbot\s*#?\s*(\d+)\b", clause, re.I)}
         # Locate the clock nearest the status read verb. A sentence may also
         # contain a saved Hold decision in either order; only the read clock
