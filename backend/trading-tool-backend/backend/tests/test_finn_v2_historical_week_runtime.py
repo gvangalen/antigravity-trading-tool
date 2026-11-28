@@ -212,6 +212,19 @@ def test_historical_quote_source_and_decision_are_separate_clocks():
     )
     assert wrong_quote_clock.status == "unavailable"
 
+    for noun in ("de USD-koers van 358,60", "de uitvoeringskoers"):
+        prepared.response.text = (
+            f"Exitbeslissing en {noun}: 12 november 2026, 15:00:30 UTC."
+        )
+        with_article = _minimal_read_answer(
+            message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+        )
+        if "USD-koers" in noun:
+            assert with_article.status == "unavailable"
+        else:
+            assert with_article.status == "completed", with_article.reason
+            assert "Koersbron bij AAPL Paper-uitvoering: 358,60 USD" in with_article.text
+
     prepared.response.text = (
         "Exitbeslissing en USD-koers van 358,60: "
         "12 november 2026, 14:59:00 UTC."

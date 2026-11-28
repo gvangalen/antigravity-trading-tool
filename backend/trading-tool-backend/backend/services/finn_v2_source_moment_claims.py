@@ -389,7 +389,7 @@ def _bot_decision_clocks_supported(
         # decision clock; the typed answer builder can state the quote source
         # and decision separately when both are verified.
         combined_price = re.search(
-            r"\ben\s+(?:(?:EUR|USD|USDT)[- ]?koers\s+van|uitvoeringskoers)\b",
+            r"\ben\s+(?:de\s+)?(?:(?:EUR|USD|USDT)[- ]?koers\s+van|uitvoeringskoers)\b",
             following, re.I,
         )
         dated_claims = list(_DATED_MOMENT.finditer(following))

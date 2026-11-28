@@ -110,7 +110,7 @@ _HISTORICAL_EXIT_DECISION_CLAIM = re.compile(
 )
 
 _MIXED_EXIT_DECISION_PRICE_CLAIM = re.compile(
-    r"(?P<label>\b(?:uitstap|exit)[- ]?besliss\w*\s+en\s+"
+    r"(?P<label>\b(?:uitstap|exit)[- ]?besliss\w*\s+en\s+(?:de\s+)?"
     r"(?:(?P<currency>EUR|USD|USDT)[- ]?koers\s+van\s+"
     r"(?P<price>\d+(?:[.,]\d+)?)|(?P<execution>uitvoeringskoers))\s*:\s*)"
     r"(?P<moment>(?:\d{1,2}\s+[a-z]+\s+20\d{2}|20\d{2}-\d{2}-\d{2})"
