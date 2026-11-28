@@ -172,6 +172,8 @@ def test_minimal_live_read_replaces_conflicting_model_fx_clock():
         assert "Botbeslissing: 12 november 14:59 UTC" in answer.text
         assert answer.text.count("Geverifieerd FX-bronmoment") == 1
         assert "2026-11-12 15:02:00 CET (Europe/Amsterdam)" in answer.text
+        assert "FX-brontijd: zie de afzonderlijk geverifieerde bronregel" in answer.text
+        assert "uit antwoordtekst niet geverifieerd" not in answer.text
 
 
 def test_historical_week_fx_moment_completion_is_idempotent():
@@ -270,7 +272,7 @@ def test_minimal_live_read_does_not_invent_conflicting_fx_source_moment():
     assert answer.status == "completed", answer.reason
     assert "Geverifieerd FX-bronmoment" not in answer.text
     assert "14:04 UTC" not in answer.text
-    assert "FX-bronmoment uit antwoordtekst niet geverifieerd" in answer.text
+    assert "FX-brontijd: niet verifieerbaar uit opgeslagen bewijs" in answer.text
 
 
 def test_minimal_live_read_neutralizes_fx_clock_when_source_missing():
@@ -284,6 +286,7 @@ def test_minimal_live_read_neutralizes_fx_clock_when_source_missing():
     assert answer.status == "completed", answer.reason
     assert "14:04 UTC" not in answer.text
     assert "Geverifieerd FX-bronmoment" not in answer.text
+    assert "FX-brontijd: niet verifieerbaar uit opgeslagen bewijs" in answer.text
 
 
 def test_minimal_live_read_rejects_conflicting_repeated_history():

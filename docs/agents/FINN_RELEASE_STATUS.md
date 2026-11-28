@@ -4,9 +4,39 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: eenduidige FX-brontekst bij historische reflectie (28 november 2026)
+
+Phase: `READY_FOR_PR_CI`. Product branch
+`codex/finn-fx-wording-20261128`, producthead
+`a2abbd1d8a6e9fe22fafb55e88e8ce1b05cb52fc`.
+Onafhankelijke ingelogde browser-QA op definitieve live SHA
+`d72d5f9a30e2250e79b273cd702d0aafc32fa39d` gaf `NOT_ACCEPTED`:
+beurt één had de juiste historische week, exitreden, onzekerheid en de
+afzonderlijke FX-, sluitings- en weekopslagmomenten. In beurt twee stond naast
+het juiste getypeerde FX-bronmoment ook de tekst “FX-bronmoment uit antwoordtekst
+niet geverifieerd”. Dat was geen afwijkende klok meer, maar voor de gebruiker
+een tegenstrijdige bronstatus. Bot-, sluitings-, les- en weekmomenten bleven
+gescheiden; er waren geen account-, bot- of ordermutaties.
+
+De kandidaat wijzigt uitsluitend de vervangende tekst voor een verworpen FX-
+concepttijd. Met eenduidig opgeslagen FX-bewijs verwijst die naar de apart
+getoonde geverifieerde bronregel. Zonder eenduidig bewijs meldt hij dat de
+FX-brontijd niet verifieerbaar is. Bronselectie, gebruikersscope, scrubgrenzen,
+bronmomenten en actiecontracten blijven hetzelfde. Gerichte regressies
+`70 passed`; onafhankelijke QA- en Security-codebeoordeling: geen blocker.
+Volledige backend: `5683 passed, 7 skipped` (log SHA-256
+`0f14ed3dc793c99da66ea401919cad2666c6653e9918e95e7d06cceb25d741eb`).
+Echte-providerselector development `20/20` (artifact SHA-256
+`29ab99811703ff139697f069297fd9d7581d5ffe3a2bb32c77955b0758ce0500`)
+en regression `109/109` (artifact SHA-256
+`883f202b08bf26fc120177397222776ab0e8fbf53fff8c8b532e84efc831ea00`),
+zonder provider-, schema-, parse-, validatie- of timeoutfouten. Er is geen
+gewijzigd actiecontract; de worker-actiematrix is voor deze read-only
+tekstcorrectie niet van toepassing. Nog geen live acceptatie.
+
 ## FINN 3.0: FX-bronmoment bij historische AAPL Paper-reflectie (28 november 2026)
 
-Phase: `READY_FOR_INDEPENDENT_QA_AFTER_STATUS_DEPLOY`. Product branch
+Phase: `LIVE_NOT_ACCEPTED`. Product branch
 `codex/finn-week-fx-moment-20261128`, producthead
 `926ffde4afc7e41327581e38a8a130e316680347`;
 [PR #1418](https://github.com/gvangalen/antigravity-trading-tool/pull/1418)
@@ -46,6 +76,14 @@ is geslaagd. Publieke backend-health en frontend build-info gaven beide HTTP
 er was geen nieuwere deploy pending. Deze statusupdate maakt zelf een latere
 SHA. QA start pas na de laatste main-CI, Auto Deploy en publieke SHA-pariteit
 op die definitieve revisie.
+De status-only PR #1419 resulteerde in definitieve SHA
+`d72d5f9a30e2250e79b273cd702d0aafc32fa39d`, met vijf groene main-CI-jobs
+in [46088489562](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46088489562),
+geslaagde Auto Deploy
+[46089263689](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46089263689)
+en publieke backend/frontend HTTP 200 op exact die SHA. QA zag de juiste
+getypeerde FX-tijd in beide beurten, maar wees de tegenstrijdige bronstatus
+in beurt twee af.
 
 ## FINN 3.0: Markdown-opmaak in historisch weekopslagmoment (27 november 2026)
 
