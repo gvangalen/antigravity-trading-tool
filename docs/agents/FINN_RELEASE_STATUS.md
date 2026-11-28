@@ -4,6 +4,54 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: getypeerde historische AAPL Paper-exit en weekreflectie
+
+Phase: `READY_FOR_INDEPENDENT_QA_AFTER_STATUS_DEPLOY`. Product branch
+`codex/finn-historical-clocks-20261128`, producthead
+`e1fe222beed1c7b2a9de24c53dbdbbae45a5b9bf`.
+[PR #1426](https://github.com/gvangalen/antigravity-trading-tool/pull/1426)
+is gemerged in `02fbb94b8cece1be5d67d7b474190a7fc043b0d2`.
+PR-CI [46110785560](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46110785560)
+en main-CI [46111733562](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46111733562)
+hebben elk vijf groene jobs. Auto Deploy
+[46112343722](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46112343722)
+is geslaagd. GitHub main, publieke backend `/api/health` en frontend
+`/build-info.json` toonden daarna exact die merge-SHA; beide endpoints gaven
+HTTP 200. Deze statusupdate maakt zelf een latere commit. Onafhankelijke QA
+start pas na groene CI, geslaagde Auto Deploy en publieke pariteit van die
+definitieve statuscommit.
+
+De eerdere ingelogde browserproef op de vorige live kandidaat was
+`NOT_ACCEPTED`: FINN verwisselde de koersbron van 14:59 UTC met het
+botbesluit, noemde het opslagmoment van de weekreflectie als 05:15 CET in
+plaats van 06:15 CET en liet losse Markdown-sterren achter. Deze kandidaat
+bouwt het gecombineerde historische antwoord uit één eigenaargebonden
+Paper-dossier en de opgeslagen weekreflectie. Koersbron, Paper-uitvoering,
+botbesluit, geregistreerde sluiting, FX-bron en weekopslag blijven apart,
+weergegeven in de opgeslagen IANA-tijdzone van de gebruiker. Ontbrekende
+bronnen worden niet als geverifieerde prijs of klok ingevuld. De gevraagde
+week, trade en omgeving begrenzen zowel antwoordtekst als gepubliceerde
+bronverwijzingen; een week-only antwoord verwijst niet naar een trade en
+een gekozen dossier publiceert uitsluitend dat dossier-ID.
+
+Gerichte historische runtime-regressies: `43/43`; reviewhistorie-slice:
+`60/60`. Volledige lokale backend op de exacte producthead: `5713 passed,
+7 skipped` (log SHA-256
+`dfbefc6e1fdd52bfb233da77f373931c0125a4a0c3a7c28627c9440fd7621d76`).
+De geïsoleerde lokale worker-actiematrix gaf eerder in deze kandidaatfamilie
+`17/17` zonder verboden broker-/Live-calls (artifact SHA-256
+`4a53ae8530bedbc9e1e1a4672f565a44563f3babf8261b0977b41f36892f36cf`).
+Echte-providerselector development `20/20` (SHA-256
+`1fb4436684fc69cdb39178b925b06feffdbedbd1a6be536b4f390df26b8b26f0`)
+en regression `109/109` (SHA-256
+`f6b326b3f296f684dd233a9d257ed5032bc911d2ec3e7cac259bb93bf8f7ce50`)
+gaven geen provider-, schema-, timeout-, parse- of validatiefouten. Deze
+matrix en providerproeven dateren van vóór de laatste read-only
+scopeprojectie; de actiecontracten en providerselector zijn daarna niet
+gewijzigd. Onafhankelijke QA- en Security-codebeoordeling op de exacte
+producthead: geen blocker. Er is nog geen ingelogde live acceptatie van
+deze kandidaat.
+
 ## FINN 3.0: historische uitstapbeslissing versus geregistreerde sluiting (28 november 2026)
 
 Phase: `READY_FOR_INDEPENDENT_QA_AFTER_STATUS_DEPLOY`. Product branch
