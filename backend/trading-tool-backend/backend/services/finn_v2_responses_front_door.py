@@ -2181,7 +2181,6 @@ class FinnResponsesFrontDoor:
                                   and item["facts"].get("selection_origin") == "current_run"
                                   and item["facts"].get("historical_notification") is True), None)
         if (selected_analysis is not None
-                and workspace_hints.get("feed_draft_edited") is not True
                 and _explicit_discussion_only(message)):
             # The card is historical. Reread its exact owner-bound score and
             # setup inventory before suggesting a setup; a quote is irrelevant
@@ -2192,49 +2191,28 @@ class FinnResponsesFrontDoor:
             quote = pair.partition("/")[2] if pair.startswith(f"{asset}/") else ""
             market_id = historical.get("market_id")
             language = locale.lower().split("-")[0]
-            currency_aliases = {
-                "EURO": "EUR", "EUROS": "EUR",
-                "DOLLAR": "USD", "DOLLARS": "USD", "TETHER": "USDT",
-            }
-            pair_mentions = re.findall(
-                r"(?<![A-Z0-9])([A-Z0-9][A-Z0-9._-]{0,19})\s*/\s*([A-Z]{2,12})(?![A-Z0-9])",
-                message.upper(), re.I,
-            )
-            pair_mentions += re.findall(
-                r"\b([A-Z0-9][A-Z0-9._-]{0,19})\s+"
-                r"(?:TEGEN|VERSUS|VS|AGAINST|GEGEN)\s+([A-Z]{2,12})\b",
-                message.upper(), re.I,
-            )
-            explicit_pairs = {
-                f"{resolve_catalog_symbol(base) or base}/{currency_aliases.get(currency, currency)}"
-                for base, currency in pair_mentions
-            }
-            explicit_assets = mentioned_catalog_symbols(message)
-            currency_mentions = {currency_aliases.get(value, value) for value in re.findall(
-                r"\b(?:EUR|EURO|EUROS|USDT|TETHER|USD|DOLLAR|DOLLARS)\b",
-                message.upper(), re.I,
-            )}
-            other_currencies = currency_mentions - {quote} if quote else set()
-            if ((explicit_pairs and explicit_pairs != {pair})
-                    or (explicit_assets and explicit_assets != {asset})
-                    or other_currencies):
-                target_base = next(iter(explicit_assets)) if len(explicit_assets) == 1 else asset
-                requested_targets = (explicit_pairs
-                                     | {f"{target_base}/{currency}" for currency in other_currencies})
-                if not requested_targets:
-                    requested_targets = explicit_assets
-                requested = ", ".join(sorted(requested_targets))
+            expected_question = {
+                "en": (f"I want to explore a setup for {pair}. What are my options, which would you "
+                       "recommend and what do you need me to choose? Do not change anything."),
+                "de": (f"Ich möchte ein Setup für {pair} erkunden. Welche Möglichkeiten gibt es, "
+                       "welche empfiehlst du und was muss ich wählen? Ändere nichts."),
+            }.get(language, (f"Ik wil een setup voor {pair} verkennen. Welke mogelijkheden zijn er, "
+                             "welke raad je aan en wat moet ik kiezen? Maak niets aan."))
+            if (workspace_hints.get("feed_draft_edited") is True
+                    or re.sub(r"\s+", " ", message.strip()) != expected_question):
+                # Only the actual feed CTA may consume the selected card as
+                # the target. An altered prompt may name any other currency or
+                # asset, including spellings that a finite parser will miss.
                 clarification = {
-                    "en": f"This update is about {pair}, but you asked about {requested}. Which analysis should we discuss? I have changed nothing.",
-                    "de": f"Diese Meldung betrifft {pair}, du fragst aber nach {requested}. Welche Analyse sollen wir besprechen? Ich habe nichts geändert.",
-                }.get(language, f"Deze melding gaat over {pair}, maar je vraagt naar {requested}. Welke analyse wil je bespreken? Ik heb niets gewijzigd.")
+                    "en": f"This update is about {pair}. Do you want to discuss that analysis or another asset or pair? I have changed nothing.",
+                    "de": f"Diese Meldung betrifft {pair}. Möchtest du diese Analyse oder einen anderen Wert beziehungsweise ein anderes Handelspaar besprechen? Ich habe nichts geändert.",
+                }.get(language, f"Deze melding gaat over {pair}. Wil je die analyse of een ander asset of handelspaar bespreken? Ik heb niets gewijzigd.")
                 return FinnResponsesFrontDoorResult(
                     FinnResponsesResult(
                         text=clarification,
                         response_id=f"selected-analysis-target-conflict-{self.run_id}",
                         tool_trace=({"name": "read_selected_analysis_target", "status": "completed",
                                      "arguments": {}, "result": {"selected": pair,
-                                                                    "requested": requested,
                                                                     "verified": True}},),
                         answer_kind="selected_analysis_target_conflict",
                         model_led_coach=False, response_id_reusable=False,

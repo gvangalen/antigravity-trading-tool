@@ -3136,8 +3136,7 @@ class FinnResponsesAnswerVerifier:
             if (marker.get("name") == "read_selected_analysis_target"
                     and marker.get("status") == "completed"
                     and isinstance(claim, dict) and claim.get("verified") is True
-                    and str(claim.get("selected") or "") in result.text
-                    and str(claim.get("requested") or "") in result.text):
+                    and str(claim.get("selected") or "") in result.text):
                 return FinnResponsesVerifiedAnswer("completed", result.text, None, evidence)
             return FinnResponsesVerifiedAnswer(
                 "unavailable", "Ik kan de gekozen analysemelding niet verifiëren.",

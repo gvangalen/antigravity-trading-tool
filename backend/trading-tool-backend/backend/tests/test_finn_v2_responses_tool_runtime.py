@@ -4445,7 +4445,8 @@ def test_selected_analysis_card_does_not_borrow_setup_from_other_pair():
         }]}
     front.reads = read
     result = asyncio.run(front.run(
-        message="Ik wil een setup voor BTC/USDT verkennen. Maak niets aan.",
+        message=("Ik wil een setup voor BTC/USDT verkennen. Welke mogelijkheden zijn er, "
+                 "welke raad je aan en wat moet ik kiezen? Maak niets aan."),
         instructions="", conversation_context={}, verified_asset="BTC", feed_evidence=feed,
     ))
     assert result.response.answer_kind == "selected_analysis_next_step"
@@ -4460,6 +4461,8 @@ def test_selected_analysis_card_does_not_borrow_setup_from_other_pair():
     "Ik wil een setup voor BTC tegen euro verkennen. Maak niets aan.",
     "Ik wil een setup voor BTC in EUR verkennen. Maak niets aan.",
     "Ik wil een setup voor Bitcoin in euro verkennen. Maak niets aan.",
+    "Ik wil een setup voor BTC in € verkennen. Maak niets aan.",
+    "Ik wil een setup voor BTC in USDC verkennen. Maak niets aan.",
     "Ik wil een setup voor ETH/EUR verkennen. Maak niets aan.",
 ])
 def test_selected_analysis_card_asks_when_question_targets_another_pair(question):
@@ -4480,15 +4483,31 @@ def test_selected_analysis_card_asks_when_question_targets_another_pair(question
     ))
     assert result.response.answer_kind == "selected_analysis_target_conflict"
     assert "BTC/USDT" in result.response.text
-    if "euro" in question.lower() or "EUR" in question:
-        assert "BTC/EUR" in result.response.text or "ETH/EUR" in result.response.text
-        assert "BTC/EURO" not in result.response.text
-    assert "Welke analyse" in result.response.text
+    assert "Wil je die analyse of een ander asset of handelspaar" in result.response.text
     assert "benchmarkscore" not in result.response.text
     verified = asyncio.run(FinnResponsesAnswerVerifier().verify(
         message=question, result=result.response, locale="nl",
     ))
     assert verified.status == "completed"
+
+
+def test_selected_analysis_card_does_not_consume_an_edited_draft():
+    feed = [{"facts": {"feed_item_id": "selected", "event_type": "analysis_ready",
+                       "selection_origin": "current_run", "historical_notification": True,
+                       "symbol": "MSTR", "historical_event_facts": {"trading_pair": "MSTR"}}}]
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7,
+                                   run_id="analysis-edited")
+    async def read(_call):
+        raise AssertionError("An edited feed draft cannot consume the card score")
+    front.reads = read
+    result = asyncio.run(front.run(
+        message=("Ik wil een setup voor MSTR verkennen. Welke mogelijkheden zijn er, "
+                 "welke raad je aan en wat moet ik kiezen? Maak niets aan."),
+        instructions="", conversation_context={}, verified_asset="MSTR",
+        feed_evidence=feed, workspace_hints={"feed_draft_edited": True},
+    ))
+    assert result.response.answer_kind == "selected_analysis_target_conflict"
+    assert "benchmarkscore" not in result.response.text
 
 
 def test_selected_analysis_card_fails_closed_when_current_score_changes(monkeypatch):
@@ -4517,7 +4536,9 @@ def test_selected_analysis_card_fails_closed_when_current_score_changes(monkeypa
         }]}
     front.reads = read
     result = asyncio.run(front.run(
-        message="Bekijk MSTR; maak niets aan.", instructions="", conversation_context={},
+        message=("Ik wil een setup voor MSTR verkennen. Welke mogelijkheden zijn er, "
+                 "welke raad je aan en wat moet ik kiezen? Maak niets aan."),
+        instructions="", conversation_context={},
         verified_asset="MSTR", feed_evidence=feed,
     ))
     assert result.response.answer_kind == "selected_analysis_next_step_unavailable"
