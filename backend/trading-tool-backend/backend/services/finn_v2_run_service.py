@@ -1974,13 +1974,72 @@ def _minimal_read_answer(
                 for trade in item["data"].get("closed_trades") or [])
         for item in current_evidence
     )
-    historical_question = bool(
-        re.search(r"\b(?:weekreflectie|wekelijkse\s+reflectie)\b", message, re.I)
-        and re.search(r"\bAAPL\b", message, re.I)
-        and re.search(r"\bPaper\b", message, re.I)
-        and re.search(r"\b(?:exitreden|exit|uitstap|verkoop|afgesloten|gesloten)\b", message, re.I)
-    )
-    typed_historical = (historical_read or historical_question) and not _legacy_historical_test
+    week_requested = bool(re.search(
+        r"\b(?:weekreflectie|wekelijkse\s+reflectie|weekly\s+(?:reflection|review))\b",
+        message, re.I,
+    ))
+    exit_requested = bool(re.search(
+        r"\b(?:exit\w*|uitstap\w*|verkoop\w*|afgesloten|gesloten|"
+        r"closed\s+(?:Paper[- ]?)?trade|sold|sell)\b",
+        message, re.I,
+    ))
+    only_live = bool(re.search(
+        r"\b(?:gebruik\s+alleen\s+Live|alleen\s+Live|only\s+Live|"
+        r"geen\s+Paper[- ]?trades?|no\s+Paper[- ]?trades?)\b",
+        message, re.I,
+    ))
+    exclude_individual = bool(re.search(
+        r"\b(?:laat\s+individuele\s+trades?\s+buiten\s+beschouwing|"
+        r"zonder\s+individuele\s+trades?|exclude\s+individual\s+trades?)\b",
+        message, re.I,
+    ))
+    if week_requested and (only_live or exclude_individual or not exit_requested):
+        if only_live:
+            return FinnResponsesVerifiedAnswer(
+                "unavailable", "Met deze uitlezing kan ik geen Live-trade "
+                "voor deze week onderbouwen.",
+                "live_history_not_verified", current_evidence,
+            )
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+        from backend.services.finn_v2_factual_source_answer import _moment_in_zone
+        try:
+            if not user_time_zone:
+                raise ValueError("missing_user_time_zone")
+            ZoneInfo(user_time_zone)
+        except (ZoneInfoNotFoundError, TypeError, ValueError):
+            return FinnResponsesVerifiedAnswer(
+                "unavailable", "Ik kan de weekreflectie niet in jouw opgeslagen "
+                "tijdzone tonen.", "user_time_zone_unavailable", current_evidence,
+            )
+        weeks = [item["data"]["weekly_reflection"] for item in current_evidence
+                 if item.get("scope") == "read_review_history"
+                 and item.get("status") == "completed"
+                 and isinstance(item.get("data"), dict)
+                 and isinstance(item["data"].get("weekly_reflection"), dict)]
+        if not weeks or any(week != weeks[0] for week in weeks[1:]):
+            return FinnResponsesVerifiedAnswer(
+                "unavailable", "Ik kan de opgeslagen weekreflectie nu niet eenduidig lezen.",
+                "weekly_reflection_unavailable", current_evidence,
+            )
+        week = weeks[0]
+        saved_at, zone = _moment_in_zone(week.get("generated_at"), user_time_zone)
+        if not saved_at or not week.get("week_start") or not week.get("week_end"):
+            return FinnResponsesVerifiedAnswer(
+                "unavailable", "Het opslagmoment van de weekreflectie is niet verifieerbaar.",
+                "weekly_reflection_time_unavailable", current_evidence,
+            )
+        def count(key: str) -> str:
+            value = week.get(key)
+            return str(value) if type(value) is int and 0 <= value <= 100000 else "onbekend"
+        return FinnResponsesVerifiedAnswer(
+            "completed", f"Opgeslagen weekreflectie {week['week_start']} t/m "
+            f"{week['week_end']}: {count('trades')} gesloten trades; "
+            f"{count('plans')} met plan; "
+            f"{count('analyzed')} geanalyseerd. "
+            f"Opgeslagen op {saved_at} ({zone}). Dit is een weeksamenvatting "
+            "zonder details over individuele trades.", None, current_evidence,
+        )
+    typed_historical = week_requested and exit_requested and not _legacy_historical_test
     if typed_historical or str(getattr(prepared, "locale", "nl") or "nl").lower().startswith("nl"):
         from backend.services.finn_v2_factual_source_answer import complete_historical_week_exit_moments
         text = complete_historical_week_exit_moments(

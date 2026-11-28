@@ -214,6 +214,38 @@ def test_historical_week_typed_answer_rejects_other_bot_or_dossier():
             user_time_zone="Europe/Amsterdam",
         )
         assert answer.status == "unavailable", extra
+
+
+def test_historical_week_respects_week_only_and_live_only_scope():
+    prepared = _prepared(text="De verkoopprijs bedroeg 999 USD.")
+    week_only = _runtime_minimal_read_answer(
+        message="Vat alleen mijn opgeslagen weekreflectie van 9–15 november samen; "
+                "laat individuele trades buiten beschouwing.",
+        prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert week_only.status == "completed", week_only.reason
+    assert "zonder details over individuele trades" in week_only.text
+    assert "Paper-exit" not in week_only.text
+    assert "999 USD" not in week_only.text
+
+    live_only = _runtime_minimal_read_answer(
+        message=f"{QUESTION} Gebruik alleen Live-gegevens, geen Paper-trades.",
+        prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert live_only.status == "unavailable"
+    assert "999 USD" not in live_only.text
+
+
+def test_english_historical_week_without_read_is_unavailable():
+    prepared = _prepared(text="The execution price was 999 USD.", week=False)
+    prepared.locale = "en"
+    answer = _runtime_minimal_read_answer(
+        message="Discuss my closed AAPL Paper trade and weekly reflection, "
+                "including the exit reason and source moments. Read only.",
+        prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert answer.status == "unavailable"
+    assert "999 USD" not in answer.text
     assert "999" not in answer.text
 
 
