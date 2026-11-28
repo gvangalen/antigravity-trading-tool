@@ -299,8 +299,9 @@ def _bot_decision_clocks_supported(
             re.search(r"\b(?:(?:uitstap|exit|bot)[- ]?)?besliss\w*\b|\bbotbesluit\w*\b",
                       source_clause, re.I)
             and re.search(
-                r"\b(?:koers(?!doel)\w*|prijs(?!doel)\w*|uitvoer\w*|"
-                r"sluit\w*|registr\w*|wisselkoers\w*|FX(?:[- ]?bron\w*)?)\b",
+                r"\b(?:koersbron\w*|prijsbron\w*|uitvoeringskoers|uitvoeringsprijs|"
+                r"(?:EUR|USD|USDT)[- ]?koers|Paper[- ]sluit\w*|"
+                r"geregistreerde\s+sluiting|wisselkoersbron\w*|FX[- ]?bronmoment)\b",
                 source_clause, re.I,
             )
         )
@@ -320,6 +321,53 @@ def _bot_decision_clocks_supported(
                         r"\ben\s+(?:de\s+)?"
                         r"(?:(?:EUR|USD|USDT)[- ]?koers\s+van|uitvoeringskoers)\b",
                         clause, re.I)):
+                    return False
+            # Check a quote's own clock even when its label precedes the
+            # decision. The decision-clock check below cannot infer that a
+            # preceding 14:58 quote is wrong from a correct 15:00 decision.
+            quote_labels = list(re.finditer(
+                r"\b(?:koersbron\w*|prijsbron\w*|uitvoeringskoers|"
+                r"uitvoeringsprijs|(?:EUR|USD|USDT)[- ]?koers)\b",
+                clause, re.I,
+            ))
+            decision_labels = list(re.finditer(
+                r"\b(?:(?:uitstap|exit|bot)[- ]?)?besliss\w*\b|\bbotbesluit\w*\b",
+                clause, re.I,
+            ))
+            for label in quote_labels:
+                boundary = min((item.start() for item in decision_labels
+                                if item.start() > label.end()), default=len(clause))
+                quote_claims = [item for item in paired_dated
+                                if label.end() <= item.start() < boundary]
+                if not quote_claims:
+                    continue
+                if historical_decision is None or len(quote_claims) != 1:
+                    return False
+                label_text = label.group(0).lower()
+                execution = ("uitvoer" in label_text or "uitvoering" in
+                             clause[label.end():quote_claims[0].start()].lower())
+                key = "execution_source_price_at" if execution else "source_price_at"
+                observed: dict[int, datetime] = {}
+                for item in evidence:
+                    if (item.get("scope") != "read_review_history"
+                            or item.get("status") != "completed"
+                            or not isinstance(item.get("data"), dict)):
+                        continue
+                    for row in item["data"].get("closed_trades") or []:
+                        if (not isinstance(row, dict) or type(row.get("review_id")) is not int
+                                or row.get("bot_id") != historical_decision[0]
+                                or str(row.get("symbol") or "").upper() != historical_decision[1]
+                                or _utc(row.get("paper_exit_decision_at")) != historical_decision[2]
+                                or not isinstance(row.get("paper_exit_evidence"), dict)):
+                            continue
+                        at = _utc(row["paper_exit_evidence"].get(key))
+                        if at is None or (row["review_id"] in observed
+                                          and observed[row["review_id"]] != at):
+                            return False
+                        observed[row["review_id"]] = at
+                claim = _claimed_moment(quote_claims[0].group(0))
+                if (len(observed) != 1 or claim is None
+                        or not _same_moment(claim, next(iter(observed.values())))):
                     return False
         ids = {int(match.group(1)) for match in re.finditer(r"\bbot\s*#?\s*(\d+)\b", clause, re.I)}
         # Locate the clock nearest the status read verb. A sentence may also
