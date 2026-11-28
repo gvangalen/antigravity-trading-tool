@@ -232,6 +232,15 @@ def test_historical_quote_source_and_decision_are_separate_clocks():
             message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
         )
         assert unsupported.status == "unavailable", noun
+    for reverse in (
+        "De uitvoeringskoers en de exitbeslissing: 12 november 2026, 15:00:30 UTC.",
+        "De koersbron en de uitstapbeslissing: 12 november 2026, 15:00:30 UTC.",
+    ):
+        prepared.response.text = reverse
+        unsupported = _minimal_read_answer(
+            message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+        )
+        assert unsupported.status == "unavailable", reverse
 
     prepared.response.text = (
         "Exitbeslissing en USD-koers van 358,60: "

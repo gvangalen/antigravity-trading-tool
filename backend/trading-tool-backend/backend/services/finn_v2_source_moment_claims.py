@@ -285,14 +285,19 @@ def _bot_decision_clocks_supported(
         # events. A single clock cannot establish both, regardless of the
         # second event's wording. Two clocks are accepted only by the narrow
         # typed quote/decision check below; unfamiliar labels fail closed.
-        if (historical_question and re.search(
-                r"\b(?:uitstap|exit)[- ]?besliss\w*\s+en\b", clause, re.I)):
+        decision_first = re.search(
+            r"\b(?:uitstap|exit)[- ]?besliss\w*\s+en\b", clause, re.I,
+        )
+        decision_second = re.search(
+            r"\ben\s+(?:de\s+)?(?:uitstap|exit)[- ]?besliss\w*\b", clause, re.I,
+        )
+        if historical_question and (decision_first or decision_second):
             paired_dated = list(_DATED_MOMENT.finditer(clause))
             paired_bare = [clock for clock in _ZONED_CLOCK.finditer(clause)
                            if not any(date.start() <= clock.start() and clock.end() <= date.end()
                                       for date in paired_dated)]
             if ((paired_dated or paired_bare)
-                    and (len(paired_dated) != 2 or paired_bare
+                    and (decision_second or len(paired_dated) != 2 or paired_bare
                     or not re.search(
                         r"\ben\s+(?:de\s+)?"
                         r"(?:(?:EUR|USD|USDT)[- ]?koers\s+van|uitvoeringskoers)\b",
