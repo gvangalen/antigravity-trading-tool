@@ -281,6 +281,23 @@ def _bot_decision_clocks_supported(
         subject = marker.search(clause)
         if subject is None:
             continue
+        # An historical "exit decision and ..." sentence names at least two
+        # events. A single clock cannot establish both, regardless of the
+        # second event's wording. Two clocks are accepted only by the narrow
+        # typed quote/decision check below; unfamiliar labels fail closed.
+        if (historical_question and re.search(
+                r"\b(?:uitstap|exit)[- ]?besliss\w*\s+en\b", clause, re.I)):
+            paired_dated = list(_DATED_MOMENT.finditer(clause))
+            paired_bare = [clock for clock in _ZONED_CLOCK.finditer(clause)
+                           if not any(date.start() <= clock.start() and clock.end() <= date.end()
+                                      for date in paired_dated)]
+            if ((paired_dated or paired_bare)
+                    and (len(paired_dated) != 2 or paired_bare
+                    or not re.search(
+                        r"\ben\s+(?:de\s+)?"
+                        r"(?:(?:EUR|USD|USDT)[- ]?koers\s+van|uitvoeringskoers)\b",
+                        clause, re.I))):
+                return False
         ids = {int(match.group(1)) for match in re.finditer(r"\bbot\s*#?\s*(\d+)\b", clause, re.I)}
         # Locate the clock nearest the status read verb. A sentence may also
         # contain a saved Hold decision in either order; only the read clock
