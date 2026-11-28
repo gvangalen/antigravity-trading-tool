@@ -159,6 +159,28 @@ def test_historical_trade_date_uses_the_users_zone_only():
     )
 
 
+def test_historical_iso_date_and_named_asset_must_match_the_closed_dossier():
+    from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
+
+    prepared = _prepared(text="Historische botbeslissing voor AAPL: 12 november 2026 14:59 UTC.")
+    row = prepared.response.tool_trace[0]["result"]["results"][0]
+    assert not current_source_moments_supported(
+        prepared.response.text, (row,),
+        question="Bespreek mijn afgesloten AAPL-trade van 2026-11-05.",
+        user_time_zone="Europe/Amsterdam",
+    )
+    assert not current_source_moments_supported(
+        "Historische botbeslissing voor MSFT: 12 november 2026 14:59 UTC.",
+        (row,), question="Bespreek mijn afgesloten MSFT-trade van 12 november.",
+        user_time_zone="Europe/Amsterdam",
+    )
+    assert current_source_moments_supported(
+        prepared.response.text, (row,),
+        question="Bespreek mijn afgesloten AAPL-trade van 2026-11-12.",
+        user_time_zone="Europe/Amsterdam",
+    )
+
+
 def test_historical_exit_clock_cannot_replace_current_bot_clock():
     from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
 

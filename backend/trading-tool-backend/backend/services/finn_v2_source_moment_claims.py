@@ -103,6 +103,13 @@ def _one_requested_paper_exit_decision(
     review_pattern = re.compile(
         r"\b(?:dossier|trade(?:[- ]?(?:reflectie|review))?|review)\s*#\s*(\d+)\b", re.I,
     )
+    historical_request = bool(re.search(
+        r"\b(?:historisch\w*|afgesloten|gesloten\s+trade|"
+        r"trade[- ]?reflectie|weekreflectie|dossier\s*#\s*\d+)\b",
+        f"{question or ''}\n{answer}", re.I,
+    ))
+    if not historical_request:
+        return None, False
     requested_ids = {int(match.group(1)) for match in review_pattern.finditer(question or "")}
     stated_ids = {int(match.group(1)) for match in review_pattern.finditer(answer)}
     if len(requested_ids) > 1 or len(stated_ids) > 1 or (
@@ -110,9 +117,19 @@ def _one_requested_paper_exit_decision(
     ):
         return None, True
     selected_ids = requested_ids or stated_ids
+    requested_symbols = mentioned_catalog_symbols(question or "")
+    stated_symbols = mentioned_catalog_symbols(answer)
+    if (len(requested_symbols) > 1 or len(stated_symbols) > 1
+            or requested_symbols and stated_symbols and requested_symbols != stated_symbols):
+        return None, True
+    selected_symbols = requested_symbols or stated_symbols
     without_week = re.sub(
         r"\b\d{1,2}\s*[–—-]\s*\d{1,2}\s+(?:" + _MONTH_PATTERN + r")\b",
         "", question or "", flags=re.I,
+    )
+    without_week = re.sub(
+        r"\b20\d{2}-\d{2}-\d{2}\s*(?:tot|t/m|[–—-])\s*20\d{2}-\d{2}-\d{2}\b",
+        "", without_week, flags=re.I,
     )
     named_dates = {
         (int(match.group(1)), _MONTHS[match.group(2).lower()],
@@ -124,6 +141,20 @@ def _one_requested_paper_exit_decision(
     }
     if len(named_dates) > 1:
         return None, True
+    iso_dates = set(re.findall(r"\b20\d{2}-\d{2}-\d{2}\b", without_week))
+    if len(iso_dates) > 1:
+        return None, True
+    if iso_dates:
+        try:
+            iso_day = datetime.fromisoformat(next(iter(iso_dates))).date()
+        except ValueError:
+            return None, True
+        iso_selector = (iso_day.day, iso_day.month, iso_day.year)
+        if named_dates and next(iter(named_dates)) not in {
+            iso_selector, (iso_day.day, iso_day.month, None),
+        }:
+            return None, True
+        named_dates = {iso_selector}
     requested_date = next(iter(named_dates), None)
     try:
         date_zone = ZoneInfo(user_time_zone) if user_time_zone else None
@@ -153,7 +184,8 @@ def _one_requested_paper_exit_decision(
                 return None, True
             selected[review_id] = candidate
     candidates = [(review_id, value) for review_id, value in selected.items()
-                  if not selected_ids or review_id in selected_ids]
+                  if (not selected_ids or review_id in selected_ids)
+                  and (not selected_symbols or value[1] in selected_symbols)]
     if requested_date is not None:
         day, month, year = requested_date
         candidates = [(review_id, value) for review_id, value in candidates
@@ -161,7 +193,7 @@ def _one_requested_paper_exit_decision(
                       and (local.day, local.month) == (day, month)
                       and (year is None or local.year == year)]
     if len(candidates) != 1:
-        return None, bool(selected_ids or requested_date)
+        return None, bool(selected_ids or requested_date or selected_symbols)
     bot_id, symbol, decision_at, _ = candidates[0][1]
     return (bot_id, symbol, decision_at), False
 
