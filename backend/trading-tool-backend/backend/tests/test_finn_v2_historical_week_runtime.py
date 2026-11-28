@@ -133,6 +133,19 @@ def test_historical_quote_source_and_decision_are_separate_clocks():
     )
     assert missing.status == "unavailable"
 
+    trade["paper_exit_evidence"]["source_price_at"] = "2026-11-12T14:59:00+00:00"
+    for prefix in ("Voor een eerdere AAPL-trade: ",
+                   "Voor de AAPL-ochtendtrade: ",
+                   "De exitbeslissing voor een andere AAPL-review: "):
+        prepared.response.text = prefix + (
+            "Exitbeslissing en USD-koers van 358,60: "
+            "12 november 2026, 14:59:00 UTC."
+        )
+        unsafe = _minimal_read_answer(
+            message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+        )
+        assert unsafe.status == "unavailable", prefix
+
 
 def test_live_week_saved_clock_and_fx_markdown_are_sanitized():
     prepared = _prepared(text=(

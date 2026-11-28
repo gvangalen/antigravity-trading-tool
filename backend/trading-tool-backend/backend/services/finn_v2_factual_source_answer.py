@@ -330,6 +330,16 @@ def complete_historical_week_exit_moments(
             verified_price = None
 
         def distinct_price_source(match: re.Match[str]) -> str:
+            clause_start = max(answer.rfind(".", 0, match.start()),
+                               answer.rfind("\n", 0, match.start())) + 1
+            next_stops = [stop for stop in (answer.find(".", match.end()),
+                                             answer.find("\n", match.end())) if stop >= 0]
+            clause_end = min(next_stops, default=len(answer))
+            clause = answer[clause_start:clause_end]
+            if ((re.search(r"\b(?:eerdere|vorige|voorgaande|andere|oudere)\b", clause, re.I)
+                    and re.search(r"\b(?:trade|dossier|review)\b", clause, re.I))
+                    or re.search(r"\b(?:ochtend|middag|avond)[- ]?trade\b", clause, re.I)):
+                return match.group(0)
             claim = _claimed_moment(match.group("moment"))
             try:
                 claimed_price = Decimal(match.group("price").replace(",", "."))
