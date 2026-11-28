@@ -4,6 +4,47 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: historische uitstapbeslissing versus geregistreerde sluiting (28 november 2026)
+
+Phase: `READY_FOR_PR_CI`. Product branch
+`codex/finn-exit-decision-label-20261128`, producthead
+`b7aff0548395c8b8f85d9c73a5ce0be264d22ac6`. Onafhankelijke
+ingelogde browser-QA op de vorige definitieve live SHA
+`0b16d1d75358255256727cfd4438cf953794a681` gaf `NOT_ACCEPTED`:
+twee nieuwe gesprekken met refresh en de exacte historische AAPL-vraag
+noemden de geregistreerde sluiting van 12 november 15:00:30 UTC ten
+onrechte een uitstap-/exitbeslissing; het aparte botbesluit van 14:59 UTC
+ontbrak. De historische week, eerste doel, onzekerheid over volledige
+plantrouw en aparte FX-/opslagmomenten waren wel correct. De browser
+toonde geen gesaniteerde tracecategorie; geen account-, bot- of
+ordermutaties.
+
+Lokaal was de oorzaak reproduceerbaar: de bronmomentverifier herkende
+samengestelde labels `uitstapbeslissing` en `exitbeslissing` niet als
+besluitclaims. De kandidaat herkent die labels en corrigeert uitsluitend
+een secondespecifieke modelklok die exact overeenkomt met de geregistreerde
+sluiting van één uit de gebruikersvraag geselecteerd eigenaargebonden Paper-
+dossier. Het afzonderlijk opgeslagen `paper_exit_decision_at` wordt uit dat
+dossier getoond in de IANA-tijdzone van de gebruiker. Een andere klok op
+dezelfde dag, een eerdere of ochtendtrade, ambigue dossiers en ontbrekend
+besluitbewijs vallen gesloten. De FX-bewerking bewaart ook bij herhaling
+een volgende gelabelde bron en vertrouwt geen door het model geschreven
+fallbackzin. De read-only bron- en antwoordroute is gewijzigd; FINN-
+actiecontracten, providerselector en orderpad zijn ongewijzigd, dus de
+worker-actiematrix is voor deze kandidaat niet van toepassing.
+
+Gerichte historische-, bronmoment- en mixed-bot-suites: `138/138`.
+Volledige backend: `5703 passed, 7 skipped` (log SHA-256
+`4ca4deec62933cf4f7ae122bd4c1a2eed98b50d4dbd861edc51a9032142b077f`).
+Echte-providerselector development `20/20` (artifact SHA-256
+`858ed8ec3526131d93b0f1e0e754298927dd232cb0a0a4002093a2ce5b595fa9`)
+en regression `109/109` (artifact SHA-256
+`ec4de188315da21ad328b55c8a7ca7d161732c5314d075a6f5f441ff28d5e7ec`),
+beide zonder provider-, schema-, parse-, validatie- of timeoutfouten.
+Onafhankelijke QA- en Security-codeherbeoordeling van deze exacte producthead:
+geen blocker. Dit is lokale codeacceptatie, nog geen nieuwe live
+browseracceptatie of deploymentbewijs.
+
 ## FINN 3.0: historisch Paper-besluit naast latere botcontrole (28 november 2026)
 
 Phase: `READY_FOR_INDEPENDENT_QA_AFTER_STATUS_DEPLOY`. Product branch

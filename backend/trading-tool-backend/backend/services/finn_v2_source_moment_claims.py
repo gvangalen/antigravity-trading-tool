@@ -223,7 +223,8 @@ def _bot_decision_clocks_supported(
         evidence, question=question, answer=answer, user_time_zone=user_time_zone,
     )
     if historical_unsafe and re.search(
-        r"\b(?:(?:bot)?besluit\w*|(?:bot)?besliss\w*|(?:bot)?beoordel\w*)\b",
+        r"\b(?:(?:bot)?besluit\w*|(?:bot)?besliss\w*|"
+        r"(?:uitstap|exit)[- ]?besliss\w*|(?:bot)?beoordel\w*)\b",
         answer, re.I,
     ) and (_DATED_MOMENT.search(answer) or _ZONED_CLOCK.search(answer)):
         return False
@@ -263,7 +264,10 @@ def _bot_decision_clocks_supported(
                 instant = _utc(decision.get("at")) if isinstance(decision, dict) else None
                 if instant:
                     decisions.append((bot.get("bot_id"), str(bot.get("symbol") or "").upper(), instant))
-    marker = re.compile(r"\b(?:bot\w*|beoordeling\w*|besluit\w*|beslissing\w*|hold)\b", re.I)
+    marker = re.compile(
+        r"\b(?:bot\w*|beoordeling\w*|besluit\w*|beslissing\w*|"
+        r"(?:uitstap|exit)[- ]?besliss\w*|hold)\b", re.I,
+    )
     invalid = re.compile(r"\b(?:fout|onjuist|incorrect|wrong|not\s+correct|falsch)\b", re.I)
     current_requested = bool(question and re.search(r"\b(?:bot\w*|besliss\w*)\b", question, re.I)
                              and re.search(r"\b(?:actuele|huidige|laatste|nieuwste|vandaag|nu|latest|current|"
@@ -334,7 +338,8 @@ def _bot_decision_clocks_supported(
         report_claim = bool(re.search(r"\b(?:dagrapport|ochtendrapport|rapportmomentopname|rapport)\b", clause, re.I))
         historical_clause = bool(re.search(
             r"\b(?:historisch\w*|afgesloten|dossier\s*#\s*\d+|"
-            r"trade\s*#\s*\d+|Paper[- ]?exit|Paper[- ]?uitstap)\b", clause, re.I,
+            r"trade\s*#\s*\d+|Paper[- ]?exit|Paper[- ]?uitstap|"
+            r"(?:uitstap|exit)[- ]?besliss\w*)\b", clause, re.I,
         ))
         if historical_clause and latest_claim:
             return False
@@ -359,7 +364,8 @@ def _bot_decision_clocks_supported(
         # unqualified claim about the latest/current decision must instead
         # match the owner-scoped decision read for that bot.
         decision_claim = bool(re.search(
-            r"\b(?:besluit\w*|besliss\w*|beoordel\w*|hold)\b", clause, re.I,
+            r"\b(?:besluit\w*|besliss\w*|(?:uitstap|exit)[- ]?besliss\w*|"
+            r"beoordel\w*|hold)\b", clause, re.I,
         ))
         has_clock_claim = bool(_DATED_MOMENT.search(clause) or _ZONED_CLOCK.search(clause))
         # Only the deterministic, typed-read recovery may distinguish its

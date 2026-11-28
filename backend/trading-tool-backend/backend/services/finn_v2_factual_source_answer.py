@@ -83,7 +83,9 @@ def _suppress_unbound_week_saved_claims(answer: str) -> str:
 _UNBOUND_FX_MOMENT_CLAIM = re.compile(
     r"(?P<label>(?:Geverifieerd\s+)?\b(?:FX(?:[- ]?(?:bron(?:moment)?|koers))?|"
     r"(?:exit|uitvoerings)?wisselkoers(?:bron(?:moment)?)?)\b"
-    r"(?:(?![.;]\s|\n).){0,80}?)"
+    r"(?:(?![.;]\s|\n|(?:,|\ben\b)\s*(?:de\s+)?"
+    r"(?:bot\w*|(?:uitstap|exit)[- ]?besliss\w*|bevestigde\s+les|"
+    r"geregistreerde\s+sluiting)\b).){0,80}?)"
     r"(?P<moment>(?:(?:\d{4}-\d{2}-\d{2}|\d{1,2}\s+[a-z]+(?:\s+\d{4})?)"
     r"\s*,?\s*)?\d{1,2}:\d{2}(?::\d{2})?\s+"
     r"(?:[A-Za-z_]+/[A-Za-z_]+|UTC|GMT|CET|CEST)\b)"
@@ -95,6 +97,14 @@ _UNBOUND_FX_MOMENT_CLAIM = re.compile(
     r"(?:\s+\d{4})?)\s*,?\s*)?\d{1,2}:\d{2}(?::\d{2})?\s+"
     r"(?:[A-Za-z_]+/[A-Za-z_]+|UTC|GMT|CET|CEST)\b))?"
     r"(?P<markdown_close>\*\*)?",
+    re.I,
+)
+
+_HISTORICAL_EXIT_DECISION_CLAIM = re.compile(
+    r"(?P<label>\b(?:uitstap|exit)[- ]?besliss\w*\b\s*"
+    r"(?:(?:op|om)\s*|:\s*)?)"
+    r"(?P<moment>(?:(?:20\d{2}-\d{2}-\d{2}|\d{1,2}\s+[a-z]+(?:\s+20\d{2})?)"
+    r"\s*,?\s*)?(?:om\s+)?\d{1,2}:\d{2}(?::\d{2})?\s+(?:UTC|CET|CEST)\b)",
     re.I,
 )
 
@@ -214,14 +224,15 @@ def complete_historical_week_exit_moments(
     # Check a dossier's identity and registered exit across every read before
     # filtering by week. Otherwise an inconsistent out-of-week duplicate can
     # disappear and make the remaining timestamp look verified.
-    dossiers: dict[int, tuple[str, str, datetime | None]] = {}
+    dossiers: dict[int, tuple[str, str, datetime | None, datetime | None]] = {}
     for trade in all_trades:
         review_id = trade.get("review_id")
         if type(review_id) is not int:
             continue
         identity = (str(trade.get("symbol") or ""),
                     str(trade.get("environment") or "").lower(),
-                    _utc_instant(trade.get("exit_at")))
+                    _utc_instant(trade.get("exit_at")),
+                    _utc_instant(trade.get("paper_exit_decision_at")))
         if review_id in dossiers and dossiers[review_id] != identity:
             return answer
         dossiers[review_id] = identity
@@ -284,6 +295,58 @@ def complete_historical_week_exit_moments(
     saved_at, _ = _moment_in_zone(week.get("generated_at"), user_time_zone)
     if not exit_at or not saved_at:
         return answer
+    decision_instants = {_utc_instant(trade.get("paper_exit_decision_at"))
+                         for trade in matching_trades}
+    decision_at_in_zone = None
+    verified_decision_at = None
+    if (len(decision_instants) == 1 and None not in decision_instants
+            and all(isinstance(trade.get("paper_exit_evidence"), dict)
+                    and trade["paper_exit_evidence"].get("trigger") in {"first_target", "stop_loss"}
+                    for trade in matching_trades)):
+        verified_decision_at = next(iter(decision_instants))
+        decision_at_in_zone, _ = _moment_in_zone(verified_decision_at, user_time_zone)
+    if decision_at_in_zone and re.search(r"\bbronmoment(?:en)?\b", question, re.I):
+        # A model may call the registered close an exit decision. Replace
+        # only that historical decision clock, using the owner-read closing
+        # ledger's linked decision; leave unrelated clocks and prose intact.
+        from backend.services.finn_v2_source_moment_claims import _claimed_moment, _same_moment
+
+        def corrected_decision(match: re.Match[str]) -> str:
+            clause_start = max(answer.rfind(".", 0, match.start()),
+                               answer.rfind("\n", 0, match.start())) + 1
+            next_stops = [stop for stop in (answer.find(".", match.end()),
+                                             answer.find("\n", match.end())) if stop >= 0]
+            clause_end = min(next_stops, default=len(answer))
+            clause = answer[clause_start:clause_end]
+            if ((re.search(r"\b(?:eerdere|vorige|voorgaande|andere|oudere)\b", clause, re.I)
+                    and re.search(r"\b(?:trade|dossier|review)\b", clause, re.I))
+                    or re.search(r"\b(?:ochtend|middag|avond)[- ]?trade\b", clause, re.I)):
+                return match.group(0)
+            moment = match.group("moment")
+            if not re.search(r"\b20\d{2}\b", moment):
+                moment = re.sub(
+                    r"^(\d{1,2}\s+[a-z]+)",
+                    lambda date: f"{date.group(1)} {verified_decision_at.year}",
+                    moment, count=1, flags=re.I,
+                )
+            claim = _claimed_moment(moment)
+            if claim is None or claim[0].astimezone(ZoneInfo(user_time_zone)).date() != (
+                verified_decision_at.astimezone(ZoneInfo(user_time_zone)).date()
+            ):
+                return match.group(0)
+            if _same_moment(claim, verified_decision_at):
+                return match.group(0)
+            # Correct only the proven confusion between this dossier's
+            # closing registration and its linked decision. Another time on
+            # the same day could belong to another trade.
+            registered_close = _utc_instant(trades[0]["exit_at"])
+            if not claim[1] or registered_close is None or not _same_moment(claim, registered_close):
+                return match.group(0)
+            return match.group("label") + decision_at_in_zone
+
+        answer = _HISTORICAL_EXIT_DECISION_CLAIM.sub(
+            corrected_decision, answer,
+        )
     fx_instants: set[datetime] = set()
     for trade in matching_trades:
         paper_exit = trade.get("paper_exit_evidence")
@@ -319,6 +382,14 @@ def complete_historical_week_exit_moments(
     if fx_at_in_zone and re.search(r"\bbronmoment(?:en)?\b", question, re.I):
         if fx_line not in answer:
             additions.append(fx_line)
+    if decision_at_in_zone and re.search(r"\bbronmoment(?:en)?\b", question, re.I):
+        utc_clock = verified_decision_at.strftime("%Y-%m-%d %H:%M:%S UTC")
+        decision_line = (
+            f"Geverifieerde AAPL Paper-exitbeslissing: {decision_at_in_zone} "
+            f"({utc_clock}; {zone_name})."
+        )
+        if decision_line not in answer:
+            additions.append(decision_line)
     return answer.rstrip() + ("\n" + "\n".join(additions) if additions else "")
 
 
