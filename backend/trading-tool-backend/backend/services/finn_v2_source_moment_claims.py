@@ -305,7 +305,8 @@ def _bot_decision_clocks_supported(
         )
         has_explicit_quote_label = bool(re.search(
             r"\b(?:koersbron\w*|prijsbron\w*|uitvoeringskoers|"
-            r"uitvoeringsprijs|(?:EUR|USD|USDT)[- ]?koers)\b",
+            r"uitvoeringsprijs|(?:EUR|USD|USDT)[- ]?koers|"
+            r"Paper[- ]?exit\s+werd\s+uitgevoerd\s+tegen)\b",
             clause, re.I,
         ))
         if historical_question and (
@@ -333,7 +334,8 @@ def _bot_decision_clocks_supported(
             # preceding 14:58 quote is wrong from a correct 15:00 decision.
             quote_labels = list(re.finditer(
                 r"\b(?:koersbron\w*|prijsbron\w*|uitvoeringskoers|"
-                r"uitvoeringsprijs|(?:EUR|USD|USDT)[- ]?koers)\b",
+                r"uitvoeringsprijs|(?:EUR|USD|USDT)[- ]?koers|"
+                r"Paper[- ]?exit\s+werd\s+uitgevoerd\s+tegen)\b",
                 clause, re.I,
             ))
             decision_labels = list(re.finditer(
@@ -407,17 +409,30 @@ def _bot_decision_clocks_supported(
                 currency_claims = re.findall(r"\b(?:EUR|USD|USDT)\b", segment, re.I)
                 if any(unit.upper() != currency for unit in currency_claims):
                     return False
+                symbol_claims = re.findall(r"[$€]", segment)
+                if any(("USD" if symbol == "$" else "EUR") != currency
+                       for symbol in symbol_claims):
+                    return False
                 amount_claims = re.findall(
                     r"\b(\d+(?:[.,]\d+)?)\s*(?:EUR|USD|USDT)\b|"
-                    r"\b(?:EUR|USD|USDT)[- ]?koers\s+van\s+(\d+(?:[.,]\d+)?)\b",
+                    r"\b(?:EUR|USD|USDT)[- ]?koers\s+van\s+(\d+(?:[.,]\d+)?)\b|"
+                    r"\b(?:EUR|USD|USDT)\s+(\d+(?:[.,]\d+)?)\b|"
+                    r"[$€]\s*(\d+(?:[.,]\d+)?)\b",
                     segment, re.I,
                 )
                 unqualified_amounts = re.findall(
-                    r"\b(?:was|van|:)\s*(\d+(?:[.,]\d+)?)\b", segment, re.I,
+                    r"\b(?:was|van|bedroeg|:)\s*(\d+(?:[.,]\d+)?)\b", segment, re.I,
                 )
+                numeric_segment = re.sub(
+                    r"\b(?:bot|dossier|trade|review)\s*#?\s*\d+\b", " ", segment,
+                    flags=re.I,
+                )
+                if (re.search(r"\b\d+(?:[.,]\d+)?\b", numeric_segment)
+                        and not amount_claims and not unqualified_amounts):
+                    return False
                 try:
-                    if any(Decimal((before or after).replace(",", ".")) != Decimal(price)
-                           for before, after in amount_claims) or any(
+                    if any(Decimal(next(value for value in groups if value).replace(",", "."))
+                           != Decimal(price) for groups in amount_claims) or any(
                         Decimal(amount.replace(",", ".")) != Decimal(price)
                         for amount in unqualified_amounts
                     ):
