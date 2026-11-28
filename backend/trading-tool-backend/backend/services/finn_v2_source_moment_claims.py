@@ -116,7 +116,8 @@ def _one_requested_paper_exit_decision(
         requested_ids and stated_ids and requested_ids != stated_ids
     ):
         return None, True
-    selected_ids = requested_ids or stated_ids
+    # The model's own dossier label may verify a selection, never make one.
+    selected_ids = requested_ids
     requested_symbols = mentioned_catalog_symbols(question or "")
     stated_symbols = mentioned_catalog_symbols(answer)
     if (len(requested_symbols) > 1 or len(stated_symbols) > 1
@@ -143,6 +144,11 @@ def _one_requested_paper_exit_decision(
         return None, True
     iso_dates = set(re.findall(r"\b20\d{2}-\d{2}-\d{2}\b", without_week))
     if len(iso_dates) > 1:
+        return None, True
+    # Day/month versus month/day is not inferable from a numeric slash date.
+    # Do not silently treat it as an absent selector after checking ISO dates.
+    without_iso = re.sub(r"\b20\d{2}-\d{2}-\d{2}\b", "", without_week)
+    if re.search(r"\b\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?\b", without_iso):
         return None, True
     if iso_dates:
         try:
@@ -194,6 +200,8 @@ def _one_requested_paper_exit_decision(
                       and (year is None or local.year == year)]
     if len(candidates) != 1:
         return None, bool(selected_ids or requested_date or selected_symbols)
+    if stated_ids and stated_ids != {candidates[0][0]}:
+        return None, True
     bot_id, symbol, decision_at, _ = candidates[0][1]
     return (bot_id, symbol, decision_at), False
 

@@ -123,6 +123,11 @@ def test_historical_clock_cannot_be_attributed_to_another_closed_trade():
         (row,), question="Bespreek mijn AAPL-trades van 12 november.",
         user_time_zone="Europe/Amsterdam",
     )
+    assert not current_source_moments_supported(
+        "Bij dossier #2127 was de botbeslissing 12 november 2026 14:59 UTC.",
+        (row,), question="Bespreek mijn afgesloten AAPL-trade van 12 november.",
+        user_time_zone="Europe/Amsterdam",
+    )
 
 
 def test_conflicting_reads_for_same_closed_review_do_not_verify_a_bot_clock():
@@ -167,6 +172,11 @@ def test_historical_iso_date_and_named_asset_must_match_the_closed_dossier():
     assert not current_source_moments_supported(
         prepared.response.text, (row,),
         question="Bespreek mijn afgesloten AAPL-trade van 2026-11-05.",
+        user_time_zone="Europe/Amsterdam",
+    )
+    assert not current_source_moments_supported(
+        prepared.response.text, (row,),
+        question="Bespreek mijn afgesloten AAPL-trade van 05/11/2026.",
         user_time_zone="Europe/Amsterdam",
     )
     assert not current_source_moments_supported(
