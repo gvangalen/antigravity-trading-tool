@@ -4,9 +4,49 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: historisch Paper-besluit naast latere botcontrole (28 november 2026)
+
+Phase: `READY_FOR_PR_CI`. Product branch
+`codex/finn-historical-source-recovery-20261128`, producthead
+`897600181f9e6cdd32801f93339878f7a8624b58`. Onafhankelijke ingelogde browser-QA op
+definitieve live SHA `50c36e78e1f014e4aa73b5b34af1ab9b4f18451a` gaf
+`NOT_ACCEPTED`: de eerste van twee identieke historische AAPL-vragen viel
+terug op “Ik kan de bronmomenten in dit antwoord niet verifiëren.” De tweede
+beurt noemde de juiste historische week, exit, FX-bron, les en weekopslag,
+maar liet losse Markdown-sterren achter de FX-verwijzing staan. Er waren
+geen account-, bot- of ordermutaties. De browser toonde geen run-ID of
+gesaniteerde verifierregel; de precieze eerste live afwijzingsregel blijft
+daarom onbewezen.
+
+Lokaal is wel een concrete verifierfout gereproduceerd: een historische
+Paper-exitbeslissing werd tegen een latere owner-bound botcontrole getoetst.
+De kandidaat projecteert het besluitmoment uit het geregistreerde sluitings-
+dossier als getypeerd `paper_exit_decision_at`, zodat de historische klok
+afzonderlijk kan worden gevalideerd. Een claim over de laatste botcontrole
+blijft aan de actuele bron gebonden. De FX-scrub verwijdert nu ook een
+afsluitende Markdown-markering wanneer de verworpen tijd binnen `**...**`
+stond. De historische dossierselectie vereist één passend dossier op basis
+van de gebruikersvraag, het exact genoemde asset en de handelsdag in de
+IANA-tijdzone van de gebruiker. Een dossier-ID of assetnaam die alleen in
+modeltekst staat, kan geen ambigue selectie oplossen. ISO-datums worden
+gecontroleerd; numeriek ambigue datums, tegenstrijdige dubbele reads en
+ontbrekend besluitbewijs vallen gesloten. Dezelfde tijdzone gaat naar alle
+verifierpaden. Gerichte suites `104/104`; onafhankelijke QA- en Security-
+codebeoordeling van deze producthead: geen blocker. Volledige backend:
+`5694 passed, 7 skipped` (log SHA-256
+`3e99cdf70c9ee487e40ea8ceffcc33e904e7d162b95b52f884a39cedc6d48cac`).
+Echte-providerselector development `20/20` (artifact SHA-256
+`73b94aea6fd6ee43dafd8c9749404774600c445785cf082f419b0c28b2417d66`)
+en regression `109/109` (artifact SHA-256
+`3725e7b86cec9b4070a48a2a0d0dcd392888526daec96b2aa55a62eb6b09689d`),
+zonder provider-, schema-, parse-, validatie- of timeoutfouten. De
+providerselector en FINN-actiecontracten zijn niet gewijzigd; de worker-
+actiematrix is voor deze read-only bronverifiercorrectie niet van toepassing.
+Nog geen live acceptatie voor deze kandidaat.
+
 ## FINN 3.0: eenduidige FX-brontekst bij historische reflectie (28 november 2026)
 
-Phase: `READY_FOR_INDEPENDENT_QA_AFTER_STATUS_DEPLOY`. Product branch
+Phase: `LIVE_NOT_ACCEPTED`. Product branch
 `codex/finn-fx-wording-20261128`, producthead
 `a2abbd1d8a6e9fe22fafb55e88e8ce1b05cb52fc`;
 [PR #1420](https://github.com/gvangalen/antigravity-trading-tool/pull/1420)
@@ -45,6 +85,14 @@ is geslaagd. Publieke backend-health en frontend build-info gaven beide HTTP
 er was geen nieuwere deploy pending. Deze statusupdate maakt zelf een latere
 SHA. QA start pas na de laatste main-CI, Auto Deploy en publieke SHA-pariteit
 op die definitieve revisie. Nog geen live acceptatie.
+De status-only PR #1421 resulteerde in definitieve SHA
+`50c36e78e1f014e4aa73b5b34af1ab9b4f18451a`, met vijf groene main-CI-jobs
+in [46092909270](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46092909270),
+geslaagde Auto Deploy
+[46093628457](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46093628457)
+en publieke backend/frontend HTTP 200 op exact die SHA. De onafhankelijke
+browser-QA wees de twee-beurtenproef af wegens de eerste algemene
+bronmomentfout en de losse Markdown-opmaak in de tweede beurt.
 
 ## FINN 3.0: FX-bronmoment bij historische AAPL Paper-reflectie (28 november 2026)
 
