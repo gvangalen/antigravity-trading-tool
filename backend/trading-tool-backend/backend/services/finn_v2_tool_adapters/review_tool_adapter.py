@@ -19,7 +19,7 @@ from backend.services.finn_v2_tool_adapters.display_source_moment import amsterd
 
 class ReviewToolAdapter:
     _WEEK_SUBJECT = re.compile(
-        r"\b(?:weekreflectie|wekelijkse reflectie|weekly reflection|wochenreflexion|"
+        r"\b(?:weekreflectie|wekelijkse reflectie|weekly reflection|weekly review|wochenreflexion|"
         r"(?:mijn|deze|de|opgeslagen)\s+reflectie)\b", re.I)
 
     @classmethod

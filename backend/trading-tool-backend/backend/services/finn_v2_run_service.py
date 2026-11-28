@@ -1974,10 +1974,14 @@ def _minimal_read_answer(
                 for trade in item["data"].get("closed_trades") or [])
         for item in current_evidence
     )
-    week_requested = bool(re.search(
-        r"\b(?:weekreflectie|wekelijkse\s+reflectie|weekly\s+(?:reflection|review))\b",
-        message, re.I,
-    ))
+    from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
+    week_requested = ReviewToolAdapter.mentions_weekly_reflection(message)
+    if historical_read and ReviewToolAdapter._WEEK_SUBJECT.search(message) and not week_requested:
+        return FinnResponsesVerifiedAnswer(
+            "unavailable", "De weekreflectie is in deze vraag uitgesloten; ik toon de "
+            "opgeslagen weeksamenvatting daarom niet.",
+            "weekly_reflection_excluded", current_evidence,
+        )
     exit_requested = bool(re.search(
         r"\b(?:exit\w*|uitstap\w*|verkoop\w*|afgesloten|gesloten|"
         r"closed\s+(?:Paper[- ]?)?trade|sold|sell)\b",
@@ -2024,7 +2028,6 @@ def _minimal_read_answer(
                 "weekly_reflection_unavailable", current_evidence,
             )
         week = weeks[0]
-        from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
         try:
             saved_start = datetime.fromisoformat(str(week["week_start"])).date()
             requested_start = ReviewToolAdapter.requested_week_start(
@@ -2056,7 +2059,11 @@ def _minimal_read_answer(
             f"Opgeslagen op {saved_at} ({zone}). Dit is een weeksamenvatting "
             "zonder details over individuele trades.", None, current_evidence,
         )
-    typed_historical = week_requested and exit_requested and not _legacy_historical_test
+    typed_historical = (
+        week_requested and exit_requested and not _legacy_historical_test
+        and bool(re.search(r"\bAAPL\b", message, re.I))
+        and bool(re.search(r"\bPaper(?:[- ](?:trade|exit))?\b", message, re.I))
+    )
     if typed_historical or str(getattr(prepared, "locale", "nl") or "nl").lower().startswith("nl"):
         from backend.services.finn_v2_factual_source_answer import complete_historical_week_exit_moments
         text = complete_historical_week_exit_moments(

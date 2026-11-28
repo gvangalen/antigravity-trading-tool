@@ -254,12 +254,36 @@ def test_historical_week_respects_week_only_and_live_only_scope():
         QUESTION.replace("9–15 november", other_week),
         "Vat alleen mijn opgeslagen weekreflectie van 2–8 november samen; "
         "laat individuele trades buiten beschouwing.",
+        "Summarize my weekly review from 2 to 8 November 2026.",
     ):
         mismatch = _runtime_minimal_read_answer(
             message=message, prepared=prepared, user_time_zone="Europe/Amsterdam",
         )
         assert mismatch.status == "unavailable", message
         assert "999 USD" not in mismatch.text
+
+    excluded_week = _runtime_minimal_read_answer(
+        message="Toon niet mijn weekreflectie; leg uit wat plantrouw betekent.",
+        prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert excluded_week.status == "unavailable"
+    assert "999 USD" not in excluded_week.text
+    assert "Opgeslagen weekreflectie" not in excluded_week.text
+
+
+def test_historical_aapl_paper_renderer_does_not_capture_other_asset_or_live():
+    prepared = _prepared(text="Het ETH-dossier wordt via de gewone read-route beoordeeld.")
+    for message in (
+        "Bespreek mijn afgesloten ETH Paper-trade van 12 november en de opgeslagen "
+        "weekreflectie van 9–15 november. Lees alleen.",
+        "Bespreek mijn afgesloten AAPL Live-trade van 12 november en de opgeslagen "
+        "weekreflectie van 9–15 november. Lees alleen.",
+    ):
+        answer = _runtime_minimal_read_answer(
+            message=message, prepared=prepared, user_time_zone="Europe/Amsterdam",
+        )
+        assert answer.reason != "historical_week_exit_evidence_unavailable", message
+        assert "AAPL Paper-exit" not in answer.text
 
 
 def test_english_historical_week_without_read_is_unavailable():
