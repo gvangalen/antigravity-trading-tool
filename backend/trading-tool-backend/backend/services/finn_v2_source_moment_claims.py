@@ -382,6 +382,13 @@ def _bot_decision_clocks_supported(
             if not relevant:
                 return False
         following = clause[subject.end():]
+        # A combined "exitbeslissing en USD-koers" clock names two different
+        # events. Do not let the price-word skip below silently bless it as a
+        # decision clock; the typed answer builder can state the quote source
+        # and decision separately when both are verified.
+        if (re.search(r"\ben\s+(?:EUR|USD|USDT)[- ]?koers\s+van\b", following, re.I)
+                and (_DATED_MOMENT.search(following) or _ZONED_CLOCK.search(following))):
+            return False
         dated = list(_DATED_MOMENT.finditer(following))
         if dated:
             for match in dated:

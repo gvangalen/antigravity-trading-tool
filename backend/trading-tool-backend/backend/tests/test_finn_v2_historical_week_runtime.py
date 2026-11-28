@@ -91,6 +91,90 @@ def test_historical_exit_decision_compounds_cannot_claim_registered_close_clock(
     )
 
 
+def test_historical_quote_source_and_decision_are_separate_clocks():
+    from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
+
+    prepared = _prepared(
+        text=("Exitbeslissing en USD-koers van 358,60: "
+              "12 november 2026, 14:59:00 UTC."),
+        trade_date="2026-11-12T15:00:30+00:00",
+    )
+    trade = prepared.response.tool_trace[0]["result"]["results"][0]["data"]["closed_trades"][0]
+    trade["paper_exit_decision_at"] = "2026-11-12T15:00:30+00:00"
+    trade["paper_exit_evidence"].update({
+        "source_price_currency": "USD", "source_price": 358.60,
+        "source_price_at": "2026-11-12T14:59:00+00:00",
+    })
+    evidence = tuple(prepared.response.tool_trace[0]["result"]["results"])
+    assert not current_source_moments_supported(
+        prepared.response.text, evidence, question=QUESTION,
+        user_time_zone="Europe/Amsterdam",
+    )
+    completed = _minimal_read_answer(
+        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert completed.status == "completed", completed.reason
+    assert "Exitbeslissing en USD-koers" not in completed.text
+    assert ("Koersbron bij AAPL Paper-exitbeoordeling: 358,60 USD op "
+            "12 november 2026, 14:59:00 UTC") in completed.text
+    assert ("Geverifieerde AAPL Paper-exitbeslissing: 2026-11-12 16:00:30 CET "
+            "(2026-11-12 15:00:30 UTC; Europe/Amsterdam)") in completed.text
+    assert "AAPL Paper-trade als gesloten geregistreerd: 2026-11-12 16:00:30 CET" in completed.text
+
+    trade["paper_exit_evidence"]["source_price_at"] = "2026-11-12T14:58:00+00:00"
+    unsafe = _minimal_read_answer(
+        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert unsafe.status == "unavailable"
+
+    trade["paper_exit_evidence"].pop("source_price_at")
+    missing = _minimal_read_answer(
+        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert missing.status == "unavailable"
+
+
+def test_live_week_saved_clock_and_fx_markdown_are_sanitized():
+    prepared = _prepared(text=(
+        "Opgeslagen weekreflectie voor 9–15 november 2026: gegenereerd "
+        "16 november 2026, 05:15:00 CET (Amsterdamse tijd).\n"
+        "- **FX-bronmoment:** 12 november 2026, 14:03 UTC"
+    ))
+    answer = _minimal_read_answer(
+        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert answer.status == "completed", answer.reason
+    assert "05:15:00 CET" not in answer.text
+    assert "06:15:00 CET" in answer.text
+    assert "- **FX-brontijd" not in answer.text
+    assert "FX-brontijd: zie de afzonderlijk geverifieerde bronregel" in answer.text
+
+
+def test_live_combined_answer_keeps_three_distinct_source_moments():
+    prepared = _prepared(text=(
+        "Exitbeslissing en USD-koers van 358,60: 12 november 2026, 14:59:00 UTC. "
+        "Opgeslagen weekreflectie voor 9–15 november 2026: gegenereerd "
+        "16 november 2026, 05:15:00 CET (Amsterdamse tijd).\n"
+        "- **FX-bronmoment:** 12 november 2026, 14:03 UTC"
+    ), trade_date="2026-11-12T15:00:30+00:00")
+    trade = prepared.response.tool_trace[0]["result"]["results"][0]["data"]["closed_trades"][0]
+    trade["paper_exit_decision_at"] = "2026-11-12T15:00:30+00:00"
+    trade["paper_exit_evidence"].update({
+        "source_price_currency": "USD", "source_price": 358.60,
+        "source_price_at": "2026-11-12T14:59:00+00:00",
+    })
+    answer = _minimal_read_answer(
+        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert answer.status == "completed", answer.reason
+    assert "Koersbron bij AAPL Paper-exitbeoordeling: 358,60 USD op 12 november 2026, 14:59:00 UTC" in answer.text
+    assert "2026-11-12 15:02:00 CET" in answer.text  # separate FX source
+    assert "2026-11-12 16:00:30 CET" in answer.text  # decision and close may coincide
+    assert "2026-11-16 06:15:00 CET" in answer.text  # saved week
+    assert "05:15:00 CET" not in answer.text
+    assert "**FX-brontijd" not in answer.text
+
+
 def test_historical_exit_decision_completion_repairs_wrong_close_label_and_adds_missing_decision():
     for draft in (
         "De uitstapbeslissing op 12 november 2026 om 15:00:30 UTC. "

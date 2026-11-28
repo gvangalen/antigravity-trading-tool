@@ -64,11 +64,12 @@ def _utc_instant(value: Any) -> datetime | None:
 
 _UNBOUND_WEEK_SAVED_CLAIM = re.compile(
     r"(?P<label>(?:\*{1,2})?\b(?:opgeslagen\s+)?weekreflectie\s+"
-    r"(?:gegenereerd|opgeslagen)(?:\*{1,2})?\s*:(?:\*{1,2})?\s*)"
+    r"(?:voor\s+\d{1,2}\s*[–—-]\s*\d{1,2}\s+[a-z]+(?:\s+\d{4})?\s*:\s*)?"
+    r"(?:gegenereerd|opgeslagen)(?:\*{1,2})?\s*:?(?:\*{1,2})?\s*)"
     r"(?P<moment>(?:(?:\d{4}-\d{2}-\d{2}|\d{1,2}\s+[a-z]+(?:\s+\d{4})?)"
     r"\s*,?\s*)?\d{1,2}:\d{2}(?::\d{2})?\s+"
     r"(?:[A-Za-z_]+/[A-Za-z_]+|[A-Z]{2,5}\b)"
-    r"(?:\s*\((?:[A-Za-z_]+/[A-Za-z_]+|UTC|GMT|CET|CEST|EST|EDT|PST|PDT)\))?)",
+    r"(?:\s*\((?:[A-Za-z_]+/[A-Za-z_]+|UTC|GMT|CET|CEST|EST|EDT|PST|PDT|Amsterdamse\s+tijd)\))?)",
     re.I,
 )
 
@@ -81,7 +82,7 @@ def _suppress_unbound_week_saved_claims(answer: str) -> str:
 
 
 _UNBOUND_FX_MOMENT_CLAIM = re.compile(
-    r"(?P<label>(?:Geverifieerd\s+)?\b(?:FX(?:[- ]?(?:bron(?:moment)?|koers))?|"
+    r"(?P<label>(?:\*{1,2})?(?:Geverifieerd\s+)?\b(?:FX(?:[- ]?(?:bron(?:moment)?|koers))?|"
     r"(?:exit|uitvoerings)?wisselkoers(?:bron(?:moment)?)?)\b"
     r"(?:(?![.;]\s|\n|(?:,|\ben\b)\s*(?:de\s+)?"
     r"(?:bot\w*|(?:uitstap|exit)[- ]?besliss\w*|bevestigde\s+les|"
@@ -105,6 +106,15 @@ _HISTORICAL_EXIT_DECISION_CLAIM = re.compile(
     r"(?:(?:op|om)\s*|:\s*)?)"
     r"(?P<moment>(?:(?:20\d{2}-\d{2}-\d{2}|\d{1,2}\s+[a-z]+(?:\s+20\d{2})?)"
     r"\s*,?\s*)?(?:om\s+)?\d{1,2}:\d{2}(?::\d{2})?\s+(?:UTC|CET|CEST)\b)",
+    re.I,
+)
+
+_MIXED_EXIT_DECISION_PRICE_CLAIM = re.compile(
+    r"(?P<label>\b(?:uitstap|exit)[- ]?besliss\w*\s+en\s+"
+    r"(?P<currency>EUR|USD|USDT)[- ]?koers\s+van\s+"
+    r"(?P<price>\d+(?:[.,]\d+)?)\s*:\s*)"
+    r"(?P<moment>(?:\d{1,2}\s+[a-z]+\s+20\d{2}|20\d{2}-\d{2}-\d{2})"
+    r"\s*,?\s*\d{1,2}:\d{2}(?::\d{2})?\s+(?:UTC|CET|CEST)\b)",
     re.I,
 )
 
@@ -164,13 +174,9 @@ def _suppress_unbound_fx_moment_claims(
         def replace(match: re.Match[str]) -> str:
             if not match.group("alternative") and verified(match.group("moment")):
                 return match.group(0)
-            # In `FX-bronmoment: **tijd**`, the opening stars sit inside the
-            # rejected claim, while the closing stars follow the clock. Drop
-            # both with the claim; keep an outer `**FX-bronmoment: tijd**`
-            # pair balanced when its opening stars are outside the match.
-            embedded_open = "**" in match.group("label")
-            close = match.group("markdown_close") or ""
-            return replacement + ("" if embedded_open else close)
+            # The match includes both outer and inner emphasis markers, so
+            # rejected draft clocks cannot leave a dangling `**` behind.
+            return replacement
 
         return _UNBOUND_FX_MOMENT_CLAIM.sub(replace, fragment)
 
@@ -305,6 +311,40 @@ def complete_historical_week_exit_moments(
                     for trade in matching_trades)):
         verified_decision_at = next(iter(decision_instants))
         decision_at_in_zone, _ = _moment_in_zone(verified_decision_at, user_time_zone)
+    # A price source observation is not the bot decision. Rewrite the narrow
+    # mixed draft only when every owner-bound copy agrees on the typed quote.
+    quote_facts = [trade.get("paper_exit_evidence") for trade in matching_trades]
+    quote_moments = {_utc_instant(facts.get("source_price_at"))
+                     for facts in quote_facts if isinstance(facts, dict)}
+    quote_prices = {(str(facts.get("source_price_currency") or "").upper(),
+                     str(facts.get("source_price") or ""))
+                    for facts in quote_facts if isinstance(facts, dict)}
+    if (all(isinstance(facts, dict) for facts in quote_facts)
+            and len(quote_moments) == 1
+            and None not in quote_moments and len(quote_prices) == 1):
+        quote_at = next(iter(quote_moments))
+        currency, raw_price = next(iter(quote_prices))
+        try:
+            verified_price = Decimal(raw_price)
+        except (InvalidOperation, TypeError, ValueError):
+            verified_price = None
+
+        def distinct_price_source(match: re.Match[str]) -> str:
+            claim = _claimed_moment(match.group("moment"))
+            try:
+                claimed_price = Decimal(match.group("price").replace(",", "."))
+            except InvalidOperation:
+                return match.group(0)
+            if (claim and _same_moment(claim, quote_at)
+                    and match.group("currency").upper() == currency
+                    and verified_price is not None and verified_price.is_finite()
+                    and claimed_price == verified_price):
+                return (f"Koersbron bij AAPL Paper-exitbeoordeling: "
+                        f"{match.group('price')} {currency} op {match.group('moment')}")
+            return match.group(0)
+
+        from backend.services.finn_v2_source_moment_claims import _claimed_moment, _same_moment
+        answer = _MIXED_EXIT_DECISION_PRICE_CLAIM.sub(distinct_price_source, answer)
     if decision_at_in_zone and re.search(r"\bbronmoment(?:en)?\b", question, re.I):
         # A model may call the registered close an exit decision. Replace
         # only that historical decision clock, using the owner-read closing
