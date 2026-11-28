@@ -6,9 +6,11 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: FX-bronmoment bij historische AAPL Paper-reflectie (28 november 2026)
 
-Phase: `READY_FOR_PR_CI`. Product branch
+Phase: `READY_FOR_INDEPENDENT_QA_AFTER_STATUS_DEPLOY`. Product branch
 `codex/finn-week-fx-moment-20261128`, producthead
-`926ffde4afc7e41327581e38a8a130e316680347`.
+`926ffde4afc7e41327581e38a8a130e316680347`;
+[PR #1418](https://github.com/gvangalen/antigravity-trading-tool/pull/1418)
+merged in `b5f36d9ea74239c49ebb4f19635da6c2d4ebb990`.
 Onafhankelijke ingelogde browser-QA op definitieve live SHA
 `974b2bdde3df460c035abd473385175226d78a50` gaf `NOT_ACCEPTED`:
 beide antwoorden noemden de historische week, de geregistreerde AAPL Paper-
@@ -35,6 +37,15 @@ zonder provider-, schema-, parse-, validatie- of timeoutfouten. Er is geen
 gewijzigd actiecontract; de worker-actiematrix is voor deze read-only
 bronprojectie en antwoordcorrectie niet van toepassing. Geen live acceptatie
 voor deze kandidaat.
+PR-CI [46085972890](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46085972890)
+en main-CI [46086769337](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46086769337)
+hebben elk vijf groene jobs. Auto Deploy
+[46087455371](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46087455371)
+is geslaagd. Publieke backend-health en frontend build-info gaven beide HTTP
+200 en SHA `b5f36d9ea74239c49ebb4f19635da6c2d4ebb990`, gelijk aan main;
+er was geen nieuwere deploy pending. Deze statusupdate maakt zelf een latere
+SHA. QA start pas na de laatste main-CI, Auto Deploy en publieke SHA-pariteit
+op die definitieve revisie.
 
 ## FINN 3.0: Markdown-opmaak in historisch weekopslagmoment (27 november 2026)
 
