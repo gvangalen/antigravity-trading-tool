@@ -2192,17 +2192,28 @@ class FinnResponsesFrontDoor:
             quote = pair.partition("/")[2] if pair.startswith(f"{asset}/") else ""
             market_id = historical.get("market_id")
             language = locale.lower().split("-")[0]
-            explicit_pairs = {f"{base}/{currency}" for base, currency in re.findall(
+            currency_aliases = {
+                "EURO": "EUR", "EUROS": "EUR",
+                "DOLLAR": "USD", "DOLLARS": "USD", "TETHER": "USDT",
+            }
+            pair_mentions = re.findall(
                 r"(?<![A-Z0-9])([A-Z0-9][A-Z0-9._-]{0,19})\s*/\s*([A-Z]{2,12})(?![A-Z0-9])",
                 message.upper(), re.I,
-            )}
-            explicit_pairs.update(f"{base}/{currency}" for base, currency in re.findall(
+            )
+            pair_mentions += re.findall(
                 r"\b([A-Z0-9][A-Z0-9._-]{0,19})\s+"
                 r"(?:TEGEN|VERSUS|VS|AGAINST|GEGEN)\s+([A-Z]{2,12})\b",
                 message.upper(), re.I,
-            ))
+            )
+            explicit_pairs = {
+                f"{resolve_catalog_symbol(base) or base}/{currency_aliases.get(currency, currency)}"
+                for base, currency in pair_mentions
+            }
             explicit_assets = mentioned_catalog_symbols(message)
-            currency_mentions = set(re.findall(r"\b(?:EUR|USDT|USD)\b", message.upper()))
+            currency_mentions = {currency_aliases.get(value, value) for value in re.findall(
+                r"\b(?:EUR|EURO|EUROS|USDT|TETHER|USD|DOLLAR|DOLLARS)\b",
+                message.upper(), re.I,
+            )}
             other_currencies = currency_mentions - {quote} if quote else set()
             if ((explicit_pairs and explicit_pairs != {pair})
                     or (explicit_assets and explicit_assets != {asset})

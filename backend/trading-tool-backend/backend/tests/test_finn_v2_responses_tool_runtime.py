@@ -4457,7 +4457,9 @@ def test_selected_analysis_card_does_not_borrow_setup_from_other_pair():
     "Ik wil een setup voor BTC/EUR verkennen. Maak niets aan.",
     "Ik wil een setup voor BTC / EUR verkennen. Maak niets aan.",
     "Ik wil een setup voor BTC tegen EUR verkennen. Maak niets aan.",
+    "Ik wil een setup voor BTC tegen euro verkennen. Maak niets aan.",
     "Ik wil een setup voor BTC in EUR verkennen. Maak niets aan.",
+    "Ik wil een setup voor Bitcoin in euro verkennen. Maak niets aan.",
     "Ik wil een setup voor ETH/EUR verkennen. Maak niets aan.",
 ])
 def test_selected_analysis_card_asks_when_question_targets_another_pair(question):
@@ -4478,6 +4480,9 @@ def test_selected_analysis_card_asks_when_question_targets_another_pair(question
     ))
     assert result.response.answer_kind == "selected_analysis_target_conflict"
     assert "BTC/USDT" in result.response.text
+    if "euro" in question.lower() or "EUR" in question:
+        assert "BTC/EUR" in result.response.text or "ETH/EUR" in result.response.text
+        assert "BTC/EURO" not in result.response.text
     assert "Welke analyse" in result.response.text
     assert "benchmarkscore" not in result.response.text
     verified = asyncio.run(FinnResponsesAnswerVerifier().verify(
