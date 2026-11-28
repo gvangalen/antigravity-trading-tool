@@ -83,9 +83,13 @@ def test_historical_bot_clock_requires_typed_owner_bound_exit_decision():
     row["data"]["latest_bot_decisions"] = [{
         "bot_id": 129, "symbol": "AAPL", "decision_at": "2026-11-27T18:48:00+00:00",
     }]
-    assert current_source_moments_supported(prepared.response.text, (row,), question=QUESTION)
+    assert current_source_moments_supported(
+        prepared.response.text, (row,), question=QUESTION, user_time_zone="Europe/Amsterdam",
+    )
     row["data"]["closed_trades"][0].pop("paper_exit_decision_at")
-    assert not current_source_moments_supported(prepared.response.text, (row,), question=QUESTION)
+    assert not current_source_moments_supported(
+        prepared.response.text, (row,), question=QUESTION, user_time_zone="Europe/Amsterdam",
+    )
 
 
 def test_historical_clock_cannot_be_attributed_to_another_closed_trade():
@@ -102,14 +106,22 @@ def test_historical_clock_cannot_be_attributed_to_another_closed_trade():
     }]
     assert not current_source_moments_supported(
         prepared.response.text, (row,), question="Bespreek trade #2128 voor AAPL.",
+        user_time_zone="Europe/Amsterdam",
+    )
+    assert not current_source_moments_supported(
+        "Historische botbeslissing bij dossier #2128: 27 november 2026 18:48 UTC.",
+        (row,), question="Bespreek dossier #2128 voor AAPL.",
+        user_time_zone="Europe/Amsterdam",
     )
     assert not current_source_moments_supported(
         "Bij dossier #999 was de botbeslissing 12 november 2026 14:59 UTC.",
         (row,), question="Bespreek dossier #999 voor AAPL.",
+        user_time_zone="Europe/Amsterdam",
     )
     assert not current_source_moments_supported(
         "De botbeslissing voor AAPL was 12 november 2026 14:59 UTC.",
         (row,), question="Bespreek mijn AAPL-trades van 12 november.",
+        user_time_zone="Europe/Amsterdam",
     )
 
 
@@ -123,6 +135,27 @@ def test_conflicting_reads_for_same_closed_review_do_not_verify_a_bot_clock():
     conflict["data"]["closed_trades"][0]["paper_exit_decision_at"] = "2026-11-12T14:58:00+00:00"
     assert not current_source_moments_supported(
         prepared.response.text, (row, conflict), question="Bespreek dossier #2127 voor AAPL.",
+        user_time_zone="Europe/Amsterdam",
+    )
+
+
+def test_historical_trade_date_uses_the_users_zone_only():
+    from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
+
+    prepared = _prepared(text="De botbeslissing voor de AAPL-trade van 12 november was 14:59 UTC.")
+    row = prepared.response.tool_trace[0]["result"]["results"][0]
+    row["data"]["closed_trades"][0]["exit_at"] = "2026-11-12T23:30:00+00:00"
+    question = "Bespreek mijn afgesloten AAPL-trade van 12 november."
+    assert not current_source_moments_supported(
+        prepared.response.text, (row,), question=question,
+        user_time_zone="Europe/Amsterdam",
+    )
+    assert current_source_moments_supported(
+        prepared.response.text, (row,), question=question,
+        user_time_zone="UTC",
+    )
+    assert not current_source_moments_supported(
+        prepared.response.text, (row,), question=question,
     )
 
 

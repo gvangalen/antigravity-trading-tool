@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import re
 from typing import Any
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from backend.services.asset_catalog_service import mentioned_catalog_symbols
 
@@ -97,6 +97,7 @@ def _same_moment(claim: tuple[datetime, bool], observed: datetime) -> bool:
 
 def _one_requested_paper_exit_decision(
     evidence: tuple[dict[str, Any], ...], *, question: str | None, answer: str,
+    user_time_zone: str | None,
 ) -> tuple[tuple[int | None, str, datetime] | None, bool]:
     """Bind an old bot clock to one owner-read closed dossier, never another trade."""
     review_pattern = re.compile(
@@ -124,6 +125,12 @@ def _one_requested_paper_exit_decision(
     if len(named_dates) > 1:
         return None, True
     requested_date = next(iter(named_dates), None)
+    try:
+        date_zone = ZoneInfo(user_time_zone) if user_time_zone else None
+    except (ZoneInfoNotFoundError, TypeError, ValueError):
+        date_zone = None
+    if requested_date is not None and date_zone is None:
+        return None, True
     selected: dict[int, tuple[int | None, str, datetime, datetime]] = {}
     for item in evidence:
         if (item.get("scope") != "read_review_history" or item.get("status") != "completed"
@@ -150,9 +157,9 @@ def _one_requested_paper_exit_decision(
     if requested_date is not None:
         day, month, year = requested_date
         candidates = [(review_id, value) for review_id, value in candidates
-                      if any((local.day, local.month) == (day, month)
-                             and (year is None or local.year == year)
-                             for local in (value[3], value[3].astimezone(_AMSTERDAM)))]
+                      if (local := value[3].astimezone(date_zone))
+                      and (local.day, local.month) == (day, month)
+                      and (year is None or local.year == year)]
     if len(candidates) != 1:
         return None, bool(selected_ids or requested_date)
     bot_id, symbol, decision_at, _ = candidates[0][1]
@@ -161,21 +168,23 @@ def _one_requested_paper_exit_decision(
 
 def _bot_decision_clocks_supported(
     answer: str, evidence: tuple[dict[str, Any], ...], *, question: str | None = None,
-    typed_recovery: bool = False,
+    typed_recovery: bool = False, user_time_zone: str | None = None,
 ) -> bool:
     """Check bot clocks in prose against saved report or current decision rows."""
     decisions: list[tuple[int | None, str, datetime]] = []
     current_decisions: list[tuple[int | None, str, datetime]] = []
     historical_decision, historical_unsafe = _one_requested_paper_exit_decision(
-        evidence, question=question, answer=answer,
+        evidence, question=question, answer=answer, user_time_zone=user_time_zone,
     )
     if historical_unsafe and re.search(
         r"\b(?:(?:bot)?besluit\w*|(?:bot)?besliss\w*|(?:bot)?beoordel\w*)\b",
         answer, re.I,
     ) and (_DATED_MOMENT.search(answer) or _ZONED_CLOCK.search(answer)):
         return False
-    if historical_decision is not None:
-        decisions.append(historical_decision)
+    historical_question = bool(question and re.search(
+        r"\b(?:afgesloten|gesloten\s+trade|trade[- ]?reflectie|weekreflectie|"
+        r"historisch\w*|dossier\s*#)\b", question, re.I,
+    ))
     for item in evidence:
         if item.get("status") != "completed" or not isinstance(item.get("data"), dict):
             continue
@@ -275,7 +284,20 @@ def _bot_decision_clocks_supported(
                             return False
                 for moment in reversed(read_moments):
                     clause = clause[:moment.start()] + " " * (moment.end() - moment.start()) + clause[moment.end():]
-        relevant = [(bot_id, symbol, at) for bot_id, symbol, at in decisions
+        latest_claim = bool(re.search(r"\b(?:laatste|nieuwste|actuele|huidige|latest|current)\b", clause, re.I))
+        report_claim = bool(re.search(r"\b(?:dagrapport|ochtendrapport|rapportmomentopname|rapport)\b", clause, re.I))
+        historical_clause = bool(re.search(
+            r"\b(?:historisch\w*|afgesloten|dossier\s*#\s*\d+|"
+            r"trade\s*#\s*\d+|Paper[- ]?exit|Paper[- ]?uitstap)\b", clause, re.I,
+        ))
+        if historical_clause and latest_claim:
+            return False
+        historical_scope = historical_clause or (
+            historical_question and not latest_claim and not current_requested and not report_claim
+        )
+        scoped_decisions = ([historical_decision] if historical_decision else []) \
+            if historical_scope else decisions
+        relevant = [(bot_id, symbol, at) for bot_id, symbol, at in scoped_decisions
                     if not ids or bot_id in ids]
         named = [(bot_id, symbol, at) for bot_id, symbol, at in relevant
                  if symbol and re.search(rf"\b{re.escape(symbol)}\b", clause, re.I)]
@@ -290,8 +312,6 @@ def _bot_decision_clocks_supported(
         # A report can correctly show its own earlier bot snapshot. An
         # unqualified claim about the latest/current decision must instead
         # match the owner-scoped decision read for that bot.
-        latest_claim = bool(re.search(r"\b(?:laatste|nieuwste|actuele|huidige|latest|current)\b", clause, re.I))
-        report_claim = bool(re.search(r"\b(?:dagrapport|ochtendrapport|rapportmomentopname|rapport)\b", clause, re.I))
         decision_claim = bool(re.search(
             r"\b(?:besluit\w*|besliss\w*|beoordel\w*|hold)\b", clause, re.I,
         ))
@@ -500,6 +520,7 @@ def current_source_moments_supported(
     answer: str, evidence: tuple[dict[str, Any], ...], *, question: str | None = None,
     diagnostics: list[str] | None = None,
     typed_recovery: bool = False,
+    user_time_zone: str | None = None,
 ) -> bool:
     """Check stated quote, portfolio and report times against their own reads."""
     def reject(rule: str) -> bool:
@@ -509,6 +530,7 @@ def current_source_moments_supported(
 
     if not _bot_decision_clocks_supported(
         answer, evidence, question=question, typed_recovery=typed_recovery,
+        user_time_zone=user_time_zone,
     ):
         return reject("bot_decision_clock_mismatch")
 
