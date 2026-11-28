@@ -3130,6 +3130,19 @@ class FinnResponsesAnswerVerifier:
             for item in (payload.get("results") or [])
             if isinstance(item, dict)
         )
+        if result.answer_kind == "selected_analysis_target_conflict":
+            marker = result.tool_trace[0] if len(result.tool_trace) == 1 else {}
+            claim = marker.get("result") if isinstance(marker, dict) else None
+            if (marker.get("name") == "read_selected_analysis_target"
+                    and marker.get("status") == "completed"
+                    and isinstance(claim, dict) and claim.get("verified") is True
+                    and str(claim.get("selected") or "") in result.text
+                    and str(claim.get("requested") or "") in result.text):
+                return FinnResponsesVerifiedAnswer("completed", result.text, None, evidence)
+            return FinnResponsesVerifiedAnswer(
+                "unavailable", "Ik kan de gekozen analysemelding niet verifiëren.",
+                "selected_analysis_target_unavailable", evidence,
+            )
         if result.answer_kind in {"selected_analysis_next_step", "selected_analysis_next_step_unavailable"}:
             scopes = {row.get("scope"): row for row in evidence if isinstance(row, dict)}
             inventory = scopes.get("read_saved_setup_inventory") or {}
@@ -3137,11 +3150,20 @@ class FinnResponsesAnswerVerifier:
             inventory_data = inventory.get("data") if inventory.get("status") == "completed" else None
             score_data = scored.get("data") if scored.get("status") == "completed" else None
             setups = inventory_data.get("setups") if isinstance(inventory_data, dict) else None
+            selection = (result.tool_trace[0].get("selection")
+                         if len(result.tool_trace) == 2 else None)
+            other_selection = (result.tool_trace[1].get("selection")
+                               if len(result.tool_trace) == 2 else None)
             verified = (
                 len(result.tool_trace) == 2
                 and {call.get("name") for call in result.tool_trace}
                 == {"get_saved_setup_inventory", "get_current_asset_scores"}
                 and isinstance(inventory_data, dict)
+                and isinstance(selection, dict)
+                and selection == other_selection
+                and bool(selection.get("feed_item_id"))
+                and bool(selection.get("symbol"))
+                and str(selection.get("pair") or "") in result.text
                 and inventory_data.get("complete") is True
                 and isinstance(setups, list)
                 and type(inventory_data.get("setup_count")) is int
@@ -3154,7 +3176,18 @@ class FinnResponsesAnswerVerifier:
                          and score_data.get("benchmark_score") is None))
                 and str(score_data.get("symbol") or "").upper()
                 == str(inventory_data.get("asset_filter") or "").upper()
-                and str(score_data.get("symbol") or "").upper() in result.text.upper()
+                and str(score_data.get("symbol") or "").upper()
+                == str(selection.get("symbol") or "").upper()
+                and score_data.get("market_id") == selection.get("market_id")
+                and (str(score_data.get("pair") or "").upper()
+                     == str(selection.get("pair") or "").upper()
+                     if selection.get("market_id") is not None
+                     else score_data.get("pair") is None
+                     and str(selection.get("pair") or "").upper()
+                     == str(selection.get("symbol") or "").upper())
+                and (score_data.get("source_status") != "available"
+                     or str(score_data.get("as_of") or "")
+                     == str(selection.get("score_as_of") or ""))
             )
             if verified and result.answer_kind == "selected_analysis_next_step":
                 return FinnResponsesVerifiedAnswer("completed", result.text, None, evidence)

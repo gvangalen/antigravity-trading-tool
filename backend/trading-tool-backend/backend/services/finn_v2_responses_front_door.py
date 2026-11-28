@@ -2181,7 +2181,6 @@ class FinnResponsesFrontDoor:
                                   and item["facts"].get("selection_origin") == "current_run"
                                   and item["facts"].get("historical_notification") is True), None)
         if (selected_analysis is not None
-                and locale.lower().startswith("nl")
                 and workspace_hints.get("feed_draft_edited") is not True
                 and _explicit_discussion_only(message)):
             # The card is historical. Reread its exact owner-bound score and
@@ -2192,6 +2191,31 @@ class FinnResponsesFrontDoor:
             pair = str(historical.get("trading_pair") or asset).upper()
             quote = pair.partition("/")[2] if pair.startswith(f"{asset}/") else ""
             market_id = historical.get("market_id")
+            language = locale.lower().split("-")[0]
+            explicit_pairs = set(re.findall(
+                r"(?<![A-Z0-9])([A-Z0-9][A-Z0-9._-]{0,19}/[A-Z]{2,12})(?![A-Z0-9])",
+                message.upper(), re.I,
+            ))
+            explicit_assets = mentioned_catalog_symbols(message)
+            if ((explicit_pairs and explicit_pairs != {pair})
+                    or (explicit_assets and explicit_assets != {asset})):
+                requested = ", ".join(sorted(explicit_pairs or explicit_assets))
+                clarification = {
+                    "en": f"This update is about {pair}, but you asked about {requested}. Which analysis should we discuss? I have changed nothing.",
+                    "de": f"Diese Meldung betrifft {pair}, du fragst aber nach {requested}. Welche Analyse sollen wir besprechen? Ich habe nichts geändert.",
+                }.get(language, f"Deze melding gaat over {pair}, maar je vraagt naar {requested}. Welke analyse wil je bespreken? Ik heb niets gewijzigd.")
+                return FinnResponsesFrontDoorResult(
+                    FinnResponsesResult(
+                        text=clarification,
+                        response_id=f"selected-analysis-target-conflict-{self.run_id}",
+                        tool_trace=({"name": "read_selected_analysis_target", "status": "completed",
+                                     "arguments": {}, "result": {"selected": pair,
+                                                                    "requested": requested,
+                                                                    "verified": True}},),
+                        answer_kind="selected_analysis_target_conflict",
+                        model_led_coach=False, response_id_reusable=False,
+                    ), None, previous_response, locale=locale,
+                )
             current = next((item["facts"] for item in feed_evidence or []
                             if isinstance(item, dict) and isinstance(item.get("facts"), dict)
                             and item["facts"].get("feed_item_id") == selected_analysis.get("feed_item_id")
@@ -2212,7 +2236,10 @@ class FinnResponsesFrontDoor:
                     logger.exception("FINN selected analysis feed reread failed")
                     inventory_read, score_read = {}, {}
                 trace = tuple({"name": call.name, "status": read.get("status", "unavailable"),
-                               "arguments": call.inputs, "result": read}
+                               "arguments": call.inputs, "result": read,
+                               "selection": {"feed_item_id": selected_analysis.get("feed_item_id"),
+                                             "symbol": asset, "pair": pair, "market_id": market_id,
+                                             "score_as_of": current.get("current_score_as_of")}}
                               for call, read in ((inventory_call, inventory_read), (score_call, score_read)))
                 inventory_rows = [row for row in inventory_read.get("results") or []
                                   if isinstance(row, dict) and row.get("scope") == "read_saved_setup_inventory"
@@ -2254,23 +2281,30 @@ class FinnResponsesFrontDoor:
                 if verified:
                     subject = pair
                     if matching:
-                        answer = (f"Voor {subject} zie ik al een opgeslagen setup. Wil je dat ik die "
-                                  "met de huidige analyse vergelijk voordat we iets nieuws ontwerpen? "
-                                  "Ik heb niets gewijzigd.")
+                        answer = {
+                            "en": f"You already have a saved setup for {subject}. Shall I compare it with the current analysis before we design another one? I have changed nothing.",
+                            "de": f"Für {subject} gibt es bereits ein gespeichertes Setup. Soll ich es mit der aktuellen Analyse vergleichen, bevor wir ein neues entwerfen? Ich habe nichts geändert.",
+                        }.get(language, f"Voor {subject} zie ik al een opgeslagen setup. Wil je dat ik die met de huidige analyse vergelijk voordat we iets nieuws ontwerpen? Ik heb niets gewijzigd.")
                     else:
                         formatted_score = (f"{scored['benchmark_score']:g}".replace(".", ",")
+                                           if language in {"nl", "de"} and scored.get("source_status") == "available"
+                                           else f"{scored['benchmark_score']:g}"
                                            if scored.get("source_status") == "available" else None)
-                        score_context = (f"De benchmarkscore voor {subject} is "
-                                         f"{formatted_score}/100. "
-                                         if scored.get("source_status") == "available" else
-                                         f"Voor {subject} is nu geen complete benchmarkscore beschikbaar. ")
-                        answer = (f"{score_context}Een benchmarkscore is op zichzelf geen koopsein. "
-                                  "Mijn startpunt is een swing-setup "
-                                  "op de daggrafiek: bepaal vooraf een instapvoorwaarde, risico en exit. "
-                                  "Je kunt ook een positie-setup voor langere termijn of een DCA-setup "
-                                  "voor gespreid opbouwen kiezen. Wil je korter handelen, langer "
-                                  "vasthouden of gespreid opbouwen? Dan maak ik een bewerkbaar voorstel. "
-                                  "Ik heb niets opgeslagen.")
+                        if language == "en":
+                            score_context = (f"The benchmark score for {subject} is {formatted_score}/100. "
+                                             if formatted_score is not None else
+                                             f"A complete benchmark score for {subject} is not available now. ")
+                            answer = (f"{score_context}A score alone is not a buy signal. I would start by exploring a daily swing setup with a clear entry condition, risk limit and exit. A longer-term position setup or a DCA setup for gradual buying are other options. Do you want to trade over a shorter period, hold for longer, or build gradually? I can then prepare an editable proposal. I have saved nothing.")
+                        elif language == "de":
+                            score_context = (f"Der Benchmarkwert für {subject} beträgt {formatted_score}/100. "
+                                             if formatted_score is not None else
+                                             f"Ein vollständiger Benchmarkwert für {subject} ist derzeit nicht verfügbar. ")
+                            answer = (f"{score_context}Ein Wert allein ist kein Kaufsignal. Als Ausgangspunkt würde ich ein Swing-Setup im Tageschart mit klarer Einstiegsbedingung, Risikogrenze und Ausstieg prüfen. Ein längerfristiges Positions-Setup oder ein DCA-Setup zum schrittweisen Aufbau sind weitere Möglichkeiten. Möchtest du kürzer handeln, länger halten oder schrittweise aufbauen? Danach kann ich einen bearbeitbaren Entwurf vorbereiten. Ich habe nichts gespeichert.")
+                        else:
+                            score_context = (f"De benchmarkscore voor {subject} is {formatted_score}/100. "
+                                             if formatted_score is not None else
+                                             f"Voor {subject} is nu geen complete benchmarkscore beschikbaar. ")
+                            answer = (f"{score_context}Een benchmarkscore is op zichzelf geen koopsein. Mijn startpunt is een swing-setup op de daggrafiek: bepaal vooraf een instapvoorwaarde, risico en exit. Je kunt ook een positie-setup voor langere termijn of een DCA-setup voor gespreid opbouwen kiezen. Wil je korter handelen, langer vasthouden of gespreid opbouwen? Dan maak ik een bewerkbaar voorstel. Ik heb niets opgeslagen.")
                     return FinnResponsesFrontDoorResult(
                         FinnResponsesResult(text=answer, response_id=f"selected-analysis-{self.run_id}",
                                             tool_trace=trace, answer_kind="selected_analysis_next_step",
@@ -2278,7 +2312,10 @@ class FinnResponsesFrontDoor:
                         None, previous_response, locale=locale,
                     )
                 return FinnResponsesFrontDoorResult(
-                    FinnResponsesResult(text="Ik kan de huidige analyse voor deze melding even niet controleren.",
+                    FinnResponsesResult(text={
+                        "en": "I cannot verify the current analysis for this update right now.",
+                        "de": "Ich kann die aktuelle Analyse für diese Meldung gerade nicht prüfen.",
+                    }.get(language, "Ik kan de huidige analyse voor deze melding even niet controleren."),
                                         response_id=f"selected-analysis-unavailable-{self.run_id}",
                                         tool_trace=trace, answer_kind="selected_analysis_next_step_unavailable",
                                         response_id_reusable=False),

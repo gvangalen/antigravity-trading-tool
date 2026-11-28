@@ -4319,12 +4319,13 @@ def test_selected_paper_next_step_does_not_borrow_other_btc_bot():
     assert verified is False and "blijft open" in missing
 
 
-@pytest.mark.parametrize("pair,market_id,existing,score_available", [
-    ("MSTR", None, False, True), ("BTC/USDT", 34, False, True),
-    ("MSTR", None, True, True), ("MSTR", None, False, False),
+@pytest.mark.parametrize("pair,market_id,existing,score_available,locale", [
+    ("MSTR", None, False, True, "nl"), ("BTC/USDT", 34, False, True, "nl"),
+    ("MSTR", None, True, True, "nl"), ("MSTR", None, False, False, "nl"),
+    ("MSTR", None, False, True, "en"), ("MSTR", None, False, True, "de"),
 ])
 def test_selected_analysis_card_offers_setup_choices_without_source_dump(
-    monkeypatch, pair, market_id, existing, score_available,
+    monkeypatch, pair, market_id, existing, score_available, locale,
 ):
     asset = pair.split("/")[0]
     feed = [
@@ -4364,10 +4365,14 @@ def test_selected_analysis_card_offers_setup_choices_without_source_dump(
             },
         }]}
     front.reads = read
+    message = {
+        "en": f"I want to explore a setup for {pair}. What are my options, which would you recommend and what do you need me to choose? Do not change anything.",
+        "de": f"Ich möchte ein Setup für {pair} erkunden. Welche Möglichkeiten gibt es, welche empfiehlst du und was muss ich wählen? Ändere nichts.",
+    }.get(locale, f"Ik wil een setup voor {pair} verkennen. Welke mogelijkheden zijn er, welke raad je aan en wat moet ik kiezen? Maak niets aan.")
     result = asyncio.run(front.run(
-        message=(f"Ik wil een setup voor {pair} verkennen. Welke mogelijkheden zijn er, "
-                 "welke raad je aan en wat moet ik kiezen? Maak niets aan."),
+        message=message,
         instructions="", conversation_context={}, verified_asset=asset, feed_evidence=feed,
+        locale=locale,
     ))
     assert result.proposal_analysis is None
     assert result.response.answer_kind == "selected_analysis_next_step"
@@ -4375,18 +4380,40 @@ def test_selected_analysis_card_offers_setup_choices_without_source_dump(
         assert "al een opgeslagen setup" in result.response.text
         assert "swing-setup" not in result.response.text
     else:
-        assert "swing-setup" in result.response.text
-        assert "positie-setup" in result.response.text
-        assert "DCA-setup" in result.response.text
-        assert ("42,7/100" in result.response.text) is score_available
-        if not score_available:
-            assert "geen complete benchmarkscore" in result.response.text
+        if locale == "nl":
+            assert "swing-setup" in result.response.text
+            assert "positie-setup" in result.response.text
+            assert "DCA-setup" in result.response.text
+            assert ("42,7/100" in result.response.text) is score_available
+            if not score_available:
+                assert "geen complete benchmarkscore" in result.response.text
+        else:
+            assert ("42.7/100" in result.response.text) is (locale == "en")
+            assert ("42,7/100" in result.response.text) is (locale == "de")
+            assert "DCA" in result.response.text
     assert "bronmoment" not in result.response.text
     assert "verouderd" not in result.response.text
     verified = asyncio.run(FinnResponsesAnswerVerifier().verify(
-        message="Bespreek deze analysekaart", result=result.response, locale="nl",
+        message=message, result=result.response, locale=locale,
     ))
     assert verified.status == "completed"
+    if pair == "BTC/USDT":
+        wrong_pair = [dict(call) for call in result.response.tool_trace]
+        wrong_pair[0]["selection"] = {**wrong_pair[0]["selection"], "pair": "BTC/EUR"}
+        rejected = asyncio.run(FinnResponsesAnswerVerifier().verify(
+            message=message,
+            result=replace(result.response, tool_trace=tuple(wrong_pair)), locale=locale,
+        ))
+        assert rejected.status == "unavailable"
+        wrong_date = [dict(call) for call in result.response.tool_trace]
+        wrong_date[0]["selection"] = {**wrong_date[0]["selection"],
+                                       "score_as_of": "2026-11-26"}
+        wrong_date[1]["selection"] = dict(wrong_date[0]["selection"])
+        rejected = asyncio.run(FinnResponsesAnswerVerifier().verify(
+            message=message,
+            result=replace(result.response, tool_trace=tuple(wrong_date)), locale=locale,
+        ))
+        assert rejected.status == "unavailable"
 
 
 def test_selected_analysis_card_does_not_borrow_setup_from_other_pair():
@@ -4424,6 +4451,36 @@ def test_selected_analysis_card_does_not_borrow_setup_from_other_pair():
     assert result.response.answer_kind == "selected_analysis_next_step"
     assert "swing-setup" in result.response.text
     assert "BTC/EUR" not in result.response.text
+
+
+@pytest.mark.parametrize("question", [
+    "Ik wil een setup voor BTC/EUR verkennen. Maak niets aan.",
+    "Ik wil een setup voor ETH/EUR verkennen. Maak niets aan.",
+])
+def test_selected_analysis_card_asks_when_question_targets_another_pair(question):
+    feed = [
+        {"facts": {"feed_item_id": "selected", "event_type": "analysis_ready",
+                   "selection_origin": "current_run", "historical_notification": True,
+                   "symbol": "BTC", "historical_event_facts": {
+                       "trading_pair": "BTC/USDT", "market_id": 34}}},
+    ]
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7,
+                                   run_id="analysis-conflict")
+    async def read(_call):
+        raise AssertionError("A conflicting target must stop before any source read")
+    front.reads = read
+    result = asyncio.run(front.run(
+        message=question, instructions="", conversation_context={},
+        verified_asset="BTC", feed_evidence=feed,
+    ))
+    assert result.response.answer_kind == "selected_analysis_target_conflict"
+    assert "BTC/USDT" in result.response.text
+    assert "Welke analyse" in result.response.text
+    assert "benchmarkscore" not in result.response.text
+    verified = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=question, result=result.response, locale="nl",
+    ))
+    assert verified.status == "completed"
 
 
 def test_selected_analysis_card_fails_closed_when_current_score_changes(monkeypatch):

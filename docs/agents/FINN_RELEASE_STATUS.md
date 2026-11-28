@@ -21,8 +21,15 @@ gedupliceerd en BTC/EUR wordt niet met BTC/USDT verwisseld. Een koers wordt
 niet als uitvoeringsprijs gepresenteerd. De handelsprijscontrole en
 bevestigingsgrens zijn niet gewijzigd.
 
-Gericht lokaal: zes nieuwe backendgevallen groen; de betrokken Responses-
-runtime-suite had vóór de laatste kleine grenscontrole `1102 passed`.
+Gericht lokaal na de onafhankelijke codebevindingen: tien nieuwe
+backendgevallen groen; de betrokken Responses-runtime-suite `1109 passed`.
+De Security-review van de eerste head vond dat een expliciete vraag naar
+BTC/EUR of ETH/EUR vanuit een BTC/USDT-kaart de kaart kon overnemen. De
+herstelkandidaat vraagt vóór enige read welk paar bedoeld is. De QA-review
+vond dat EN/DE nog de modelroute namen en de verifier de kaartmarkt en
+scoredatum niet zelf toetste. De herstelkandidaat lokaliseert het antwoord
+in NL/EN/DE en vergelijkt getypeerde kaart-, markt- en score-identiteit met
+beide toolresultaten. Onafhankelijke herreview van deze head staat nog open.
 Frontend-commandtests `117/117`, i18n-tests `45/45`, voorsteltests `10/10`,
 build en typecheck groen. `npm audit --omit=dev --audit-level=high` eindigde
 met exit 0 en één gematigde Next.js-melding. De volledige lokale backendrun
