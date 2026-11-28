@@ -4,6 +4,36 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: betekenisvolle feedmeldingen voor markt, portfolio en trades (28 november 2026)
+
+Phase: `BUILD_GATES_PASSED_PR_CI_RUNNING`. Productbranch
+`codex/feed-meaningful-updates`, producthead
+`002c8807f83d99cc2aacd7eba08945b4d97f4e4d` in
+[PR #1432](https://github.com/gvangalen/antigravity-trading-tool/pull/1432).
+Deze release bundelt meldingen bij betekenisvolle marktverandering en
+geverifieerde Paper- en Live-portfoliowijzigingen. Een onzekere of mislukte
+Live-order krijgt een aparte waarschuwing die sluit wanneer de status is
+opgehelderd. Een opgeslagen individuele gesloten-tradeanalyse opent direct
+het betreffende rapport. Onvolledige brokerbalans en benodigde koersen geven
+bij actieve Live-bots pas na een uur aaneengesloten onbeschikbaarheid één
+waarschuwing; herstel of deactivering sluit die. De toestand wordt in een
+eigen migratietabel bewaard. Ongewijzigde scores en statussen maken geen
+nieuwe meldingen. De feed leest bestaande order- en analysegegevens en
+plaatst zelf geen orders. Actiecontracten en providerselectie zijn niet
+gewijzigd; de lokale worker-actiematrix en echte-providerselector zijn voor
+deze release daarom niet van toepassing.
+
+Gemeten lokale Build-gates op de productcodehead: volledige backend-suite
+`5757 passed, 7 skipped` (47 waarschuwingen; log SHA-256
+`11da977d5ad45148133163839380e229f0b22b5a0bf20c14272f76c99509421f`).
+Frontend typecheck, lint:i18n, i18n-tests, commandtests `118/118` en build
+zijn groen; de gewijzigde statische export is in de PR opgenomen. High-audit
+exit 0 met één moderate Next.js-melding. De PR-CI
+[46131899947](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46131899947)
+loopt nog; security, workflow, mobile en frontend waren bij de laatste
+controle groen en de backendjob liep nog. Er is nog geen live SHA of
+onafhankelijk QA-verdict voor deze release.
+
 ## FINN 3.0: analysekaart opent bruikbaar setupgesprek (28 november 2026)
 
 Phase: `LIVE_QA_ACCEPTED_SINGLE_MSTR_BROWSER_TURN`. Branch
