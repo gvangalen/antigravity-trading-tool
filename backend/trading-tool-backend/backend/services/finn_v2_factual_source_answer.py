@@ -312,6 +312,15 @@ def complete_historical_week_exit_moments(
         from backend.services.finn_v2_source_moment_claims import _claimed_moment, _same_moment
 
         def corrected_decision(match: re.Match[str]) -> str:
+            clause_start = max(answer.rfind(".", 0, match.start()),
+                               answer.rfind("\n", 0, match.start())) + 1
+            next_stops = [stop for stop in (answer.find(".", match.end()),
+                                             answer.find("\n", match.end())) if stop >= 0]
+            clause_end = min(next_stops, default=len(answer))
+            clause = answer[clause_start:clause_end]
+            if (re.search(r"\b(?:eerdere|vorige|voorgaande|andere|oudere)\b", clause, re.I)
+                    and re.search(r"\b(?:trade|dossier|review)\b", clause, re.I)):
+                return match.group(0)
             moment = match.group("moment")
             if not re.search(r"\b20\d{2}\b", moment):
                 moment = re.sub(
@@ -320,6 +329,10 @@ def complete_historical_week_exit_moments(
                     moment, count=1, flags=re.I,
                 )
             claim = _claimed_moment(moment)
+            if claim is None or claim[0].astimezone(ZoneInfo(user_time_zone)).date() != (
+                verified_decision_at.astimezone(ZoneInfo(user_time_zone)).date()
+            ):
+                return match.group(0)
             if claim and _same_moment(claim, verified_decision_at):
                 return match.group(0)
             return match.group("label") + decision_at_in_zone

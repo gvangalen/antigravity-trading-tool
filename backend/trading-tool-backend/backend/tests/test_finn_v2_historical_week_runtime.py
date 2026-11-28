@@ -156,16 +156,24 @@ def test_historical_exit_decision_repair_does_not_relabel_a_report_clock():
 
 
 def test_historical_exit_decision_repair_does_not_relabel_an_earlier_trade():
-    draft = "De exitbeslissing van een eerdere AAPL-trade was op 5 november 2026 14:59 UTC."
-    prepared = _prepared(text=draft)
-    evidence = tuple(prepared.response.tool_trace[0]["result"]["results"])
     from backend.services.finn_v2_factual_source_answer import complete_historical_week_exit_moments
-
-    completed = complete_historical_week_exit_moments(
-        draft, evidence, question=QUESTION, user_time_zone="Europe/Amsterdam",
-    )
-    assert "5 november 2026 14:59 UTC" in completed
-    assert "eerdere AAPL-trade was op 2026-11-12" not in completed
+    for draft in (
+        "De exitbeslissing van een eerdere AAPL-trade was op 5 november 2026 14:59 UTC.",
+        "Voor een eerdere AAPL-trade: exitbeslissing op 5 november 2026 om 14:00 UTC.",
+        "Voor een eerdere AAPL-trade: exitbeslissing op 12 november 2026 om 14:00 UTC.",
+        "De exitbeslissing op 12 november 2026 om 14:00 UTC hoort bij een eerdere AAPL-trade.",
+    ):
+        prepared = _prepared(text=draft)
+        evidence = tuple(prepared.response.tool_trace[0]["result"]["results"])
+        completed = complete_historical_week_exit_moments(
+            draft, evidence, question=QUESTION, user_time_zone="Europe/Amsterdam",
+        )
+        assert draft in completed
+        assert "eerdere AAPL-trade: exitbeslissing op 2026-11-12 15:59" not in completed
+        answer = _minimal_read_answer(
+            message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+        )
+        assert answer.status == "unavailable"
 
 
 def test_model_written_fx_fallback_phrase_does_not_bypass_clock_scrub():
