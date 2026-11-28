@@ -326,8 +326,12 @@ def complete_historical_week_exit_moments(
                 r"\b(?:dossier|trade(?:[- ]?(?:reflectie|review))?|review)\s*#?\s*(\d+)\b",
                 clause, re.I,
             )}
+            stated_bot_ids = {int(ref.group(1)) for ref in re.finditer(
+                r"\bbot\s*#?\s*(\d+)\b", clause, re.I,
+            )}
             if (verified_decision_at is None
-                    or (stated_ids and stated_ids != {trades[0].get("review_id")})):
+                    or (stated_ids and stated_ids != {trades[0].get("review_id")})
+                    or (stated_bot_ids and stated_bot_ids != {trades[0].get("bot_id")})):
                 return match.group(0)
             if ((re.search(r"\b(?:eerdere|vorige|voorgaande|andere|oudere)\b", clause, re.I)
                     and re.search(r"\b(?:trade|dossier|review)\b", clause, re.I))
@@ -352,8 +356,9 @@ def complete_historical_week_exit_moments(
                 return match.group(0)
             claim = _claimed_moment(match.group("moment"))
             registered_close = _utc_instant(trades[0]["exit_at"])
-            if (claim and any(_same_moment(claim, instant) for instant in
-                              (quote_at, verified_decision_at, registered_close) if instant)
+            if (claim and (any(_same_moment(claim, instant) for instant in
+                               (quote_at, verified_decision_at, registered_close) if instant)
+                           if execution else _same_moment(claim, quote_at))
                     and currency in {"EUR", "USD", "USDT"}
                     and (execution or match.group("currency").upper() == currency)
                     and verified_price.is_finite() and verified_price > 0

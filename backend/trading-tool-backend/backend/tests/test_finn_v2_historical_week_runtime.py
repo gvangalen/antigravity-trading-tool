@@ -177,7 +177,8 @@ def test_historical_quote_source_and_decision_are_separate_clocks():
     for prefix in ("Voor een eerdere AAPL-trade: ",
                    "Voor de AAPL-ochtendtrade: ",
                    "De exitbeslissing voor een andere AAPL-review: ",
-                   "Voor dossier #999: ", "Voor review 999: "):
+                   "Voor dossier #999: ", "Voor review 999: ",
+                   "Voor bot #456: "):
         prepared.response.text = prefix + (
             "Exitbeslissing en USD-koers van 358,60: "
             "12 november 2026, 14:59:00 UTC."
@@ -186,6 +187,15 @@ def test_historical_quote_source_and_decision_are_separate_clocks():
             message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
         )
         assert unsafe.status == "unavailable", prefix
+
+    prepared.response.text = (
+        "Exitbeslissing en USD-koers van 358,60: "
+        "12 november 2026, 15:00:30 UTC."
+    )
+    wrong_quote_clock = _minimal_read_answer(
+        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert wrong_quote_clock.status == "unavailable"
 
     prepared.response.text = (
         "Exitbeslissing en USD-koers van 358,60: "

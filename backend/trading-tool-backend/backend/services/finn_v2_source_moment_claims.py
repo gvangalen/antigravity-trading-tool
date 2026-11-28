@@ -356,6 +356,7 @@ def _bot_decision_clocks_supported(
         relevant = named or relevant
         if not relevant:
             if re.search(r"\b(?:(?:bot)?besluit\w*|(?:bot)?besliss\w*|"
+                         r"(?:uitstap|exit)[- ]?besliss\w*|"
                          r"(?:bot)?beoordel\w*|hold)\b", clause, re.I) and (
                 _DATED_MOMENT.search(clause) or _ZONED_CLOCK.search(clause)
             ):
