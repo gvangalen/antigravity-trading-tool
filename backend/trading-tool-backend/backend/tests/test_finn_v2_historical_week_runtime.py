@@ -137,6 +137,53 @@ def test_historical_exit_decision_completion_does_not_select_between_two_same_da
     assert "Geverifieerde AAPL Paper-exitbeslissing" not in answer.text
 
 
+def test_historical_exit_decision_repair_does_not_relabel_a_report_clock():
+    draft = "De exitbeslissing volgt het rapportmoment 12 november 2026 05:15 UTC."
+    prepared = _prepared(text=draft)
+    evidence = tuple(prepared.response.tool_trace[0]["result"]["results"])
+    from backend.services.finn_v2_factual_source_answer import complete_historical_week_exit_moments
+
+    completed = complete_historical_week_exit_moments(
+        draft, evidence, question=QUESTION, user_time_zone="Europe/Amsterdam",
+    )
+    assert "het rapportmoment 12 november 2026 05:15 UTC" in completed
+    assert "het rapportmoment 2026-11-12 15:59:00 CET" not in completed
+    answer = _minimal_read_answer(
+        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    if answer.status == "completed":
+        assert "het rapportmoment 12 november 2026 05:15 UTC" in answer.text
+
+
+def test_historical_exit_decision_repair_does_not_relabel_an_earlier_trade():
+    draft = "De exitbeslissing van een eerdere AAPL-trade was op 5 november 2026 14:59 UTC."
+    prepared = _prepared(text=draft)
+    evidence = tuple(prepared.response.tool_trace[0]["result"]["results"])
+    from backend.services.finn_v2_factual_source_answer import complete_historical_week_exit_moments
+
+    completed = complete_historical_week_exit_moments(
+        draft, evidence, question=QUESTION, user_time_zone="Europe/Amsterdam",
+    )
+    assert "5 november 2026 14:59 UTC" in completed
+    assert "eerdere AAPL-trade was op 2026-11-12" not in completed
+
+
+def test_model_written_fx_fallback_phrase_does_not_bypass_clock_scrub():
+    from backend.services.finn_v2_factual_source_answer import complete_historical_week_exit_moments
+
+    prepared = _prepared(text=(
+        "FX-brontijd: zie de afzonderlijk geverifieerde bronregel 12 november 14:03 UTC, "
+        "botbeslissing 12 november 14:59 UTC."
+    ))
+    evidence = tuple(prepared.response.tool_trace[0]["result"]["results"])
+    completed = complete_historical_week_exit_moments(
+        prepared.response.text, evidence, question=QUESTION,
+        user_time_zone="Europe/Amsterdam",
+    )
+    assert "14:03 UTC" not in completed
+    assert "botbeslissing 12 november 14:59 UTC" in completed
+
+
 def test_historical_bot_clock_requires_typed_owner_bound_exit_decision():
     from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
 

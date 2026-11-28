@@ -83,7 +83,9 @@ def _suppress_unbound_week_saved_claims(answer: str) -> str:
 _UNBOUND_FX_MOMENT_CLAIM = re.compile(
     r"(?P<label>(?:Geverifieerd\s+)?\b(?:FX(?:[- ]?(?:bron(?:moment)?|koers))?|"
     r"(?:exit|uitvoerings)?wisselkoers(?:bron(?:moment)?)?)\b"
-    r"(?:(?![.;]\s|\n).){0,80}?)"
+    r"(?:(?![.;]\s|\n|(?:,|\ben\b)\s*(?:de\s+)?"
+    r"(?:bot\w*|(?:uitstap|exit)[- ]?besliss\w*|bevestigde\s+les|"
+    r"geregistreerde\s+sluiting)\b).){0,80}?)"
     r"(?P<moment>(?:(?:\d{4}-\d{2}-\d{2}|\d{1,2}\s+[a-z]+(?:\s+\d{4})?)"
     r"\s*,?\s*)?\d{1,2}:\d{2}(?::\d{2})?\s+"
     r"(?:[A-Za-z_]+/[A-Za-z_]+|UTC|GMT|CET|CEST)\b)"
@@ -99,8 +101,8 @@ _UNBOUND_FX_MOMENT_CLAIM = re.compile(
 )
 
 _HISTORICAL_EXIT_DECISION_CLAIM = re.compile(
-    r"(?P<label>\b(?:uitstap|exit)[- ]?besliss\w*\b"
-    r"(?:(?![.;]\s|\n).){0,80}?)"
+    r"(?P<label>\b(?:uitstap|exit)[- ]?besliss\w*\b\s*"
+    r"(?:(?:op|om)\s*|:\s*)?)"
     r"(?P<moment>(?:(?:20\d{2}-\d{2}-\d{2}|\d{1,2}\s+[a-z]+(?:\s+20\d{2})?)"
     r"\s*,?\s*)?(?:om\s+)?\d{1,2}:\d{2}(?::\d{2})?\s+(?:UTC|CET|CEST)\b)",
     re.I,
@@ -160,9 +162,6 @@ def _suppress_unbound_fx_moment_claims(
             "FX-brontijd: niet verifieerbaar uit opgeslagen bewijs"
         )
         def replace(match: re.Match[str]) -> str:
-            if ("zie de afzonderlijk geverifieerde bronregel" in match.group("label").lower()
-                    or "niet verifieerbaar uit opgeslagen bewijs" in match.group("label").lower()):
-                return match.group(0)
             if not match.group("alternative") and verified(match.group("moment")):
                 return match.group(0)
             # In `FX-bronmoment: **tijd**`, the opening stars sit inside the

@@ -365,7 +365,7 @@ def _bot_decision_clocks_supported(
         # match the owner-scoped decision read for that bot.
         decision_claim = bool(re.search(
             r"\b(?:besluit\w*|besliss\w*|(?:uitstap|exit)[- ]?besliss\w*|"
-            r"beoordeel\w*|beoordel\w*|hold)\b", clause, re.I,
+            r"beoordel\w*|hold)\b", clause, re.I,
         ))
         has_clock_claim = bool(_DATED_MOMENT.search(clause) or _ZONED_CLOCK.search(clause))
         # Only the deterministic, typed-read recovery may distinguish its
