@@ -718,6 +718,28 @@ def test_historical_paper_card_uses_owner_verified_filled_order_on_read():
     assert rendered["evidence"]["order_status"] == "filled"
 
 
+def test_verified_paper_fill_shows_portfolio_cash_only_for_matching_decision():
+    moment = datetime(2026, 11, 10, 14, tzinfo=timezone.utc)
+    row = {
+        "id": "11111111-1111-1111-1111-111111111111", "event_type": "bot_decision",
+        "symbol": "BTC", "evidence": {"symbol": "BTC", "action": "buy",
+            "status": "executed", "order_status": "filled", "amount_eur": 200,
+            "portfolio_cash_pct": 15.0, "portfolio_position_pct": 85.0,
+            "portfolio_cash_eur": "150.00"},
+        "copy_json": module._bot_fallback("BTC", {"symbol": "BTC", "action": "buy",
+            "status": "executed", "order_status": "filled"}),
+        "verified_decision_status": "executed", "verified_order_status": "filled",
+        "verified_decision_ts": moment, "verified_filled_amount_eur": 200,
+        "created_at": None, "updated_at": None,
+        "source_observed_at": moment, "expires_at": None,
+    }
+    rendered = module.FinnCoachFeedService._serialize(dict(row), "nl")
+    assert "15.0% cash" in rendered["description"] or "15,0% cash" in rendered["description"]
+    row["source_observed_at"] = moment - timedelta(hours=1)
+    stale = module.FinnCoachFeedService._serialize(dict(row), "nl")
+    assert "15,0% cash" not in stale["description"]
+
+
 def test_historical_paper_card_does_not_borrow_later_same_day_fill():
     old = datetime(2026, 11, 16, 6, 0, 18, tzinfo=timezone.utc)
     row = {

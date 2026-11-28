@@ -2305,6 +2305,11 @@
     "footerSafe": "Protected system"
   },
   "portfolioPage": {
+    "cashAlertLabel": "Low Paper cash alert (%)",
+    "cashAlertHelp": "Choose your own limit. Leave blank to turn off this alert; FINN checks periodically.",
+    "cashAlertOff": "Off",
+    "cashAlertSave": "Save limit",
+    "cashAlertError": "Check your limit (1–99%) and try again.",
     "environment": "Portfolio environment",
     "subtitle": "Bot values and results based on known portfolio records.",
     "paper": "Paper",

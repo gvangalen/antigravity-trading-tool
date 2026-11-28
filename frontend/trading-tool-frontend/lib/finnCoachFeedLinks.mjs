@@ -1,4 +1,5 @@
 export function coachFeedDetailsHref(item = {}) {
+  if (item.subject_type === "portfolio") return "/portfolio";
   if (item.subject_type === "report") {
     return `/report?type=${encodeURIComponent(item.evidence?.report_type || "daily")}&date=${encodeURIComponent(item.evidence?.report_date || "")}`;
   }

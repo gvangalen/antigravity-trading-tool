@@ -54,8 +54,9 @@ def reconcile_paper_position_risk(user_id: int):
 
     async def review():
         async with async_session_factory() as session:
-            created = await FinnCoachFeedService(session).reconcile_paper_position_risks(
-                user_id=user_id)
+            feed = FinnCoachFeedService(session)
+            created = await feed.reconcile_paper_position_risks(user_id=user_id)
+            created += await feed.reconcile_paper_cash_alert(user_id=user_id)
             await session.commit()
             return len(created)
 
