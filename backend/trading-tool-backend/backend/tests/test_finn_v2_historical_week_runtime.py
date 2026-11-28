@@ -263,6 +263,8 @@ def test_historical_quote_source_and_decision_are_separate_clocks():
         "De exitbeslissing was op 12 november 2026 om 15:00:30 UTC.",
         "Uitvoeringskoers op 12 november 2026 om 14:59:00 UTC: 999 USD. "
         "De exitbeslissing was op 12 november 2026 om 15:00:30 UTC.",
+        "De uitvoeringskoers was 999 USD. "
+        "De exitbeslissing was op 12 november 2026 om 15:00:30 UTC.",
         "De exitbeslissing viel op 12 november 2026 om 15:00:30 UTC, "
         "met een uitvoeringskoers op 12 november 2026 om 14:58:00 UTC.",
     ):

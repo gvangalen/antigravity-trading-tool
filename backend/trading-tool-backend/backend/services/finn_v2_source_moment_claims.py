@@ -367,8 +367,6 @@ def _bot_decision_clocks_supported(
                 # closed trade. Never let it bypass the dated quote check.
                 if any(segment_start <= item.start() < segment_end for item in paired_bare):
                     return False
-                if not quote_claims:
-                    continue
                 label_text = label.group(0).lower()
                 execution = ("uitvoer" in label_text or "uitvoering" in
                              clause[label.end():segment_end].lower())
@@ -426,11 +424,11 @@ def _bot_decision_clocks_supported(
                         return False
                 except (InvalidOperation, ValueError):
                     return False
-                if (len(observed) != 1 or any(
+                if any(
                     (claim := _claimed_moment(moment.group(0))) is None
                     or not _same_moment(claim, at)
                     for moment in quote_claims
-                )):
+                ):
                     return False
         if subject is None:
             continue
