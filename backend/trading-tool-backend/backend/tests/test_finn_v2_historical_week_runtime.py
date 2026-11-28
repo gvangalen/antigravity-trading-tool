@@ -228,12 +228,38 @@ def test_historical_week_respects_week_only_and_live_only_scope():
     assert "Paper-exit" not in week_only.text
     assert "999 USD" not in week_only.text
 
+    negated_exit = _runtime_minimal_read_answer(
+        message="Bespreek niet mijn AAPL Paper-exit, maar alleen de weekreflectie van "
+                "9–15 november.",
+        prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert negated_exit.status == "completed", negated_exit.reason
+    assert "Paper-exit" not in negated_exit.text
+    assert "999 USD" not in negated_exit.text
+
     live_only = _runtime_minimal_read_answer(
         message=f"{QUESTION} Gebruik alleen Live-gegevens, geen Paper-trades.",
         prepared=prepared, user_time_zone="Europe/Amsterdam",
     )
     assert live_only.status == "unavailable"
     assert "999 USD" not in live_only.text
+    exclusive_live = _runtime_minimal_read_answer(
+        message=f"{QUESTION} Gebruik uitsluitend Live-gegevens.",
+        prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert exclusive_live.status == "unavailable"
+
+    other_week = "2–8 november"
+    for message in (
+        QUESTION.replace("9–15 november", other_week),
+        "Vat alleen mijn opgeslagen weekreflectie van 2–8 november samen; "
+        "laat individuele trades buiten beschouwing.",
+    ):
+        mismatch = _runtime_minimal_read_answer(
+            message=message, prepared=prepared, user_time_zone="Europe/Amsterdam",
+        )
+        assert mismatch.status == "unavailable", message
+        assert "999 USD" not in mismatch.text
 
 
 def test_english_historical_week_without_read_is_unavailable():

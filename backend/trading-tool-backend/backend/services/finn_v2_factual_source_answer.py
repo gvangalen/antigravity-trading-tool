@@ -222,6 +222,16 @@ def complete_historical_week_exit_moments(
         end = datetime.fromisoformat(str(week["week_end"])).date()
     except (KeyError, TypeError, ValueError):
         return None if typed else answer
+    if typed:
+        from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
+        try:
+            requested_start = ReviewToolAdapter.requested_week_start(
+                question, reference_year=start.year,
+            )
+        except ValueError:
+            return None
+        if requested_start is not None and requested_start != start:
+            return None
     try:
         period_zone = ZoneInfo(str(week.get("time_zone") or user_time_zone))
     except (ZoneInfoNotFoundError, TypeError, ValueError):

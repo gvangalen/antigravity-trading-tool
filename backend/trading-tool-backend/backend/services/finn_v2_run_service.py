@@ -1984,13 +1984,15 @@ def _minimal_read_answer(
         message, re.I,
     ))
     only_live = bool(re.search(
-        r"\b(?:gebruik\s+alleen\s+Live|alleen\s+Live|only\s+Live|"
+        r"\b(?:(?:gebruik\s+)?(?:alleen|uitsluitend|only|exclusively)\s+Live|"
         r"geen\s+Paper[- ]?trades?|no\s+Paper[- ]?trades?)\b",
         message, re.I,
     ))
     exclude_individual = bool(re.search(
         r"\b(?:laat\s+individuele\s+trades?\s+buiten\s+beschouwing|"
-        r"zonder\s+individuele\s+trades?|exclude\s+individual\s+trades?)\b",
+        r"zonder\s+individuele\s+trades?|exclude\s+individual\s+trades?|"
+        r"bespreek\s+niet\b[^.!?\n]{0,60}\b(?:exit\w*|trade\w*|uitstap\w*)\b"
+        r"[^.!?\n]{0,60}\bmaar\s+alleen)\b",
         message, re.I,
     ))
     if week_requested and (only_live or exclude_individual or not exit_requested):
@@ -2022,6 +2024,21 @@ def _minimal_read_answer(
                 "weekly_reflection_unavailable", current_evidence,
             )
         week = weeks[0]
+        from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
+        try:
+            saved_start = datetime.fromisoformat(str(week["week_start"])).date()
+            requested_start = ReviewToolAdapter.requested_week_start(
+                message, reference_year=saved_start.year,
+            )
+        except (KeyError, TypeError, ValueError):
+            requested_start = None
+            saved_start = None
+        if saved_start is None or (requested_start is not None
+                                   and requested_start != saved_start):
+            return FinnResponsesVerifiedAnswer(
+                "unavailable", "De gelezen weekreflectie hoort niet bij de gevraagde week.",
+                "weekly_reflection_week_mismatch", current_evidence,
+            )
         saved_at, zone = _moment_in_zone(week.get("generated_at"), user_time_zone)
         if not saved_at or not week.get("week_start") or not week.get("week_end"):
             return FinnResponsesVerifiedAnswer(
