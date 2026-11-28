@@ -6,53 +6,48 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: analysekaart opent bruikbaar setupgesprek (28 november 2026)
 
-Phase: `LOCAL_CANDIDATE_PENDING_REQUIRED_GATES`. Branch
+Phase: `BUILD_VALIDATED_PENDING_MERGE_DEPLOY_QA`. Branch
 `codex/finn-mstr-feed-coaching-20261128`, gebaseerd op main
-`63f2a958916feb20613dc6a86b244ca172050833`. De ingelogde MSTR-proef van
-de gebruiker op de vorige live versie is `NOT_ACCEPTED`: de feedknop vroeg
-letterlijk om benchmarkbronnen en bronmomenten; FINN gaf daarop een technische
-opsomming, noemde een koers van dezelfde dag verouderd voor uitvoering, en
-bood nauwelijks een setupkeuze. De kandidaat maakt de zichtbare vraag kort
-en gebruikersgericht. Voor een geselecteerde, onbewerkte analysekaart leest
-de read-only FINN-route de actuele eigenaargebonden score en volledige
-setupinventaris opnieuw. Bij een ontbrekende setup biedt hij een swing-,
-positie- en DCA-richting met één keuzevraag; een bestaande setup wordt niet
-gedupliceerd en BTC/EUR wordt niet met BTC/USDT verwisseld. Een koers wordt
-niet als uitvoeringsprijs gepresenteerd. De handelsprijscontrole en
-bevestigingsgrens zijn niet gewijzigd.
+`63f2a958916feb20613dc6a86b244ca172050833`; laatste productcodehead
+`f36ef79fcda9d39d469b330501b3f34bc047b17c` in
+[PR #1429](https://github.com/gvangalen/antigravity-trading-tool/pull/1429).
+De ingelogde MSTR-proef op de vorige live versie was `NOT_ACCEPTED`: de
+feedknop vroeg om benchmarkbronnen en bronmomenten en FINN gaf een technische
+opsomming met een koerslabel in plaats van setupkeuzes. De kandidaat stelt
+in web en mobiel een korte vraag over mogelijke setups. De geselecteerde,
+onbewerkte analysekaart wordt read-only tegen actuele eigenaargebonden
+score- en volledige setupinventaris herlezen. Bij ontbrekende setup bespreekt
+FINN swing-, positie- en DCA-richtingen met één keuzevraag; bij bestaande
+setup vraagt hij eerst om vergelijking. Een onvolledige of afwijkende
+kaartcontext eindigt zonder modelaanroep of scoreclaim. Koersuitvoering,
+bevestiging, actiecontracten en providerselectie zijn niet gewijzigd; de
+worker-actiematrix voor gewijzigde actiecontracten is daarom niet van
+toepassing.
 
-Gericht lokaal na de onafhankelijke codebevindingen: 21 geselecteerde
-backendgevallen groen; de betrokken Responses-runtime-suite `1120 passed`.
-De Security-review van de eerste head vond dat een expliciete vraag naar
-BTC/EUR of ETH/EUR vanuit een BTC/USDT-kaart de kaart kon overnemen. De
-herstelkandidaat vraagt vóór enige read welk paar bedoeld is. De QA-review
-vond dat EN/DE nog de modelroute namen en de verifier de kaartmarkt en
-scoredatum niet zelf toetste. De herstelkandidaat lokaliseert het antwoord
-in NL/EN/DE en vergelijkt getypeerde kaart-, markt- en score-identiteit met
-beide toolresultaten. QA gaf op die head `geen blocker`. Security vond
-daarna aanvullende schrijfwijzen voor een andere valuta. De finale
-herstelkandidaat laat uitsluitend de exacte door de feedknop ingevulde vraag
-de geselecteerde kaart gebruiken. Elke bewerkte of afwijkende vraag krijgt
-vóór reads en de modelroute een verduidelijkingsvraag, zonder scoreclaim.
-De mobiele NL/EN/DE-feedvragen zijn gelijkgetrokken met web; een gedeelde
-promptregressie en de mobiele chattests `26/26` zijn groen. Mobile typecheck
-en lint geven exit 0; lint toont 89 bestaande waarschuwingen, geen fouten.
-QA gaf op de voorlaatste head geen blocker. Security vond nog een val-through
-naar het model bij een geselecteerde kaart zonder volledig actueel bewijs.
-De laatste kandidaat eindigt daar nu met unavailable zonder provider- of
-scoreclaim; twee regressiegevallen dekken ontbrekende kaartstatus en
-ongeldig markt-ID. Herreview van deze laatste wijziging staat nog open.
-Frontend-commandtests `117/117`, i18n-tests `45/45`, voorsteltests `10/10`,
-build en typecheck groen. `npm audit --omit=dev --audit-level=high` eindigde
-met exit 0 en één gematigde Next.js-melding. De volledige lokale backendrun
-is **niet groen afgetekend**: na 5577 geslaagde en zeven overgeslagen tests
-bleef een bestaande test op een externe verbinding wachten; de run is na
-400 seconden onderbroken. De echte-providerselector kon lokaal niet draaien
-omdat `OPENAI_API_KEY` hier ontbreekt. Deze geselecteerde feedroute roept
-de provider niet aan en wijzigt geen actiecontract; dat is geen vervanging
-voor een vereiste provider- of releasegate. PR-CI voor de laatste head moet
-nog groen worden; er is nog geen deploy,
-publieke SHA-pariteit of onafhankelijke live QA voor deze kandidaat.
+Gemeten lokale Build-gates op de productcodehead: geselecteerde analysekaart
+`21/21`, Responses-runtime `1120 passed`; volledige backend-suite met
+uitsluitend een geïsoleerde lokale DB/Redis-verbinding `5734 passed, 7 skipped`
+(47 waarschuwingen, 396,21 s). De eerste algemene suitepoging had 13
+configuratiefouten doordat de local_finn-queueprefix aan repositorybrede
+tests was doorgegeven; dezelfde betrokken tests waren daarna `82/82` groen
+met standaard queuebeleid, gevolgd door de volledige groene suite.
+Frontend-commandtests `117/117`, i18n `45/45`, voorsteltests `10/10`, build,
+typecheck en lint:i18n groen. Mobiele chatprompts `26/26`, typecheck en lint
+exit 0; lint toont 89 bestaande waarschuwingen. High-audit exit 0 met één
+moderate Next.js-melding. Echte Responses-provider development `20/20`
+(artifact SHA-256 `a4ffd24faf30d7d383ad2b487eb9563969051db2d75e6c7df63fddaf1e97682b`)
+en regression `109/109` (SHA-256
+`684fa0a5eef98397b4244e76286f533e36f1f48a2cdfeb120d7e3addbd861151`):
+100% operation/entity en nul provider-, schema-, timeout-, parse- of
+validatiefouten; lokale telemetry zonder fout na schema-bootstrap.
+PR-CI [46118663303](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46118663303)
+op die productcodehead had vijf groene jobs. Onafhankelijke QA-codeherreview
+en Security-herreview op dezelfde head: geen blocker, geen live verdict.
+
+Nog open: CI op de statuscommit, merge, laatste main-CI en Auto Deploy,
+backend/frontend HTTP 200 en exacte publieke SHA-pariteit, daarna een
+onafhankelijke ingelogde QA-proef van de zichtbare MSTR-feedkaart en het
+setupgesprek. De vorige browseruitkomst blijft tot die proef `NOT_ACCEPTED`.
 
 ## FINN 3.0: getypeerde historische AAPL Paper-exit en weekreflectie
 
