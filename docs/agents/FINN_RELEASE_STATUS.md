@@ -6,9 +6,21 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: historisch Paper-besluit naast latere botcontrole (28 november 2026)
 
-Phase: `READY_FOR_PR_CI`. Product branch
+Phase: `READY_FOR_INDEPENDENT_QA_AFTER_STATUS_DEPLOY`. Product branch
 `codex/finn-historical-source-recovery-20261128`, producthead
-`897600181f9e6cdd32801f93339878f7a8624b58`. Onafhankelijke ingelogde browser-QA op
+`897600181f9e6cdd32801f93339878f7a8624b58`.
+[PR #1422](https://github.com/gvangalen/antigravity-trading-tool/pull/1422)
+is gemerged in `5cf5d2cd5951b70d3c1f7c579410fa248b71835a`.
+PR-CI [46096969900](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46096969900)
+en main-CI [46097708721](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46097708721)
+hebben elk vijf groene jobs. Auto Deploy
+[46098359003](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46098359003)
+is geslaagd. GitHub main, publieke backend-health en frontend build-info
+toonden dezelfde SHA `5cf5d2cd5951b70d3c1f7c579410fa248b71835a`;
+beide publieke endpoints gaven HTTP 200 en er was geen nieuwere deploy
+pending. Deze statusupdate maakt zelf een latere commit; onafhankelijke QA
+start pas na groene CI, succesvolle Auto Deploy en publieke pariteit van die
+definitieve statuscommit. Onafhankelijke ingelogde browser-QA op
 definitieve live SHA `50c36e78e1f014e4aa73b5b34af1ab9b4f18451a` gaf
 `NOT_ACCEPTED`: de eerste van twee identieke historische AAPL-vragen viel
 terug op “Ik kan de bronmomenten in dit antwoord niet verifiëren.” De tweede
