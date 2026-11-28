@@ -187,6 +187,7 @@ def test_uncertain_live_order_is_not_reported_as_fill_and_resolves_on_confirmati
     assert published["event_type"] == "live_order_attention"
     assert published["event_key"] == "live-order-problem:91"
     assert published["evidence"]["order_status"] == "unknown_exchange_state"
+    assert published["expires_at"] is None
     state["status"] = "filled"
     feed.publish.reset_mock()
     feed.resolve.reset_mock()
@@ -232,6 +233,37 @@ def test_broker_gap_requires_sustained_failure_and_active_live_bot(monkeypatch):
     assert asyncio.run(feed.reconcile_live_portfolio_events(user_id=7)) == []
     feed.publish.assert_not_awaited()
     feed.resolve.assert_awaited_with(user_id=7, event_key="live-broker-data:account")
+
+
+def test_empty_but_complete_live_account_does_not_raise_broker_outage(monkeypatch):
+    now = datetime.now(timezone.utc)
+    account = {"total_eur": 0, "cash_eur": 0, "position_value_eur": 0,
+               "as_of": now, "exchange_name": "bitvavo"}
+
+    async def execute(sql, _params):
+        query = str(sql)
+        if "FROM users" in query:
+            return Rows(first={"cash_limit": None})
+        if "FROM bot_orders" in query:
+            return Rows(all=[])
+        if "FROM bot_configs" in query:
+            return Rows(first=1)
+        if "INSERT INTO finn_live_balance_observations" in query:
+            assert "first_unavailable_at, last_available_at" in query
+            return Rows()
+        raise AssertionError(query)
+
+    async def balance(_session, _user_id):
+        return account
+
+    monkeypatch.setattr("backend.services.live_portfolio_allocation_service.read_live_account", balance)
+    feed = FinnCoachFeedService(SimpleNamespace(execute=execute))
+    feed.publish = AsyncMock()
+    feed.resolve = AsyncMock()
+    assert asyncio.run(feed.reconcile_live_portfolio_events(user_id=7)) == []
+    feed.publish.assert_not_awaited()
+    assert any(call.kwargs["event_key"] == "live-broker-data:account"
+               for call in feed.resolve.await_args_list)
 
 
 def test_trade_review_notification_requires_saved_ready_analysis():

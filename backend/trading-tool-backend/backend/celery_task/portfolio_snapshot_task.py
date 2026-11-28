@@ -57,6 +57,8 @@ def reconcile_paper_position_risk(user_id: int):
             feed = FinnCoachFeedService(session)
             created = await feed.reconcile_paper_position_risks(user_id=user_id)
             created += await feed.reconcile_paper_cash_alert(user_id=user_id)
+            # Preserve Paper notifications even when the broker read stalls or fails.
+            await session.commit()
             created += await feed.reconcile_live_portfolio_events(user_id=user_id)
             await session.commit()
             return len(created)

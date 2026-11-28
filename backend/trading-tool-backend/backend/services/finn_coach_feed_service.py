@@ -866,7 +866,7 @@ class FinnCoachFeedService:
                         old_facts = {}
                 if not isinstance(old_facts, dict):
                     old_facts = {}
-                if event_type in {"portfolio_cash_low", "live_portfolio_cash_low", "live_trade_filled", "live_broker_data_blocked"} and current["status"] in VISIBLE:
+                if event_type in {"portfolio_cash_low", "live_portfolio_cash_low", "live_trade_filled", "live_order_attention", "live_broker_data_blocked"} and current["status"] in VISIBLE:
                     await self.session.execute(text("""
                         UPDATE finn_coach_feed_items
                         SET evidence=CAST(:evidence AS JSONB),
@@ -1352,16 +1352,27 @@ class FinnCoachFeedService:
         """), {"user_id": user_id})
         orders = result.mappings().all()
         problems_result = await self.session.execute(text("""
+            WITH recent AS (
+                SELECT id FROM bot_orders
+                WHERE user_id=:user_id AND execution_environment='live'
+                  AND updated_at >= NOW() - INTERVAL '1 day'
+                ORDER BY updated_at DESC, id DESC LIMIT 80
+            ), unresolved AS (
+                SELECT id FROM bot_orders
+                WHERE user_id=:user_id AND execution_environment='live'
+                  AND status='unknown_exchange_state'
+                ORDER BY updated_at DESC, id DESC LIMIT 80
+            )
             SELECT o.id, o.bot_id, o.symbol, o.status, o.updated_at,
                    b.name AS bot_name
             FROM bot_orders o
             JOIN bot_configs b ON b.id=o.bot_id AND b.user_id=o.user_id AND b.is_live=TRUE
             WHERE o.user_id=:user_id AND o.execution_environment='live'
-              AND o.updated_at >= NOW() - INTERVAL '1 day'
+              AND o.id IN (SELECT id FROM recent UNION SELECT id FROM unresolved)
               AND o.status IN ('ready','approved','pending','sending','sent',
                                'unknown_exchange_state','failed','rejected',
                                'cancelled','error','filled','partial')
-            ORDER BY o.updated_at DESC, o.id DESC LIMIT 80
+            ORDER BY o.updated_at DESC, o.id DESC LIMIT 160
         """), {"user_id": user_id})
         problem_orders = problems_result.mappings().all()
         active_result = await self.session.execute(text("""
@@ -1387,7 +1398,8 @@ class FinnCoachFeedService:
                 evidence={"environment": "live", "order_id": order["id"],
                           "bot_id": order["bot_id"], "order_status": order["status"]},
                 source_observed_at=observed_order,
-                expires_at=datetime.now(timezone.utc) + timedelta(days=2),
+                expires_at=(None if order["status"] == "unknown_exchange_state"
+                            else datetime.now(timezone.utc) + timedelta(days=2)),
                 revision=f"live-problem:{order['id']}:{order['status']}",
             )
             if item:
@@ -1409,15 +1421,16 @@ class FinnCoachFeedService:
             free = Decimal(str(account["cash_eur"]))
             position = Decimal(str(account["position_value_eur"]))
             equity = cash + position
-            cash_pct = cash * 100 / equity
-            valid = (all(value.is_finite() for value in (cash, free, position, equity, cash_pct))
-                     and 0 <= free <= cash and cash >= 0 and position >= 0 and equity > 0
+            account_complete = (all(value.is_finite() for value in (cash, free, position, equity))
+                     and 0 <= free <= cash and cash >= 0 and position >= 0
                      and observed is not None
                      and timedelta(0) <= now - observed <= timedelta(minutes=5))
-        except (KeyError, TypeError, ValueError, InvalidOperation, ZeroDivisionError):
-            valid = False
+            valid = account_complete and equity > 0
+            cash_pct = cash * 100 / equity if valid else None
+        except (KeyError, TypeError, ValueError, InvalidOperation):
+            account_complete = valid = False
         if active_live_bots:
-            if valid:
+            if account_complete:
                 await self.session.execute(text("""
                     INSERT INTO finn_live_balance_observations
                         (user_id, first_unavailable_at, last_available_at, last_checked_at)
@@ -1432,8 +1445,12 @@ class FinnCoachFeedService:
                         (user_id, first_unavailable_at, last_checked_at)
                     VALUES (:user_id, NOW(), NOW())
                     ON CONFLICT (user_id) DO UPDATE SET
-                        first_unavailable_at=COALESCE(
-                            finn_live_balance_observations.first_unavailable_at, NOW()),
+                        first_unavailable_at=CASE
+                            WHEN finn_live_balance_observations.last_checked_at
+                                 < NOW() - INTERVAL '30 minutes' THEN NOW()
+                            ELSE COALESCE(
+                                finn_live_balance_observations.first_unavailable_at, NOW())
+                        END,
                         last_checked_at=NOW()
                     RETURNING first_unavailable_at
                 """), {"user_id": user_id})
