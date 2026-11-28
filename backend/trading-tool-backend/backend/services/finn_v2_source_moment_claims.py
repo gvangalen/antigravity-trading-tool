@@ -339,6 +339,10 @@ def _bot_decision_clocks_supported(
                                 if item.start() > label.end()), default=len(clause))
                 quote_claims = [item for item in paired_dated
                                 if label.end() <= item.start() < boundary]
+                # A bare zoned clock has no date to bind to the selected
+                # closed trade. Never let it bypass the dated quote check.
+                if any(label.end() <= item.start() < boundary for item in paired_bare):
+                    return False
                 if not quote_claims:
                     continue
                 if historical_decision is None or len(quote_claims) != 1:
