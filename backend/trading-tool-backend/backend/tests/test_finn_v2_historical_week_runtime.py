@@ -75,6 +75,68 @@ def test_historical_paper_bot_clock_is_not_compared_with_newer_bot_check():
     assert "Geverifieerd FX-bronmoment" in answer.text
 
 
+def test_historical_exit_decision_compounds_cannot_claim_registered_close_clock():
+    from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
+
+    prepared = _prepared(text="De uitstapbeslissing op 12 november 2026 om 15:00:30 UTC.")
+    evidence = tuple(prepared.response.tool_trace[0]["result"]["results"])
+    for label in ("uitstapbeslissing", "exitbeslissing", "Paper-exitbeslissing"):
+        wrong = f"De {label} op 12 november 2026 om 15:00:30 UTC."
+        assert not current_source_moments_supported(
+            wrong, evidence, question=QUESTION, user_time_zone="Europe/Amsterdam",
+        ), label
+    assert current_source_moments_supported(
+        "De uitstapbeslissing op 12 november 2026 om 14:59 UTC.",
+        evidence, question=QUESTION, user_time_zone="Europe/Amsterdam",
+    )
+
+
+def test_historical_exit_decision_completion_repairs_wrong_close_label_and_adds_missing_decision():
+    for draft in (
+        "De uitstapbeslissing op 12 november 2026 om 15:00:30 UTC. "
+        "Het eerste koersdoel werd geraakt; volledige plantrouw blijft onzeker.",
+        "De exitbeslissing op 12 november 2026, 15:00:30 UTC. "
+        "Het eerste koersdoel werd geraakt; volledige plantrouw blijft onzeker.",
+        "Het eerste koersdoel werd geraakt; volledige plantrouw blijft onzeker.",
+    ):
+        answer = _minimal_read_answer(
+            message=QUESTION, prepared=_prepared(
+                text=draft, trade_date="2026-11-12T15:00:30+00:00",
+            ),
+            user_time_zone="Europe/Amsterdam",
+        )
+        assert answer.status == "completed", answer.reason
+        assert "Paper-exitbeslissing: 2026-11-12 15:59:00 CET" in answer.text
+        assert "15:00:30 UTC" not in answer.text
+        assert "AAPL Paper-trade als gesloten geregistreerd: 2026-11-12 16:00:30 CET" in answer.text
+
+
+def test_historical_exit_decision_completion_needs_unique_owner_read_decision():
+    prepared = _prepared(text="De uitstapbeslissing op 12 november 2026 om 15:00:30 UTC.")
+    row = prepared.response.tool_trace[0]["result"]["results"][0]
+    row["data"]["closed_trades"][0].pop("paper_exit_decision_at")
+    answer = _minimal_read_answer(
+        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert answer.status == "unavailable"
+    assert "Paper-exitbeslissing: 2026-11-12" not in answer.text
+
+
+def test_historical_exit_decision_completion_does_not_select_between_two_same_day_trades():
+    prepared = _prepared(text="De uitstapbeslissing op 12 november 2026 om 15:00:30 UTC.")
+    row = prepared.response.tool_trace[0]["result"]["results"][0]
+    trade = row["data"]["closed_trades"][0]
+    row["data"]["closed_trades"].append({
+        **trade, "review_id": 2128, "exit_at": "2026-11-12T18:00:00+00:00",
+        "paper_exit_decision_at": "2026-11-12T17:59:00+00:00",
+    })
+    answer = _minimal_read_answer(
+        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert answer.status == "unavailable"
+    assert "Geverifieerde AAPL Paper-exitbeslissing" not in answer.text
+
+
 def test_historical_bot_clock_requires_typed_owner_bound_exit_decision():
     from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
 
@@ -384,6 +446,26 @@ def test_historical_week_fx_moment_completion_is_idempotent():
     assert second == first
     assert first.count("Geverifieerd FX-bronmoment") == 1
     assert "14:03 UTC" not in first
+
+
+def test_historical_exit_completion_keeps_later_bot_clause_on_second_pass():
+    from backend.services.finn_v2_factual_source_answer import complete_historical_week_exit_moments
+
+    prepared = _prepared(text=(
+        "FX-bronmoment: 12 november 14:03 UTC, "
+        "botbeslissing 12 november 14:59 UTC."
+    ))
+    evidence = tuple(prepared.response.tool_trace[0]["result"]["results"])
+    first = complete_historical_week_exit_moments(
+        prepared.response.text, evidence, question=QUESTION,
+        user_time_zone="Europe/Amsterdam",
+    )
+    second = complete_historical_week_exit_moments(
+        first, evidence, question=QUESTION, user_time_zone="Europe/Amsterdam",
+    )
+    assert second == first
+    assert "botbeslissing 12 november 14:59 UTC" in second
+    assert "Geverifieerde AAPL Paper-exitbeslissing" in second
 
 
 def test_historical_week_fx_scrub_preserves_next_labeled_source_after_comma():

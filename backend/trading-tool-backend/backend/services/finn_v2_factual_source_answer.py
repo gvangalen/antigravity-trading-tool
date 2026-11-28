@@ -98,6 +98,14 @@ _UNBOUND_FX_MOMENT_CLAIM = re.compile(
     re.I,
 )
 
+_HISTORICAL_EXIT_DECISION_CLAIM = re.compile(
+    r"(?P<label>\b(?:uitstap|exit)[- ]?besliss\w*\b"
+    r"(?:(?![.;]\s|\n).){0,80}?)"
+    r"(?P<moment>(?:(?:20\d{2}-\d{2}-\d{2}|\d{1,2}\s+[a-z]+(?:\s+20\d{2})?)"
+    r"\s*,?\s*)?(?:om\s+)?\d{1,2}:\d{2}(?::\d{2})?\s+(?:UTC|CET|CEST)\b)",
+    re.I,
+)
+
 
 def _suppress_unbound_fx_moment_claims(
     answer: str, verified_at: datetime | None, canonical_line: str | None,
@@ -152,6 +160,9 @@ def _suppress_unbound_fx_moment_claims(
             "FX-brontijd: niet verifieerbaar uit opgeslagen bewijs"
         )
         def replace(match: re.Match[str]) -> str:
+            if ("zie de afzonderlijk geverifieerde bronregel" in match.group("label").lower()
+                    or "niet verifieerbaar uit opgeslagen bewijs" in match.group("label").lower()):
+                return match.group(0)
             if not match.group("alternative") and verified(match.group("moment")):
                 return match.group(0)
             # In `FX-bronmoment: **tijd**`, the opening stars sit inside the
@@ -214,14 +225,15 @@ def complete_historical_week_exit_moments(
     # Check a dossier's identity and registered exit across every read before
     # filtering by week. Otherwise an inconsistent out-of-week duplicate can
     # disappear and make the remaining timestamp look verified.
-    dossiers: dict[int, tuple[str, str, datetime | None]] = {}
+    dossiers: dict[int, tuple[str, str, datetime | None, datetime | None]] = {}
     for trade in all_trades:
         review_id = trade.get("review_id")
         if type(review_id) is not int:
             continue
         identity = (str(trade.get("symbol") or ""),
                     str(trade.get("environment") or "").lower(),
-                    _utc_instant(trade.get("exit_at")))
+                    _utc_instant(trade.get("exit_at")),
+                    _utc_instant(trade.get("paper_exit_decision_at")))
         if review_id in dossiers and dossiers[review_id] != identity:
             return answer
         dossiers[review_id] = identity
@@ -284,6 +296,38 @@ def complete_historical_week_exit_moments(
     saved_at, _ = _moment_in_zone(week.get("generated_at"), user_time_zone)
     if not exit_at or not saved_at:
         return answer
+    decision_instants = {_utc_instant(trade.get("paper_exit_decision_at"))
+                         for trade in matching_trades}
+    decision_at_in_zone = None
+    verified_decision_at = None
+    if (len(decision_instants) == 1 and None not in decision_instants
+            and all(isinstance(trade.get("paper_exit_evidence"), dict)
+                    and trade["paper_exit_evidence"].get("trigger") in {"first_target", "stop_loss"}
+                    for trade in matching_trades)):
+        verified_decision_at = next(iter(decision_instants))
+        decision_at_in_zone, _ = _moment_in_zone(verified_decision_at, user_time_zone)
+    if decision_at_in_zone and re.search(r"\bbronmoment(?:en)?\b", question, re.I):
+        # A model may call the registered close an exit decision. Replace
+        # only that historical decision clock, using the owner-read closing
+        # ledger's linked decision; leave unrelated clocks and prose intact.
+        from backend.services.finn_v2_source_moment_claims import _claimed_moment, _same_moment
+
+        def corrected_decision(match: re.Match[str]) -> str:
+            moment = match.group("moment")
+            if not re.search(r"\b20\d{2}\b", moment):
+                moment = re.sub(
+                    r"^(\d{1,2}\s+[a-z]+)",
+                    lambda date: f"{date.group(1)} {verified_decision_at.year}",
+                    moment, count=1, flags=re.I,
+                )
+            claim = _claimed_moment(moment)
+            if claim and _same_moment(claim, verified_decision_at):
+                return match.group(0)
+            return match.group("label") + decision_at_in_zone
+
+        answer = _HISTORICAL_EXIT_DECISION_CLAIM.sub(
+            corrected_decision, answer,
+        )
     fx_instants: set[datetime] = set()
     for trade in matching_trades:
         paper_exit = trade.get("paper_exit_evidence")
@@ -319,6 +363,14 @@ def complete_historical_week_exit_moments(
     if fx_at_in_zone and re.search(r"\bbronmoment(?:en)?\b", question, re.I):
         if fx_line not in answer:
             additions.append(fx_line)
+    if decision_at_in_zone and re.search(r"\bbronmoment(?:en)?\b", question, re.I):
+        utc_clock = verified_decision_at.strftime("%Y-%m-%d %H:%M:%S UTC")
+        decision_line = (
+            f"Geverifieerde AAPL Paper-exitbeslissing: {decision_at_in_zone} "
+            f"({utc_clock}; {zone_name})."
+        )
+        if decision_line not in answer:
+            additions.append(decision_line)
     return answer.rstrip() + ("\n" + "\n".join(additions) if additions else "")
 
 
