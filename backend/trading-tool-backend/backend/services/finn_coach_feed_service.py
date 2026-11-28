@@ -438,6 +438,35 @@ def _fallback(kind: str, subject: str, evidence: dict, *, focus: str = "brief") 
             bodies["en"] += f" At the verified Live balance check, EUR was {cash_pct}%."
             bodies["de"] += f" Bei der geprüften Live-Bilanz betrug der EUR-Anteil {cash_pct}%."
         return {locale: {"title": titles[locale], "body": bodies[locale]} for locale in LOCALES}
+    if kind == "live_order_attention":
+        uncertain = evidence.get("order_status") == "unknown_exchange_state"
+        return {
+            "nl": {"title": "Live-order: uitkomst controleren" if uncertain else "Live-order niet afgerond",
+                   "body": "De uitkomst bij de broker is nog niet bevestigd. Controleer deze order bij de broker voordat je opnieuw bestelt." if uncertain else "Deze Live-order is niet als volledig uitgevoerd bevestigd. Bekijk de orderstatus en de vastgelegde reden."},
+            "en": {"title": "Live order: check outcome" if uncertain else "Live order not completed",
+                   "body": "The broker outcome is not confirmed yet. Check this order with the broker before placing it again." if uncertain else "This Live order was not confirmed as fully filled. Review its status and recorded reason."},
+            "de": {"title": "Live-Order: Ausgang prüfen" if uncertain else "Live-Order nicht abgeschlossen",
+                   "body": "Das Ergebnis beim Broker ist noch nicht bestätigt. Prüfe diese Order beim Broker, bevor du erneut bestellst." if uncertain else "Diese Live-Order wurde nicht als vollständig ausgeführt bestätigt. Prüfe Status und gespeicherten Grund."},
+        }
+    if kind == "trade_review_ready":
+        symbol = str(evidence.get("symbol") or subject).strip().upper()[:20]
+        return {
+            "nl": {"title": f"Analyse van je gesloten {symbol}-trade staat klaar",
+                   "body": "Bekijk FINN's terugblik op deze trade en bepaal zelf welke les je wilt vastleggen."},
+            "en": {"title": f"Your closed {symbol} trade analysis is ready",
+                   "body": "Review FINN's assessment of this trade and choose which lesson you want to record."},
+            "de": {"title": f"Analyse deines geschlossenen {symbol}-Trades ist bereit",
+                   "body": "Sieh dir FINNs Rückblick auf diesen Trade an und entscheide, welche Lehre du festhalten möchtest."},
+        }
+    if kind == "live_broker_data_blocked":
+        return {
+            "nl": {"title": "Live-portefeuille niet volledig controleerbaar",
+                   "body": "FINN kon de brokerbalans en alle benodigde koersen al meer dan een uur niet volledig controleren. Controleer je exchange-koppeling en de Live-botstatus."},
+            "en": {"title": "Live portfolio cannot be fully verified",
+                   "body": "FINN has been unable to fully verify the broker balance and required prices for over an hour. Check your exchange connection and Live bot status."},
+            "de": {"title": "Live-Portfolio nicht vollständig prüfbar",
+                   "body": "FINN konnte Brokerbestand und benötigte Kurse seit über einer Stunde nicht vollständig prüfen. Prüfe Exchange-Verbindung und Live-Botstatus."},
+        }
     if kind == "plan_review":
         pair = str(evidence.get("trading_pair") or evidence.get("symbol") or "").strip()[:30]
         market = f" ({pair})" if pair else ""
@@ -727,7 +756,7 @@ class FinnCoachFeedService:
                       expires_at: datetime | None = None,
                       revision: str | None = None) -> str | None:
         """One row per owner/event. Unchanged evidence never reopens or regenerates."""
-        if not event_key or event_type not in {"plan_match", "plan_review", "position_risk", "portfolio_cash_low", "live_portfolio_cash_low", "live_trade_filled", "weekly_reflection", "improvement_suggestion", "data_blocked", "proposal_pending", "market_move", "bot_decision", "live_bot_paused", "daily_report_ready", "periodic_report_ready", "watchlist_added", "analysis_ready", "strategy_next_step", "paper_next_step"}:
+        if not event_key or event_type not in {"plan_match", "plan_review", "position_risk", "portfolio_cash_low", "live_portfolio_cash_low", "live_trade_filled", "live_order_attention", "trade_review_ready", "live_broker_data_blocked", "weekly_reflection", "improvement_suggestion", "data_blocked", "proposal_pending", "market_move", "bot_decision", "live_bot_paused", "daily_report_ready", "periodic_report_ready", "watchlist_added", "analysis_ready", "strategy_next_step", "paper_next_step"}:
             raise ValueError("feed_event_invalid")
         facts = {**evidence, "subject": str(subject or "")[:120]}
         digest = hashlib.sha256(str(revision or _json(facts)).encode()).hexdigest()
@@ -837,7 +866,7 @@ class FinnCoachFeedService:
                         old_facts = {}
                 if not isinstance(old_facts, dict):
                     old_facts = {}
-                if event_type in {"portfolio_cash_low", "live_portfolio_cash_low", "live_trade_filled"} and current["status"] in VISIBLE:
+                if event_type in {"portfolio_cash_low", "live_portfolio_cash_low", "live_trade_filled", "live_broker_data_blocked"} and current["status"] in VISIBLE:
                     await self.session.execute(text("""
                         UPDATE finn_coach_feed_items
                         SET evidence=CAST(:evidence AS JSONB),
@@ -909,7 +938,7 @@ class FinnCoachFeedService:
             "source_observed_at": source_observed_at,
             "copy_json": _json(_fallback(event_type, subject, facts)),
             "copy_source": ("verified_facts" if event_type in {
-                                "position_risk", "portfolio_cash_low", "live_portfolio_cash_low", "live_trade_filled", "weekly_reflection", "improvement_suggestion",
+                                "position_risk", "portfolio_cash_low", "live_portfolio_cash_low", "live_trade_filled", "live_order_attention", "trade_review_ready", "live_broker_data_blocked", "weekly_reflection", "improvement_suggestion",
                                 "bot_decision", "watchlist_added", "analysis_ready", "strategy_next_step", "paper_next_step", "daily_report_ready", "periodic_report_ready"} or event_type == "data_blocked" and facts.get("bot_id")
                             else "fact_fallback"),
             "expires_at": expires_at,
@@ -1255,6 +1284,32 @@ class FinnCoachFeedService:
         )
         return [item] if item else []
 
+    async def publish_trade_review_ready(self, *, user_id: int, review_id: int) -> str | None:
+        """Notify only after the owner's finished analysis is persisted."""
+        result = await self.session.execute(text("""
+            SELECT id, symbol, analysis_status, analysis_json IS NOT NULL AS has_analysis,
+                   analysis_updated_at, exit_at
+            FROM finn_trade_reviews WHERE id=:review_id AND user_id=:user_id
+        """), {"review_id": review_id, "user_id": user_id})
+        review = result.mappings().first()
+        event_key = f"trade-review:{review_id}"
+        if not review or review["analysis_status"] != "ready" or not review["has_analysis"]:
+            await self.resolve(user_id=user_id, event_key=event_key)
+            return None
+        observed = _utc_source_moment(review["analysis_updated_at"])
+        if not observed:
+            return None
+        return await self.publish(
+            user_id=user_id, event_key=event_key, event_type="trade_review_ready",
+            subject_type="trade_review", subject_id=str(review_id),
+            subject=str(review["symbol"]), symbol=str(review["symbol"]).upper(),
+            evidence={"review_id": review_id, "symbol": str(review["symbol"]).upper(),
+                      "exit_at": str(review["exit_at"])},
+            source_observed_at=observed,
+            expires_at=observed + timedelta(days=7), priority=2,
+            revision=f"trade-review-ready:{review_id}",
+        )
+
     async def reconcile_live_portfolio_events(self, *, user_id: int) -> list[str]:
         """Observe confirmed Live fills and a verified broker cash threshold.
 
@@ -1296,8 +1351,55 @@ class FinnCoachFeedService:
             ORDER BY o.updated_at DESC, o.id DESC LIMIT 40
         """), {"user_id": user_id})
         orders = result.mappings().all()
-        if not limit and not orders:
-            return []
+        problems_result = await self.session.execute(text("""
+            SELECT o.id, o.bot_id, o.symbol, o.status, o.updated_at,
+                   b.name AS bot_name
+            FROM bot_orders o
+            JOIN bot_configs b ON b.id=o.bot_id AND b.user_id=o.user_id AND b.is_live=TRUE
+            WHERE o.user_id=:user_id AND o.execution_environment='live'
+              AND o.updated_at >= NOW() - INTERVAL '1 day'
+              AND o.status IN ('ready','approved','pending','sending','sent',
+                               'unknown_exchange_state','failed','rejected',
+                               'cancelled','error','filled','partial')
+            ORDER BY o.updated_at DESC, o.id DESC LIMIT 80
+        """), {"user_id": user_id})
+        problem_orders = problems_result.mappings().all()
+        active_result = await self.session.execute(text("""
+            SELECT COUNT(*) AS active_count FROM bot_configs
+            WHERE user_id=:user_id AND is_live=TRUE AND is_active=TRUE
+        """), {"user_id": user_id})
+        active_live_bots = int(active_result.scalar_one() or 0)
+        created = []
+        for order in reversed(problem_orders):
+            event_key = f"live-order-problem:{order['id']}"
+            if order["status"] not in {"unknown_exchange_state", "failed", "rejected",
+                                       "error"}:
+                await self.resolve(user_id=user_id, event_key=event_key)
+                continue
+            observed_order = _utc_source_moment(order.get("updated_at"))
+            if not observed_order:
+                continue
+            item = await self.publish(
+                user_id=user_id, event_key=event_key, event_type="live_order_attention",
+                subject_type="bot", subject_id=str(order["bot_id"]),
+                subject=str(order["bot_name"] or "Live-bot"),
+                symbol=str(order["symbol"] or "").upper(), priority=4,
+                evidence={"environment": "live", "order_id": order["id"],
+                          "bot_id": order["bot_id"], "order_status": order["status"]},
+                source_observed_at=observed_order,
+                expires_at=datetime.now(timezone.utc) + timedelta(days=2),
+                revision=f"live-problem:{order['id']}:{order['status']}",
+            )
+            if item:
+                created.append(item)
+        if not limit and not orders and not active_live_bots:
+            await self.session.execute(text("""
+                UPDATE finn_live_balance_observations
+                SET first_unavailable_at=NULL, last_checked_at=NOW()
+                WHERE user_id=:user_id
+            """), {"user_id": user_id})
+            await self.resolve(user_id=user_id, event_key="live-broker-data:account")
+            return created
 
         account = await read_live_account(self.session, user_id)
         now = datetime.now(timezone.utc)
@@ -1314,7 +1416,48 @@ class FinnCoachFeedService:
                      and timedelta(0) <= now - observed <= timedelta(minutes=5))
         except (KeyError, TypeError, ValueError, InvalidOperation, ZeroDivisionError):
             valid = False
-        created = []
+        if active_live_bots:
+            if valid:
+                await self.session.execute(text("""
+                    INSERT INTO finn_live_balance_observations
+                        (user_id, first_unavailable_at, last_available_at, last_checked_at)
+                    VALUES (:user_id, NULL, NOW(), NOW())
+                    ON CONFLICT (user_id) DO UPDATE SET first_unavailable_at=NULL,
+                        last_available_at=NOW(), last_checked_at=NOW()
+                """), {"user_id": user_id})
+                await self.resolve(user_id=user_id, event_key="live-broker-data:account")
+            else:
+                observation = await self.session.execute(text("""
+                    INSERT INTO finn_live_balance_observations
+                        (user_id, first_unavailable_at, last_checked_at)
+                    VALUES (:user_id, NOW(), NOW())
+                    ON CONFLICT (user_id) DO UPDATE SET
+                        first_unavailable_at=COALESCE(
+                            finn_live_balance_observations.first_unavailable_at, NOW()),
+                        last_checked_at=NOW()
+                    RETURNING first_unavailable_at
+                """), {"user_id": user_id})
+                first_unavailable = _utc_source_moment(observation.scalar_one())
+                if first_unavailable and now - first_unavailable >= timedelta(hours=1):
+                    item = await self.publish(
+                        user_id=user_id, event_key="live-broker-data:account",
+                        event_type="live_broker_data_blocked", subject_type="portfolio",
+                        subject_id="live", subject="Live-portefeuille", symbol=None,
+                        priority=4, evidence={"environment": "live",
+                                              "active_live_bots": active_live_bots,
+                                              "first_unavailable_at": first_unavailable.isoformat()},
+                        source_observed_at=now, expires_at=now + timedelta(hours=2),
+                        revision=f"live-broker-unavailable:{first_unavailable.isoformat()}",
+                    )
+                    if item:
+                        created.append(item)
+        else:
+            await self.session.execute(text("""
+                UPDATE finn_live_balance_observations
+                SET first_unavailable_at=NULL, last_checked_at=NOW()
+                WHERE user_id=:user_id
+            """), {"user_id": user_id})
+            await self.resolve(user_id=user_id, event_key="live-broker-data:account")
         newest_order_id = orders[0]["id"] if orders else None
         for order in reversed(orders):
             filled_at = _utc_source_moment(order.get("updated_at"))

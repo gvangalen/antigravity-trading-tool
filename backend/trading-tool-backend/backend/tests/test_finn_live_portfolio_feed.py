@@ -23,6 +23,9 @@ class Rows:
     def all(self):
         return self.rows
 
+    def scalar_one(self):
+        return self.one
+
 
 def test_live_cash_alert_setting_is_independent_of_paper():
     request = AssistantPreferenceUpdate(live_cash_alert_below_pct=25,
@@ -47,6 +50,10 @@ def test_confirmed_live_fill_and_complete_broker_balance_create_separate_events(
         assert params == {"user_id": 7}
         if "FROM users" in query:
             return Rows(first={"cash_limit": "25"})
+        if "FROM bot_configs" in query:
+            return Rows(first=0)
+        if "FROM bot_orders" in query and "JOIN bot_executions" not in query:
+            return Rows(all=[])
         if "FROM bot_orders" in query:
             assert "execution_environment='live'" in query
             assert "exchange_order_id IS NOT NULL" in query
@@ -54,6 +61,8 @@ def test_confirmed_live_fill_and_complete_broker_balance_create_separate_events(
             return Rows(all=[order])
         if "FROM finn_coach_feed_items" in query:
             return Rows(first=None)
+        if "UPDATE finn_live_balance_observations" in query:
+            return Rows()
         raise AssertionError(query)
 
     async def balance(session, user_id):
@@ -73,7 +82,7 @@ def test_confirmed_live_fill_and_complete_broker_balance_create_separate_events(
     assert alert["event_key"] == "portfolio-cash:live"
     assert alert["evidence"]["cash_pct"] == 20
     assert "broker" in _fallback("live_portfolio_cash_low", "Live", alert["evidence"])["nl"]["body"]
-    feed.resolve.assert_not_awaited()
+    feed.resolve.assert_awaited_once_with(user_id=7, event_key="live-broker-data:account")
 
 
 def test_live_fill_remains_visible_without_complete_broker_valuation(monkeypatch):
@@ -87,8 +96,14 @@ def test_live_fill_remains_visible_without_complete_broker_valuation(monkeypatch
         query = str(sql)
         if "FROM users" in query:
             return Rows(first={"cash_limit": "25"})
+        if "FROM bot_configs" in query:
+            return Rows(first=0)
+        if "FROM bot_orders" in query and "JOIN bot_executions" not in query:
+            return Rows(all=[])
         if "FROM bot_orders" in query:
             return Rows(all=[order])
+        if "UPDATE finn_live_balance_observations" in query:
+            return Rows()
         raise AssertionError(query)
 
     async def balance(_session, _user_id):
@@ -103,7 +118,7 @@ def test_live_fill_remains_visible_without_complete_broker_valuation(monkeypatch
     trade = feed.publish.await_args.kwargs
     assert trade["event_type"] == "live_trade_filled"
     assert "portfolio_cash_pct" not in trade["evidence"]
-    feed.resolve.assert_not_awaited()
+    feed.resolve.assert_awaited_once_with(user_id=7, event_key="live-broker-data:account")
 
 
 def test_live_cash_alert_resolves_only_on_verified_recovery(monkeypatch):
@@ -113,10 +128,14 @@ def test_live_cash_alert_resolves_only_on_verified_recovery(monkeypatch):
         query = str(sql)
         if "FROM users" in query:
             return Rows(first={"cash_limit": "20"})
+        if "FROM bot_configs" in query:
+            return Rows(first=0)
         if "FROM bot_orders" in query:
             return Rows(all=[])
         if "FROM finn_coach_feed_items" in query:
             return Rows(first={"status": "read"})
+        if "UPDATE finn_live_balance_observations" in query:
+            return Rows()
         raise AssertionError(query)
 
     account = {"total_eur": 300, "cash_eur": 250, "position_value_eur": 700,
@@ -130,10 +149,108 @@ def test_live_cash_alert_resolves_only_on_verified_recovery(monkeypatch):
     feed.publish = AsyncMock()
     feed.resolve = AsyncMock()
     assert asyncio.run(feed.reconcile_live_portfolio_events(user_id=7)) == []
-    feed.resolve.assert_awaited_once_with(user_id=7, event_key="portfolio-cash:live")
+    assert any(call.kwargs["event_key"] == "portfolio-cash:live"
+               for call in feed.resolve.await_args_list)
     feed.publish.assert_not_awaited()
 
     feed.resolve.reset_mock()
     account["as_of"] = now - timedelta(minutes=15)
     assert asyncio.run(feed.reconcile_live_portfolio_events(user_id=7)) == []
-    feed.resolve.assert_not_awaited()
+    feed.resolve.assert_awaited_once_with(user_id=7, event_key="live-broker-data:account")
+
+
+def test_uncertain_live_order_is_not_reported_as_fill_and_resolves_on_confirmation():
+    now = datetime.now(timezone.utc)
+    state = {"status": "unknown_exchange_state"}
+
+    async def execute(sql, _params):
+        query = str(sql)
+        if "FROM users" in query:
+            return Rows(first={"cash_limit": None})
+        if "JOIN bot_executions" in query:
+            return Rows(all=[])
+        if "FROM bot_orders" in query:
+            return Rows(all=[{"id": 91, "bot_id": 8, "symbol": "BTC",
+                              "bot_name": "Live BTC", "updated_at": now,
+                              "status": state["status"]}])
+        if "FROM bot_configs" in query:
+            return Rows(first=0)
+        if "UPDATE finn_live_balance_observations" in query:
+            return Rows()
+        raise AssertionError(query)
+
+    feed = FinnCoachFeedService(SimpleNamespace(execute=execute))
+    feed.publish = AsyncMock(return_value="problem")
+    feed.resolve = AsyncMock()
+    assert asyncio.run(feed.reconcile_live_portfolio_events(user_id=7)) == ["problem"]
+    published = feed.publish.await_args.kwargs
+    assert published["event_type"] == "live_order_attention"
+    assert published["event_key"] == "live-order-problem:91"
+    assert published["evidence"]["order_status"] == "unknown_exchange_state"
+    state["status"] = "filled"
+    feed.publish.reset_mock()
+    feed.resolve.reset_mock()
+    assert asyncio.run(feed.reconcile_live_portfolio_events(user_id=7)) == []
+    feed.publish.assert_not_awaited()
+    assert any(call.kwargs["event_key"] == "live-order-problem:91"
+               for call in feed.resolve.await_args_list)
+
+
+def test_broker_gap_requires_sustained_failure_and_active_live_bot(monkeypatch):
+    now = datetime.now(timezone.utc)
+    state = {"first": now, "active": 1, "account": None}
+
+    async def execute(sql, _params):
+        query = str(sql)
+        if "FROM users" in query:
+            return Rows(first={"cash_limit": None})
+        if "FROM bot_orders" in query:
+            return Rows(all=[])
+        if "FROM bot_configs" in query:
+            return Rows(first=state["active"])
+        if "INSERT INTO finn_live_balance_observations" in query:
+            return Rows(first=state["first"])
+        if "UPDATE finn_live_balance_observations" in query:
+            return Rows()
+        raise AssertionError(query)
+
+    async def balance(_session, _user_id):
+        return state["account"]
+
+    monkeypatch.setattr("backend.services.live_portfolio_allocation_service.read_live_account", balance)
+    feed = FinnCoachFeedService(SimpleNamespace(execute=execute))
+    feed.publish = AsyncMock(return_value="broker")
+    feed.resolve = AsyncMock()
+    assert asyncio.run(feed.reconcile_live_portfolio_events(user_id=7)) == []
+    feed.publish.assert_not_awaited()
+    state["first"] = now - timedelta(hours=2)
+    assert asyncio.run(feed.reconcile_live_portfolio_events(user_id=7)) == ["broker"]
+    assert feed.publish.await_args.kwargs["event_type"] == "live_broker_data_blocked"
+    state["active"] = 0
+    feed.publish.reset_mock()
+    feed.resolve.reset_mock()
+    assert asyncio.run(feed.reconcile_live_portfolio_events(user_id=7)) == []
+    feed.publish.assert_not_awaited()
+    feed.resolve.assert_awaited_with(user_id=7, event_key="live-broker-data:account")
+
+
+def test_trade_review_notification_requires_saved_ready_analysis():
+    now = datetime.now(timezone.utc)
+    state = {"analysis_status": "ready"}
+
+    async def execute(sql, params):
+        assert params == {"review_id": 42, "user_id": 7}
+        assert "FROM finn_trade_reviews" in str(sql)
+        return Rows(first={"id": 42, "symbol": "BTC",
+                           "analysis_status": state["analysis_status"],
+                           "has_analysis": True,
+                           "analysis_updated_at": now, "exit_at": now})
+
+    feed = FinnCoachFeedService(SimpleNamespace(execute=execute))
+    feed.publish = AsyncMock(return_value="review")
+    feed.resolve = AsyncMock()
+    assert asyncio.run(feed.publish_trade_review_ready(user_id=7, review_id=42)) == "review"
+    assert feed.publish.await_args.kwargs["subject_id"] == "42"
+    state["analysis_status"] = "pending"
+    assert asyncio.run(feed.publish_trade_review_ready(user_id=7, review_id=42)) is None
+    feed.resolve.assert_awaited_once_with(user_id=7, event_key="trade-review:42")

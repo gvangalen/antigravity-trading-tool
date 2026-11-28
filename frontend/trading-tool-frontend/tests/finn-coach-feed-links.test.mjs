@@ -9,6 +9,12 @@ test("weekly coaching links to its saved reflection week", () => {
   "/report?reflection_week=2026-11-09#finn-trades-title");
 });
 
+test("finished trade review opens the saved analysis", () => {
+  assert.equal(coachFeedDetailsHref({event_type: "trade_review_ready",
+    subject_type: "trade_review", subject_id: "42"}),
+  "/report?trade_review_id=42#finn-trades-title");
+});
+
 test("pair-scoped suggestion preserves the exact quote", () => {
   assert.equal(coachFeedDetailsHref({subject_type: "asset", symbol: "BTC",
     evidence: {market_id: 12, trading_pair: "BTC/USDT"}}),

@@ -277,3 +277,65 @@ async def _analyze_pending_trade_reviews(session_factory=None) -> int:
         except Exception:
             logger.exception("FINN trade analysis failed", extra={"review_id": review_id})
     return completed
+
+
+@shared_task(name="backend.celery_task.finn_trade_review_task.recover_trade_review_feed")
+def recover_trade_review_feed() -> int:
+    return asyncio.run(_run_with_task_database(_recover_trade_review_feed))
+
+
+async def _recover_trade_review_feed(session_factory=None) -> int:
+    """Recover a missed notification after a worker crash or temporary feed failure."""
+    session_factory = session_factory or async_session_factory
+    allowed = allowed_trade_review_users()
+    if allowed == set():
+        return 0
+    owner_filter = "AND r.user_id = ANY(CAST(:allowed AS INTEGER[]))" if allowed is not None else ""
+    params = {"allowed": sorted(allowed)} if allowed is not None else {}
+    async with session_factory() as session:
+        obsolete = await session.execute(text(f"""
+            SELECT f.user_id, f.event_key FROM finn_coach_feed_items f
+            JOIN users u ON u.id=f.user_id AND u.is_active=TRUE
+            LEFT JOIN finn_trade_reviews r ON r.user_id=f.user_id
+                AND r.id::text=f.subject_id
+            WHERE f.event_type='trade_review_ready'
+              AND f.status IN ('unread','read')
+              AND (r.id IS NULL OR r.analysis_status <> 'ready' OR r.analysis_json IS NULL)
+              AND f.created_at >= NOW() - INTERVAL '7 days'
+              {owner_filter.replace('r.user_id', 'f.user_id')}
+            ORDER BY f.created_at LIMIT 100
+        """), params)
+        obsolete_keys = [(int(row.user_id), str(row.event_key))
+                         for row in obsolete.fetchall()]
+        result = await session.execute(text(f"""
+            SELECT r.user_id, r.id FROM finn_trade_reviews r
+            JOIN users u ON u.id=r.user_id AND u.is_active=TRUE
+            WHERE r.analysis_status='ready' AND r.analysis_json IS NOT NULL
+              AND r.analysis_updated_at >= NOW() - INTERVAL '1 hour'
+              AND NOT EXISTS (
+                  SELECT 1 FROM finn_coach_feed_items f
+                  WHERE f.user_id=r.user_id AND f.event_key='trade-review:' || r.id::text
+              ) {owner_filter}
+            ORDER BY r.analysis_updated_at, r.id LIMIT 100
+        """), params)
+        targets = [(int(row.user_id), int(row.id)) for row in result.fetchall()]
+    for user_id, event_key in obsolete_keys:
+        try:
+            async with session_factory() as session:
+                await FinnCoachFeedService(session).resolve(
+                    user_id=user_id, event_key=event_key)
+                await session.commit()
+        except Exception:
+            logger.exception("FINN obsolete trade review feed cleanup failed",
+                             extra={"event_key": event_key})
+    completed = 0
+    for user_id, review_id in targets:
+        try:
+            async with session_factory() as session:
+                item = await FinnCoachFeedService(session).publish_trade_review_ready(
+                    user_id=user_id, review_id=review_id)
+                await session.commit()
+                completed += bool(item)
+        except Exception:
+            logger.exception("FINN trade review feed recovery failed", extra={"review_id": review_id})
+    return completed

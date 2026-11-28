@@ -460,6 +460,16 @@ class FinnTradeAnalysisService:
             fresh = await self.reviews.get_review(user_id, review_id)
             return {"status": fresh["analysis_status"], "analysis": fresh["analysis_json"],
                     "reason": fresh["analysis_reason"]}
+        if status != "ready":
+            return {"status": status, "analysis": analysis, "reason": reason}
+        try:
+            from backend.services.finn_coach_feed_service import FinnCoachFeedService
+            await FinnCoachFeedService(self.session).publish_trade_review_ready(
+                user_id=user_id, review_id=review_id)
+            await self.session.commit()
+        except Exception:
+            await self.session.rollback()
+            logger.exception("trade_review_ready_feed_failed review_id=%s", review_id)
         return {"status": status, "analysis": analysis, "reason": reason}
 
     async def ask(self, user_id: int, review_id: int, question: str) -> dict:
