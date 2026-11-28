@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from backend.domain.indicator_display import indicator_display_name
 from backend.domain.technical_indicator_catalog import get_active_technical_indicator_definitions
 from backend.services.finn_v2_tool_adapters.display_source_moment import amsterdam_source_moment
-from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
+from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG, mentioned_catalog_symbols
 
 
 def _read(results: dict[str, Any], scope: str) -> tuple[dict[str, Any] | None, str | None]:
@@ -64,11 +64,12 @@ def _utc_instant(value: Any) -> datetime | None:
 
 _UNBOUND_WEEK_SAVED_CLAIM = re.compile(
     r"(?P<label>(?:\*{1,2})?\b(?:opgeslagen\s+)?weekreflectie\s+"
-    r"(?:gegenereerd|opgeslagen)(?:\*{1,2})?\s*:(?:\*{1,2})?\s*)"
+    r"(?:voor\s+\d{1,2}\s*[–—-]\s*\d{1,2}\s+[a-z]+(?:\s+\d{4})?\s*:\s*)?"
+    r"(?:gegenereerd|opgeslagen)(?:\*{1,2})?\s*:?(?:\*{1,2})?\s*)"
     r"(?P<moment>(?:(?:\d{4}-\d{2}-\d{2}|\d{1,2}\s+[a-z]+(?:\s+\d{4})?)"
     r"\s*,?\s*)?\d{1,2}:\d{2}(?::\d{2})?\s+"
     r"(?:[A-Za-z_]+/[A-Za-z_]+|[A-Z]{2,5}\b)"
-    r"(?:\s*\((?:[A-Za-z_]+/[A-Za-z_]+|UTC|GMT|CET|CEST|EST|EDT|PST|PDT)\))?)",
+    r"(?:\s*\((?:[A-Za-z_]+/[A-Za-z_]+|UTC|GMT|CET|CEST|EST|EDT|PST|PDT|Amsterdamse\s+tijd)\))?)",
     re.I,
 )
 
@@ -81,7 +82,7 @@ def _suppress_unbound_week_saved_claims(answer: str) -> str:
 
 
 _UNBOUND_FX_MOMENT_CLAIM = re.compile(
-    r"(?P<label>(?:Geverifieerd\s+)?\b(?:FX(?:[- ]?(?:bron(?:moment)?|koers))?|"
+    r"(?P<label>(?:\*{1,2})?(?:Geverifieerd\s+)?\b(?:FX(?:[- ]?(?:bron(?:moment)?|koers))?|"
     r"(?:exit|uitvoerings)?wisselkoers(?:bron(?:moment)?)?)\b"
     r"(?:(?![.;]\s|\n|(?:,|\ben\b)\s*(?:de\s+)?"
     r"(?:bot\w*|(?:uitstap|exit)[- ]?besliss\w*|bevestigde\s+les|"
@@ -105,6 +106,15 @@ _HISTORICAL_EXIT_DECISION_CLAIM = re.compile(
     r"(?:(?:op|om)\s*|:\s*)?)"
     r"(?P<moment>(?:(?:20\d{2}-\d{2}-\d{2}|\d{1,2}\s+[a-z]+(?:\s+20\d{2})?)"
     r"\s*,?\s*)?(?:om\s+)?\d{1,2}:\d{2}(?::\d{2})?\s+(?:UTC|CET|CEST)\b)",
+    re.I,
+)
+
+_MIXED_EXIT_DECISION_PRICE_CLAIM = re.compile(
+    r"(?P<label>\b(?:uitstap|exit)[- ]?besliss\w*\s+en\s+(?:de\s+)?"
+    r"(?:(?P<currency>EUR|USD|USDT)[- ]?koers\s+van\s+"
+    r"(?P<price>\d+(?:[.,]\d+)?)|(?P<execution>uitvoeringskoers))\s*:\s*)"
+    r"(?P<moment>(?:\d{1,2}\s+[a-z]+\s+20\d{2}|20\d{2}-\d{2}-\d{2})"
+    r"\s*,?\s*\d{1,2}:\d{2}(?::\d{2})?\s+(?:UTC|CET|CEST)\b)",
     re.I,
 )
 
@@ -164,13 +174,9 @@ def _suppress_unbound_fx_moment_claims(
         def replace(match: re.Match[str]) -> str:
             if not match.group("alternative") and verified(match.group("moment")):
                 return match.group(0)
-            # In `FX-bronmoment: **tijd**`, the opening stars sit inside the
-            # rejected claim, while the closing stars follow the clock. Drop
-            # both with the claim; keep an outer `**FX-bronmoment: tijd**`
-            # pair balanced when its opening stars are outside the match.
-            embedded_open = "**" in match.group("label")
-            close = match.group("markdown_close") or ""
-            return replacement + ("" if embedded_open else close)
+            # The match includes both outer and inner emphasis markers, so
+            # rejected draft clocks cannot leave a dangling `**` behind.
+            return replacement
 
         return _UNBOUND_FX_MOMENT_CLAIM.sub(replace, fragment)
 
@@ -182,25 +188,27 @@ def _suppress_unbound_fx_moment_claims(
 
 def complete_historical_week_exit_moments(
     answer: str, evidence: tuple[dict[str, Any], ...], *, question: str,
-    user_time_zone: str | None,
-) -> str:
+    user_time_zone: str | None, typed: bool = False,
+    include_selected_review_id: bool = False,
+) -> str | tuple[str, int] | None:
     """Show the two verified source moments in the user's zone for a weekly exit review."""
-    if not user_time_zone or not re.search(r"\b(?:weekreflectie|wekelijkse reflectie)\b", question, re.I) \
-            or not re.search(r"\bAAPL\b", question, re.I) \
-            or not re.search(r"\bPaper\b", question, re.I) \
-            or not re.search(r"\b(?:exitreden|exit|uitstap|verkoop|afgesloten)\b", question, re.I):
-        return answer
+    if not user_time_zone or (not typed and (
+            not re.search(r"\b(?:weekreflectie|wekelijkse reflectie)\b", question, re.I)
+            or not re.search(r"\bAAPL\b", question, re.I)
+            or not re.search(r"\bPaper\b", question, re.I)
+            or not re.search(r"\b(?:exitreden|exit|uitstap|verkoop|afgesloten)\b", question, re.I))):
+        return None if typed else answer
     try:
         ZoneInfo(user_time_zone)
     except (ZoneInfoNotFoundError, TypeError, ValueError):
-        return answer
+        return None if typed else answer
     rows = [item["data"] for item in evidence
             if item.get("scope") == "read_review_history"
             and item.get("status") == "completed" and isinstance(item.get("data"), dict)]
     weeks = [row["weekly_reflection"] for row in rows
              if isinstance(row.get("weekly_reflection"), dict)]
     if not weeks:
-        return answer
+        return None if typed else answer
     week = weeks[0]
     # The model can read the same owner-scoped history twice in one turn. A
     # duplicate read is safe; conflicting saved weeks are not.
@@ -209,16 +217,26 @@ def complete_historical_week_exit_moments(
     if any(tuple(candidate.get(key) for key in
                  ("week_start", "week_end", "generated_at", "time_zone")) != week_key
            for candidate in weeks[1:]):
-        return answer
+        return None if typed else answer
     try:
         start = datetime.fromisoformat(str(week["week_start"])).date()
         end = datetime.fromisoformat(str(week["week_end"])).date()
     except (KeyError, TypeError, ValueError):
-        return answer
+        return None if typed else answer
+    if typed:
+        from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
+        try:
+            requested_start = ReviewToolAdapter.requested_week_start(
+                question, reference_year=start.year,
+            )
+        except ValueError:
+            return None
+        if requested_start is not None and requested_start != start:
+            return None
     try:
         period_zone = ZoneInfo(str(week.get("time_zone") or user_time_zone))
     except (ZoneInfoNotFoundError, TypeError, ValueError):
-        return answer
+        return None if typed else answer
     all_trades = [trade for row in rows for trade in row.get("closed_trades") or []
                   if isinstance(trade, dict)]
     # Check a dossier's identity and registered exit across every read before
@@ -234,7 +252,7 @@ def complete_historical_week_exit_moments(
                     _utc_instant(trade.get("exit_at")),
                     _utc_instant(trade.get("paper_exit_decision_at")))
         if review_id in dossiers and dossiers[review_id] != identity:
-            return answer
+            return None if typed else answer
         dossiers[review_id] = identity
     matching_trades = [trade for trade in all_trades
                        if trade.get("symbol") == "AAPL"
@@ -245,13 +263,19 @@ def complete_historical_week_exit_moments(
                      for trade in matching_trades}
     trades = list(unique_trades.values())
     if len(trades) != 1:
-        return answer
+        return None if typed else answer
     requested_ids = {int(match.group(1)) for match in re.finditer(
-        r"\b(?:dossier|trade(?:[- ]?(?:reflectie|review))?|review)\s*#\s*(\d+)\b",
+        r"\b(?:dossier|trade(?:[- ]?(?:reflectie|review))?|review)\s*#?\s*(\d+)\b",
         question, re.I,
     )}
     if requested_ids and requested_ids != {trades[0].get("review_id")}:
-        return answer
+        return None if typed else answer
+    if typed:
+        requested_bot_ids = {int(match.group(1)) for match in re.finditer(
+            r"\bbot\s*#?\s*(\d+)\b", question, re.I,
+        )}
+        if requested_bot_ids and requested_bot_ids != {trades[0].get("bot_id")}:
+            return None
     # A separately named exit date can refer to another trade than the week.
     # Remove the week range before interpreting dates as trade references.
     without_week = re.sub(
@@ -268,14 +292,14 @@ def complete_historical_week_exit_moments(
     for match in re.finditer(r"\b\d{4}-\d{2}-\d{2}\b", without_week):
         try:
             if datetime.fromisoformat(match.group()).date() != exit_date:
-                return answer
+                return None if typed else answer
         except ValueError:
-            return answer
+            return None if typed else answer
     without_week = re.sub(r"\b\d{4}-\d{2}-\d{2}\b", "", without_week)
     # Numeric locale dates are ambiguous (day/month versus month/day). Do not
     # guess which exit they identify; the week range itself was removed above.
     if re.search(r"\b\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?\b", without_week):
-        return answer
+        return None if typed else answer
     month_numbers = {name: number for number, names in enumerate((
         ("januari", "jan"), ("februari", "feb"), ("maart", "mrt"),
         ("april", "apr"), ("mei",), ("juni", "jun"), ("juli", "jul"),
@@ -290,11 +314,11 @@ def complete_historical_week_exit_moments(
         if (int(match.group(1)), month_numbers[match.group(2).lower()]) != (
             exit_date.day, exit_date.month,
         ) or (match.group(3) and int(match.group(3)) != exit_date.year):
-            return answer
+            return None if typed else answer
     exit_at, zone_name = _moment_in_zone(trades[0]["exit_at"], user_time_zone)
     saved_at, _ = _moment_in_zone(week.get("generated_at"), user_time_zone)
     if not exit_at or not saved_at:
-        return answer
+        return None if typed else answer
     decision_instants = {_utc_instant(trade.get("paper_exit_decision_at"))
                          for trade in matching_trades}
     decision_at_in_zone = None
@@ -305,6 +329,158 @@ def complete_historical_week_exit_moments(
                     for trade in matching_trades)):
         verified_decision_at = next(iter(decision_instants))
         decision_at_in_zone, _ = _moment_in_zone(verified_decision_at, user_time_zone)
+    if typed:
+        # This narrow historical answer has several independently timed
+        # sources. Free model prose must never supply its price, currency,
+        # decision, closing or week clocks. Use one owner-read dossier only.
+        requested_symbols = mentioned_catalog_symbols(question)
+        if requested_symbols and requested_symbols != {"AAPL"}:
+            return None
+        if type(trades[0].get("review_id")) is not int:
+            return None
+        if not decision_at_in_zone or any(trade != trades[0] for trade in matching_trades):
+            return None
+        facts = trades[0].get("paper_exit_evidence")
+        if not isinstance(facts, dict):
+            return None
+        reason = {"first_target": "eerste koersdoel", "stop_loss": "stop-loss"}.get(
+            facts.get("trigger"))
+        if reason is None:
+            return None
+        lines = [
+            f"AAPL Paper-exit: opgeslagen botreden {reason}. Dit is botbewijs, "
+            "geen onafhankelijke beursuitvoering.",
+        ]
+        for prefix, price_key, currency_key, at_key in (
+            ("Koersbron bij exitbeoordeling", "source_price", "source_price_currency",
+             "source_price_at"),
+            ("Koersbron bij Paper-uitvoering", "execution_source_price",
+             "execution_source_price_currency", "execution_source_price_at"),
+        ):
+            raw_price = facts.get(price_key)
+            currency = str(facts.get(currency_key) or "").upper()
+            quote_at, _ = _moment_in_zone(facts.get(at_key), user_time_zone)
+            try:
+                price = Decimal(str(raw_price))
+            except (InvalidOperation, TypeError, ValueError):
+                price = None
+            if (price is None or not price.is_finite() or price <= 0
+                    or currency not in {"EUR", "USD", "USDT"} or not quote_at):
+                lines.append(f"{prefix}: prijs, valuta of bronmoment niet verifieerbaar.")
+            else:
+                lines.append(f"{prefix}: {format(price, '.2f').replace('.', ',')} {currency}; "
+                             f"bronmoment {quote_at} "
+                             f"({zone_name}).")
+        fx_at, _ = _moment_in_zone(facts.get("execution_fx_observed_at"), user_time_zone)
+        try:
+            fx_factor = Decimal(str(facts.get("execution_fx_eur_per_unit")))
+        except (InvalidOperation, TypeError, ValueError):
+            fx_factor = None
+        if fx_at and fx_factor is not None and fx_factor.is_finite() and fx_factor > 0:
+            lines.append(f"FX-bron bij Paper-uitvoering: {format(fx_factor, 'f')} EUR-factor; "
+                         f"bronmoment {fx_at} ({zone_name}).")
+        else:
+            lines.append("FX-bron bij Paper-uitvoering: factor of bronmoment niet verifieerbaar.")
+        lines.extend((
+            f"Botbeslissing: {decision_at_in_zone} ({zone_name}).",
+            f"Paper-sluiting geregistreerd: {exit_at} ({zone_name}).",
+            f"Weekreflectie {start.isoformat()} t/m {end.isoformat()} opgeslagen: "
+            f"{saved_at} ({zone_name}).",
+        ))
+        lesson = trades[0].get("confirmed_lesson")
+        if (isinstance(lesson, dict) and isinstance(lesson.get("lesson_text"), str)
+                and _utc_instant(lesson.get("confirmed_at")) is not None):
+            lesson_text = re.sub(r"[\x00-\x1f\x7f]+", " ", lesson["lesson_text"]).strip()[:300]
+            if lesson_text:
+                confirmed_at, _ = _moment_in_zone(lesson["confirmed_at"], user_time_zone)
+                lines.append(f"Door gebruiker bevestigde les ({confirmed_at}): {lesson_text}")
+        if not any(line.startswith("Door gebruiker bevestigde les") for line in lines):
+            themes = [pattern.get("theme") for pattern in week.get("observed_patterns") or []
+                      if isinstance(pattern, dict)]
+            attention = {
+                "exit_process": "controleer welke uitstapregel het besluit activeerde",
+                "evidence_gap": "leg ontbrekende planvoorwaarden en bronmomenten vast",
+                "risk": "toets de uitstap aan de opgeslagen risicogrens",
+            }
+            theme = next((item for item in themes if item in attention), None)
+            if theme:
+                lines.append(f"Weekreflectie noemt als aandachtspunt: {attention[theme]}. "
+                             "Dit is een patroon, geen bevestigde les voor deze trade.")
+            else:
+                lines.append("Een concreet door de gebruiker bevestigd aandachtspunt is niet "
+                             "beschikbaar in deze bronnen.")
+        lines.append("Onzeker blijft of alle oorspronkelijke planvoorwaarden zijn gevolgd; "
+                     "het opgeslagen exitlabel alleen bewijst geen volledige plantrouw.")
+        rendered = "\n".join(lines)
+        if include_selected_review_id:
+            return rendered, trades[0]["review_id"]
+        return rendered
+    # A price source observation is not the bot decision. Rewrite the narrow
+    # mixed draft only when every owner-bound copy agrees on the typed quote.
+    quote_facts = [trade.get("paper_exit_evidence") for trade in matching_trades]
+    if all(isinstance(facts, dict) for facts in quote_facts):
+        def distinct_price_source(match: re.Match[str]) -> str:
+            clause_start = max(answer.rfind(".", 0, match.start()),
+                               answer.rfind("\n", 0, match.start())) + 1
+            next_stops = [stop for stop in (answer.find(".", match.end()),
+                                             answer.find("\n", match.end())) if stop >= 0]
+            clause_end = min(next_stops, default=len(answer))
+            clause = answer[clause_start:clause_end]
+            stated_ids = {int(ref.group(1)) for ref in re.finditer(
+                r"\b(?:dossier|trade(?:[- ]?(?:reflectie|review))?|review)\s*#?\s*(\d+)\b",
+                clause, re.I,
+            )}
+            stated_bot_ids = {int(ref.group(1)) for ref in re.finditer(
+                r"\bbot\s*#?\s*(\d+)\b", clause, re.I,
+            )}
+            if (verified_decision_at is None
+                    or (stated_ids and stated_ids != {trades[0].get("review_id")})
+                    or (stated_bot_ids and stated_bot_ids != {trades[0].get("bot_id")})):
+                return match.group(0)
+            if ((re.search(r"\b(?:eerdere|vorige|voorgaande|andere|oudere)\b", clause, re.I)
+                    and re.search(r"\b(?:trade|dossier|review)\b", clause, re.I))
+                    or re.search(r"\b(?:ochtend|middag|avond)[- ]?trade\b", clause, re.I)):
+                return match.group(0)
+            execution = bool(match.group("execution"))
+            moment_key = "execution_source_price_at" if execution else "source_price_at"
+            price_key = "execution_source_price" if execution else "source_price"
+            quote_moments = {_utc_instant(facts.get(moment_key)) for facts in quote_facts}
+            currency_key = ("execution_source_price_currency" if execution
+                            else "source_price_currency")
+            quote_prices = {(str(facts.get(currency_key) or "").upper(),
+                             str(facts.get(price_key) or "")) for facts in quote_facts}
+            if (len(quote_moments) != 1 or None in quote_moments
+                    or len(quote_prices) != 1):
+                return match.group(0)
+            quote_at = next(iter(quote_moments))
+            currency, raw_price = next(iter(quote_prices))
+            try:
+                verified_price = Decimal(raw_price)
+                claimed_price = (Decimal(match.group("price").replace(",", "."))
+                                 if not execution else verified_price)
+            except (InvalidOperation, TypeError, ValueError):
+                return match.group(0)
+            claim = _claimed_moment(match.group("moment"))
+            registered_close = _utc_instant(trades[0]["exit_at"])
+            if (claim and (any(_same_moment(claim, instant) for instant in
+                               (quote_at, verified_decision_at, registered_close) if instant)
+                           if execution else _same_moment(claim, quote_at))
+                    and currency in {"EUR", "USD", "USDT"}
+                    and (execution or match.group("currency").upper() == currency)
+                    and verified_price.is_finite() and verified_price > 0
+                    and claimed_price == verified_price):
+                if execution:
+                    zone_quote, _ = _moment_in_zone(quote_at, user_time_zone)
+                    displayed_price = f"{verified_price:.2f}".replace(".", ",")
+                    return (f"Koersbron bij AAPL Paper-uitvoering: "
+                            f"{displayed_price} {currency} op {zone_quote} "
+                            f"({quote_at.strftime('%Y-%m-%d %H:%M:%S UTC')}; {user_time_zone})")
+                return (f"Koersbron bij AAPL Paper-exitbeoordeling: "
+                        f"{match.group('price')} {currency} op {match.group('moment')}")
+            return match.group(0)
+
+        from backend.services.finn_v2_source_moment_claims import _claimed_moment, _same_moment
+        answer = _MIXED_EXIT_DECISION_PRICE_CLAIM.sub(distinct_price_source, answer)
     if decision_at_in_zone and re.search(r"\bbronmoment(?:en)?\b", question, re.I):
         # A model may call the registered close an exit decision. Replace
         # only that historical decision clock, using the owner-read closing

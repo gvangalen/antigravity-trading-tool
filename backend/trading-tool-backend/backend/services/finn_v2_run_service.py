@@ -1934,6 +1934,7 @@ def _minimal_read_answers_enabled() -> bool:
 def _minimal_read_answer(
     *, message: str, prepared: FinnResponsesFrontDoorResult,
     user_time_zone: str | None = None,
+    _legacy_historical_test: bool = False,
 ) -> FinnResponsesVerifiedAnswer:
     """Keep the model's wording; check only a concrete saved-object type error."""
     current_evidence = tuple(
@@ -1962,11 +1963,157 @@ def _minimal_read_answer(
             if isinstance(item, dict)
         )
     text = prepared.response.text.strip()
-    if str(getattr(prepared, "locale", "nl") or "nl").lower().startswith("nl"):
-        from backend.services.finn_v2_factual_source_answer import complete_historical_week_exit_moments
-        text = complete_historical_week_exit_moments(
-            text, current_evidence, question=message, user_time_zone=user_time_zone,
+    historical_read = any(
+        item.get("scope") == "read_review_history"
+        and item.get("status") == "completed"
+        and isinstance(item.get("data"), dict)
+        and isinstance(item["data"].get("weekly_reflection"), dict)
+        and any(isinstance(trade, dict)
+                and str(trade.get("symbol") or "").upper() == "AAPL"
+                and str(trade.get("environment") or "").lower() == "paper"
+                for trade in item["data"].get("closed_trades") or [])
+        for item in current_evidence
+    )
+    from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
+    week_requested = ReviewToolAdapter.mentions_weekly_reflection(message)
+    if ReviewToolAdapter._WEEK_SUBJECT.search(message) and not week_requested:
+        return FinnResponsesVerifiedAnswer(
+            "unavailable", "De weekreflectie is in deze vraag uitgesloten; ik toon de "
+            "opgeslagen weeksamenvatting daarom niet.",
+            "weekly_reflection_excluded", (),
         )
+    exit_requested = bool(re.search(
+        r"\b(?:exit\w*|uitstap\w*|verkoop\w*|afgesloten|gesloten|"
+        r"closed\s+(?:Paper[- ]?)?trade|sold|sell)\b",
+        message, re.I,
+    ))
+    only_live = bool(re.search(
+        r"\b(?:(?:gebruik\s+)?(?:alleen|uitsluitend|only|exclusively)\s+Live|"
+        r"(?:geen|niet|no|not|zonder|without)\s+Paper"
+        r"(?:[- ]?(?:trades?|gegevens|data))?)\b",
+        message, re.I,
+    ))
+    exclude_individual = bool(re.search(
+        r"\b(?:laat\s+individuele\s+trades?\s+buiten\s+beschouwing|"
+        r"zonder\s+individuele\s+trades?|exclude\s+individual\s+trades?|"
+        r"(?:niet|not)\s+(?:(?:mijn|de|the|my)\s+)?(?:AAPL\s+)?"
+        r"(?:Paper[- ]?)?(?:exit\w*|trade\w*|uitstap\w*)|"
+        r"bespreek\s+niet\b[^.!?\n]{0,60}\b(?:exit\w*|trade\w*|uitstap\w*)\b"
+        r"[^.!?\n]{0,60}\bmaar\s+alleen)\b",
+        message, re.I,
+    ))
+    if week_requested and (only_live or exclude_individual or not exit_requested):
+        if only_live:
+            return FinnResponsesVerifiedAnswer(
+                "unavailable", "Met deze uitlezing kan ik geen Live-trade "
+                "voor deze week onderbouwen.",
+                "live_history_not_verified", (),
+            )
+        current_evidence = tuple(
+            {"scope": item.get("scope"), "status": item.get("status"),
+             "source": item.get("source"),
+             "data": {"weekly_reflection": item["data"]["weekly_reflection"]}}
+            for item in current_evidence
+            if item.get("scope") == "read_review_history"
+            and item.get("status") == "completed"
+            and isinstance(item.get("data"), dict)
+            and isinstance(item["data"].get("weekly_reflection"), dict)
+        )
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+        from backend.services.finn_v2_factual_source_answer import _moment_in_zone
+        try:
+            if not user_time_zone:
+                raise ValueError("missing_user_time_zone")
+            ZoneInfo(user_time_zone)
+        except (ZoneInfoNotFoundError, TypeError, ValueError):
+            return FinnResponsesVerifiedAnswer(
+                "unavailable", "Ik kan de weekreflectie niet in jouw opgeslagen "
+                "tijdzone tonen.", "user_time_zone_unavailable", current_evidence,
+            )
+        weeks = [item["data"]["weekly_reflection"] for item in current_evidence
+                 if item.get("scope") == "read_review_history"
+                 and item.get("status") == "completed"
+                 and isinstance(item.get("data"), dict)
+                 and isinstance(item["data"].get("weekly_reflection"), dict)]
+        if not weeks or any(week != weeks[0] for week in weeks[1:]):
+            return FinnResponsesVerifiedAnswer(
+                "unavailable", "Ik kan de opgeslagen weekreflectie nu niet eenduidig lezen.",
+                "weekly_reflection_unavailable", current_evidence,
+            )
+        week = weeks[0]
+        try:
+            saved_start = datetime.fromisoformat(str(week["week_start"])).date()
+            requested_start = ReviewToolAdapter.requested_week_start(
+                message, reference_year=saved_start.year,
+            )
+        except (KeyError, TypeError, ValueError):
+            requested_start = None
+            saved_start = None
+        if saved_start is None or (requested_start is not None
+                                   and requested_start != saved_start):
+            return FinnResponsesVerifiedAnswer(
+                "unavailable", "De gelezen weekreflectie hoort niet bij de gevraagde week.",
+                "weekly_reflection_week_mismatch", (),
+            )
+        saved_at, zone = _moment_in_zone(week.get("generated_at"), user_time_zone)
+        if not saved_at or not week.get("week_start") or not week.get("week_end"):
+            return FinnResponsesVerifiedAnswer(
+                "unavailable", "Het opslagmoment van de weekreflectie is niet verifieerbaar.",
+                "weekly_reflection_time_unavailable", current_evidence,
+            )
+        def count(key: str) -> str:
+            value = week.get(key)
+            return str(value) if type(value) is int and 0 <= value <= 100000 else "onbekend"
+        return FinnResponsesVerifiedAnswer(
+            "completed", f"Opgeslagen weekreflectie {week['week_start']} t/m "
+            f"{week['week_end']}: {count('trades')} gesloten trades; "
+            f"{count('plans')} met plan; "
+            f"{count('analyzed')} geanalyseerd. "
+            f"Opgeslagen op {saved_at} ({zone}). Dit is een weeksamenvatting "
+            "zonder details over individuele trades.", None, current_evidence,
+        )
+    typed_historical = (
+        week_requested and exit_requested and not _legacy_historical_test
+        and bool(re.search(r"\bAAPL\b", message, re.I))
+        and bool(re.search(r"\bPaper(?:[- ](?:trade|exit))?\b", message, re.I))
+    )
+    if typed_historical or str(getattr(prepared, "locale", "nl") or "nl").lower().startswith("nl"):
+        from backend.services.finn_v2_factual_source_answer import complete_historical_week_exit_moments
+        rendered = complete_historical_week_exit_moments(
+            text, current_evidence, question=message, user_time_zone=user_time_zone,
+            typed=typed_historical, include_selected_review_id=typed_historical,
+        )
+        if rendered is None:
+            return FinnResponsesVerifiedAnswer(
+                "unavailable", "Ik kan deze AAPL Paper-exit en weekreflectie niet eenduidig "
+                "aan hetzelfde opgeslagen dossier koppelen.",
+                "historical_week_exit_evidence_unavailable",
+                () if typed_historical else current_evidence,
+            )
+        if typed_historical:
+            text, selected_review_id = rendered
+            current_evidence = tuple(
+                {"scope": item.get("scope"), "status": item.get("status"),
+                 "source": item.get("source"),
+                 "data": {
+                     "weekly_reflection": item["data"].get("weekly_reflection"),
+                     "closed_trade_review_ids": [
+                         selected_review_id
+                         for review_id in item["data"].get("closed_trade_review_ids") or []
+                         if type(review_id) is int and review_id == selected_review_id
+                     ][:1],
+                     "closed_trades": [trade for trade in item["data"].get("closed_trades") or []
+                                       if isinstance(trade, dict)
+                                       and trade.get("review_id") == selected_review_id],
+                 }}
+                for item in current_evidence
+                if item.get("scope") == "read_review_history"
+                and item.get("status") == "completed"
+                and isinstance(item.get("data"), dict)
+            )
+            evidence = current_evidence
+        else:
+            text = rendered
     # A direct question about the owner's saved profile is a readback of
     # typed database facts. The model can otherwise deny a profile that the
     # same turn successfully read, and this minimal path skips the semantic

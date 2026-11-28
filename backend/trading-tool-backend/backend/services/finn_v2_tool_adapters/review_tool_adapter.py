@@ -19,7 +19,7 @@ from backend.services.finn_v2_tool_adapters.display_source_moment import amsterd
 
 class ReviewToolAdapter:
     _WEEK_SUBJECT = re.compile(
-        r"\b(?:weekreflectie|wekelijkse reflectie|weekly reflection|wochenreflexion|"
+        r"\b(?:weekreflectie|wekelijkse reflectie|weekly reflection|weekly review|wochenreflexion|"
         r"(?:mijn|deze|de|opgeslagen)\s+reflectie)\b", re.I)
 
     @classmethod
@@ -143,6 +143,9 @@ class ReviewToolAdapter:
 
         currency = raw.get("source_price_currency")
         currency = currency if isinstance(currency, str) and currency in {"EUR", "USD", "USDT"} else None
+        execution_currency = raw.get("execution_source_price_currency")
+        execution_currency = (execution_currency if isinstance(execution_currency, str)
+                              and execution_currency in {"EUR", "USD", "USDT"} else None)
         facts = [f"vastgelegd Paper-exitlabel {raw['trigger']} (botbewijs, geen onafhankelijke beursuitvoering)"]
         if currency:
             facts.append(f"opgeslagen stop {numeric('saved_stop_loss') or 'onbekend'} {currency}")
@@ -150,9 +153,10 @@ class ReviewToolAdapter:
             facts.append(
                 f"beslissingskoers {numeric('source_price') or 'onbekend'} {currency} "
                 f"op {instant('source_price_at') or 'onbekend'}")
+        if execution_currency:
             facts.append(
-                f"uitvoeringskoers {numeric('execution_source_price') or 'onbekend'} {currency} "
-                f"op {instant('execution_source_price_at') or 'onbekend'}")
+                f"uitvoeringskoers {numeric('execution_source_price') or 'onbekend'} "
+                f"{execution_currency} op {instant('execution_source_price_at') or 'onbekend'}")
         facts.append(
             f"EUR-factor bij uitvoering {numeric('execution_fx_eur_per_unit') or 'onbekend'} "
             f"op {instant('execution_fx_observed_at') or 'onbekend'}")
@@ -581,7 +585,10 @@ class ReviewToolAdapter:
                     "order_plan_evidence": review.get("order_plan_evidence"),
                     "paper_exit_evidence": (
                         {key: review["paper_exit_evidence"].get(key) for key in (
-                            "trigger", "source_price_currency", "saved_first_target",
+                            "trigger", "source_price_currency", "source_price",
+                            "source_price_at", "execution_source_price_currency",
+                            "execution_source_price",
+                            "execution_source_price_at", "saved_first_target",
                             "execution_fx_eur_per_unit", "execution_fx_observed_at",
                         )}
                         if review.get("environment") == "paper"

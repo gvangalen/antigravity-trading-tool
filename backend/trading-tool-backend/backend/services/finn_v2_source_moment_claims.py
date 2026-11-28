@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 import re
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -280,6 +281,28 @@ def _bot_decision_clocks_supported(
         subject = marker.search(clause)
         if subject is None:
             continue
+        # An historical "exit decision and ..." sentence names at least two
+        # events. A single clock cannot establish both, regardless of the
+        # second event's wording. Two clocks are accepted only by the narrow
+        # typed quote/decision check below; unfamiliar labels fail closed.
+        decision_first = re.search(
+            r"\b(?:uitstap|exit)[- ]?besliss\w*\s+en\b", clause, re.I,
+        )
+        decision_second = re.search(
+            r"\ben\s+(?:de\s+)?(?:uitstap|exit)[- ]?besliss\w*\b", clause, re.I,
+        )
+        if historical_question and (decision_first or decision_second):
+            paired_dated = list(_DATED_MOMENT.finditer(clause))
+            paired_bare = [clock for clock in _ZONED_CLOCK.finditer(clause)
+                           if not any(date.start() <= clock.start() and clock.end() <= date.end()
+                                      for date in paired_dated)]
+            if ((paired_dated or paired_bare)
+                    and (decision_second or len(paired_dated) != 2 or paired_bare
+                    or not re.search(
+                        r"\ben\s+(?:de\s+)?"
+                        r"(?:(?:EUR|USD|USDT)[- ]?koers\s+van|uitvoeringskoers)\b",
+                        clause, re.I))):
+                return False
         ids = {int(match.group(1)) for match in re.finditer(r"\bbot\s*#?\s*(\d+)\b", clause, re.I)}
         # Locate the clock nearest the status read verb. A sentence may also
         # contain a saved Hold decision in either order; only the read clock
@@ -355,6 +378,7 @@ def _bot_decision_clocks_supported(
         relevant = named or relevant
         if not relevant:
             if re.search(r"\b(?:(?:bot)?besluit\w*|(?:bot)?besliss\w*|"
+                         r"(?:uitstap|exit)[- ]?besliss\w*|"
                          r"(?:bot)?beoordel\w*|hold)\b", clause, re.I) and (
                 _DATED_MOMENT.search(clause) or _ZONED_CLOCK.search(clause)
             ):
@@ -382,7 +406,72 @@ def _bot_decision_clocks_supported(
             if not relevant:
                 return False
         following = clause[subject.end():]
-        dated = list(_DATED_MOMENT.finditer(following))
+        # A combined "exitbeslissing en USD-koers" clock names two different
+        # events. Do not let the price-word skip below silently bless it as a
+        # decision clock; the typed answer builder can state the quote source
+        # and decision separately when both are verified.
+        combined_price = re.search(
+            r"\ben\s+(?:de\s+)?(?:(?:EUR|USD|USDT)[- ]?koers\s+van|uitvoeringskoers)\b",
+            following, re.I,
+        )
+        dated_claims = list(_DATED_MOMENT.finditer(following))
+        bare_claims = [clock for clock in _ZONED_CLOCK.finditer(following)
+                       if not any(date.start() <= clock.start() and clock.end() <= date.end()
+                                  for date in dated_claims)]
+        if combined_price and historical_question:
+            # Two separately stated times are valid only when this owner's
+            # selected dossier proves one decision and one price observation.
+            # A single shared clock (or an untyped/bare clock) cannot prove
+            # which event the model meant.
+            if (historical_decision is None or len(dated_claims) != 2 or bare_claims):
+                return False
+            execution = "uitvoeringskoers" in combined_price.group(0).lower()
+            quote_key = "execution_source_price_at" if execution else "source_price_at"
+            price_key = "execution_source_price" if execution else "source_price"
+            quote_rows = {}
+            for item in evidence:
+                if (item.get("scope") != "read_review_history" or item.get("status") != "completed"
+                        or not isinstance(item.get("data"), dict)):
+                    continue
+                for row in item["data"].get("closed_trades") or []:
+                    if (not isinstance(row, dict) or type(row.get("review_id")) is not int
+                            or row.get("bot_id") != historical_decision[0]
+                            or str(row.get("symbol") or "").upper() != historical_decision[1]
+                            or _utc(row.get("paper_exit_decision_at")) != historical_decision[2]
+                            or not isinstance(row.get("paper_exit_evidence"), dict)):
+                        continue
+                    facts = row["paper_exit_evidence"]
+                    currency_key = ("execution_source_price_currency" if execution
+                                    else "source_price_currency")
+                    candidate = (_utc(facts.get(quote_key)),
+                                 str(facts.get(currency_key) or "").upper(),
+                                 str(facts.get(price_key) or ""))
+                    if (row["review_id"] in quote_rows
+                            and quote_rows[row["review_id"]] != candidate):
+                        return False
+                    quote_rows[row["review_id"]] = candidate
+            if len(quote_rows) != 1:
+                return False
+            quote_at, currency, raw_price = next(iter(quote_rows.values()))
+            if quote_at is None or currency not in {"EUR", "USD", "USDT"}:
+                return False
+            if not execution:
+                price_claim = re.search(
+                    r"\b(EUR|USD|USDT)[- ]?koers\s+van\s+(\d+(?:[.,]\d+)?)\b",
+                    following, re.I,
+                )
+                try:
+                    if (price_claim is None or price_claim.group(1).upper() != currency
+                            or Decimal(price_claim.group(2).replace(",", ".")) != Decimal(raw_price)):
+                        return False
+                except (InvalidOperation, ValueError):
+                    return False
+            claims = [_claimed_moment(moment.group(0)) for moment in dated_claims]
+            if (any(claim is None for claim in claims)
+                    or not _same_moment(claims[0], quote_at)
+                    or not _same_moment(claims[1], historical_decision[2])):
+                return False
+        dated = dated_claims
         if dated:
             for match in dated:
                 if re.search(r"\b(?:indicator\w*|koers\w*|prijs\w*|portfolio|portefeuille|"
