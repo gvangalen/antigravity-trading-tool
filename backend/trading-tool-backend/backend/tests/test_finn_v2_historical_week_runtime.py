@@ -223,6 +223,8 @@ def test_historical_week_answer_evidence_contains_only_selected_dossier():
         "review_id": 9001, "symbol": "MSFT", "environment": "paper",
         "exit_at": "2026-11-12T15:02:00+00:00",
     })
+    prepared.response.tool_trace[0]["result"]["results"][0]["data"][
+        "closed_trade_review_ids"] = [2127, 9001]
     answer = _runtime_minimal_read_answer(
         message=f"{QUESTION} Gebruik uitsluitend dossier #2127.",
         prepared=prepared, user_time_zone="Europe/Amsterdam",
@@ -231,6 +233,11 @@ def test_historical_week_answer_evidence_contains_only_selected_dossier():
     published = [trade for item in answer.evidence
                  for trade in (item.get("data") or {}).get("closed_trades") or []]
     assert [trade["review_id"] for trade in published] == [2127]
+    assert [review_id for item in answer.evidence for review_id in
+            (item.get("data") or {}).get("closed_trade_review_ids") or []] == [2127]
+    from backend.services.finn_v2_run_service import _verified_closed_review_evidence
+    assert [source["entity_id"] for source in
+            _verified_closed_review_evidence(answer.evidence)] == ["2127"]
     assert "9001" not in answer.text
 
 

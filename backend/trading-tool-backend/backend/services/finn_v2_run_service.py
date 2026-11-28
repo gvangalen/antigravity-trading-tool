@@ -2097,6 +2097,11 @@ def _minimal_read_answer(
                  "source": item.get("source"),
                  "data": {
                      "weekly_reflection": item["data"].get("weekly_reflection"),
+                     "closed_trade_review_ids": [
+                         selected_review_id
+                         for review_id in item["data"].get("closed_trade_review_ids") or []
+                         if type(review_id) is int and review_id == selected_review_id
+                     ][:1],
                      "closed_trades": [trade for trade in item["data"].get("closed_trades") or []
                                        if isinstance(trade, dict)
                                        and trade.get("review_id") == selected_review_id],
