@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: betekenisvolle feedmeldingen voor markt, portfolio en trades (28 november 2026)
 
-Phase: `BUILD_GATES_PASSED_PR_CI_RUNNING`. Productbranch
+Phase: `DEPLOY_IDENTITY_VERIFIED_QA_PENDING`. Productbranch
 `codex/feed-meaningful-updates`, producthead
 `8042f592f31d82afdbbd699d8c7ee2379af8fef9` in
 [PR #1432](https://github.com/gvangalen/antigravity-trading-tool/pull/1432).
@@ -34,10 +34,19 @@ exit 0 met één moderate Next.js-melding. De migratie en een drie dagen oude
 onopgeloste Live-orderquery zijn in een tijdelijke lokale PostgreSQL-database
 uitgevoerd; die testdatabase is verwijderd. Onafhankelijke QA-, Security- en
 Architecture-codehercontrole op de productcodehead vond geen releaseblocker;
-ingelogde productie-QA is nog niet uitgevoerd. De PR-CI
+ingelogde productie-QA is nog niet uitgevoerd. PR-CI op productcode
 [46132662817](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46132662817)
-loopt nog; security, workflow, mobile en frontend waren bij de laatste
-controle groen en de backendjob liep nog. Er is nog geen live SHA.
+en op de laatste releasestatuscommit
+[46133241587](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46133241587)
+hadden elk vijf groene jobs. [PR #1432](https://github.com/gvangalen/antigravity-trading-tool/pull/1432)
+is gemerged in `56a0b77e52c8c1a75b1ef0f6cdaf9314a7e2923e`; main-CI
+[46133901874](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46133901874)
+had vijf groene jobs en Auto Deploy
+[46134604996](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46134604996)
+slaagde. GitHub main, publieke backend `/api/health` en frontend
+`/build-info.json` toonden daarna exact die merge-SHA met HTTP 200. Deze
+statusupdate maakt zelf een nieuwe commit; de CI-, deploy- en publieke
+SHA-pariteit daarvan worden afzonderlijk gecontroleerd vóór QA-handoff.
 
 ## FINN 3.0: analysekaart opent bruikbaar setupgesprek (28 november 2026)
 
