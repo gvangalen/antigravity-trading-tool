@@ -340,22 +340,38 @@ def _bot_decision_clocks_supported(
                 r"\b(?:(?:uitstap|exit|bot)[- ]?)?besliss\w*\b|\bbotbesluit\w*\b",
                 clause, re.I,
             ))
+            stated_bot_ids = {int(match.group(1)) for match in re.finditer(
+                r"\bbot\s*#?\s*(\d+)\b", clause, re.I,
+            )}
+            stated_review_ids = {int(match.group(1)) for match in re.finditer(
+                r"\b(?:dossier|trade|review)\s*#?\s*(\d+)\b", clause, re.I,
+            )}
             for label in quote_labels:
-                boundary = min((item.start() for item in decision_labels
-                                if item.start() > label.end()), default=len(clause))
-                quote_claims = [item for item in paired_dated
-                                if label.end() <= item.start() < boundary]
+                if (historical_decision is None
+                        or stated_bot_ids and stated_bot_ids != {historical_decision[0]}):
+                    return False
+                segment_start = max((item.end() for item in decision_labels
+                                     if item.end() <= label.start()), default=0)
+                segment_end = min((item.start() for item in decision_labels
+                                   if item.start() > label.end()), default=len(clause))
+                after = [item for item in paired_dated
+                         if label.end() <= item.start() < segment_end]
+                before = [item for item in paired_dated
+                          if segment_start <= item.start() < label.start()]
+                # The nearest side of a source label owns its clock. If both
+                # sides claim times, the attribution is ambiguous.
+                if before and after:
+                    return False
+                quote_claims = after or before
                 # A bare zoned clock has no date to bind to the selected
                 # closed trade. Never let it bypass the dated quote check.
-                if any(label.end() <= item.start() < boundary for item in paired_bare):
+                if any(segment_start <= item.start() < segment_end for item in paired_bare):
                     return False
                 if not quote_claims:
                     continue
-                if historical_decision is None:
-                    return False
                 label_text = label.group(0).lower()
                 execution = ("uitvoer" in label_text or "uitvoering" in
-                             clause[label.end():quote_claims[0].start()].lower())
+                             clause[label.end():segment_end].lower())
                 key = "execution_source_price_at" if execution else "source_price_at"
                 observed: dict[int, tuple[datetime, str, str]] = {}
                 for item in evidence:
@@ -365,6 +381,7 @@ def _bot_decision_clocks_supported(
                         continue
                     for row in item["data"].get("closed_trades") or []:
                         if (not isinstance(row, dict) or type(row.get("review_id")) is not int
+                                or stated_review_ids and stated_review_ids != {row.get("review_id")}
                                 or row.get("bot_id") != historical_decision[0]
                                 or str(row.get("symbol") or "").upper() != historical_decision[1]
                                 or _utc(row.get("paper_exit_decision_at")) != historical_decision[2]
@@ -386,7 +403,9 @@ def _bot_decision_clocks_supported(
                 if len(observed) != 1:
                     return False
                 at, currency, price = next(iter(observed.values()))
-                segment = clause[label.start():quote_claims[0].start()]
+                segment = clause[segment_start:segment_end]
+                segment = _DATED_MOMENT.sub(" ", segment)
+                segment = _ZONED_CLOCK.sub(" ", segment)
                 currency_claims = re.findall(r"\b(?:EUR|USD|USDT)\b", segment, re.I)
                 if any(unit.upper() != currency for unit in currency_claims):
                     return False
