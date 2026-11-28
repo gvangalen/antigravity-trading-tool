@@ -11,6 +11,11 @@ QUESTION = (
 )
 
 
+LEGACY_QUESTION = QUESTION.replace(
+    "Welke exitreden en welk concreet aandachtspunt zijn bevestigd, en wat blijft onzeker over plantrouw? ",
+    "Noem de opgeslagen exitreden. ",
+)
+
 def _prepared(*, text, trade_date="2026-11-12T15:02:00+00:00", week=True):
     return SimpleNamespace(
         locale="nl", previous_response=None,
@@ -50,7 +55,7 @@ def test_minimal_live_read_completes_historical_exit_and_week_in_user_zone():
         "plan. 14:59 UTC en 05:15 UTC zijn de bronmomenten.",
     ):
         answer = _minimal_read_answer(
-            message=QUESTION, prepared=_prepared(text=text),
+            message=LEGACY_QUESTION, prepared=_prepared(text=text),
             user_time_zone="Europe/Amsterdam",
         )
         assert answer.status == "completed", answer.reason
@@ -68,7 +73,7 @@ def test_historical_paper_bot_clock_is_not_compared_with_newer_bot_check():
         "bot_id": 129, "symbol": "AAPL", "decision_at": "2026-11-27T18:48:00+00:00",
     }]
     answer = _minimal_read_answer(
-        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+        message=LEGACY_QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
     )
     assert answer.status == "completed", answer.reason
     assert "12 november 2026 14:59 UTC" in answer.text
@@ -83,11 +88,11 @@ def test_historical_exit_decision_compounds_cannot_claim_registered_close_clock(
     for label in ("uitstapbeslissing", "exitbeslissing", "Paper-exitbeslissing"):
         wrong = f"De {label} op 12 november 2026 om 15:00:30 UTC."
         assert not current_source_moments_supported(
-            wrong, evidence, question=QUESTION, user_time_zone="Europe/Amsterdam",
+            wrong, evidence, question=LEGACY_QUESTION, user_time_zone="Europe/Amsterdam",
         ), label
     assert current_source_moments_supported(
         "De uitstapbeslissing op 12 november 2026 om 14:59 UTC.",
-        evidence, question=QUESTION, user_time_zone="Europe/Amsterdam",
+        evidence, question=LEGACY_QUESTION, user_time_zone="Europe/Amsterdam",
     )
 
 
@@ -170,13 +175,25 @@ def test_historical_week_typed_answer_uses_user_zone_and_confirmed_lesson():
     assert "GBP" not in answer.text
 
 
-def test_historical_week_without_typed_quote_rejects_model_execution_price():
+def test_historical_week_without_typed_quote_reports_missing_source():
     answer = _minimal_read_answer(
         message=QUESTION,
         prepared=_prepared(text="De uitvoeringskoers was 999 USD."),
         user_time_zone="Europe/Amsterdam",
     )
-    assert answer.status == "unavailable"
+    assert answer.status == "completed", answer.reason
+    assert "Koersbron bij Paper-uitvoering: prijs, valuta of bronmoment niet verifieerbaar" in answer.text
+
+
+def test_historical_week_typed_answer_rejects_other_bot_or_dossier():
+    prepared = _prepared(text="Het eerste koersdoel werd geraakt.")
+    for extra in ("Gebruik uitsluitend de trade van bot #456.",
+                  "Gebruik uitsluitend dossier 999.", "Gebruik uitsluitend dossier #999."):
+        answer = _minimal_read_answer(
+            message=f"{QUESTION} {extra}", prepared=prepared,
+            user_time_zone="Europe/Amsterdam",
+        )
+        assert answer.status == "unavailable", extra
     assert "999" not in answer.text
 
 
@@ -187,7 +204,7 @@ def test_live_week_saved_clock_and_fx_markdown_are_sanitized():
         "- **FX-bronmoment:** 12 november 2026, 14:03 UTC"
     ))
     answer = _minimal_read_answer(
-        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+        message=LEGACY_QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
     )
     assert answer.status == "completed", answer.reason
     assert "05:15:00 CET" not in answer.text
@@ -233,7 +250,7 @@ def test_historical_exit_decision_completion_repairs_wrong_close_label_and_adds_
         "Het eerste koersdoel werd geraakt; volledige plantrouw blijft onzeker.",
     ):
         answer = _minimal_read_answer(
-            message=QUESTION, prepared=_prepared(
+            message=LEGACY_QUESTION, prepared=_prepared(
                 text=draft, trade_date="2026-11-12T15:00:30+00:00",
             ),
             user_time_zone="Europe/Amsterdam",
@@ -249,7 +266,7 @@ def test_historical_exit_decision_completion_needs_unique_owner_read_decision():
     row = prepared.response.tool_trace[0]["result"]["results"][0]
     row["data"]["closed_trades"][0].pop("paper_exit_decision_at")
     answer = _minimal_read_answer(
-        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+        message=LEGACY_QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
     )
     assert answer.status == "unavailable"
     assert "Paper-exitbeslissing: 2026-11-12" not in answer.text
@@ -264,7 +281,7 @@ def test_historical_exit_decision_completion_does_not_select_between_two_same_da
         "paper_exit_decision_at": "2026-11-12T17:59:00+00:00",
     })
     answer = _minimal_read_answer(
-        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+        message=LEGACY_QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
     )
     assert answer.status == "unavailable"
     assert "Geverifieerde AAPL Paper-exitbeslissing" not in answer.text
@@ -277,12 +294,12 @@ def test_historical_exit_decision_repair_does_not_relabel_a_report_clock():
     from backend.services.finn_v2_factual_source_answer import complete_historical_week_exit_moments
 
     completed = complete_historical_week_exit_moments(
-        draft, evidence, question=QUESTION, user_time_zone="Europe/Amsterdam",
+        draft, evidence, question=LEGACY_QUESTION, user_time_zone="Europe/Amsterdam",
     )
     assert "het rapportmoment 12 november 2026 05:15 UTC" in completed
     assert "het rapportmoment 2026-11-12 15:59:00 CET" not in completed
     answer = _minimal_read_answer(
-        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+        message=LEGACY_QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
     )
     if answer.status == "completed":
         assert "het rapportmoment 12 november 2026 05:15 UTC" in answer.text
@@ -301,12 +318,12 @@ def test_historical_exit_decision_repair_does_not_relabel_an_earlier_trade():
         prepared = _prepared(text=draft, trade_date="2026-11-12T15:00:30+00:00")
         evidence = tuple(prepared.response.tool_trace[0]["result"]["results"])
         completed = complete_historical_week_exit_moments(
-            draft, evidence, question=QUESTION, user_time_zone="Europe/Amsterdam",
+            draft, evidence, question=LEGACY_QUESTION, user_time_zone="Europe/Amsterdam",
         )
         assert draft in completed
         assert "eerdere AAPL-trade: exitbeslissing op 2026-11-12 15:59" not in completed
         answer = _minimal_read_answer(
-            message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+            message=LEGACY_QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
         )
         assert answer.status == "unavailable"
 
@@ -319,11 +336,11 @@ def test_historical_exit_decision_only_repairs_exact_registered_close_clock():
         prepared = _prepared(text=draft, trade_date="2026-11-12T15:00:30+00:00")
         evidence = tuple(prepared.response.tool_trace[0]["result"]["results"])
         completed = complete_historical_week_exit_moments(
-            draft, evidence, question=QUESTION, user_time_zone="Europe/Amsterdam",
+            draft, evidence, question=LEGACY_QUESTION, user_time_zone="Europe/Amsterdam",
         )
         assert draft in completed
         answer = _minimal_read_answer(
-            message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+            message=LEGACY_QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
         )
         assert answer.status == "unavailable"
 
@@ -337,7 +354,7 @@ def test_model_written_fx_fallback_phrase_does_not_bypass_clock_scrub():
     ))
     evidence = tuple(prepared.response.tool_trace[0]["result"]["results"])
     completed = complete_historical_week_exit_moments(
-        prepared.response.text, evidence, question=QUESTION,
+        prepared.response.text, evidence, question=LEGACY_QUESTION,
         user_time_zone="Europe/Amsterdam",
     )
     assert "14:03 UTC" not in completed
@@ -353,11 +370,11 @@ def test_historical_bot_clock_requires_typed_owner_bound_exit_decision():
         "bot_id": 129, "symbol": "AAPL", "decision_at": "2026-11-27T18:48:00+00:00",
     }]
     assert current_source_moments_supported(
-        prepared.response.text, (row,), question=QUESTION, user_time_zone="Europe/Amsterdam",
+        prepared.response.text, (row,), question=LEGACY_QUESTION, user_time_zone="Europe/Amsterdam",
     )
     row["data"]["closed_trades"][0].pop("paper_exit_decision_at")
     assert not current_source_moments_supported(
-        prepared.response.text, (row,), question=QUESTION, user_time_zone="Europe/Amsterdam",
+        prepared.response.text, (row,), question=LEGACY_QUESTION, user_time_zone="Europe/Amsterdam",
     )
 
 
@@ -510,7 +527,7 @@ def test_minimal_live_read_does_not_complete_mismatched_or_missing_sources():
     for prepared in (_prepared(text=text, trade_date="2026-11-05T14:59:00+00:00"),
                      _prepared(text=text, week=False)):
         answer = _minimal_read_answer(
-            message=QUESTION, prepared=prepared,
+            message=LEGACY_QUESTION, prepared=prepared,
             user_time_zone="Europe/Amsterdam",
         )
         assert answer.status == "completed", answer.reason
@@ -525,7 +542,7 @@ def test_minimal_live_read_corrects_only_week_storage_clock():
         "Lesbevestiging: 13 november 09:07:57 UTC."
     )
     answer = _minimal_read_answer(
-        message=QUESTION, prepared=_prepared(text=draft),
+        message=LEGACY_QUESTION, prepared=_prepared(text=draft),
         user_time_zone="Europe/Amsterdam",
     )
     assert answer.status == "completed", answer.reason
@@ -549,7 +566,7 @@ def test_minimal_live_read_completes_repeated_owner_history_reads():
     ))
     prepared.response.tool_trace += prepared.response.tool_trace
     answer = _minimal_read_answer(
-        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+        message=LEGACY_QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
     )
     assert answer.status == "completed", answer.reason
     assert "AAPL Paper-trade als gesloten geregistreerd: 2026-11-12 16:02:00 CET" in answer.text
@@ -566,7 +583,7 @@ def test_minimal_live_read_scrubs_markdown_week_clock_after_repeated_reads():
     ))
     prepared.response.tool_trace += prepared.response.tool_trace
     answer = _minimal_read_answer(
-        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+        message=LEGACY_QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
     )
     assert answer.status == "completed", answer.reason
     assert "05:15:00 Europe/Amsterdam" not in answer.text
@@ -589,7 +606,7 @@ def test_minimal_live_read_completes_missing_fx_source_moment_on_repeat():
     ))
     prepared.response.tool_trace += prepared.response.tool_trace
     answer = _minimal_read_answer(
-        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+        message=LEGACY_QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
     )
     assert answer.status == "completed", answer.reason
     assert "Geverifieerd FX-bronmoment bij AAPL Paper-uitvoering: 2026-11-12 15:02:00 CET (Europe/Amsterdam)." in answer.text
@@ -609,7 +626,7 @@ def test_minimal_live_read_replaces_conflicting_model_fx_clock():
         "FX-bronmoment: 12 november 14:02 UTC en om 12 november 15:03 CET",
     ):
         answer = _minimal_read_answer(
-            message=QUESTION, prepared=_prepared(text=(
+            message=LEGACY_QUESTION, prepared=_prepared(text=(
                 "Botbeslissing: 12 november 14:59 UTC. "
                 f"{fx_claim}. De Paper-uitstap raakte het eerste koersdoel."
             )), user_time_zone="Europe/Amsterdam",
@@ -626,7 +643,7 @@ def test_minimal_live_read_replaces_conflicting_model_fx_clock():
 
 def test_conflicting_fx_clock_inside_markdown_does_not_leave_closing_stars():
     answer = _minimal_read_answer(
-        message=QUESTION,
+        message=LEGACY_QUESTION,
         prepared=_prepared(text=(
             "De Paper-uitstap raakte het eerste koersdoel. "
             "FX-bronmoment: **12 november 14:03 UTC**"
@@ -644,11 +661,11 @@ def test_historical_week_fx_moment_completion_is_idempotent():
     prepared = _prepared(text="FX-bronmoment: 12 november 14:03 UTC.")
     evidence = tuple(prepared.response.tool_trace[0]["result"]["results"])
     first = complete_historical_week_exit_moments(
-        prepared.response.text, evidence, question=QUESTION,
+        prepared.response.text, evidence, question=LEGACY_QUESTION,
         user_time_zone="Europe/Amsterdam",
     )
     second = complete_historical_week_exit_moments(
-        first, evidence, question=QUESTION, user_time_zone="Europe/Amsterdam",
+        first, evidence, question=LEGACY_QUESTION, user_time_zone="Europe/Amsterdam",
     )
     assert second == first
     assert first.count("Geverifieerd FX-bronmoment") == 1
@@ -664,11 +681,11 @@ def test_historical_exit_completion_keeps_later_bot_clause_on_second_pass():
     ))
     evidence = tuple(prepared.response.tool_trace[0]["result"]["results"])
     first = complete_historical_week_exit_moments(
-        prepared.response.text, evidence, question=QUESTION,
+        prepared.response.text, evidence, question=LEGACY_QUESTION,
         user_time_zone="Europe/Amsterdam",
     )
     second = complete_historical_week_exit_moments(
-        first, evidence, question=QUESTION, user_time_zone="Europe/Amsterdam",
+        first, evidence, question=LEGACY_QUESTION, user_time_zone="Europe/Amsterdam",
     )
     assert second == first
     assert "botbeslissing 12 november 14:59 UTC" in second
@@ -686,7 +703,7 @@ def test_historical_week_fx_scrub_preserves_next_labeled_source_after_comma():
          "geregistreerde sluiting 12 november 15:00:30 UTC"),
     ):
         answer = _minimal_read_answer(
-            message=QUESTION, prepared=_prepared(text=f"{claim}, {bot_moment}."),
+            message=LEGACY_QUESTION, prepared=_prepared(text=f"{claim}, {bot_moment}."),
             user_time_zone="Europe/Amsterdam",
         )
         assert answer.status == "completed", answer.reason
@@ -707,7 +724,7 @@ def test_historical_week_fx_scrub_preserves_source_joined_with_en():
          "om 14:59 UTC.", "en de botbeslissing om 14:59 UTC"),
     ):
         answer = _minimal_read_answer(
-            message=QUESTION, prepared=_prepared(text=text),
+            message=LEGACY_QUESTION, prepared=_prepared(text=text),
             user_time_zone="Europe/Amsterdam",
         )
         assert answer.status == "completed", answer.reason
@@ -718,7 +735,7 @@ def test_historical_week_fx_scrub_preserves_source_joined_with_en():
 
 def test_historical_week_fx_scrub_preserves_labeled_source_in_parentheses():
     answer = _minimal_read_answer(
-        message=QUESTION, prepared=_prepared(text=(
+        message=LEGACY_QUESTION, prepared=_prepared(text=(
             "FX-bronmoment: 12 november 14:02 UTC "
             "(botbeslissing: 12 november 14:59 UTC)."
         )), user_time_zone="Europe/Amsterdam",
@@ -749,7 +766,7 @@ def test_minimal_live_read_does_not_invent_conflicting_fx_source_moment():
     ]}}
     prepared.response.tool_trace += (conflict,)
     answer = _minimal_read_answer(
-        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+        message=LEGACY_QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
     )
     assert answer.status == "completed", answer.reason
     assert "Geverifieerd FX-bronmoment" not in answer.text
@@ -763,7 +780,7 @@ def test_minimal_live_read_neutralizes_fx_clock_when_source_missing():
         "paper_exit_evidence"
     ] = None
     answer = _minimal_read_answer(
-        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+        message=LEGACY_QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
     )
     assert answer.status == "completed", answer.reason
     assert "14:04 UTC" not in answer.text
@@ -785,7 +802,7 @@ def test_minimal_live_read_rejects_conflicting_repeated_history():
     ]}}
     prepared.response.tool_trace += (conflicting_week,)
     answer = _minimal_read_answer(
-        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+        message=LEGACY_QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
     )
     assert answer.status == "completed", answer.reason
     assert "als gesloten geregistreerd" not in answer.text
@@ -807,7 +824,7 @@ def test_minimal_live_read_rejects_conflicting_repeated_history():
         ]}}
         conflicting_identity.response.tool_trace += (changed,)
         answer = _minimal_read_answer(
-            message=QUESTION, prepared=conflicting_identity,
+            message=LEGACY_QUESTION, prepared=conflicting_identity,
             user_time_zone="Europe/Amsterdam",
         )
         assert answer.status == "completed", answer.reason
@@ -826,7 +843,7 @@ def test_minimal_live_read_rejects_conflicting_repeated_history():
     ]}}
     conflicting_outside_week.response.tool_trace += (outside,)
     answer = _minimal_read_answer(
-        message=QUESTION, prepared=conflicting_outside_week,
+        message=LEGACY_QUESTION, prepared=conflicting_outside_week,
         user_time_zone="Europe/Amsterdam",
     )
     assert answer.status == "completed", answer.reason
@@ -844,7 +861,7 @@ def test_minimal_live_read_rejects_conflicting_repeated_history():
     ]}}
     separate_old_dossier.response.tool_trace += (old_trade,)
     answer = _minimal_read_answer(
-        message=QUESTION, prepared=separate_old_dossier,
+        message=LEGACY_QUESTION, prepared=separate_old_dossier,
         user_time_zone="Europe/Amsterdam",
     )
     assert answer.status == "completed", answer.reason
@@ -864,7 +881,7 @@ def test_minimal_live_read_rejects_conflicting_repeated_history():
     ]}}
     conflicting_trade.response.tool_trace += (other_trade,)
     answer = _minimal_read_answer(
-        message=QUESTION, prepared=conflicting_trade,
+        message=LEGACY_QUESTION, prepared=conflicting_trade,
         user_time_zone="Europe/Amsterdam",
     )
     assert answer.status == "completed", answer.reason

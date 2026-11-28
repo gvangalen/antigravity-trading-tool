@@ -253,11 +253,17 @@ def complete_historical_week_exit_moments(
     if len(trades) != 1:
         return None if typed else answer
     requested_ids = {int(match.group(1)) for match in re.finditer(
-        r"\b(?:dossier|trade(?:[- ]?(?:reflectie|review))?|review)\s*#\s*(\d+)\b",
+        r"\b(?:dossier|trade(?:[- ]?(?:reflectie|review))?|review)\s*#?\s*(\d+)\b",
         question, re.I,
     )}
     if requested_ids and requested_ids != {trades[0].get("review_id")}:
         return None if typed else answer
+    if typed:
+        requested_bot_ids = {int(match.group(1)) for match in re.finditer(
+            r"\bbot\s*#?\s*(\d+)\b", question, re.I,
+        )}
+        if requested_bot_ids and requested_bot_ids != {trades[0].get("bot_id")}:
+            return None
     # A separately named exit date can refer to another trade than the week.
     # Remove the week range before interpreting dates as trade references.
     without_week = re.sub(

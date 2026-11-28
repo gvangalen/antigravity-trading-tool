@@ -1970,35 +1970,12 @@ def _minimal_read_answer(
             and re.search(r"\bPaper\b", message, re.I)
             and re.search(r"\b(?:exitreden|exit|uitstap|verkoop|afgesloten)\b", message, re.I)
             and re.search(r"\bbronmomenten\b", message, re.I)
+            and re.search(r"\baandachtspunt\b", message, re.I)
+            and re.search(r"\bplantrouw\b", message, re.I)
         )
-        typed_historical = historical_week_request and any(
-                isinstance(trade, dict)
-                and isinstance((facts := trade.get("paper_exit_evidence")), dict)
-                and all(facts.get(key) is not None for key in (
-                    "source_price", "source_price_currency", "source_price_at",
-                    "execution_source_price", "execution_source_price_currency",
-                    "execution_source_price_at",
-                ))
-                for item in current_evidence
-                if item.get("scope") == "read_review_history"
-                and item.get("status") == "completed"
-                and isinstance(item.get("data"), dict)
-                for trade in item["data"].get("closed_trades") or []
-        )
-        if historical_week_request and not typed_historical and re.search(
-            r"(?<!FX-)\b(?:koers|prijs|uitvoeringskoers|uitvoeringsprijs|"
-            r"uitgevoerd\s+tegen|verkocht\s+tegen)\b"
-            r"[^.!?\n]{0,80}\d|[$€]\s*\d|\b(?:EUR|USD|USDT|GBP)\s*\d",
-            text, re.I,
-        ):
-            return FinnResponsesVerifiedAnswer(
-                "unavailable", "Ik kan de historische koers, valuta en bronmomenten "
-                "voor deze AAPL Paper-exit niet volledig verifiëren.",
-                "historical_quote_evidence_unavailable", current_evidence,
-            )
         text = complete_historical_week_exit_moments(
             text, current_evidence, question=message, user_time_zone=user_time_zone,
-            typed=typed_historical,
+            typed=historical_week_request,
         )
         if text is None:
             return FinnResponsesVerifiedAnswer(
