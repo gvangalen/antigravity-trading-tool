@@ -386,10 +386,17 @@ def _bot_decision_clocks_supported(
         # events. Do not let the price-word skip below silently bless it as a
         # decision clock; the typed answer builder can state the quote source
         # and decision separately when both are verified.
-        if (re.search(r"\ben\s+(?:EUR|USD|USDT)[- ]?koers\s+van\b", following, re.I)
-                and (_DATED_MOMENT.search(following) or _ZONED_CLOCK.search(following))):
+        combined_price = re.search(
+            r"\ben\s+(?:(?:EUR|USD|USDT)[- ]?koers\s+van|uitvoeringskoers)\b",
+            following, re.I,
+        )
+        dated_claims = list(_DATED_MOMENT.finditer(following))
+        bare_claims = [clock for clock in _ZONED_CLOCK.finditer(following)
+                       if not any(date.start() <= clock.start() and clock.end() <= date.end()
+                                  for date in dated_claims)]
+        if combined_price and len(dated_claims) + len(bare_claims) == 1:
             return False
-        dated = list(_DATED_MOMENT.finditer(following))
+        dated = dated_claims
         if dated:
             for match in dated:
                 if re.search(r"\b(?:indicator\w*|koers\w*|prijs\w*|portfolio|portefeuille|"

@@ -111,8 +111,8 @@ _HISTORICAL_EXIT_DECISION_CLAIM = re.compile(
 
 _MIXED_EXIT_DECISION_PRICE_CLAIM = re.compile(
     r"(?P<label>\b(?:uitstap|exit)[- ]?besliss\w*\s+en\s+"
-    r"(?P<currency>EUR|USD|USDT)[- ]?koers\s+van\s+"
-    r"(?P<price>\d+(?:[.,]\d+)?)\s*:\s*)"
+    r"(?:(?P<currency>EUR|USD|USDT)[- ]?koers\s+van\s+"
+    r"(?P<price>\d+(?:[.,]\d+)?)|(?P<execution>uitvoeringskoers))\s*:\s*)"
     r"(?P<moment>(?:\d{1,2}\s+[a-z]+\s+20\d{2}|20\d{2}-\d{2}-\d{2})"
     r"\s*,?\s*\d{1,2}:\d{2}(?::\d{2})?\s+(?:UTC|CET|CEST)\b)",
     re.I,
@@ -314,21 +314,7 @@ def complete_historical_week_exit_moments(
     # A price source observation is not the bot decision. Rewrite the narrow
     # mixed draft only when every owner-bound copy agrees on the typed quote.
     quote_facts = [trade.get("paper_exit_evidence") for trade in matching_trades]
-    quote_moments = {_utc_instant(facts.get("source_price_at"))
-                     for facts in quote_facts if isinstance(facts, dict)}
-    quote_prices = {(str(facts.get("source_price_currency") or "").upper(),
-                     str(facts.get("source_price") or ""))
-                    for facts in quote_facts if isinstance(facts, dict)}
-    if (all(isinstance(facts, dict) for facts in quote_facts)
-            and len(quote_moments) == 1
-            and None not in quote_moments and len(quote_prices) == 1):
-        quote_at = next(iter(quote_moments))
-        currency, raw_price = next(iter(quote_prices))
-        try:
-            verified_price = Decimal(raw_price)
-        except (InvalidOperation, TypeError, ValueError):
-            verified_price = None
-
+    if all(isinstance(facts, dict) for facts in quote_facts):
         def distinct_price_source(match: re.Match[str]) -> str:
             clause_start = max(answer.rfind(".", 0, match.start()),
                                answer.rfind("\n", 0, match.start())) + 1
@@ -347,15 +333,37 @@ def complete_historical_week_exit_moments(
                     and re.search(r"\b(?:trade|dossier|review)\b", clause, re.I))
                     or re.search(r"\b(?:ochtend|middag|avond)[- ]?trade\b", clause, re.I)):
                 return match.group(0)
-            claim = _claimed_moment(match.group("moment"))
-            try:
-                claimed_price = Decimal(match.group("price").replace(",", "."))
-            except InvalidOperation:
+            execution = bool(match.group("execution"))
+            moment_key = "execution_source_price_at" if execution else "source_price_at"
+            price_key = "execution_source_price" if execution else "source_price"
+            quote_moments = {_utc_instant(facts.get(moment_key)) for facts in quote_facts}
+            quote_prices = {(str(facts.get("source_price_currency") or "").upper(),
+                             str(facts.get(price_key) or "")) for facts in quote_facts}
+            if (len(quote_moments) != 1 or None in quote_moments
+                    or len(quote_prices) != 1):
                 return match.group(0)
-            if (claim and _same_moment(claim, quote_at)
-                    and match.group("currency").upper() == currency
-                    and verified_price is not None and verified_price.is_finite()
+            quote_at = next(iter(quote_moments))
+            currency, raw_price = next(iter(quote_prices))
+            try:
+                verified_price = Decimal(raw_price)
+                claimed_price = (Decimal(match.group("price").replace(",", "."))
+                                 if not execution else verified_price)
+            except (InvalidOperation, TypeError, ValueError):
+                return match.group(0)
+            claim = _claimed_moment(match.group("moment"))
+            registered_close = _utc_instant(trades[0]["exit_at"])
+            if (claim and any(_same_moment(claim, instant) for instant in
+                              (quote_at, verified_decision_at, registered_close) if instant)
+                    and currency in {"EUR", "USD", "USDT"}
+                    and (execution or match.group("currency").upper() == currency)
+                    and verified_price.is_finite() and verified_price > 0
                     and claimed_price == verified_price):
+                if execution:
+                    zone_quote, _ = _moment_in_zone(quote_at, user_time_zone)
+                    displayed_price = f"{verified_price:.2f}".replace(".", ",")
+                    return (f"Koersbron bij AAPL Paper-uitvoering: "
+                            f"{displayed_price} {currency} op {zone_quote} "
+                            f"({quote_at.strftime('%Y-%m-%d %H:%M:%S UTC')}; {user_time_zone})")
                 return (f"Koersbron bij AAPL Paper-exitbeoordeling: "
                         f"{match.group('price')} {currency} op {match.group('moment')}")
             return match.group(0)

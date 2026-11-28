@@ -582,7 +582,8 @@ class ReviewToolAdapter:
                     "paper_exit_evidence": (
                         {key: review["paper_exit_evidence"].get(key) for key in (
                             "trigger", "source_price_currency", "source_price",
-                            "source_price_at", "saved_first_target",
+                            "source_price_at", "execution_source_price",
+                            "execution_source_price_at", "saved_first_target",
                             "execution_fx_eur_per_unit", "execution_fx_observed_at",
                         )}
                         if review.get("environment") == "paper"

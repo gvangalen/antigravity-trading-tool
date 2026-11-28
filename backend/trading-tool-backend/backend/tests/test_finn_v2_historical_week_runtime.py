@@ -104,6 +104,8 @@ def test_historical_quote_source_and_decision_are_separate_clocks():
     trade["paper_exit_evidence"].update({
         "source_price_currency": "USD", "source_price": 358.60,
         "source_price_at": "2026-11-12T14:59:00+00:00",
+        "execution_source_price": 358.60,
+        "execution_source_price_at": "2026-11-12T14:59:00+00:00",
     })
     evidence = tuple(prepared.response.tool_trace[0]["result"]["results"])
     assert not current_source_moments_supported(
@@ -120,6 +122,33 @@ def test_historical_quote_source_and_decision_are_separate_clocks():
     assert ("Geverifieerde AAPL Paper-exitbeslissing: 2026-11-12 16:00:30 CET "
             "(2026-11-12 15:00:30 UTC; Europe/Amsterdam)") in completed.text
     assert "AAPL Paper-trade als gesloten geregistreerd: 2026-11-12 16:00:30 CET" in completed.text
+
+    prepared.response.text = (
+        "Exitbeslissing en uitvoeringskoers: "
+        "12 november 2026, 15:00:30 UTC."
+    )
+    execution = _minimal_read_answer(
+        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert execution.status == "completed", execution.reason
+    assert "Exitbeslissing en uitvoeringskoers" not in execution.text
+    assert ("Koersbron bij AAPL Paper-uitvoering: 358,60 USD op "
+            "2026-11-12 15:59:00 CET (2026-11-12 14:59:00 UTC; Europe/Amsterdam)") in execution.text
+    assert "Geverifieerde AAPL Paper-exitbeslissing: 2026-11-12 16:00:30 CET" in execution.text
+
+    prepared.response.text = (
+        "Exitbeslissing en USD-koers van 358,60: "
+        "12 november 2026, 14:59:00 UTC en de botbeslissing "
+        "12 november 2026, 15:00:30 UTC."
+    )
+    assert current_source_moments_supported(
+        prepared.response.text, evidence, question=QUESTION,
+        user_time_zone="Europe/Amsterdam",
+    )
+    prepared.response.text = (
+        "Exitbeslissing en USD-koers van 358,60: "
+        "12 november 2026, 14:59:00 UTC."
+    )
 
     trade["paper_exit_evidence"]["source_price_at"] = "2026-11-12T14:58:00+00:00"
     unsafe = _minimal_read_answer(
@@ -186,6 +215,8 @@ def test_live_combined_answer_keeps_three_distinct_source_moments():
     trade["paper_exit_evidence"].update({
         "source_price_currency": "USD", "source_price": 358.60,
         "source_price_at": "2026-11-12T14:59:00+00:00",
+        "execution_source_price": 358.60,
+        "execution_source_price_at": "2026-11-12T14:59:00+00:00",
     })
     answer = _minimal_read_answer(
         message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
