@@ -107,6 +107,15 @@ def _bot_decision_clocks_supported(
             continue
         data = item["data"]
         if item.get("scope") == "read_review_history":
+            for row in data.get("closed_trades") or []:
+                if not isinstance(row, dict) or str(row.get("environment") or "").lower() != "paper":
+                    continue
+                exit_facts = row.get("paper_exit_evidence")
+                instant = _utc(row.get("paper_exit_decision_at"))
+                if (isinstance(exit_facts, dict)
+                        and exit_facts.get("trigger") in {"first_target", "stop_loss"}
+                        and instant):
+                    decisions.append((row.get("bot_id"), str(row.get("symbol") or "").upper(), instant))
             rows = data.get("latest_bot_decisions") or []
             for row in rows:
                 if not isinstance(row, dict):

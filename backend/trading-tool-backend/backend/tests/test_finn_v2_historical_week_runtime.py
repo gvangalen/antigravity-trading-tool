@@ -27,7 +27,9 @@ def _prepared(*, text, trade_date="2026-11-12T15:02:00+00:00", week=True):
                     } if week else None),
                     "closed_trades": [{
                         "review_id": 2127, "symbol": "AAPL", "environment": "paper",
+                        "bot_id": 129,
                         "exit_at": trade_date,
+                        "paper_exit_decision_at": "2026-11-12T14:59:00+00:00",
                         "paper_exit_evidence": {
                             "trigger": "first_target",
                             "execution_fx_eur_per_unit": 0.92,
@@ -55,6 +57,48 @@ def test_minimal_live_read_completes_historical_exit_and_week_in_user_zone():
         # The recorded close is distinct from the model's 14:59 UTC decision.
         assert "AAPL Paper-trade als gesloten geregistreerd: 2026-11-12 16:02:00 CET" in answer.text
         assert "Geverifieerd opslagmoment week 2026-11-09 t/m 2026-11-15: 2026-11-16 06:15:00 CET" in answer.text
+
+
+def test_historical_paper_bot_clock_is_not_compared_with_newer_bot_check():
+    prepared = _prepared(text=(
+        "Historische botbeslissing voor AAPL: 12 november 2026 14:59 UTC. "
+        "De Paper-uitstap raakte het eerste koersdoel; volledige plantrouw blijft onzeker."
+    ))
+    prepared.response.tool_trace[0]["result"]["results"][0]["data"]["latest_bot_decisions"] = [{
+        "bot_id": 129, "symbol": "AAPL", "decision_at": "2026-11-27T18:48:00+00:00",
+    }]
+    answer = _minimal_read_answer(
+        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert answer.status == "completed", answer.reason
+    assert "12 november 2026 14:59 UTC" in answer.text
+    assert "Geverifieerd FX-bronmoment" in answer.text
+
+
+def test_historical_bot_clock_requires_typed_owner_bound_exit_decision():
+    from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
+
+    prepared = _prepared(text="Historische botbeslissing voor AAPL: 12 november 2026 14:59 UTC.")
+    row = prepared.response.tool_trace[0]["result"]["results"][0]
+    row["data"]["latest_bot_decisions"] = [{
+        "bot_id": 129, "symbol": "AAPL", "decision_at": "2026-11-27T18:48:00+00:00",
+    }]
+    assert current_source_moments_supported(prepared.response.text, (row,), question=QUESTION)
+    row["data"]["closed_trades"][0].pop("paper_exit_decision_at")
+    assert not current_source_moments_supported(prepared.response.text, (row,), question=QUESTION)
+
+
+def test_historical_exit_clock_cannot_replace_current_bot_clock():
+    from backend.services.finn_v2_source_moment_claims import current_source_moments_supported
+
+    prepared = _prepared(text="De laatste botbeslissing voor AAPL was 12 november 2026 14:59 UTC.")
+    row = prepared.response.tool_trace[0]["result"]["results"][0]
+    row["data"]["latest_bot_decisions"] = [{
+        "bot_id": 129, "symbol": "AAPL", "decision_at": "2026-11-27T18:48:00+00:00",
+    }]
+    assert not current_source_moments_supported(
+        prepared.response.text, (row,), question="Wat was de laatste AAPL-botbeslissing?",
+    )
 
 
 def test_minimal_live_read_does_not_complete_mismatched_or_missing_sources():
@@ -174,6 +218,20 @@ def test_minimal_live_read_replaces_conflicting_model_fx_clock():
         assert "2026-11-12 15:02:00 CET (Europe/Amsterdam)" in answer.text
         assert "FX-brontijd: zie de afzonderlijk geverifieerde bronregel" in answer.text
         assert "uit antwoordtekst niet geverifieerd" not in answer.text
+
+
+def test_conflicting_fx_clock_inside_markdown_does_not_leave_closing_stars():
+    answer = _minimal_read_answer(
+        message=QUESTION,
+        prepared=_prepared(text=(
+            "De Paper-uitstap raakte het eerste koersdoel. "
+            "FX-bronmoment: **12 november 14:03 UTC**"
+        )),
+        user_time_zone="Europe/Amsterdam",
+    )
+    assert answer.status == "completed", answer.reason
+    assert "FX-brontijd: zie de afzonderlijk geverifieerde bronregel**" not in answer.text
+    assert "FX-brontijd: zie de afzonderlijk geverifieerde bronregel" in answer.text
 
 
 def test_historical_week_fx_moment_completion_is_idempotent():
