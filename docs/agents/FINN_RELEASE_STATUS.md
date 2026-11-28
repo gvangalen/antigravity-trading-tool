@@ -6,9 +6,21 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: historische uitstapbeslissing versus geregistreerde sluiting (28 november 2026)
 
-Phase: `READY_FOR_PR_CI`. Product branch
+Phase: `READY_FOR_INDEPENDENT_QA_AFTER_STATUS_DEPLOY`. Product branch
 `codex/finn-exit-decision-label-20261128`, producthead
-`b7aff0548395c8b8f85d9c73a5ce0be264d22ac6`. Onafhankelijke
+`b7aff0548395c8b8f85d9c73a5ce0be264d22ac6`.
+[PR #1424](https://github.com/gvangalen/antigravity-trading-tool/pull/1424)
+is gemerged in `b8447215f7091fe3bef28b0d44b0789f6baad850`.
+PR-CI [46101966290](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46101966290)
+en main-CI [46102619179](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46102619179)
+hebben elk vijf groene jobs. Auto Deploy
+[46103248574](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46103248574)
+is geslaagd. GitHub main, publieke backend-health en frontend build-info
+toonden dezelfde SHA `b8447215f7091fe3bef28b0d44b0789f6baad850`;
+beide publieke endpoints gaven HTTP 200 en er was geen nieuwere deploy
+pending. Deze statusupdate maakt zelf een latere commit; onafhankelijke QA
+start pas na groene CI, succesvolle Auto Deploy en publieke pariteit van die
+definitieve statuscommit. Onafhankelijke
 ingelogde browser-QA op de vorige definitieve live SHA
 `0b16d1d75358255256727cfd4438cf953794a681` gaf `NOT_ACCEPTED`:
 twee nieuwe gesprekken met refresh en de exacte historische AAPL-vraag
@@ -42,12 +54,12 @@ en regression `109/109` (artifact SHA-256
 `ec4de188315da21ad328b55c8a7ca7d161732c5314d075a6f5f441ff28d5e7ec`),
 beide zonder provider-, schema-, parse-, validatie- of timeoutfouten.
 Onafhankelijke QA- en Security-codeherbeoordeling van deze exacte producthead:
-geen blocker. Dit is lokale codeacceptatie, nog geen nieuwe live
-browseracceptatie of deploymentbewijs.
+geen blocker. Dit is lokale codeacceptatie en gemeten deploymentidentiteit,
+nog geen nieuwe live browseracceptatie.
 
 ## FINN 3.0: historisch Paper-besluit naast latere botcontrole (28 november 2026)
 
-Phase: `READY_FOR_INDEPENDENT_QA_AFTER_STATUS_DEPLOY`. Product branch
+Phase: `LIVE_NOT_ACCEPTED`. Product branch
 `codex/finn-historical-source-recovery-20261128`, producthead
 `897600181f9e6cdd32801f93339878f7a8624b58`.
 [PR #1422](https://github.com/gvangalen/antigravity-trading-tool/pull/1422)
