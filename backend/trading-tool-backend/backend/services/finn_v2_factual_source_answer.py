@@ -318,8 +318,9 @@ def complete_historical_week_exit_moments(
                                              answer.find("\n", match.end())) if stop >= 0]
             clause_end = min(next_stops, default=len(answer))
             clause = answer[clause_start:clause_end]
-            if (re.search(r"\b(?:eerdere|vorige|voorgaande|andere|oudere)\b", clause, re.I)
-                    and re.search(r"\b(?:trade|dossier|review)\b", clause, re.I)):
+            if ((re.search(r"\b(?:eerdere|vorige|voorgaande|andere|oudere)\b", clause, re.I)
+                    and re.search(r"\b(?:trade|dossier|review)\b", clause, re.I))
+                    or re.search(r"\b(?:ochtend|middag|avond)[- ]?trade\b", clause, re.I)):
                 return match.group(0)
             moment = match.group("moment")
             if not re.search(r"\b20\d{2}\b", moment):
@@ -333,7 +334,13 @@ def complete_historical_week_exit_moments(
                 verified_decision_at.astimezone(ZoneInfo(user_time_zone)).date()
             ):
                 return match.group(0)
-            if claim and _same_moment(claim, verified_decision_at):
+            if _same_moment(claim, verified_decision_at):
+                return match.group(0)
+            # Correct only the proven confusion between this dossier's
+            # closing registration and its linked decision. Another time on
+            # the same day could belong to another trade.
+            registered_close = _utc_instant(trades[0]["exit_at"])
+            if not claim[1] or registered_close is None or not _same_moment(claim, registered_close):
                 return match.group(0)
             return match.group("label") + decision_at_in_zone
 
