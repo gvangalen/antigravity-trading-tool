@@ -56,6 +56,7 @@ from backend.services.watchlist_conversation_service import ambiguous_asset_chan
 from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
 from backend.services.finn_v2_account_bundle_answer import render_account_bundle_answer
 from backend.services.finn_v2_profile_paper_fit_answer import render_profile_paper_fit_answer
+from backend.services.finn_v2_analysis_setup_coaching import render_analysis_setup_coaching
 from backend.services.finn_v2_smart_dca_coach_answer import (
     render_saved_smart_dca_coach_answer, saved_smart_dca_identity_matched,
     smart_dca_identity_question, smart_dca_source_unavailable_text,
@@ -2280,32 +2281,9 @@ class FinnResponsesFrontDoor:
                             and isinstance(setups, list) and len(setups) == inventory["setup_count"]
                             and matching is not None and score_matches)
                 if verified:
-                    subject = pair
-                    if matching:
-                        answer = {
-                            "en": f"You already have a saved setup for {subject}. Shall I compare it with the current analysis before we design another one? I have changed nothing.",
-                            "de": f"Für {subject} gibt es bereits ein gespeichertes Setup. Soll ich es mit der aktuellen Analyse vergleichen, bevor wir ein neues entwerfen? Ich habe nichts geändert.",
-                        }.get(language, f"Voor {subject} zie ik al een opgeslagen setup. Wil je dat ik die met de huidige analyse vergelijk voordat we iets nieuws ontwerpen? Ik heb niets gewijzigd.")
-                    else:
-                        formatted_score = (f"{scored['benchmark_score']:g}".replace(".", ",")
-                                           if language in {"nl", "de"} and scored.get("source_status") == "available"
-                                           else f"{scored['benchmark_score']:g}"
-                                           if scored.get("source_status") == "available" else None)
-                        if language == "en":
-                            score_context = (f"The benchmark score for {subject} is {formatted_score}/100. "
-                                             if formatted_score is not None else
-                                             f"A complete benchmark score for {subject} is not available now. ")
-                            answer = (f"{score_context}A score alone is not a buy signal. I would start by exploring a daily swing setup with a clear entry condition, risk limit and exit. A longer-term position setup or a DCA setup for gradual buying are other options. Do you want to trade over a shorter period, hold for longer, or build gradually? I can then prepare an editable proposal. I have saved nothing.")
-                        elif language == "de":
-                            score_context = (f"Der Benchmarkwert für {subject} beträgt {formatted_score}/100. "
-                                             if formatted_score is not None else
-                                             f"Ein vollständiger Benchmarkwert für {subject} ist derzeit nicht verfügbar. ")
-                            answer = (f"{score_context}Ein Wert allein ist kein Kaufsignal. Als Ausgangspunkt würde ich ein Swing-Setup im Tageschart mit klarer Einstiegsbedingung, Risikogrenze und Ausstieg prüfen. Ein längerfristiges Positions-Setup oder ein DCA-Setup zum schrittweisen Aufbau sind weitere Möglichkeiten. Möchtest du kürzer handeln, länger halten oder schrittweise aufbauen? Danach kann ich einen bearbeitbaren Entwurf vorbereiten. Ich habe nichts gespeichert.")
-                        else:
-                            score_context = (f"De benchmarkscore voor {subject} is {formatted_score}/100. "
-                                             if formatted_score is not None else
-                                             f"Voor {subject} is nu geen complete benchmarkscore beschikbaar. ")
-                            answer = (f"{score_context}Een benchmarkscore is op zichzelf geen koopsein. Mijn startpunt is een swing-setup op de daggrafiek: bepaal vooraf een instapvoorwaarde, risico en exit. Je kunt ook een positie-setup voor langere termijn of een DCA-setup voor gespreid opbouwen kiezen. Wil je korter handelen, langer vasthouden of gespreid opbouwen? Dan maak ik een bewerkbaar voorstel. Ik heb niets opgeslagen.")
+                    answer = render_analysis_setup_coaching(
+                        subject=pair, matching=matching, scored=scored, language=language,
+                    )
                     return FinnResponsesFrontDoorResult(
                         FinnResponsesResult(text=answer, response_id=f"selected-analysis-{self.run_id}",
                                             tool_trace=trace, answer_kind="selected_analysis_next_step",

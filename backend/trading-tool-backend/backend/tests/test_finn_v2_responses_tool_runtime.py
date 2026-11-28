@@ -4348,7 +4348,8 @@ def test_selected_analysis_card_offers_setup_choices_without_source_dump(
     async def read(call):
         if call.name == "get_saved_setup_inventory":
             setups = ([{"setup_id": 12, "name": "MSTR plan", "symbol": asset,
-                       "pair": "MSTR/USD", "market_id": None}] if existing else [])
+                       "pair": "MSTR/USD", "market_id": None,
+                       "min_benchmark_score": 50, "max_benchmark_score": 70}] if existing else [])
             return {"status": "completed", "results": [{
                 "scope": "read_saved_setup_inventory", "status": "completed", "data": {
                     "asset_filter": asset, "setups": setups, "setup_count": len(setups), "complete": True,
@@ -4377,7 +4378,8 @@ def test_selected_analysis_card_offers_setup_choices_without_source_dump(
     assert result.proposal_analysis is None
     assert result.response.answer_kind == "selected_analysis_next_step"
     if existing:
-        assert "al een opgeslagen setup" in result.response.text
+        assert "7,3 punten onder de ondergrens van 50" in result.response.text
+        assert "instapvoorwaarde, risicogrens en exit" in result.response.text
         assert "swing-setup" not in result.response.text
     else:
         if locale == "nl":
@@ -4393,10 +4395,25 @@ def test_selected_analysis_card_offers_setup_choices_without_source_dump(
             assert "DCA" in result.response.text
     assert "bronmoment" not in result.response.text
     assert "verouderd" not in result.response.text
+    assert "geen koopsein" not in result.response.text
     verified = asyncio.run(FinnResponsesAnswerVerifier().verify(
         message=message, result=result.response, locale=locale,
     ))
     assert verified.status == "completed"
+    if existing:
+        changed = [dict(call) for call in result.response.tool_trace]
+        inventory_result = dict(changed[0]["result"])
+        rows = [dict(row) for row in inventory_result["results"]]
+        rows[0]["data"] = {**rows[0]["data"], "setups": [
+            {**rows[0]["data"]["setups"][0], "min_benchmark_score": 55},
+        ]}
+        inventory_result["results"] = rows
+        changed[0]["result"] = inventory_result
+        rejected = asyncio.run(FinnResponsesAnswerVerifier().verify(
+            message=message,
+            result=replace(result.response, tool_trace=tuple(changed)), locale=locale,
+        ))
+        assert rejected.status == "unavailable"
     if pair == "BTC/USDT":
         wrong_pair = [dict(call) for call in result.response.tool_trace]
         wrong_pair[0]["selection"] = {**wrong_pair[0]["selection"], "pair": "BTC/EUR"}
