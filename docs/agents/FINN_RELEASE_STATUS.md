@@ -4,9 +4,40 @@ Status: canonical
 
 Runtime identity comes from Git and public deployment surfaces, not this document's own commit SHA.
 
+## FINN 3.0: setupscore als concrete vervolgstap (28 november 2026)
+
+Phase: `PR_CI_GREEN_AWAITING_DEPLOY`. Productbranch
+`codex/finn-setup-score-coaching-20261128`, productcodehead
+`1d3d84be5343e6cf6dde681eb057e4249c6638ba` in
+[PR #1434](https://github.com/gvangalen/antigravity-trading-tool/pull/1434).
+Deze kandidaat vervangt in de geselecteerde analysekaart-Bespreek-route de
+herhaalde waarschuwing dat de score geen koopsein is door een concrete
+vervolgstap. Bij precies één eigenaar- en paargebonden setup met opgeslagen
+scoregrens toont FINN het verschil in scorepunten tot de grens of dat de
+score binnen de zone valt. Hij vraagt daarna om de overige planvoorwaarden
+te bepalen of te controleren, zonder te claimen dat die al zijn opgeslagen.
+Zonder passende setup biedt hij swing-, positie- en DCA-keuzes; bij meerdere
+setups, ontbrekende grens of score verzint hij geen afstand. Een expliciete
+stock-valuta-afwijking telt niet mee; de canonieke asset-only stocksetup
+zonder valutavelden blijft bruikbaar. De verifier reconstrueert de reactie
+uit de getypeerde owner-bound inventory- en scorereads. De route is read-only;
+actiecontracten, orderuitvoering, providerselectie en frontend zijn niet
+gewijzigd.
+
+Gemeten Build-gates op de productcodehead: geselecteerde runtime
+`1124 passed`, volledige backend-suite `5762 passed, 7 skipped`
+(47 waarschuwingen, 393,73 s), `git diff --check` schoon. Onafhankelijke
+QA-codeherreview op de exacte productcodehead: geen blocker; geen live run.
+PR-CI [46142369084](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46142369084)
+heeft vijf groene jobs. Deze kandidaat is nog niet gemerged of live getest.
+De vorige feedrelease hieronder is wel live maar haar natuurlijke
+gebeurtenistriggers hebben nog geen onafhankelijke QA-acceptatie. Die
+open dekkingsscope gaat mee in de live QA van de nieuwe publieke SHA;
+zij wordt niet achteraf als groen gepresenteerd.
+
 ## FINN 3.0: betekenisvolle feedmeldingen voor markt, portfolio en trades (28 november 2026)
 
-Phase: `DEPLOY_IDENTITY_VERIFIED_QA_PENDING`. Productbranch
+Phase: `LIVE_UNACCEPTED_CARRIED_FORWARD`. Productbranch
 `codex/feed-meaningful-updates`, producthead
 `8042f592f31d82afdbbd699d8c7ee2379af8fef9` in
 [PR #1432](https://github.com/gvangalen/antigravity-trading-tool/pull/1432).
