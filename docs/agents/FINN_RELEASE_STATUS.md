@@ -6,7 +6,7 @@ Runtime identity comes from Git and public deployment surfaces, not this documen
 
 ## FINN 3.0: getypeerde historische AAPL Paper-exit en weekreflectie
 
-Phase: `READY_FOR_INDEPENDENT_QA_AFTER_STATUS_DEPLOY`. Product branch
+Phase: `LIVE_QA_ACCEPTED_VISIBLE_BROWSER_SCOPE`. Product branch
 `codex/finn-historical-clocks-20261128`, producthead
 `e1fe222beed1c7b2a9de24c53dbdbbae45a5b9bf`.
 [PR #1426](https://github.com/gvangalen/antigravity-trading-tool/pull/1426)
@@ -19,7 +19,13 @@ is geslaagd. GitHub main, publieke backend `/api/health` en frontend
 `/build-info.json` toonden daarna exact die merge-SHA; beide endpoints gaven
 HTTP 200. Deze statusupdate maakt zelf een latere commit. Onafhankelijke QA
 start pas na groene CI, geslaagde Auto Deploy en publieke pariteit van die
-definitieve statuscommit.
+definitieve statuscommit. Die commit is gemerged in
+`d27740d038af5298f1c414c765aa1e7c1d116c97`: main-CI
+[46113113856](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46113113856)
+had vijf groene jobs, Auto Deploy
+[46113725191](https://github.com/gvangalen/antigravity-trading-tool/actions/runs/46113725191)
+slaagde, en main, publieke backend en frontend gaven exact die SHA met
+HTTP 200.
 
 De eerdere ingelogde browserproef op de vorige live kandidaat was
 `NOT_ACCEPTED`: FINN verwisselde de koersbron van 14:59 UTC met het
@@ -49,8 +55,23 @@ gaven geen provider-, schema-, timeout-, parse- of validatiefouten. Deze
 matrix en providerproeven dateren van vóór de laatste read-only
 scopeprojectie; de actiecontracten en providerselector zijn daarna niet
 gewijzigd. Onafhankelijke QA- en Security-codebeoordeling op de exacte
-producthead: geen blocker. Er is nog geen ingelogde live acceptatie van
-deze kandidaat.
+producthead: geen blocker.
+
+Onafhankelijke ingelogde browser-QA op exact `d27740d038af5298f1c414c765aa1e7c1d116c97`
+gaf `ACCEPTED` voor de zichtbare historische AAPL-flow. De exacte vraag
+over de AAPL Paper-exit van 12 november en opgeslagen weekreflectie van
+9–15 november werd in twee nieuwe gesprekken gesteld, met refresh ertussen.
+Beide antwoorden waren gelijk: eerste koersdoel als botreden, de bevestigde
+les, afzonderlijke koers-, FX-, besluit-, sluitings- en weekmomenten in de
+gebruikerszone en eerlijk voorbehoud over volledige plantrouw. De weekopslag
+was 16 november 06:15 CET; de eerdere fout 05:15 CET en losse Markdown-sterren
+kwamen niet terug. Een vraag naar 2–8 november koppelde het verkeerde
+dossier niet, uitsluitend Live gaf geen Paper-claim en een week-only vraag
+toonde geen individuele tradedetails. Er waren geen account-, bot- of
+ordermutaties. De browser toont geen run-ID, interne trace of gepubliceerde
+`response.evidence`; die velden zijn in deze browserproef `UNTESTED`.
+Deze verdictupdate bevat geen runtimecode en maakt zelf opnieuw een SHA;
+haar CI, Auto Deploy en publieke identiteit worden afzonderlijk gecontroleerd.
 
 ## FINN 3.0: historische uitstapbeslissing versus geregistreerde sluiting (28 november 2026)
 
