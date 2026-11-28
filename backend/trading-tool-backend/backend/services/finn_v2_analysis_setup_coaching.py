@@ -14,9 +14,11 @@ def matching_analysis_setups(setups: list, *, symbol: str, pair: str,
             and str(row.get("symbol") or "").upper() == symbol
             and row.get("market_id") == market_id
             and (str(row.get("pair") or "").upper() == pair if market_id is not None
-                 else bool(catalog_quote)
-                 and str(row.get("quote_currency") or "").upper() == catalog_quote
-                 and str(row.get("pair") or "").upper() == f"{symbol}/{catalog_quote}")]
+                 else bool(catalog_quote) and (
+                     (row.get("quote_currency") is None and row.get("pair") is None)
+                     or (str(row.get("quote_currency") or "").upper() == catalog_quote
+                         and str(row.get("pair") or "").upper() == f"{symbol}/{catalog_quote}")
+                 ))]
 
 
 def _score(value: object) -> Decimal | None:

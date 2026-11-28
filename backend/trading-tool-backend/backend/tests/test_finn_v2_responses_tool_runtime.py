@@ -4348,7 +4348,7 @@ def test_selected_analysis_card_offers_setup_choices_without_source_dump(
     async def read(call):
         if call.name == "get_saved_setup_inventory":
             setups = ([{"setup_id": 12, "name": "MSTR plan", "symbol": asset,
-                       "pair": "MSTR/USD", "quote_currency": "USD", "market_id": None,
+                       "pair": None, "quote_currency": None, "market_id": None,
                        "min_benchmark_score": 50, "max_benchmark_score": 70}] if existing else [])
             return {"status": "completed", "results": [{
                 "scope": "read_saved_setup_inventory", "status": "completed", "data": {

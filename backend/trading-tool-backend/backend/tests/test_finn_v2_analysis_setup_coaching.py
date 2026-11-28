@@ -33,13 +33,15 @@ def test_missing_or_ambiguous_threshold_does_not_invent_distance():
 
 def test_stock_quote_must_match_catalog_before_using_saved_threshold():
     rows = [
+        {"symbol": "MSTR", "market_id": None, "quote_currency": None,
+         "pair": None, "min_benchmark_score": 45},
         {"symbol": "MSTR", "market_id": None, "quote_currency": "EUR",
          "pair": "MSTR/EUR", "min_benchmark_score": 50},
         {"symbol": "MSTR", "market_id": None, "quote_currency": "USD",
          "pair": "MSTR/USD", "min_benchmark_score": 60},
     ]
-    assert matching_analysis_setups(rows, symbol="MSTR", pair="MSTR", market_id=None) == rows[1:]
-    assert matching_analysis_setups(rows[:1], symbol="MSTR", pair="MSTR", market_id=None) == []
+    assert matching_analysis_setups(rows, symbol="MSTR", pair="MSTR", market_id=None) == [rows[0], rows[2]]
+    assert matching_analysis_setups(rows[1:2], symbol="MSTR", pair="MSTR", market_id=None) == []
 
 
 def test_no_saved_setup_proposes_choices_without_signal_boilerplate():
