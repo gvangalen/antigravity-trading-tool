@@ -279,8 +279,6 @@ def _bot_decision_clocks_supported(
         answer, flags=re.I,
     ):
         subject = marker.search(clause)
-        if subject is None:
-            continue
         # An historical "exit decision and ..." sentence names at least two
         # events. A single clock cannot establish both, regardless of the
         # second event's wording. Two clocks are accepted only by the narrow
@@ -305,7 +303,15 @@ def _bot_decision_clocks_supported(
                 source_clause, re.I,
             )
         )
-        if historical_question and (decision_with_other_source or decision_first or decision_second):
+        has_explicit_quote_label = bool(re.search(
+            r"\b(?:koersbron\w*|prijsbron\w*|uitvoeringskoers|"
+            r"uitvoeringsprijs|(?:EUR|USD|USDT)[- ]?koers)\b",
+            clause, re.I,
+        ))
+        if historical_question and (
+            decision_with_other_source or decision_first or decision_second
+            or has_explicit_quote_label
+        ):
             paired_dated = list(_DATED_MOMENT.finditer(clause))
             paired_bare = [clock for clock in _ZONED_CLOCK.finditer(clause)
                            if not any(date.start() <= clock.start() and clock.end() <= date.end()
@@ -345,7 +351,7 @@ def _bot_decision_clocks_supported(
                     return False
                 if not quote_claims:
                     continue
-                if historical_decision is None or len(quote_claims) != 1:
+                if historical_decision is None:
                     return False
                 label_text = label.group(0).lower()
                 execution = ("uitvoer" in label_text or "uitvoering" in
@@ -369,10 +375,14 @@ def _bot_decision_clocks_supported(
                                           and observed[row["review_id"]] != at):
                             return False
                         observed[row["review_id"]] = at
-                claim = _claimed_moment(quote_claims[0].group(0))
-                if (len(observed) != 1 or claim is None
-                        or not _same_moment(claim, next(iter(observed.values())))):
+                if (len(observed) != 1 or any(
+                    (claim := _claimed_moment(moment.group(0))) is None
+                    or not _same_moment(claim, next(iter(observed.values())))
+                    for moment in quote_claims
+                )):
                     return False
+        if subject is None:
+            continue
         ids = {int(match.group(1)) for match in re.finditer(r"\bbot\s*#?\s*(\d+)\b", clause, re.I)}
         # Locate the clock nearest the status read verb. A sentence may also
         # contain a saved Hold decision in either order; only the read clock
