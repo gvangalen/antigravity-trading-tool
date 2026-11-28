@@ -357,7 +357,7 @@ def _bot_decision_clocks_supported(
                 execution = ("uitvoer" in label_text or "uitvoering" in
                              clause[label.end():quote_claims[0].start()].lower())
                 key = "execution_source_price_at" if execution else "source_price_at"
-                observed: dict[int, datetime] = {}
+                observed: dict[int, tuple[datetime, str, str]] = {}
                 for item in evidence:
                     if (item.get("scope") != "read_review_history"
                             or item.get("status") != "completed"
@@ -370,14 +370,46 @@ def _bot_decision_clocks_supported(
                                 or _utc(row.get("paper_exit_decision_at")) != historical_decision[2]
                                 or not isinstance(row.get("paper_exit_evidence"), dict)):
                             continue
-                        at = _utc(row["paper_exit_evidence"].get(key))
-                        if at is None or (row["review_id"] in observed
-                                          and observed[row["review_id"]] != at):
+                        facts = row["paper_exit_evidence"]
+                        at = _utc(facts.get(key))
+                        currency = str(facts.get(
+                            "execution_source_price_currency" if execution
+                            else "source_price_currency") or "").upper()
+                        price = str(facts.get(
+                            "execution_source_price" if execution else "source_price") or "")
+                        candidate = (at, currency, price)
+                        if (at is None or currency not in {"EUR", "USD", "USDT"}
+                                or not price or (row["review_id"] in observed
+                                                 and observed[row["review_id"]] != candidate)):
                             return False
-                        observed[row["review_id"]] = at
+                        observed[row["review_id"]] = candidate
+                if len(observed) != 1:
+                    return False
+                at, currency, price = next(iter(observed.values()))
+                segment = clause[label.start():quote_claims[0].start()]
+                currency_claims = re.findall(r"\b(?:EUR|USD|USDT)\b", segment, re.I)
+                if any(unit.upper() != currency for unit in currency_claims):
+                    return False
+                amount_claims = re.findall(
+                    r"\b(\d+(?:[.,]\d+)?)\s*(?:EUR|USD|USDT)\b|"
+                    r"\b(?:EUR|USD|USDT)[- ]?koers\s+van\s+(\d+(?:[.,]\d+)?)\b",
+                    segment, re.I,
+                )
+                unqualified_amounts = re.findall(
+                    r"\b(?:was|van|:)\s*(\d+(?:[.,]\d+)?)\b", segment, re.I,
+                )
+                try:
+                    if any(Decimal((before or after).replace(",", ".")) != Decimal(price)
+                           for before, after in amount_claims) or any(
+                        Decimal(amount.replace(",", ".")) != Decimal(price)
+                        for amount in unqualified_amounts
+                    ):
+                        return False
+                except (InvalidOperation, ValueError):
+                    return False
                 if (len(observed) != 1 or any(
                     (claim := _claimed_moment(moment.group(0))) is None
-                    or not _same_moment(claim, next(iter(observed.values())))
+                    or not _same_moment(claim, at)
                     for moment in quote_claims
                 )):
                     return False
