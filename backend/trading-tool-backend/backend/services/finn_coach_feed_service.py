@@ -405,6 +405,39 @@ def _fallback(kind: str, subject: str, evidence: dict, *, focus: str = "brief") 
             "de": {"title": "Paper-Guthaben unter deiner Grenze" if below else "Paper-Guthaben nahe deiner Grenze",
                    "body": f"Dein Paper-Portfolio besteht zu {cash_pct}% (€{cash_eur}) aus Guthaben. Deine gespeicherte Grenze beträgt {limit_pct}%. Prüfe dein Portfolio vor einem weiteren Kauf."},
         }
+    if kind == "live_portfolio_cash_low":
+        cash_pct = evidence.get("cash_pct")
+        limit_pct = evidence.get("limit_pct")
+        cash_eur = evidence.get("cash_eur")
+        below = cash_pct is not None and limit_pct is not None and cash_pct < limit_pct
+        return {
+            "nl": {"title": "Live EUR-saldo onder jouw grens" if below else "Live EUR-saldo rond jouw grens",
+                   "body": f"Je gecontroleerde Live-portefeuille bestaat voor {cash_pct}% uit EUR (€{cash_eur}). Je ingestelde grens is {limit_pct}%. Dit is het totale EUR-saldo bij de broker, inclusief eventueel gereserveerde EUR."},
+            "en": {"title": "Live EUR balance below your limit" if below else "Live EUR balance near your limit",
+                   "body": f"EUR is {cash_pct}% (€{cash_eur}) of your verified Live portfolio. Your saved limit is {limit_pct}%. This is the broker's total EUR balance, including any reserved EUR."},
+            "de": {"title": "Live-EUR-Bestand unter deiner Grenze" if below else "Live-EUR-Bestand nahe deiner Grenze",
+                   "body": f"Dein geprüftes Live-Portfolio besteht zu {cash_pct}% aus EUR (€{cash_eur}). Deine gespeicherte Grenze beträgt {limit_pct}%. Dies ist der gesamte EUR-Bestand beim Broker, einschließlich reservierter EUR."},
+        }
+    if kind == "live_trade_filled":
+        symbol = str(evidence.get("symbol") or subject).strip().upper()[:20]
+        action = evidence.get("side")
+        partial = evidence.get("order_status") == "partial"
+        cash_pct = evidence.get("portfolio_cash_pct")
+        titles = {
+            "nl": f"{symbol}: {'aankoop' if action == 'buy' else 'verkoop'} {'deels ' if partial else ''}uitgevoerd",
+            "en": f"{symbol}: {'buy' if action == 'buy' else 'sell'} {'partly ' if partial else ''}filled",
+            "de": f"{symbol}: {'Kauf' if action == 'buy' else 'Verkauf'} {'teilweise ' if partial else ''}ausgeführt",
+        }
+        bodies = {
+            "nl": f"De broker heeft deze order bevestigd. Uitgevoerd bedrag: {_bot_amount(evidence, 'nl')}.",
+            "en": f"The broker confirmed this order. Executed amount: {_bot_amount(evidence, 'en')}.",
+            "de": f"Der Broker hat diese Order bestätigt. Ausgeführter Betrag: {_bot_amount(evidence, 'de')}.",
+        }
+        if cash_pct is not None:
+            bodies["nl"] += f" Bij de gecontroleerde Live-balans was het EUR-aandeel {cash_pct}%."
+            bodies["en"] += f" At the verified Live balance check, EUR was {cash_pct}%."
+            bodies["de"] += f" Bei der geprüften Live-Bilanz betrug der EUR-Anteil {cash_pct}%."
+        return {locale: {"title": titles[locale], "body": bodies[locale]} for locale in LOCALES}
     if kind == "plan_review":
         pair = str(evidence.get("trading_pair") or evidence.get("symbol") or "").strip()[:30]
         market = f" ({pair})" if pair else ""
@@ -694,7 +727,7 @@ class FinnCoachFeedService:
                       expires_at: datetime | None = None,
                       revision: str | None = None) -> str | None:
         """One row per owner/event. Unchanged evidence never reopens or regenerates."""
-        if not event_key or event_type not in {"plan_match", "plan_review", "position_risk", "portfolio_cash_low", "weekly_reflection", "improvement_suggestion", "data_blocked", "proposal_pending", "market_move", "bot_decision", "live_bot_paused", "daily_report_ready", "periodic_report_ready", "watchlist_added", "analysis_ready", "strategy_next_step", "paper_next_step"}:
+        if not event_key or event_type not in {"plan_match", "plan_review", "position_risk", "portfolio_cash_low", "live_portfolio_cash_low", "live_trade_filled", "weekly_reflection", "improvement_suggestion", "data_blocked", "proposal_pending", "market_move", "bot_decision", "live_bot_paused", "daily_report_ready", "periodic_report_ready", "watchlist_added", "analysis_ready", "strategy_next_step", "paper_next_step"}:
             raise ValueError("feed_event_invalid")
         facts = {**evidence, "subject": str(subject or "")[:120]}
         digest = hashlib.sha256(str(revision or _json(facts)).encode()).hexdigest()
@@ -804,7 +837,7 @@ class FinnCoachFeedService:
                         old_facts = {}
                 if not isinstance(old_facts, dict):
                     old_facts = {}
-                if event_type == "portfolio_cash_low" and current["status"] in VISIBLE:
+                if event_type in {"portfolio_cash_low", "live_portfolio_cash_low", "live_trade_filled"} and current["status"] in VISIBLE:
                     await self.session.execute(text("""
                         UPDATE finn_coach_feed_items
                         SET evidence=CAST(:evidence AS JSONB),
@@ -876,7 +909,7 @@ class FinnCoachFeedService:
             "source_observed_at": source_observed_at,
             "copy_json": _json(_fallback(event_type, subject, facts)),
             "copy_source": ("verified_facts" if event_type in {
-                                "position_risk", "portfolio_cash_low", "weekly_reflection", "improvement_suggestion",
+                                "position_risk", "portfolio_cash_low", "live_portfolio_cash_low", "live_trade_filled", "weekly_reflection", "improvement_suggestion",
                                 "bot_decision", "watchlist_added", "analysis_ready", "strategy_next_step", "paper_next_step", "daily_report_ready", "periodic_report_ready"} or event_type == "data_blocked" and facts.get("bot_id")
                             else "fact_fallback"),
             "expires_at": expires_at,
@@ -1221,6 +1254,127 @@ class FinnCoachFeedService:
             expires_at=now + timedelta(hours=1), revision=f"paper:below:{limit}",
         )
         return [item] if item else []
+
+    async def reconcile_live_portfolio_events(self, *, user_id: int) -> list[str]:
+        """Observe confirmed Live fills and a verified broker cash threshold.
+
+        This is read-only: a broker failure leaves prior cards alone and cannot
+        turn a missing balance into zero cash. Paper ledgers are never mixed in.
+        """
+        from backend.services.live_portfolio_allocation_service import read_live_account
+
+        setting = await self.session.execute(text("""
+            SELECT ai_preferences->>'live_cash_alert_below_pct' AS cash_limit
+            FROM users WHERE id=:user_id
+        """), {"user_id": user_id})
+        row = setting.mappings().first()
+        try:
+            limit = int(row["cash_limit"]) if row and row["cash_limit"] is not None else 0
+        except (TypeError, ValueError):
+            limit = 0
+        if not 1 <= limit <= 99:
+            limit = 0
+            await self.resolve(user_id=user_id, event_key="portfolio-cash:live")
+
+        result = await self.session.execute(text("""
+            SELECT o.id, o.bot_id, o.symbol, o.side, o.status, o.updated_at,
+                   o.executed_qty, b.name AS bot_name,
+                   ledger.amount_eur AS ledger_amount_eur
+            FROM bot_orders o
+            JOIN bot_configs b ON b.id=o.bot_id AND b.user_id=o.user_id AND b.is_live=TRUE
+            JOIN bot_executions e ON e.bot_order_id=o.id AND e.user_id=o.user_id
+            JOIN LATERAL (
+                SELECT SUM(ABS(l.cash_delta_eur)) AS amount_eur
+                FROM bot_ledger l
+                WHERE l.user_id=o.user_id AND l.bot_id=o.bot_id
+                  AND l.order_id=o.id AND l.entry_type='execute'
+            ) ledger ON ledger.amount_eur > 0
+            WHERE o.user_id=:user_id AND o.execution_environment='live'
+              AND o.exchange_order_id IS NOT NULL AND o.status IN ('filled','partial')
+              AND e.status=o.status AND e.filled_qty > 0
+              AND o.updated_at >= NOW() - INTERVAL '1 day'
+            ORDER BY o.updated_at DESC, o.id DESC LIMIT 40
+        """), {"user_id": user_id})
+        orders = result.mappings().all()
+        if not limit and not orders:
+            return []
+
+        account = await read_live_account(self.session, user_id)
+        now = datetime.now(timezone.utc)
+        observed = _utc_source_moment(account.get("as_of")) if account else None
+        try:
+            cash = Decimal(str(account["total_eur"]))
+            free = Decimal(str(account["cash_eur"]))
+            position = Decimal(str(account["position_value_eur"]))
+            equity = cash + position
+            cash_pct = cash * 100 / equity
+            valid = (all(value.is_finite() for value in (cash, free, position, equity, cash_pct))
+                     and 0 <= free <= cash and cash >= 0 and position >= 0 and equity > 0
+                     and observed is not None
+                     and timedelta(0) <= now - observed <= timedelta(minutes=5))
+        except (KeyError, TypeError, ValueError, InvalidOperation, ZeroDivisionError):
+            valid = False
+        created = []
+        newest_order_id = orders[0]["id"] if orders else None
+        for order in reversed(orders):
+            filled_at = _utc_source_moment(order.get("updated_at"))
+            if not filled_at or order.get("side") not in {"buy", "sell"}:
+                continue
+            try:
+                qty = Decimal(str(order["executed_qty"]))
+                amount = Decimal(str(order["ledger_amount_eur"]))
+            except (KeyError, TypeError, ValueError, InvalidOperation):
+                continue
+            if (not all(value.is_finite() for value in (qty, amount))
+                    or min(qty, amount) <= 0 or amount > 1_000_000_000):
+                continue
+            facts = {"environment": "live", "is_live": True, "order_id": order["id"],
+                     "bot_id": order["bot_id"], "symbol": order["symbol"],
+                     "side": order["side"], "order_status": order["status"],
+                     "amount_eur": format(amount.quantize(Decimal("0.01")), "f")}
+            if valid and order["id"] == newest_order_id and observed >= filled_at:
+                facts.update({"portfolio_cash_pct": float(round(cash_pct, 1)),
+                              "portfolio_cash_eur": format(cash.quantize(Decimal("0.01")), "f"),
+                              "portfolio_valuation_at": observed.isoformat()})
+            item = await self.publish(
+                user_id=user_id, event_key=f"live-order:{order['id']}",
+                event_type="live_trade_filled", subject_type="bot",
+                subject_id=str(order["bot_id"]), subject=str(order["bot_name"] or "Live-bot"),
+                symbol=str(order["symbol"] or "").upper(), evidence=facts,
+                source_observed_at=filled_at, priority=3,
+                revision=f"live-fill:{order['id']}:{order['status']}",
+            )
+            if item:
+                created.append(item)
+
+        if not limit or not valid:
+            return created
+        previous = await self.session.execute(text("""
+            SELECT status FROM finn_coach_feed_items
+            WHERE user_id=:user_id AND event_key='portfolio-cash:live'
+            ORDER BY created_at DESC, id DESC LIMIT 1
+        """), {"user_id": user_id})
+        current = previous.mappings().first()
+        if cash_pct >= limit + 5:
+            await self.resolve(user_id=user_id, event_key="portfolio-cash:live")
+            return created
+        if cash_pct >= limit and (not current or current["status"] not in VISIBLE):
+            return created
+        facts = {"environment": "live", "cash_pct": float(round(cash_pct, 1)),
+                 "cash_eur": format(cash.quantize(Decimal("0.01")), "f"),
+                 "equity_eur": format(equity.quantize(Decimal("0.01")), "f"),
+                 "limit_pct": limit, "valuation_as_of": observed.isoformat(),
+                 "exchange_name": str(account["exchange_name"])}
+        item = await self.publish(
+            user_id=user_id, event_key="portfolio-cash:live",
+            event_type="live_portfolio_cash_low", subject_type="portfolio",
+            subject_id="live", subject="Live-portefeuille", symbol=None,
+            priority=4, evidence=facts, source_observed_at=observed,
+            expires_at=now + timedelta(hours=1), revision=f"live:below:{limit}",
+        )
+        if item:
+            created.append(item)
+        return created
 
     async def reconcile_improvement_suggestions(self, *, user_id: int, symbol: str,
                                                 market_id: int | None = None) -> list[str]:

@@ -2308,6 +2308,8 @@
   "portfolioPage": {
     "cashAlertLabel": "Melding bij weinig Paper-cash (%)",
     "cashAlertHelp": "Stel je eigen grens in. Laat leeg om deze melding uit te zetten; FINN controleert periodiek.",
+    "liveCashAlertLabel": "Melding bij weinig Live EUR-saldo (%)",
+    "liveCashAlertHelp": "FINN gebruikt de gecontroleerde brokerbalans en telt gereserveerde EUR mee. Laat leeg om de melding uit te zetten.",
     "cashAlertOff": "Uit",
     "cashAlertSave": "Grens opslaan",
     "cashAlertError": "Controleer je grens (1–99%) en probeer opnieuw.",

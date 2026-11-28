@@ -131,15 +131,20 @@ def test_retryable_paper_risk_task_reports_its_own_outcome(monkeypatch):
         events.append(("cash_review", user_id))
         return []
 
+    async def live_review(self, *, user_id):
+        events.append(("live_review", user_id))
+        return []
+
     monkeypatch.setattr(database, "async_session_factory", session_factory)
     monkeypatch.setattr(finn_v2_task, "_run_async", lambda coro: asyncio.run(coro))
     monkeypatch.setattr(FinnCoachFeedService, "reconcile_paper_position_risks", review)
     monkeypatch.setattr(FinnCoachFeedService, "reconcile_paper_cash_alert", cash_review)
+    monkeypatch.setattr(FinnCoachFeedService, "reconcile_live_portfolio_events", live_review)
 
     result = portfolio_snapshot_task.reconcile_paper_position_risk.run(42)
 
     assert result == {"status": "ok", "user_id": 42, "created_count": 0}
-    assert events == [("review", 42), ("cash_review", 42), "feed_committed"]
+    assert events == [("review", 42), ("cash_review", 42), ("live_review", 42), "feed_committed"]
 
 
 def test_discuss_paper_risk_rereads_current_position_in_same_owner(monkeypatch):

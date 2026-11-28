@@ -2307,6 +2307,8 @@
   "portfolioPage": {
     "cashAlertLabel": "Low Paper cash alert (%)",
     "cashAlertHelp": "Choose your own limit. Leave blank to turn off this alert; FINN checks periodically.",
+    "liveCashAlertLabel": "Low Live EUR balance alert (%)",
+    "liveCashAlertHelp": "FINN uses the verified broker balance, including reserved EUR. Leave blank to turn this alert off.",
     "cashAlertOff": "Off",
     "cashAlertSave": "Save limit",
     "cashAlertError": "Check your limit (1–99%) and try again.",

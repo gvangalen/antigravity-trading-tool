@@ -97,6 +97,7 @@ class AssistantPreferenceUpdate(BaseModel):
     analysis_hidden_indicators: Optional[List[str]] = None
     active_finn_session_id: Optional[str] = None
     paper_cash_alert_below_pct: Optional[int] = Field(default=None, ge=0, le=99)
+    live_cash_alert_below_pct: Optional[int] = Field(default=None, ge=0, le=99)
 
     @validator("time_zone", "detected_time_zone")
     def validate_time_zone(cls, value):

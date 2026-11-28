@@ -47,7 +47,7 @@ def run_portfolio_snapshot(user_id: int):
              autoretry_for=(Exception,), retry_backoff=True,
              retry_kwargs={"max_retries": 3})
 def reconcile_paper_position_risk(user_id: int):
-    """Retryable Paper-only feed observer; no portfolio or trade mutation."""
+    """Retryable Paper and Live feed observer; no portfolio or trade mutation."""
     from backend.celery_task.finn_v2_task import _run_async
     from backend.infrastructure.database import async_session_factory
     from backend.services.finn_coach_feed_service import FinnCoachFeedService
@@ -57,6 +57,7 @@ def reconcile_paper_position_risk(user_id: int):
             feed = FinnCoachFeedService(session)
             created = await feed.reconcile_paper_position_risks(user_id=user_id)
             created += await feed.reconcile_paper_cash_alert(user_id=user_id)
+            created += await feed.reconcile_live_portfolio_events(user_id=user_id)
             await session.commit()
             return len(created)
 

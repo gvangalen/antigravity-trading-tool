@@ -2325,6 +2325,8 @@
   "portfolioPage": {
     "cashAlertLabel": "Meldung bei wenig Paper-Guthaben (%)",
     "cashAlertHelp": "Wähle deine Grenze. Leer lassen deaktiviert die Meldung; FINN prüft regelmäßig.",
+    "liveCashAlertLabel": "Meldung bei niedrigem Live-EUR-Bestand (%)",
+    "liveCashAlertHelp": "FINN verwendet den geprüften Brokerbestand einschließlich reservierter EUR. Leer lassen deaktiviert die Meldung.",
     "cashAlertOff": "Aus",
     "cashAlertSave": "Grenze speichern",
     "cashAlertError": "Prüfe deine Grenze (1–99 %) und versuche es erneut.",
