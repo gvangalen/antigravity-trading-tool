@@ -1963,18 +1963,29 @@ def _minimal_read_answer(
             if isinstance(item, dict)
         )
     text = prepared.response.text.strip()
-    if str(getattr(prepared, "locale", "nl") or "nl").lower().startswith("nl"):
+    historical_read = any(
+        item.get("scope") == "read_review_history"
+        and item.get("status") == "completed"
+        and isinstance(item.get("data"), dict)
+        and isinstance(item["data"].get("weekly_reflection"), dict)
+        and any(isinstance(trade, dict)
+                and str(trade.get("symbol") or "").upper() == "AAPL"
+                and str(trade.get("environment") or "").lower() == "paper"
+                for trade in item["data"].get("closed_trades") or [])
+        for item in current_evidence
+    )
+    historical_question = bool(
+        re.search(r"\b(?:weekreflectie|wekelijkse\s+reflectie)\b", message, re.I)
+        and re.search(r"\bAAPL\b", message, re.I)
+        and re.search(r"\bPaper\b", message, re.I)
+        and re.search(r"\b(?:exitreden|exit|uitstap|verkoop|afgesloten|gesloten)\b", message, re.I)
+    )
+    typed_historical = (historical_read or historical_question) and not _legacy_historical_test
+    if typed_historical or str(getattr(prepared, "locale", "nl") or "nl").lower().startswith("nl"):
         from backend.services.finn_v2_factual_source_answer import complete_historical_week_exit_moments
-        historical_week_request = bool(
-            re.search(r"\b(?:weekreflectie|wekelijkse\s+reflectie)\b", message, re.I)
-            and re.search(r"\bAAPL\b", message, re.I)
-            and re.search(r"\bPaper\b", message, re.I)
-            and re.search(r"\b(?:exitreden|exit|uitstap|verkoop|afgesloten)\b", message, re.I)
-            and not _legacy_historical_test
-        )
         text = complete_historical_week_exit_moments(
             text, current_evidence, question=message, user_time_zone=user_time_zone,
-            typed=historical_week_request,
+            typed=typed_historical,
         )
         if text is None:
             return FinnResponsesVerifiedAnswer(

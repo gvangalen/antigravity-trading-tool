@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from backend.domain.indicator_display import indicator_display_name
 from backend.domain.technical_indicator_catalog import get_active_technical_indicator_definitions
 from backend.services.finn_v2_tool_adapters.display_source_moment import amsterdam_source_moment
-from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
+from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG, mentioned_catalog_symbols
 
 
 def _read(results: dict[str, Any], scope: str) -> tuple[dict[str, Any] | None, str | None]:
@@ -191,10 +191,11 @@ def complete_historical_week_exit_moments(
     user_time_zone: str | None, typed: bool = False,
 ) -> str | None:
     """Show the two verified source moments in the user's zone for a weekly exit review."""
-    if not user_time_zone or not re.search(r"\b(?:weekreflectie|wekelijkse reflectie)\b", question, re.I) \
-            or not re.search(r"\bAAPL\b", question, re.I) \
-            or not re.search(r"\bPaper\b", question, re.I) \
-            or not re.search(r"\b(?:exitreden|exit|uitstap|verkoop|afgesloten)\b", question, re.I):
+    if not user_time_zone or (not typed and (
+            not re.search(r"\b(?:weekreflectie|wekelijkse reflectie)\b", question, re.I)
+            or not re.search(r"\bAAPL\b", question, re.I)
+            or not re.search(r"\bPaper\b", question, re.I)
+            or not re.search(r"\b(?:exitreden|exit|uitstap|verkoop|afgesloten)\b", question, re.I))):
         return None if typed else answer
     try:
         ZoneInfo(user_time_zone)
@@ -321,6 +322,9 @@ def complete_historical_week_exit_moments(
         # This narrow historical answer has several independently timed
         # sources. Free model prose must never supply its price, currency,
         # decision, closing or week clocks. Use one owner-read dossier only.
+        requested_symbols = mentioned_catalog_symbols(question)
+        if requested_symbols and requested_symbols != {"AAPL"}:
+            return None
         if not decision_at_in_zone or any(trade != trades[0] for trade in matching_trades):
             return None
         facts = trades[0].get("paper_exit_evidence")

@@ -186,6 +186,7 @@ def test_historical_week_without_typed_quote_reports_missing_source():
         QUESTION,
         QUESTION.replace("welk concreet aandachtspunt", "welke concrete aandachtspunten"),
         QUESTION.replace("weekreflectie", "wekelijkse reflectie"),
+        QUESTION.replace("afgesloten AAPL Paper-trade", "gesloten AAPL Paper-trade"),
     ):
         answer = _runtime_minimal_read_answer(
             message=message,
@@ -195,6 +196,13 @@ def test_historical_week_without_typed_quote_reports_missing_source():
         assert answer.status == "completed", answer.reason
         assert "Koersbron bij Paper-uitvoering: prijs, valuta of bronmoment niet verifieerbaar" in answer.text
         assert "999 USD" not in answer.text
+    english_locale = _prepared(text="De verkoopprijs bedroeg 999 USD.")
+    english_locale.locale = "en"
+    answer = _runtime_minimal_read_answer(
+        message=QUESTION, prepared=english_locale, user_time_zone="Europe/Amsterdam",
+    )
+    assert answer.status == "completed", answer.reason
+    assert "999 USD" not in answer.text
 
 
 def test_historical_week_typed_answer_rejects_other_bot_or_dossier():
