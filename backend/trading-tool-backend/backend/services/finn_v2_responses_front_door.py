@@ -2180,8 +2180,7 @@ class FinnResponsesFrontDoor:
                                   and item["facts"].get("event_type") == "analysis_ready"
                                   and item["facts"].get("selection_origin") == "current_run"
                                   and item["facts"].get("historical_notification") is True), None)
-        if (selected_analysis is not None
-                and _explicit_discussion_only(message)):
+        if selected_analysis is not None:
             # The card is historical. Reread its exact owner-bound score and
             # setup inventory before suggesting a setup; a quote is irrelevant
             # to this planning conversation and may be old for order execution.

@@ -21,8 +21,8 @@ gedupliceerd en BTC/EUR wordt niet met BTC/USDT verwisseld. Een koers wordt
 niet als uitvoeringsprijs gepresenteerd. De handelsprijscontrole en
 bevestigingsgrens zijn niet gewijzigd.
 
-Gericht lokaal na de onafhankelijke codebevindingen: achttien nieuwe
-backendgevallen groen; de betrokken Responses-runtime-suite `1117 passed`.
+Gericht lokaal na de onafhankelijke codebevindingen: negentien nieuwe
+backendgevallen groen; de betrokken Responses-runtime-suite `1118 passed`.
 De Security-review van de eerste head vond dat een expliciete vraag naar
 BTC/EUR of ETH/EUR vanuit een BTC/USDT-kaart de kaart kon overnemen. De
 herstelkandidaat vraagt vóór enige read welk paar bedoeld is. De QA-review
@@ -32,8 +32,11 @@ in NL/EN/DE en vergelijkt getypeerde kaart-, markt- en score-identiteit met
 beide toolresultaten. QA gaf op die head `geen blocker`. Security vond
 daarna aanvullende schrijfwijzen voor een andere valuta. De finale
 herstelkandidaat laat uitsluitend de exacte door de feedknop ingevulde vraag
-de geselecteerde kaart gebruiken. Elke bewerkte of afwijkende read-only
-vraag krijgt vóór reads een verduidelijkingsvraag, zonder scoreclaim.
+de geselecteerde kaart gebruiken. Elke bewerkte of afwijkende vraag krijgt
+vóór reads en de modelroute een verduidelijkingsvraag, zonder scoreclaim.
+De mobiele NL/EN/DE-feedvragen zijn gelijkgetrokken met web; een gedeelde
+promptregressie en de mobiele chattests `26/26` zijn groen. Mobile typecheck
+en lint geven exit 0; lint toont 89 bestaande waarschuwingen, geen fouten.
 Security-herreview van deze head staat nog open.
 Frontend-commandtests `117/117`, i18n-tests `45/45`, voorsteltests `10/10`,
 build en typecheck groen. `npm audit --omit=dev --audit-level=high` eindigde

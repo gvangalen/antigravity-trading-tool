@@ -4464,6 +4464,7 @@ def test_selected_analysis_card_does_not_borrow_setup_from_other_pair():
     "Ik wil een setup voor BTC in € verkennen. Maak niets aan.",
     "Ik wil een setup voor BTC in USDC verkennen. Maak niets aan.",
     "Ik wil een setup voor ETH/EUR verkennen. Maak niets aan.",
+    "Welke setup past bij BTC in euro?",
 ])
 def test_selected_analysis_card_asks_when_question_targets_another_pair(question):
     feed = [
