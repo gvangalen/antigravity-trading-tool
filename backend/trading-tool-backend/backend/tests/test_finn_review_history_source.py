@@ -212,6 +212,7 @@ def test_owner_paper_exit_review_exposes_only_requested_structured_facts():
                      "source_price": 358.60,
                      "source_price_at": "2026-11-16T14:59:00+00:00",
                      "execution_source_price": 358.60,
+                     "execution_source_price_currency": "USD",
                      "execution_source_price_at": "2026-11-16T14:59:00+00:00",
                      "saved_first_target": 357.42, "execution_fx_eur_per_unit": 0.9,
                      "execution_fx_observed_at": "2026-11-16T14:02:00+00:00",
@@ -247,7 +248,8 @@ def test_owner_paper_exit_review_exposes_only_requested_structured_facts():
     facts = result["data"].closed_trades[0].paper_exit_evidence
     assert facts == {key: exit_evidence[key] for key in (
         "trigger", "source_price_currency", "source_price", "source_price_at",
-        "execution_source_price", "execution_source_price_at",
+        "execution_source_price_currency", "execution_source_price",
+        "execution_source_price_at",
         "saved_first_target",
         "execution_fx_eur_per_unit", "execution_fx_observed_at")}
     assert "untrusted_field" not in str(result["data"])

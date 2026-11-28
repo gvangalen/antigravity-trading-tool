@@ -419,8 +419,10 @@ def _bot_decision_clocks_supported(
                             or not isinstance(row.get("paper_exit_evidence"), dict)):
                         continue
                     facts = row["paper_exit_evidence"]
+                    currency_key = ("execution_source_price_currency" if execution
+                                    else "source_price_currency")
                     candidate = (_utc(facts.get(quote_key)),
-                                 str(facts.get("source_price_currency") or "").upper(),
+                                 str(facts.get(currency_key) or "").upper(),
                                  str(facts.get(price_key) or ""))
                     if (row["review_id"] in quote_rows
                             and quote_rows[row["review_id"]] != candidate):
@@ -444,10 +446,8 @@ def _bot_decision_clocks_supported(
                     return False
             claims = [_claimed_moment(moment.group(0)) for moment in dated_claims]
             if (any(claim is None for claim in claims)
-                    or not any(_same_moment(claims[0], first)
-                               and _same_moment(claims[1], second)
-                               for first, second in ((quote_at, historical_decision[2]),
-                                                     (historical_decision[2], quote_at)))):
+                    or not _same_moment(claims[0], quote_at)
+                    or not _same_moment(claims[1], historical_decision[2])):
                 return False
         dated = dated_claims
         if dated:

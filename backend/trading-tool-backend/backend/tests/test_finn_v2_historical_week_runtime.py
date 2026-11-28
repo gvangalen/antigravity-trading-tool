@@ -105,6 +105,7 @@ def test_historical_quote_source_and_decision_are_separate_clocks():
         "source_price_currency": "USD", "source_price": 358.60,
         "source_price_at": "2026-11-12T14:59:00+00:00",
         "execution_source_price": 358.60,
+        "execution_source_price_currency": "USD",
         "execution_source_price_at": "2026-11-12T14:59:00+00:00",
     })
     evidence = tuple(prepared.response.tool_trace[0]["result"]["results"])
@@ -136,6 +137,14 @@ def test_historical_quote_source_and_decision_are_separate_clocks():
             "2026-11-12 15:59:00 CET (2026-11-12 14:59:00 UTC; Europe/Amsterdam)") in execution.text
     assert "Geverifieerde AAPL Paper-exitbeslissing: 2026-11-12 16:00:30 CET" in execution.text
 
+    trade["paper_exit_evidence"]["execution_source_price_currency"] = "EUR"
+    different_currency = _minimal_read_answer(
+        message=QUESTION, prepared=prepared, user_time_zone="Europe/Amsterdam",
+    )
+    assert different_currency.status == "completed", different_currency.reason
+    assert "Koersbron bij AAPL Paper-uitvoering: 358,60 EUR" in different_currency.text
+    trade["paper_exit_evidence"]["execution_source_price_currency"] = "USD"
+
     prepared.response.text = (
         "Exitbeslissing en USD-koers van 358,60: "
         "12 november 2026, 14:59:00 UTC en de botbeslissing "
@@ -156,6 +165,12 @@ def test_historical_quote_source_and_decision_are_separate_clocks():
         assert not current_source_moments_supported(
             wrong, evidence, question=QUESTION, user_time_zone="Europe/Amsterdam",
         )
+    assert not current_source_moments_supported(
+        "Exitbeslissing en USD-koers van 358,60: "
+        "12 november 2026, 15:00:30 UTC en de botbeslissing "
+        "12 november 2026, 14:59:00 UTC.",
+        evidence, question=QUESTION, user_time_zone="Europe/Amsterdam",
+    )
     prepared.response.text = (
         "Exitbeslissing en USD-koers van 358,60: "
         "12 november 2026, 14:59:00 UTC."
@@ -237,6 +252,7 @@ def test_live_combined_answer_keeps_three_distinct_source_moments():
         "source_price_currency": "USD", "source_price": 358.60,
         "source_price_at": "2026-11-12T14:59:00+00:00",
         "execution_source_price": 358.60,
+        "execution_source_price_currency": "USD",
         "execution_source_price_at": "2026-11-12T14:59:00+00:00",
     })
     answer = _minimal_read_answer(

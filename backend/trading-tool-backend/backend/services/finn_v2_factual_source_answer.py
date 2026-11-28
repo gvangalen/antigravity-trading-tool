@@ -341,7 +341,9 @@ def complete_historical_week_exit_moments(
             moment_key = "execution_source_price_at" if execution else "source_price_at"
             price_key = "execution_source_price" if execution else "source_price"
             quote_moments = {_utc_instant(facts.get(moment_key)) for facts in quote_facts}
-            quote_prices = {(str(facts.get("source_price_currency") or "").upper(),
+            currency_key = ("execution_source_price_currency" if execution
+                            else "source_price_currency")
+            quote_prices = {(str(facts.get(currency_key) or "").upper(),
                              str(facts.get(price_key) or "")) for facts in quote_facts}
             if (len(quote_moments) != 1 or None in quote_moments
                     or len(quote_prices) != 1):
